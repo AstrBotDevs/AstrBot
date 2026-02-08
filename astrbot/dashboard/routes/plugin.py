@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import ssl
 import traceback
 from dataclasses import dataclass
@@ -327,7 +328,8 @@ class PluginRoute(Route):
                     self.plugin_manager.plugin_store_path,
                     plugin.root_dir_name or "",
                 )
-            _t["extension_page"] = os.path.exists(
+            _t["extension_page"] = await asyncio.to_thread(
+                os.path.exists,
                 os.path.join(plugin_dir, "web", "index.html")
             )
             # 检查是否为全空的幽灵插件
@@ -619,13 +621,13 @@ class PluginRoute(Route):
             plugin_obj.root_dir_name or "",
         )
 
-        if not os.path.isdir(plugin_dir):
+        if not await asyncio.to_thread(os.path.isdir, plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
-        if not os.path.isfile(readme_path):
+        if not await asyncio.to_thread(os.path.isfile, readme_path):
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
@@ -675,7 +677,7 @@ class PluginRoute(Route):
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
         for name in changelog_names:
             changelog_path = os.path.join(plugin_dir, name)
-            if os.path.isfile(changelog_path):
+            if await asyncio.to_thread(os.path.isfile, changelog_path):
                 try:
                     with open(changelog_path, encoding="utf-8") as f:
                         changelog_content = f.read()
@@ -739,10 +741,10 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name or "",
             )
 
-        # 扩展页面固定位于 web/index.html
+        # 扩展页面位于 web/index.html
         extension_page_path = os.path.join(plugin_dir, "web", "index.html")
 
-        if not os.path.exists(extension_page_path):
+        if not await asyncio.to_thread(os.path.exists, extension_page_path):
             return Response().error(f"插件 {plugin_name} 未配置扩展页面").__dict__
 
         try:
@@ -750,10 +752,9 @@ class PluginRoute(Route):
                 html_content = f.read()
 
             # 注入配置脚本 - 对插件名使用 json.dumps 防止 XSS，但保持 apiToken 为可执行代码
-            import json
             safe_plugin_name = json.dumps(plugin_obj.name)
 
-            injected_script = f'''
+            injected_script = f"""
 <script>
 window.ASTRBOT_CONFIG = {{
     apiUrl: "/api/plug",
@@ -761,12 +762,11 @@ window.ASTRBOT_CONFIG = {{
     apiToken: localStorage.getItem("token") || ""
 }};
 </script>
-'''
+"""
 
             # 使用正则表达式不区分大小写查找 </head> 标签
-            import re
-            pattern = re.compile(r'</head\s*>', re.IGNORECASE)
-            html_content = pattern.sub(injected_script + r'</head>', html_content)
+            pattern = re.compile(r"</head\s*>", re.IGNORECASE)
+            html_content = pattern.sub(injected_script + r"</head>", html_content)
 
             return (
                 Response()
