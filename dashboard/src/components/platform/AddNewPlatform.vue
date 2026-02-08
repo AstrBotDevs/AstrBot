@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="800px" height="90%" @after-enter="prepareData">
+  <v-dialog v-model="showDialog" max-width="800px" max-height="90%" @after-enter="prepareData">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
   <v-card-text ref="dialogScrollContainer" class="pa-4 ml-2" style="overflow-y: auto;">
