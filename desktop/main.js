@@ -11,6 +11,7 @@ const {
   nativeImage,
   shell,
   dialog,
+  ipcMain,
 } = require('electron');
 const { spawn, spawnSync } = require('child_process');
 
@@ -44,6 +45,8 @@ let backendConfig = null;
 let backendLogFd = null;
 let backendLastExitReason = null;
 let backendStartupFailureReason = null;
+let backendSpawning = false;
+let backendRestarting = false;
 
 app.commandLine.appendSwitch('disable-http-cache');
 
@@ -345,6 +348,29 @@ async function waitForBackend(maxWaitMs = 0, failOnProcessExit = false) {
       };
     }
     await delay(600);
+  }
+}
+
+function canManageBackend() {
+  if (!backendConfig) {
+    backendConfig = resolveBackendConfig();
+  }
+  return Boolean(backendConfig?.cmd);
+}
+
+async function startBackendAndWait(maxWaitMs = backendTimeoutMs) {
+  if (!canManageBackend()) {
+    return {
+      ok: false,
+      reason: 'Backend command is not configured.',
+    };
+  }
+  backendSpawning = true;
+  try {
+    startBackend();
+    return await waitForBackend(maxWaitMs, true);
+  } finally {
+    backendSpawning = false;
   }
 }
 
@@ -804,14 +830,111 @@ async function ensureBackend() {
       'Backend auto-start is disabled or backend command is not configured.';
     return false;
   }
-  startBackend();
-  const waitResult = await waitForBackend(backendTimeoutMs, true);
+  const waitResult = await startBackendAndWait(backendTimeoutMs);
   if (!waitResult.ok) {
     backendStartupFailureReason = waitResult.reason;
     return false;
   }
   return true;
 }
+
+ipcMain.handle('astrbot-desktop:is-electron-runtime', async () => true);
+
+ipcMain.handle('astrbot-desktop:get-backend-state', async () => {
+  const running = await pingBackend();
+  return {
+    running,
+    spawning: backendSpawning,
+    restarting: backendRestarting,
+    canManage: canManageBackend(),
+  };
+});
+
+ipcMain.handle('astrbot-desktop:restart-backend', async () => {
+  if (!canManageBackend()) {
+    return {
+      ok: false,
+      reason: 'Backend command is not configured.',
+    };
+  }
+  if (backendSpawning || backendRestarting) {
+    return {
+      ok: false,
+      reason: 'Backend action already in progress.',
+    };
+  }
+
+  backendRestarting = true;
+  try {
+    await stopBackend();
+    const startResult = await startBackendAndWait(backendTimeoutMs);
+    if (!startResult.ok) {
+      return {
+        ok: false,
+        reason: startResult.reason || 'Failed to restart backend.',
+      };
+    }
+    return {
+      ok: true,
+      reason: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    backendRestarting = false;
+  }
+});
+
+ipcMain.handle('astrbot-desktop:stop-backend', async () => {
+  if (!canManageBackend()) {
+    return {
+      ok: false,
+      reason: 'Backend command is not configured.',
+    };
+  }
+  if (backendSpawning || backendRestarting) {
+    return {
+      ok: false,
+      reason: 'Backend action already in progress.',
+    };
+  }
+
+  try {
+    if (!backendProcess) {
+      const running = await pingBackend();
+      if (running) {
+        return {
+          ok: false,
+          reason: 'Backend is running but not managed by Electron.',
+        };
+      }
+      return {
+        ok: true,
+        reason: null,
+      };
+    }
+    await stopBackend();
+    const running = await pingBackend();
+    if (running) {
+      return {
+        ok: false,
+        reason: 'Backend is still reachable after stop request.',
+      };
+    }
+    return {
+      ok: true,
+      reason: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+});
 
 app.setAppUserModelId('com.astrbot.desktop');
 
