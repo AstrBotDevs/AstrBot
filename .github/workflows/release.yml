@@ -165,7 +165,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -180,6 +180,21 @@ jobs:
           cache-dependency-path: |
             dashboard/pnpm-lock.yaml
             desktop/pnpm-lock.yaml
+
+      - name: Prepare OpenSSL for Windows ARM64
+        if: ${{ matrix.os == 'win' && matrix.arch == 'arm64' }}
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          & C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+          & C:\vcpkg\vcpkg.exe install openssl:arm64-windows
+
+          "VCPKG_ROOT=C:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKGRS_TRIPLET=arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENSSL_DIR=C:\vcpkg\installed\arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENSSL_ROOT_DIR=C:\vcpkg\installed\arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENSSL_LIB_DIR=C:\vcpkg\installed\arm64-windows\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OPENSSL_INCLUDE_DIR=C:\vcpkg\installed\arm64-windows\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install dependencies
         shell: bash
