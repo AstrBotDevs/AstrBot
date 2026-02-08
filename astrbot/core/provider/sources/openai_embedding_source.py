@@ -47,3 +47,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 1024))
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

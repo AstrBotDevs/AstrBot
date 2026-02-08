@@ -35,7 +35,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
             http_options.base_url = api_base
         proxy = provider_config.get("proxy", "")
         if proxy:
-            http_options.proxy = proxy
+            http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini TTS] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
@@ -84,3 +84,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
             wf.writeframes(response.candidates[0].content.parts[0].inline_data.data)
 
         return path
+
+    async def terminate(self):
+        if self.client:
+            await self.client.aclose()

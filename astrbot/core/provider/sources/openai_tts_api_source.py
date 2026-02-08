@@ -58,3 +58,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
                 async for chunk in response.iter_bytes(chunk_size=1024):
                     f.write(chunk)
         return path
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

@@ -81,7 +81,7 @@ class ProviderGoogleGenAI(Provider):
             timeout=self.timeout * 1000,  # 毫秒
         )
         if proxy:
-            http_options.proxy = proxy
+            http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini] 使用代理: {proxy}")
         self.client = genai.Client(
             api_key=self.chosen_api_key,
@@ -929,4 +929,5 @@ class ProviderGoogleGenAI(Provider):
             return "data:image/jpeg;base64," + image_bs64
 
     async def terminate(self):
-        logger.info("Google GenAI 适配器已终止。")
+        if self.client:
+            await self.client.aclose()

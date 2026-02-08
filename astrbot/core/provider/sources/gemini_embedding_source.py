@@ -32,7 +32,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             http_options.base_url = api_base
         proxy = provider_config.get("proxy", "")
         if proxy:
-            http_options.proxy = proxy
+            http_options.async_client_args = {"proxy": proxy}
             logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
@@ -75,3 +75,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 768))
+
+    async def terminate(self):
+        if self.client:
+            await self.client.aclose()

@@ -644,3 +644,7 @@ class ProviderAnthropic(Provider):
 
     def set_key(self, key: str):
         self.chosen_api_key = key
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()
