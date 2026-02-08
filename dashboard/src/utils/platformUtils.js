@@ -14,6 +14,8 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
   } else if (name === 'wecom' || name === 'wecom_ai_bot') {
     return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
+  } else if (name === 'weixin_official_account') {
+    return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
   } else if (name === 'lark') {
     return new URL('@/assets/images/platform_logos/lark.png', import.meta.url).href
   } else if (name === 'dingtalk') {

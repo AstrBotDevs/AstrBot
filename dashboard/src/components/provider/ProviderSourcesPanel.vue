@@ -14,7 +14,7 @@
             rounded="xl"
             size="small"
           >
-            新增
+            {{ tm('providerSources.add') }}
           </v-btn>
         </template>
         <v-list density="compact">

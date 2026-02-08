@@ -92,6 +92,7 @@
   },
   "providerSources": {
     "title": "提供商源",
+    "add": "新增",
     "empty": "暂无提供商源",
     "selectHint": "请选择一个提供商源",
     "save": "保存配置",

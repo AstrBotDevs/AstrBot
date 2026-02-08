@@ -45,12 +45,67 @@
     },
     "invalidPlatformId": "Platform ID cannot contain ':' or '!'."
   },
+  "createDialog": {
+    "step1Title": "Choose Platform Category",
+    "step1Hint": "Where do you want to connect the bot? e.g. QQ, WeCom, Feishu, Discord, Telegram.",
+    "platformTypeLabel": "Platform Category",
+    "configFileTitle": "Config File",
+    "optional": "Optional",
+    "configHint": "How do you want to configure the bot? The config file includes model, persona, knowledge base, plugins, and more.",
+    "configDefaultHint": "Uses the default config file \"default\" by default. You can configure it later.",
+    "useExistingConfig": "Use existing config file",
+    "selectConfigLabel": "Select config file",
+    "createNewConfig": "Create new config file",
+    "newConfigNameLabel": "New config name",
+    "newConfigTitle": "Use new config file",
+    "newConfigLoadFailed": "Failed to load default config template",
+    "addRouteRule": "Add route rule",
+    "viewMode": "View",
+    "editMode": "Edit",
+    "noRouteRules": "No route rules for this platform. The default config file will be used.",
+    "sessionIdPlaceholder": "Session ID or *",
+    "allSessions": "All sessions",
+    "configMissing": "Config file not found",
+    "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /sid to get the session ID. If none match, the default config file is used.",
+    "warningContinue": "Ignore warning and continue",
+    "warningEditAgain": "Edit again",
+    "configDrawerTitle": "Config File Management",
+    "configDrawerIdLabel": "ID",
+    "configTableHeaders": {
+      "configId": "Config ID linked to this instance",
+      "scope": "Scope in this instance"
+    },
+    "routeTableHeaders": {
+      "source": "Message Source (Type: Session ID)",
+      "config": "Config File",
+      "actions": "Actions"
+    },
+    "messageTypeOptions": {
+      "all": "All messages",
+      "group": "Group messages (GroupMessage)",
+      "friend": "Direct messages (FriendMessage)"
+    },
+    "messageTypeLabels": {
+      "all": "All messages",
+      "group": "Group messages",
+      "friend": "Direct messages"
+    }
+  },
   "messages": {
     "updateSuccess": "Update successful!",
     "addSuccess": "Add successful!",
     "deleteSuccess": "Delete successful!",
     "statusUpdateSuccess": "Status update successful!",
-    "deleteConfirm": "Are you sure you want to delete platform adapter"
+    "deleteConfirm": "Are you sure you want to delete platform adapter",
+    "configNotFoundOpenConfig": "Target config file not found. Opened the config page for review.",
+    "updateMissingPlatformId": "Update failed: missing platform ID.",
+    "platformUpdateFailed": "Platform update failed.",
+    "addSuccessWithConfig": "Platform added. Config file updated.",
+    "configIdMissing": "Unable to get config file ID.",
+    "routingUpdateFailed": "Failed to update routing table: {message}",
+    "createConfigFailed": "Failed to create config file: {message}",
+    "platformIdMissing": "Unable to get platform ID.",
+    "routingSaveFailed": "Failed to save routing table: {message}"
   },
   "status": {
     "enabled": "Enabled",
