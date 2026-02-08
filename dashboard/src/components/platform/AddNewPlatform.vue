@@ -9,14 +9,14 @@
           </div>
           <div style="flex: 1;">
             <h3>
-              选择消息平台类别
+              {{ tm('createDialog.step1Title') }}
             </h3>
-            <small style="color: grey;">想把机器人接入到哪里？如 QQ、企业微信、飞书、Discord、Telegram 等。</small>
+            <small style="color: grey;">{{ tm('createDialog.step1Hint') }}</small>
             <div>
 
               <div v-if="!updatingMode">
                 <v-select v-model="selectedPlatformType" :items="Object.keys(platformTemplates)" item-title="name"
-                  item-value="name" label="消息平台类别" variant="outlined" rounded="md" dense hide-details class="mt-6"
+                  item-value="name" :label="tm('createDialog.platformTypeLabel')" variant="outlined" rounded="md" dense hide-details class="mt-6"
                   style="max-width: 30%; min-width: 300px;">
 
                   <template v-slot:item="{ props: itemProps, item }">
@@ -41,7 +41,7 @@
                 </div>
               </div>
               <div v-else>
-                <v-text-field label="消息平台类别" variant="outlined" rounded="md" dense hide-details class="mt-6"
+                <v-text-field :label="tm('createDialog.platformTypeLabel')" variant="outlined" rounded="md" dense hide-details class="mt-6"
                   style="max-width: 30%; min-width: 300px;" v-model="updatingPlatformConfig.type"
                   disabled></v-text-field>
                 <div class="mt-3">
@@ -102,10 +102,10 @@
       <v-card-actions class="px-4 pb-4">
         <v-spacer></v-spacer>
         <v-btn color="error" @click="handleOneBotEmptyTokenWarningDismiss(true)">
-          无视警告并继续创建
+          {{ tm('createDialog.warningContinue') }}
         </v-btn>
         <v-btn color="primary" @click="handleOneBotEmptyTokenWarningDismiss(false)">
-          重新修改
+          {{ tm('createDialog.warningEditAgain') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -259,7 +259,7 @@ export default {
       const id = this.originalUpdatingPlatformId || this.updatingPlatformConfig.id;
       if (!id) {
         this.loading = false;
-        this.showError('更新失败，缺少平台 ID。');
+        this.showError(this.tm('messages.updateMissingPlatformId'));
         return;
       }
       if (!this.isPlatformIdValid(id)) {
@@ -273,13 +273,13 @@ export default {
           config: this.updatingPlatformConfig
         });
         if (resp.data.status === 'error') {
-          throw new Error(resp.data.message || '平台更新失败');
+          throw new Error(resp.data.message || this.tm('messages.platformUpdateFailed'));
         }
         this.loading = false;
         this.showDialog = false;
         this.resetForm();
         this.$emit('refresh-config');
-        this.showSuccess('更新成功');
+        this.showSuccess(this.tm('messages.updateSuccess'));
       } catch (err) {
         this.loading = false;
         this.showError(err.response?.data?.message || err.message);
@@ -314,7 +314,7 @@ export default {
         this.showDialog = false;
         this.resetForm();
         this.$emit('refresh-config');
-        this.showSuccess(res.data.message || '平台添加成功');
+        this.showSuccess(res.data.message || this.tm('messages.addSuccessWithConfig'));
       } catch (err) {
         this.loading = false;
         this.showError(err.response?.data?.message || err.message);
