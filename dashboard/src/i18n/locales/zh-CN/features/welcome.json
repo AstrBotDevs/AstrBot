@@ -1,0 +1,32 @@
+{
+  "greeting": {
+    "morning": "上午好，欢迎使用 AstrBot",
+    "afternoon": "下午好，欢迎使用 AstrBot",
+    "evening": "晚上好，欢迎使用 AstrBot",
+    "newYear": "新年快乐！"
+  },
+  "subtitle": "可以先完成基础引导，平台和对话提供商都支持稍后再配置。",
+  "onboard": {
+    "title": "快速引导",
+    "subtitle": "欢迎页可直接完成初始化。",
+    "step1Title": "配置平台机器人",
+    "step1Desc": "将 AstrBot 连接到 QQ、飞书、企业微信、Telegram 等 IM 平台。",
+    "step2Title": "配置 AI 模型",
+    "step2Desc": "为 AstrBot 配置 AI 模型。",
+    "configure": "去配置",
+    "skip": "跳过",
+    "pending": "待处理",
+    "completed": "已完成",
+    "skipped": "已跳过",
+    "platformLoadFailed": "加载平台配置失败",
+    "providerLoadFailed": "加载提供商配置失败",
+    "providerUpdateFailed": "更新 default 配置文件默认对话提供商失败",
+    "providerDefaultUpdated": "已将 default 配置文件的默认对话提供商设置为 {id}"
+  },
+  "resources": {
+    "title": "相关资源",
+    "githubDesc": "给 AstrBot 点个 Star 吧！",
+    "docsTitle": "文档",
+    "docsDesc": "查阅 AstrBot 的官方文档。"
+  }
+}

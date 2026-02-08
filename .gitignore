@@ -33,7 +33,6 @@ tests/astrbot_plugin_openai
 dashboard/node_modules/
 dashboard/dist/
 package-lock.json
-package.json
 yarn.lock
 
 # Operating System
