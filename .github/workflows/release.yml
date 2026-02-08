@@ -21,6 +21,10 @@ jobs:
   build-dashboard:
     name: Build Dashboard
     runs-on: ubuntu-24.04
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -74,11 +78,8 @@ jobs:
           path: dashboard/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
 
       - name: Upload dashboard package to Cloudflare R2
-        if: ${{ secrets.R2_ACCOUNT_ID != '' && secrets.R2_ACCESS_KEY_ID != '' && secrets.R2_SECRET_ACCESS_KEY != '' }}
+        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' }}
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: "astrbot"
           R2_OBJECT_NAME: "astrbot-webui-latest.zip"
           VERSION_TAG: ${{ steps.tag.outputs.tag }}
