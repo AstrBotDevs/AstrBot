@@ -82,12 +82,35 @@ The app does not store a full AstrBot source tree in home directory.
 
 ## Troubleshooting
 
+Startup behavior:
+
+- Packaged app shows a local startup page first, then switches to dashboard after backend is reachable.
+- If startup page never switches, check logs and timeout settings below.
+
 Runtime logs:
 
-- Backend stdout/stderr is written to `~/.astrbot/logs/backend.log` in packaged app mode.
-- If UI stays blank, check that log first and then retry launching the app.
-- Packaged app defaults to `ASTRBOT_BACKEND_TIMEOUT_MS=0` (wait until backend is reachable).
-- Set `ASTRBOT_BACKEND_TIMEOUT_MS` to a positive number only if you need an explicit startup timeout.
+- Electron shell log: `~/.astrbot/logs/electron.log`
+- Backend stdout/stderr log: `~/.astrbot/logs/backend.log`
+- On backend startup failure, the app dialog also shows the backend reason and backend log path.
+
+Timeout and loading controls:
+
+- `ASTRBOT_BACKEND_TIMEOUT_MS` controls how long Electron waits for backend reachability.
+- In packaged mode, default is `0` (wait indefinitely).
+- In development mode, default is `20000`.
+- `ASTRBOT_DASHBOARD_TIMEOUT_MS` controls dashboard page load wait time after backend is ready (default `20000`).
+- If you see `Unable to load the AstrBot dashboard.`, increase `ASTRBOT_DASHBOARD_TIMEOUT_MS`.
+
+Startup page locale:
+
+- Startup page language follows cached dashboard locale in `~/.astrbot/data/desktop_state.json`.
+- Supported startup locales are `zh-CN` and `en-US`.
+- Remove that file to reset locale fallback behavior.
+
+Backend auto-start:
+
+- `ASTRBOT_BACKEND_AUTO_START=0` disables Electron-managed backend startup.
+- When disabled, backend must already be running at `ASTRBOT_BACKEND_URL` before launching app.
 
 If Electron download times out on restricted networks, configure mirrors before install:
 
