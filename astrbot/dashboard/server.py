@@ -313,9 +313,13 @@ class AstrBotDashboard:
                 port,
             )
 
-        if self.check_port_in_use("127.0.0.1", port):
-            info = self.get_process_using_port(port)
-            raise RuntimeError(f"端口 {port} 已被占用\n{info}")
+        check_hosts = {host}
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            check_hosts.add("127.0.0.1")
+        for check_host in check_hosts:
+            if self.check_port_in_use(check_host, port):
+                info = self.get_process_using_port(port)
+                raise RuntimeError(f"端口 {port} 已被占用\n{info}")
 
         if self.enable_webui:
             self._print_access_urls(host, port)
