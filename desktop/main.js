@@ -564,8 +564,8 @@ async function loadStartupScreen() {
   const startupTexts = getStartupTexts(startupLocale);
   let iconUrl = '';
   try {
-    const iconBuffer = fs.readFileSync(getAssetPath('icon.png'));
-    iconUrl = `data:image/png;base64,${iconBuffer.toString('base64')}`;
+    const iconBuffer = fs.readFileSync(getAssetPath('icon-no-shadow.svg'));
+    iconUrl = `data:image/svg+xml;base64,${iconBuffer.toString('base64')}`;
   } catch {}
   const html = `<!doctype html>
 <html lang="en">
@@ -581,7 +581,7 @@ async function loadStartupScreen() {
       --surface: #ffffff;
       --text: #1b1c1d;
       --muted: #556170;
-      --border: #d0d0d0;
+      --border: #eeeeee;
     }
     body {
       margin: 0;
@@ -599,8 +599,7 @@ async function loadStartupScreen() {
       border-radius: 14px;
       background: var(--surface);
       border: 1px solid var(--border);
-      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
-      width: min(460px, calc(100vw - 48px));
+      width: min(360px, calc(100vw - 48px));
     }
     .logo {
       width: 64px;
