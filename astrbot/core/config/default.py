@@ -902,32 +902,6 @@ CONFIG_METADATA_2 = {
         "metadata": {
             "provider": {
                 "type": "list",
-                "items": {
-                    "id": {
-                        "description": "ID",
-                        "hint": "提供商源唯一 ID",
-                    },
-                    "proxy": {
-                        "description": "代理地址",
-                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
-                    },
-                    "timeout": {
-                        "description": "超时时间",
-                        "hint": "请求超时时间（秒）",
-                    },
-                    "key": {
-                        "description": "API Key",
-                        "hint": "API 密钥，支持配置多个进行轮询",
-                    },
-                    "api_base": {
-                        "description": "API 端点",
-                        "hint": "自定义 API 端点 URL",
-                    },
-                    "custom_headers": {
-                        "description": "自定义请求头",
-                        "hint": "自定义 HTTP 请求头",
-                    },
-                },
                 # provider sources templates
                 "config_template": {
                     "OpenAI": {
@@ -1491,7 +1465,7 @@ CONFIG_METADATA_2 = {
                         "launch_model_if_not_running": False,
                     },
                 },
-                "items_metadata": {
+                "items": {
                     "genie_onnx_model_dir": {
                         "description": "ONNX Model Directory",
                         "type": "string",
