@@ -20,7 +20,7 @@ Current behavior:
 - Node.js available
 - `pnpm` available
 
-Desktop dependency management uses `pnpm` with lockfile:
+Desktop dependency management uses `pnpm` with a lockfile:
 
 - `desktop/pnpm-lock.yaml`
 - `pnpm --dir desktop install --frozen-lockfile`
@@ -96,8 +96,9 @@ Runtime logs:
 Timeout and loading controls:
 
 - `ASTRBOT_BACKEND_TIMEOUT_MS` controls how long Electron waits for backend reachability.
-- In packaged mode, default is `0` (wait indefinitely).
+- In packaged mode, default is `0` (auto mode with a 5-minute safety cap).
 - In development mode, default is `20000`.
+- If backend startup times out, app shows startup failure dialog and exits.
 - `ASTRBOT_DASHBOARD_TIMEOUT_MS` controls dashboard page load wait time after backend is ready (default `20000`).
 - If you see `Unable to load the AstrBot dashboard.`, increase `ASTRBOT_DASHBOARD_TIMEOUT_MS`.
 

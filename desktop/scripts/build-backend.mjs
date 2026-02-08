@@ -53,8 +53,16 @@ const result = spawnSync('uv', args, {
 });
 
 if (result.error) {
-  console.error('Failed to run uv. Make sure uv and pyinstaller are installed.');
-  process.exit(1);
+  console.error(`Failed to run 'uv': ${result.error.message}`);
+  process.exit(typeof result.status === 'number' ? result.status : 1);
 }
 
-process.exit(result.status ?? 1);
+if (result.status !== 0) {
+  console.error(
+    `'uv' exited with status ${result.status} while running PyInstaller. ` +
+      'Verify that uv and pyinstaller are installed and that arguments are valid.',
+  );
+  process.exit(result.status ?? 1);
+}
+
+process.exit(0);

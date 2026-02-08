@@ -49,6 +49,17 @@ def _run_pip_main_with_output(pip_main, args: list[str]) -> tuple[int, str]:
     return result_code, stream.getvalue()
 
 
+def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
+    root_logger = logging.getLogger()
+    original_handler_ids = {id(handler) for handler in original_handlers}
+
+    for handler in list(root_logger.handlers):
+        if id(handler) not in original_handler_ids:
+            root_logger.removeHandler(handler)
+            with contextlib.suppress(Exception):
+                handler.close()
+
+
 class PipInstaller:
     def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None):
         self.pip_install_arg = pip_install_arg
@@ -115,6 +126,7 @@ class PipInstaller:
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
+        original_handlers = list(logging.getLogger().handlers)
         result_code, output = await asyncio.to_thread(
             _run_pip_main_with_output, pip_main, args
         )
@@ -123,6 +135,5 @@ class PipInstaller:
             if line:
                 logger.info(line)
 
-        for handler in logging.root.handlers[:]:
-            logging.root.removeHandler(handler)
+        _cleanup_added_root_handlers(original_handlers)
         return result_code
