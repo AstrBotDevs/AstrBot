@@ -18,6 +18,7 @@ const emit = defineEmits<{
   (e: 'toggle-command', cmd: CommandItem): void;
   (e: 'rename', cmd: CommandItem): void;
   (e: 'view-details', cmd: CommandItem): void;
+  (e: 'update-permission', cmd: CommandItem, permission: 'admin' | 'member'): void;
 }>();
 
 // 表格表头
@@ -146,9 +147,36 @@ const getRowProps = ({ item }: { item: CommandItem }) => {
       </template>
 
       <template v-slot:item.permission="{ item }">
-        <v-chip :color="getPermissionColor(item.permission)" size="small" class="font-weight-medium">
-          {{ getPermissionLabel(item.permission) }}
-        </v-chip>
+        <v-menu location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-chip
+              v-bind="props"
+              :color="getPermissionColor(item.permission)"
+              size="small"
+              class="font-weight-medium cursor-pointer"
+              link
+            >
+              {{ getPermissionLabel(item.permission) }}
+              <v-icon end size="14">mdi-chevron-down</v-icon>
+            </v-chip>
+          </template>
+          <v-list density="compact">
+            <v-list-item
+              :value="'member'"
+              @click="$emit('update-permission', item, 'member')"
+              :active="item.permission !== 'admin'"
+            >
+              <v-list-item-title>{{ tm('permission.everyone') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item
+              :value="'admin'"
+              @click="$emit('update-permission', item, 'admin')"
+              :active="item.permission === 'admin'"
+            >
+              <v-list-item-title>{{ tm('permission.admin') }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </template>
 
       <template v-slot:item.enabled="{ item }">
@@ -252,6 +280,10 @@ code.sub-command-code {
 
 .v-data-table .sub-command-row:hover {
   background-color: rgba(var(--v-theme-info), 0.08) !important;
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>
 

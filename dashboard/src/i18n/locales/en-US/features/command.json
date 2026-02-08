@@ -69,7 +69,9 @@
     "toggleFailed": "Failed to update command status",
     "renameSuccess": "Command renamed",
     "renameFailed": "Rename failed",
-    "loadFailed": "Failed to load commands"
+    "loadFailed": "Failed to load commands",
+    "updateSuccess": "Updated successfully",
+    "updateFailed": "Update failed"
   },
   "search": {
     "placeholder": "Search commands..."
