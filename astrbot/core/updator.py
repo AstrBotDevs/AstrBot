@@ -57,14 +57,20 @@ class AstrBotUpdator(RepoZipUpdator):
             py = sys.executable
 
         try:
-            if "astrbot" in os.path.basename(sys.argv[0]):  # 兼容cli
+            # 仅 CLI 模式走 `python -m astrbot.cli.__main__`，
+            # 打包后的后端可执行文件需要直接 exec 自身。
+            if os.environ.get("ASTRBOT_CLI") == "1":
                 if os.name == "nt":
                     args = [f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]]
                 else:
                     args = sys.argv[1:]
                 os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
             else:
-                os.execl(sys.executable, py, *sys.argv)
+                if getattr(sys, "frozen", False):
+                    # Frozen executable should not receive argv[0] as a positional argument.
+                    os.execl(sys.executable, py, *sys.argv[1:])
+                else:
+                    os.execl(sys.executable, py, *sys.argv)
         except Exception as e:
             logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
             raise e

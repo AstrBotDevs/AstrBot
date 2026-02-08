@@ -1,0 +1,227 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (branch/tag/SHA)"
+        required: false
+        default: "master"
+      tag:
+        description: "Release tag to upload assets to (for example: v4.14.6)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-desktop:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+          - name: windows-x64
+            runner: windows-2022
+            os: win
+            arch: amd64
+          - name: windows-arm64
+            runner: windows-11-arm
+            os: win
+            arch: arm64
+          - name: macos-x64
+            runner: macos-15-intel
+            os: mac
+            arch: amd64
+          - name: macos-arm64
+            runner: macos-15
+            os: mac
+            arch: arm64
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: |
+            dashboard/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir desktop install --frozen-lockfile
+
+      - name: Build desktop package
+        run: |
+          pnpm --dir dashboard run build
+          pnpm --dir desktop run build:webui
+          pnpm --dir desktop run build:backend
+          pnpm --dir desktop run sync:version
+          pnpm --dir desktop exec electron-builder --publish never
+
+      - name: Resolve artifact tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve artifact tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize artifact names
+        shell: bash
+        env:
+          NAME_PREFIX: AstrBot-${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
+        run: |
+          shopt -s nullglob
+          out_dir="desktop/dist/release"
+          mkdir -p "$out_dir"
+          files=(
+            desktop/dist/*.AppImage
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.exe
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No desktop artifacts found to rename." >&2
+            exit 1
+          fi
+          for src in "${files[@]}"; do
+            file="$(basename "$src")"
+            case "$file" in
+              *.AppImage)
+                dest="$out_dir/${NAME_PREFIX}.AppImage"
+                ;;
+              *.dmg)
+                dest="$out_dir/${NAME_PREFIX}.dmg"
+                ;;
+              *.exe)
+                dest="$out_dir/${NAME_PREFIX}.exe"
+                ;;
+              *.zip)
+                dest="$out_dir/${NAME_PREFIX}.zip"
+                ;;
+              *)
+                continue
+                ;;
+            esac
+            cp "$src" "$dest"
+          done
+          ls -la "$out_dir"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: AstrBot-${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
+          if-no-files-found: error
+          path: desktop/dist/release/*
+
+  publish-release:
+    name: Publish Release Assets
+    runs-on: ubuntu-24.04
+    needs: build-desktop
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve release tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: AstrBot-${{ steps.tag.outputs.tag }}-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes ""
+          fi
+
+      - name: Remove stale desktop assets from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          while IFS= read -r asset; do
+            case "$asset" in
+              *.AppImage|*.dmg|*.zip|*.exe|*.blockmap)
+                gh release delete-asset "$tag" "$asset" -y || true
+                ;;
+            esac
+          done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          gh release upload "$tag" release-assets/* --clobber

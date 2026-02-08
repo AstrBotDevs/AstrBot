@@ -117,6 +117,10 @@ uv run main.py
 
 Or refer to the official documentation: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html).
 
+#### Desktop Electron Build
+
+For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/README.md`](desktop/README.md).
+
 ## Supported Messaging Platforms
 
 **Officially Maintained**

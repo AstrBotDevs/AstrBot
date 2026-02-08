@@ -132,13 +132,17 @@ export const useCommonStore = defineStore({
     getLogCache() {
       return this.log_cache
     },
+    async fetchStartTime() {
+      const res = await axios.get('/api/stat/start-time');
+      this.startTime = res.data.data.start_time;
+      return this.startTime;
+    },
     getStartTime() {
       if (this.startTime !== -1) {
         return this.startTime
       }
-      axios.get('/api/stat/start-time').then((res) => {
-        this.startTime = res.data.data.start_time
-      })
+      this.fetchStartTime().catch(() => {});
+      return this.startTime
     },
     async getPluginCollections(force = false, customSource = null) {
       // 获取插件市场数据
