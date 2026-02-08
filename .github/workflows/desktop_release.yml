@@ -78,7 +78,10 @@ jobs:
       - name: Build desktop package
         run: |
           pnpm --dir dashboard run build
-          pnpm --dir desktop run dist:full
+          pnpm --dir desktop run build:webui
+          pnpm --dir desktop run build:backend
+          pnpm --dir desktop run sync:version
+          pnpm --dir desktop exec electron-builder --publish never
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v6
