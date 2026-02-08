@@ -91,6 +91,7 @@
   },
   "providerSources": {
     "title": "Provider Sources",
+    "add": "Add",
     "empty": "No provider sources",
     "selectHint": "Please select a provider source",
     "save": "Save Configuration",
