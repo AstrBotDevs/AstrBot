@@ -177,7 +177,7 @@ DEFAULT_CONFIG = {
     "t2i_use_file_service": False,
     "t2i_active_template": "base",
     "http_proxy": "",
-    "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "172.*", "192.168.*"],
+    "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
     "dashboard": {
         "enable": True,
         "username": "astrbot",
