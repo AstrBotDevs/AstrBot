@@ -12,7 +12,7 @@ const {
   shell,
   dialog,
 } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const isMac = process.platform === 'darwin';
 const backendUrl = normalizeUrl(
@@ -36,6 +36,7 @@ const dashboardTimeoutMs = Number.parseInt(
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let quitInProgress = false;
 let backendProcess = null;
 let backendConfig = null;
 let backendLogFd = null;
@@ -204,6 +205,29 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function waitForProcessExit(child, timeoutMs = 5000) {
+  if (!child) {
+    return Promise.resolve('missing');
+  }
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve('exited');
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (reason) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve(reason);
+    };
+    const timeout = setTimeout(() => finish('timeout'), timeoutMs);
+    child.once('exit', () => finish('exit'));
+    child.once('error', () => finish('error'));
+  });
+}
+
 async function pingBackend(timeoutMs = 800) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -245,6 +269,10 @@ async function waitForBackend(maxWaitMs = 0, failOnProcessExit = false) {
 }
 
 function startBackend() {
+  if (isQuitting || quitInProgress) {
+    logElectron('Skip backend start because app is quitting.');
+    return;
+  }
   if (backendProcess) {
     return;
   }
@@ -317,20 +345,57 @@ function startBackend() {
   });
 }
 
-function stopBackend() {
-  if (!backendProcess || backendProcess.killed) {
+async function stopBackend() {
+  if (!backendProcess) {
     return;
   }
-  if (process.platform === 'win32' && backendProcess.pid) {
-    spawn('taskkill', ['/pid', `${backendProcess.pid}`, '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-    });
+  const processToStop = backendProcess;
+  const pid = processToStop.pid;
+  backendProcess = null;
+  logElectron(`Stop backend requested pid=${pid ?? 'unknown'}`);
+
+  if (process.platform === 'win32' && pid) {
+    try {
+      const result = spawnSync('taskkill', ['/pid', `${pid}`, '/t', '/f'], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      if (result.status !== 0) {
+        logElectron(
+          `taskkill failed pid=${pid} status=${result.status} signal=${result.signal ?? 'null'}`,
+        );
+      } else {
+        logElectron(`taskkill completed pid=${pid}`);
+      }
+    } catch (error) {
+      logElectron(
+        `taskkill threw for pid=${pid}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    await waitForProcessExit(processToStop, 5000);
   } else {
-    backendProcess.kill('SIGTERM');
+    if (!processToStop.killed) {
+      try {
+        processToStop.kill('SIGTERM');
+      } catch (error) {
+        logElectron(
+          `SIGTERM failed for pid=${pid ?? 'unknown'}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+    const exitResult = await waitForProcessExit(processToStop, 5000);
+    if (exitResult === 'timeout' && !processToStop.killed) {
+      try {
+        processToStop.kill('SIGKILL');
+      } catch {}
+      await waitForProcessExit(processToStop, 1500);
+    }
   }
   closeBackendLogFd();
-  backendProcess = null;
 }
 
 async function loadDashboard(maxWaitMs = 20000) {
@@ -534,9 +599,27 @@ if (!gotLock) {
   });
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (quitInProgress) {
+    event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+  quitInProgress = true;
   isQuitting = true;
-  stopBackend();
+  logElectron('before-quit received, stopping backend.');
+  stopBackend()
+    .catch((error) => {
+      logElectron(
+        `stopBackend failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    })
+    .finally(() => {
+      logElectron('Backend stop finished, exiting app.');
+      app.exit(0);
+    });
 });
 
 app.whenReady().then(async () => {
@@ -547,6 +630,9 @@ app.whenReady().then(async () => {
     }
   }
   const ready = await ensureBackend();
+  if (isQuitting) {
+    return;
+  }
 
   if (!ready) {
     const backendLogPath = backendConfig?.rootDir
