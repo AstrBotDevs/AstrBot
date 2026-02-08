@@ -38,7 +38,7 @@ class WeixinOfficialAccountServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict):
         self.server = quart.Quart(__name__)
         self.port = int(cast(int | str, config.get("port")))
-        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
+        self.callback_server_host = config.get("callback_server_host", "::")
         self.token = config.get("token")
         self.encoding_aes_key = config.get("encoding_aes_key")
         self.appid = config.get("appid")

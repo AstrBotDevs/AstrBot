@@ -418,9 +418,9 @@ class AiocqhttpAdapter(Platform):
     def run(self) -> Awaitable[Any]:
         if not self.host or not self.port:
             logger.warning(
-                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199",
+                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://[::]:6199",
             )
-            self.host = "0.0.0.0"
+            self.host = "::"
             self.port = 6199
 
         coro = self.bot.run_task(

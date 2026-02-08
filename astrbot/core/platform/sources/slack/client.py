@@ -23,7 +23,7 @@ class SlackWebhookClient:
         self,
         web_client: AsyncWebClient,
         signing_secret: str,
-        host: str = "0.0.0.0",
+        host: str = "::",
         port: int = 3000,
         path: str = "/slack/events",
         event_handler: Callable | None = None,
