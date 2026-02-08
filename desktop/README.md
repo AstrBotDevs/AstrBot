@@ -71,6 +71,7 @@ By default (`ASTRBOT_ROOT` not set), packaged desktop app uses this layout:
     config/         # Main configuration
     plugins/        # Installed plugins
     plugin_data/    # Plugin persistent data
+    site-packages/  # Plugin dependency installation target in packaged mode
     temp/           # Runtime temp files
     skills/         # Skill-related runtime data
     knowledge_base/ # Knowledge base files
