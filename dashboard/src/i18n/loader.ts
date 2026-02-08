@@ -59,6 +59,7 @@ export class I18nLoader {
       { name: 'features/alkaid/memory', path: 'features/alkaid/memory.json' },
       { name: 'features/persona', path: 'features/persona.json' },
       { name: 'features/migration', path: 'features/migration.json' },
+      { name: 'features/welcome', path: 'features/welcome.json' },
       
       // 消息模块
       { name: 'messages/errors', path: 'messages/errors.json' },
