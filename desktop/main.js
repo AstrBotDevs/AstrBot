@@ -32,6 +32,8 @@ const dashboardTimeoutMs = Number.parseInt(
   process.env.ASTRBOT_DASHBOARD_TIMEOUT_MS || '20000',
   10,
 );
+const LOCALE_STORAGE_KEY = 'astrbot-locale';
+const SUPPORTED_STARTUP_LOCALES = new Set(['zh-CN', 'en-US']);
 
 let mainWindow = null;
 let tray = null;
@@ -146,6 +148,84 @@ function resolveBackendCwd() {
     return path.resolve(__dirname, '..');
   }
   return resolveBackendRoot();
+}
+
+function normalizeLocale(value) {
+  if (!value) {
+    return null;
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return null;
+  }
+  if (SUPPORTED_STARTUP_LOCALES.has(raw)) {
+    return raw;
+  }
+  const lower = raw.toLowerCase();
+  if (lower.startsWith('zh')) {
+    return 'zh-CN';
+  }
+  if (lower.startsWith('en')) {
+    return 'en-US';
+  }
+  return null;
+}
+
+function getDesktopStatePath() {
+  const rootDir =
+    process.env.ASTRBOT_ROOT ||
+    backendConfig?.rootDir ||
+    resolveBackendRoot() ||
+    app.getPath('userData');
+  return path.join(rootDir, 'data', 'desktop_state.json');
+}
+
+function readCachedLocale() {
+  const statePath = getDesktopStatePath();
+  try {
+    const raw = fs.readFileSync(statePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return normalizeLocale(parsed?.locale);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedLocale(locale) {
+  const normalized = normalizeLocale(locale);
+  if (!normalized) {
+    return;
+  }
+  const statePath = getDesktopStatePath();
+  ensureDir(path.dirname(statePath));
+  try {
+    fs.writeFileSync(
+      statePath,
+      `${JSON.stringify({ locale: normalized }, null, 2)}\n`,
+      'utf8',
+    );
+  } catch {}
+}
+
+function resolveStartupLocale() {
+  const cached = readCachedLocale();
+  if (cached) {
+    return cached;
+  }
+  return normalizeLocale(app.getLocale()) || 'zh-CN';
+}
+
+function getStartupTexts(locale) {
+  if (locale === 'zh-CN') {
+    return {
+      title: 'AstrBot 正在启动',
+      message: '界面很快就会加载完成。',
+    };
+  }
+  return {
+    title: 'AstrBot is starting',
+    message: 'The dashboard will be ready in a moment.',
+  };
 }
 
 function buildDefaultBackendLaunch(webuiDir) {
@@ -421,6 +501,146 @@ async function loadDashboard(maxWaitMs = 20000) {
   throw new Error(`Timed out loading ${backendUrl}`);
 }
 
+async function persistLocaleFromDashboard(timeoutMs = 1200) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  const currentUrl = mainWindow.webContents.getURL();
+  if (!currentUrl || !currentUrl.startsWith(backendUrl)) {
+    return;
+  }
+  try {
+    const localeRaw = await Promise.race([
+      mainWindow.webContents.executeJavaScript(
+        `(() => {
+          try {
+            return window.localStorage.getItem('${LOCALE_STORAGE_KEY}') || '';
+          } catch {
+            return '';
+          }
+        })();`,
+        true,
+      ),
+      delay(timeoutMs).then(() => null),
+    ]);
+    const locale = normalizeLocale(localeRaw);
+    if (locale) {
+      writeCachedLocale(locale);
+    }
+  } catch {}
+}
+
+async function loadStartupScreen() {
+  if (!mainWindow) {
+    return false;
+  }
+  const startupLocale = resolveStartupLocale();
+  const startupTexts = getStartupTexts(startupLocale);
+  let iconUrl = '';
+  try {
+    const iconBuffer = fs.readFileSync(getAssetPath('icon.png'));
+    iconUrl = `data:image/png;base64,${iconBuffer.toString('base64')}`;
+  } catch {}
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AstrBot</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --primary: #3c96ca;
+      --bg: #f9fafc;
+      --surface: #ffffff;
+      --text: #1b1c1d;
+      --muted: #556170;
+      --border: #d0d0d0;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Poppins", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--text);
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .card {
+      text-align: center;
+      padding: 28px 30px 24px;
+      border-radius: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
+      width: min(460px, calc(100vw - 48px));
+    }
+    .logo {
+      width: 64px;
+      height: 64px;
+      display: block;
+      margin: 0 auto 12px;
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      margin: 0 auto 14px;
+      border: 3px solid rgba(60, 150, 202, 0.22);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    p {
+      margin: 0;
+      line-height: 1.55;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #1677ff;
+        --bg: #1d1d1d;
+        --surface: #1f1f1f;
+        --text: #ffffff;
+        --muted: #c8c8cc;
+        --border: #333333;
+      }
+      .card {
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+      }
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    ${
+      iconUrl
+        ? `<img class="logo" src="${iconUrl}" alt="AstrBot logo" />`
+        : '<div class="logo" aria-hidden="true"></div>'
+    }
+    <div class="spinner" aria-hidden="true"></div>
+    <h1>${startupTexts.title}</h1>
+    <p>${startupTexts.message}</p>
+  </div>
+</body>
+</html>`;
+  const startupUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+  await mainWindow.loadURL(startupUrl);
+  return true;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -428,6 +648,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 680,
     show: false,
+    backgroundColor: '#f9fafc',
     autoHideMenuBar: !isMac,
     icon: getAssetPath('icon.png'),
     webPreferences: {
@@ -472,7 +693,11 @@ function createWindow() {
   );
 
   mainWindow.webContents.on('did-finish-load', () => {
-    logElectron(`did-finish-load url=${mainWindow.webContents.getURL()}`);
+    const currentUrl = mainWindow.webContents.getURL();
+    logElectron(`did-finish-load url=${currentUrl}`);
+    if (currentUrl.startsWith(backendUrl)) {
+      void persistLocaleFromDashboard();
+    }
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
@@ -608,16 +833,21 @@ app.on('before-quit', (event) => {
   quitInProgress = true;
   isQuitting = true;
   logElectron('before-quit received, stopping backend.');
-  stopBackend()
-    .catch((error) => {
-      logElectron(
-        `stopBackend failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    })
+  persistLocaleFromDashboard()
+    .catch(() => {})
+    .then(() =>
+      stopBackend().catch((error) => {
+        logElectron(
+          `stopBackend failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }),
+    )
     .finally(() => {
-      logElectron('Backend stop finished, exiting app.');
+      logElectron(
+        'Backend stop finished, exiting app.',
+      );
       app.exit(0);
     });
 });
@@ -629,6 +859,19 @@ app.whenReady().then(async () => {
       app.dock.setIcon(dockIcon);
     }
   }
+  createWindow();
+  createTray();
+  try {
+    await loadStartupScreen();
+  } catch (error) {
+    logElectron(
+      `failed to load startup screen: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  showWindow();
+
   const ready = await ensureBackend();
   if (isQuitting) {
     return;
@@ -659,11 +902,7 @@ app.whenReady().then(async () => {
     return;
   }
 
-  createWindow();
-  createTray();
-
   try {
-    await mainWindow.webContents.session.clearCache();
     await loadDashboard(dashboardTimeoutMs);
     showWindow();
   } catch (error) {
