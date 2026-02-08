@@ -42,9 +42,6 @@ desktop/resources/webui/*
 desktop/resources/.pyinstaller/
 package-lock.json
 yarn.lock
-!desktop/package.json
-!desktop/resources/backend/.gitkeep
-!desktop/resources/webui/.gitkeep
 
 # Operating System
 **/.DS_Store
