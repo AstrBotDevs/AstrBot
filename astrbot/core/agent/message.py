@@ -3,7 +3,13 @@
 
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, GetCoreSchemaHandler, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    GetCoreSchemaHandler,
+    PrivateAttr,
+    model_serializer,
+    model_validator,
+)
 from pydantic_core import core_schema
 
 
@@ -177,6 +183,8 @@ class Message(BaseModel):
 
     tool_call_id: str | None = None
     """The ID of the tool call."""
+
+    _no_save: bool = PrivateAttr(default=False)
 
     @model_validator(mode="after")
     def check_content_required(self):

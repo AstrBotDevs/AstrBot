@@ -149,7 +149,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         messages = []
         # append existing messages in the run context
         for msg in request.contexts:
-            messages.append(Message.model_validate(msg))
+            m = Message.model_validate(msg)
+            if isinstance(msg, dict) and msg.get("_no_save"):
+                m._no_save = True
+            messages.append(m)
         if request.prompt is not None:
             m = await request.assemble_context()
             messages.append(Message.model_validate(m))

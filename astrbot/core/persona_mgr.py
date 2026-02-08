@@ -313,7 +313,7 @@ class PersonaManager:
                         {
                             "role": "user" if user_turn else "assistant",
                             "content": dialog,
-                            "_no_save": None,  # 不持久化到 db
+                            "_no_save": True,  # 不持久化到 db
                         },
                     )
                     user_turn = not user_turn
