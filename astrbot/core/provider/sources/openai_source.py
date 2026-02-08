@@ -2,11 +2,11 @@ import asyncio
 import base64
 import inspect
 import json
-import os
 import random
 import re
 from collections.abc import AsyncGenerator
 
+import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
@@ -22,6 +22,11 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    is_connection_error,
+    log_connection_failure,
+)
 
 from ..register import register_provider_adapter
 
@@ -31,6 +36,11 @@ from ..register import register_provider_adapter
     "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """创建带代理的 HTTP 客户端"""
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("OpenAI", proxy)
+
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -55,6 +65,7 @@ class ProviderOpenAIOfficial(Provider):
                 default_headers=self.custom_headers,
                 base_url=provider_config.get("api_base", ""),
                 timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
             )
         else:
             # Using OpenAI Official API
@@ -63,6 +74,7 @@ class ProviderOpenAIOfficial(Provider):
                 base_url=provider_config.get("api_base", None),
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
             )
 
         self.default_params = inspect.signature(
@@ -455,12 +467,9 @@ class ProviderOpenAIOfficial(Provider):
         if "tool" in str(e).lower() and "support" in str(e).lower():
             logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
-        if "Connection error." in str(e):
-            proxy = os.environ.get("http_proxy", None)
-            if proxy:
-                logger.error(
-                    f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}",
-                )
+        if is_connection_error(e):
+            proxy = self.provider_config.get("proxy", "")
+            log_connection_failure("OpenAI", e, proxy)
 
         raise e
 
@@ -697,3 +706,7 @@ class ProviderOpenAIOfficial(Provider):
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

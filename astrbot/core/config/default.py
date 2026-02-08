@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.14.5"
+VERSION = "4.14.6"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -177,7 +177,7 @@ DEFAULT_CONFIG = {
     "t2i_use_file_service": False,
     "t2i_active_template": "base",
     "http_proxy": "",
-    "no_proxy": ["localhost", "127.0.0.1", "::1"],
+    "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
     "dashboard": {
         "enable": True,
         "username": "astrbot",
@@ -913,6 +913,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Google Gemini": {
@@ -935,6 +936,7 @@ CONFIG_METADATA_2 = {
                             "dangerous_content": "BLOCK_MEDIUM_AND_ABOVE",
                         },
                         "gm_thinking_config": {"budget": 0, "level": "HIGH"},
+                        "proxy": "",
                     },
                     "Anthropic": {
                         "id": "anthropic",
@@ -945,6 +947,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "anth_thinking_config": {"budget": 0},
                     },
                     "Moonshot": {
@@ -956,6 +959,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "xAI": {
@@ -967,6 +971,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                         "xai_native_search": False,
                     },
@@ -979,6 +984,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Zhipu": {
@@ -990,6 +996,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Azure OpenAI": {
@@ -1002,6 +1009,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Ollama": {
@@ -1012,6 +1020,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://127.0.0.1:11434/v1",
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "LM Studio": {
@@ -1022,6 +1031,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://127.0.0.1:1234/v1",
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Gemini_OpenAI_API": {
@@ -1033,6 +1043,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Groq": {
@@ -1044,6 +1055,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.groq.com/openai/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "302.AI": {
@@ -1055,6 +1067,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "SiliconFlow": {
@@ -1066,6 +1079,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api.siliconflow.cn/v1",
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "PPIO": {
@@ -1077,6 +1091,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.ppinfra.com/v3/openai",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "TokenPony": {
@@ -1088,6 +1103,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.tokenpony.cn/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Compshare": {
@@ -1099,6 +1115,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.modelverse.cn/v1",
                         "timeout": 120,
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "ModelScope": {
@@ -1110,6 +1127,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
+                        "proxy": "",
                         "custom_headers": {},
                     },
                     "Dify": {
@@ -1125,6 +1143,7 @@ CONFIG_METADATA_2 = {
                         "dify_query_input_key": "astrbot_text_query",
                         "variables": {},
                         "timeout": 60,
+                        "proxy": "",
                     },
                     "Coze": {
                         "id": "coze",
@@ -1136,6 +1155,7 @@ CONFIG_METADATA_2 = {
                         "bot_id": "",
                         "coze_api_base": "https://api.coze.cn",
                         "timeout": 60,
+                        "proxy": "",
                         # "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
@@ -1154,6 +1174,7 @@ CONFIG_METADATA_2 = {
                         },
                         "variables": {},
                         "timeout": 60,
+                        "proxy": "",
                     },
                     "FastGPT": {
                         "id": "fastgpt",
@@ -1164,6 +1185,7 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "api_base": "https://api.fastgpt.in/api/v1",
                         "timeout": 60,
+                        "proxy": "",
                         "custom_headers": {},
                         "custom_extra_body": {},
                     },
@@ -1176,6 +1198,7 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "",
                         "model": "whisper-1",
+                        "proxy": "",
                     },
                     "Whisper(Local)": {
                         "provider": "openai",
@@ -1205,6 +1228,7 @@ CONFIG_METADATA_2 = {
                         "model": "tts-1",
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
+                        "proxy": "",
                     },
                     "Genie TTS": {
                         "id": "genie_tts",
@@ -1285,6 +1309,7 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
+                        "proxy": "",
                     },
                     "阿里云百炼 TTS(API)": {
                         "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
@@ -1311,6 +1336,7 @@ CONFIG_METADATA_2 = {
                         "azure_tts_volume": "100",
                         "azure_tts_subscription_key": "",
                         "azure_tts_region": "eastus",
+                        "proxy": "",
                     },
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
@@ -1333,6 +1359,7 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-latex": False,
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
+                        "proxy": "",
                     },
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
@@ -1347,6 +1374,7 @@ CONFIG_METADATA_2 = {
                         "volcengine_speed_ratio": 1.0,
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
+                        "proxy": "",
                     },
                     "Gemini TTS": {
                         "id": "gemini_tts",
@@ -1360,6 +1388,7 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_model": "gemini-2.5-flash-preview-tts",
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
+                        "proxy": "",
                     },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
@@ -1372,6 +1401,7 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
                         "timeout": 20,
+                        "proxy": "",
                     },
                     "Gemini Embedding": {
                         "id": "gemini_embedding",
@@ -1384,6 +1414,7 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "gemini-embedding-exp-03-07",
                         "embedding_dimensions": 768,
                         "timeout": 20,
+                        "proxy": "",
                     },
                     "vLLM Rerank": {
                         "id": "vllm_rerank",
@@ -2079,6 +2110,11 @@ CONFIG_METADATA_2 = {
                     "api_base": {
                         "description": "API Base URL",
                         "type": "string",
+                    },
+                    "proxy": {
+                        "description": "代理地址",
+                        "type": "string",
+                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
                     },
                     "model": {
                         "description": "模型 ID",
