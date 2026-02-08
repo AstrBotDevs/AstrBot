@@ -27,16 +27,28 @@ jobs:
         include:
           - name: linux-x64
             runner: ubuntu-24.04
+            os: linux
+            arch: amd64
           - name: linux-arm64
             runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
           - name: windows-x64
             runner: windows-2022
+            os: win
+            arch: amd64
           - name: windows-arm64
             runner: windows-11-arm
+            os: win
+            arch: arm64
           - name: macos-x64
             runner: macos-15-intel
+            os: mac
+            arch: amd64
           - name: macos-arm64
             runner: macos-15
+            os: mac
+            arch: arm64
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
@@ -82,17 +94,80 @@ jobs:
           pnpm --dir desktop run sync:version
           pnpm --dir desktop exec electron-builder --publish never
 
-      - name: Upload desktop artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: desktop-${{ matrix.name }}
-          if-no-files-found: error
-          path: |
+      - name: Resolve artifact tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve artifact tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize artifact names
+        shell: bash
+        env:
+          NAME_PREFIX: ${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
+        run: |
+          shopt -s nullglob
+          out_dir="desktop/dist/release"
+          mkdir -p "$out_dir"
+          files=(
             desktop/dist/*.AppImage
             desktop/dist/*.dmg
             desktop/dist/*.zip
             desktop/dist/*.exe
             desktop/dist/*.blockmap
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No desktop artifacts found to rename." >&2
+            exit 1
+          fi
+          for src in "${files[@]}"; do
+            file="$(basename "$src")"
+            case "$file" in
+              *.exe.blockmap)
+                dest="$out_dir/${NAME_PREFIX}.exe.blockmap"
+                ;;
+              *.dmg.blockmap)
+                dest="$out_dir/${NAME_PREFIX}.dmg.blockmap"
+                ;;
+              *.zip.blockmap)
+                dest="$out_dir/${NAME_PREFIX}.zip.blockmap"
+                ;;
+              *.AppImage)
+                dest="$out_dir/${NAME_PREFIX}.AppImage"
+                ;;
+              *.dmg)
+                dest="$out_dir/${NAME_PREFIX}.dmg"
+                ;;
+              *.exe)
+                dest="$out_dir/${NAME_PREFIX}.exe"
+                ;;
+              *.zip)
+                dest="$out_dir/${NAME_PREFIX}.zip"
+                ;;
+              *)
+                continue
+                ;;
+            esac
+            cp "$src" "$dest"
+          done
+          ls -la "$out_dir"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
+          if-no-files-found: error
+          path: desktop/dist/release/*
 
   publish-release:
     name: Publish Release Assets
@@ -104,13 +179,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
-
-      - name: Download built artifacts
-        uses: actions/download-artifact@v6
-        with:
-          pattern: desktop-*
-          path: release-assets
-          merge-multiple: true
 
       - name: Resolve release tag
         id: tag
@@ -128,6 +196,13 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: ${{ steps.tag.outputs.tag }}-*
+          path: release-assets
+          merge-multiple: true
 
       - name: Ensure release exists
         env:
