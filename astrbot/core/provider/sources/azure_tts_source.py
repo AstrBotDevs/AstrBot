@@ -10,6 +10,7 @@ from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
 
+from astrbot import logger
 from astrbot.core.config.default import VERSION
 
 from ..entities import ProviderType
@@ -29,6 +30,9 @@ class OTTSProvider:
         self.last_sync_time = 0
         self.timeout = Timeout(10.0)
         self.retry_count = 3
+        self.proxy = config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[Azure TTS] 使用代理: {self.proxy}")
         self._client: AsyncClient | None = None
 
     @property
@@ -40,7 +44,9 @@ class OTTSProvider:
         return self._client
 
     async def __aenter__(self):
-        self._client = AsyncClient(timeout=self.timeout)
+        self._client = AsyncClient(
+            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -125,6 +131,9 @@ class AzureNativeProvider(TTSProvider):
             "rate": provider_config.get("azure_tts_rate", "1"),
             "volume": provider_config.get("azure_tts_volume", "100"),
         }
+        self.proxy = provider_config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[Azure TTS Native] 使用代理: {self.proxy}")
 
     @property
     def client(self) -> AsyncClient:
@@ -141,6 +150,7 @@ class AzureNativeProvider(TTSProvider):
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
+            proxy=self.proxy if self.proxy else None,
         )
         return self
 

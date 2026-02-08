@@ -233,6 +233,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       customSchema.provider.items.key.hint = tm('providerSources.hints.key')
       customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
     }
+    // 为 proxy 字段添加描述和提示
+    if (customSchema.provider?.items?.proxy) {
+      customSchema.provider.items.proxy.description = tm('providerSources.labels.proxy')
+      customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
+    }
 
     return customSchema
   })

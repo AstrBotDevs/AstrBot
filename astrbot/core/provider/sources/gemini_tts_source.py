@@ -5,6 +5,7 @@ import wave
 from google import genai
 from google.genai import types
 
+from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ..entities import ProviderType
@@ -32,6 +33,10 @@ class ProviderGeminiTTSAPI(TTSProvider):
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
+        proxy = provider_config.get("proxy", "")
+        if proxy:
+            http_options.async_client_args = {"proxy": proxy}
+            logger.info(f"[Gemini TTS] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
         self.model: str = provider_config.get(
@@ -79,3 +84,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
             wf.writeframes(response.candidates[0].content.parts[0].inline_data.data)
 
         return path
+
+    async def terminate(self):
+        if self.client:
+            await self.client.aclose()
