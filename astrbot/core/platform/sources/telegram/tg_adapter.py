@@ -427,6 +427,9 @@ class TelegramPlatformAdapter(Platform):
         """
         from datetime import datetime, timedelta
 
+        if not update.message:
+            return
+
         media_group_id = update.message.media_group_id
         if not media_group_id:
             return
@@ -437,14 +440,14 @@ class TelegramPlatformAdapter(Platform):
                 "created_at": datetime.now(),
                 "items": [],
             }
-            logger.debug(f"创建媒体组缓存: {media_group_id}")
+            logger.debug(f"Create media group cache: {media_group_id}")
 
         # Add this message to the cache
         entry = self.media_group_cache[media_group_id]
         entry["items"].append((update, context))
         logger.debug(
-            f"添加消息到媒体组 {media_group_id}, "
-            f"当前共 {len(entry['items'])} 条"
+            f"Add message to media group {media_group_id}, "
+            f"currently has {len(entry['items'])} items.",
         )
 
         # Calculate delay: if already waited too long, process immediately;
@@ -453,14 +456,14 @@ class TelegramPlatformAdapter(Platform):
         if elapsed >= self.media_group_max_wait:
             delay = 0
             logger.debug(
-                f"媒体组 {media_group_id} 已达到最大等待时间 "
-                f"({elapsed:.1f}s >= {self.media_group_max_wait}s)，立即处理"
+                f"Media group {media_group_id} has reached max wait time "
+                f"({elapsed:.1f}s >= {self.media_group_max_wait}s), processing immediately.",
             )
         else:
             delay = self.media_group_timeout
             logger.debug(
-                f"已安排媒体组 {media_group_id} 在 {delay} 秒后处理 "
-                f"(已等待 {elapsed:.1f}s)"
+                f"Scheduled media group {media_group_id} to be processed in {delay} seconds "
+                f"(already waited {elapsed:.1f}s)"
             )
 
         # Schedule/reschedule processing (replace_existing=True handles debounce)
@@ -481,17 +484,17 @@ class TelegramPlatformAdapter(Platform):
             media_group_id: The unique identifier for this media group
         """
         if media_group_id not in self.media_group_cache:
-            logger.warning(f"媒体组 {media_group_id} 未在缓存中找到")
+            logger.warning(f"Media group {media_group_id} not found in cache")
             return
 
         entry = self.media_group_cache.pop(media_group_id)
         updates_and_contexts = entry["items"]
         if not updates_and_contexts:
-            logger.warning(f"媒体组 {media_group_id} 为空")
+            logger.warning(f"Media group {media_group_id} is empty")
             return
 
         logger.info(
-            f"正在处理媒体组 {media_group_id}，共 {len(updates_and_contexts)} 项"
+            f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items"
         )
 
         # Use the first update to create the base message (with reply, caption, etc.)
@@ -499,7 +502,9 @@ class TelegramPlatformAdapter(Platform):
         abm = await self.convert_message(first_update, first_context)
 
         if not abm:
-            logger.warning(f"转换媒体组 {media_group_id} 的第一条消息失败")
+            logger.warning(
+                f"Failed to convert the first message of media group {media_group_id}"
+            )
             return
 
         # Add additional media from remaining updates by reusing convert_message
@@ -512,7 +517,7 @@ class TelegramPlatformAdapter(Platform):
             # Merge only the message components (keep base session/meta from first)
             abm.message.extend(extra.message)
             logger.debug(
-                f"添加 {len(extra.message)} 个组件到媒体组 {media_group_id}"
+                f"Added {len(extra.message)} components to media group {media_group_id}"
             )
 
         # Process the merged message
@@ -545,6 +550,6 @@ class TelegramPlatformAdapter(Platform):
             if self.application.updater is not None:
                 await self.application.updater.stop()
 
-            logger.info("Telegram 适配器已被关闭")
+            logger.info("Telegram adapter has been closed.")
         except Exception as e:
-            logger.error(f"Telegram 适配器关闭时出错: {e}")
+            logger.error(f"Error occurred while closing Telegram adapter: {e}")
