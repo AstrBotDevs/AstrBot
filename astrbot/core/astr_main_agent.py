@@ -118,7 +118,7 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
-def _select_provider(
+async def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
     """Select chat provider for the event."""
@@ -134,7 +134,7 @@ def _select_provider(
             return None
         return provider
     try:
-        return plugin_context.get_using_provider(umo=event.unified_msg_origin)
+        return await plugin_context.get_using_provider(umo=event.unified_msg_origin)
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
         return None
@@ -505,7 +505,7 @@ async def _process_quote_message(
             if img_cap_prov_id:
                 prov = plugin_context.get_provider_by_id(img_cap_prov_id)
             if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+                prov = await plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
                 llm_resp = await prov.text_chat(
@@ -845,7 +845,7 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
-    provider = provider or _select_provider(event, plugin_context)
+    provider = provider or await _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
         return None

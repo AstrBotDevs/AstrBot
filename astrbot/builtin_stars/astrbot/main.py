@@ -48,7 +48,9 @@ class Main(star.Star):
 
             if need_active:
                 """主动回复"""
-                provider = self.context.get_using_provider(event.unified_msg_origin)
+                provider = await self.context.get_using_provider(
+                    event.unified_msg_origin
+                )
                 if not provider:
                     logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return

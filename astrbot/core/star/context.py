@@ -251,7 +251,7 @@ class Context:
         Raises:
             ProviderNotFoundError: 未找到。
         """
-        prov = self.get_using_provider(umo)
+        prov = await self.get_using_provider(umo)
         if not prov:
             raise ProviderNotFoundError("Provider not found")
         return prov.meta().id
@@ -335,7 +335,7 @@ class Context:
         """获取所有用于 Embedding 任务的 Provider。"""
         return self.provider_manager.embedding_provider_insts
 
-    def get_using_provider(self, umo: str | None = None) -> Provider | None:
+    async def get_using_provider(self, umo: str | None = None) -> Provider | None:
         """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
 
         Args:
@@ -348,7 +348,7 @@ class Context:
         Raises:
             ValueError: 该会话来源配置的的对话模型（提供商）的类型不正确。
         """
-        prov = self.provider_manager.get_using_provider(
+        prov = await self.provider_manager.get_using_provider(
             provider_type=ProviderType.CHAT_COMPLETION,
             umo=umo,
         )
@@ -360,7 +360,7 @@ class Context:
             )
         return prov
 
-    def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
+    async def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
         """获取当前使用的用于 TTS 任务的 Provider。
 
         Args:
@@ -372,7 +372,7 @@ class Context:
         Raises:
             ValueError: 返回的提供者不是 TTSProvider 类型。
         """
-        prov = self.provider_manager.get_using_provider(
+        prov = await self.provider_manager.get_using_provider(
             provider_type=ProviderType.TEXT_TO_SPEECH,
             umo=umo,
         )
@@ -380,7 +380,7 @@ class Context:
             raise ValueError("返回的 Provider 不是 TTSProvider 类型")
         return prov
 
-    def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
+    async def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """获取当前使用的用于 STT 任务的 Provider。
 
         Args:
@@ -392,7 +392,7 @@ class Context:
         Raises:
             ValueError: 返回的提供者不是 STTProvider 类型。
         """
-        prov = self.provider_manager.get_using_provider(
+        prov = await self.provider_manager.get_using_provider(
             provider_type=ProviderType.SPEECH_TO_TEXT,
             umo=umo,
         )

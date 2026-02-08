@@ -70,7 +70,7 @@ class LongTermMemory:
         image_caption_prompt: str,
     ) -> str:
         if not image_caption_provider_id:
-            provider = self.context.get_using_provider()
+            provider = await self.context.get_using_provider()
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
@@ -164,7 +164,9 @@ class LongTermMemory:
                 "Please react to it. Only output your response and do not output any other information. "
                 "You MUST use the SAME language as the chatroom is using."
             )
-            req.contexts = []  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
+            req.contexts = (
+                []
+            )  # 清空上下文，当使用了主动回复，所有聊天记录都在一个prompt中。
         else:
             req.system_prompt += (
                 "You are now in a chatroom. The chat history is as follows: \n"

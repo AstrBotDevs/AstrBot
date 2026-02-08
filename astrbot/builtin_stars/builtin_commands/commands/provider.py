@@ -138,7 +138,7 @@ class ProviderCommands:
             llm_data = [d for d in display_data if d["type"] == "llm"]
             for i, d in enumerate(llm_data):
                 line = f"{i + 1}. {d['info']}{d['mark']}"
-                provider_using = self.context.get_using_provider(umo=umo)
+                provider_using = await self.context.get_using_provider(umo=umo)
                 if (
                     provider_using
                     and provider_using.meta().id == d["provider"].meta().id
@@ -152,7 +152,7 @@ class ProviderCommands:
                 parts.append("\n## 载入的 TTS 提供商\n")
                 for i, d in enumerate(tts_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
-                    tts_using = self.context.get_using_tts_provider(umo=umo)
+                    tts_using =  await self.context.get_using_tts_provider(umo=umo)
                     if tts_using and tts_using.meta().id == d["provider"].meta().id:
                         line += " (当前使用)"
                     parts.append(line + "\n")
@@ -163,7 +163,7 @@ class ProviderCommands:
                 parts.append("\n## 载入的 STT 提供商\n")
                 for i, d in enumerate(stt_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
-                    stt_using = self.context.get_using_stt_provider(umo=umo)
+                    stt_using = await self.context.get_using_stt_provider(umo=umo)
                     if stt_using and stt_using.meta().id == d["provider"].meta().id:
                         line += " (当前使用)"
                     parts.append(line + "\n")
@@ -230,7 +230,7 @@ class ProviderCommands:
         idx_or_name: int | str | None = None,
     ):
         """查看或者切换模型"""
-        prov = self.context.get_using_provider(message.unified_msg_origin)
+        prov = await self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
@@ -294,7 +294,7 @@ class ProviderCommands:
             )
 
     async def key(self, message: AstrMessageEvent, index: int | None = None):
-        prov = self.context.get_using_provider(message.unified_msg_origin)
+        prov = await self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),

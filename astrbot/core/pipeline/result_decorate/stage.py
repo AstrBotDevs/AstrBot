@@ -253,7 +253,7 @@ class ResultDecorateStage(Stage):
                     result.chain = new_chain
 
             # TTS
-            tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
+            tts_provider = await self.ctx.plugin_manager.context.get_using_tts_provider(
                 event.unified_msg_origin,
             )
 

@@ -68,7 +68,7 @@ class PreProcessStage(Stage):
         if self.stt_settings.get("enable", False):
             # TODO: 独立
             ctx = self.plugin_manager.context
-            stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
+            stt_provider = await ctx.get_using_stt_provider(event.unified_msg_origin)
             if not stt_provider:
                 logger.warning(
                     f"会话 {event.unified_msg_origin} 未配置语音转文本模型。",

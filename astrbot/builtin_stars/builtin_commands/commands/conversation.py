@@ -70,7 +70,7 @@ class ConversationCommands:
             message.set_result(MessageEventResult().message("重置对话成功。"))
             return
 
-        if not self.context.get_using_provider(umo):
+        if not await self.context.get_using_provider(umo):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )
@@ -100,7 +100,7 @@ class ConversationCommands:
 
     async def his(self, message: AstrMessageEvent, page: int = 1):
         """查看对话记录"""
-        if not self.context.get_using_provider(message.unified_msg_origin):
+        if not await self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )

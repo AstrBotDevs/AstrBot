@@ -153,7 +153,7 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
-    def get_using_provider(
+    async def get_using_provider(
         self, provider_type: ProviderType, umo=None
     ) -> Providers | None:
         """获取正在使用的提供商实例。
@@ -169,11 +169,11 @@ class ProviderManager:
         provider = None
         provider_id = None
         if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
+            provider_id = await sp.get_async(
+            scope="umo",
+            scope_id=umo,
+            key=f"provider_perf_{provider_type.value}",
+            default=None,
             )
             if provider_id:
                 provider = self.inst_map.get(provider_id)
