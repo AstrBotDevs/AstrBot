@@ -32,23 +32,39 @@
     "extraResources": [
       {
         "from": "resources/backend",
-        "to": "backend"
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!**/*.map"
+        ]
       },
       {
         "from": "resources/webui",
-        "to": "webui"
+        "to": "webui",
+        "filter": [
+          "**/*",
+          "!**/*.map"
+        ]
       },
       {
         "from": "assets",
-        "to": "assets"
+        "to": "assets",
+        "filter": [
+          "**/*",
+          "!**/*.map"
+        ]
       }
     ],
     "files": [
       "**/*",
-      "!resources/backend{,/**}",
-      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
-      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
-      "!**/node_modules/.bin"
+      "!**/*.map",
+      "!**/*.d.ts",
+      "!**/{test,__tests__,tests,powered-test,example,examples}/**"
+    ],
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
     ],
     "asar": true,
     "directories": {
