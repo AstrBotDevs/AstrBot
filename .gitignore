@@ -41,7 +41,6 @@ desktop/resources/backend/*.exe
 desktop/resources/webui/*
 desktop/resources/.pyinstaller/
 package-lock.json
-package.json
 yarn.lock
 !desktop/package.json
 !desktop/resources/backend/.gitkeep
