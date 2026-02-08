@@ -34,9 +34,9 @@ jobs:
           - name: windows-arm64
             runner: windows-11-arm
           - name: macos-x64
-            runner: macos-13
+            runner: macos-15-intel
           - name: macos-arm64
-            runner: macos-14
+            runner: macos-15
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       GH_TOKEN: ${{ github.token }}
@@ -76,7 +76,9 @@ jobs:
           pnpm --dir desktop install --frozen-lockfile
 
       - name: Build desktop package
-        run: pnpm --dir desktop run dist:full
+        run: |
+          pnpm --dir dashboard run build
+          pnpm --dir desktop run dist:full
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v6
