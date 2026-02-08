@@ -2,7 +2,6 @@ import asyncio
 import base64
 import inspect
 import json
-import os
 import random
 import re
 from collections.abc import AsyncGenerator
@@ -470,8 +469,6 @@ class ProviderOpenAIOfficial(Provider):
 
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
-            if not proxy:
-                proxy = os.environ.get("http_proxy", os.environ.get("https_proxy", ""))
             log_connection_failure("OpenAI", e, proxy)
 
         raise e
