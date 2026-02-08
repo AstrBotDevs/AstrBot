@@ -7,11 +7,13 @@ import datetime
 import json
 import os
 import zoneinfo
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
 from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -19,7 +21,6 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
-    CHATUI_EXTRA_PROMPT,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
@@ -99,6 +100,8 @@ class MainAgentBuildConfig:
     """This will inject healthy and safe system prompt into the main agent,
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
+    computer_use_runtime: str = "local"
+    """The runtime for agent computer use: none, local, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -112,6 +115,7 @@ class MainAgentBuildResult:
     agent_runner: AgentRunner
     provider_request: ProviderRequest
     provider: Provider
+    reset_coro: Coroutine | None = None
 
 
 def _select_provider(
@@ -259,6 +263,8 @@ async def _ensure_persona_and_skills(
         return
 
     # get persona ID
+
+    # 1. from session service config - highest priority
     persona_id = (
         await sp.get_async(
             scope="umo",
@@ -269,14 +275,15 @@ async def _ensure_persona_and_skills(
     ).get("persona_id")
 
     if not persona_id:
-        persona_id = req.conversation.persona_id or cfg.get("default_personality")
-        if persona_id is None or persona_id != "[%None]":
-            default_persona = plugin_context.persona_manager.selected_default_persona_v3
-            if default_persona:
-                persona_id = default_persona["name"]
-                if event.get_platform_name() == "webchat":
-                    persona_id = "_chatui_default_"
-                    req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+        # 2. from conversation setting - second priority
+        persona_id = req.conversation.persona_id
+
+        if persona_id == "[%None]":
+            # explicitly set to no persona
+            pass
+        elif persona_id is None:
+            # 3. from config default persona setting - last priority
+            persona_id = cfg.get("default_personality")
 
     persona = next(
         builtins.filter(
@@ -291,23 +298,18 @@ async def _ensure_persona_and_skills(
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
+    else:
+        # special handling for webchat persona
+        if event.get_platform_name() == "webchat" and persona_id != "[%None]":
+            persona_id = "_chatui_default_"
+            req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
-    skills_cfg = cfg.get("skills", {})
-    sandbox_cfg = cfg.get("sandbox", {})
+    runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
-    runtime = skills_cfg.get("runtime", "local")
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
 
-    if runtime == "sandbox" and not sandbox_cfg.get("enable", False):
-        logger.warning(
-            "Skills runtime is set to sandbox, but sandbox mode is disabled, will skip skills prompt injection.",
-        )
-        req.system_prompt += (
-            "\n[Background: User added some skills, and skills runtime is set to sandbox, "
-            "but sandbox mode is disabled. So skills will be unavailable.]\n"
-        )
-    elif skills:
+    if skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
@@ -316,12 +318,12 @@ async def _ensure_persona_and_skills(
                 skills = [skill for skill in skills if skill.name in allowed]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
-
-        runtime = skills_cfg.get("runtime", "local")
-        sandbox_enabled = sandbox_cfg.get("enable", False)
-        if runtime == "local" and not sandbox_enabled:
-            _apply_local_env_tools(req)
-
+            if runtime == "none":
+                req.system_prompt += (
+                    "User has not enabled the Computer Use feature. "
+                    "You cannot use shell or Python to perform skills. "
+                    "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
+                )
     tmgr = plugin_context.get_llm_tool_manager()
 
     # sub agents integration
@@ -708,9 +710,18 @@ def _sanitize_context_by_modalities(
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """根据事件中的插件设置，过滤请求中的工具列表。
+
+    注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
+    因为它们不属于任何插件，不应被插件过滤逻辑影响。
+    """
     if event.plugins_name is not None and req.func_tool:
         new_tool_set = ToolSet()
         for tool in req.func_tool.tools:
+            if isinstance(tool, MCPTool):
+                # 保留 MCP 工具
+                new_tool_set.add_tool(tool)
+                continue
             mp = tool.handler_module_path
             if not mp:
                 continue
@@ -828,8 +839,12 @@ async def build_main_agent(
     config: MainAgentBuildConfig,
     provider: Provider | None = None,
     req: ProviderRequest | None = None,
+    apply_reset: bool = True,
 ) -> MainAgentBuildResult | None:
-    """构建主对话代理（Main Agent），并且自动 reset。"""
+    """构建主对话代理（Main Agent），并且自动 reset。
+
+    If apply_reset is False, will not call reset on the agent runner.
+    """
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
@@ -905,8 +920,10 @@ async def build_main_agent(
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
-    if config.sandbox_cfg.get("enable", False):
+    if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
+    elif config.computer_use_runtime == "local":
+        _apply_local_env_tools(req)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
@@ -931,7 +948,6 @@ async def build_main_agent(
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
-        req.system_prompt += f"\n{CHATUI_EXTRA_PROMPT}\n"
 
     if req.func_tool and req.func_tool.tools:
         tool_prompt = (
@@ -945,7 +961,7 @@ async def build_main_agent(
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
-    await agent_runner.reset(
+    reset_coro = agent_runner.reset(
         provider=provider,
         request=req,
         run_context=AgentContextWrapper(
@@ -963,8 +979,12 @@ async def build_main_agent(
         tool_schema_mode=config.tool_schema_mode,
     )
 
+    if apply_reset:
+        await reset_coro
+
     return MainAgentBuildResult(
         agent_runner=agent_runner,
         provider_request=req,
         provider=provider,
+        reset_coro=reset_coro if not apply_reset else None,
     )

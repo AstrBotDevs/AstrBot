@@ -92,6 +92,7 @@
   },
   "providerSources": {
     "title": "提供商源",
+    "add": "新增",
     "empty": "暂无提供商源",
     "selectHint": "请选择一个提供商源",
     "save": "保存配置",
@@ -113,7 +114,11 @@
     "hints": {
       "id": "提供商源唯一 ID（不是提供商 ID）",
       "key": "API 密钥",
-      "apiBase": "自定义 API 端点 URL"
+      "apiBase": "自定义 API 端点 URL",
+      "proxy": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
+    },
+    "labels": {
+      "proxy": "代理地址"
     }
   },
   "models": {
@@ -142,4 +147,4 @@
       "modelId": "模型 ID"
     }
   }
-} 
+}

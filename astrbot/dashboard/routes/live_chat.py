@@ -256,143 +256,148 @@ class LiveChatRoute(Route):
             await queue.put((session.username, cid, payload))
 
             # 3. 等待响应并流式发送 TTS 音频
-            back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
+            back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, cid)
 
             bot_text = ""
             audio_playing = False
 
-            while True:
-                if session.should_interrupt:
-                    # 用户打断，停止处理
-                    logger.info("[Live Chat] 检测到用户打断")
-                    await websocket.send_json({"t": "stop_play"})
-                    # 保存消息并标记为被打断
-                    await self._save_interrupted_message(session, user_text, bot_text)
-                    # 清空队列中未处理的消息
-                    while not back_queue.empty():
+            try:
+                while True:
+                    if session.should_interrupt:
+                        # 用户打断，停止处理
+                        logger.info("[Live Chat] 检测到用户打断")
+                        await websocket.send_json({"t": "stop_play"})
+                        # 保存消息并标记为被打断
+                        await self._save_interrupted_message(
+                            session, user_text, bot_text
+                        )
+                        # 清空队列中未处理的消息
+                        while not back_queue.empty():
+                            try:
+                                back_queue.get_nowait()
+                            except asyncio.QueueEmpty:
+                                break
+                        break
+
+                    try:
+                        result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        continue
+
+                    if not result:
+                        continue
+
+                    result_message_id = result.get("message_id")
+                    if result_message_id != message_id:
+                        logger.warning(
+                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}"
+                        )
+                        continue
+
+                    result_type = result.get("type")
+                    result_chain_type = result.get("chain_type")
+                    data = result.get("data", "")
+
+                    if result_chain_type == "agent_stats":
                         try:
-                            back_queue.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
-                    break
+                            stats = json.loads(data)
+                            await websocket.send_json(
+                                {
+                                    "t": "metrics",
+                                    "data": {
+                                        "llm_ttft": stats.get("time_to_first_token", 0),
+                                        "llm_total_time": stats.get("end_time", 0)
+                                        - stats.get("start_time", 0),
+                                    },
+                                }
+                            )
+                        except Exception as e:
+                            logger.error(f"[Live Chat] 解析 AgentStats 失败: {e}")
+                        continue
 
-                try:
-                    result = await asyncio.wait_for(back_queue.get(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    continue
+                    if result_chain_type == "tts_stats":
+                        try:
+                            stats = json.loads(data)
+                            await websocket.send_json(
+                                {
+                                    "t": "metrics",
+                                    "data": stats,
+                                }
+                            )
+                        except Exception as e:
+                            logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
+                        continue
 
-                if not result:
-                    continue
+                    if result_type == "plain":
+                        # 普通文本消息
+                        bot_text += data
 
-                result_message_id = result.get("message_id")
-                if result_message_id != message_id:
-                    logger.warning(
-                        f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}"
-                    )
-                    continue
+                    elif result_type == "audio_chunk":
+                        # 流式音频数据
+                        if not audio_playing:
+                            audio_playing = True
+                            logger.debug("[Live Chat] 开始播放音频流")
 
-                result_type = result.get("type")
-                result_chain_type = result.get("chain_type")
-                data = result.get("data", "")
+                            # Calculate latency from wav assembly finish to first audio chunk
+                            speak_to_first_frame_latency = (
+                                time.time() - wav_assembly_finish_time
+                            )
+                            await websocket.send_json(
+                                {
+                                    "t": "metrics",
+                                    "data": {
+                                        "speak_to_first_frame": speak_to_first_frame_latency
+                                    },
+                                }
+                            )
 
-                if result_chain_type == "agent_stats":
-                    try:
-                        stats = json.loads(data)
+                        text = result.get("text")
+                        if text:
+                            await websocket.send_json(
+                                {
+                                    "t": "bot_text_chunk",
+                                    "data": {"text": text},
+                                }
+                            )
+
+                        # 发送音频数据给前端
+                        await websocket.send_json(
+                            {
+                                "t": "response",
+                                "data": data,  # base64 编码的音频数据
+                            }
+                        )
+
+                    elif result_type in ["complete", "end"]:
+                        # 处理完成
+                        logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
+
+                        # 如果没有音频流，发送 bot 消息文本
+                        if not audio_playing:
+                            await websocket.send_json(
+                                {
+                                    "t": "bot_msg",
+                                    "data": {
+                                        "text": bot_text,
+                                        "ts": int(time.time() * 1000),
+                                    },
+                                }
+                            )
+
+                        # 发送结束标记
+                        await websocket.send_json({"t": "end"})
+
+                        # 发送总耗时
+                        wav_to_tts_duration = time.time() - wav_assembly_finish_time
                         await websocket.send_json(
                             {
                                 "t": "metrics",
-                                "data": {
-                                    "llm_ttft": stats.get("time_to_first_token", 0),
-                                    "llm_total_time": stats.get("end_time", 0)
-                                    - stats.get("start_time", 0),
-                                },
+                                "data": {"wav_to_tts_total_time": wav_to_tts_duration},
                             }
                         )
-                    except Exception as e:
-                        logger.error(f"[Live Chat] 解析 AgentStats 失败: {e}")
-                    continue
-
-                if result_chain_type == "tts_stats":
-                    try:
-                        stats = json.loads(data)
-                        await websocket.send_json(
-                            {
-                                "t": "metrics",
-                                "data": stats,
-                            }
-                        )
-                    except Exception as e:
-                        logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
-                    continue
-
-                if result_type == "plain":
-                    # 普通文本消息
-                    bot_text += data
-
-                elif result_type == "audio_chunk":
-                    # 流式音频数据
-                    if not audio_playing:
-                        audio_playing = True
-                        logger.debug("[Live Chat] 开始播放音频流")
-
-                        # Calculate latency from wav assembly finish to first audio chunk
-                        speak_to_first_frame_latency = (
-                            time.time() - wav_assembly_finish_time
-                        )
-                        await websocket.send_json(
-                            {
-                                "t": "metrics",
-                                "data": {
-                                    "speak_to_first_frame": speak_to_first_frame_latency
-                                },
-                            }
-                        )
-
-                    text = result.get("text")
-                    if text:
-                        await websocket.send_json(
-                            {
-                                "t": "bot_text_chunk",
-                                "data": {"text": text},
-                            }
-                        )
-
-                    # 发送音频数据给前端
-                    await websocket.send_json(
-                        {
-                            "t": "response",
-                            "data": data,  # base64 编码的音频数据
-                        }
-                    )
-
-                elif result_type in ["complete", "end"]:
-                    # 处理完成
-                    logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
-
-                    # 如果没有音频流，发送 bot 消息文本
-                    if not audio_playing:
-                        await websocket.send_json(
-                            {
-                                "t": "bot_msg",
-                                "data": {
-                                    "text": bot_text,
-                                    "ts": int(time.time() * 1000),
-                                },
-                            }
-                        )
-
-                    # 发送结束标记
-                    await websocket.send_json({"t": "end"})
-
-                    # 发送总耗时
-                    wav_to_tts_duration = time.time() - wav_assembly_finish_time
-                    await websocket.send_json(
-                        {
-                            "t": "metrics",
-                            "data": {"wav_to_tts_total_time": wav_to_tts_duration},
-                        }
-                    )
-                    break
+                        break
+            finally:
+                webchat_queue_mgr.remove_back_queue(message_id)
 
         except Exception as e:
             logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)

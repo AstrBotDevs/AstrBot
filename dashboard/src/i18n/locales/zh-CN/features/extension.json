@@ -2,11 +2,11 @@
   "title": "插件管理",
   "subtitle": "管理和配置系统插件",
   "tabs": {
-    "installedPlugins": "已安装的插件",
-    "installedMcpServers": "已安装的 MCP 服务器",
+    "installedPlugins": "AstrBot 插件",
+    "market": "AstrBot 插件市场", 
+    "installedMcpServers": "MCP",
     "skills": "Skills",
-    "handlersOperation": "管理行为",
-    "market": "插件市场"
+    "handlersOperation": "管理行为"
   },
   "search": {
     "placeholder": "搜索插件...",
@@ -210,7 +210,9 @@
     "deleteTitle": "删除确认",
     "deleteMessage": "确定要删除该 Skill 吗？",
     "deleteSuccess": "删除成功",
-    "deleteFailed": "删除失败"
+    "deleteFailed": "删除失败",
+    "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
+    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。"
   },
   "card": {
     "actions": {

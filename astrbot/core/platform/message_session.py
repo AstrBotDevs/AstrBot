@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from astrbot.core.platform.message_type import MessageType
 
@@ -13,7 +13,7 @@ class MessageSession:
     """平台适配器实例的唯一标识符。自 AstrBot v4.0.0 起，该字段实际为 platform_id。"""
     message_type: MessageType
     session_id: str
-    platform_id: str | None = None
+    platform_id: str = field(init=False)
 
     def __str__(self):
         return f"{self.platform_id}:{self.message_type.value}:{self.session_id}"

@@ -37,6 +37,9 @@ def register_platform_adapter(
             if "id" not in default_config_tmpl:
                 default_config_tmpl["id"] = adapter_name
 
+        # Get the module path of the class being decorated
+        module_path = cls.__module__
+
         pm = PlatformMetadata(
             name=adapter_name,
             description=desc,
@@ -45,6 +48,7 @@ def register_platform_adapter(
             adapter_display_name=adapter_display_name,
             logo_path=logo_path,
             support_streaming_message=support_streaming_message,
+            module_path=module_path,
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls
@@ -52,3 +56,31 @@ def register_platform_adapter(
         return cls
 
     return decorator
+
+
+def unregister_platform_adapters_by_module(module_path_prefix: str) -> list[str]:
+    """根据模块路径前缀注销平台适配器。
+
+    在插件热重载时调用，用于清理该插件注册的所有平台适配器。
+
+    Args:
+        module_path_prefix: 模块路径前缀，如 "data.plugins.my_plugin"
+
+    Returns:
+        被注销的平台适配器名称列表
+    """
+    unregistered = []
+    to_remove = []
+
+    for pm in platform_registry:
+        if pm.module_path and pm.module_path.startswith(module_path_prefix):
+            to_remove.append(pm)
+            unregistered.append(pm.name)
+
+    for pm in to_remove:
+        platform_registry.remove(pm)
+        if pm.name in platform_cls_map:
+            del platform_cls_map[pm.name]
+        logger.debug(f"平台适配器 {pm.name} 已注销 (来自模块 {pm.module_path})")
+
+    return unregistered

@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "Future Task Management",
-    "beta": "Beta",
+    "beta": "Experimental",
     "subtitle": "See scheduled tasks for AstrBot. AstrBot will wake up, run them, and deliver the results.",
     "proactive": {
       "supported": "Proactive delivery is available on: {platforms}",
@@ -22,6 +22,7 @@
       "name": "Name",
       "type": "Type",
       "cron": "Cron",
+      "session": "Session ID",
       "nextRun": "Next Run",
       "lastRun": "Last Run",
       "note": "Note",
@@ -39,6 +40,7 @@
   },
   "form": {
     "title": "New Task",
+    "chatHint": "You can ask AstrBot in chat to create future tasks instead of adding them here.",
     "runOnce": "One-off task",
     "name": "Task name",
     "note": "Task description",

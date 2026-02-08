@@ -18,6 +18,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from ..register import register_provider_adapter
 
@@ -74,12 +75,17 @@ class ProviderGoogleGenAI(Provider):
 
     def _init_client(self) -> None:
         """初始化Gemini客户端"""
+        proxy = self.provider_config.get("proxy", "")
+        http_options = types.HttpOptions(
+            base_url=self.api_base,
+            timeout=self.timeout * 1000,  # 毫秒
+        )
+        if proxy:
+            http_options.async_client_args = {"proxy": proxy}
+            logger.info(f"[Gemini] 使用代理: {proxy}")
         self.client = genai.Client(
             api_key=self.chosen_api_key,
-            http_options=types.HttpOptions(
-                base_url=self.api_base,
-                timeout=self.timeout * 1000,  # 毫秒
-            ),
+            http_options=http_options,
         ).aio
 
     def _init_safety_settings(self) -> None:
@@ -113,9 +119,12 @@ class ProviderGoogleGenAI(Provider):
                 f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}...",
             )
             raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
-        # logger.error(
-        #     f"发生了错误(gemini_source)。Provider 配置如下: {self.provider_config}",
-        # )
+
+        # 连接错误处理
+        if is_connection_error(e):
+            proxy = self.provider_config.get("proxy", "")
+            log_connection_failure("Gemini", e, proxy)
+
         raise e
 
     async def _prepare_query_config(
@@ -920,4 +929,5 @@ class ProviderGoogleGenAI(Provider):
             return "data:image/jpeg;base64," + image_bs64
 
     async def terminate(self):
-        logger.info("Google GenAI 适配器已终止。")
+        if self.client:
+            await self.client.aclose()

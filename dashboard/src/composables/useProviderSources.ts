@@ -59,14 +59,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   let suppressSourceWatch = false
 
-  const providerTypes = [
+  const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
     { value: 'agent_runner', label: tm('providers.tabs.agentRunner'), icon: 'mdi-robot' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
     { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
-  ]
+  ])
 
   // ===== Computed =====
   const availableSourceTypes = computed(() => {
@@ -232,6 +232,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       customSchema.provider.items.id.hint = tm('providerSources.hints.id')
       customSchema.provider.items.key.hint = tm('providerSources.hints.key')
       customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
+    }
+    // 为 proxy 字段添加描述和提示
+    if (customSchema.provider?.items?.proxy) {
+      customSchema.provider.items.proxy.description = tm('providerSources.labels.proxy')
+      customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
     }
 
     return customSchema

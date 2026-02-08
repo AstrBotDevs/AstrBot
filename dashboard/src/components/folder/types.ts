@@ -241,6 +241,7 @@ export interface FolderItemSelectorLabels {
   
   // 按钮
   createButton?: string;
+  editButton?: string;
   confirmButton?: string;
   cancelButton?: string;
   
