@@ -124,7 +124,6 @@ jobs:
             desktop/dist/*.dmg
             desktop/dist/*.zip
             desktop/dist/*.exe
-            desktop/dist/*.blockmap
           )
           if [ ${#files[@]} -eq 0 ]; then
             echo "No desktop artifacts found to rename." >&2
@@ -133,15 +132,6 @@ jobs:
           for src in "${files[@]}"; do
             file="$(basename "$src")"
             case "$file" in
-              *.exe.blockmap)
-                dest="$out_dir/${NAME_PREFIX}.exe.blockmap"
-                ;;
-              *.dmg.blockmap)
-                dest="$out_dir/${NAME_PREFIX}.dmg.blockmap"
-                ;;
-              *.zip.blockmap)
-                dest="$out_dir/${NAME_PREFIX}.zip.blockmap"
-                ;;
               *.AppImage)
                 dest="$out_dir/${NAME_PREFIX}.AppImage"
                 ;;
