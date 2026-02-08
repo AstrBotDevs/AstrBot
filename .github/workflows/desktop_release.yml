@@ -114,7 +114,7 @@ jobs:
       - name: Normalize artifact names
         shell: bash
         env:
-          NAME_PREFIX: ${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
+          NAME_PREFIX: AstrBot-${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
         run: |
           shopt -s nullglob
           out_dir="desktop/dist/release"
@@ -155,7 +155,7 @@ jobs:
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
+          name: AstrBot-${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-${{ matrix.os }}
           if-no-files-found: error
           path: desktop/dist/release/*
 
@@ -190,7 +190,7 @@ jobs:
       - name: Download built artifacts
         uses: actions/download-artifact@v6
         with:
-          pattern: ${{ steps.tag.outputs.tag }}-*
+          pattern: AstrBot-${{ steps.tag.outputs.tag }}-*
           path: release-assets
           merge-multiple: true
 
@@ -203,6 +203,20 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$tag" --notes ""
           fi
+
+      - name: Remove stale desktop assets from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          while IFS= read -r asset; do
+            case "$asset" in
+              *.AppImage|*.dmg|*.zip|*.exe|*.blockmap)
+                gh release delete-asset "$tag" "$asset" -y || true
+                ;;
+            esac
+          done < <(gh release view "$tag" --json assets --jq '.assets[].name')
 
       - name: Upload assets to release
         env:
