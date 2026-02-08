@@ -59,7 +59,7 @@ def try_cast(value: Any, type_: str):
             return None
 
 
-def _expect_type(value, expected_type, path_key, errors, expected_name=None):
+def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> bool:
     if not isinstance(value, expected_type):
         errors.append(
             f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
@@ -69,7 +69,7 @@ def _expect_type(value, expected_type, path_key, errors, expected_name=None):
     return True
 
 
-def _validate_template_list(value, meta, path_key, errors, validate_fn):
+def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
     if not _expect_type(value, list, path_key, errors, "list"):
         return
 
@@ -102,7 +102,7 @@ def _validate_template_list(value, meta, path_key, errors, validate_fn):
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
-    def validate(data: dict, metadata: dict = schema, path=""):
+    def validate(data: dict, metadata: dict = schema, path="") -> None:
         for key, value in data.items():
             if key not in metadata:
                 continue
@@ -206,7 +206,9 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
-def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
+def save_config(
+    post_config: dict, config: AstrBotConfig, is_core: bool = False
+) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
@@ -1221,7 +1223,7 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
-    async def _register_platform_logo(self, platform, platform_default_tmpl):
+    async def _register_platform_logo(self, platform, platform_default_tmpl) -> None:
         """注册平台logo文件并生成访问令牌"""
         if not platform.logo_path:
             return
@@ -1357,7 +1359,7 @@ class ConfigRoute(Route):
 
     async def _save_astrbot_configs(
         self, post_configs: dict, conf_id: str | None = None
-    ):
+    ) -> None:
         try:
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
@@ -1373,7 +1375,7 @@ class ConfigRoute(Route):
         except Exception as e:
             raise e
 
-    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str):
+    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str) -> None:
         md = None
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

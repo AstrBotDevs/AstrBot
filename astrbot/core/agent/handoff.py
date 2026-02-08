@@ -14,7 +14,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         parameters: dict | None = None,
         tool_description: str | None = None,
         **kwargs,
-    ):
+    ) -> None:
         self.agent = agent
 
         # Avoid passing duplicate `description` to the FunctionTool dataclass.

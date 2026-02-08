@@ -13,7 +13,7 @@ from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
 class PlatformManager:
-    def __init__(self, config: AstrBotConfig, event_queue: Queue):
+    def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
         self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
@@ -38,7 +38,7 @@ class PlatformManager:
         sanitized = platform_id.replace(":", "_").replace("!", "_")
         return sanitized, sanitized != platform_id
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
             try:
@@ -58,7 +58,7 @@ class PlatformManager:
             ),
         )
 
-    async def load_platform(self, platform_config: dict):
+    async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""
         # 动态导入
         try:
@@ -176,7 +176,9 @@ class PlatformManager:
             except Exception:
                 logger.error(traceback.format_exc())
 
-    async def _task_wrapper(self, task: asyncio.Task, platform: Platform | None = None):
+    async def _task_wrapper(
+        self, task: asyncio.Task, platform: Platform | None = None
+    ) -> None:
         # 设置平台状态为运行中
         if platform:
             platform.status = PlatformStatus.RUNNING
@@ -198,7 +200,7 @@ class PlatformManager:
             if platform:
                 platform.record_error(error_msg, tb_str)
 
-    async def reload(self, platform_config: dict):
+    async def reload(self, platform_config: dict) -> None:
         await self.terminate_platform(platform_config["id"])
         if platform_config["enable"]:
             await self.load_platform(platform_config)
@@ -209,7 +211,7 @@ class PlatformManager:
             if key not in config_ids:
                 await self.terminate_platform(key)
 
-    async def terminate_platform(self, platform_id: str):
+    async def terminate_platform(self, platform_id: str) -> None:
         if platform_id in self._inst_map:
             logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
 
@@ -231,7 +233,7 @@ class PlatformManager:
             if getattr(inst, "terminate", None):
                 await inst.terminate()
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         for inst in self.platform_insts:
             if getattr(inst, "terminate", None):
                 await inst.terminate()

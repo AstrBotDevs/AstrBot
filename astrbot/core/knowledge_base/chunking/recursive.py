@@ -11,7 +11,7 @@ class RecursiveCharacterChunker(BaseChunker):
         length_function: Callable[[str], int] = len,
         is_separator_regex: bool = False,
         separators: list[str] | None = None,
-    ):
+    ) -> None:
         """初始化递归字符文本分割器
 
         Args:

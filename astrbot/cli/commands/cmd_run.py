@@ -10,7 +10,7 @@ from filelock import FileLock, Timeout
 from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
 
-async def run_astrbot(astrbot_root: Path):
+async def run_astrbot(astrbot_root: Path) -> None:
     """运行 AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader

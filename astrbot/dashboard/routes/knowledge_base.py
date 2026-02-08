@@ -114,7 +114,7 @@ class KnowledgeBaseRoute(Route):
             p["total"] = total
 
     def _make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
-        async def _callback(stage: str, current: int, total: int):
+        async def _callback(stage: str, current: int, total: int) -> None:
             self._update_progress(
                 task_id,
                 status="processing",
@@ -137,7 +137,7 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台上传任务"""
         try:
             # 初始化任务状态
@@ -216,7 +216,7 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台导入预切片文档任务"""
         try:
             # 初始化任务状态
@@ -1215,7 +1215,7 @@ class KnowledgeBaseRoute(Route):
         max_retries: int,
         enable_cleaning: bool,
         cleaning_provider_id: str | None,
-    ):
+    ) -> None:
         """后台上传URL任务"""
         try:
             # 初始化任务状态

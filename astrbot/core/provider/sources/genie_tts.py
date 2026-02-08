@@ -61,7 +61,7 @@ class GenieTTSProvider(TTSProvider):
 
         loop = asyncio.get_event_loop()
 
-        def _generate(save_path: str):
+        def _generate(save_path: str) -> None:
             assert genie is not None
             genie.tts(
                 character_name=self.character_name,
@@ -99,7 +99,7 @@ class GenieTTSProvider(TTSProvider):
                 filename = f"genie_tts_{uuid.uuid4()}.wav"
                 path = os.path.join(temp_dir, filename)
 
-                def _generate(save_path: str, t: str):
+                def _generate(save_path: str, t: str) -> None:
                     assert genie is not None
                     genie.tts(
                         character_name=self.character_name,

@@ -41,7 +41,7 @@ except ImportError:
 
 
 class PluginManager:
-    def __init__(self, context: Context, config: AstrBotConfig):
+    def __init__(self, context: Context, config: AstrBotConfig) -> None:
         self.updator = PluginUpdator()
 
         self.context = context
@@ -66,7 +66,7 @@ class PluginManager:
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
 
-    async def _watch_plugins_changes(self):
+    async def _watch_plugins_changes(self) -> None:
         """监视插件文件变化"""
         try:
             async for changes in awatch(
@@ -83,7 +83,7 @@ class PluginManager:
             logger.error(f"插件热重载监视任务异常: {e!s}")
             logger.error(traceback.format_exc())
 
-    async def _handle_file_changes(self, changes):
+    async def _handle_file_changes(self, changes) -> None:
         """处理文件变化"""
         logger.info(f"检测到文件变化: {changes}")
         plugins_to_check = []
@@ -167,7 +167,9 @@ class PluginManager:
             plugins.extend(_p)
         return plugins
 
-    async def _check_plugin_dept_update(self, target_plugin: str | None = None):
+    async def _check_plugin_dept_update(
+        self, target_plugin: str | None = None
+    ) -> bool | None:
         """检查插件的依赖
         如果 target_plugin 为 None，则检查所有插件的依赖
         """
@@ -264,7 +266,7 @@ class PluginManager:
         module_patterns: list[str] | None = None,
         root_dir_name: str | None = None,
         is_reserved: bool = False,
-    ):
+    ) -> None:
         """从 sys.modules 中移除指定的模块
 
         可以基于模块名模式或插件目录名移除模块，用于清理插件相关的模块缓存
@@ -711,7 +713,7 @@ class PluginManager:
         plugin_name: str,
         delete_config: bool = False,
         delete_data: bool = False,
-    ):
+    ) -> None:
         """卸载指定的插件。
 
         Args:
@@ -800,7 +802,7 @@ class PluginManager:
                     except Exception as e:
                         logger.warning(f"删除插件持久化数据失败 (plugins_data): {e!s}")
 
-    async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str):
+    async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str) -> None:
         """解绑并移除一个插件。
 
         Args:
@@ -863,7 +865,7 @@ class PluginManager:
             is_reserved=plugin.reserved,
         )
 
-    async def update_plugin(self, plugin_name: str, proxy=""):
+    async def update_plugin(self, plugin_name: str, proxy="") -> None:
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
@@ -874,7 +876,7 @@ class PluginManager:
         await self.updator.update(plugin, proxy=proxy)
         await self.reload(plugin_name)
 
-    async def turn_off_plugin(self, plugin_name: str):
+    async def turn_off_plugin(self, plugin_name: str) -> None:
         """禁用一个插件。
         调用插件的 terminate() 方法，
         将插件的 module_path 加入到 data/shared_preferences.json 的 inactivated_plugins 列表中。
@@ -916,7 +918,7 @@ class PluginManager:
             plugin.activated = False
 
     @staticmethod
-    async def _terminate_plugin(star_metadata: StarMetadata):
+    async def _terminate_plugin(star_metadata: StarMetadata) -> None:
         """终止插件，调用插件的 terminate() 和 __del__() 方法"""
         logger.info(f"正在终止插件 {star_metadata.name} ...")
 
@@ -936,7 +938,7 @@ class PluginManager:
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
 
-    async def turn_on_plugin(self, plugin_name: str):
+    async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
             raise Exception(f"插件 {plugin_name} 不存在。")

@@ -127,7 +127,7 @@ class SQLiteDatabase:
         conn.text_factory = str
         return conn
 
-    def _exec_sql(self, sql: str, params: tuple | None = None):
+    def _exec_sql(self, sql: str, params: tuple | None = None) -> None:
         conn = self.conn
         try:
             c = self.conn.cursor()
@@ -144,7 +144,7 @@ class SQLiteDatabase:
 
         conn.commit()
 
-    def insert_platform_metrics(self, metrics: dict):
+    def insert_platform_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -153,7 +153,7 @@ class SQLiteDatabase:
                 (k, v, int(time.time())),
             )
 
-    def insert_llm_metrics(self, metrics: dict):
+    def insert_llm_metrics(self, metrics: dict) -> None:
         for k, v in metrics.items():
             self._exec_sql(
                 """
@@ -249,7 +249,7 @@ class SQLiteDatabase:
 
         return Conversation(*res)
 
-    def new_conversation(self, user_id: str, cid: str):
+    def new_conversation(self, user_id: str, cid: str) -> None:
         history = "[]"
         updated_at = int(time.time())
         created_at = updated_at
@@ -287,7 +287,7 @@ class SQLiteDatabase:
             )
         return conversations
 
-    def update_conversation(self, user_id: str, cid: str, history: str):
+    def update_conversation(self, user_id: str, cid: str, history: str) -> None:
         """更新对话，并且同时更新时间"""
         updated_at = int(time.time())
         self._exec_sql(
@@ -297,7 +297,7 @@ class SQLiteDatabase:
             (history, updated_at, user_id, cid),
         )
 
-    def update_conversation_title(self, user_id: str, cid: str, title: str):
+    def update_conversation_title(self, user_id: str, cid: str, title: str) -> None:
         self._exec_sql(
             """
             UPDATE webchat_conversation SET title = ? WHERE user_id = ? AND cid = ?
@@ -305,7 +305,9 @@ class SQLiteDatabase:
             (title, user_id, cid),
         )
 
-    def update_conversation_persona_id(self, user_id: str, cid: str, persona_id: str):
+    def update_conversation_persona_id(
+        self, user_id: str, cid: str, persona_id: str
+    ) -> None:
         self._exec_sql(
             """
             UPDATE webchat_conversation SET persona_id = ? WHERE user_id = ? AND cid = ?
@@ -313,7 +315,7 @@ class SQLiteDatabase:
             (persona_id, user_id, cid),
         )
 
-    def delete_conversation(self, user_id: str, cid: str):
+    def delete_conversation(self, user_id: str, cid: str) -> None:
         self._exec_sql(
             """
             DELETE FROM webchat_conversation WHERE user_id = ? AND cid = ?

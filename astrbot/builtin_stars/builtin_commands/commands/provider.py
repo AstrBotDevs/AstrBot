@@ -8,7 +8,7 @@ from astrbot.core.provider.entities import ProviderType
 
 
 class ProviderCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     def _log_reachability_failure(
@@ -17,7 +17,7 @@ class ProviderCommands:
         provider_capability_type: ProviderType | None,
         err_code: str,
         err_reason: str,
-    ):
+    ) -> None:
         """记录不可达原因到日志。"""
         meta = provider.meta()
         logger.warning(
@@ -49,7 +49,7 @@ class ProviderCommands:
         event: AstrMessageEvent,
         idx: str | int | None = None,
         idx2: int | None = None,
-    ):
+    ) -> None:
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
         cfg = self.context.get_config(umo).get("provider_settings", {})
@@ -228,7 +228,7 @@ class ProviderCommands:
         self,
         message: AstrMessageEvent,
         idx_or_name: int | str | None = None,
-    ):
+    ) -> None:
         """查看或者切换模型"""
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
@@ -293,7 +293,7 @@ class ProviderCommands:
                 MessageEventResult().message(f"切换模型到 {prov.get_model()}。"),
             )
 
-    async def key(self, message: AstrMessageEvent, index: int | None = None):
+    async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(

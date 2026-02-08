@@ -250,7 +250,7 @@ class RegisteringCommandable:
     command: Callable[..., Callable[..., None]] = register_command
     custom_filter: Callable[..., Callable[..., Any]] = register_custom_filter
 
-    def __init__(self, parent_group: CommandGroupFilter):
+    def __init__(self, parent_group: CommandGroupFilter) -> None:
         self.parent_group = parent_group
 
 
@@ -565,7 +565,7 @@ class RegisteringAgent:
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
-    def __init__(self, agent: Agent[AstrAgentContext]):
+    def __init__(self, agent: Agent[AstrAgentContext]) -> None:
         self._agent = agent
 
 

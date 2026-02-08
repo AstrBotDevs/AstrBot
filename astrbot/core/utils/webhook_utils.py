@@ -20,7 +20,7 @@ def _get_dashboard_port() -> int:
         return 6185
 
 
-def log_webhook_info(platform_name: str, webhook_uuid: str):
+def log_webhook_info(platform_name: str, webhook_uuid: str) -> None:
     """打印美观的 webhook 信息日志
 
     Args:

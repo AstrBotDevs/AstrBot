@@ -32,12 +32,12 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         bot: Client,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
         await self._post_send()
 

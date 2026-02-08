@@ -19,7 +19,7 @@ class DiscordEmbed(BaseMessageComponent):
         image: str | None = None,
         footer: str | None = None,
         fields: list[dict] | None = None,
-    ):
+    ) -> None:
         self.title = title
         self.description = description
         self.color = color
@@ -71,7 +71,7 @@ class DiscordButton(BaseMessageComponent):
         emoji: str | None = None,
         url: str | None = None,
         disabled: bool = False,
-    ):
+    ) -> None:
         self.label = label
         self.custom_id = custom_id
         self.style = style
@@ -85,7 +85,7 @@ class DiscordReference(BaseMessageComponent):
 
     type: str = "discord_reference"
 
-    def __init__(self, message_id: str, channel_id: str):
+    def __init__(self, message_id: str, channel_id: str) -> None:
         self.message_id = message_id
         self.channel_id = channel_id
 
@@ -99,7 +99,7 @@ class DiscordView(BaseMessageComponent):
         self,
         components: list[BaseMessageComponent] | None = None,
         timeout: float | None = None,
-    ):
+    ) -> None:
         self.components = components or []
         self.timeout = timeout
 

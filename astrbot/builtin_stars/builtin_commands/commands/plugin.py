@@ -8,10 +8,10 @@ from astrbot.core.star.star_manager import PluginManager
 
 
 class PluginCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def plugin_ls(self, event: AstrMessageEvent):
+    async def plugin_ls(self, event: AstrMessageEvent) -> None:
         """获取已经安装的插件列表。"""
         parts = ["已加载的插件：\n"]
         for plugin in self.context.get_all_stars():
@@ -30,7 +30,7 @@ class PluginCommands:
             MessageEventResult().message(f"{plugin_list_info}").use_t2i(False),
         )
 
-    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = ""):
+    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """禁用插件"""
         if DEMO_MODE:
             event.set_result(MessageEventResult().message("演示模式下无法禁用插件。"))
@@ -43,7 +43,7 @@ class PluginCommands:
         await self.context._star_manager.turn_off_plugin(plugin_name)  # type: ignore
         event.set_result(MessageEventResult().message(f"插件 {plugin_name} 已禁用。"))
 
-    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = ""):
+    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """启用插件"""
         if DEMO_MODE:
             event.set_result(MessageEventResult().message("演示模式下无法启用插件。"))
@@ -56,7 +56,7 @@ class PluginCommands:
         await self.context._star_manager.turn_on_plugin(plugin_name)  # type: ignore
         event.set_result(MessageEventResult().message(f"插件 {plugin_name} 已启用。"))
 
-    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = ""):
+    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = "") -> None:
         """安装插件"""
         if DEMO_MODE:
             event.set_result(MessageEventResult().message("演示模式下无法安装插件。"))
@@ -77,7 +77,7 @@ class PluginCommands:
                 event.set_result(MessageEventResult().message(f"安装插件失败: {e}"))
                 return
 
-    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = ""):
+    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """获取插件帮助"""
         if not plugin_name:
             event.set_result(

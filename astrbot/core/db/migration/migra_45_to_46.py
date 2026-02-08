@@ -3,7 +3,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.umop_config_router import UmopConfigRouter
 
 
-async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter):
+async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter) -> None:
     abconf_data = acm.abconf_data
 
     if not isinstance(abconf_data, dict):

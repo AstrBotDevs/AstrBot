@@ -37,7 +37,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         self.model = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         logger.info("下载或者加载 SenseVoice 模型中，这可能需要一些时间 ...")
 
         # 将模型加载放到线程池中执行
@@ -52,7 +52,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return os.path.join("data", "temp", f"{timestamp}")
 
-    async def _is_silk_file(self, file_path):
+    async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
         with open(file_path, "rb") as f:
             file_header = f.read(8)

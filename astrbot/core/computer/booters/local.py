@@ -225,7 +225,7 @@ class LocalBooter(ComputerBooter):
             "LocalBooter does not support upload_file operation. Use shell instead."
         )
 
-    async def download_file(self, remote_path: str, local_path: str):
+    async def download_file(self, remote_path: str, local_path: str) -> None:
         raise NotImplementedError(
             "LocalBooter does not support download_file operation. Use shell instead."
         )

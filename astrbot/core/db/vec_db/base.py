@@ -9,7 +9,7 @@ class Result:
 
 
 class BaseVecDB:
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化向量数据库"""
 
     @abc.abstractmethod

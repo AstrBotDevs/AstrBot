@@ -10,7 +10,7 @@ import numpy as np
 
 
 class EmbeddingStorage:
-    def __init__(self, dimension: int, path: str | None = None):
+    def __init__(self, dimension: int, path: str | None = None) -> None:
         self.dimension = dimension
         self.path = path
         self.index = None
@@ -20,7 +20,7 @@ class EmbeddingStorage:
             base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)
 
-    async def insert(self, vector: np.ndarray, id: int):
+    async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量
 
         Args:
@@ -38,7 +38,7 @@ class EmbeddingStorage:
         self.index.add_with_ids(vector.reshape(1, -1), np.array([id]))
         await self.save_index()
 
-    async def insert_batch(self, vectors: np.ndarray, ids: list[int]):
+    async def insert_batch(self, vectors: np.ndarray, ids: list[int]) -> None:
         """批量插入向量
 
         Args:
@@ -71,7 +71,7 @@ class EmbeddingStorage:
         distances, indices = self.index.search(vector, k)
         return distances, indices
 
-    async def delete(self, ids: list[int]):
+    async def delete(self, ids: list[int]) -> None:
         """删除向量
 
         Args:
@@ -83,7 +83,7 @@ class EmbeddingStorage:
         self.index.remove_ids(id_array)
         await self.save_index()
 
-    async def save_index(self):
+    async def save_index(self) -> None:
         """保存索引
 
         Args:

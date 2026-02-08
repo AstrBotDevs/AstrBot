@@ -261,7 +261,7 @@ class PluginRoute(Route):
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None):
+    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None) -> None:
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在

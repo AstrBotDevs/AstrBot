@@ -13,7 +13,7 @@ class ProviderXAI(ProviderOpenAIOfficial):
     ) -> None:
         super().__init__(provider_config, provider_settings)
 
-    def _maybe_inject_xai_search(self, payloads: dict):
+    def _maybe_inject_xai_search(self, payloads: dict) -> None:
         """当开启 xAI 原生搜索时，向请求体注入 Live Search 参数。
 
         - 仅在 provider_config.xai_native_search 为 True 时生效
@@ -24,6 +24,6 @@ class ProviderXAI(ProviderOpenAIOfficial):
         # OpenAI SDK 不识别的字段会在 _query/_query_stream 中放入 extra_body
         payloads["search_parameters"] = {"mode": "auto"}
 
-    def _finally_convert_payload(self, payloads: dict):
+    def _finally_convert_payload(self, payloads: dict) -> None:
         self._maybe_inject_xai_search(payloads)
         super()._finally_convert_payload(payloads)

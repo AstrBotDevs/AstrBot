@@ -28,7 +28,7 @@ class NetworkRenderStrategy(RenderStrategy):
         self.endpoints = [self.BASE_RENDER_URL]
         self.template_manager = TemplateManager()
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         if self.BASE_RENDER_URL == ASTRBOT_T2I_DEFAULT_ENDPOINT:
             asyncio.create_task(self.get_official_endpoints())
 
@@ -36,7 +36,7 @@ class NetworkRenderStrategy(RenderStrategy):
         """通过名称获取文转图 HTML 模板"""
         return self.template_manager.get_template(name)
 
-    async def get_official_endpoints(self):
+    async def get_official_endpoints(self) -> None:
         """获取官方的 t2i 端点列表。"""
         try:
             async with aiohttp.ClientSession() as session:

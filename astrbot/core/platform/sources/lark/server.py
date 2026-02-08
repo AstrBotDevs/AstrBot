@@ -21,7 +21,7 @@ from astrbot.api import logger
 class AESCipher:
     """AES 加密/解密工具类"""
 
-    def __init__(self, key: str):
+    def __init__(self, key: str) -> None:
         self.bs = AES.block_size
         self.key = hashlib.sha256(self.str_to_bytes(key)).digest()
 
@@ -52,7 +52,7 @@ class LarkWebhookServer:
     仅支持统一 Webhook 模式
     """
 
-    def __init__(self, config: dict, event_queue: asyncio.Queue):
+    def __init__(self, config: dict, event_queue: asyncio.Queue) -> None:
         """初始化 Webhook 服务器
 
         Args:
@@ -197,7 +197,7 @@ class LarkWebhookServer:
 
         return {}
 
-    def set_callback(self, callback: Callable[[dict], Awaitable[None]]):
+    def set_callback(self, callback: Callable[[dict], Awaitable[None]]) -> None:
         """设置事件回调函数
 
         Args:

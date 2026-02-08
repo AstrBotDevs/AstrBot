@@ -11,7 +11,7 @@ class MessageMember:
     user_id: str  # 发送者id
     nickname: str | None = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
         return (
             f"User ID: {self.user_id},"
@@ -34,7 +34,7 @@ class Group:
     members: list[MessageMember] | None = None
     """所有群成员"""
 
-    def __str__(self):
+    def __str__(self) -> str:
         # 使用 f-string 来构建返回的字符串表示形式
         return (
             f"Group ID: {self.group_id}\n"
@@ -78,7 +78,7 @@ class AstrBotMessage:
         return ""
 
     @group_id.setter
-    def group_id(self, value: str | None):
+    def group_id(self, value: str | None) -> None:
         """设置 group_id"""
         if value:
             if self.group:

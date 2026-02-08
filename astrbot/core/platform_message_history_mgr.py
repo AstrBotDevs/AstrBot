@@ -3,7 +3,7 @@ from astrbot.core.db.po import PlatformMessageHistory
 
 
 class PlatformMessageHistoryManager:
-    def __init__(self, db_helper: BaseDatabase):
+    def __init__(self, db_helper: BaseDatabase) -> None:
         self.db = db_helper
 
     async def insert(
@@ -40,7 +40,9 @@ class PlatformMessageHistoryManager:
         history.reverse()
         return history
 
-    async def delete(self, platform_id: str, user_id: str, offset_sec: int = 86400):
+    async def delete(
+        self, platform_id: str, user_id: str, offset_sec: int = 86400
+    ) -> None:
         """Delete platform message history records older than the specified offset."""
         await self.db.delete_platform_message_offset(
             platform_id=platform_id,

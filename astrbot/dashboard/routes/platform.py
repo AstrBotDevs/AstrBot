@@ -26,7 +26,7 @@ class PlatformRoute(Route):
 
         self._register_webhook_routes()
 
-    def _register_webhook_routes(self):
+    def _register_webhook_routes(self) -> None:
         """注册 webhook 路由"""
         # 统一 webhook 入口，支持 GET 和 POST
         self.app.add_url_rule(

@@ -44,7 +44,7 @@ class RetrievalManager:
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
         kb_db: KBSQLiteDatabase,
-    ):
+    ) -> None:
         """初始化检索管理器
 
         Args:

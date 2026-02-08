@@ -642,7 +642,7 @@ class ProviderAnthropic(Provider):
             models_str.append(model.id)
         return models_str
 
-    def set_key(self, key: str):
+    def set_key(self, key: str) -> None:
         self.chosen_api_key = key
 
     async def terminate(self):

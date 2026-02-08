@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class PersonaCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     def _build_tree_output(
@@ -50,7 +50,7 @@ class PersonaCommands:
 
         return lines
 
-    async def persona(self, message: AstrMessageEvent):
+    async def persona(self, message: AstrMessageEvent) -> None:
         l = message.message_str.split(" ")  # noqa: E741
         umo = message.unified_msg_origin
 

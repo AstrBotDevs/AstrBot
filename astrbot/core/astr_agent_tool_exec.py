@@ -57,7 +57,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         elif tool.is_background_task:
             task_id = uuid.uuid4().hex
 
-            async def _run_in_background():
+            async def _run_in_background() -> None:
                 try:
                     await cls._execute_background(
                         tool=tool,
@@ -153,7 +153,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         task_id: str,
         **tool_args,
-    ):
+    ) -> None:
         from astrbot.core.astr_main_agent import (
             MainAgentBuildConfig,
             _get_session_conv,

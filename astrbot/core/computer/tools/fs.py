@@ -100,7 +100,7 @@ class FileUploadTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
-    ):
+    ) -> str | None:
         sb = await get_booter(
             context.context.context,
             context.context.event.unified_msg_origin,
