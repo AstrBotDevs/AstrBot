@@ -19,7 +19,7 @@ class CustomFilterMeta(ABCMeta):
 
 
 class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
-    def __init__(self, raise_error: bool = True, **kwargs):
+    def __init__(self, raise_error: bool = True, **kwargs) -> None:
         self.raise_error = raise_error
 
     @abstractmethod
@@ -35,7 +35,7 @@ class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
 
 
 class CustomFilterOr(CustomFilter):
-    def __init__(self, filter1: CustomFilter, filter2: CustomFilter):
+    def __init__(self, filter1: CustomFilter, filter2: CustomFilter) -> None:
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
@@ -49,7 +49,7 @@ class CustomFilterOr(CustomFilter):
 
 
 class CustomFilterAnd(CustomFilter):
-    def __init__(self, filter1: CustomFilter, filter2: CustomFilter):
+    def __init__(self, filter1: CustomFilter, filter2: CustomFilter) -> None:
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(

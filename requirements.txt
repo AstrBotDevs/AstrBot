@@ -17,7 +17,7 @@ defusedxml>=0.7.1
 deprecated>=1.2.18
 dingtalk-stream>=0.22.1
 docstring-parser>=0.16
-faiss-cpu==1.10.0
+faiss-cpu>=1.12.0
 filelock>=3.18.0
 google-genai>=1.56.0
 lark-oapi>=1.4.15

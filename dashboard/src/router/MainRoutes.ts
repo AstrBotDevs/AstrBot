@@ -3,13 +3,18 @@ const MainRoutes = {
   meta: {
     requiresAuth: true
   },
-  redirect: '/main/platforms',
+  redirect: '/welcome',
   component: () => import('@/layouts/full/FullLayout.vue'),
   children: [
     {
       name: 'MainPage',
       path: '/',
-      component: () => import('@/views/PlatformPage.vue')
+      component: () => import('@/views/WelcomePage.vue')
+    },
+    {
+      name: 'Welcome',
+      path: '/welcome',
+      component: () => import('@/views/WelcomePage.vue')
     },
     {
       name: 'Extensions',

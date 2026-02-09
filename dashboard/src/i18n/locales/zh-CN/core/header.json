@@ -47,6 +47,17 @@
     "releaseNotes": {
       "title": "更新日志"
     },
+    "redirectConfirm": {
+      "title": "即将跳转",
+      "message": "将跳转到 GitHub Releases 页面，是否继续？",
+      "latestLabel": "最新版本",
+      "targetVersion": "目标版本：",
+      "currentVersion": "当前版本：",
+      "guideTitle": "跳转后建议：",
+      "guideStep1": "根据你的系统架构下载对应安装包。",
+      "guideStep2": "完成安装后重启 AstrBot。",
+      "guideStep3": "如果你使用 Docker，请优先使用镜像更新方式。"
+    },
     "dashboardUpdate": {
       "title": "单独更新管理面板到最新版本",
       "currentVersion": "当前版本",

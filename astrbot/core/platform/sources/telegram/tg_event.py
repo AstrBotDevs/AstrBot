@@ -38,7 +38,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: ExtBot,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
 
@@ -73,7 +73,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         message: MessageChain,
         user_name: str,
-    ):
+    ) -> None:
         image_path = None
 
         has_reply = False
@@ -134,14 +134,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 path = await i.convert_to_file_path()
                 await client.send_voice(voice=path, **cast(Any, payload))
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
             await self.send_with_client(self.client, message, self.message_obj.group_id)
         else:
             await self.send_with_client(self.client, message, self.get_sender_id())
         await super().send(message)
 
-    async def react(self, emoji: str | None, big: bool = False):
+    async def react(self, emoji: str | None, big: bool = False) -> None:
         """给原消息添加 Telegram 反应：
         - 普通 emoji：传入 '👍'、'😂' 等
         - 自定义表情：传入其 custom_emoji_id（纯数字字符串）

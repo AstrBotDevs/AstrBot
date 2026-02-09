@@ -54,7 +54,7 @@ class WebChatQueueMgr:
                 if not request_ids:
                     self._conversation_back_requests.pop(conversation_id, None)
 
-    def remove_queues(self, conversation_id: str):
+    def remove_queues(self, conversation_id: str) -> None:
         """Remove queues for the given conversation ID"""
         for request_id in list(
             self._conversation_back_requests.get(conversation_id, set())

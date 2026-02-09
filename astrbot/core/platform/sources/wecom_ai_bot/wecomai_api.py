@@ -19,7 +19,7 @@ from .WXBizJsonMsgCrypt import WXBizJsonMsgCrypt
 class WecomAIBotAPIClient:
     """企业微信智能机器人 API 客户端"""
 
-    def __init__(self, token: str, encoding_aes_key: str):
+    def __init__(self, token: str, encoding_aes_key: str) -> None:
         """初始化 API 客户端
 
         Args:

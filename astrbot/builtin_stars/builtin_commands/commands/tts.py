@@ -8,10 +8,10 @@ from astrbot.core.star.session_llm_manager import SessionServiceManager
 class TTSCommand:
     """文本转语音命令类"""
 
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def tts(self, event: AstrMessageEvent):
+    async def tts(self, event: AstrMessageEvent) -> None:
         """开关文本转语音（会话级别）"""
         umo = event.unified_msg_origin
         ses_tts = await SessionServiceManager.is_tts_enabled_for_session(umo)

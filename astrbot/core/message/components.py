@@ -66,7 +66,7 @@ class ComponentType(str, Enum):
 class BaseMessageComponent(BaseModel):
     type: ComponentType
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
     def toDict(self):
@@ -89,7 +89,7 @@ class Plain(BaseMessageComponent):
     text: str
     convert: bool | None = True
 
-    def __init__(self, text: str, convert: bool = True, **_):
+    def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
 
     def toDict(self):
@@ -103,7 +103,7 @@ class Face(BaseMessageComponent):
     type = ComponentType.Face
     id: int
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -118,7 +118,7 @@ class Record(BaseMessageComponent):
     # 额外
     path: str | None
 
-    def __init__(self, file: str | None, **_):
+    def __init__(self, file: str | None, **_) -> None:
         for k in _:
             if k == "url":
                 pass
@@ -221,7 +221,7 @@ class Video(BaseMessageComponent):
     # 额外
     path: str | None = ""
 
-    def __init__(self, file: str, **_):
+    def __init__(self, file: str, **_) -> None:
         super().__init__(file=file, **_)
 
     @staticmethod
@@ -255,7 +255,7 @@ class Video(BaseMessageComponent):
             return os.path.abspath(url)
         raise Exception(f"not a valid file: {url}")
 
-    async def register_to_file_service(self):
+    async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
 
         Returns:
@@ -303,7 +303,7 @@ class At(BaseMessageComponent):
     qq: int | str  # 此处str为all时代表所有人
     name: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
     def toDict(self):
@@ -316,28 +316,28 @@ class At(BaseMessageComponent):
 class AtAll(At):
     qq: str = "all"
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class RPS(BaseMessageComponent):  # TODO
     type = ComponentType.RPS
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Dice(BaseMessageComponent):  # TODO
     type = ComponentType.Dice
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Shake(BaseMessageComponent):  # TODO
     type = ComponentType.Shake
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -348,7 +348,7 @@ class Share(BaseMessageComponent):
     content: str | None = ""
     image: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -357,7 +357,7 @@ class Contact(BaseMessageComponent):  # TODO
     _type: str  # type 字段冲突
     id: int | None = 0
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -368,7 +368,7 @@ class Location(BaseMessageComponent):  # TODO
     title: str | None = ""
     content: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -382,7 +382,7 @@ class Music(BaseMessageComponent):
     content: str | None = ""
     image: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         # for k in _.keys():
         #     if k == "_type" and _[k] not in ["qq", "163", "xm", "custom"]:
         #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
@@ -402,7 +402,7 @@ class Image(BaseMessageComponent):
     path: str | None = ""
     file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
-    def __init__(self, file: str | None, **_):
+    def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
 
     @staticmethod
@@ -525,7 +525,7 @@ class Reply(BaseMessageComponent):
     seq: int | None = 0
     """deprecated"""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -534,7 +534,7 @@ class Poke(BaseMessageComponent):
     id: int | None = 0
     qq: int | None = 0
 
-    def __init__(self, type: str, **_):
+    def __init__(self, type: str, **_) -> None:
         type = f"Poke:{type}"
         super().__init__(type=type, **_)
 
@@ -543,7 +543,7 @@ class Forward(BaseMessageComponent):
     type = ComponentType.Forward
     id: str
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -558,7 +558,7 @@ class Node(BaseMessageComponent):
     seq: str | list | None = ""  # 忽略
     time: int | None = 0  # 忽略
 
-    def __init__(self, content: list[BaseMessageComponent], **_):
+    def __init__(self, content: list[BaseMessageComponent], **_) -> None:
         if isinstance(content, Node):
             # back
             content = [content]
@@ -605,7 +605,7 @@ class Nodes(BaseMessageComponent):
     type = ComponentType.Nodes
     nodes: list[Node]
 
-    def __init__(self, nodes: list[Node], **_):
+    def __init__(self, nodes: list[Node], **_) -> None:
         super().__init__(nodes=nodes, **_)
 
     def toDict(self):
@@ -631,7 +631,7 @@ class Json(BaseMessageComponent):
     type = ComponentType.Json
     data: dict
 
-    def __init__(self, data: str | dict, **_):
+    def __init__(self, data: str | dict, **_) -> None:
         if isinstance(data, str):
             data = json.loads(data)
         super().__init__(data=data, **_)
@@ -650,7 +650,7 @@ class File(BaseMessageComponent):
     file_: str | None = ""  # 本地路径
     url: str | None = ""  # url
 
-    def __init__(self, name: str, file: str = "", url: str = ""):
+    def __init__(self, name: str, file: str = "", url: str = "") -> None:
         """文件消息段。"""
         super().__init__(name=name, file_=file, url=url)
 
@@ -686,7 +686,7 @@ class File(BaseMessageComponent):
         return ""
 
     @file.setter
-    def file(self, value: str):
+    def file(self, value: str) -> None:
         """向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
 
         Args:
@@ -721,7 +721,7 @@ class File(BaseMessageComponent):
 
         return ""
 
-    async def _download_file(self):
+    async def _download_file(self) -> None:
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")
@@ -736,7 +736,7 @@ class File(BaseMessageComponent):
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 
-    async def register_to_file_service(self):
+    async def register_to_file_service(self) -> str:
         """将文件注册到文件服务。
 
         Returns:
@@ -786,7 +786,7 @@ class WechatEmoji(BaseMessageComponent):
     md5_len: int | None = 0
     cdnurl: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
