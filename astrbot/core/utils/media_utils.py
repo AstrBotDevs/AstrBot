@@ -7,6 +7,7 @@ import asyncio
 import os
 import subprocess
 import uuid
+from pathlib import Path
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -205,3 +206,92 @@ async def convert_video_format(
     except Exception as e:
         logger.error(f"[Media Utils] 转换视频格式时出错: {e}")
         raise
+
+
+async def convert_audio_format(
+    audio_path: str,
+    output_format: str = "amr",
+    output_path: str | None = None,
+) -> str:
+    """使用ffmpeg将音频转换为指定格式。
+
+    Args:
+        audio_path: 原始音频文件路径
+        output_format: 目标格式，例如 amr / ogg
+        output_path: 输出文件路径，如果为None则自动生成
+
+    Returns:
+        转换后的音频文件路径
+    """
+    if audio_path.lower().endswith(f".{output_format}"):
+        return audio_path
+
+    if output_path is None:
+        temp_dir = Path(get_astrbot_data_path()) / "temp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        output_path = str(temp_dir / f"{uuid.uuid4()}.{output_format}")
+
+    args = ["ffmpeg", "-y", "-i", audio_path]
+    if output_format == "amr":
+        args.extend(["-ac", "1", "-ar", "8000", "-ab", "12.2k"])
+    elif output_format == "ogg":
+        args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
+    args.append(output_path)
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError as e:
+                    logger.warning(f"[Media Utils] 清理失败的音频输出文件时出错: {e}")
+            error_msg = stderr.decode() if stderr else "未知错误"
+            raise Exception(f"ffmpeg conversion failed: {error_msg}")
+        logger.debug(f"[Media Utils] 音频转换成功: {audio_path} -> {output_path}")
+        return output_path
+    except FileNotFoundError:
+        raise Exception("ffmpeg not found")
+
+
+async def extract_video_cover(
+    video_path: str,
+    output_path: str | None = None,
+) -> str:
+    """从视频中提取封面图（JPG）。"""
+    if output_path is None:
+        temp_dir = Path(get_astrbot_data_path()) / "temp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        output_path = str(temp_dir / f"{uuid.uuid4()}.jpg")
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-ss",
+            "00:00:00",
+            "-frames:v",
+            "1",
+            output_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError as e:
+                    logger.warning(f"[Media Utils] 清理失败的视频封面文件时出错: {e}")
+            error_msg = stderr.decode() if stderr else "未知错误"
+            raise Exception(f"ffmpeg extract cover failed: {error_msg}")
+        return output_path
+    except FileNotFoundError:
+        raise Exception("ffmpeg not found")
