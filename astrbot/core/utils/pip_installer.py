@@ -19,7 +19,12 @@ def _get_pip_main():
         try:
             from pip import main as pip_main
         except ImportError as exc:
-            raise ImportError("pip module is unavailable") from exc
+            raise ImportError(
+                "pip module is unavailable "
+                f"(sys.executable={sys.executable}, "
+                f"frozen={getattr(sys, 'frozen', False)}, "
+                f"ASTRBOT_ELECTRON_CLIENT={os.environ.get('ASTRBOT_ELECTRON_CLIENT')})"
+            ) from exc
 
     return pip_main
 
@@ -82,10 +87,7 @@ class PipInstaller:
         importlib.invalidate_caches()
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
-        try:
-            pip_main = _get_pip_main()
-        except ImportError as exc:
-            raise Exception("pip 模块不可用，请检查当前运行环境是否包含 pip") from exc
+        pip_main = _get_pip_main()
 
         original_handlers = list(logging.getLogger().handlers)
         result_code, output = await asyncio.to_thread(
