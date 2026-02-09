@@ -35,6 +35,8 @@ const args = [
   'pip',
   '--collect-submodules',
   'astrbot.api',
+  '--collect-data',
+  'certifi',
   '--add-data',
   `${kbStopwordsSrc}${dataSeparator}${kbStopwordsDest}`,
   '--distpath',
