@@ -255,6 +255,9 @@ class BackendManager {
       ...process.env,
       PYTHONUNBUFFERED: '1',
     };
+    if (this.app.isPackaged) {
+      env.ASTRBOT_ELECTRON_CLIENT = '1';
+    }
     if (backendConfig.rootDir) {
       env.ASTRBOT_ROOT = backendConfig.rootDir;
       const logsDir = path.join(backendConfig.rootDir, 'logs');
