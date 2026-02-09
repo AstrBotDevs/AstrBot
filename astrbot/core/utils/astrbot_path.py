@@ -14,13 +14,8 @@ Skills 目录路径：固定为数据目录下的 skills 目录
 """
 
 import os
-import sys
 
-
-def _is_packaged_electron_runtime() -> bool:
-    return os.environ.get("ASTRBOT_ELECTRON_CLIENT") == "1" and bool(
-        getattr(sys, "frozen", False)
-    )
+from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
 
 
 def get_astrbot_path() -> str:
@@ -34,7 +29,7 @@ def get_astrbot_root() -> str:
     """获取Astrbot根目录路径"""
     if path := os.environ.get("ASTRBOT_ROOT"):
         return os.path.realpath(path)
-    if _is_packaged_electron_runtime():
+    if is_packaged_electron_runtime():
         return os.path.realpath(os.path.join(os.path.expanduser("~"), ".astrbot"))
     return os.path.realpath(os.getcwd())
 
