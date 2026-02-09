@@ -110,7 +110,7 @@
         <!-- 创建/编辑 Persona 对话框 -->
         <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
             :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
-            @saved="handlePersonaSaved" @error="showError" />
+            @saved="handlePersonaSaved" @deleted="handlePersonaDeleted" @error="showError" />
 
         <!-- 查看 Persona 详情对话框 -->
         <v-dialog v-model="showViewDialog" max-width="700px">
@@ -410,6 +410,11 @@ export default defineComponent({
         },
 
         handlePersonaSaved(message: string) {
+            this.showSuccess(message);
+            this.refreshCurrentFolder();
+        },
+
+        handlePersonaDeleted(message: string) {
             this.showSuccess(message);
             this.refreshCurrentFolder();
         },
