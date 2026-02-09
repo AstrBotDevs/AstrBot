@@ -615,8 +615,9 @@ export default {
                 }
             } catch (error) {
                 this.$emit('error', error.response?.data?.message || this.tm('messages.deleteError'));
+            } finally {
+                this.saving = false;
             }
-            this.saving = false;
         },
 
         addDialogPair() {
