@@ -50,9 +50,6 @@ def _get_pip_subprocess_executable() -> str | None:
             continue
 
         candidate_path = Path(candidate)
-        with contextlib.suppress(OSError):
-            candidate_path = candidate_path.resolve()
-
         if candidate_path.is_file() and os.access(candidate_path, os.X_OK):
             return str(candidate_path)
 
