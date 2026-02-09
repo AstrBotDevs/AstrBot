@@ -160,7 +160,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -291,13 +291,13 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download dashboard artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: release-assets
 
       - name: Download desktop artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: AstrBot-${{ steps.tag.outputs.tag }}-*
           path: release-assets
