@@ -5,7 +5,6 @@ import io
 import locale
 import logging
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -32,20 +31,19 @@ def _robust_decode(line: bytes) -> str:
     return line.decode("utf-8", errors="replace").strip()
 
 
+def _is_frozen_runtime() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
 def _is_packaged_electron_runtime() -> bool:
-    return (
-        bool(getattr(sys, "frozen", False))
-        and os.environ.get("ASTRBOT_ELECTRON_CLIENT") == "1"
-    )
+    return _is_frozen_runtime() and os.environ.get("ASTRBOT_ELECTRON_CLIENT") == "1"
 
 
 def _get_pip_subprocess_executable() -> str | None:
-    candidates = [
-        getattr(sys, "_base_executable", None),
-        sys.executable,
-        shutil.which("python3"),
-        shutil.which("python"),
-    ]
+    if _is_frozen_runtime():
+        candidates = [getattr(sys, "_base_executable", None)]
+    else:
+        candidates = [sys.executable]
 
     for candidate in candidates:
         if not candidate:
