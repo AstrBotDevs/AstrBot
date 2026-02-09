@@ -32,12 +32,11 @@ def _robust_decode(line: bytes) -> str:
     return line.decode("utf-8", errors="replace").strip()
 
 
-def _is_frozen_runtime() -> bool:
-    return bool(getattr(sys, "frozen", False))
-
-
 def _is_packaged_electron_runtime() -> bool:
-    return _is_frozen_runtime() and os.environ.get("ASTRBOT_ELECTRON_CLIENT") == "1"
+    return (
+        bool(getattr(sys, "frozen", False))
+        and os.environ.get("ASTRBOT_ELECTRON_CLIENT") == "1"
+    )
 
 
 def _get_pip_subprocess_executable() -> str | None:
