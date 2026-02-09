@@ -259,6 +259,24 @@ async def convert_audio_format(
         raise Exception("ffmpeg not found")
 
 
+async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
+    """将音频转换为amr格式。"""
+    return await convert_audio_format(
+        audio_path=audio_path,
+        output_format="amr",
+        output_path=output_path,
+    )
+
+
+async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
+    """将音频转换为wav格式。"""
+    return await convert_audio_format(
+        audio_path=audio_path,
+        output_format="wav",
+        output_path=output_path,
+    )
+
+
 async def extract_video_cover(
     video_path: str,
     output_path: str | None = None,
