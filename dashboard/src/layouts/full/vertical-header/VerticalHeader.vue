@@ -45,7 +45,9 @@ let version = ref('');
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
-const isElectronApp = ref(false);
+const isElectronApp = ref(
+  typeof window !== 'undefined' && !!window.astrbotDesktop?.isElectron
+);
 const redirectConfirmDialog = ref(false);
 const pendingRedirectUrl = ref('');
 const resolvingReleaseTarget = ref(false);
@@ -235,7 +237,9 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message;
       }
-      dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
+      dashboardHasNewVersion.value = isElectronApp.value
+        ? false
+        : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
       if (err.response && err.response.status == 401) {
@@ -381,7 +385,9 @@ onMounted(async () => {
   } catch {
     isElectronApp.value = false;
   }
-  isElectronApp.value = true
+  if (isElectronApp.value) {
+    dashboardHasNewVersion.value = false;
+  }
 });
 
 </script>
@@ -426,7 +432,7 @@ onMounted(async () => {
       <small v-if="hasNewVersion">
         {{ t('core.header.version.hasNewVersion') }}
       </small>
-      <small v-else-if="dashboardHasNewVersion">
+      <small v-else-if="dashboardHasNewVersion && !isElectronApp">
         {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
@@ -509,7 +515,7 @@ onMounted(async () => {
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
         <v-list-item-title>{{ t('core.header.updateDialog.title') }}</v-list-item-title>
-        <template v-slot:append v-if="hasNewVersion || dashboardHasNewVersion">
+        <template v-slot:append v-if="hasNewVersion || (dashboardHasNewVersion && !isElectronApp)">
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
         </template>
       </v-list-item>
