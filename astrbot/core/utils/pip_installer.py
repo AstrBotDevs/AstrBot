@@ -16,7 +16,11 @@ def _get_pip_main():
     try:
         from pip._internal.cli.main import main as pip_main
     except ImportError:
-        from pip import main as pip_main
+        try:
+            from pip import main as pip_main
+        except ImportError as exc:
+            raise ImportError("pip module is unavailable") from exc
+
     return pip_main
 
 
