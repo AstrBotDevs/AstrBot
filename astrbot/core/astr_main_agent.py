@@ -326,6 +326,24 @@ async def _ensure_persona_and_skills(
                 )
     tmgr = plugin_context.get_llm_tool_manager()
 
+    # inject toolset in the persona
+    if (persona and persona.get("tools") is None) or not persona:
+        persona_toolset = tmgr.get_full_tool_set()
+        for tool in list(persona_toolset):
+            if not tool.active:
+                persona_toolset.remove_tool(tool.name)
+    else:
+        persona_toolset = ToolSet()
+        if persona["tools"]:
+            for tool_name in persona["tools"]:
+                tool = tmgr.get_func(tool_name)
+                if tool and tool.active:
+                    persona_toolset.add_tool(tool)
+    if not req.func_tool:
+        req.func_tool = persona_toolset
+    else:
+        req.func_tool.merge(persona_toolset)
+
     # sub agents integration
     orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
     so = plugin_context.subagent_orchestrator
@@ -371,22 +389,19 @@ async def _ensure_persona_and_skills(
                         assigned_tools.add(name)
 
         if req.func_tool is None:
-            toolset = ToolSet()
-        else:
-            toolset = req.func_tool
+            req.func_tool = ToolSet()
 
         # add subagent handoff tools
         for tool in so.handoffs:
-            toolset.add_tool(tool)
+            req.func_tool.add_tool(tool)
 
         # check duplicates
         if remove_dup:
-            names = toolset.names()
+            handoff_names = {tool.name for tool in so.handoffs}
             for tool_name in assigned_tools:
-                if tool_name in names:
-                    toolset.remove_tool(tool_name)
-
-        req.func_tool = toolset
+                if tool_name in handoff_names:
+                    continue
+                req.func_tool.remove_tool(tool_name)
 
         router_prompt = (
             plugin_context.get_config()
@@ -395,32 +410,14 @@ async def _ensure_persona_and_skills(
         ).strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
-        return
-
-    # inject toolset in the persona
-    if (persona and persona.get("tools") is None) or not persona:
-        toolset = tmgr.get_full_tool_set()
-        for tool in list(toolset):
-            if not tool.active:
-                toolset.remove_tool(tool.name)
-    else:
-        toolset = ToolSet()
-        if persona["tools"]:
-            for tool_name in persona["tools"]:
-                tool = tmgr.get_func(tool_name)
-                if tool and tool.active:
-                    toolset.add_tool(tool)
-    if not req.func_tool:
-        req.func_tool = toolset
-    else:
-        req.func_tool.merge(toolset)
     try:
         event.trace.record(
-            "sel_persona", persona_id=persona_id, persona_toolset=toolset.names()
+            "sel_persona",
+            persona_id=persona_id,
+            persona_toolset=persona_toolset.names(),
         )
     except Exception:
         pass
-    logger.debug("Tool set for persona %s: %s", persona_id, toolset.names())
 
 
 async def _request_img_caption(
@@ -960,6 +957,14 @@ async def build_main_agent(
     action_type = event.get_extra("action_type")
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+
+    logger.debug("Final ProviderRequest: prompt=%s, system_prompt=%s, image_urls=%s, contexts=%s, func_tool=%s",
+        req.prompt,
+        req.system_prompt,
+        req.image_urls,
+        req.contexts,
+        req.func_tool.names() if req.func_tool else None,
+    )
 
     reset_coro = agent_runner.reset(
         provider=provider,
