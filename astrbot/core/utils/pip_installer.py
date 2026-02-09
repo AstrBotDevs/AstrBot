@@ -5,6 +5,7 @@ import io
 import locale
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -36,12 +37,24 @@ def _is_frozen_runtime() -> bool:
 
 
 def _get_pip_subprocess_executable() -> str | None:
-    candidates = [getattr(sys, "_base_executable", None), sys.executable]
+    candidates = [
+        getattr(sys, "_base_executable", None),
+        sys.executable,
+        shutil.which("python3"),
+        shutil.which("python"),
+    ]
+
     for candidate in candidates:
         if not candidate:
             continue
-        if "python" in Path(candidate).name.lower():
-            return candidate
+
+        candidate_path = Path(candidate)
+        with contextlib.suppress(OSError):
+            candidate_path = candidate_path.resolve()
+
+        if candidate_path.is_file() and os.access(candidate_path, os.X_OK):
+            return str(candidate_path)
+
     return None
 
 
@@ -110,10 +123,16 @@ class PipInstaller:
                 result_code = await self._run_pip_subprocess(
                     subprocess_executable, args
                 )
-            except FileNotFoundError:
+            except OSError as exc:
                 logger.warning(
-                    "pip subprocess executable not found; falling back to in-process mode"
+                    "Failed to launch pip subprocess (%r). Falling back to in-process pip: %s",
+                    subprocess_executable,
+                    exc,
                 )
+        else:
+            logger.debug(
+                "No suitable Python executable found for pip subprocess; using in-process pip"
+            )
 
         if result_code is None:
             result_code = await self._run_pip_in_process(args)
