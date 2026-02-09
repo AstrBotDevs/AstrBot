@@ -351,8 +351,99 @@ export default {
       }
     },
 
+    findPlatformTemplate(platform) {
+      const templates = this.metadata?.platform_group?.metadata?.platform?.config_template || {};
+
+      if (platform?.type && templates[platform.type]) {
+        return templates[platform.type];
+      }
+      if (platform?.id && templates[platform.id]) {
+        return templates[platform.id];
+      }
+
+      for (const template of Object.values(templates)) {
+        if (template?.type === platform?.type) {
+          return template;
+        }
+      }
+      return null;
+    },
+
+    mergeConfigWithTemplate(sourceConfig, templateConfig) {
+      const merge = (source, reference) => {
+        const target = {};
+        const sourceObj = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+        const referenceObj = reference && typeof reference === 'object' && !Array.isArray(reference) ? reference : null;
+
+        if (!referenceObj) {
+          for (const [key, value] of Object.entries(sourceObj)) {
+            if (Array.isArray(value)) {
+              target[key] = [...value];
+            } else if (value && typeof value === 'object') {
+              target[key] = { ...value };
+            } else {
+              target[key] = value;
+            }
+          }
+          return target;
+        }
+
+        // 1) 先按模板顺序写入，保证字段相对顺序与 template 一致
+        for (const [key, refValue] of Object.entries(referenceObj)) {
+          const hasSourceKey = Object.prototype.hasOwnProperty.call(sourceObj, key);
+          const sourceValue = sourceObj[key];
+
+          if (refValue && typeof refValue === 'object' && !Array.isArray(refValue)) {
+            target[key] = merge(
+              hasSourceKey && sourceValue && typeof sourceValue === 'object' && !Array.isArray(sourceValue)
+                ? sourceValue
+                : {},
+              refValue
+            );
+            continue;
+          }
+
+          if (hasSourceKey) {
+            if (Array.isArray(sourceValue)) {
+              target[key] = [...sourceValue];
+            } else if (sourceValue && typeof sourceValue === 'object') {
+              target[key] = { ...sourceValue };
+            } else {
+              target[key] = sourceValue;
+            }
+          } else if (Array.isArray(refValue)) {
+            target[key] = [...refValue];
+          } else {
+            target[key] = refValue;
+          }
+        }
+
+        // 2) 再补充 source 中模板没有的额外字段，保持旧配置兼容性
+        for (const [key, value] of Object.entries(sourceObj)) {
+          if (Object.prototype.hasOwnProperty.call(referenceObj, key)) {
+            continue;
+          }
+          if (Array.isArray(value)) {
+            target[key] = [...value];
+          } else if (value && typeof value === 'object') {
+            target[key] = { ...value };
+          } else {
+            target[key] = value;
+          }
+        }
+
+        return target;
+      };
+
+      return merge(sourceConfig, templateConfig);
+    },
+
     editPlatform(platform) {
-      this.updatingPlatformConfig = JSON.parse(JSON.stringify(platform));
+      const platformCopy = JSON.parse(JSON.stringify(platform));
+      const template = this.findPlatformTemplate(platformCopy);
+      this.updatingPlatformConfig = template
+        ? this.mergeConfigWithTemplate(platformCopy, template)
+        : platformCopy;
       this.updatingMode = true;
       this.showAddPlatformDialog = true;
       this.$nextTick(() => {
