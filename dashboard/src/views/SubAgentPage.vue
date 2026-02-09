@@ -20,21 +20,10 @@
     <v-card class="rounded-lg" variant="flat">
       <v-card-text>
         <v-row>
-          <v-col cols="12" md="6">
+          <v-col cols="12" md="12">
             <v-switch
               v-model="cfg.main_enable"
               :label="tm('switches.enable')"
-              inset
-              color="primary"
-              hide-details
-              density="comfortable"
-            />
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-switch
-              v-model="cfg.remove_main_duplicate_tools"
-              :disabled="!cfg.main_enable"
-              :label="tm('switches.dedupe')"
               inset
               color="primary"
               hide-details

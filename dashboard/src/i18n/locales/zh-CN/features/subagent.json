@@ -2,7 +2,7 @@
   "page": {
     "title": "SubAgent 编排",
     "beta": "实验性",
-    "subtitle": "主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。"
+    "subtitle": "主 LLM 负责聊天与委派（transfer_to_*），工具挂载在各个 SubAgent 上。"
   },
   "actions": {
     "refresh": "刷新",
@@ -11,12 +11,11 @@
     "delete": "删除"
   },
   "switches": {
-    "enable": "启用 SubAgent 编排",
-    "dedupe": "主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）"
+    "enable": "启用 SubAgent 编排"
   },
   "description": {
     "disabled": "不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。",
-    "enabled": "启动：主 LLM 会保留自身工具并挂载 transfer_to_* 委派工具。若开启“去重重复工具”，与 SubAgent 指定的工具重叠部分会从主 LLM 工具集中移除。"
+    "enabled": "启动：主 LLM 仅挂载 transfer_to_* 委派工具，不再直接挂载 persona/全局工具；由 SubAgent 负责工具调用与结果整理。"
   },
   "section": {
     "title": "SubAgents"
