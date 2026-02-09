@@ -36,6 +36,10 @@ def _is_frozen_runtime() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def _is_packaged_electron_runtime() -> bool:
+    return _is_frozen_runtime() and os.environ.get("ASTRBOT_ELECTRON_CLIENT") == "1"
+
+
 def _get_pip_subprocess_executable() -> str | None:
     candidates = [
         getattr(sys, "_base_executable", None),
@@ -106,7 +110,7 @@ class PipInstaller:
         args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
 
         target_site_packages = None
-        if _is_frozen_runtime():
+        if _is_packaged_electron_runtime():
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             args.extend(["--target", target_site_packages])
