@@ -26,6 +26,7 @@ from astrbot.api.platform import (
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -165,6 +166,7 @@ class WecomPlatformAdapter(Platform):
             self.api_base_url += "/"
 
         self.server = WecomServer(self._event_queue, self.config)
+        self.agent_id: str | None = None
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
@@ -215,6 +217,36 @@ class WecomPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
+        # 企业微信客服不支持主动发送
+        if hasattr(self.client, "kf_message"):
+            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
+            await super().send_by_session(session, message_chain)
+            return
+        if not self.agent_id:
+            logger.warning(
+                f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
+            )
+            await super().send_by_session(session, message_chain)
+            return
+
+        message_obj = AstrBotMessage()
+        message_obj.self_id = self.agent_id
+        message_obj.session_id = session.session_id
+        message_obj.type = session.message_type
+        message_obj.sender = MessageMember(session.session_id, session.session_id)
+        message_obj.message = []
+        message_obj.message_str = ""
+        message_obj.message_id = uuid.uuid4().hex
+        message_obj.raw_message = {"_proactive_send": True}
+
+        event = WecomPlatformEvent(
+            message_str=message_obj.message_str,
+            message_obj=message_obj,
+            platform_meta=self.meta(),
+            session_id=message_obj.session_id,
+            client=self.client,
+        )
+        await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
     @override
@@ -318,11 +350,8 @@ class WecomPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                from pydub import AudioSegment
-
                 path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
-                audio = AudioSegment.from_file(path)
-                audio.export(path_wav, format="wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -344,6 +373,7 @@ class WecomPlatformAdapter(Platform):
             logger.warning(f"暂未实现的事件: {msg.type}")
             return
 
+        self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
@@ -388,11 +418,8 @@ class WecomPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                from pydub import AudioSegment
-
                 path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
-                audio = AudioSegment.from_file(path)
-                audio.export(path_wav, format="wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path

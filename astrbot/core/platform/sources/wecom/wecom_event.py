@@ -1,23 +1,15 @@
 import asyncio
 import os
-import uuid
 
 from wechatpy.enterprise import WeChatClient
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 from .wecom_kf_message import WeChatKFMessage
-
-try:
-    import pydub
-except Exception:
-    logger.warning(
-        "检测到 pydub 库未安装，企业微信将无法语音收发。如需使用语音，请前往管理面板 -> 平台日志 -> 安装 Pip 库安装 pydub。",
-    )
 
 
 class WecomPlatformEvent(AstrMessageEvent):
@@ -125,25 +117,66 @@ class WecomPlatformEvent(AstrMessageEvent):
                         )
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
-                    # 转成amr
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
-                    pydub.AudioSegment.from_wav(record_path).export(
-                        record_path_amr,
-                        format="amr",
-                    )
+                    record_path_amr = await convert_audio_to_amr(record_path)
 
-                    with open(record_path_amr, "rb") as f:
+                    try:
+                        with open(record_path_amr, "rb") as f:
+                            try:
+                                response = self.client.media.upload("voice", f)
+                            except Exception as e:
+                                logger.error(f"微信客服上传语音失败: {e}")
+                                await self.send(
+                                    MessageChain().message(
+                                        f"微信客服上传语音失败: {e}"
+                                    ),
+                                )
+                                return
+                            logger.info(f"微信客服上传语音返回: {response}")
+                            kf_message_api.send_voice(
+                                user_id,
+                                self.get_self_id(),
+                                response["media_id"],
+                            )
+                    finally:
+                        if record_path_amr != record_path and os.path.exists(
+                            record_path_amr,
+                        ):
+                            try:
+                                os.remove(record_path_amr)
+                            except OSError as e:
+                                logger.warning(f"删除临时音频文件失败: {e}")
+                elif isinstance(comp, File):
+                    file_path = await comp.get_file()
+
+                    with open(file_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("voice", f)
+                            response = self.client.media.upload("file", f)
                         except Exception as e:
-                            logger.error(f"微信客服上传语音失败: {e}")
+                            logger.error(f"微信客服上传文件失败: {e}")
                             await self.send(
-                                MessageChain().message(f"微信客服上传语音失败: {e}"),
+                                MessageChain().message(f"微信客服上传文件失败: {e}"),
                             )
                             return
-                        logger.info(f"微信客服上传语音返回: {response}")
-                        kf_message_api.send_voice(
+                        logger.debug(f"微信客服上传文件返回: {response}")
+                        kf_message_api.send_file(
+                            user_id,
+                            self.get_self_id(),
+                            response["media_id"],
+                        )
+                elif isinstance(comp, Video):
+                    video_path = await comp.convert_to_file_path()
+
+                    with open(video_path, "rb") as f:
+                        try:
+                            response = self.client.media.upload("video", f)
+                        except Exception as e:
+                            logger.error(f"微信客服上传视频失败: {e}")
+                            await self.send(
+                                MessageChain().message(f"微信客服上传视频失败: {e}"),
+                            )
+                            return
+                        logger.debug(f"微信客服上传视频返回: {response}")
+                        kf_message_api.send_video(
                             user_id,
                             self.get_self_id(),
                             response["media_id"],
@@ -183,25 +216,66 @@ class WecomPlatformEvent(AstrMessageEvent):
                         )
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
-                    # 转成amr
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    record_path_amr = os.path.join(temp_dir, f"{uuid.uuid4()}.amr")
-                    pydub.AudioSegment.from_wav(record_path).export(
-                        record_path_amr,
-                        format="amr",
-                    )
+                    record_path_amr = await convert_audio_to_amr(record_path)
 
-                    with open(record_path_amr, "rb") as f:
+                    try:
+                        with open(record_path_amr, "rb") as f:
+                            try:
+                                response = self.client.media.upload("voice", f)
+                            except Exception as e:
+                                logger.error(f"企业微信上传语音失败: {e}")
+                                await self.send(
+                                    MessageChain().message(
+                                        f"企业微信上传语音失败: {e}"
+                                    ),
+                                )
+                                return
+                            logger.info(f"企业微信上传语音返回: {response}")
+                            self.client.message.send_voice(
+                                message_obj.self_id,
+                                message_obj.session_id,
+                                response["media_id"],
+                            )
+                    finally:
+                        if record_path_amr != record_path and os.path.exists(
+                            record_path_amr,
+                        ):
+                            try:
+                                os.remove(record_path_amr)
+                            except OSError as e:
+                                logger.warning(f"删除临时音频文件失败: {e}")
+                elif isinstance(comp, File):
+                    file_path = await comp.get_file()
+
+                    with open(file_path, "rb") as f:
                         try:
-                            response = self.client.media.upload("voice", f)
+                            response = self.client.media.upload("file", f)
                         except Exception as e:
-                            logger.error(f"企业微信上传语音失败: {e}")
+                            logger.error(f"企业微信上传文件失败: {e}")
                             await self.send(
-                                MessageChain().message(f"企业微信上传语音失败: {e}"),
+                                MessageChain().message(f"企业微信上传文件失败: {e}"),
                             )
                             return
-                        logger.info(f"企业微信上传语音返回: {response}")
-                        self.client.message.send_voice(
+                        logger.debug(f"企业微信上传文件返回: {response}")
+                        self.client.message.send_file(
+                            message_obj.self_id,
+                            message_obj.session_id,
+                            response["media_id"],
+                        )
+                elif isinstance(comp, Video):
+                    video_path = await comp.convert_to_file_path()
+
+                    with open(video_path, "rb") as f:
+                        try:
+                            response = self.client.media.upload("video", f)
+                        except Exception as e:
+                            logger.error(f"企业微信上传视频失败: {e}")
+                            await self.send(
+                                MessageChain().message(f"企业微信上传视频失败: {e}"),
+                            )
+                            return
+                        logger.debug(f"企业微信上传视频返回: {response}")
+                        self.client.message.send_video(
                             message_obj.self_id,
                             message_obj.session_id,
                             response["media_id"],

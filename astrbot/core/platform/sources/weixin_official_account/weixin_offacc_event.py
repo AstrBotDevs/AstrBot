@@ -1,5 +1,5 @@
 import asyncio
-import uuid
+import os
 from typing import cast
 
 from wechatpy import WeChatClient
@@ -9,13 +9,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-
-try:
-    import pydub
-except Exception:
-    logger.warning(
-        "检测到 pydub 库未安装，微信公众平台将无法语音收发。如需使用语音，请前往管理面板 -> 平台日志 -> 安装 Pip 库安装 pydub。",
-    )
+from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 
 class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
@@ -137,38 +131,46 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
             elif isinstance(comp, Record):
                 record_path = await comp.convert_to_file_path()
-                # 转成amr
-                record_path_amr = f"data/temp/{uuid.uuid4()}.amr"
-                pydub.AudioSegment.from_wav(record_path).export(
-                    record_path_amr,
-                    format="amr",
-                )
+                record_path_amr = await convert_audio_to_amr(record_path)
 
-                with open(record_path_amr, "rb") as f:
-                    try:
-                        response = self.client.media.upload("voice", f)
-                    except Exception as e:
-                        logger.error(f"微信公众平台上传语音失败: {e}")
-                        await self.send(
-                            MessageChain().message(f"微信公众平台上传语音失败: {e}"),
-                        )
-                        return
-                    logger.info(f"微信公众平台上传语音返回: {response}")
+                try:
+                    with open(record_path_amr, "rb") as f:
+                        try:
+                            response = self.client.media.upload("voice", f)
+                        except Exception as e:
+                            logger.error(f"微信公众平台上传语音失败: {e}")
+                            await self.send(
+                                MessageChain().message(
+                                    f"微信公众平台上传语音失败: {e}"
+                                ),
+                            )
+                            return
+                        logger.info(f"微信公众平台上传语音返回: {response}")
 
-                    if active_send_mode:
-                        self.client.message.send_voice(
-                            message_obj.sender.user_id,
-                            response["media_id"],
-                        )
-                    else:
-                        reply = VoiceReply(
-                            media_id=response["media_id"],
-                            message=cast(dict, self.message_obj.raw_message)["message"],
-                        )
-                        xml = reply.render()
-                        future = cast(dict, self.message_obj.raw_message)["future"]
-                        assert isinstance(future, asyncio.Future)
-                        future.set_result(xml)
+                        if active_send_mode:
+                            self.client.message.send_voice(
+                                message_obj.sender.user_id,
+                                response["media_id"],
+                            )
+                        else:
+                            reply = VoiceReply(
+                                media_id=response["media_id"],
+                                message=cast(dict, self.message_obj.raw_message)[
+                                    "message"
+                                ],
+                            )
+                            xml = reply.render()
+                            future = cast(dict, self.message_obj.raw_message)["future"]
+                            assert isinstance(future, asyncio.Future)
+                            future.set_result(xml)
+                finally:
+                    if record_path_amr != record_path and os.path.exists(
+                        record_path_amr
+                    ):
+                        try:
+                            os.remove(record_path_amr)
+                        except OSError as e:
+                            logger.warning(f"删除临时音频文件失败: {e}")
 
             else:
                 logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
