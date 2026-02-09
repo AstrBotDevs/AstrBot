@@ -6,6 +6,7 @@ import locale
 import logging
 import os
 import sys
+from pathlib import Path
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 
@@ -32,6 +33,16 @@ def _robust_decode(line: bytes) -> str:
 
 def _is_frozen_runtime() -> bool:
     return bool(getattr(sys, "frozen", False))
+
+
+def _get_pip_subprocess_executable() -> str | None:
+    candidates = [getattr(sys, "_base_executable", None), sys.executable]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if "python" in Path(candidate).name.lower():
+            return candidate
+    return None
 
 
 def _get_pip_main():
@@ -92,13 +103,20 @@ class PipInstaller:
 
         logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         result_code = None
-        if _is_frozen_runtime():
-            result_code = await self._run_pip_in_process(args)
-        else:
+
+        subprocess_executable = _get_pip_subprocess_executable()
+        if subprocess_executable:
             try:
-                result_code = await self._run_pip_subprocess(args)
+                result_code = await self._run_pip_subprocess(
+                    subprocess_executable, args
+                )
             except FileNotFoundError:
-                result_code = await self._run_pip_in_process(args)
+                logger.warning(
+                    "pip subprocess executable not found; falling back to in-process mode"
+                )
+
+        if result_code is None:
+            result_code = await self._run_pip_in_process(args)
 
         if result_code != 0:
             raise Exception(f"安装失败，错误码：{result_code}")
@@ -107,9 +125,9 @@ class PipInstaller:
             sys.path.insert(0, target_site_packages)
         importlib.invalidate_caches()
 
-    async def _run_pip_subprocess(self, args: list[str]) -> int:
+    async def _run_pip_subprocess(self, executable: str, args: list[str]) -> int:
         process = await asyncio.create_subprocess_exec(
-            sys.executable,
+            executable,
             "-m",
             "pip",
             *args,
