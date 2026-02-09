@@ -50,6 +50,16 @@ def check_env() -> None:
     os.makedirs(get_astrbot_temp_path(), exist_ok=True)
     os.makedirs(site_packages_path, exist_ok=True)
 
+    try:
+        import certifi
+
+        certifi_cafile = certifi.where()
+        if certifi_cafile and os.path.exists(certifi_cafile):
+            os.environ.setdefault("SSL_CERT_FILE", certifi_cafile)
+            os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi_cafile)
+    except Exception as e:
+        logger.warning(f"Failed to configure certifi CA bundle: {e}")
+
     # 针对问题 #181 的临时解决方案
     mimetypes.add_type("text/javascript", ".js")
     mimetypes.add_type("text/javascript", ".mjs")
