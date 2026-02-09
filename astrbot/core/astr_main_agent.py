@@ -958,14 +958,6 @@ async def build_main_agent(
     if action_type == "live":
         req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
 
-    logger.debug("Final ProviderRequest: prompt=%s, system_prompt=%s, image_urls=%s, contexts=%s, func_tool=%s",
-        req.prompt,
-        req.system_prompt,
-        req.image_urls,
-        req.contexts,
-        req.func_tool.names() if req.func_tool else None,
-    )
-
     reset_coro = agent_runner.reset(
         provider=provider,
         request=req,
