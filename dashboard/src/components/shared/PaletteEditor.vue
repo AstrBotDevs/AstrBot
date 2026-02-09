@@ -31,7 +31,7 @@
 
           <v-card-text class="pa-3">
             <div class="format-row mb-2">
-              <span class="format-label">HEX</span>
+              <span class="format-label">{{ t('core.common.palette.formatHex') }}</span>
               <v-text-field
                 v-model="hexInput"
                 density="compact"
@@ -53,7 +53,7 @@
             </div>
 
             <div class="format-row mb-2">
-              <span class="format-label">RGB</span>
+              <span class="format-label">{{ t('core.common.palette.formatRgb') }}</span>
               <v-text-field
                 v-model="rgbInput"
                 density="compact"
@@ -75,7 +75,7 @@
             </div>
 
             <div class="format-row">
-              <span class="format-label">HSV</span>
+              <span class="format-label">{{ t('core.common.palette.formatHsv') }}</span>
               <v-text-field
                 v-model="hsvInput"
                 density="compact"
@@ -198,9 +198,9 @@ const snackbarText = ref('')
 
 const formatPlaceholder = computed(() => {
   switch (props.format) {
-    case ColorFormat.RGB: return 'rgb(255, 255, 255)'
-    case ColorFormat.HSV: return 'hsv(0, 0%, 100%)'
-    default: return '#RRGGBB'
+    case ColorFormat.RGB: return t('core.common.palette.placeholderRgb')
+    case ColorFormat.HSV: return t('core.common.palette.placeholderHsv')
+    default: return t('core.common.palette.placeholderHex')
   }
 })
 

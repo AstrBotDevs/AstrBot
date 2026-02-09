@@ -115,6 +115,13 @@
     "pasteFailed": "Failed to read clipboard",
     "pickScreen": "Pick",
     "pickSuccess": "Color picked from screen",
-    "invalidFormat": "Invalid color format"
+    "invalidFormat": "Invalid color format",
+    "copyFailed": "Failed to copy to clipboard",
+    "formatHex": "HEX",
+    "formatRgb": "RGB",
+    "formatHsv": "HSV",
+    "placeholderHex": "#RRGGBB",
+    "placeholderRgb": "rgb(255, 255, 255)",
+    "placeholderHsv": "hsv(0, 0%, 100%)"
   }
 }

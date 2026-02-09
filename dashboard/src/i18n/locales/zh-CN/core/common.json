@@ -115,6 +115,13 @@
     "pasteFailed": "无法读取剪贴板",
     "pickScreen": "取色",
     "pickSuccess": "已从屏幕取色",
-    "invalidFormat": "颜色格式无效"
+    "invalidFormat": "颜色格式无效",
+    "copyFailed": "复制到剪贴板失败",
+    "formatHex": "HEX",
+    "formatRgb": "RGB",
+    "formatHsv": "HSV",
+    "placeholderHex": "#RRGGBB",
+    "placeholderRgb": "rgb(255, 255, 255)",
+    "placeholderHsv": "hsv(0, 0%, 100%)"
   }
 }
