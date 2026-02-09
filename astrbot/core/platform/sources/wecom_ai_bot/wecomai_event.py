@@ -186,7 +186,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "type": "break",  # break means a segment end
                         "data": final_data,
                         "streaming": True,
-                        "session_id": self.session_id,
+                        "session_id": stream_id,
                     },
                 )
                 final_data = ""
@@ -205,7 +205,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "type": "complete",  # complete means we return the final result
                 "data": final_data,
                 "streaming": True,
-                "session_id": self.session_id,
+                "session_id": stream_id,
             },
         )
         await super().send_streaming(generator, use_fallback)

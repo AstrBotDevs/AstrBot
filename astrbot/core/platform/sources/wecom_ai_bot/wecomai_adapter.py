@@ -127,6 +127,7 @@ class WecomAIBotAdapter(Platform):
             self.queue_mgr,
             self._handle_queued_message,
         )
+        self._stream_plain_cache: dict[str, str] = {}
 
         self.webhook_client: WecomAIBotWebhookClient | None = None
         if self.msg_push_webhook_url:
@@ -198,6 +199,7 @@ class WecomAIBotAdapter(Platform):
             # wechat server is requesting for updates of a stream
             stream_id = message_data["stream"]["id"]
             if not self.queue_mgr.has_back_queue(stream_id):
+                self._stream_plain_cache.pop(stream_id, None)
                 if self.queue_mgr.is_stream_finished(stream_id):
                     logger.debug(
                         f"Stream already finished, returning end message: {stream_id}"
@@ -225,24 +227,48 @@ class WecomAIBotAdapter(Platform):
                 return None
 
             # aggregate all delta chains in the back queue
-            latest_plain_content = ""
+            cached_plain_content = self._stream_plain_cache.get(stream_id, "")
+            latest_plain_content = cached_plain_content
             image_base64 = []
             finish = False
             while not queue.empty():
                 msg = await queue.get()
                 if msg["type"] == "plain":
-                    latest_plain_content = msg["data"] or ""
+                    plain_data = msg.get("data") or ""
+                    if msg.get("streaming", False):
+                        # streaming plain payload is already cumulative
+                        cached_plain_content = plain_data
+                    else:
+                        # segmented non-stream send() pushes plain chunks, needs append
+                        cached_plain_content += plain_data
+                    latest_plain_content = cached_plain_content
                 elif msg["type"] == "image":
                     image_base64.append(msg["image_data"])
+                elif msg["type"] == "break":
+                    continue
                 elif msg["type"] in {"end", "complete"}:
                     # stream end
                     finish = True
                     self.queue_mgr.remove_queues(stream_id, mark_finished=True)
+                    self._stream_plain_cache.pop(stream_id, None)
                     break
 
             logger.debug(
                 f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}",
             )
+            if not finish:
+                self._stream_plain_cache[stream_id] = cached_plain_content
+            if finish and not latest_plain_content and not image_base64:
+                end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
+                    stream_id,
+                    "",
+                    True,
+                )
+                return await self.api_client.encrypt_message(
+                    end_message,
+                    callback_params["nonce"],
+                    callback_params["timestamp"],
+                )
             if latest_plain_content or image_base64:
                 msg_items = []
                 if finish and image_base64:
