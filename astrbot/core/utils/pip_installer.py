@@ -47,6 +47,39 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
+def _patch_distlib_finder_for_frozen_runtime() -> None:
+    if not getattr(sys, "frozen", False):
+        return
+
+    try:
+        from pip._vendor.distlib import resources as distlib_resources
+    except Exception:
+        return
+
+    for package_name in ("pip._vendor.distlib", "pip._vendor"):
+        try:
+            package = importlib.import_module(package_name)
+        except Exception:
+            continue
+
+        loader = getattr(package, "__loader__", None)
+        if loader is None:
+            loader = getattr(getattr(package, "__spec__", None), "loader", None)
+        if loader is None:
+            continue
+
+        loader_type = type(loader)
+        if loader_type in distlib_resources._finder_registry:
+            continue
+
+        distlib_resources.register_finder(loader, distlib_resources.ResourceFinder)
+        logger.info(
+            "Patched pip distlib finder for frozen loader: %s (%s)",
+            loader_type.__name__,
+            package_name,
+        )
+
+
 class PipInstaller:
     def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None) -> None:
         self.pip_install_arg = pip_install_arg
@@ -88,6 +121,7 @@ class PipInstaller:
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
+        _patch_distlib_finder_for_frozen_runtime()
 
         original_handlers = list(logging.getLogger().handlers)
         result_code, output = await asyncio.to_thread(
