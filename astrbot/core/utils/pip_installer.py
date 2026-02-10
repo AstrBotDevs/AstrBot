@@ -49,6 +49,14 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
+def _prepend_sys_path(path: str) -> None:
+    normalized_target = os.path.realpath(path)
+    sys.path[:] = [
+        item for item in sys.path if os.path.realpath(item) != normalized_target
+    ]
+    sys.path.insert(0, normalized_target)
+
+
 def _get_loader_for_package(package: object) -> object | None:
     loader = getattr(package, "__loader__", None)
     if loader is not None:
@@ -73,7 +81,7 @@ def _try_register_distlib_finder(
         return False
 
     try:
-        register_finder(loader_type, resource_finder)
+        register_finder(loader, resource_finder)
     except Exception as exc:
         logger.warning(
             "Failed to patch pip distlib finder for loader %s (%s): %s",
@@ -177,6 +185,7 @@ class PipInstaller:
         if is_packaged_electron_runtime():
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
+            _prepend_sys_path(target_site_packages)
             args.extend(["--target", target_site_packages])
 
         if self.pip_install_arg:
@@ -188,8 +197,8 @@ class PipInstaller:
         if result_code != 0:
             raise Exception(f"安装失败，错误码：{result_code}")
 
-        if target_site_packages and target_site_packages not in sys.path:
-            sys.path.insert(0, target_site_packages)
+        if target_site_packages:
+            _prepend_sys_path(target_site_packages)
         importlib.invalidate_caches()
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
