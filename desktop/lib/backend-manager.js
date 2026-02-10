@@ -317,13 +317,6 @@ class BackendManager {
         if (sawBackendDown && previousStartTime === null) {
           return { ok: true, reason: null };
         }
-        if (
-          sawBackendDown &&
-          previousStartTime !== null &&
-          currentStartTime === null
-        ) {
-          return { ok: true, reason: null };
-        }
       }
 
       if (Date.now() - start >= gracefulWaitMs) {
@@ -566,6 +559,40 @@ class BackendManager {
     return Array.from(pids);
   }
 
+  getWindowsProcessInfo(pid) {
+    const result = spawnSync(
+      'tasklist',
+      ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
+      {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+        windowsHide: true,
+      },
+    );
+    if (result.status !== 0 || !result.stdout) {
+      return null;
+    }
+
+    const firstLine = result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+    if (!firstLine || firstLine.startsWith('INFO:')) {
+      return null;
+    }
+
+    const fields = firstLine
+      .replace(/^"/, '')
+      .replace(/"$/, '')
+      .split('","');
+    const imageName = fields[0] || '';
+    const parsedPid = Number.parseInt(fields[1] || '', 10);
+    if (!imageName || !Number.isInteger(parsedPid) || parsedPid !== Number(pid)) {
+      return null;
+    }
+    return { imageName, pid: parsedPid };
+  }
+
   async stopUnmanagedBackendByPort() {
     if (!this.app.isPackaged || process.platform !== 'win32') {
       return false;
@@ -585,7 +612,25 @@ class BackendManager {
       `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
     );
 
+    const expectedImageName = (
+      path.basename(this.getPackagedBackendPath() || '') || 'astrbot-backend.exe'
+    ).toLowerCase();
+
     for (const pid of pids) {
+      const processInfo = this.getWindowsProcessInfo(pid);
+      if (!processInfo) {
+        this.log(`Skip unmanaged cleanup for pid=${pid}: unable to resolve process info.`);
+        continue;
+      }
+
+      const actualImageName = processInfo.imageName.toLowerCase();
+      if (actualImageName !== expectedImageName) {
+        this.log(
+          `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
+        );
+        continue;
+      }
+
       try {
         // Synchronous taskkill is acceptable here because unmanaged cleanup
         // is performed only during shutdown/restart control flows.
