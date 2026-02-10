@@ -289,13 +289,69 @@ def _prefer_module_from_site_packages(
             raise
 
 
+def _extract_conflicting_module_name(exc: Exception) -> str | None:
+    if isinstance(exc, ModuleNotFoundError):
+        missing_name = getattr(exc, "name", None)
+        if missing_name:
+            return missing_name.split(".", 1)[0]
+
+    message = str(exc)
+    from_match = re.search(r"from '([A-Za-z0-9_.]+)'", message)
+    if from_match:
+        return from_match.group(1).split(".", 1)[0]
+
+    no_module_match = re.search(r"No module named '([A-Za-z0-9_.]+)'", message)
+    if no_module_match:
+        return no_module_match.group(1).split(".", 1)[0]
+
+    return None
+
+
+def _prefer_module_with_dependency_recovery(
+    module_name: str,
+    site_packages_path: str,
+    max_attempts: int = 3,
+) -> bool:
+    recovered_dependencies: set[str] = set()
+
+    for _ in range(max_attempts):
+        try:
+            return _prefer_module_from_site_packages(module_name, site_packages_path)
+        except Exception as exc:
+            dependency_name = _extract_conflicting_module_name(exc)
+            if (
+                not dependency_name
+                or dependency_name == module_name
+                or dependency_name in recovered_dependencies
+            ):
+                raise
+
+            recovered_dependencies.add(dependency_name)
+            recovered = _prefer_module_from_site_packages(
+                dependency_name,
+                site_packages_path,
+            )
+            if not recovered:
+                raise
+            logger.info(
+                "Recovered dependency %s while preferring %s from plugin site-packages.",
+                dependency_name,
+                module_name,
+            )
+
+    return False
+
+
 def _prefer_modules_from_site_packages(
     module_names: set[str],
     site_packages_path: str,
 ) -> None:
     for module_name in sorted(module_names):
         try:
-            loaded = _prefer_module_from_site_packages(module_name, site_packages_path)
+            loaded = _prefer_module_with_dependency_recovery(
+                module_name,
+                site_packages_path,
+            )
             if not loaded:
                 logger.debug(
                     "Module %s not found in plugin site-packages: %s",
