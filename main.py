@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-import runtime_bootstrap  # noqa: F401
+import runtime_bootstrap
 from astrbot.core import LogBroker, LogManager, db_helper, logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.initial_loader import InitialLoader
@@ -94,6 +94,8 @@ async def check_dashboard_files(webui_dir: str | None = None):
 
 
 if __name__ == "__main__":
+    runtime_bootstrap.flush_bootstrap_records(logger)
+
     parser = argparse.ArgumentParser(description="AstrBot")
     parser.add_argument(
         "--webui-dir",
