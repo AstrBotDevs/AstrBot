@@ -116,6 +116,29 @@ function updateTrayMenu() {
         }
       },
     },
+    {
+      label: shellTexts.trayRestartBackend,
+      click: async () => {
+        if (!backendManager) {
+          return;
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          showWindow();
+          const currentUrl = mainWindow.webContents.getURL();
+          if (currentUrl.startsWith(backendManager.getBackendUrl())) {
+            mainWindow.webContents.send('astrbot-desktop:tray-restart-backend');
+            return;
+          }
+        }
+
+        const result = await backendManager.restartBackend();
+        if (!result.ok) {
+          logElectron(
+            `Tray restart backend fallback failed: ${result.reason || 'unknown reason'}`,
+          );
+        }
+      },
+    },
     { type: 'separator' },
     {
       label: shellTexts.trayQuit,
