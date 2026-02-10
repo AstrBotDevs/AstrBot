@@ -31,16 +31,20 @@ export default {
         }
     },
     methods: {
-        async check() {
+        async check(initialStartTime = null) {
             this.newStartTime = -1
             this.cnt = 0
             this.visible = true
             this.status = ""
-            const commonStore = useCommonStore()
-            try {
-                this.startTime = await commonStore.fetchStartTime()
-            } catch (_error) {
-                this.startTime = commonStore.getStartTime()
+            if (typeof initialStartTime === 'number' && Number.isFinite(initialStartTime)) {
+                this.startTime = initialStartTime
+            } else {
+                const commonStore = useCommonStore()
+                try {
+                    this.startTime = await commonStore.fetchStartTime()
+                } catch (_error) {
+                    this.startTime = commonStore.getStartTime()
+                }
             }
             console.log('start wfr')
             setTimeout(() => {
