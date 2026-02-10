@@ -275,8 +275,9 @@ class BackendManager {
     if (!result.ok || !result.data) {
       return null;
     }
-    const startTime = result.data?.data?.start_time;
-    return Number.isFinite(startTime) ? startTime : null;
+    const rawStartTime = result.data?.data?.start_time;
+    const numericStartTime = Number(rawStartTime);
+    return Number.isFinite(numericStartTime) ? numericStartTime : null;
   }
 
   async requestGracefulRestart(authToken = null) {
