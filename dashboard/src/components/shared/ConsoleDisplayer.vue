@@ -269,7 +269,7 @@ export default {
         }
       }
 
-      span.style = style + 'display: block; font-size: 12px; font-family: Consolas, monospace; white-space: pre-wrap; margin-bottom: 2px;'
+      span.style = style + 'display: block; font-size: 12px; font-family: SFMono-Regular, Menlo, Monaco, Consolas, "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", monospace; white-space: pre-wrap; margin-bottom: 2px;'
       span.classList.add('fade-in')
       span.innerText = `${log}`;
       ele.appendChild(span)

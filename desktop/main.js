@@ -161,6 +161,16 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       preload: path.join(__dirname, 'preload.js'),
+      ...(isMac
+        ? {
+            defaultFontFamily: {
+              standard: 'PingFang SC',
+              sansSerif: 'PingFang SC',
+              serif: 'Songti SC',
+              monospace: 'SF Mono',
+            },
+          }
+        : {}),
     },
   });
 
