@@ -28,12 +28,14 @@ export default {
             newStartTime: -1,
             status: '',
             cnt: 0,
+            hasProbeFailure: false,
         }
     },
     methods: {
         async check() {
             this.newStartTime = -1
             this.cnt = 0
+            this.hasProbeFailure = false
             this.visible = true
             this.status = ""
             const commonStore = useCommonStore()
@@ -76,9 +78,19 @@ export default {
                     this.visible = false
                     // reload
                     window.location.reload()
+                    return this.newStartTime
+                }
+
+                if (this.startTime === -1 && this.hasProbeFailure) {
+                    this.newStartTime = newStartTime
+                    console.log('wfr: restarted (fallback by recovery)')
+                    this.visible = false
+                    // reload
+                    window.location.reload()
                 }
             } catch (_error) {
                 // backend may be unavailable during restart window
+                this.hasProbeFailure = true
             }
             return this.newStartTime
         }

@@ -271,6 +271,9 @@ class BackendManager {
     if (this.app.isPackaged) {
       env.ASTRBOT_ELECTRON_CLIENT = '1';
     }
+    if (backendConfig.webuiDir) {
+      env.ASTRBOT_WEBUI_DIR = backendConfig.webuiDir;
+    }
     if (backendConfig.rootDir) {
       env.ASTRBOT_ROOT = backendConfig.rootDir;
       const logsDir = path.join(backendConfig.rootDir, 'logs');

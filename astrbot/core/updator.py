@@ -44,6 +44,38 @@ class AstrBotUpdator(RepoZipUpdator):
         except psutil.NoSuchProcess:
             pass
 
+    @staticmethod
+    def _resolve_webui_dir_arg(argv: list[str]) -> str | None:
+        try:
+            start = argv.index("--webui-dir") + 1
+        except ValueError:
+            return None
+
+        if start >= len(argv):
+            return None
+
+        value_parts: list[str] = []
+        for arg in argv[start:]:
+            if arg.startswith("--") and value_parts:
+                break
+            if arg.startswith("--") and not value_parts:
+                break
+            value_parts.append(arg)
+
+        if not value_parts:
+            return None
+        return " ".join(value_parts).strip() or None
+
+    def _build_frozen_reboot_args(self) -> list[str]:
+        argv = list(sys.argv[1:])
+        webui_dir = self._resolve_webui_dir_arg(argv)
+        if not webui_dir:
+            webui_dir = os.environ.get("ASTRBOT_WEBUI_DIR")
+
+        if webui_dir:
+            return ["--webui-dir", webui_dir]
+        return []
+
     def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
@@ -68,8 +100,8 @@ class AstrBotUpdator(RepoZipUpdator):
                 os.execv(executable, [executable, "-m", "astrbot.cli.__main__", *args])
             else:
                 if getattr(sys, "frozen", False):
-                    # Frozen executable should not receive argv[0] as a positional argument.
-                    os.execv(executable, [executable, *sys.argv[1:]])
+                    args = self._build_frozen_reboot_args()
+                    os.execv(executable, [executable, *args])
                 else:
                     os.execv(executable, [executable, *sys.argv])
         except Exception as e:

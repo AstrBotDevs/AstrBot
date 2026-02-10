@@ -1,12 +1,12 @@
 import axios from 'axios'
 
 type WaitingForRestartRef = {
-  check: () => void
+  check: () => void | Promise<void>
 }
 
-function triggerWaiting(waitingRef?: WaitingForRestartRef | null) {
+async function triggerWaiting(waitingRef?: WaitingForRestartRef | null) {
   if (!waitingRef) return
-  waitingRef.check()
+  await waitingRef.check()
 }
 
 export async function restartAstrBot(
@@ -15,14 +15,14 @@ export async function restartAstrBot(
   const desktopBridge = window.astrbotDesktop
 
   if (desktopBridge?.isElectron) {
+    await triggerWaiting(waitingRef)
     const result = await desktopBridge.restartBackend()
     if (!result.ok) {
       throw new Error(result.reason || 'Failed to restart backend.')
     }
-    triggerWaiting(waitingRef)
     return
   }
 
   await axios.post('/api/stat/restart-core')
-  triggerWaiting(waitingRef)
+  await triggerWaiting(waitingRef)
 }
