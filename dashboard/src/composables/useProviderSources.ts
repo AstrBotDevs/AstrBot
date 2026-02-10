@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, inject, onMounted, nextTick, watch } from 'vue'
 import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
 
@@ -36,6 +36,27 @@ export function resolveDefaultTab(value?: string) {
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
+
+  type ConfirmDialogOptions = {
+    title?: string
+    message?: string
+  }
+
+  type ConfirmDialogHandler = (options: ConfirmDialogOptions) => Promise<boolean>
+
+  const confirmDialog = inject<ConfirmDialogHandler | undefined>('$confirm', undefined)
+
+  async function askForConfirmation(message: string) {
+    if (confirmDialog) {
+      try {
+        return await confirmDialog({ message })
+      } catch {
+        return false
+      }
+    }
+
+    return window.confirm(message)
+  }
 
   // ===== State =====
   const config = ref<Record<string, any>>({})
@@ -396,7 +417,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProviderSource(source: any) {
-    if (!confirm(tm('providerSources.deleteConfirm', { id: source.id }))) return
+    const confirmed = await askForConfirmation(
+      tm('providerSources.deleteConfirm', { id: source.id })
+    )
+    if (!confirmed) return
 
     try {
       await axios.post('/api/config/provider_sources/delete', { id: source.id })
@@ -558,7 +582,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProvider(provider: any) {
-    if (!confirm(tm('models.deleteConfirm', { id: provider.id }))) return
+    const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
+    if (!confirmed) return
 
     try {
       await axios.post('/api/config/provider/delete', { id: provider.id })
