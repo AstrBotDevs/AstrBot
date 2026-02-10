@@ -35,6 +35,8 @@ const args = [
   'pip',
   '--collect-submodules',
   'astrbot.api',
+  '--hidden-import',
+  '_multiprocessing',
   '--collect-data',
   'certifi',
   '--add-data',
