@@ -251,7 +251,7 @@ Additionally, the birth of this project would not have been possible without the
 
 <div align="center">
 
-_Companionship and capability should never be at odds. What we aim to create is a robot that can both understand emotions, provide genuine companionship, and reliably accomplish tasks._
+_Companionship and capability should never be at odds. What we aim to create is a robot that can understand emotions, provide genuine companionship, and reliably accomplish tasks._
 
 _私は、高性能ですから!_
 
