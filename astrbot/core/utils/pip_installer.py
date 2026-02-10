@@ -202,13 +202,20 @@ def _ensure_preferred_modules(
     module_names: set[str],
     site_packages_path: str,
 ) -> None:
-    _prefer_modules_from_site_packages(module_names, site_packages_path)
+    unresolved_prefer_reasons = _prefer_modules_from_site_packages(
+        module_names, site_packages_path
+    )
 
     unresolved_modules: list[str] = []
     for module_name in sorted(module_names):
         if not _module_exists_in_site_packages(module_name, site_packages_path):
             continue
         if _is_module_loaded_from_site_packages(module_name, site_packages_path):
+            continue
+
+        failure_reason = unresolved_prefer_reasons.get(module_name)
+        if failure_reason:
+            unresolved_modules.append(f"{module_name} -> {failure_reason}")
             continue
 
         loaded_module = sys.modules.get(module_name)
@@ -345,25 +352,61 @@ def _prefer_module_with_dependency_recovery(
 def _prefer_modules_from_site_packages(
     module_names: set[str],
     site_packages_path: str,
-) -> None:
-    for module_name in sorted(module_names):
-        try:
-            loaded = _prefer_module_with_dependency_recovery(
-                module_name,
-                site_packages_path,
-            )
-            if not loaded:
+) -> dict[str, str]:
+    pending_modules = sorted(module_names)
+    unresolved_reasons: dict[str, str] = {}
+    max_rounds = max(2, min(6, len(pending_modules) + 1))
+
+    for _ in range(max_rounds):
+        if not pending_modules:
+            break
+
+        next_round_pending: list[str] = []
+        round_progress = False
+
+        for module_name in pending_modules:
+            try:
+                loaded = _prefer_module_with_dependency_recovery(
+                    module_name,
+                    site_packages_path,
+                )
+            except Exception as exc:
+                unresolved_reasons[module_name] = str(exc)
+                next_round_pending.append(module_name)
+                continue
+
+            unresolved_reasons.pop(module_name, None)
+            if loaded:
+                round_progress = True
+            else:
                 logger.debug(
                     "Module %s not found in plugin site-packages: %s",
                     module_name,
                     site_packages_path,
                 )
-        except Exception as exc:
-            logger.warning(
-                "Failed to prefer module %s from plugin site-packages: %s",
-                module_name,
-                exc,
-            )
+
+        if not next_round_pending:
+            pending_modules = []
+            break
+
+        if not round_progress and len(next_round_pending) == len(pending_modules):
+            pending_modules = next_round_pending
+            break
+
+        pending_modules = next_round_pending
+
+    final_unresolved = {
+        module_name: unresolved_reasons.get(module_name, "unknown import error")
+        for module_name in pending_modules
+    }
+    for module_name, reason in final_unresolved.items():
+        logger.warning(
+            "Failed to prefer module %s from plugin site-packages: %s",
+            module_name,
+            reason,
+        )
+
+    return final_unresolved
 
 
 def _ensure_plugin_dependencies_preferred(
