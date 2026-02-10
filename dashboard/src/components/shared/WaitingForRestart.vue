@@ -11,6 +11,7 @@
 
 <script>
 import axios from 'axios'
+import { useCommonStore } from '@/stores/common';
 import { useI18n } from '@/i18n/composables';
 
 
@@ -27,37 +28,24 @@ export default {
             newStartTime: -1,
             status: '',
             cnt: 0,
-            hasProbeFailure: false,
         }
     },
     methods: {
-        async fetchStartTime() {
-            const res = await axios.get('/api/stat/start-time', {
-                timeout: 3000,
-                params: { _: Date.now() },
-                headers: {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                },
-            })
-            return res.data.data.start_time
-        },
         async check() {
             this.newStartTime = -1
             this.cnt = 0
-            this.hasProbeFailure = false
             this.visible = true
             this.status = ""
-            await this.$nextTick()
+            const commonStore = useCommonStore()
             try {
-                this.startTime = await this.fetchStartTime()
+                this.startTime = await commonStore.fetchStartTime()
             } catch (_error) {
-                this.startTime = -1
+                this.startTime = commonStore.getStartTime()
             }
             console.log('start wfr')
             setTimeout(() => {
                 this.timeoutInternal()
-            }, 300)
+            }, 1000)
         },
         timeoutInternal() {
             console.log('wfr: timeoutInternal', this.newStartTime, this.startTime)
@@ -79,7 +67,8 @@ export default {
         },
         async checkStartTime() {
             try {
-                let newStartTime = await this.fetchStartTime()
+                let res = await axios.get('/api/stat/start-time', { timeout: 3000 })
+                let newStartTime = res.data.data.start_time
                 console.log('wfr: checkStartTime', newStartTime, this.startTime)
                 if (this.startTime !== -1 && newStartTime !== this.startTime) {
                     this.newStartTime = newStartTime
@@ -87,19 +76,9 @@ export default {
                     this.visible = false
                     // reload
                     window.location.reload()
-                    return this.newStartTime
-                }
-
-                if (this.startTime === -1 && this.hasProbeFailure) {
-                    this.newStartTime = newStartTime
-                    console.log('wfr: restarted (fallback by recovery)')
-                    this.visible = false
-                    // reload
-                    window.location.reload()
                 }
             } catch (_error) {
                 // backend may be unavailable during restart window
-                this.hasProbeFailure = true
             }
             return this.newStartTime
         }

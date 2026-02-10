@@ -15,20 +15,15 @@ export async function restartAstrBot(
   const desktopBridge = window.astrbotDesktop
 
   if (desktopBridge?.isElectron) {
-    await triggerWaiting(waitingRef)
-    const result = await desktopBridge.restartBackend()
+    const authToken = localStorage.getItem('token')
+    const result = await desktopBridge.restartBackend(authToken)
     if (!result.ok) {
       throw new Error(result.reason || 'Failed to restart backend.')
     }
-    if (!waitingRef) {
-      window.location.reload()
-    }
+    await triggerWaiting(waitingRef)
     return
   }
 
   await axios.post('/api/stat/restart-core')
   await triggerWaiting(waitingRef)
-  if (!waitingRef) {
-    window.location.reload()
-  }
 }
