@@ -7,23 +7,17 @@ export type ConfirmDialogOptions = {
 
 export type ConfirmDialogHandler = (options: ConfirmDialogOptions) => Promise<boolean>
 
-export function resolveConfirmDialog(candidate: unknown): ConfirmDialogHandler | undefined {
-  if (typeof candidate === 'function') {
-    return candidate as ConfirmDialogHandler
-  }
-
-  return undefined
-}
+export type ConfirmDialogCandidate = ConfirmDialogHandler | null | undefined
 
 export function useConfirmDialog(): ConfirmDialogHandler | undefined {
-  return resolveConfirmDialog(inject('$confirm', undefined))
+  return inject<ConfirmDialogHandler | undefined>('$confirm', undefined)
 }
 
 export async function askForConfirmation(
   message: string,
-  candidate?: unknown
+  candidate?: ConfirmDialogCandidate
 ): Promise<boolean> {
-  const confirmDialog = resolveConfirmDialog(candidate)
+  const confirmDialog = candidate ?? undefined
 
   if (confirmDialog) {
     try {

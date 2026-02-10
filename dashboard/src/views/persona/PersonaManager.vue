@@ -424,7 +424,7 @@ export default defineComponent({
             if (
                 !(await askForConfirmationDialog(
                     this.tm('messages.deleteConfirm', { id: persona.persona_id }),
-                    (this as any).$confirm,
+                    this.$confirm,
                 ))
             ) {
                 return;
