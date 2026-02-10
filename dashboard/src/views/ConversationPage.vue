@@ -333,7 +333,10 @@ import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
-import { askForConfirmation as askForConfirmationDialog } from '@/utils/confirmDialog';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
     name: 'ConversationPage',
@@ -346,12 +349,14 @@ export default {
         const { t, locale } = useI18n();
         const { tm } = useModuleI18n('features/conversation');
         const customizerStore = useCustomizerStore();
+        const confirmDialog = useConfirmDialog();
 
         return {
             t,
             tm,
             locale,
-            customizerStore
+            customizerStore,
+            confirmDialog
         };
     },
 
@@ -747,7 +752,7 @@ export default {
         // 关闭对话历史对话框
         async closeHistoryDialog() {
             if (this.isEditingHistory) {
-                if (await askForConfirmationDialog(this.tm('dialogs.view.confirmClose'), this.$confirm)) {
+                if (await askForConfirmationDialog(this.tm('dialogs.view.confirmClose'), this.confirmDialog)) {
                     this.dialogView = false;
                 }
             } else {

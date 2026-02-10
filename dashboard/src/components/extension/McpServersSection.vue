@@ -218,7 +218,10 @@ import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { askForConfirmation as askForConfirmationDialog } from '@/utils/confirmDialog';
+import {
+  askForConfirmation as askForConfirmationDialog,
+  useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
   name: 'McpServersSection',
@@ -229,7 +232,8 @@ export default {
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/tooluse');
-    return { t, tm };
+    const confirmDialog = useConfirmDialog();
+    return { t, tm, confirmDialog };
   },
   data() {
     return {
@@ -386,7 +390,7 @@ export default {
     async deleteServer(server) {
       const serverName = server.name || server;
       const message = this.tm('dialogs.confirmDelete', { name: serverName });
-      if (!(await askForConfirmationDialog(message, this.$confirm))) {
+      if (!(await askForConfirmationDialog(message, this.confirmDialog))) {
         return;
       }
 

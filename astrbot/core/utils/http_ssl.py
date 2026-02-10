@@ -4,7 +4,9 @@ import threading
 
 import aiohttp
 
-from http_ssl_common import build_ssl_context_with_certifi as _build_ssl_context
+from astrbot.utils.http_ssl_common import (
+    build_ssl_context_with_certifi as _build_ssl_context,
+)
 
 logger = logging.getLogger("astrbot")
 

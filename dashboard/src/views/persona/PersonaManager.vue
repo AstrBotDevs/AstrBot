@@ -260,7 +260,10 @@ import PersonaCard from './PersonaCard.vue';
 import PersonaForm from '@/components/shared/PersonaForm.vue';
 import CreateFolderDialog from './CreateFolderDialog.vue';
 import MoveToFolderDialog from './MoveToFolderDialog.vue';
-import { askForConfirmation as askForConfirmationDialog } from '@/utils/confirmDialog';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
@@ -295,7 +298,8 @@ export default defineComponent({
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/persona');
-        return { t, tm };
+        const confirmDialog = useConfirmDialog();
+        return { t, tm, confirmDialog };
     },
     data() {
         return {
@@ -424,7 +428,7 @@ export default defineComponent({
             if (
                 !(await askForConfirmationDialog(
                     this.tm('messages.deleteConfirm', { id: persona.persona_id }),
-                    this.$confirm,
+                    this.confirmDialog,
                 ))
             ) {
                 return;

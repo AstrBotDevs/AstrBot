@@ -49,6 +49,57 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
+def _get_loader_for_package(package: object) -> object | None:
+    loader = getattr(package, "__loader__", None)
+    if loader is not None:
+        return loader
+
+    spec = getattr(package, "__spec__", None)
+    if spec is None:
+        return None
+    return getattr(spec, "loader", None)
+
+
+def _try_register_distlib_finder(
+    distlib_resources: object,
+    finder_registry: dict[type, object],
+    register_finder,
+    resource_finder: object,
+    loader: object,
+    package_name: str,
+) -> bool:
+    loader_type = type(loader)
+    if loader_type in finder_registry:
+        return False
+
+    try:
+        register_finder(loader_type, resource_finder)
+    except Exception as exc:
+        logger.warning(
+            "Failed to patch pip distlib finder for loader %s (%s): %s",
+            loader_type.__name__,
+            package_name,
+            exc,
+        )
+        return False
+
+    updated_registry = getattr(distlib_resources, "_finder_registry", finder_registry)
+    if isinstance(updated_registry, dict) and loader_type not in updated_registry:
+        logger.warning(
+            "Distlib finder patch did not take effect for loader %s (%s).",
+            loader_type.__name__,
+            package_name,
+        )
+        return False
+
+    logger.info(
+        "Patched pip distlib finder for frozen loader: %s (%s)",
+        loader_type.__name__,
+        package_name,
+    )
+    return True
+
+
 def _patch_distlib_finder_for_frozen_runtime() -> None:
     global _DISTLIB_FINDER_PATCH_ATTEMPTED
 
@@ -85,43 +136,21 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
         except Exception:
             continue
 
-        loader = getattr(package, "__loader__", None)
-        if loader is None:
-            loader = getattr(getattr(package, "__spec__", None), "loader", None)
+        loader = _get_loader_for_package(package)
         if loader is None:
             continue
 
-        loader_type = type(loader)
-        if loader_type in finder_registry:
-            continue
-
-        try:
-            register_finder(loader, resource_finder)
-        except Exception as exc:
-            logger.warning(
-                "Failed to patch pip distlib finder for loader %s (%s): %s",
-                loader_type.__name__,
-                package_name,
-                exc,
-            )
-            continue
-
-        finder_registry = getattr(
-            distlib_resources, "_finder_registry", finder_registry
-        )
-        if isinstance(finder_registry, dict) and loader_type not in finder_registry:
-            logger.warning(
-                "Distlib finder patch did not take effect for loader %s (%s).",
-                loader_type.__name__,
-                package_name,
-            )
-            continue
-
-        logger.info(
-            "Patched pip distlib finder for frozen loader: %s (%s)",
-            loader_type.__name__,
+        if _try_register_distlib_finder(
+            distlib_resources,
+            finder_registry,
+            register_finder,
+            resource_finder,
+            loader,
             package_name,
-        )
+        ):
+            finder_registry = getattr(
+                distlib_resources, "_finder_registry", finder_registry
+            )
 
 
 class PipInstaller:
