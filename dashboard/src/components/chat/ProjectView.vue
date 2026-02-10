@@ -45,10 +45,9 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import type { Project } from '@/components/chat/ProjectList.vue';
-import { askForConfirmation, type ConfirmDialogHandler } from '@/utils/confirmDialog';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 interface Session {
     session_id: string;
@@ -71,7 +70,7 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n('features/chat');
 
-const confirmDialog = inject<ConfirmDialogHandler | undefined>('$confirm', undefined);
+const confirmDialog = useConfirmDialog();
 
 function formatDate(dateString: string): string {
     return new Date(dateString).toLocaleString();

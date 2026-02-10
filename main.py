@@ -94,7 +94,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
 
 
 if __name__ == "__main__":
-    runtime_bootstrap.flush_bootstrap_records(logger)
+    runtime_bootstrap.initialize_runtime_bootstrap(logger)
 
     parser = argparse.ArgumentParser(description="AstrBot")
     parser.add_argument(

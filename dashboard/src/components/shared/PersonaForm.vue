@@ -307,7 +307,7 @@
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
-import { askForConfirmation as askForConfirmationDialog, resolveConfirmDialog } from '@/utils/confirmDialog';
+import { askForConfirmation as askForConfirmationDialog } from '@/utils/confirmDialog';
 
 export default {
     name: 'PersonaForm',
@@ -598,7 +598,12 @@ export default {
         async deletePersona() {
             if (!this.editingPersona) return;
 
-            if (!(await askForConfirmationDialog(this.tm('messages.deleteConfirm', { id: this.editingPersona.persona_id }), resolveConfirmDialog(this.$confirm)))) {
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: this.editingPersona.persona_id }),
+                    this.$confirm,
+                ))
+            ) {
                 return;
             }
 

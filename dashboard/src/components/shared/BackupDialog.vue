@@ -367,15 +367,15 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { useI18n } from '@/i18n/composables'
-import { askForConfirmation, resolveConfirmDialog } from '@/utils/confirmDialog'
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 import WaitingForRestart from './WaitingForRestart.vue'
 
 const { t } = useI18n()
 
-const confirmDialog = resolveConfirmDialog(inject('$confirm', undefined))
+const confirmDialog = useConfirmDialog()
 
 const isOpen = ref(false)
 const activeTab = ref('export')

@@ -141,10 +141,10 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref } from 'vue';
+import { ref } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { Session } from '@/composables/useSessions';
-import { askForConfirmation, type ConfirmDialogHandler } from '@/utils/confirmDialog';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
@@ -184,7 +184,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 
-const confirmDialog = inject<ConfirmDialogHandler | undefined>('$confirm', undefined);
+const confirmDialog = useConfirmDialog();
 
 const sidebarCollapsed = ref(true);
 const showProviderConfigDialog = ref(false);

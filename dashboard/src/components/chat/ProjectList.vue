@@ -42,9 +42,9 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref } from 'vue';
+import { ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
-import { askForConfirmation, type ConfirmDialogHandler } from '@/utils/confirmDialog';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 export interface Project {
     project_id: string;
@@ -73,7 +73,7 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n('features/chat');
 
-const confirmDialog = inject<ConfirmDialogHandler | undefined>('$confirm', undefined);
+const confirmDialog = useConfirmDialog();
 
 const expanded = ref(props.initialExpanded);
 

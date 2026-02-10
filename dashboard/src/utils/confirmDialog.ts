@@ -1,3 +1,5 @@
+import { inject } from 'vue'
+
 export type ConfirmDialogOptions = {
   title?: string
   message?: string
@@ -13,10 +15,16 @@ export function resolveConfirmDialog(candidate: unknown): ConfirmDialogHandler |
   return undefined
 }
 
+export function useConfirmDialog(): ConfirmDialogHandler | undefined {
+  return resolveConfirmDialog(inject('$confirm', undefined))
+}
+
 export async function askForConfirmation(
   message: string,
-  confirmDialog?: ConfirmDialogHandler
+  candidate?: unknown
 ): Promise<boolean> {
+  const confirmDialog = resolveConfirmDialog(candidate)
+
   if (confirmDialog) {
     try {
       return await confirmDialog({ message })

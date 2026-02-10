@@ -197,7 +197,7 @@ import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
-import { askForConfirmation as askForConfirmationDialog, resolveConfirmDialog } from '@/utils/confirmDialog';
+import { askForConfirmation as askForConfirmationDialog } from '@/utils/confirmDialog';
 
 export default {
   name: 'PlatformPage',
@@ -454,7 +454,7 @@ export default {
 
     async deletePlatform(platform) {
       const message = `${this.messages.deleteConfirm} ${platform.id}?`;
-      if (!(await askForConfirmationDialog(message, resolveConfirmDialog(this.$confirm)))) {
+      if (!(await askForConfirmationDialog(message, this.$confirm))) {
         return;
       }
 

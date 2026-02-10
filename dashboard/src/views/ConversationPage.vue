@@ -333,7 +333,7 @@ import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
-import { askForConfirmation as askForConfirmationDialog, resolveConfirmDialog } from '@/utils/confirmDialog';
+import { askForConfirmation as askForConfirmationDialog } from '@/utils/confirmDialog';
 
 export default {
     name: 'ConversationPage',
@@ -747,7 +747,7 @@ export default {
         // 关闭对话历史对话框
         async closeHistoryDialog() {
             if (this.isEditingHistory) {
-                if (await askForConfirmationDialog(this.tm('dialogs.view.confirmClose'), resolveConfirmDialog(this.$confirm))) {
+                if (await askForConfirmationDialog(this.tm('dialogs.view.confirmClose'), this.$confirm)) {
                     this.dialogView = false;
                 }
             } else {
