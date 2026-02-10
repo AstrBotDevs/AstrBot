@@ -159,7 +159,7 @@ For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/REA
 - [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
 - [302.AI](https://share.302.ai/rr1M3l)
 - [TokenPony](https://www.tokenpony.cn/3YPyf)
-- [SiliconFlow](https://docs.siliconflow.cn/cn/usecases/use-siliconcloud-in-astrbot)
+- [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
 - [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE)
 - ModelScope
 - OneAPI
