@@ -16,12 +16,17 @@ export async function restartAstrBot(
   const desktopBridge = window.astrbotDesktop
 
   if (desktopBridge?.isElectron) {
-    await triggerWaiting(waitingRef)
     const authToken = localStorage.getItem('token')
-    const result = await desktopBridge.restartBackend(authToken)
-    if (!result.ok) {
+    try {
+      const result = await desktopBridge.restartBackend(authToken)
+      if (!result.ok) {
+        waitingRef?.stop?.()
+        throw new Error(result.reason || 'Failed to restart backend.')
+      }
+      await triggerWaiting(waitingRef)
+    } catch (error) {
       waitingRef?.stop?.()
-      throw new Error(result.reason || 'Failed to restart backend.')
+      throw error
     }
     return
   }

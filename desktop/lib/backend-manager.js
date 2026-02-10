@@ -7,6 +7,7 @@ const { spawn, spawnSync } = require('child_process');
 const { delay, ensureDir, normalizeUrl, waitForProcessExit } = require('./common');
 
 const PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS = 5 * 60 * 1000;
+const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
 
 function parseBackendTimeoutMs(app) {
   const defaultTimeoutMs = app.isPackaged ? 0 : 20000;
@@ -292,6 +293,10 @@ class BackendManager {
 
   async waitForGracefulRestart(previousStartTime, maxWaitMs = 0) {
     const effectiveMaxWaitMs = this.getEffectiveWaitMs(maxWaitMs);
+    const gracefulWaitMs =
+      effectiveMaxWaitMs > 0
+        ? effectiveMaxWaitMs
+        : GRACEFUL_RESTART_WAIT_FALLBACK_MS;
     const start = Date.now();
     let sawBackendDown = false;
 
@@ -320,10 +325,10 @@ class BackendManager {
         }
       }
 
-      if (effectiveMaxWaitMs > 0 && Date.now() - start >= effectiveMaxWaitMs) {
+      if (Date.now() - start >= gracefulWaitMs) {
         return {
           ok: false,
-          reason: `Timed out after ${effectiveMaxWaitMs}ms waiting for graceful restart.`,
+          reason: `Timed out after ${gracefulWaitMs}ms waiting for graceful restart.`,
         };
       }
 

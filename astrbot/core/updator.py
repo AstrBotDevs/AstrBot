@@ -45,9 +45,13 @@ class AstrBotUpdator(RepoZipUpdator):
             pass
 
     @staticmethod
-    def _resolve_webui_dir_arg(argv: list[str]) -> str | None:
+    def _is_option_arg(arg: str) -> bool:
+        return arg.startswith("-")
+
+    @classmethod
+    def _collect_flag_values(cls, argv: list[str], flag: str) -> str | None:
         try:
-            idx = argv.index("--webui-dir")
+            idx = argv.index(flag)
         except ValueError:
             return None
 
@@ -56,7 +60,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
         value_parts: list[str] = []
         for arg in argv[idx + 1 :]:
-            if arg.startswith("--"):
+            if cls._is_option_arg(arg):
                 break
             if arg:
                 value_parts.append(arg)
@@ -65,6 +69,10 @@ class AstrBotUpdator(RepoZipUpdator):
             return None
 
         return " ".join(value_parts).strip() or None
+
+    @classmethod
+    def _resolve_webui_dir_arg(cls, argv: list[str]) -> str | None:
+        return cls._collect_flag_values(argv, "--webui-dir")
 
     def _build_frozen_reboot_args(self) -> list[str]:
         argv = list(sys.argv[1:])
@@ -76,6 +84,24 @@ class AstrBotUpdator(RepoZipUpdator):
             return ["--webui-dir", webui_dir]
         return []
 
+    @staticmethod
+    def _reset_pyinstaller_environment() -> None:
+        if not getattr(sys, "frozen", False):
+            return
+        os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        for key in list(os.environ.keys()):
+            if key.startswith("_PYI_"):
+                os.environ.pop(key, None)
+
+    def _build_reboot_argv(self, executable: str) -> list[str]:
+        if os.environ.get("ASTRBOT_CLI") == "1":
+            args = sys.argv[1:]
+            return [executable, "-m", "astrbot.cli.__main__", *args]
+        if getattr(sys, "frozen", False):
+            args = self._build_frozen_reboot_args()
+            return [executable, *args]
+        return [executable, *sys.argv]
+
     def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
@@ -86,24 +112,9 @@ class AstrBotUpdator(RepoZipUpdator):
         executable = sys.executable
 
         try:
-            if getattr(sys, "frozen", False):
-                # Ensure onefile runtime resets extraction environment on restart.
-                os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-                for key in list(os.environ.keys()):
-                    if key.startswith("_PYI_"):
-                        os.environ.pop(key, None)
-
-            # 仅 CLI 模式走 `python -m astrbot.cli.__main__`，
-            # 打包后的后端可执行文件需要直接 exec 自身。
-            if os.environ.get("ASTRBOT_CLI") == "1":
-                args = sys.argv[1:]
-                os.execv(executable, [executable, "-m", "astrbot.cli.__main__", *args])
-            else:
-                if getattr(sys, "frozen", False):
-                    args = self._build_frozen_reboot_args()
-                    os.execv(executable, [executable, *args])
-                else:
-                    os.execv(executable, [executable, *sys.argv])
+            self._reset_pyinstaller_environment()
+            reboot_argv = self._build_reboot_argv(executable)
+            os.execv(executable, reboot_argv)
         except Exception as e:
             logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
             raise e
