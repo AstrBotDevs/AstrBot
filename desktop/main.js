@@ -358,12 +358,10 @@ app.on('before-quit', (event) => {
     .persistLocaleFromDashboard(mainWindow, backendManager.getBackendUrl())
     .catch(() => {})
     .then(() =>
-      backendManager.stopManagedBackend().catch((error) => {
-        logElectron(
-          `stopBackend failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+      backendManager.stopAnyBackend().then((result) => {
+        if (!result.ok) {
+          logElectron(`stopBackend failed: ${result.reason || 'unknown reason'}`);
+        }
       }),
     )
     .finally(() => {

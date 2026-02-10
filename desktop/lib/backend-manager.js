@@ -177,6 +177,19 @@ class BackendManager {
     return this.backendConfig;
   }
 
+  getBackendPort() {
+    try {
+      const parsed = new URL(this.backendUrl);
+      if (parsed.port) {
+        const port = Number.parseInt(parsed.port, 10);
+        return Number.isFinite(port) ? port : null;
+      }
+      return parsed.protocol === 'https:' ? 443 : 80;
+    } catch {
+      return null;
+    }
+  }
+
   canManageBackend() {
     return Boolean(this.getBackendConfig().cmd);
   }
@@ -386,6 +399,104 @@ class BackendManager {
     this.closeBackendLogFd();
   }
 
+  findListeningPidsOnWindows(port) {
+    const result = spawnSync('netstat', ['-ano', '-p', 'tcp'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+
+    if (result.status !== 0 || !result.stdout) {
+      return [];
+    }
+
+    const pids = new Set();
+    const lines = result.stdout.split(/\r?\n/);
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.toUpperCase().startsWith('TCP')) {
+        continue;
+      }
+
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 5) {
+        continue;
+      }
+
+      const localAddress = parts[1] || '';
+      const pid = parts[parts.length - 1];
+      if (!/^\d+$/.test(pid)) {
+        continue;
+      }
+      if (
+        localAddress.endsWith(`:${port}`) ||
+        localAddress.endsWith(`]:${port}`)
+      ) {
+        pids.add(pid);
+      }
+    }
+
+    return Array.from(pids);
+  }
+
+  async stopUnmanagedBackendByPort() {
+    if (!this.app.isPackaged || process.platform !== 'win32') {
+      return false;
+    }
+
+    const port = this.getBackendPort();
+    if (!port) {
+      return false;
+    }
+
+    const pids = this.findListeningPidsOnWindows(port);
+    if (!pids.length) {
+      return false;
+    }
+
+    this.log(
+      `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
+    );
+
+    for (const pid of pids) {
+      try {
+        spawnSync('taskkill', ['/pid', `${pid}`, '/t', '/f'], {
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+      } catch {}
+    }
+
+    await delay(500);
+    return !(await this.pingBackend(1200));
+  }
+
+  async stopAnyBackend() {
+    if (this.backendProcess) {
+      await this.stopManagedBackend();
+      const running = await this.pingBackend();
+      if (!running) {
+        return { ok: true, reason: null };
+      }
+    } else {
+      const running = await this.pingBackend();
+      if (!running) {
+        return { ok: true, reason: null };
+      }
+    }
+
+    const cleaned = await this.stopUnmanagedBackendByPort();
+    if (cleaned) {
+      return { ok: true, reason: null };
+    }
+
+    return {
+      ok: false,
+      reason: 'Backend is running but not managed by Electron.',
+    };
+  }
+
   async ensureBackend() {
     this.backendStartupFailureReason = null;
 
@@ -468,31 +579,7 @@ class BackendManager {
     }
 
     try {
-      if (!this.backendProcess) {
-        const running = await this.pingBackend();
-        if (running) {
-          return {
-            ok: false,
-            reason: 'Backend is running but not managed by Electron.',
-          };
-        }
-        return {
-          ok: true,
-          reason: null,
-        };
-      }
-      await this.stopManagedBackend();
-      const running = await this.pingBackend();
-      if (running) {
-        return {
-          ok: false,
-          reason: 'Backend is still reachable after stop request.',
-        };
-      }
-      return {
-        ok: true,
-        reason: null,
-      };
+      return await this.stopAnyBackend();
     } catch (error) {
       return {
         ok: false,

@@ -190,6 +190,7 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -375,9 +376,7 @@ export default {
           this.save_message_success = "success";
 
           if (this.isSystemConfig) {
-            axios.post('/api/stat/restart-core').then(() => {
-              this.$refs.wfr.check();
-            })
+            restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
           }
         } else {
           this.save_message = res.data.message || this.messages.saveError;
