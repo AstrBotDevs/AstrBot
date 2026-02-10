@@ -220,13 +220,120 @@ class BackendManager {
     }
   }
 
+  getEffectiveWaitMs(maxWaitMs = 0) {
+    if (maxWaitMs > 0) {
+      return maxWaitMs;
+    }
+    if (this.app.isPackaged) {
+      return PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS;
+    }
+    return 0;
+  }
+
+  async requestBackendJson(pathname, options = {}) {
+    const timeoutMs = options.timeoutMs || 2000;
+    const method = options.method || 'GET';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const requestUrl = new URL(pathname, this.backendUrl);
+    requestUrl.searchParams.set('_ts', `${Date.now()}`);
+
+    const authToken =
+      typeof options.authToken === 'string' && options.authToken
+        ? options.authToken
+        : null;
+
+    try {
+      const response = await fetch(requestUrl.toString(), {
+        method,
+        signal: controller.signal,
+        redirect: 'manual',
+        headers: {
+          Accept: 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(options.headers || {}),
+        },
+      });
+      if (!response.ok) {
+        return { ok: false, data: null };
+      }
+      const data = await response.json();
+      return { ok: true, data };
+    } catch {
+      return { ok: false, data: null };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async getBackendStartTime() {
+    const result = await this.requestBackendJson('/api/stat/start-time', {
+      timeoutMs: 1800,
+      method: 'GET',
+    });
+    if (!result.ok || !result.data) {
+      return null;
+    }
+    const startTime = result.data?.data?.start_time;
+    return Number.isFinite(startTime) ? startTime : null;
+  }
+
+  async requestGracefulRestart(authToken = null) {
+    const result = await this.requestBackendJson('/api/stat/restart-core', {
+      timeoutMs: 2500,
+      method: 'POST',
+      authToken,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    return result.ok;
+  }
+
+  async waitForGracefulRestart(previousStartTime, maxWaitMs = 0) {
+    const effectiveMaxWaitMs = this.getEffectiveWaitMs(maxWaitMs);
+    const start = Date.now();
+    let sawBackendDown = false;
+
+    while (true) {
+      const reachable = await this.pingBackend(700);
+      if (!reachable) {
+        sawBackendDown = true;
+        if (!this.backendProcess) {
+          return {
+            ok: false,
+            reason:
+              this.backendLastExitReason ||
+              'Backend process exited during graceful restart.',
+          };
+        }
+      } else {
+        const currentStartTime = await this.getBackendStartTime();
+        if (
+          previousStartTime !== null &&
+          currentStartTime !== null &&
+          currentStartTime !== previousStartTime
+        ) {
+          return { ok: true, reason: null };
+        }
+        if (previousStartTime === null && sawBackendDown) {
+          return { ok: true, reason: null };
+        }
+      }
+
+      if (effectiveMaxWaitMs > 0 && Date.now() - start >= effectiveMaxWaitMs) {
+        return {
+          ok: false,
+          reason: `Timed out after ${effectiveMaxWaitMs}ms waiting for graceful restart.`,
+        };
+      }
+
+      await delay(350);
+    }
+  }
+
   async waitForBackend(maxWaitMs = 0, failOnProcessExit = false) {
-    const effectiveMaxWaitMs =
-      maxWaitMs > 0
-        ? maxWaitMs
-        : this.app.isPackaged
-          ? PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS
-          : 0;
+    const effectiveMaxWaitMs = this.getEffectiveWaitMs(maxWaitMs);
     const start = Date.now();
     while (true) {
       if (await this.pingBackend()) {
@@ -360,6 +467,8 @@ class BackendManager {
 
     if (process.platform === 'win32' && pid) {
       try {
+        // Synchronous taskkill is acceptable here because stop/restart is
+        // already a control-path operation and not latency-sensitive.
         const result = spawnSync('taskkill', ['/pid', `${pid}`, '/t', '/f'], {
           stdio: 'ignore',
           windowsHide: true,
@@ -403,6 +512,8 @@ class BackendManager {
   }
 
   findListeningPidsOnWindows(port) {
+    // Synchronous netstat parsing is acceptable here because this helper is
+    // used only during shutdown/restart cleanup paths.
     const result = spawnSync('netstat', ['-ano', '-p', 'tcp'], {
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
@@ -428,14 +539,21 @@ class BackendManager {
       }
 
       const localAddress = parts[1] || '';
+      const state = (parts[3] || '').toUpperCase();
       const pid = parts[parts.length - 1];
       if (!/^\d+$/.test(pid)) {
         continue;
       }
-      if (
-        localAddress.endsWith(`:${port}`) ||
-        localAddress.endsWith(`]:${port}`)
-      ) {
+
+      if (state !== 'LISTENING') {
+        continue;
+      }
+
+      const cleanedLocalAddress = localAddress.replace(/\]$/, '');
+      const segments = cleanedLocalAddress.split(':');
+      const portStr = segments[segments.length - 1];
+      const portNum = Number(portStr);
+      if (Number.isInteger(portNum) && portNum === Number(port)) {
         pids.add(pid);
       }
     }
@@ -464,6 +582,8 @@ class BackendManager {
 
     for (const pid of pids) {
       try {
+        // Synchronous taskkill is acceptable here because unmanaged cleanup
+        // is performed only during shutdown/restart control flows.
         spawnSync('taskkill', ['/pid', `${pid}`, '/t', '/f'], {
           stdio: 'ignore',
           windowsHide: true,
@@ -529,7 +649,7 @@ class BackendManager {
     };
   }
 
-  async restartBackend() {
+  async restartBackend(authToken = null) {
     if (!this.canManageBackend()) {
       return {
         ok: false,
@@ -545,6 +665,31 @@ class BackendManager {
 
     this.backendRestarting = true;
     try {
+      const backendRunning = await this.pingBackend(900);
+      if (backendRunning) {
+        const previousStartTime = await this.getBackendStartTime();
+        const gracefulRequested = await this.requestGracefulRestart(authToken);
+        if (gracefulRequested) {
+          const gracefulResult = await this.waitForGracefulRestart(
+            previousStartTime,
+            this.backendTimeoutMs,
+          );
+          if (gracefulResult.ok) {
+            return {
+              ok: true,
+              reason: null,
+            };
+          }
+          this.log(
+            `Graceful restart did not complete: ${gracefulResult.reason || 'unknown reason'}`,
+          );
+        } else {
+          this.log(
+            'Graceful restart request failed; falling back to managed restart.',
+          );
+        }
+      }
+
       await this.stopManagedBackend();
       const startResult = await this.startBackendAndWait(this.backendTimeoutMs);
       if (!startResult.ok) {

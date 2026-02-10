@@ -47,23 +47,23 @@ class AstrBotUpdator(RepoZipUpdator):
     @staticmethod
     def _resolve_webui_dir_arg(argv: list[str]) -> str | None:
         try:
-            start = argv.index("--webui-dir") + 1
+            idx = argv.index("--webui-dir")
         except ValueError:
             return None
 
-        if start >= len(argv):
+        if idx + 1 >= len(argv):
             return None
 
         value_parts: list[str] = []
-        for arg in argv[start:]:
-            if arg.startswith("--") and value_parts:
+        for arg in argv[idx + 1 :]:
+            if arg.startswith("--"):
                 break
-            if arg.startswith("--") and not value_parts:
-                break
-            value_parts.append(arg)
+            if arg:
+                value_parts.append(arg)
 
         if not value_parts:
             return None
+
         return " ".join(value_parts).strip() or None
 
     def _build_frozen_reboot_args(self) -> list[str]:

@@ -245,8 +245,8 @@ function registerIpcHandlers() {
     return backendManager.getState();
   });
 
-  ipcMain.handle('astrbot-desktop:restart-backend', async () => {
-    return backendManager.restartBackend();
+  ipcMain.handle('astrbot-desktop:restart-backend', async (_event, authToken) => {
+    return backendManager.restartBackend(authToken);
   });
 
   ipcMain.handle('astrbot-desktop:stop-backend', async () => {
