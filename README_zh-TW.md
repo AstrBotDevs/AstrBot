@@ -241,7 +241,12 @@ pre-commit install
 
 </div>
 
-</details>
+<div align="center">
+
+_陪伴與能力從來不應該是對立面。我們希望創造的是一個既能理解情緒、給予陪伴，也能可靠完成工作的機器人。_
 
 _私は、高性能ですから!_
 
+<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
+
+</div>
