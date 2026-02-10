@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import importlib.metadata as importlib_metadata
 import importlib.util
 import io
 import logging
@@ -129,71 +130,63 @@ def _extract_requirement_names(requirements_path: str) -> set[str]:
     return names
 
 
-def _extract_top_level_modules(dist_info_path: str) -> set[str]:
-    top_level_path = os.path.join(dist_info_path, "top_level.txt")
-    if not os.path.isfile(top_level_path):
+def _extract_top_level_modules(
+    distribution: importlib_metadata.Distribution,
+) -> set[str]:
+    try:
+        text = distribution.read_text("top_level.txt") or ""
+    except Exception:
         return set()
 
     modules: set[str] = set()
-    try:
-        with open(top_level_path, encoding="utf-8") as top_level_file:
-            for line in top_level_file:
-                candidate = line.strip()
-                if not candidate or candidate.startswith("#"):
-                    continue
-                modules.add(candidate)
-    except Exception:
-        return set()
-    return modules
-
-
-def _find_dist_info_paths(
-    requirement_name: str,
-    site_packages_path: str,
-) -> list[str]:
-    normalized_prefix = requirement_name.replace("-", "_")
-    dist_infos: list[str] = []
-
-    try:
-        entries = os.listdir(site_packages_path)
-    except Exception:
-        return dist_infos
-
-    for entry in entries:
-        if not entry.endswith(".dist-info"):
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
             continue
-        base_name = entry[: -len(".dist-info")].lower()
-        if base_name == normalized_prefix or base_name.startswith(
-            f"{normalized_prefix}-"
-        ):
-            dist_infos.append(os.path.join(site_packages_path, entry))
-    return dist_infos
+        modules.add(candidate)
+    return modules
 
 
 def _collect_candidate_modules(
     requirement_names: set[str],
     site_packages_path: str,
 ) -> set[str]:
+    by_name: dict[str, list[importlib_metadata.Distribution]] = {}
+    try:
+        for distribution in importlib_metadata.distributions(path=[site_packages_path]):
+            distribution_name = distribution.metadata.get("Name")
+            if not distribution_name:
+                continue
+            canonical_name = _canonicalize_distribution_name(distribution_name)
+            by_name.setdefault(canonical_name, []).append(distribution)
+    except Exception as exc:
+        logger.warning("读取 site-packages 元数据失败，使用回退模块名: %s", exc)
+
     candidates: set[str] = set()
     for requirement_name in requirement_names:
-        dist_info_paths = _find_dist_info_paths(requirement_name, site_packages_path)
-        for dist_info_path in dist_info_paths:
-            candidates.update(_extract_top_level_modules(dist_info_path))
+        matched_distributions = by_name.get(requirement_name, [])
+        modules_for_requirement: set[str] = set()
+        for distribution in matched_distributions:
+            modules_for_requirement.update(_extract_top_level_modules(distribution))
 
-        if not dist_info_paths:
-            fallback_module_name = requirement_name.replace("-", "_")
-            if fallback_module_name:
-                candidates.add(fallback_module_name)
+        if modules_for_requirement:
+            candidates.update(modules_for_requirement)
+            continue
+
+        fallback_module_name = requirement_name.replace("-", "_")
+        if fallback_module_name:
+            candidates.add(fallback_module_name)
 
     return candidates
 
 
-def _validate_preferred_module_sources(
+def _ensure_preferred_modules(
     module_names: set[str],
     site_packages_path: str,
 ) -> None:
-    unresolved_modules: list[str] = []
+    _prefer_modules_from_site_packages(module_names, site_packages_path)
 
+    unresolved_modules: list[str] = []
     for module_name in sorted(module_names):
         if not _module_exists_in_site_packages(module_name, site_packages_path):
             continue
@@ -297,6 +290,23 @@ def _prefer_modules_from_site_packages(
                 module_name,
                 exc,
             )
+
+
+def _ensure_plugin_dependencies_preferred(
+    target_site_packages: str,
+    requested_requirements: set[str],
+) -> None:
+    if not requested_requirements:
+        return
+
+    candidate_modules = _collect_candidate_modules(
+        requested_requirements,
+        target_site_packages,
+    )
+    if not candidate_modules:
+        return
+
+    _ensure_preferred_modules(candidate_modules, target_site_packages)
 
 
 def _get_loader_for_package(package: object) -> object | None:
@@ -447,20 +457,10 @@ class PipInstaller:
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
-            if requested_requirements:
-                candidate_modules = _collect_candidate_modules(
-                    requested_requirements,
-                    target_site_packages,
-                )
-                if candidate_modules:
-                    _prefer_modules_from_site_packages(
-                        candidate_modules,
-                        target_site_packages,
-                    )
-                    _validate_preferred_module_sources(
-                        candidate_modules,
-                        target_site_packages,
-                    )
+            _ensure_plugin_dependencies_preferred(
+                target_site_packages,
+                requested_requirements,
+            )
         importlib.invalidate_caches()
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
