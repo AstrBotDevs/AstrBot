@@ -51,28 +51,29 @@ class AstrBotUpdator(RepoZipUpdator):
         """
         time.sleep(delay)
         self.terminate_child_processes()
-        if os.name == "nt":
-            py = f'"{sys.executable}"'
-        else:
-            py = sys.executable
+        executable = sys.executable
 
         try:
+            if getattr(sys, "frozen", False):
+                # Ensure onefile runtime resets extraction environment on restart.
+                os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+                for key in list(os.environ.keys()):
+                    if key.startswith("_PYI_"):
+                        os.environ.pop(key, None)
+
             # 仅 CLI 模式走 `python -m astrbot.cli.__main__`，
             # 打包后的后端可执行文件需要直接 exec 自身。
             if os.environ.get("ASTRBOT_CLI") == "1":
-                if os.name == "nt":
-                    args = [f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]]
-                else:
-                    args = sys.argv[1:]
-                os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
+                args = sys.argv[1:]
+                os.execv(executable, [executable, "-m", "astrbot.cli.__main__", *args])
             else:
                 if getattr(sys, "frozen", False):
                     # Frozen executable should not receive argv[0] as a positional argument.
-                    os.execl(sys.executable, py, *sys.argv[1:])
+                    os.execv(executable, [executable, *sys.argv[1:]])
                 else:
-                    os.execl(sys.executable, py, *sys.argv)
+                    os.execv(executable, [executable, *sys.argv])
         except Exception as e:
-            logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
+            logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
             raise e
 
     async def check_update(
