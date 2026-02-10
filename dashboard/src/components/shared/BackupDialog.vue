@@ -370,9 +370,12 @@
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { useI18n } from '@/i18n/composables'
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 import WaitingForRestart from './WaitingForRestart.vue'
 
 const { t } = useI18n()
+
+const confirmDialog = useConfirmDialog()
 
 const isOpen = ref(false)
 const activeTab = ref('export')
@@ -844,7 +847,7 @@ const restoreFromList = async (filename) => {
 
 // 删除备份
 const deleteBackup = async (filename) => {
-    if (!confirm(t('features.settings.backup.list.confirmDelete'))) return
+    if (!(await askForConfirmation(t('features.settings.backup.list.confirmDelete'), confirmDialog))) return
 
     try {
         const response = await axios.post('/api/backup/delete', { filename })

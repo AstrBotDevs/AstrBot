@@ -144,6 +144,7 @@
 import { ref } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { Session } from '@/composables/useSessions';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
@@ -183,6 +184,8 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 
+const confirmDialog = useConfirmDialog();
+
 const sidebarCollapsed = ref(true);
 const showProviderConfigDialog = ref(false);
 
@@ -199,10 +202,10 @@ function toggleSidebar() {
     localStorage.setItem('sidebarCollapsed', JSON.stringify(sidebarCollapsed.value));
 }
 
-function handleDeleteConversation(session: Session) {
+async function handleDeleteConversation(session: Session) {
     const sessionTitle = session.display_name || tm('conversation.newConversation');
     const message = tm('conversation.confirmDelete', { name: sessionTitle });
-    if (window.confirm(message)) {
+    if (await askForConfirmation(message, confirmDialog)) {
         emit('deleteConversation', session.session_id);
     }
 }
@@ -359,4 +362,3 @@ function handleDeleteConversation(session: Session) {
     justify-content: center;
 }
 </style>
-

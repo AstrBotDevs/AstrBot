@@ -197,6 +197,10 @@ import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import {
+  askForConfirmation as askForConfirmationDialog,
+  useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
   name: 'PlatformPage',
@@ -210,10 +214,12 @@ export default {
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/platform');
+    const confirmDialog = useConfirmDialog();
 
     return {
       t,
-      tm
+      tm,
+      confirmDialog
     };
   },
   data() {
@@ -451,15 +457,18 @@ export default {
       });
     },
 
-    deletePlatform(platform) {
-      if (confirm(`${this.messages.deleteConfirm} ${platform.id}?`)) {
-        axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
-          this.getConfig();
-          this.showSuccess(res.data.message || this.messages.deleteSuccess);
-        }).catch((err) => {
-          this.showError(err.response?.data?.message || err.message);
-        });
+    async deletePlatform(platform) {
+      const message = `${this.messages.deleteConfirm} ${platform.id}?`;
+      if (!(await askForConfirmationDialog(message, this.confirmDialog))) {
+        return;
       }
+
+      axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
+        this.getConfig();
+        this.showSuccess(res.data.message || this.messages.deleteSuccess);
+      }).catch((err) => {
+        this.showError(err.response?.data?.message || err.message);
+      });
     },
 
     platformStatusChange(platform) {

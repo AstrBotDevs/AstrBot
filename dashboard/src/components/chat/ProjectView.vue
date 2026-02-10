@@ -47,6 +47,7 @@
 <script setup lang="ts">
 import { useModuleI18n } from '@/i18n/composables';
 import type { Project } from '@/components/chat/ProjectList.vue';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 interface Session {
     session_id: string;
@@ -69,14 +70,16 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n('features/chat');
 
+const confirmDialog = useConfirmDialog();
+
 function formatDate(dateString: string): string {
     return new Date(dateString).toLocaleString();
 }
 
-function handleDeleteSession(session: Session) {
+async function handleDeleteSession(session: Session) {
     const sessionTitle = session.display_name || tm('conversation.newConversation');
     const message = tm('conversation.confirmDelete', { name: sessionTitle });
-    if (window.confirm(message)) {
+    if (await askForConfirmation(message, confirmDialog)) {
         emit('deleteSession', session.session_id);
     }
 }

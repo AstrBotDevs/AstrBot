@@ -11,6 +11,8 @@ from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
 
 logger = logging.getLogger("astrbot")
 
+_DISTLIB_FINDER_PATCH_ATTEMPTED = False
+
 
 def _get_pip_main():
     try:
@@ -45,6 +47,110 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
             root_logger.removeHandler(handler)
             with contextlib.suppress(Exception):
                 handler.close()
+
+
+def _get_loader_for_package(package: object) -> object | None:
+    loader = getattr(package, "__loader__", None)
+    if loader is not None:
+        return loader
+
+    spec = getattr(package, "__spec__", None)
+    if spec is None:
+        return None
+    return getattr(spec, "loader", None)
+
+
+def _try_register_distlib_finder(
+    distlib_resources: object,
+    finder_registry: dict[type, object],
+    register_finder,
+    resource_finder: object,
+    loader: object,
+    package_name: str,
+) -> bool:
+    loader_type = type(loader)
+    if loader_type in finder_registry:
+        return False
+
+    try:
+        register_finder(loader_type, resource_finder)
+    except Exception as exc:
+        logger.warning(
+            "Failed to patch pip distlib finder for loader %s (%s): %s",
+            loader_type.__name__,
+            package_name,
+            exc,
+        )
+        return False
+
+    updated_registry = getattr(distlib_resources, "_finder_registry", finder_registry)
+    if isinstance(updated_registry, dict) and loader_type not in updated_registry:
+        logger.warning(
+            "Distlib finder patch did not take effect for loader %s (%s).",
+            loader_type.__name__,
+            package_name,
+        )
+        return False
+
+    logger.info(
+        "Patched pip distlib finder for frozen loader: %s (%s)",
+        loader_type.__name__,
+        package_name,
+    )
+    return True
+
+
+def _patch_distlib_finder_for_frozen_runtime() -> None:
+    global _DISTLIB_FINDER_PATCH_ATTEMPTED
+
+    if not getattr(sys, "frozen", False):
+        return
+    if _DISTLIB_FINDER_PATCH_ATTEMPTED:
+        return
+
+    _DISTLIB_FINDER_PATCH_ATTEMPTED = True
+
+    try:
+        from pip._vendor.distlib import resources as distlib_resources
+    except Exception:
+        return
+
+    finder_registry = getattr(distlib_resources, "_finder_registry", None)
+    register_finder = getattr(distlib_resources, "register_finder", None)
+    resource_finder = getattr(distlib_resources, "ResourceFinder", None)
+
+    if not isinstance(finder_registry, dict):
+        logger.warning(
+            "Skip patching distlib finder because _finder_registry is unavailable."
+        )
+        return
+    if not callable(register_finder) or resource_finder is None:
+        logger.warning(
+            "Skip patching distlib finder because register API is unavailable."
+        )
+        return
+
+    for package_name in ("pip._vendor.distlib", "pip._vendor"):
+        try:
+            package = importlib.import_module(package_name)
+        except Exception:
+            continue
+
+        loader = _get_loader_for_package(package)
+        if loader is None:
+            continue
+
+        if _try_register_distlib_finder(
+            distlib_resources,
+            finder_registry,
+            register_finder,
+            resource_finder,
+            loader,
+            package_name,
+        ):
+            finder_registry = getattr(
+                distlib_resources, "_finder_registry", finder_registry
+            )
 
 
 class PipInstaller:
@@ -88,6 +194,7 @@ class PipInstaller:
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
+        _patch_distlib_finder_for_frozen_runtime()
 
         original_handlers = list(logging.getLogger().handlers)
         result_code, output = await asyncio.to_thread(
