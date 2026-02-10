@@ -245,8 +245,8 @@ function registerIpcHandlers() {
     return backendManager.getState();
   });
 
-  ipcMain.handle('astrbot-desktop:restart-backend', async () => {
-    return backendManager.restartBackend();
+  ipcMain.handle('astrbot-desktop:restart-backend', async (_event, authToken) => {
+    return backendManager.restartBackend(authToken);
   });
 
   ipcMain.handle('astrbot-desktop:stop-backend', async () => {
@@ -358,12 +358,10 @@ app.on('before-quit', (event) => {
     .persistLocaleFromDashboard(mainWindow, backendManager.getBackendUrl())
     .catch(() => {})
     .then(() =>
-      backendManager.stopManagedBackend().catch((error) => {
-        logElectron(
-          `stopBackend failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+      backendManager.stopAnyBackend().then((result) => {
+        if (!result.ok) {
+          logElectron(`stopBackend failed: ${result.reason || 'unknown reason'}`);
+        }
       }),
     )
     .finally(() => {
