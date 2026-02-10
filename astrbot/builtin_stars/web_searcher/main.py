@@ -199,7 +199,7 @@ class Main(star.Star):
                 return results
 
     @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str | None = None):
+    async def websearch(self, event: AstrMessageEvent, oper: str | None = None) -> None:
         """网页搜索指令（已废弃）"""
         event.set_result(
             MessageEventResult().message(
@@ -246,7 +246,7 @@ class Main(star.Star):
 
         return ret
 
-    async def ensure_baidu_ai_search_mcp(self, umo: str | None = None):
+    async def ensure_baidu_ai_search_mcp(self, umo: str | None = None) -> None:
         if self.baidu_initialized:
             return
         cfg = self.context.get_config(umo=umo)
@@ -553,7 +553,7 @@ class Main(star.Star):
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
-    ):
+    ) -> None:
         """Get the session conversation for the given event."""
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         prov_settings = cfg.get("provider_settings", {})

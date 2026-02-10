@@ -32,8 +32,15 @@ tests/astrbot_plugin_openai
 # Dashboard
 dashboard/node_modules/
 dashboard/dist/
+.pnpm-store/
+desktop/node_modules/
+desktop/dist/
+desktop/out/
+desktop/resources/backend/astrbot-backend*
+desktop/resources/backend/*.exe
+desktop/resources/webui/*
+desktop/resources/.pyinstaller/
 package-lock.json
-package.json
 yarn.lock
 
 # Operating System

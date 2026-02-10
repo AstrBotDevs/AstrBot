@@ -33,9 +33,15 @@ export default {
     methods: {
         async check() {
             this.newStartTime = -1
-            this.startTime = useCommonStore().getStartTime()
+            this.cnt = 0
             this.visible = true
             this.status = ""
+            const commonStore = useCommonStore()
+            try {
+                this.startTime = await commonStore.fetchStartTime()
+            } catch (_error) {
+                this.startTime = commonStore.getStartTime()
+            }
             console.log('start wfr')
             setTimeout(() => {
                 this.timeoutInternal()
@@ -50,7 +56,7 @@ export default {
                     this.timeoutInternal()
                 }, 1000)
             } else {
-                if (this.cnt == 10) {
+                if (this.cnt >= 60) {
                     this.status = this.t('core.common.restart.maxRetriesReached')
                 }
                 this.cnt = 0
@@ -60,15 +66,19 @@ export default {
             }
         },
         async checkStartTime() {
-            let res = await axios.get('/api/stat/start-time', { timeout: 3000 })
-            let newStartTime = res.data.data.start_time
-            console.log('wfr: checkStartTime', this.newStartTime, this.startTime)
-            if (this.newStartTime !== this.startTime) {
-                this.newStartTime = newStartTime
-                console.log('wfr: restarted')
-                this.visible = false
-                // reload 
-                window.location.reload()
+            try {
+                let res = await axios.get('/api/stat/start-time', { timeout: 3000 })
+                let newStartTime = res.data.data.start_time
+                console.log('wfr: checkStartTime', newStartTime, this.startTime)
+                if (this.startTime !== -1 && newStartTime !== this.startTime) {
+                    this.newStartTime = newStartTime
+                    console.log('wfr: restarted')
+                    this.visible = false
+                    // reload
+                    window.location.reload()
+                }
+            } catch (_error) {
+                // backend may be unavailable during restart window
             }
             return this.newStartTime
         }

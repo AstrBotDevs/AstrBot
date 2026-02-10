@@ -1,9 +1,9 @@
 [project]
 name = "AstrBot"
-version = "4.14.5"
+version = "4.14.8"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 keywords = ["Astrbot", "Astrbot Module", "Astrbot Plugin"]
 
@@ -24,7 +24,7 @@ dependencies = [
   "deprecated>=1.2.18",
   "dingtalk-stream>=0.22.1",
   "docstring-parser>=0.16",
-  "faiss-cpu==1.10.0",
+  "faiss-cpu>=1.12.0",
   "filelock>=3.18.0",
   "google-genai>=1.56.0",
   "lark-oapi>=1.4.15",
@@ -36,7 +36,7 @@ dependencies = [
   "pip>=25.1.1",
   "psutil>=5.8.0,<7.2.0",
   "py-cord>=2.6.1",
-  "pydantic~=2.10.3",
+  "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
   "python-telegram-bot>=22.0",
@@ -61,6 +61,7 @@ dependencies = [
   "xinference-client",
   "tenacity>=9.1.2",
   "shipyard-python-sdk>=0.2.4",
+  "python-socks>=2.8.0",
 ]
 
 [dependency-groups]

@@ -52,7 +52,7 @@ class PluginUpdator(RepoZipUpdator):
 
         return plugin_path
 
-    def unzip_file(self, zip_path: str, target_dir: str):
+    def unzip_file(self, zip_path: str, target_dir: str) -> None:
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
         logger.info(f"正在解压压缩包: {zip_path}")

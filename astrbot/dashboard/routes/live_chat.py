@@ -20,7 +20,7 @@ from .route import Route, RouteContext
 class LiveChatSession:
     """Live Chat 会话管理器"""
 
-    def __init__(self, session_id: str, username: str):
+    def __init__(self, session_id: str, username: str) -> None:
         self.session_id = session_id
         self.username = username
         self.conversation_id = str(uuid.uuid4())
@@ -31,14 +31,14 @@ class LiveChatSession:
         self.current_stamp: str | None = None
         self.temp_audio_path: str | None = None
 
-    def start_speaking(self, stamp: str):
+    def start_speaking(self, stamp: str) -> None:
         """开始说话"""
         self.is_speaking = True
         self.current_stamp = stamp
         self.audio_frames = []
         logger.debug(f"[Live Chat] {self.username} 开始说话 stamp={stamp}")
 
-    def add_audio_frame(self, data: bytes):
+    def add_audio_frame(self, data: bytes) -> None:
         """添加音频帧"""
         if self.is_speaking:
             self.audio_frames.append(data)
@@ -82,7 +82,7 @@ class LiveChatSession:
             logger.error(f"[Live Chat] 组装 WAV 文件失败: {e}", exc_info=True)
             return None, 0.0
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """清理临时文件"""
         if self.temp_audio_path and os.path.exists(self.temp_audio_path):
             try:
@@ -111,7 +111,7 @@ class LiveChatRoute(Route):
         # 注册 WebSocket 路由
         self.app.websocket("/api/live_chat/ws")(self.live_chat_ws)
 
-    async def live_chat_ws(self):
+    async def live_chat_ws(self) -> None:
         """Live Chat WebSocket 处理器"""
         # WebSocket 不能通过 header 传递 token，需要从 query 参数获取
         # 注意：WebSocket 上下文使用 websocket.args 而不是 request.args
@@ -152,7 +152,7 @@ class LiveChatRoute(Route):
                 del self.sessions[session_id]
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
-    async def _handle_message(self, session: LiveChatSession, message: dict):
+    async def _handle_message(self, session: LiveChatSession, message: dict) -> None:
         """处理 WebSocket 消息"""
         msg_type = message.get("t")  # 使用 t 代替 type
 
@@ -201,7 +201,7 @@ class LiveChatRoute(Route):
 
     async def _process_audio(
         self, session: LiveChatSession, audio_path: str, assemble_duration: float
-    ):
+    ) -> None:
         """处理音频：STT -> LLM -> 流式 TTS"""
         try:
             # 发送 WAV 组装耗时
@@ -409,7 +409,7 @@ class LiveChatRoute(Route):
 
     async def _save_interrupted_message(
         self, session: LiveChatSession, user_text: str, bot_text: str
-    ):
+    ) -> None:
         """保存被打断的消息"""
         interrupted_text = bot_text + " [用户打断]"
         logger.info(f"[Live Chat] 保存打断消息: {interrupted_text}")

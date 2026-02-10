@@ -10,6 +10,7 @@ from xml.sax.saxutils import escape
 
 from httpx import AsyncClient, Timeout
 
+from astrbot import logger
 from astrbot.core.config.default import VERSION
 
 from ..entities import ProviderType
@@ -21,7 +22,7 @@ TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class OTTSProvider:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         self.skey = config["OTTS_SKEY"]
         self.api_url = config["OTTS_URL"]
         self.auth_time_url = config["OTTS_AUTH_TIME"]
@@ -29,6 +30,9 @@ class OTTSProvider:
         self.last_sync_time = 0
         self.timeout = Timeout(10.0)
         self.retry_count = 3
+        self.proxy = config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[Azure TTS] 使用代理: {self.proxy}")
         self._client: AsyncClient | None = None
 
     @property
@@ -40,7 +44,9 @@ class OTTSProvider:
         return self._client
 
     async def __aenter__(self):
-        self._client = AsyncClient(timeout=self.timeout)
+        self._client = AsyncClient(
+            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -48,7 +54,7 @@ class OTTSProvider:
             await self._client.aclose()
             self._client = None
 
-    async def _sync_time(self):
+    async def _sync_time(self) -> None:
         try:
             response = await self.client.get(self.auth_time_url)
             response.raise_for_status()
@@ -103,7 +109,7 @@ class OTTSProvider:
 
 
 class AzureNativeProvider(TTSProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         self.subscription_key = provider_config.get(
             "azure_tts_subscription_key",
@@ -125,6 +131,9 @@ class AzureNativeProvider(TTSProvider):
             "rate": provider_config.get("azure_tts_rate", "1"),
             "volume": provider_config.get("azure_tts_volume", "100"),
         }
+        self.proxy = provider_config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[Azure TTS Native] 使用代理: {self.proxy}")
 
     @property
     def client(self) -> AsyncClient:
@@ -141,6 +150,7 @@ class AzureNativeProvider(TTSProvider):
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
+            proxy=self.proxy if self.proxy else None,
         )
         return self
 
@@ -149,7 +159,7 @@ class AzureNativeProvider(TTSProvider):
             await self._client.aclose()
             self._client = None
 
-    async def _refresh_token(self):
+    async def _refresh_token(self) -> None:
         token_url = (
             f"https://{self.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
         )
@@ -195,7 +205,7 @@ class AzureNativeProvider(TTSProvider):
 
 @register_provider_adapter("azure_tts", "Azure TTS", ProviderType.TEXT_TO_SPEECH)
 class AzureTTSProvider(TTSProvider):
-    def __init__(self, provider_config: dict, provider_settings: dict):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
         key_value = provider_config.get("azure_tts_subscription_key", "")
         self.provider = self._parse_provider(key_value, provider_config)

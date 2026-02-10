@@ -47,6 +47,17 @@
     "releaseNotes": {
       "title": "Release Notes"
     },
+    "redirectConfirm": {
+      "title": "Leaving AstrBot",
+      "message": "You are about to open the GitHub Releases page. Continue?",
+      "latestLabel": "Latest",
+      "targetVersion": "Target version: ",
+      "currentVersion": "Current version: ",
+      "guideTitle": "Recommended after opening:",
+      "guideStep1": "Download the installer that matches your OS and architecture.",
+      "guideStep2": "Install it and restart AstrBot.",
+      "guideStep3": "If you use Docker, prefer the image update path."
+    },
     "dashboardUpdate": {
       "title": "Update Dashboard to Latest Version Only",
       "currentVersion": "Current Version",

@@ -24,6 +24,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
@@ -35,7 +36,7 @@ else:
 
 
 class WeixinOfficialAccountServer:
-    def __init__(self, event_queue: asyncio.Queue, config: dict):
+    def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
         self.server = quart.Quart(__name__)
         self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
@@ -129,7 +130,7 @@ class WeixinOfficialAccountServer:
 
         return "success"
 
-    async def start_polling(self):
+    async def start_polling(self) -> None:
         logger.info(
             f"将在 {self.callback_server_host}:{self.port} 端口启动 微信公众平台 适配器。",
         )
@@ -139,7 +140,7 @@ class WeixinOfficialAccountServer:
             shutdown_trigger=self.shutdown_trigger,
         )
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
 
 
@@ -218,7 +219,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         await super().send_by_session(session, message_chain)
 
     @override
@@ -232,7 +233,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         # 如果启用统一 webhook 模式，则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
         if self.unified_webhook_mode and webhook_uuid:
@@ -294,14 +295,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                from pydub import AudioSegment
-
                 path_wav = f"data/temp/wecom_{msg.media_id}.wav"
-                audio = AudioSegment.from_file(path)
-                audio.export(path_wav, format="wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(
-                    f"转换音频失败: {e}。如果没有安装 pydub 和 ffmpeg 请先安装。",
+                    f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。",
                 )
                 path_wav = path
                 return
@@ -331,7 +329,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WeixinOfficialAccountPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -344,7 +342,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
     def get_client(self) -> WeChatClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.server.shutdown_event.set()
         try:
             await self.server.server.shutdown()

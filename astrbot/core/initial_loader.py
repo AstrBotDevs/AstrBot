@@ -17,13 +17,13 @@ from astrbot.dashboard.server import AstrBotDashboard
 class InitialLoader:
     """AstrBot 启动器，负责初始化和启动核心组件和仪表板服务器。"""
 
-    def __init__(self, db: BaseDatabase, log_broker: LogBroker):
+    def __init__(self, db: BaseDatabase, log_broker: LogBroker) -> None:
         self.db = db
         self.logger = logger
         self.log_broker = log_broker
         self.webui_dir: str | None = None
 
-    async def start(self):
+    async def start(self) -> None:
         core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
 
         try:
