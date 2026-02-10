@@ -2,6 +2,7 @@ import axios from 'axios'
 
 type WaitingForRestartRef = {
   check: () => void | Promise<void>
+  stop?: () => void
 }
 
 async function triggerWaiting(waitingRef?: WaitingForRestartRef | null) {
@@ -15,12 +16,13 @@ export async function restartAstrBot(
   const desktopBridge = window.astrbotDesktop
 
   if (desktopBridge?.isElectron) {
+    await triggerWaiting(waitingRef)
     const authToken = localStorage.getItem('token')
     const result = await desktopBridge.restartBackend(authToken)
     if (!result.ok) {
+      waitingRef?.stop?.()
       throw new Error(result.reason || 'Failed to restart backend.')
     }
-    await triggerWaiting(waitingRef)
     return
   }
 

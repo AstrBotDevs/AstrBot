@@ -47,6 +47,11 @@ export default {
                 this.timeoutInternal()
             }, 1000)
         },
+        stop() {
+            this.visible = false
+            this.cnt = 0
+            this.newStartTime = -1
+        },
         timeoutInternal() {
             console.log('wfr: timeoutInternal', this.newStartTime, this.startTime)
             if (this.newStartTime === -1 && this.cnt < 60 && this.visible) {
