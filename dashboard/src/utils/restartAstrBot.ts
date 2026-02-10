@@ -20,9 +20,15 @@ export async function restartAstrBot(
     if (!result.ok) {
       throw new Error(result.reason || 'Failed to restart backend.')
     }
+    if (!waitingRef) {
+      window.location.reload()
+    }
     return
   }
 
   await axios.post('/api/stat/restart-core')
   await triggerWaiting(waitingRef)
+  if (!waitingRef) {
+    window.location.reload()
+  }
 }
