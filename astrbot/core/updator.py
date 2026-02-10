@@ -102,6 +102,15 @@ class AstrBotUpdator(RepoZipUpdator):
             return [executable, *args]
         return [executable, *sys.argv]
 
+    @staticmethod
+    def _exec_reboot(executable: str, argv: list[str]) -> None:
+        if os.name == "nt" and getattr(sys, "frozen", False):
+            quoted_executable = f'"{executable}"' if " " in executable else executable
+            quoted_args = [f'"{arg}"' if " " in arg else arg for arg in argv[1:]]
+            os.execl(executable, quoted_executable, *quoted_args)
+            return
+        os.execv(executable, argv)
+
     def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
@@ -114,7 +123,7 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             self._reset_pyinstaller_environment()
             reboot_argv = self._build_reboot_argv(executable)
-            os.execv(executable, reboot_argv)
+            self._exec_reboot(executable, reboot_argv)
         except Exception as e:
             logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
             raise e
