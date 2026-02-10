@@ -190,7 +190,10 @@ class PluginManager:
                 try:
                     await pip_installer.install(requirements_path=pth)
                 except Exception as e:
-                    logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
+                    error_message = f"更新插件 {p} 的依赖失败。Code: {e!s}"
+                    logger.error(error_message)
+                    raise RuntimeError(error_message) from e
+        return True
 
     @staticmethod
     def _purge_conflicting_third_party_modules(prefixes: tuple[str, ...]) -> None:
@@ -683,7 +686,12 @@ class PluginManager:
             plugin_path = await self.updator.install(repo_url, proxy)
             # reload the plugin
             dir_name = os.path.basename(plugin_path)
-            await self.load(specified_dir_name=dir_name)
+            success, error_message = await self.load(specified_dir_name=dir_name)
+            if not success:
+                raise Exception(
+                    error_message
+                    or f"安装插件 {dir_name} 失败，请检查插件依赖或兼容性。"
+                )
 
             # Get the plugin metadata to return repo info
             plugin = self.context.get_registered_star(dir_name)
@@ -1028,7 +1036,11 @@ class PluginManager:
         except BaseException as e:
             logger.warning(f"删除插件压缩包失败: {e!s}")
         # await self.reload()
-        await self.load(specified_dir_name=dir_name)
+        success, error_message = await self.load(specified_dir_name=dir_name)
+        if not success:
+            raise Exception(
+                error_message or f"安装插件 {dir_name} 失败，请检查插件依赖或兼容性。"
+            )
 
         # Get the plugin metadata to return repo info
         plugin = self.context.get_registered_star(dir_name)

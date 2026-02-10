@@ -5,7 +5,9 @@ import importlib.util
 import io
 import logging
 import os
+import re
 import sys
+import threading
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
@@ -13,6 +15,11 @@ from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
 logger = logging.getLogger("astrbot")
 
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
+_SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
+
+
+def _canonicalize_distribution_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).strip("-").lower()
 
 
 def _get_pip_main():
@@ -58,56 +65,228 @@ def _prepend_sys_path(path: str) -> None:
     sys.path.insert(0, normalized_target)
 
 
-def _prefer_module_from_site_packages(
-    module_name: str, site_packages_path: str
-) -> bool:
+def _module_exists_in_site_packages(module_name: str, site_packages_path: str) -> bool:
     base_path = os.path.join(site_packages_path, *module_name.split("."))
     package_init = os.path.join(base_path, "__init__.py")
     module_file = f"{base_path}.py"
+    return os.path.isfile(package_init) or os.path.isfile(module_file)
 
-    module_location = None
-    submodule_search_locations = None
 
-    if os.path.isfile(package_init):
-        module_location = package_init
-        submodule_search_locations = [os.path.dirname(package_init)]
-    elif os.path.isfile(module_file):
-        module_location = module_file
-    else:
+def _is_module_loaded_from_site_packages(
+    module_name: str,
+    site_packages_path: str,
+) -> bool:
+    module = sys.modules.get(module_name)
+    if module is None:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            return False
+
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
         return False
 
-    for key in list(sys.modules.keys()):
-        if key == module_name or key.startswith(f"{module_name}."):
-            sys.modules.pop(key, None)
-
-    spec = importlib.util.spec_from_file_location(
-        module_name,
-        module_location,
-        submodule_search_locations=submodule_search_locations,
-    )
-    if spec is None or spec.loader is None:
+    module_path = os.path.realpath(module_file)
+    site_packages_real = os.path.realpath(site_packages_path)
+    try:
+        return (
+            os.path.commonpath([module_path, site_packages_real]) == site_packages_real
+        )
+    except ValueError:
         return False
 
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
 
-    if "." in module_name:
-        parent_name, child_name = module_name.rsplit(".", 1)
-        parent_module = sys.modules.get(parent_name)
-        if parent_module is not None:
-            setattr(parent_module, child_name, module)
+def _extract_requirement_name(raw_requirement: str) -> str | None:
+    line = raw_requirement.split("#", 1)[0].strip()
+    if not line:
+        return None
+    if line.startswith(("-r", "--requirement", "-c", "--constraint")):
+        return None
+    if line.startswith("-"):
+        return None
 
-    logger.info("Loaded %s from plugin site-packages: %s", module_name, module_location)
-    return True
+    egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
+    if egg_match:
+        return _canonicalize_distribution_name(egg_match.group(1))
+
+    candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
+    if not candidate:
+        return None
+    return _canonicalize_distribution_name(candidate)
 
 
-def _prefer_fastapi_related_modules(site_packages_path: str) -> None:
-    for module_name in ("starlette", "starlette.status"):
+def _extract_requirement_names(requirements_path: str) -> set[str]:
+    names: set[str] = set()
+    try:
+        with open(requirements_path, encoding="utf-8") as requirements_file:
+            for line in requirements_file:
+                requirement_name = _extract_requirement_name(line)
+                if requirement_name:
+                    names.add(requirement_name)
+    except Exception as exc:
+        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
+    return names
+
+
+def _extract_top_level_modules(dist_info_path: str) -> set[str]:
+    top_level_path = os.path.join(dist_info_path, "top_level.txt")
+    if not os.path.isfile(top_level_path):
+        return set()
+
+    modules: set[str] = set()
+    try:
+        with open(top_level_path, encoding="utf-8") as top_level_file:
+            for line in top_level_file:
+                candidate = line.strip()
+                if not candidate or candidate.startswith("#"):
+                    continue
+                modules.add(candidate)
+    except Exception:
+        return set()
+    return modules
+
+
+def _find_dist_info_paths(
+    requirement_name: str,
+    site_packages_path: str,
+) -> list[str]:
+    normalized_prefix = requirement_name.replace("-", "_")
+    dist_infos: list[str] = []
+
+    try:
+        entries = os.listdir(site_packages_path)
+    except Exception:
+        return dist_infos
+
+    for entry in entries:
+        if not entry.endswith(".dist-info"):
+            continue
+        base_name = entry[: -len(".dist-info")].lower()
+        if base_name == normalized_prefix or base_name.startswith(
+            f"{normalized_prefix}-"
+        ):
+            dist_infos.append(os.path.join(site_packages_path, entry))
+    return dist_infos
+
+
+def _collect_candidate_modules(
+    requirement_names: set[str],
+    site_packages_path: str,
+) -> set[str]:
+    candidates: set[str] = set()
+    for requirement_name in requirement_names:
+        dist_info_paths = _find_dist_info_paths(requirement_name, site_packages_path)
+        for dist_info_path in dist_info_paths:
+            candidates.update(_extract_top_level_modules(dist_info_path))
+
+        if not dist_info_paths:
+            fallback_module_name = requirement_name.replace("-", "_")
+            if fallback_module_name:
+                candidates.add(fallback_module_name)
+
+    return candidates
+
+
+def _validate_preferred_module_sources(
+    module_names: set[str],
+    site_packages_path: str,
+) -> None:
+    unresolved_modules: list[str] = []
+
+    for module_name in sorted(module_names):
+        if not _module_exists_in_site_packages(module_name, site_packages_path):
+            continue
+        if _is_module_loaded_from_site_packages(module_name, site_packages_path):
+            continue
+
+        loaded_module = sys.modules.get(module_name)
+        loaded_from = getattr(loaded_module, "__file__", "unknown")
+        unresolved_modules.append(f"{module_name} -> {loaded_from}")
+
+    if unresolved_modules:
+        conflict_message = (
+            "检测到插件依赖与当前运行时发生冲突，无法安全加载该插件。"
+            f"冲突模块: {', '.join(unresolved_modules)}"
+        )
+        raise RuntimeError(conflict_message)
+
+
+def _prefer_module_from_site_packages(
+    module_name: str, site_packages_path: str
+) -> bool:
+    with _SITE_PACKAGES_IMPORT_LOCK:
+        base_path = os.path.join(site_packages_path, *module_name.split("."))
+        package_init = os.path.join(base_path, "__init__.py")
+        module_file = f"{base_path}.py"
+
+        module_location = None
+        submodule_search_locations = None
+
+        if os.path.isfile(package_init):
+            module_location = package_init
+            submodule_search_locations = [os.path.dirname(package_init)]
+        elif os.path.isfile(module_file):
+            module_location = module_file
+        else:
+            return False
+
+        spec = importlib.util.spec_from_file_location(
+            module_name,
+            module_location,
+            submodule_search_locations=submodule_search_locations,
+        )
+        if spec is None or spec.loader is None:
+            return False
+
+        matched_keys = [
+            key
+            for key in list(sys.modules.keys())
+            if key == module_name or key.startswith(f"{module_name}.")
+        ]
+        original_modules = {key: sys.modules[key] for key in matched_keys}
+
+        try:
+            for key in matched_keys:
+                sys.modules.pop(key, None)
+
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+
+            if "." in module_name:
+                parent_name, child_name = module_name.rsplit(".", 1)
+                parent_module = sys.modules.get(parent_name)
+                if parent_module is not None:
+                    setattr(parent_module, child_name, module)
+
+            logger.info(
+                "Loaded %s from plugin site-packages: %s",
+                module_name,
+                module_location,
+            )
+            return True
+        except Exception:
+            failed_keys = [
+                key
+                for key in list(sys.modules.keys())
+                if key == module_name or key.startswith(f"{module_name}.")
+            ]
+            for key in failed_keys:
+                sys.modules.pop(key, None)
+            sys.modules.update(original_modules)
+            raise
+
+
+def _prefer_modules_from_site_packages(
+    module_names: set[str],
+    site_packages_path: str,
+) -> None:
+    for module_name in sorted(module_names):
         try:
             loaded = _prefer_module_from_site_packages(module_name, site_packages_path)
             if not loaded:
-                logger.warning(
+                logger.debug(
                     "Module %s not found in plugin site-packages: %s",
                     module_name,
                     site_packages_path,
@@ -236,10 +415,15 @@ class PipInstaller:
         mirror: str | None = None,
     ) -> None:
         args = ["install"]
+        requested_requirements: set[str] = set()
         if package_name:
             args.append(package_name)
+            requirement_name = _extract_requirement_name(package_name)
+            if requirement_name:
+                requested_requirements.add(requirement_name)
         elif requirements_path:
             args.extend(["-r", requirements_path])
+            requested_requirements = _extract_requirement_names(requirements_path)
 
         index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
         args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
@@ -263,7 +447,20 @@ class PipInstaller:
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
-            _prefer_fastapi_related_modules(target_site_packages)
+            if requested_requirements:
+                candidate_modules = _collect_candidate_modules(
+                    requested_requirements,
+                    target_site_packages,
+                )
+                if candidate_modules:
+                    _prefer_modules_from_site_packages(
+                        candidate_modules,
+                        target_site_packages,
+                    )
+                    _validate_preferred_module_sources(
+                        candidate_modules,
+                        target_site_packages,
+                    )
         importlib.invalidate_caches()
 
     async def _run_pip_in_process(self, args: list[str]) -> int:

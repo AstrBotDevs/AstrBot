@@ -278,6 +278,34 @@ const comparePluginVersions = (leftVersion, rightVersion) => {
   return comparePrerelease(left.prerelease, right.prerelease);
 };
 
+const normalizeVersionText = (value) => String(value ?? "").trim();
+
+const isUnknownVersionText = (value, unknownLabel) => {
+  const normalizedValue = normalizeVersionText(value).toLowerCase();
+  const candidates = new Set([
+    normalizeVersionText(unknownLabel).toLowerCase(),
+    "unknown",
+    "未知",
+  ]);
+  return candidates.has(normalizedValue);
+};
+
+const shouldMarkPluginUpdate = (localVersion, onlineVersion, unknownLabel) => {
+  const compareResult = comparePluginVersions(onlineVersion, localVersion);
+  if (compareResult !== null) {
+    return compareResult > 0;
+  }
+
+  if (isUnknownVersionText(onlineVersion, unknownLabel)) {
+    return false;
+  }
+
+  return (
+    normalizeVersionText(localVersion).toLowerCase() !==
+    normalizeVersionText(onlineVersion).toLowerCase()
+  );
+};
+
 const plugin_handler_info_headers = computed(() => [
   { title: tm("table.headers.eventType"), key: "event_type_h" },
   { title: tm("table.headers.description"), key: "desc", maxWidth: "250px" },
@@ -459,11 +487,11 @@ const checkUpdate = () => {
 
     if (matchedPlugin) {
       extension.online_version = matchedPlugin.version;
-      const compareResult = comparePluginVersions(
-        matchedPlugin.version,
+      extension.has_update = shouldMarkPluginUpdate(
         extension.version,
+        matchedPlugin.version,
+        tm("status.unknown"),
       );
-      extension.has_update = compareResult !== null && compareResult > 0;
     } else {
       extension.has_update = false;
     }
