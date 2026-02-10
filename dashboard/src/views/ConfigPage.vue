@@ -190,6 +190,7 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { askForConfirmation as askForConfirmationDialog, resolveConfirmDialog } from '@/utils/confirmDialog';
 
 export default {
   name: 'ConfigPage',
@@ -473,8 +474,9 @@ export default {
         this.createNewConfig();
       }
     },
-    confirmDeleteConfig(config) {
-      if (confirm(this.tm('configManagement.confirmDelete').replace('{name}', config.name))) {
+    async confirmDeleteConfig(config) {
+      const message = this.tm('configManagement.confirmDelete').replace('{name}', config.name);
+      if (await askForConfirmationDialog(message, resolveConfirmDialog(this.$confirm))) {
         this.deleteConfig(config.id);
       }
     },

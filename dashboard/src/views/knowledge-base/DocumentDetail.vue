@@ -240,13 +240,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { useModuleI18n } from '@/i18n/composables'
+import { askForConfirmation, type ConfirmDialogHandler } from '@/utils/confirmDialog'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/document')
 const route = useRoute()
+
+const confirmDialog = inject<ConfirmDialogHandler | undefined>('$confirm', undefined)
 
 const kbId = ref(route.params.kbId as string)
 const docId = ref(route.params.docId as string)
@@ -356,7 +359,7 @@ const viewChunk = (chunk: any) => {
 
 // 删除分块
 const deleteChunk = async (chunk: any) => {
-  if (!confirm(t('chunks.deleteConfirm'))) return
+  if (!(await askForConfirmation(t('chunks.deleteConfirm'), confirmDialog))) return
   try {
     const response = await axios.post('/api/kb/chunk/delete', {
       chunk_id: chunk.chunk_id,

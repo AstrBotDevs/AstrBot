@@ -522,6 +522,7 @@
 <script>
 import axios from 'axios'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
+import { askForConfirmation as askForConfirmationDialog, resolveConfirmDialog } from '@/utils/confirmDialog'
 
 export default {
   name: 'SessionManagementPage',
@@ -1503,7 +1504,8 @@ export default {
     },
 
     async deleteGroup(group) {
-      if (!confirm(`确定要删除分组 "${group.name}" 吗？`)) return
+      const message = `确定要删除分组 "${group.name}" 吗？`
+      if (!(await askForConfirmationDialog(message, resolveConfirmDialog(this.$confirm)))) return
 
       try {
         const response = await axios.post('/api/session/group/delete', { id: group.id })

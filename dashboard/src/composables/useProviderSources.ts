@@ -1,6 +1,7 @@
 import { ref, computed, inject, onMounted, nextTick, watch } from 'vue'
 import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
+import { askForConfirmation as askForConfirmationDialog, type ConfirmDialogHandler } from '@/utils/confirmDialog'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -37,25 +38,10 @@ export function resolveDefaultTab(value?: string) {
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
 
-  type ConfirmDialogOptions = {
-    title?: string
-    message?: string
-  }
-
-  type ConfirmDialogHandler = (options: ConfirmDialogOptions) => Promise<boolean>
-
   const confirmDialog = inject<ConfirmDialogHandler | undefined>('$confirm', undefined)
 
   async function askForConfirmation(message: string) {
-    if (confirmDialog) {
-      try {
-        return await confirmDialog({ message })
-      } catch {
-        return false
-      }
-    }
-
-    return window.confirm(message)
+    return askForConfirmationDialog(message, confirmDialog)
   }
 
   // ===== State =====
