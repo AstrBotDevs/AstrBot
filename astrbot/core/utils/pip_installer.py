@@ -56,6 +56,21 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
     except Exception:
         return
 
+    finder_registry = getattr(distlib_resources, "_finder_registry", None)
+    register_finder = getattr(distlib_resources, "register_finder", None)
+    resource_finder = getattr(distlib_resources, "ResourceFinder", None)
+
+    if not isinstance(finder_registry, dict):
+        logger.warning(
+            "Skip patching distlib finder because _finder_registry is unavailable."
+        )
+        return
+    if not callable(register_finder) or resource_finder is None:
+        logger.warning(
+            "Skip patching distlib finder because register API is unavailable."
+        )
+        return
+
     for package_name in ("pip._vendor.distlib", "pip._vendor"):
         try:
             package = importlib.import_module(package_name)
@@ -69,10 +84,31 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             continue
 
         loader_type = type(loader)
-        if loader_type in distlib_resources._finder_registry:
+        if loader_type in finder_registry:
             continue
 
-        distlib_resources.register_finder(loader, distlib_resources.ResourceFinder)
+        try:
+            register_finder(loader, resource_finder)
+        except Exception as exc:
+            logger.warning(
+                "Failed to patch pip distlib finder for loader %s (%s): %s",
+                loader_type.__name__,
+                package_name,
+                exc,
+            )
+            continue
+
+        finder_registry = getattr(
+            distlib_resources, "_finder_registry", finder_registry
+        )
+        if isinstance(finder_registry, dict) and loader_type not in finder_registry:
+            logger.warning(
+                "Distlib finder patch did not take effect for loader %s (%s).",
+                loader_type.__name__,
+                package_name,
+            )
+            continue
+
         logger.info(
             "Patched pip distlib finder for frozen loader: %s (%s)",
             loader_type.__name__,

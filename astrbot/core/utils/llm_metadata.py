@@ -1,10 +1,9 @@
-import ssl
 from typing import Literal, TypedDict
 
 import aiohttp
-import certifi
 
 from astrbot.core import logger
+from astrbot.core.utils.http_ssl import build_tls_connector
 
 
 class LLMModalities(TypedDict):
@@ -34,10 +33,8 @@ LLM_METADATAS: dict[str, LLMMetadata] = {}
 async def update_llm_metadata() -> None:
     url = "https://models.dev/api.json"
     try:
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
         async with aiohttp.ClientSession(
-            trust_env=True, connector=connector
+            trust_env=True, connector=build_tls_connector()
         ) as session:
             async with session.get(url) as response:
                 data = await response.json()

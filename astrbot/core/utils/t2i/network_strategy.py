@@ -1,12 +1,11 @@
 import asyncio
 import logging
 import random
-import ssl
 
 import aiohttp
-import certifi
 
 from astrbot.core.config import VERSION
+from astrbot.core.utils.http_ssl import build_tls_connector
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.t2i.template_manager import TemplateManager
 
@@ -39,11 +38,9 @@ class NetworkRenderStrategy(RenderStrategy):
     async def get_official_endpoints(self) -> None:
         """获取官方的 t2i 端点列表。"""
         try:
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
             async with aiohttp.ClientSession(
                 trust_env=True,
-                connector=connector,
+                connector=build_tls_connector(),
             ) as session:
                 async with session.get(
                     "https://api.soulter.top/astrbot/t2i-endpoints",
@@ -93,12 +90,10 @@ class NetworkRenderStrategy(RenderStrategy):
         for endpoint in endpoints:
             try:
                 if return_url:
-                    ssl_context = ssl.create_default_context(cafile=certifi.where())
-                    connector = aiohttp.TCPConnector(ssl=ssl_context)
                     async with (
                         aiohttp.ClientSession(
                             trust_env=True,
-                            connector=connector,
+                            connector=build_tls_connector(),
                         ) as session,
                         session.post(
                             f"{endpoint}/generate",

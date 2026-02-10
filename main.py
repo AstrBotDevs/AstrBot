@@ -8,12 +8,16 @@ from pathlib import Path
 
 def _configure_runtime_ca_bundle() -> None:
     try:
+        import ssl
+
+        import aiohttp.connector as aiohttp_connector
         import certifi
 
-        certifi_cafile = certifi.where()
-        if certifi_cafile and os.path.exists(certifi_cafile):
-            os.environ.setdefault("SSL_CERT_FILE", certifi_cafile)
-            os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi_cafile)
+        ssl_context = ssl.create_default_context()
+        ssl_context.load_verify_locations(cafile=certifi.where())
+
+        if hasattr(aiohttp_connector, "_SSL_CONTEXT_VERIFIED"):
+            aiohttp_connector._SSL_CONTEXT_VERIFIED = ssl_context
     except Exception:
         return
 
