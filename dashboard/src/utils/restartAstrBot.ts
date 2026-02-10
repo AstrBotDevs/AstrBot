@@ -1,13 +1,27 @@
 import axios from 'axios'
 
 type WaitingForRestartRef = {
-  check: () => void | Promise<void>
+  check: (initialStartTime?: number | null) => void | Promise<void>
   stop?: () => void
 }
 
-async function triggerWaiting(waitingRef?: WaitingForRestartRef | null) {
+async function triggerWaiting(
+  waitingRef?: WaitingForRestartRef | null,
+  initialStartTime?: number | null
+) {
   if (!waitingRef) return
-  await waitingRef.check()
+  await waitingRef.check(initialStartTime)
+}
+
+async function fetchCurrentStartTime(): Promise<number | null> {
+  try {
+    const response = await axios.get('/api/stat/start-time', { timeout: 1500 })
+    const rawStartTime = response?.data?.data?.start_time
+    const numericStartTime = Number(rawStartTime)
+    return Number.isFinite(numericStartTime) ? numericStartTime : null
+  } catch (_error) {
+    return null
+  }
 }
 
 export async function restartAstrBot(
@@ -17,13 +31,15 @@ export async function restartAstrBot(
 
   if (desktopBridge?.isElectron) {
     const authToken = localStorage.getItem('token')
+    const initialStartTime = await fetchCurrentStartTime()
     try {
-      const result = await desktopBridge.restartBackend(authToken)
+      const restartPromise = desktopBridge.restartBackend(authToken)
+      await triggerWaiting(waitingRef, initialStartTime)
+      const result = await restartPromise
       if (!result.ok) {
         waitingRef?.stop?.()
         throw new Error(result.reason || 'Failed to restart backend.')
       }
-      await triggerWaiting(waitingRef)
     } catch (error) {
       waitingRef?.stop?.()
       throw error
