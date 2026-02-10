@@ -5,29 +5,11 @@ import os
 import sys
 from pathlib import Path
 
-
-def _configure_runtime_ca_bundle() -> None:
-    try:
-        import ssl
-
-        import aiohttp.connector as aiohttp_connector
-        import certifi
-
-        ssl_context = ssl.create_default_context()
-        ssl_context.load_verify_locations(cafile=certifi.where())
-
-        if hasattr(aiohttp_connector, "_SSL_CONTEXT_VERIFIED"):
-            aiohttp_connector._SSL_CONTEXT_VERIFIED = ssl_context
-    except Exception:
-        return
-
-
-_configure_runtime_ca_bundle()
-
-from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402, I001
-from astrbot.core.config.default import VERSION  # noqa: E402
-from astrbot.core.initial_loader import InitialLoader  # noqa: E402
-from astrbot.core.utils.astrbot_path import (  # noqa: E402
+import runtime_bootstrap  # noqa: F401
+from astrbot.core import LogBroker, LogManager, db_helper, logger
+from astrbot.core.config.default import VERSION
+from astrbot.core.initial_loader import InitialLoader
+from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_data_path,
     get_astrbot_plugin_path,
@@ -35,7 +17,7 @@ from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_site_packages_path,
     get_astrbot_temp_path,
 )
-from astrbot.core.utils.io import download_dashboard, get_dashboard_version  # noqa: E402
+from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
