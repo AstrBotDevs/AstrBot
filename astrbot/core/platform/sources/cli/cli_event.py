@@ -55,6 +55,10 @@ class CLIMessageEvent(AstrMessageEvent):
 
     async def send(self, message_chain: MessageChain) -> dict[str, Any]:
         """发送消息到CLI"""
+        # 调用父类方法以设置 _has_send_oper 标志
+        # 这告诉 ProcessStage 已经有发送操作，避免触发 LLM
+        await super().send(message_chain)
+
         # Socket模式：收集多次回复
         if self.response_future is not None and not self.response_future.done():
             # 使用 ImageProcessor 预处理图片（避免临时文件被删除）
