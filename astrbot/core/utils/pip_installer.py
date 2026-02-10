@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import importlib
+import importlib.util
 import io
 import logging
 import os
@@ -55,6 +56,55 @@ def _prepend_sys_path(path: str) -> None:
         item for item in sys.path if os.path.realpath(item) != normalized_target
     ]
     sys.path.insert(0, normalized_target)
+
+
+def _prefer_module_from_site_packages(
+    module_name: str, site_packages_path: str
+) -> bool:
+    base_path = os.path.join(site_packages_path, *module_name.split("."))
+    package_init = os.path.join(base_path, "__init__.py")
+    module_file = f"{base_path}.py"
+
+    module_location = None
+    submodule_search_locations = None
+
+    if os.path.isfile(package_init):
+        module_location = package_init
+        submodule_search_locations = [os.path.dirname(package_init)]
+    elif os.path.isfile(module_file):
+        module_location = module_file
+    else:
+        return False
+
+    for key in list(sys.modules.keys()):
+        if key == module_name or key.startswith(f"{module_name}."):
+            sys.modules.pop(key, None)
+
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        module_location,
+        submodule_search_locations=submodule_search_locations,
+    )
+    if spec is None or spec.loader is None:
+        return False
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    logger.info("Loaded %s from plugin site-packages: %s", module_name, module_location)
+    return True
+
+
+def _prefer_fastapi_related_modules(site_packages_path: str) -> None:
+    for module_name in ("starlette", "starlette.status"):
+        try:
+            _prefer_module_from_site_packages(module_name, site_packages_path)
+        except Exception as exc:
+            logger.debug(
+                "Failed to prefer module %s from plugin site-packages: %s",
+                module_name,
+                exc,
+            )
 
 
 def _get_loader_for_package(package: object) -> object | None:
@@ -187,6 +237,7 @@ class PipInstaller:
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
             args.extend(["--target", target_site_packages])
+            args.append("--upgrade")
 
         if self.pip_install_arg:
             args.extend(self.pip_install_arg.split())
@@ -199,6 +250,7 @@ class PipInstaller:
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
+            _prefer_fastapi_related_modules(target_site_packages)
         importlib.invalidate_caches()
 
     async def _run_pip_in_process(self, args: list[str]) -> int:
