@@ -209,6 +209,75 @@ const marketCustomFilter = (value, query, item) => {
   return false;
 };
 
+const parsePluginVersion = (rawVersion) => {
+  if (rawVersion == null) return null;
+  const cleaned = String(rawVersion).trim().replace(/^[vV]/, "");
+  if (!cleaned) return null;
+
+  const match =
+    /^(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+      cleaned,
+    );
+  if (!match) return null;
+
+  const numeric = match[1]
+    .split(".")
+    .map((part) => Number.parseInt(part, 10));
+  if (numeric.some((part) => Number.isNaN(part))) return null;
+
+  const prerelease = match[2]
+    ? match[2]
+        .split(".")
+        .map((part) =>
+          /^\d+$/.test(part) ? Number.parseInt(part, 10) : part.toLowerCase(),
+        )
+    : null;
+
+  return { numeric, prerelease };
+};
+
+const comparePrerelease = (left, right) => {
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+
+  const maxLength = Math.max(left.length, right.length);
+  for (let i = 0; i < maxLength; i++) {
+    const leftPart = left[i];
+    const rightPart = right[i];
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    if (leftPart === rightPart) continue;
+
+    const leftIsNumber = typeof leftPart === "number";
+    const rightIsNumber = typeof rightPart === "number";
+
+    if (leftIsNumber && rightIsNumber) return leftPart > rightPart ? 1 : -1;
+    if (leftIsNumber !== rightIsNumber) return leftIsNumber ? -1 : 1;
+
+    const compareResult = String(leftPart).localeCompare(String(rightPart));
+    if (compareResult !== 0) return compareResult > 0 ? 1 : -1;
+  }
+
+  return 0;
+};
+
+const comparePluginVersions = (leftVersion, rightVersion) => {
+  const left = parsePluginVersion(leftVersion);
+  const right = parsePluginVersion(rightVersion);
+  if (!left || !right) return null;
+
+  const maxLength = Math.max(left.numeric.length, right.numeric.length);
+  for (let i = 0; i < maxLength; i++) {
+    const leftPart = left.numeric[i] ?? 0;
+    const rightPart = right.numeric[i] ?? 0;
+    if (leftPart === rightPart) continue;
+    return leftPart > rightPart ? 1 : -1;
+  }
+
+  return comparePrerelease(left.prerelease, right.prerelease);
+};
+
 const plugin_handler_info_headers = computed(() => [
   { title: tm("table.headers.eventType"), key: "event_type_h" },
   { title: tm("table.headers.description"), key: "desc", maxWidth: "250px" },
@@ -390,9 +459,11 @@ const checkUpdate = () => {
 
     if (matchedPlugin) {
       extension.online_version = matchedPlugin.version;
-      extension.has_update =
-        extension.version !== matchedPlugin.version &&
-        matchedPlugin.version !== tm("status.unknown");
+      const compareResult = comparePluginVersions(
+        matchedPlugin.version,
+        extension.version,
+      );
+      extension.has_update = compareResult !== null && compareResult > 0;
     } else {
       extension.has_update = false;
     }
