@@ -299,14 +299,6 @@ class BackendManager {
       const reachable = await this.pingBackend(700);
       if (!reachable) {
         sawBackendDown = true;
-        if (!this.backendProcess) {
-          return {
-            ok: false,
-            reason:
-              this.backendLastExitReason ||
-              'Backend process exited during graceful restart.',
-          };
-        }
       } else {
         const currentStartTime = await this.getBackendStartTime();
         if (
@@ -316,7 +308,14 @@ class BackendManager {
         ) {
           return { ok: true, reason: null };
         }
-        if (previousStartTime === null && sawBackendDown) {
+        if (sawBackendDown && previousStartTime === null) {
+          return { ok: true, reason: null };
+        }
+        if (
+          sawBackendDown &&
+          previousStartTime !== null &&
+          currentStartTime === null
+        ) {
           return { ok: true, reason: null };
         }
       }
