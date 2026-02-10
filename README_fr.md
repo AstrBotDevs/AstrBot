@@ -241,7 +241,12 @@ De plus, la naissance de ce projet n'aurait pas été possible sans l'aide des p
 
 </div>
 
-</details>
+<div align="center">
+
+_La compagnie et la capacité ne devraient jamais être des opposés. Nous souhaitons créer un robot capable à la fois de comprendre les émotions, d'offrir de la présence, et d'accomplir des tâches de manière fiable._
 
 _私は、高性能ですから!_
 
+<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
+
+</div>

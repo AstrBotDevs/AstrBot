@@ -249,8 +249,6 @@ Additionally, the birth of this project would not have been possible without the
 
 </div>
 
-</details>
-
 <div align="center">
 
 _私は、高性能ですから!_

@@ -242,6 +242,12 @@ AstrBot への貢献をしていただいたすべてのコントリビュータ
 
 </div>
 
-</details>
+<div align="center">
+
+_共感力と能力は決して対立するものではありません。私たちが目指すのは、感情を理解し、心の支えとなるだけでなく、確実に仕事をこなせるロボットの創造です。_
 
 _私は、高性能ですから!_
+
+<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
+
+</div>
