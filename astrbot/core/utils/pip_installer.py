@@ -11,6 +11,8 @@ from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
 
 logger = logging.getLogger("astrbot")
 
+_DISTLIB_FINDER_PATCH_ATTEMPTED = False
+
 
 def _get_pip_main():
     try:
@@ -48,8 +50,14 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
 
 
 def _patch_distlib_finder_for_frozen_runtime() -> None:
+    global _DISTLIB_FINDER_PATCH_ATTEMPTED
+
     if not getattr(sys, "frozen", False):
         return
+    if _DISTLIB_FINDER_PATCH_ATTEMPTED:
+        return
+
+    _DISTLIB_FINDER_PATCH_ATTEMPTED = True
 
     try:
         from pip._vendor.distlib import resources as distlib_resources
