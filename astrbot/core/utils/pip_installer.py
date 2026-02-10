@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import threading
+from collections import deque
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
@@ -162,8 +163,25 @@ def _collect_candidate_modules(
     except Exception as exc:
         logger.warning("读取 site-packages 元数据失败，使用回退模块名: %s", exc)
 
+    expanded_requirement_names: set[str] = set()
+    pending = deque(requirement_names)
+    while pending:
+        requirement_name = pending.popleft()
+        if requirement_name in expanded_requirement_names:
+            continue
+        expanded_requirement_names.add(requirement_name)
+
+        for distribution in by_name.get(requirement_name, []):
+            for dependency_line in distribution.requires or []:
+                dependency_name = _extract_requirement_name(dependency_line)
+                if not dependency_name:
+                    continue
+                if dependency_name in expanded_requirement_names:
+                    continue
+                pending.append(dependency_name)
+
     candidates: set[str] = set()
-    for requirement_name in requirement_names:
+    for requirement_name in expanded_requirement_names:
         matched_distributions = by_name.get(requirement_name, [])
         modules_for_requirement: set[str] = set()
         for distribution in matched_distributions:
