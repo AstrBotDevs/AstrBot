@@ -91,6 +91,13 @@ def _prefer_module_from_site_packages(
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
+
+    if "." in module_name:
+        parent_name, child_name = module_name.rsplit(".", 1)
+        parent_module = sys.modules.get(parent_name)
+        if parent_module is not None:
+            setattr(parent_module, child_name, module)
+
     logger.info("Loaded %s from plugin site-packages: %s", module_name, module_location)
     return True
 
@@ -98,9 +105,15 @@ def _prefer_module_from_site_packages(
 def _prefer_fastapi_related_modules(site_packages_path: str) -> None:
     for module_name in ("starlette", "starlette.status"):
         try:
-            _prefer_module_from_site_packages(module_name, site_packages_path)
+            loaded = _prefer_module_from_site_packages(module_name, site_packages_path)
+            if not loaded:
+                logger.warning(
+                    "Module %s not found in plugin site-packages: %s",
+                    module_name,
+                    site_packages_path,
+                )
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 "Failed to prefer module %s from plugin site-packages: %s",
                 module_name,
                 exc,
@@ -237,7 +250,7 @@ class PipInstaller:
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
             args.extend(["--target", target_site_packages])
-            args.append("--upgrade")
+            args.extend(["--upgrade", "--force-reinstall"])
 
         if self.pip_install_arg:
             args.extend(self.pip_install_arg.split())

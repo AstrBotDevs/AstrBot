@@ -193,6 +193,14 @@ class PluginManager:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
 
     @staticmethod
+    def _purge_conflicting_third_party_modules(prefixes: tuple[str, ...]) -> None:
+        for key in list(sys.modules.keys()):
+            if any(
+                key == prefix or key.startswith(f"{prefix}.") for prefix in prefixes
+            ):
+                sys.modules.pop(key, None)
+
+    @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
         """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
 
@@ -403,6 +411,9 @@ class PluginManager:
                 except (ModuleNotFoundError, ImportError):
                     # 尝试安装依赖
                     await self._check_plugin_dept_update(target_plugin=root_dir_name)
+                    self._purge_conflicting_third_party_modules(
+                        ("starlette", "fastapi", "pydantic", "pydantic_core")
+                    )
                     module = __import__(path, fromlist=[module_str])
                 except Exception as e:
                     logger.error(traceback.format_exc())
