@@ -12,7 +12,6 @@ import axios from "axios";
 import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import { shouldMarkPluginUpdate } from "@/utils/pluginVersion";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 
 import { ref, computed, onMounted, reactive, watch } from "vue";
@@ -391,11 +390,9 @@ const checkUpdate = () => {
 
     if (matchedPlugin) {
       extension.online_version = matchedPlugin.version;
-      extension.has_update = shouldMarkPluginUpdate(
-        extension.version,
-        matchedPlugin.version,
-        tm("status.unknown"),
-      );
+      extension.has_update =
+        extension.version !== matchedPlugin.version &&
+        matchedPlugin.version !== tm("status.unknown");
     } else {
       extension.has_update = false;
     }
