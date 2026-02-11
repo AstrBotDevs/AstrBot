@@ -867,6 +867,8 @@ async def build_main_agent(
                 return None
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+
+            # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
@@ -882,6 +884,35 @@ async def build_main_agent(
                             text=f"[File Attachment: name {file_name}, path {file_path}]"
                         )
                     )
+            # quoted message attachments
+            reply_comps = [
+                comp
+                for comp in event.message_obj.message
+                if isinstance(comp, Reply) and comp.chain
+            ]
+            for comp in reply_comps:
+                if not comp.chain:
+                    continue
+                for reply_comp in comp.chain:
+                    if isinstance(reply_comp, Image):
+                        image_path = await reply_comp.convert_to_file_path()
+                        req.image_urls.append(image_path)
+                        req.extra_user_content_parts.append(
+                            TextPart(
+                                text=f"[Image Attachment in quoted message: path {image_path}]"
+                            )
+                        )
+                    elif isinstance(reply_comp, File):
+                        file_path = await reply_comp.get_file()
+                        file_name = reply_comp.name or os.path.basename(file_path)
+                        req.extra_user_content_parts.append(
+                            TextPart(
+                                text=(
+                                    f"[File Attachment in quoted message: "
+                                    f"name {file_name}, path {file_path}]"
+                                )
+                            )
+                        )
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation

@@ -3,10 +3,13 @@ import base64
 import json
 import re
 import time
+from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
+    GetMessageRequest,
     GetMessageResourceRequest,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
@@ -22,6 +25,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -90,6 +94,347 @@ class LarkPlatformAdapter(Platform):
             self.webhook_server.set_callback(self.handle_webhook_event)
 
         self.event_id_timestamps: dict[str, float] = {}
+
+    async def _download_message_resource(
+        self,
+        *,
+        message_id: str,
+        file_key: str,
+        resource_type: str,
+    ) -> bytes | None:
+        if self.lark_api.im is None:
+            logger.error("[Lark] API Client im 模块未初始化")
+            return None
+
+        request = (
+            GetMessageResourceRequest.builder()
+            .message_id(message_id)
+            .file_key(file_key)
+            .type(resource_type)
+            .build()
+        )
+        response = await self.lark_api.im.v1.message_resource.aget(request)
+        if not response.success():
+            logger.error(
+                f"[Lark] 下载消息资源失败 type={resource_type}, key={file_key}, "
+                f"code={response.code}, msg={response.msg}",
+            )
+            return None
+
+        if response.file is None:
+            logger.error(f"[Lark] 消息资源响应中不包含文件流: {file_key}")
+            return None
+
+        return response.file.read()
+
+    @staticmethod
+    def _build_message_str_from_components(
+        components: list[Comp.BaseMessageComponent],
+    ) -> str:
+        parts: list[str] = []
+        for comp in components:
+            if isinstance(comp, Comp.Plain):
+                text = comp.text.strip()
+                if text:
+                    parts.append(text)
+            elif isinstance(comp, Comp.At):
+                name = str(comp.name or comp.qq or "").strip()
+                if name:
+                    parts.append(f"@{name}")
+            elif isinstance(comp, Comp.Image):
+                parts.append("[image]")
+            elif isinstance(comp, Comp.File):
+                parts.append(str(comp.name or "[file]"))
+            elif isinstance(comp, Comp.Record):
+                parts.append("[audio]")
+            elif isinstance(comp, Comp.Video):
+                parts.append("[video]")
+
+        return " ".join(parts).strip()
+
+    @staticmethod
+    def _parse_post_content(content: dict[str, Any]) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for item in content.get("content", []):
+            if isinstance(item, list):
+                for comp in item:
+                    if isinstance(comp, dict):
+                        result.append(comp)
+            elif isinstance(item, dict):
+                result.append(item)
+        return result
+
+    @staticmethod
+    def _build_at_map(mentions: list[Any] | None) -> dict[str, Comp.At]:
+        at_map: dict[str, Comp.At] = {}
+        if not mentions:
+            return at_map
+
+        for mention in mentions:
+            key = getattr(mention, "key", None)
+            if not key:
+                continue
+
+            mention_id = getattr(mention, "id", None)
+            open_id = ""
+            if mention_id is not None:
+                if hasattr(mention_id, "open_id"):
+                    open_id = getattr(mention_id, "open_id", "") or ""
+                else:
+                    open_id = str(mention_id)
+
+            mention_name = str(getattr(mention, "name", "") or "")
+            at_map[key] = Comp.At(qq=open_id, name=mention_name)
+
+        return at_map
+
+    async def _parse_message_components(
+        self,
+        *,
+        message_id: str | None,
+        message_type: str,
+        content: dict[str, Any],
+        at_map: dict[str, Comp.At],
+    ) -> list[Comp.BaseMessageComponent]:
+        components: list[Comp.BaseMessageComponent] = []
+
+        if message_type == "text":
+            message_str_raw = str(content.get("text", ""))
+            at_pattern = r"(@_user_\d+)"
+            parts = re.split(at_pattern, message_str_raw)
+            for part in parts:
+                segment = part.strip()
+                if not segment:
+                    continue
+                if segment in at_map:
+                    components.append(at_map[segment])
+                else:
+                    components.append(Comp.Plain(segment))
+            return components
+
+        if message_type in ("post", "image"):
+            if message_type == "image":
+                comp_list = [
+                    {
+                        "tag": "img",
+                        "image_key": content.get("image_key"),
+                    },
+                ]
+            else:
+                comp_list = self._parse_post_content(content)
+
+            for comp in comp_list:
+                tag = comp.get("tag")
+                if tag == "at":
+                    user_key = str(comp.get("user_id", ""))
+                    if user_key in at_map:
+                        components.append(at_map[user_key])
+                elif tag == "text":
+                    text = str(comp.get("text", "")).strip()
+                    if text:
+                        components.append(Comp.Plain(text))
+                elif tag == "a":
+                    text = str(comp.get("text", "")).strip()
+                    href = str(comp.get("href", "")).strip()
+                    if text and href:
+                        components.append(Comp.Plain(f"{text}({href})"))
+                    elif text:
+                        components.append(Comp.Plain(text))
+                elif tag == "img":
+                    image_key = str(comp.get("image_key", "")).strip()
+                    if not image_key:
+                        continue
+                    if not message_id:
+                        logger.error("[Lark] 图片消息缺少 message_id")
+                        continue
+                    image_bytes = await self._download_message_resource(
+                        message_id=message_id,
+                        file_key=image_key,
+                        resource_type="image",
+                    )
+                    if image_bytes is None:
+                        continue
+                    image_base64 = base64.b64encode(image_bytes).decode()
+                    components.append(Comp.Image.fromBase64(image_base64))
+                elif tag == "media":
+                    file_key = str(comp.get("file_key", "")).strip()
+                    file_name = (
+                        str(comp.get("file_name", "")).strip() or "lark_media.mp4"
+                    )
+                    if not file_key:
+                        continue
+                    if not message_id:
+                        logger.error("[Lark] 富文本视频消息缺少 message_id")
+                        continue
+                    file_path = await self._download_file_resource_to_temp(
+                        message_id=message_id,
+                        file_key=file_key,
+                        message_type="post_media",
+                        file_name=file_name,
+                        default_suffix=".mp4",
+                    )
+                    if file_path:
+                        components.append(Comp.Video(file=file_path, path=file_path))
+
+            return components
+
+        if message_type == "file":
+            file_key = str(content.get("file_key", "")).strip()
+            file_name = str(content.get("file_name", "")).strip() or "lark_file"
+            if not message_id:
+                logger.error("[Lark] 文件消息缺少 message_id")
+                return components
+            if not file_key:
+                logger.error("[Lark] 文件消息缺少 file_key")
+                return components
+            file_path = await self._download_file_resource_to_temp(
+                message_id=message_id,
+                file_key=file_key,
+                message_type="file",
+                file_name=file_name,
+            )
+            if file_path:
+                components.append(Comp.File(name=file_name, file=file_path))
+            return components
+
+        if message_type == "audio":
+            file_key = str(content.get("file_key", "")).strip()
+            if not message_id:
+                logger.error("[Lark] 音频消息缺少 message_id")
+                return components
+            if not file_key:
+                logger.error("[Lark] 音频消息缺少 file_key")
+                return components
+            file_path = await self._download_file_resource_to_temp(
+                message_id=message_id,
+                file_key=file_key,
+                message_type="audio",
+                default_suffix=".opus",
+            )
+            if file_path:
+                components.append(Comp.Record(file=file_path, url=file_path))
+            return components
+
+        if message_type == "media":
+            file_key = str(content.get("file_key", "")).strip()
+            file_name = str(content.get("file_name", "")).strip() or "lark_media.mp4"
+            if not message_id:
+                logger.error("[Lark] 视频消息缺少 message_id")
+                return components
+            if not file_key:
+                logger.error("[Lark] 视频消息缺少 file_key")
+                return components
+            file_path = await self._download_file_resource_to_temp(
+                message_id=message_id,
+                file_key=file_key,
+                message_type="media",
+                file_name=file_name,
+                default_suffix=".mp4",
+            )
+            if file_path:
+                components.append(Comp.Video(file=file_path, path=file_path))
+            return components
+
+        return components
+
+    async def _build_reply_from_parent_id(
+        self,
+        parent_message_id: str,
+    ) -> Comp.Reply | None:
+        if self.lark_api.im is None:
+            logger.error("[Lark] API Client im 模块未初始化")
+            return None
+
+        request = GetMessageRequest.builder().message_id(parent_message_id).build()
+        response = await self.lark_api.im.v1.message.aget(request)
+        if not response.success():
+            logger.error(
+                f"[Lark] 获取引用消息失败 id={parent_message_id}, "
+                f"code={response.code}, msg={response.msg}",
+            )
+            return None
+
+        if response.data is None or not response.data.items:
+            logger.error(
+                f"[Lark] 引用消息响应为空 id={parent_message_id}",
+            )
+            return None
+
+        parent_message = response.data.items[0]
+        quoted_message_id = parent_message.message_id or parent_message_id
+        quoted_sender_id = (
+            parent_message.sender.id
+            if parent_message.sender and parent_message.sender.id
+            else "unknown"
+        )
+        quoted_time_raw = parent_message.create_time or 0
+        quoted_time = (
+            quoted_time_raw // 1000
+            if isinstance(quoted_time_raw, int) and quoted_time_raw > 10**11
+            else quoted_time_raw
+        )
+        quoted_content = (
+            parent_message.body.content if parent_message.body else ""
+        ) or ""
+        quoted_type = parent_message.msg_type or ""
+        quoted_content_json: dict[str, Any] = {}
+        if quoted_content:
+            try:
+                parsed = json.loads(quoted_content)
+                if isinstance(parsed, dict):
+                    quoted_content_json = parsed
+            except json.JSONDecodeError:
+                logger.warning(
+                    f"[Lark] 解析引用消息内容失败 id={quoted_message_id}",
+                )
+
+        quoted_at_map = self._build_at_map(parent_message.mentions)
+        quoted_chain = await self._parse_message_components(
+            message_id=quoted_message_id,
+            message_type=quoted_type,
+            content=quoted_content_json,
+            at_map=quoted_at_map,
+        )
+        quoted_text = self._build_message_str_from_components(quoted_chain)
+        sender_nickname = (
+            quoted_sender_id[:8] if quoted_sender_id != "unknown" else "unknown"
+        )
+
+        return Comp.Reply(
+            id=quoted_message_id,
+            chain=quoted_chain,
+            sender_id=quoted_sender_id,
+            sender_nickname=sender_nickname,
+            time=quoted_time,
+            message_str=quoted_text,
+            text=quoted_text,
+        )
+
+    async def _download_file_resource_to_temp(
+        self,
+        *,
+        message_id: str,
+        file_key: str,
+        message_type: str,
+        file_name: str = "",
+        default_suffix: str = ".bin",
+    ) -> str | None:
+        file_bytes = await self._download_message_resource(
+            message_id=message_id,
+            file_key=file_key,
+            resource_type="file",
+        )
+        if file_bytes is None:
+            return None
+
+        suffix = Path(file_name).suffix if file_name else default_suffix
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = (
+            temp_dir / f"lark_{message_type}_{file_name}_{uuid4().hex[:4]}{suffix}"
+        )
+        temp_path.write_bytes(file_bytes)
+        return str(temp_path.resolve())
 
     def _clean_expired_events(self) -> None:
         """清理超过 30 分钟的事件记录"""
@@ -176,6 +521,11 @@ class LarkPlatformAdapter(Platform):
         abm.message_str = ""
 
         at_list = {}
+        if message.parent_id:
+            reply_seg = await self._build_reply_from_parent_id(message.parent_id)
+            if reply_seg:
+                abm.message.append(reply_seg)
+
         if message.mentions:
             for m in message.mentions:
                 if m.id is None:
@@ -198,80 +548,19 @@ class LarkPlatformAdapter(Platform):
             logger.error(f"[Lark] 解析消息内容失败: {message.content}")
             return
 
-        if message.message_type == "text":
-            message_str_raw = content_json_b.get("text", "")  # 带有 @ 的消息
-            at_pattern = r"(@_user_\d+)"  # 可以根据需求修改正则
-            # at_users = re.findall(at_pattern, message_str_raw)
-            # 拆分文本，去掉AT符号部分
-            parts = re.split(at_pattern, message_str_raw)
-            for i in range(len(parts)):
-                s = parts[i].strip()
-                if not s:
-                    continue
-                if s in at_list:
-                    abm.message.append(at_list[s])
-                else:
-                    abm.message.append(Comp.Plain(parts[i].strip()))
-        elif message.message_type == "post":
-            _ls = []
+        if not isinstance(content_json_b, dict):
+            logger.error(f"[Lark] 消息内容不是 JSON Object: {message.content}")
+            return
 
-            content_ls = content_json_b.get("content", [])
-            for comp in content_ls:
-                if isinstance(comp, list):
-                    _ls.extend(comp)
-                elif isinstance(comp, dict):
-                    _ls.append(comp)
-            content_json_b = _ls
-        elif message.message_type == "image":
-            content_json_b = [
-                {
-                    "tag": "img",
-                    "image_key": content_json_b.get("image_key"),
-                    "style": [],
-                },
-            ]
-
-        if message.message_type in ("post", "image"):
-            for comp in content_json_b:
-                if comp.get("tag") == "at":
-                    user_id = comp.get("user_id")
-                    if user_id in at_list:
-                        abm.message.append(at_list[user_id])
-                elif comp.get("tag") == "text" and comp.get("text", "").strip():
-                    abm.message.append(Comp.Plain(comp["text"].strip()))
-                elif comp.get("tag") == "img":
-                    image_key = comp.get("image_key")
-                    if not image_key:
-                        continue
-
-                    request = (
-                        GetMessageResourceRequest.builder()
-                        .message_id(cast(str, message.message_id))
-                        .file_key(image_key)
-                        .type("image")
-                        .build()
-                    )
-
-                    if self.lark_api.im is None:
-                        logger.error("[Lark] API Client im 模块未初始化")
-                        continue
-
-                    response = await self.lark_api.im.v1.message_resource.aget(request)
-                    if not response.success():
-                        logger.error(f"无法下载飞书图片: {image_key}")
-                        continue
-
-                    if response.file is None:
-                        logger.error(f"飞书图片响应中不包含文件流: {image_key}")
-                        continue
-
-                    image_bytes = response.file.read()
-                    image_base64 = base64.b64encode(image_bytes).decode()
-                    abm.message.append(Comp.Image.fromBase64(image_base64))
-
-        for comp in abm.message:
-            if isinstance(comp, Comp.Plain):
-                abm.message_str += comp.text
+        logger.debug(f"[Lark] 解析消息内容: {content_json_b}")
+        parsed_components = await self._parse_message_components(
+            message_id=message.message_id,
+            message_type=message.message_type or "unknown",
+            content=content_json_b,
+            at_map=at_list,
+        )
+        abm.message.extend(parsed_components)
+        abm.message_str = self._build_message_str_from_components(parsed_components)
 
         if message.message_id is None:
             logger.error("[Lark] 消息缺少 message_id")
@@ -296,7 +585,6 @@ class LarkPlatformAdapter(Platform):
         else:
             abm.session_id = abm.sender.user_id
 
-        logger.debug(abm)
         await self.handle_msg(abm)
 
     async def handle_msg(self, abm: AstrBotMessage) -> None:
