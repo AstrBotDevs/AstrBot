@@ -1,10 +1,22 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
-const { ensureDir } = require('./common');
+const {
+  appendRotatingLog,
+  parseLogBackupCount,
+  parseLogMaxBytes,
+} = require('./common');
 
 function createElectronLogger({ app, getRootDir }) {
+  const electronLogMaxBytes = parseLogMaxBytes(
+    process.env.ASTRBOT_ELECTRON_LOG_MAX_MB,
+    20,
+  );
+  const electronLogBackupCount = parseLogBackupCount(
+    process.env.ASTRBOT_ELECTRON_LOG_BACKUP_COUNT,
+    3,
+  );
+
   function getElectronLogPath() {
     const rootDir =
       process.env.ASTRBOT_ROOT ||
@@ -15,11 +27,11 @@ function createElectronLogger({ app, getRootDir }) {
 
   function logElectron(message) {
     const logPath = getElectronLogPath();
-    ensureDir(path.dirname(logPath));
     const line = `[${new Date().toISOString()}] ${message}\n`;
-    try {
-      fs.appendFileSync(logPath, line, 'utf8');
-    } catch {}
+    appendRotatingLog(logPath, line, {
+      maxBytes: electronLogMaxBytes,
+      backupCount: electronLogBackupCount,
+    });
   }
 
   return {

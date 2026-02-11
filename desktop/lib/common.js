@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 
 function normalizeUrl(value) {
   try {
@@ -22,6 +23,93 @@ function ensureDir(value) {
     return;
   }
   fs.mkdirSync(value, { recursive: true });
+}
+
+function parseLogMaxBytes(maxMbRaw, defaultMaxMb = 20) {
+  const parsed = Number.parseInt(`${maxMbRaw ?? defaultMaxMb}`, 10);
+  const maxMb = Number.isFinite(parsed) && parsed > 0 ? parsed : defaultMaxMb;
+  return maxMb * 1024 * 1024;
+}
+
+function parseLogBackupCount(backupCountRaw, defaultBackupCount = 3) {
+  const parsed = Number.parseInt(
+    `${backupCountRaw ?? defaultBackupCount}`,
+    10,
+  );
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return defaultBackupCount;
+}
+
+function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0) {
+  if (!logPath || !maxBytes || maxBytes <= 0) {
+    return;
+  }
+  if (!fs.existsSync(logPath)) {
+    return;
+  }
+
+  let currentSize = 0;
+  try {
+    currentSize = fs.statSync(logPath).size;
+  } catch {
+    return;
+  }
+  if (currentSize + Math.max(0, incomingBytes) <= maxBytes) {
+    return;
+  }
+
+  if (!backupCount || backupCount <= 0) {
+    try {
+      fs.truncateSync(logPath, 0);
+    } catch {}
+    return;
+  }
+
+  const oldestPath = `${logPath}.${backupCount}`;
+  try {
+    if (fs.existsSync(oldestPath)) {
+      fs.unlinkSync(oldestPath);
+    }
+  } catch {}
+
+  for (let index = backupCount - 1; index >= 1; index -= 1) {
+    const sourcePath = `${logPath}.${index}`;
+    const targetPath = `${logPath}.${index + 1}`;
+    try {
+      if (fs.existsSync(sourcePath)) {
+        fs.renameSync(sourcePath, targetPath);
+      }
+    } catch {}
+  }
+
+  try {
+    fs.renameSync(logPath, `${logPath}.1`);
+  } catch {}
+}
+
+function appendRotatingLog(logPath, payload, options = {}) {
+  if (!logPath || payload === undefined || payload === null) {
+    return;
+  }
+  ensureDir(path.dirname(logPath));
+  const content =
+    typeof payload === 'string' || Buffer.isBuffer(payload)
+      ? payload
+      : String(payload);
+  const incomingBytes = Buffer.isBuffer(content)
+    ? content.length
+    : Buffer.byteLength(content, 'utf8');
+  const maxBytes = Number.isFinite(options.maxBytes) ? options.maxBytes : 0;
+  const backupCount = Number.isFinite(options.backupCount)
+    ? options.backupCount
+    : 0;
+
+  rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes);
+  try {
+    fs.appendFileSync(logPath, content, Buffer.isBuffer(content) ? undefined : 'utf8');
+  } catch {}
 }
 
 function delay(ms) {
@@ -52,8 +140,12 @@ function waitForProcessExit(child, timeoutMs = 5000) {
 }
 
 module.exports = {
+  appendRotatingLog,
   delay,
   ensureDir,
   normalizeUrl,
+  parseLogBackupCount,
+  parseLogMaxBytes,
+  rotateLogFileIfNeeded,
   waitForProcessExit,
 };

@@ -4,7 +4,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
-const { delay, ensureDir, normalizeUrl, waitForProcessExit } = require('./common');
+const {
+  appendRotatingLog,
+  delay,
+  ensureDir,
+  normalizeUrl,
+  parseLogBackupCount,
+  parseLogMaxBytes,
+  waitForProcessExit,
+} = require('./common');
 
 const PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS = 5 * 60 * 1000;
 const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
@@ -34,10 +42,18 @@ class BackendManager {
     );
     this.backendAutoStart = process.env.ASTRBOT_BACKEND_AUTO_START !== '0';
     this.backendTimeoutMs = parseBackendTimeoutMs(app);
+    this.backendLogMaxBytes = parseLogMaxBytes(
+      process.env.ASTRBOT_BACKEND_LOG_MAX_MB,
+      20,
+    );
+    this.backendLogBackupCount = parseLogBackupCount(
+      process.env.ASTRBOT_BACKEND_LOG_BACKUP_COUNT,
+      3,
+    );
 
     this.backendProcess = null;
     this.backendConfig = null;
-    this.backendLogFd = null;
+    this.backendLogPath = null;
     this.backendLastExitReason = null;
     this.backendStartupFailureReason = null;
     this.backendSpawning = false;
@@ -195,14 +211,14 @@ class BackendManager {
     return Boolean(this.getBackendConfig().cmd);
   }
 
-  closeBackendLogFd() {
-    if (this.backendLogFd === null) {
+  writeBackendLog(payload) {
+    if (!this.backendLogPath) {
       return;
     }
-    try {
-      fs.closeSync(this.backendLogFd);
-    } catch {}
-    this.backendLogFd = null;
+    appendRotatingLog(this.backendLogPath, payload, {
+      maxBytes: this.backendLogMaxBytes,
+      backupCount: this.backendLogBackupCount,
+    });
   }
 
   async pingBackend(timeoutMs = 800) {
@@ -379,61 +395,54 @@ class BackendManager {
     if (backendConfig.webuiDir) {
       env.ASTRBOT_WEBUI_DIR = backendConfig.webuiDir;
     }
+    this.backendLogPath = null;
     if (backendConfig.rootDir) {
       env.ASTRBOT_ROOT = backendConfig.rootDir;
       const logsDir = path.join(backendConfig.rootDir, 'logs');
       ensureDir(logsDir);
-      const logPath = path.join(logsDir, 'backend.log');
-      try {
-        this.backendLogFd = fs.openSync(logPath, 'a');
-      } catch {
-        this.backendLogFd = null;
-      }
+      this.backendLogPath = path.join(logsDir, 'backend.log');
     }
+    const usePipedLogging = Boolean(this.backendLogPath);
 
     this.backendProcess = spawn(backendConfig.cmd, backendConfig.args || [], {
       cwd: backendConfig.cwd,
       env,
       shell: backendConfig.shell,
-      stdio:
-        this.backendLogFd === null
-          ? 'ignore'
-          : ['ignore', this.backendLogFd, this.backendLogFd],
+      stdio: usePipedLogging ? ['ignore', 'pipe', 'pipe'] : 'ignore',
       windowsHide: true,
     });
 
-    if (this.backendLogFd !== null) {
+    if (usePipedLogging && this.backendProcess.stdout && this.backendProcess.stderr) {
+      this.backendProcess.stdout.on('data', (chunk) => {
+        this.writeBackendLog(chunk);
+      });
+      this.backendProcess.stderr.on('data', (chunk) => {
+        this.writeBackendLog(chunk);
+      });
+    }
+
+    if (usePipedLogging) {
       const launchLine = [backendConfig.cmd, ...(backendConfig.args || [])]
         .map((item) => JSON.stringify(item))
         .join(' ');
-      try {
-        fs.writeSync(
-          this.backendLogFd,
-          `[${new Date().toISOString()}] [Electron] Start backend ${launchLine}\n`,
-        );
-      } catch {}
+      this.writeBackendLog(
+        `[${new Date().toISOString()}] [Electron] Start backend ${launchLine}\n`,
+      );
     }
 
     this.backendProcess.on('error', (error) => {
       this.backendLastExitReason =
         error instanceof Error ? error.message : String(error);
-      if (this.backendLogFd !== null) {
-        try {
-          fs.writeSync(
-            this.backendLogFd,
-            `[${new Date().toISOString()}] [Electron] Backend spawn error: ${
-              error instanceof Error ? error.message : String(error)
-            }\n`,
-          );
-        } catch {}
-      }
-      this.closeBackendLogFd();
+      this.writeBackendLog(
+        `[${new Date().toISOString()}] [Electron] Backend spawn error: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
       this.backendProcess = null;
     });
 
     this.backendProcess.on('exit', (code, signal) => {
       this.backendLastExitReason = `Backend process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}).`;
-      this.closeBackendLogFd();
       this.backendProcess = null;
     });
   }
@@ -506,7 +515,6 @@ class BackendManager {
         await waitForProcessExit(processToStop, 1500);
       }
     }
-    this.closeBackendLogFd();
   }
 
   findListeningPidsOnWindows(port) {
