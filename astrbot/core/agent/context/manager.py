@@ -55,7 +55,7 @@ class ContextManager:
         try:
             result = messages
 
-            # 1. 基于轮次的截断 (Enforce max turns)
+            # 1. ???????(Enforce max turns)
             if self.config.enforce_max_turns != -1:
                 result = self.truncator.truncate_by_turns(
                     result,
@@ -63,7 +63,7 @@ class ContextManager:
                     drop_turns=self.config.truncate_turns,
                 )
 
-            # 2. 基于 token 的压缩
+            # 2. ?? token ???
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
                     result, trusted_token_usage

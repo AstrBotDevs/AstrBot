@@ -91,6 +91,8 @@ class MainAgentBuildConfig:
     """The number of most recent turns to keep during llm_compress strategy."""
     llm_compress_provider_id: str = ""
     """The provider ID for the LLM used in context compression."""
+    llm_compress_use_compact_api: bool = True
+    """Whether to prefer provider native compact API when available."""
     max_context_length: int = -1
     """The maximum number of turns to keep in context. -1 means no limit.
     This enforce max turns before compression"""
@@ -742,17 +744,22 @@ async def _handle_webchat(
     if not user_prompt or not chatui_session_id or not session or session.display_name:
         return
 
-    llm_resp = await prov.text_chat(
-        system_prompt=(
-            "You are a conversation title generator. "
-            "Generate a concise title in the same language as the user’s input, "
-            "no more than 10 words, capturing only the core topic."
-            "If the input is a greeting, small talk, or has no clear topic, "
-            "(e.g., “hi”, “hello”, “haha”), return <None>. "
-            "Output only the title itself or <None>, with no explanations."
-        ),
-        prompt=f"Generate a concise title for the following user query:\n{user_prompt}",
-    )
+    try:
+        llm_resp = await prov.text_chat(
+            system_prompt=(
+                "You are a conversation title generator. "
+                "Generate a concise title in the same language as the user's input, "
+                "no more than 10 words, capturing only the core topic."
+                "If the input is a greeting, small talk, or has no clear topic, "
+                '(e.g., "hi", "hello", "haha"), return <None>. '
+                "Output only the title itself or <None>, with no explanations."
+            ),
+            prompt=f"Generate a concise title for the following user query:\n{user_prompt}",
+        )
+    except Exception as e:
+        logger.warning("Failed to generate chatui title: %s", e)
+        return
+
     if llm_resp and llm_resp.completion_text:
         title = llm_resp.completion_text.strip()
         if not title or "<None>" in title:
@@ -807,26 +814,33 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
 
 
 def _get_compress_provider(
-    config: MainAgentBuildConfig, plugin_context: Context
+    config: MainAgentBuildConfig,
+    plugin_context: Context,
+    active_provider: Provider | None,
 ) -> Provider | None:
-    if not config.llm_compress_provider_id:
-        return None
     if config.context_limit_reached_strategy != "llm_compress":
         return None
-    provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
-    if provider is None:
+
+    _ = active_provider
+
+    if not config.llm_compress_provider_id:
+        return None
+
+    selected_provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+    if selected_provider is None:
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "Configured llm_compress_provider_id not found: %s. Skip compression.",
             config.llm_compress_provider_id,
         )
         return None
-    if not isinstance(provider, Provider):
+    if not isinstance(selected_provider, Provider):
         logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
+            "Configured llm_compress_provider_id is not a Provider: %s. Skip compression.",
             config.llm_compress_provider_id,
         )
         return None
-    return provider
+
+    return selected_provider
 
 
 async def build_main_agent(
@@ -970,7 +984,7 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
-        llm_compress_provider=_get_compress_provider(config, plugin_context),
+        llm_compress_provider=_get_compress_provider(config, plugin_context, provider),
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,

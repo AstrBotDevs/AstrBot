@@ -193,13 +193,49 @@ class LLMSummaryCompressor:
         usage_rate = current_tokens / max_tokens
         return usage_rate > self.compression_threshold
 
+    def _supports_native_compact(self) -> bool:
+        support_native_compact = getattr(self.provider, "supports_native_compact", None)
+        if not callable(support_native_compact):
+            return False
+        try:
+            return bool(support_native_compact())
+        except Exception:
+            return False
+
+    async def _try_native_compact(
+        self,
+        system_messages: list[Message],
+        messages_to_summarize: list[Message],
+        recent_messages: list[Message],
+    ) -> list[Message] | None:
+        compact_context = getattr(self.provider, "compact_context", None)
+        if not callable(compact_context):
+            return None
+
+        try:
+            compacted_messages = await compact_context(messages_to_summarize)
+        except Exception as e:
+            logger.warning(
+                f"Native compact failed, fallback to summary compression: {e}"
+            )
+            return None
+
+        if not compacted_messages:
+            return None
+
+        result: list[Message] = []
+        result.extend(system_messages)
+        result.extend(compacted_messages)
+        result.extend(recent_messages)
+        return result
+
     async def __call__(self, messages: list[Message]) -> list[Message]:
         """Use LLM to generate a summary of the conversation history.
 
         Process:
         1. Divide messages: keep the system message and the latest N messages.
-        2. Send the old messages + the instruction message to the LLM.
-        3. Reconstruct the message list: [system message, summary message, latest messages].
+        2. Prefer native compact when provider supports it.
+        3. Fallback to LLM summary and reconstruct message list.
         """
         if len(messages) <= self.keep_recent + 1:
             return messages
@@ -207,15 +243,22 @@ class LLMSummaryCompressor:
         system_messages, messages_to_summarize, recent_messages = split_history(
             messages, self.keep_recent
         )
-
         if not messages_to_summarize:
             return messages
 
-        # build payload
+        native_compact_supported = self._supports_native_compact()
+
+        if native_compact_supported:
+            compacted = await self._try_native_compact(
+                system_messages,
+                messages_to_summarize,
+                recent_messages,
+            )
+            if compacted is not None:
+                return compacted
         instruction_message = Message(role="user", content=self.instruction_text)
         llm_payload = messages_to_summarize + [instruction_message]
 
-        # generate summary
         try:
             response = await self.provider.text_chat(contexts=llm_payload)
             summary_content = response.completion_text
@@ -223,8 +266,7 @@ class LLMSummaryCompressor:
             logger.error(f"Failed to generate summary: {e}")
             return messages
 
-        # build result
-        result = []
+        result: list[Message] = []
         result.extend(system_messages)
 
         result.append(

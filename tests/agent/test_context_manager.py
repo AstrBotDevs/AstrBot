@@ -344,6 +344,82 @@ class TestContextManager:
             # Truncator should be called first
             mock_truncate.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_native_compact_is_preferred_when_available(self):
+        """Native compact should be used before summary generation when available."""
+
+        class NativeCompactProvider(MockProvider):
+            def __init__(self):
+                super().__init__()
+                self.compact_context = AsyncMock(
+                    return_value=[Message(role="user", content="compacted")]
+                )
+                self.text_chat = AsyncMock()
+
+            def supports_native_compact(self):
+                return True
+
+        provider = NativeCompactProvider()
+        config = ContextConfig(
+            max_context_tokens=10,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+            llm_compress_keep_recent=2,
+        )
+        manager = ContextManager(config)
+
+        messages = self.create_messages(8)
+
+        with patch.object(
+            manager.compressor, "should_compress", side_effect=[True, False]
+        ):
+            result = await manager.process(messages)
+
+        provider.compact_context.assert_awaited_once()
+        provider.text_chat.assert_not_called()
+        assert any(msg.content == "compacted" for msg in result)
+
+    @pytest.mark.asyncio
+    async def test_native_compact_fallback_to_summary_on_failure(self):
+        """Fallback to summary compression when native compact fails."""
+
+        class FailingCompactProvider(MockProvider):
+            def __init__(self):
+                super().__init__()
+                self.compact_context = AsyncMock(
+                    side_effect=RuntimeError("compact failed")
+                )
+                self.text_chat = AsyncMock(
+                    return_value=LLMResponse(
+                        role="assistant",
+                        completion_text="summary fallback",
+                    )
+                )
+
+            def supports_native_compact(self):
+                return True
+
+        provider = FailingCompactProvider()
+        config = ContextConfig(
+            max_context_tokens=10,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+            llm_compress_keep_recent=2,
+        )
+        manager = ContextManager(config)
+
+        messages = self.create_messages(8)
+
+        with patch.object(
+            manager.compressor, "should_compress", side_effect=[True, False]
+        ):
+            result = await manager.process(messages)
+
+        provider.compact_context.assert_awaited_once()
+        provider.text_chat.assert_awaited_once()
+        assert any(
+            msg.content == "Our previous history conversation summary: summary fallback"
+            for msg in result
+        )
+
     # ==================== Error Handling Tests ====================
 
     @pytest.mark.asyncio

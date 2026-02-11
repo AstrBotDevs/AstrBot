@@ -211,6 +211,10 @@
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
           "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+        },
+        "llm_compress_use_compact_api": {
+          "description": "Prefer compact API when available",
+          "hint": "When enabled, local runner first tries provider native compact API and falls back to LLM summary compression."
         }
       }
     },

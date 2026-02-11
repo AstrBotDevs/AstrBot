@@ -214,6 +214,10 @@
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
           "hint": "留空时将降级为\"按对话轮数截断\"的策略。"
+        },
+        "llm_compress_use_compact_api": {
+          "description": "\u4f18\u5148\u4f7f\u7528 compact \u63a5\u53e3",
+          "hint": "\u542f\u7528\u540e\u4f1a\u4f18\u5148\u8c03\u7528\u5f53\u524d\u4f1a\u8bdd\u4f9b\u5e94\u5546\u7684 native compact \u63a5\u53e3\uff1b\u82e5\u4e0d\u652f\u6301\u5219\u56de\u9000\u5230\u5e38\u89c4 LLM \u538b\u7f29\u3002"
         }
       }
     },
