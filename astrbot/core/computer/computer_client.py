@@ -40,15 +40,15 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         upload_result = await booter.upload_file(zip_path, str(remote_zip))
         if not upload_result.get("success", False):
             raise RuntimeError("Failed to upload skills bundle to sandbox.")
-        # Use -n flag to never overwrite existing files, fallback to Python if unzip unavailable
+        # Always overwrite with local source of truth to avoid stale skills in long-lived sandboxes.
         await booter.shell.exec(
-            f"unzip -n {remote_zip} -d {SANDBOX_SKILLS_ROOT} || "
-            f"python3 -c \"import zipfile, os, pathlib; z=zipfile.ZipFile('{remote_zip}'); "
-            f"[z.extract(m, '{SANDBOX_SKILLS_ROOT}') for m in z.namelist() "
-            f"if not os.path.exists(os.path.join('{SANDBOX_SKILLS_ROOT}', m))]\" || "
-            f"python -c \"import zipfile, os, pathlib; z=zipfile.ZipFile('{remote_zip}'); "
-            f"[z.extract(m, '{SANDBOX_SKILLS_ROOT}') for m in z.namelist() "
-            f"if not os.path.exists(os.path.join('{SANDBOX_SKILLS_ROOT}', m))]\"; "
+            f"mkdir -p {SANDBOX_SKILLS_ROOT} && "
+            f"rm -rf {SANDBOX_SKILLS_ROOT}/* && "
+            f"(unzip -o {remote_zip} -d {SANDBOX_SKILLS_ROOT} || "
+            f"python3 -c \"import zipfile; z=zipfile.ZipFile('{remote_zip}'); "
+            f"z.extractall('{SANDBOX_SKILLS_ROOT}')\" || "
+            f"python -c \"import zipfile; z=zipfile.ZipFile('{remote_zip}'); "
+            f"z.extractall('{SANDBOX_SKILLS_ROOT}')\"); "
             f"rm -f {remote_zip}"
         )
     finally:
@@ -66,7 +66,7 @@ async def get_booter(
     config = context.get_config(umo=session_id)
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    booter_type = sandbox_cfg.get("booter", "shipyard")
+    booter_type = sandbox_cfg.get("booter", "shipyard_neo")
 
     if session_id in session_booter:
         booter = session_booter[session_id]
@@ -86,6 +86,19 @@ async def get_booter(
             client = ShipyardBooter(
                 endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions
             )
+        elif booter_type == "shipyard_neo":
+            from .booters.shipyard_neo import ShipyardNeoBooter
+
+            ep = sandbox_cfg.get("shipyard_neo_endpoint", "")
+            token = sandbox_cfg.get("shipyard_neo_access_token", "")
+            ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
+            profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
+            client = ShipyardNeoBooter(
+                endpoint_url=ep,
+                access_token=token,
+                profile=profile,
+                ttl=ttl,
+            )
         elif booter_type == "boxlite":
             from .booters.boxlite import BoxliteBooter
 
@@ -102,6 +115,21 @@ async def get_booter(
 
         session_booter[session_id] = client
     return session_booter[session_id]
+
+
+async def sync_skills_to_active_sandboxes() -> None:
+    """Best-effort skills synchronization for all active sandbox sessions."""
+    for session_id, booter in list(session_booter.items()):
+        try:
+            if not await booter.available():
+                continue
+            await _sync_skills_to_sandbox(booter)
+        except Exception as e:
+            logger.warning(
+                "Failed to sync skills to sandbox for session %s: %s",
+                session_id,
+                e,
+            )
 
 
 def get_local_booter() -> ComputerBooter:

@@ -120,11 +120,15 @@ DEFAULT_CONFIG = {
         },
         "computer_use_runtime": "local",
         "sandbox": {
-            "booter": "shipyard",
+            "booter": "shipyard_neo",
             "shipyard_endpoint": "",
             "shipyard_access_token": "",
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
+            "shipyard_neo_endpoint": "",
+            "shipyard_neo_access_token": "",
+            "shipyard_neo_profile": "python-default",
+            "shipyard_neo_ttl": 3600,
         },
     },
     # SubAgent orchestrator mode:
@@ -2674,10 +2678,46 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard"],
-                        "labels": ["Shipyard"],
+                        "options": ["shipyard_neo", "shipyard"],
+                        "labels": ["Shipyard Neo", "Shipyard"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_endpoint": {
+                        "description": "Shipyard Neo API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard Neo(Bay) 服务的 API 访问地址。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_access_token": {
+                        "description": "Shipyard Neo Access Token",
+                        "type": "string",
+                        "hint": "用于访问 Shipyard Neo(Bay) 的访问令牌。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_profile": {
+                        "description": "Shipyard Neo Profile",
+                        "type": "string",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_ttl": {
+                        "description": "Shipyard Neo Sandbox TTL",
+                        "type": "int",
+                        "hint": "Shipyard Neo 沙箱生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
                         },
                     },
                     "provider_settings.sandbox.shipyard_endpoint": {
