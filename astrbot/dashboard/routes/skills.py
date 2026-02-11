@@ -296,7 +296,9 @@ class SkillsRoute(Route):
                 endpoint_url=endpoint,
                 access_token=access_token,
             ) as client:
-                release = await client.skills.promote_candidate(candidate_id, stage=stage)
+                release = await client.skills.promote_candidate(
+                    candidate_id, stage=stage
+                )
                 release_json = _to_jsonable(release)
 
                 sync_json = None
@@ -337,7 +339,9 @@ class SkillsRoute(Route):
                 except Exception:
                     logger.warning("Failed to sync skills to active sandboxes.")
 
-                return Response().ok({"release": release_json, "sync": sync_json}).__dict__
+                return (
+                    Response().ok({"release": release_json, "sync": sync_json}).__dict__
+                )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__

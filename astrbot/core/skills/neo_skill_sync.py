@@ -136,7 +136,9 @@ class NeoSkillSyncManager:
         page_json = _to_jsonable(page)
         items = page_json.get("items", [])
         if not isinstance(items, list) or not items:
-            raise ValueError(f"No active stable release found for skill_key: {skill_key}")
+            raise ValueError(
+                f"No active stable release found for skill_key: {skill_key}"
+            )
         if not isinstance(items[0], dict):
             raise ValueError("Unexpected release payload format.")
         return items[0]
@@ -152,7 +154,9 @@ class NeoSkillSyncManager:
         if release_id:
             release = await self._find_release(client, release_id=release_id)
         elif skill_key:
-            release = await self._find_active_stable_release(client, skill_key=skill_key)
+            release = await self._find_active_stable_release(
+                client, skill_key=skill_key
+            )
         else:
             raise ValueError("release_id or skill_key is required for sync.")
 

@@ -27,13 +27,13 @@ def _to_json_text(data: Any) -> str:
 
 def _ensure_admin(context: ContextWrapper[AstrAgentContext]) -> str | None:
     if context.context.event.role != "admin":
-        return (
-            "error: Permission denied. Skill lifecycle tools are only allowed for admin users."
-        )
+        return "error: Permission denied. Skill lifecycle tools are only allowed for admin users."
     return None
 
 
-async def _get_neo_context(context: ContextWrapper[AstrAgentContext]) -> tuple[Any, Any]:
+async def _get_neo_context(
+    context: ContextWrapper[AstrAgentContext],
+) -> tuple[Any, Any]:
     booter = await get_booter(
         context.context.context,
         context.context.event.unified_msg_origin,

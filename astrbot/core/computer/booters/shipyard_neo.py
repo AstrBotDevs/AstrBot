@@ -95,9 +95,7 @@ class NeoShellComponent(ShellComponent):
             run_command = f"{env_prefix} {run_command}"
 
         if background:
-            run_command = (
-                f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
-            )
+            run_command = f"nohup sh -lc {shlex.quote(run_command)} >/tmp/astrbot_bg.log 2>&1 & echo $!"
 
         result = await self._sandbox.shell.exec(
             run_command,
