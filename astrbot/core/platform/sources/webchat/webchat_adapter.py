@@ -221,4 +221,3 @@ class WebChatAdapter(Platform):
 
     async def terminate(self) -> None:
         self._shutdown_event.set()
-        await self._webchat_queue_mgr.clear_listener()
