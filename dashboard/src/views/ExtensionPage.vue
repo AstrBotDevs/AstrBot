@@ -357,17 +357,53 @@ const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
   setTimeout(resetLoadingDialog, timeToClose);
 };
 
+const failedPluginsDict = ref({});
+
 const getExtensions = async () => {
   loading_.value = true;
   try {
-    const res = await axios.get("/api/plugin/get");
+    const res = await axios.get("/api/plugin/get");   
     Object.assign(extension_data, res.data);
+    
+    const failRes = await axios.get("/api/plugin/source/get-failed-plugins");    
+    failedPluginsDict.value = failRes.data.data || {};
+    
     checkUpdate();
   } catch (err) {
     toast(err, "error");
   } finally {
     loading_.value = false;
   }
+};
+
+const handleReloadAllFailed = async () => {
+    const dirNames = Object.keys(failedPluginsDict.value);
+    if (dirNames.length === 0) {
+        toast("没有需要重载的失败插件", "info");
+        return;
+    }
+
+    loading_.value = true;
+    try {
+        const promises = dirNames.map(dir => 
+            axios.post("/api/plugin/reload-failed", { dir_name: dir })
+        );
+        await Promise.all(promises);
+        
+        toast("已尝试重载所有失败插件", "success");
+        
+        // 清空 message 关闭对话框
+        extension_data.message = "";
+        
+        // 刷新列表
+        await getExtensions();
+        
+    } catch (e) {
+        console.error("重载失败:", e);
+        toast("批量重载过程中出现错误", "error");
+    } finally {
+        loading_.value = false;
+    }
 };
 
 const checkUpdate = () => {
@@ -1257,6 +1293,15 @@ watch(activeTab, (newTab) => {
                           </p>
                         </v-card-text>
                         <v-card-actions>
+                          <v-btn
+                              
+                              color="error"
+                              variant="tonal"
+                              prepend-icon="mdi-refresh"
+                              @click="handleReloadAllFailed(isActive)"
+                          >
+                              尝试一键重载修复
+                          </v-btn>
                           <v-spacer></v-spacer>
                           <v-btn
                             color="primary"
