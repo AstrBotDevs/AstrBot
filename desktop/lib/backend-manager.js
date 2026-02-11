@@ -6,8 +6,6 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { BufferedRotatingLogger } = require('./buffered-rotating-logger');
 const {
-  LOG_ROTATION_DEFAULT_BACKUP_COUNT,
-  LOG_ROTATION_DEFAULT_MAX_MB,
   delay,
   ensureDir,
   normalizeUrl,
@@ -48,11 +46,9 @@ class BackendManager {
     this.backendTimeoutMs = parseBackendTimeoutMs(app);
     this.backendLogMaxBytes = parseLogMaxBytes(
       process.env.ASTRBOT_BACKEND_LOG_MAX_MB,
-      LOG_ROTATION_DEFAULT_MAX_MB,
     );
     this.backendLogBackupCount = parseLogBackupCount(
       process.env.ASTRBOT_BACKEND_LOG_BACKUP_COUNT,
-      LOG_ROTATION_DEFAULT_BACKUP_COUNT,
     );
 
     this.backendProcess = null;
