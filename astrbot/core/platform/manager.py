@@ -242,21 +242,26 @@ class PlatformManager:
             await self._stop_platform_task(client_id)
 
     async def terminate(self) -> None:
+        terminated_client_ids: set[str] = set()
         for platform_id in list(self._inst_map.keys()):
+            info = self._inst_map.get(platform_id)
+            if info:
+                terminated_client_ids.add(info["client_id"])
             await self.terminate_platform(platform_id)
 
         for inst in list(self.platform_insts):
+            client_id = inst.client_self_id
+            if client_id in terminated_client_ids:
+                continue
             try:
                 if getattr(inst, "terminate", None):
                     await inst.terminate()
             finally:
-                await self._stop_platform_task(inst.client_self_id)
+                await self._stop_platform_task(client_id)
 
         self.platform_insts.clear()
         self._inst_map.clear()
-
-        for client_id in list(self._platform_tasks.keys()):
-            await self._stop_platform_task(client_id)
+        self._platform_tasks.clear()
 
     def get_insts(self):
         return self.platform_insts

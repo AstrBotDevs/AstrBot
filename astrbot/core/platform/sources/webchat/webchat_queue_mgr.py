@@ -87,12 +87,17 @@ class WebChatQueueMgr:
         for conversation_id in list(self.queues.keys()):
             self._start_listener_if_needed(conversation_id)
 
-    def clear_listener(self):
+    async def clear_listener(self) -> None:
         self._listener_callback = None
         for close_event in self._queue_close_events.values():
             close_event.set()
-        for task in self._listener_tasks.values():
+        self._queue_close_events.clear()
+
+        listener_tasks = list(self._listener_tasks.values())
+        for task in listener_tasks:
             task.cancel()
+        if listener_tasks:
+            await asyncio.gather(*listener_tasks, return_exceptions=True)
         self._listener_tasks.clear()
 
     def _start_listener_if_needed(self, conversation_id: str):

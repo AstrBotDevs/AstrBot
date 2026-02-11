@@ -42,7 +42,7 @@ class QueueListener:
         try:
             await self.stop_event.wait()
         finally:
-            self.webchat_queue_mgr.clear_listener()
+            await self.webchat_queue_mgr.clear_listener()
 
 
 @register_platform_adapter("webchat", "webchat")
@@ -220,4 +220,4 @@ class WebChatAdapter(Platform):
 
     async def terminate(self) -> None:
         self._shutdown_event.set()
-        webchat_queue_mgr.clear_listener()
+        await webchat_queue_mgr.clear_listener()
