@@ -86,19 +86,19 @@ class PluginRoute(Route):
         try:
             data = await request.get_json()
             dir_name = data.get("dir_name") # 这里拿的是目录名，不是插件名
-            
+
             if not dir_name:
                 return Response().error("缺少插件目录名").__dict__
 
             # 调用 star_manager.py 中的函数
             # 注意：传入的是目录名
             success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
-            
+
             if success:
                 return Response().ok(None, f"插件 {dir_name} 重载成功。").__dict__
             else:
                 return Response().error(f"重载失败: {err}").__dict__
-                
+
         except Exception as e:
             logger.error(f"/api/plugin/reload-failed: {traceback.format_exc()}")
             return Response().error(str(e)).__dict__
@@ -361,7 +361,7 @@ class PluginRoute(Route):
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
             .__dict__
         )
-    
+
     async def get_failed_plugins(self):
         """专门获取加载失败的插件列表(字典格式)"""
         return Response().ok(self.plugin_manager.failed_plugin_dict).__dict__
