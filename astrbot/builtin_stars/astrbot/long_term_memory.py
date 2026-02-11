@@ -24,7 +24,9 @@ class LongTermMemory:
         """记录群成员的群聊记录"""
 
     def cfg(self, event: AstrMessageEvent):
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg = self.context.get_config_by_id(
+            event.chain_config.config_id if event.chain_config else None,
+        )
         try:
             max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
         except BaseException as e:
@@ -68,9 +70,15 @@ class LongTermMemory:
         image_url: str,
         image_caption_provider_id: str,
         image_caption_prompt: str,
+        event: AstrMessageEvent | None = None,
     ) -> str:
         if not image_caption_provider_id:
-            provider = self.context.get_using_provider()
+            provider = (
+                self.context.get_chat_provider_for_event(event) if event else None
+            )
+            if provider is None:
+                providers = self.context.get_all_providers()
+                provider = providers[0] if providers else None
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
@@ -133,6 +141,7 @@ class LongTermMemory:
                                 url,
                                 cfg["image_caption_provider_id"],
                                 cfg["image_caption_prompt"],
+                                event,
                             )
                             parts.append(f" [Image: {caption}]")
                         except Exception as e:

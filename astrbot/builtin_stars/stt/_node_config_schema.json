@@ -1,0 +1,8 @@
+﻿{
+  "provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "覆盖此节点的语音转文字（STT）提供商 ID",
+    "_special": "select_provider_stt"
+  }
+}

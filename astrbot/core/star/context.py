@@ -21,7 +21,7 @@ from astrbot.core.platform import Platform
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
-from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
@@ -239,7 +239,11 @@ class Context:
             raise Exception("Agent did not produce a final LLM response")
         return llm_resp
 
-    async def get_current_chat_provider_id(self, umo: str) -> str:
+    async def get_current_chat_provider_id(
+        self,
+        umo: str,
+        event: AstrMessageEvent | None = None,
+    ) -> str:
         """获取当前使用的聊天模型 Provider ID。
 
         Args:
@@ -251,10 +255,122 @@ class Context:
         Raises:
             ProviderNotFoundError: 未找到。
         """
-        prov = self.get_using_provider(umo)
+        prov: Provider | None = None
+        if event is not None:
+            prov = self.get_chat_provider_for_event(event)
+        if not prov:
+            prov = self.get_using_provider(umo)
         if not prov:
             raise ProviderNotFoundError("Provider not found")
         return prov.meta().id
+
+    def _resolve_provider_for_event(
+        self,
+        event: AstrMessageEvent,
+        *,
+        expected_type: type,
+        default_provider_key: str,
+        kind_name: str,
+        providers_getter: Callable[[], list],
+    ):
+        selected_provider = event.get_extra("selected_provider")
+        if isinstance(selected_provider, str) and selected_provider:
+            provider = self.get_provider_by_id(selected_provider)
+            if isinstance(provider, expected_type):
+                return provider
+            if provider is None:
+                logger.error(
+                    "Configured selected_provider is not found: %s",
+                    selected_provider,
+                )
+            else:
+                logger.warning(
+                    "selected_provider is not a %s provider: %s",
+                    kind_name,
+                    selected_provider,
+                )
+
+        node_config = event.node_config or {}
+        if isinstance(node_config, dict):
+            node_provider_id = str(node_config.get("provider_id") or "").strip()
+            if node_provider_id:
+                provider = self.get_provider_by_id(node_provider_id)
+                if isinstance(provider, expected_type):
+                    return provider
+                if provider is None:
+                    logger.error(
+                        "Configured %s provider is not found: %s",
+                        kind_name,
+                        node_provider_id,
+                    )
+                else:
+                    logger.warning(
+                        "Configured provider_id is not a %s provider: %s",
+                        kind_name,
+                        node_provider_id,
+                    )
+                return None
+
+        chain_config_id = event.chain_config.config_id if event.chain_config else None
+        runtime_config = self.get_config_by_id(chain_config_id)
+        provider_settings = runtime_config.get("provider_settings", {})
+        default_provider_id = str(
+            provider_settings.get(default_provider_key) or ""
+        ).strip()
+
+        if default_provider_id:
+            provider = self.get_provider_by_id(default_provider_id)
+            if isinstance(provider, expected_type):
+                return provider
+            if provider is None:
+                logger.error(
+                    "Configured %s is not found: %s",
+                    default_provider_key,
+                    default_provider_id,
+                )
+            else:
+                logger.warning(
+                    "Configured %s is not a %s provider: %s",
+                    default_provider_key,
+                    kind_name,
+                    default_provider_id,
+                )
+
+        providers = providers_getter()
+        return providers[0] if providers else None
+
+    def get_chat_provider_for_event(self, event: AstrMessageEvent) -> Provider | None:
+        """Resolve chat provider for a specific event with node-aware rules."""
+        provider = self._resolve_provider_for_event(
+            event,
+            expected_type=Provider,
+            default_provider_key="default_provider_id",
+            kind_name="chat",
+            providers_getter=self.get_all_providers,
+        )
+        return provider if isinstance(provider, Provider) else None
+
+    def get_tts_provider_for_event(self, event: AstrMessageEvent) -> TTSProvider | None:
+        """Resolve TTS provider for a specific event with node-aware rules."""
+        provider = self._resolve_provider_for_event(
+            event,
+            expected_type=TTSProvider,
+            default_provider_key="default_tts_provider_id",
+            kind_name="tts",
+            providers_getter=self.get_all_tts_providers,
+        )
+        return provider if isinstance(provider, TTSProvider) else None
+
+    def get_stt_provider_for_event(self, event: AstrMessageEvent) -> STTProvider | None:
+        """Resolve STT provider for a specific event with node-aware rules."""
+        provider = self._resolve_provider_for_event(
+            event,
+            expected_type=STTProvider,
+            default_provider_key="default_stt_provider_id",
+            kind_name="stt",
+            providers_getter=self.get_all_stt_providers,
+        )
+        return provider if isinstance(provider, STTProvider) else None
 
     def get_registered_star(self, star_name: str) -> StarMetadata | None:
         """根据插件名获取插件的 Metadata"""
@@ -335,6 +451,13 @@ class Context:
         """获取所有用于 Embedding 任务的 Provider。"""
         return self.provider_manager.embedding_provider_insts
 
+    @deprecated(
+        version="5.0",
+        reason=(
+            "Use get_chat_provider_for_event(event) for node-aware resolution. "
+            "This fallback only uses session config defaults."
+        ),
+    )
     def get_using_provider(self, umo: str | None = None) -> Provider | None:
         """获取当前使用的用于文本生成任务的 LLM Provider(Chat_Completion 类型)。
 
@@ -348,18 +471,35 @@ class Context:
         Raises:
             ValueError: 该会话来源配置的的对话模型（提供商）的类型不正确。
         """
-        prov = self.provider_manager.get_using_provider(
-            provider_type=ProviderType.CHAT_COMPLETION,
-            umo=umo,
-        )
-        if prov is None:
-            return None
-        if not isinstance(prov, Provider):
-            raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
-            )
-        return prov
+        config = self.get_config(umo)
+        provider_id = str(
+            config.get("provider_settings", {}).get("default_provider_id") or ""
+        ).strip()
+        if provider_id:
+            prov = self.get_provider_by_id(provider_id)
+            if isinstance(prov, Provider):
+                return prov
+            if prov is None:
+                logger.warning(
+                    "Configured default_provider_id is not found: %s",
+                    provider_id,
+                )
+            else:
+                logger.warning(
+                    "Configured default_provider_id is not a chat provider: %s",
+                    provider_id,
+                )
 
+        providers = self.get_all_providers()
+        return providers[0] if providers else None
+
+    @deprecated(
+        version="5.0",
+        reason=(
+            "Use node-level provider binding or node-aware resolver. "
+            "This fallback only uses session config defaults."
+        ),
+    )
     def get_using_tts_provider(self, umo: str | None = None) -> TTSProvider | None:
         """获取当前使用的用于 TTS 任务的 Provider。
 
@@ -372,14 +512,35 @@ class Context:
         Raises:
             ValueError: 返回的提供者不是 TTSProvider 类型。
         """
-        prov = self.provider_manager.get_using_provider(
-            provider_type=ProviderType.TEXT_TO_SPEECH,
-            umo=umo,
-        )
-        if prov and not isinstance(prov, TTSProvider):
-            raise ValueError("返回的 Provider 不是 TTSProvider 类型")
-        return prov
+        config = self.get_config(umo)
+        provider_id = str(
+            config.get("provider_settings", {}).get("default_tts_provider_id") or ""
+        ).strip()
+        if provider_id:
+            prov = self.get_provider_by_id(provider_id)
+            if isinstance(prov, TTSProvider):
+                return prov
+            if prov is None:
+                logger.warning(
+                    "Configured default_tts_provider_id is not found: %s",
+                    provider_id,
+                )
+            else:
+                logger.warning(
+                    "Configured default_tts_provider_id is not a TTS provider: %s",
+                    provider_id,
+                )
 
+        providers = self.get_all_tts_providers()
+        return providers[0] if providers else None
+
+    @deprecated(
+        version="5.0",
+        reason=(
+            "Use node-level provider binding or node-aware resolver. "
+            "This fallback only uses session config defaults."
+        ),
+    )
     def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
         """获取当前使用的用于 STT 任务的 Provider。
 
@@ -392,13 +553,27 @@ class Context:
         Raises:
             ValueError: 返回的提供者不是 STTProvider 类型。
         """
-        prov = self.provider_manager.get_using_provider(
-            provider_type=ProviderType.SPEECH_TO_TEXT,
-            umo=umo,
-        )
-        if prov and not isinstance(prov, STTProvider):
-            raise ValueError("返回的 Provider 不是 STTProvider 类型")
-        return prov
+        config = self.get_config(umo)
+        provider_id = str(
+            config.get("provider_settings", {}).get("default_stt_provider_id") or ""
+        ).strip()
+        if provider_id:
+            prov = self.get_provider_by_id(provider_id)
+            if isinstance(prov, STTProvider):
+                return prov
+            if prov is None:
+                logger.warning(
+                    "Configured default_stt_provider_id is not found: %s",
+                    provider_id,
+                )
+            else:
+                logger.warning(
+                    "Configured default_stt_provider_id is not a STT provider: %s",
+                    provider_id,
+                )
+
+        providers = self.get_all_stt_providers()
+        return providers[0] if providers else None
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
         """获取 AstrBot 的配置。
@@ -416,6 +591,10 @@ class Context:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def get_config_by_id(self, config_id: str | None) -> AstrBotConfig:
+        """通过配置文件 ID 获取配置，不依赖 umo 映射。"""
+        return self.astrbot_config_mgr.get_conf_by_id(config_id)
 
     async def send_message(
         self,

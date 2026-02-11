@@ -62,8 +62,9 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
 async def get_booter(
     context: Context,
     session_id: str,
+    config_id: str | None = None,
 ) -> ComputerBooter:
-    config = context.get_config(umo=session_id)
+    config = context.get_config_by_id(config_id)
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "shipyard")

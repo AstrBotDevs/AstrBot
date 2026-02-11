@@ -44,9 +44,13 @@ class PersonaManager:
     async def get_default_persona_v3(
         self,
         umo: str | MessageSession | None = None,
+        config_id: str | None = None,
     ) -> Personality:
         """获取默认 persona"""
-        cfg = self.acm.get_conf(umo)
+        if config_id:
+            cfg = self.acm.get_conf_by_id(config_id)
+        else:
+            cfg = self.acm.get_conf(umo)
         default_persona_id = cfg.get("provider_settings", {}).get(
             "default_personality",
             "default",

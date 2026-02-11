@@ -19,7 +19,7 @@
   "chat": "聊天",
   "cron": "未来任务",
   "conversation": "对话数据",
-  "sessionManagement": "自定义规则",
+  "chainManagement": "Chain 路由",
   "console": "平台日志",
   "trace": "追踪",
   "alkaid": "Alkaid",

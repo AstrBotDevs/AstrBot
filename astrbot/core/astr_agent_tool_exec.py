@@ -115,7 +115,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # to the current/default provider resolution.
         prov_id = getattr(
             tool, "provider_id", None
-        ) or await ctx.get_current_chat_provider_id(umo)
+        ) or await ctx.get_current_chat_provider_id(umo, event=event)
 
         # prepare begin dialogs
         contexts = None

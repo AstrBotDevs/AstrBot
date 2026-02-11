@@ -1,0 +1,4 @@
+name: tts
+desc: Builtin text-to-speech pipeline node
+author: AstrBot
+version: 1.0.0

@@ -1,0 +1,4 @@
+name: knowledge_base
+desc: Builtin knowledge base retrieval node for pipeline chains
+author: AstrBot
+version: 1.0.0

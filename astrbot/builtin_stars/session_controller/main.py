@@ -34,7 +34,9 @@ class Main(Star):
         """实现了对只有一个 @ 的消息内容的处理"""
         try:
             messages = event.get_messages()
-            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            cfg = self.context.get_config_by_id(
+                event.chain_config.config_id if event.chain_config else None,
+            )
             p_settings = cfg["platform_settings"]
             wake_prefix = cfg.get("wake_prefix", [])
             if len(messages) == 1:

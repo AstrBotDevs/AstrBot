@@ -1,0 +1,4 @@
+name: t2i
+desc: Builtin text-to-image pipeline node
+author: AstrBot
+version: 1.0.0

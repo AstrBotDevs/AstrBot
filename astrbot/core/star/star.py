@@ -11,7 +11,7 @@ star_map: dict[str, StarMetadata] = {}
 """key 是模块路径，__module__"""
 
 if TYPE_CHECKING:
-    from . import Star
+    from .star_base import Star
 
 
 @dataclass
@@ -60,6 +60,9 @@ class StarMetadata:
 
     logo_path: str | None = None
     """插件 Logo 的路径"""
+
+    node_schema: dict | None = None
+    """Node 参数 Schema，仅对 node 类型插件有效"""
 
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"

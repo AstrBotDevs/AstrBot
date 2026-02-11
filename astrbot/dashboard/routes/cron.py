@@ -98,6 +98,7 @@ class CronRoute(Route):
                         Response().error("run_at must be ISO datetime").__dict__
                     )
 
+            config_id = payload.get("config_id")
             job_payload = {
                 "session": session,
                 "note": note,
@@ -105,6 +106,7 @@ class CronRoute(Route):
                 "provider_id": provider_id,
                 "run_at": run_at,
                 "origin": "api",
+                "config_id": config_id,
             }
 
             job = await cron_mgr.add_active_job(

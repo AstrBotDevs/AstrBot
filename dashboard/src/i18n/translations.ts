@@ -12,7 +12,7 @@ import zhCNShared from './locales/zh-CN/core/shared.json';
 import zhCNChat from './locales/zh-CN/features/chat.json';
 import zhCNExtension from './locales/zh-CN/features/extension.json';
 import zhCNConversation from './locales/zh-CN/features/conversation.json';
-import zhCNSessionManagement from './locales/zh-CN/features/session-management.json';
+import zhCNChainManagement from './locales/zh-CN/features/chain-management.json';
 import zhCNToolUse from './locales/zh-CN/features/tool-use.json';
 import zhCNProvider from './locales/zh-CN/features/provider.json';
 import zhCNPlatform from './locales/zh-CN/features/platform.json';
@@ -53,7 +53,7 @@ import enUSShared from './locales/en-US/core/shared.json';
 import enUSChat from './locales/en-US/features/chat.json';
 import enUSExtension from './locales/en-US/features/extension.json';
 import enUSConversation from './locales/en-US/features/conversation.json';
-import enUSSessionManagement from './locales/en-US/features/session-management.json';
+import enUSChainManagement from './locales/en-US/features/chain-management.json';
 import enUSToolUse from './locales/en-US/features/tool-use.json';
 import enUSProvider from './locales/en-US/features/provider.json';
 import enUSPlatform from './locales/en-US/features/platform.json';
@@ -98,7 +98,7 @@ export const translations = {
       chat: zhCNChat,
       extension: zhCNExtension,
       conversation: zhCNConversation,
-      'session-management': zhCNSessionManagement,
+      'chain-management': zhCNChainManagement,
       tooluse: zhCNToolUse,
       provider: zhCNProvider,
       platform: zhCNPlatform,
@@ -147,7 +147,7 @@ export const translations = {
       chat: enUSChat,
       extension: enUSExtension,
       conversation: enUSConversation,
-      'session-management': enUSSessionManagement,
+      'chain-management': enUSChainManagement,
       tooluse: enUSToolUse,
       provider: enUSProvider,
       platform: enUSPlatform,

@@ -77,6 +77,11 @@ class CreateActiveCronTool(FunctionTool[AstrAgentContext]):
             "sender_id": context.context.event.get_sender_id(),
             "note": note,
             "origin": "tool",
+            "config_id": (
+                context.context.event.chain_config.config_id
+                if context.context.event.chain_config
+                else None
+            ),
         }
 
         job = await cron_mgr.add_active_job(

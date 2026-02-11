@@ -1,0 +1,4 @@
+name: content_safety
+desc: Builtin content safety checks for pipeline chains
+author: AstrBot
+version: 1.0.0

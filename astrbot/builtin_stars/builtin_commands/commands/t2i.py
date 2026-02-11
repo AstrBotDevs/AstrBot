@@ -1,23 +1,38 @@
-"""文本转图片命令"""
+"""Text-to-image command."""
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_T2I,
+    toggle_chain_runtime_flag,
+)
+
+from ._node_binding import get_chain_nodes
 
 
 class T2ICommand:
-    """文本转图片命令类"""
+    """Toggle text-to-image output for the current routed chain."""
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def t2i(self, event: AstrMessageEvent) -> None:
-        """开关文本转图片"""
-        config = self.context.get_config(umo=event.unified_msg_origin)
-        if config["t2i"]:
-            config["t2i"] = False
-            config.save_config()
-            event.set_result(MessageEventResult().message("已关闭文本转图片模式。"))
+    async def t2i(self, event: AstrMessageEvent):
+        chain_config = event.chain_config
+        if not chain_config:
+            event.set_result(MessageEventResult().message("未找到已路由的 Chain。"))
             return
-        config["t2i"] = True
-        config.save_config()
-        event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
+
+        nodes = get_chain_nodes(event, "t2i")
+        if not nodes:
+            event.set_result(
+                MessageEventResult().message("当前 Chain 中没有 T2I 节点。")
+            )
+            return
+
+        enabled = await toggle_chain_runtime_flag(chain_config.chain_id, FEATURE_T2I)
+        status = "开启" if enabled else "关闭"
+        event.set_result(
+            MessageEventResult().message(
+                f"Chain `{chain_config.chain_id}` 的 T2I 功能已{status}（共 {len(nodes)} 个节点）。"
+            )
+        )

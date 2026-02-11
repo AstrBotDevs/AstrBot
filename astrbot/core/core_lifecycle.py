@@ -1,6 +1,6 @@
 """Astrbot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作.
 
-该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus等。
+该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineExecutor、EventBus等。
 该类还负责加载和执行插件, 以及处理事件总线的分发。
 
 工作流程:
@@ -25,7 +25,9 @@ from astrbot.core.cron import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.persona_mgr import PersonaManager
-from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
+from astrbot.core.pipeline.context import PipelineContext
+from astrbot.core.pipeline.engine.executor import PipelineExecutor
+from astrbot.core.pipeline.engine.router import ChainRouter
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
@@ -33,7 +35,6 @@ from astrbot.core.star import PluginManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
-from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
@@ -45,7 +46,7 @@ from .event_bus import EventBus
 class AstrBotCoreLifecycle:
     """AstrBot 核心生命周期管理类, 负责管理 AstrBot 的启动、停止、重启等操作.
 
-    该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、
+    该类负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineExecutor、
     EventBus 等。
     该类还负责加载和执行插件, 以及处理事件总线的分发。
     """
@@ -98,7 +99,7 @@ class AstrBotCoreLifecycle:
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
-        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
+        负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineExecutor、EventBus、AstrBotUpdator等。
         """
         # 初始化日志代理
         logger.info("AstrBot v" + VERSION)
@@ -115,14 +116,12 @@ class AstrBotCoreLifecycle:
 
         await html_renderer.initialize()
 
-        # 初始化 UMOP 配置路由器
-        self.umop_config_router = UmopConfigRouter(sp=sp)
-        await self.umop_config_router.initialize()
+        # 初始化 Chain 配置路由器（用于配置文件选择）
+        self.chain_config_router = ChainRouter()
 
         # 初始化 AstrBot 配置管理器
         self.astrbot_config_mgr = AstrBotConfigManager(
             default_config=self.astrbot_config,
-            ucr=self.umop_config_router,
             sp=sp,
         )
 
@@ -131,12 +130,14 @@ class AstrBotCoreLifecycle:
             await migra(
                 self.db,
                 self.astrbot_config_mgr,
-                self.umop_config_router,
+                sp,
                 self.astrbot_config_mgr,
             )
         except Exception as e:
             logger.error(f"AstrBot migration failed: {e!s}")
             logger.error(traceback.format_exc())
+
+        await self.chain_config_router.load_configs(self.db)
 
         # 初始化事件队列
         self.event_queue = Queue()
@@ -197,8 +198,8 @@ class AstrBotCoreLifecycle:
 
         await self.kb_manager.initialize()
 
-        # 初始化消息事件流水线调度器
-        self.pipeline_scheduler_mapping = await self.load_pipeline_scheduler()
+        # 初始化消息事件流水线执行器
+        self.pipeline_executor_mapping = await self.load_pipeline_executors()
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()
@@ -206,8 +207,9 @@ class AstrBotCoreLifecycle:
         # 初始化事件总线
         self.event_bus = EventBus(
             self.event_queue,
-            self.pipeline_scheduler_mapping,
+            self.pipeline_executor_mapping,
             self.astrbot_config_mgr,
+            self.chain_config_router,
         )
 
         # 记录启动时间
@@ -353,34 +355,37 @@ class AstrBotCoreLifecycle:
             )
         return tasks
 
-    async def load_pipeline_scheduler(self) -> dict[str, PipelineScheduler]:
-        """加载消息事件流水线调度器.
+    async def load_pipeline_executors(self) -> dict[str, PipelineExecutor]:
+        """加载消息事件流水线执行器.
 
         Returns:
-            dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
+            dict[str, PipelineExecutor]: 配置 ID 到流水线执行器的映射
 
         """
         mapping = {}
-        for conf_id, ab_config in self.astrbot_config_mgr.confs.items():
-            scheduler = PipelineScheduler(
-                PipelineContext(ab_config, self.plugin_manager, conf_id),
+        for config_id, ab_config in self.astrbot_config_mgr.confs.items():
+            executor = PipelineExecutor(
+                self.star_context,
+                PipelineContext(
+                    ab_config,
+                    self.plugin_manager,
+                ),
             )
-            await scheduler.initialize()
-            mapping[conf_id] = scheduler
+            await executor.initialize()
+            mapping[config_id] = executor
         return mapping
 
-    async def reload_pipeline_scheduler(self, conf_id: str) -> None:
-        """重新加载消息事件流水线调度器.
-
-        Returns:
-            dict[str, PipelineScheduler]: 平台 ID 到流水线调度器的映射
-
-        """
-        ab_config = self.astrbot_config_mgr.confs.get(conf_id)
+    async def reload_pipeline_executor(self, config_id: str) -> None:
+        """重新加载消息事件流水线执行器."""
+        ab_config = self.astrbot_config_mgr.confs.get(config_id)
         if not ab_config:
-            raise ValueError(f"配置文件 {conf_id} 不存在")
-        scheduler = PipelineScheduler(
-            PipelineContext(ab_config, self.plugin_manager, conf_id),
+            raise ValueError(f"配置文件 {config_id} 不存在")
+        executor = PipelineExecutor(
+            self.star_context,
+            PipelineContext(
+                ab_config,
+                self.plugin_manager,
+            ),
         )
-        await scheduler.initialize()
-        self.pipeline_scheduler_mapping[conf_id] = scheduler
+        await executor.initialize()
+        self.pipeline_executor_mapping[config_id] = executor
