@@ -21,18 +21,32 @@ from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.astr_main_agent_resources import (
+    ANNOTATE_EXECUTION_TOOL,
+    BROWSER_BATCH_EXEC_TOOL,
+    BROWSER_EXEC_TOOL,
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+    CREATE_SKILL_CANDIDATE_TOOL,
+    CREATE_SKILL_PAYLOAD_TOOL,
+    EVALUATE_SKILL_CANDIDATE_TOOL,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
+    GET_EXECUTION_HISTORY_TOOL,
+    GET_SKILL_PAYLOAD_TOOL,
     KNOWLEDGE_BASE_QUERY_TOOL,
+    LIST_SKILL_CANDIDATES_TOOL,
+    LIST_SKILL_RELEASES_TOOL,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
     LOCAL_EXECUTE_SHELL_TOOL,
     LOCAL_PYTHON_TOOL,
+    PROMOTE_SKILL_CANDIDATE_TOOL,
     PYTHON_TOOL,
+    ROLLBACK_SKILL_RELEASE_TOOL,
+    RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
     SEND_MESSAGE_TO_USER_TOOL,
+    SYNC_SKILL_RELEASE_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
     retrieve_knowledge_base,
@@ -781,9 +795,11 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 def _apply_sandbox_tools(
     config: MainAgentBuildConfig, req: ProviderRequest, session_id: str
 ) -> None:
+    _ = session_id
     if req.func_tool is None:
         req.func_tool = ToolSet()
-    if config.sandbox_cfg.get("booter") == "shipyard":
+    booter = config.sandbox_cfg.get("booter", "shipyard_neo")
+    if booter == "shipyard":
         ep = config.sandbox_cfg.get("shipyard_endpoint", "")
         at = config.sandbox_cfg.get("shipyard_access_token", "")
         if not ep or not at:
@@ -791,10 +807,28 @@ def _apply_sandbox_tools(
             return
         os.environ["SHIPYARD_ENDPOINT"] = ep
         os.environ["SHIPYARD_ACCESS_TOKEN"] = at
+
     req.func_tool.add_tool(EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(PYTHON_TOOL)
     req.func_tool.add_tool(FILE_UPLOAD_TOOL)
     req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
+
+    if booter == "shipyard_neo":
+        req.func_tool.add_tool(BROWSER_EXEC_TOOL)
+        req.func_tool.add_tool(BROWSER_BATCH_EXEC_TOOL)
+        req.func_tool.add_tool(RUN_BROWSER_SKILL_TOOL)
+        req.func_tool.add_tool(GET_EXECUTION_HISTORY_TOOL)
+        req.func_tool.add_tool(ANNOTATE_EXECUTION_TOOL)
+        req.func_tool.add_tool(CREATE_SKILL_PAYLOAD_TOOL)
+        req.func_tool.add_tool(GET_SKILL_PAYLOAD_TOOL)
+        req.func_tool.add_tool(CREATE_SKILL_CANDIDATE_TOOL)
+        req.func_tool.add_tool(LIST_SKILL_CANDIDATES_TOOL)
+        req.func_tool.add_tool(EVALUATE_SKILL_CANDIDATE_TOOL)
+        req.func_tool.add_tool(PROMOTE_SKILL_CANDIDATE_TOOL)
+        req.func_tool.add_tool(LIST_SKILL_RELEASES_TOOL)
+        req.func_tool.add_tool(ROLLBACK_SKILL_RELEASE_TOOL)
+        req.func_tool.add_tool(SYNC_SKILL_RELEASE_TOOL)
+
     req.system_prompt += f"\n{SANDBOX_MODE_PROMPT}\n"
 
 
