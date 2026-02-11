@@ -403,6 +403,15 @@ class ChatRoute(Route):
                         streaming = result.get("streaming", False)
                         chain_type = result.get("chain_type")
 
+                        if (
+                            enable_streaming
+                            and msg_type == "plain"
+                            and chain_type in {"tool_call", "tool_call_result"}
+                            and not streaming
+                        ):
+                            result["streaming"] = True
+                            streaming = True
+
                         if chain_type == "agent_stats":
                             stats_info = {
                                 "type": "agent_stats",

@@ -659,24 +659,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
-        # yield the last tool call result
-        if tool_call_result_blocks:
-            last_tcr_content = str(tool_call_result_blocks[-1].content)
-            yield _HandleFunctionToolsResult.from_message_chain(
-                MessageChain(
-                    type="tool_call_result",
-                    chain=[
-                        Json(
-                            data={
-                                "id": func_tool_id,
-                                "ts": time.time(),
-                                "result": last_tcr_content,
-                            }
-                        )
-                    ],
+            # yield the tool call result
+            if tool_call_result_blocks:
+                last_tcr_content = str(tool_call_result_blocks[-1].content)
+                yield _HandleFunctionToolsResult.from_message_chain(
+                    MessageChain(
+                        type="tool_call_result",
+                        chain=[
+                            Json(
+                                data={
+                                    "id": func_tool_id,
+                                    "ts": time.time(),
+                                    "result": last_tcr_content,
+                                }
+                            )
+                        ],
+                    )
                 )
-            )
-            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
+                logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
