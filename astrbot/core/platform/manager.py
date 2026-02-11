@@ -70,7 +70,17 @@ class PlatformManager:
         client_id = inst.client_self_id
         try:
             if getattr(inst, "terminate", None):
-                await inst.terminate()
+                try:
+                    await inst.terminate()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(
+                        "终止平台适配器失败: client_id=%s, error=%s",
+                        client_id,
+                        e,
+                    )
+                    logger.error(traceback.format_exc())
         finally:
             await self._stop_platform_task(client_id)
 
