@@ -45,6 +45,10 @@ function logRotationFsError(action, targetPath, error) {
   );
 }
 
+function isIgnorableFsError(error) {
+  return Boolean(error && typeof error === 'object' && error.code === 'ENOENT');
+}
+
 function parseLogMaxBytes(
   maxMbRaw,
   defaultMaxMb = LOG_ROTATION_DEFAULT_MAX_MB,
@@ -72,14 +76,14 @@ function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0
   if (!logPath || !maxBytes || maxBytes <= 0) {
     return;
   }
-  if (!fs.existsSync(logPath)) {
-    return;
-  }
 
   let currentSize = 0;
   try {
     currentSize = fs.statSync(logPath).size;
   } catch (error) {
+    if (isIgnorableFsError(error)) {
+      return;
+    }
     logRotationFsError('stat', logPath, error);
     return;
   }
@@ -91,6 +95,9 @@ function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0
     try {
       fs.truncateSync(logPath, 0);
     } catch (error) {
+      if (isIgnorableFsError(error)) {
+        return;
+      }
       logRotationFsError('truncate', logPath, error);
     }
     return;
@@ -98,21 +105,25 @@ function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0
 
   const oldestPath = `${logPath}.${backupCount}`;
   try {
-    if (fs.existsSync(oldestPath)) {
-      fs.unlinkSync(oldestPath);
-    }
+    fs.unlinkSync(oldestPath);
   } catch (error) {
-    logRotationFsError('unlink', oldestPath, error);
+    if (isIgnorableFsError(error)) {
+      // Missing rotated file is expected.
+      // Continue rotation for remaining files.
+    } else {
+      logRotationFsError('unlink', oldestPath, error);
+    }
   }
 
   for (let index = backupCount - 1; index >= 1; index -= 1) {
     const sourcePath = `${logPath}.${index}`;
     const targetPath = `${logPath}.${index + 1}`;
     try {
-      if (fs.existsSync(sourcePath)) {
-        fs.renameSync(sourcePath, targetPath);
-      }
+      fs.renameSync(sourcePath, targetPath);
     } catch (error) {
+      if (isIgnorableFsError(error)) {
+        continue;
+      }
       logRotationFsError('rename', `${sourcePath} -> ${targetPath}`, error);
     }
   }
@@ -120,6 +131,9 @@ function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0
   try {
     fs.renameSync(logPath, `${logPath}.1`);
   } catch (error) {
+    if (isIgnorableFsError(error)) {
+      return;
+    }
     logRotationFsError('rename', `${logPath} -> ${logPath}.1`, error);
   }
 }
@@ -182,6 +196,7 @@ module.exports = {
   appendRotatingLog,
   delay,
   ensureDir,
+  isIgnorableFsError,
   isLogRotationDebugEnabled,
   logRotationFsError,
   normalizeUrl,

@@ -18,6 +18,8 @@ const {
 
 const PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS = 5 * 60 * 1000;
 const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
+const BACKEND_LOG_FLUSH_INTERVAL_MS = 120;
+const BACKEND_LOG_MAX_BUFFER_BYTES = 128 * 1024;
 
 function parseBackendTimeoutMs(app) {
   const defaultTimeoutMs = app.isPackaged ? 0 : 20000;
@@ -56,6 +58,9 @@ class BackendManager {
     this.backendProcess = null;
     this.backendConfig = null;
     this.backendLogPath = null;
+    this.backendLogBuffer = [];
+    this.backendLogBufferBytes = 0;
+    this.backendLogFlushTimer = null;
     this.backendLastExitReason = null;
     this.backendStartupFailureReason = null;
     this.backendSpawning = false;
@@ -221,6 +226,57 @@ class BackendManager {
       maxBytes: this.backendLogMaxBytes,
       backupCount: this.backendLogBackupCount,
     });
+  }
+
+  clearBackendLogFlushTimer() {
+    if (this.backendLogFlushTimer === null) {
+      return;
+    }
+    clearTimeout(this.backendLogFlushTimer);
+    this.backendLogFlushTimer = null;
+  }
+
+  flushBackendLogBuffer() {
+    this.clearBackendLogFlushTimer();
+    if (!this.backendLogBuffer.length) {
+      return;
+    }
+    const chunks = this.backendLogBuffer;
+    this.backendLogBuffer = [];
+    this.backendLogBufferBytes = 0;
+    const payload = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
+    this.writeBackendLog(payload);
+  }
+
+  scheduleBackendLogFlush() {
+    if (this.backendLogFlushTimer !== null) {
+      return;
+    }
+    this.backendLogFlushTimer = setTimeout(() => {
+      this.backendLogFlushTimer = null;
+      this.flushBackendLogBuffer();
+    }, BACKEND_LOG_FLUSH_INTERVAL_MS);
+  }
+
+  queueBackendLog(payload) {
+    if (!this.backendLogPath || payload === undefined || payload === null) {
+      return;
+    }
+    const chunk = Buffer.isBuffer(payload)
+      ? payload
+      : Buffer.from(String(payload), 'utf8');
+    if (!chunk.length) {
+      return;
+    }
+
+    this.backendLogBuffer.push(chunk);
+    this.backendLogBufferBytes += chunk.length;
+
+    if (this.backendLogBufferBytes >= BACKEND_LOG_MAX_BUFFER_BYTES) {
+      this.flushBackendLogBuffer();
+      return;
+    }
+    this.scheduleBackendLogFlush();
   }
 
   async pingBackend(timeoutMs = 800) {
@@ -397,6 +453,7 @@ class BackendManager {
     if (backendConfig.webuiDir) {
       env.ASTRBOT_WEBUI_DIR = backendConfig.webuiDir;
     }
+    this.flushBackendLogBuffer();
     this.backendLogPath = null;
     if (backendConfig.rootDir) {
       env.ASTRBOT_ROOT = backendConfig.rootDir;
@@ -414,20 +471,24 @@ class BackendManager {
       windowsHide: true,
     });
 
-    if (usePipedLogging && this.backendProcess.stdout && this.backendProcess.stderr) {
-      this.backendProcess.stdout.on('data', (chunk) => {
-        this.writeBackendLog(chunk);
-      });
-      this.backendProcess.stderr.on('data', (chunk) => {
-        this.writeBackendLog(chunk);
-      });
+    if (usePipedLogging) {
+      if (this.backendProcess.stdout) {
+        this.backendProcess.stdout.on('data', (chunk) => {
+          this.queueBackendLog(chunk);
+        });
+      }
+      if (this.backendProcess.stderr) {
+        this.backendProcess.stderr.on('data', (chunk) => {
+          this.queueBackendLog(chunk);
+        });
+      }
     }
 
     if (usePipedLogging) {
       const launchLine = [backendConfig.cmd, ...(backendConfig.args || [])]
         .map((item) => JSON.stringify(item))
         .join(' ');
-      this.writeBackendLog(
+      this.queueBackendLog(
         `[${new Date().toISOString()}] [Electron] Start backend ${launchLine}\n`,
       );
     }
@@ -435,16 +496,18 @@ class BackendManager {
     this.backendProcess.on('error', (error) => {
       this.backendLastExitReason =
         error instanceof Error ? error.message : String(error);
-      this.writeBackendLog(
+      this.queueBackendLog(
         `[${new Date().toISOString()}] [Electron] Backend spawn error: ${
           error instanceof Error ? error.message : String(error)
         }\n`,
       );
+      this.flushBackendLogBuffer();
       this.backendProcess = null;
     });
 
     this.backendProcess.on('exit', (code, signal) => {
       this.backendLastExitReason = `Backend process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}).`;
+      this.flushBackendLogBuffer();
       this.backendProcess = null;
     });
   }
@@ -517,6 +580,7 @@ class BackendManager {
         await waitForProcessExit(processToStop, 1500);
       }
     }
+    this.flushBackendLogBuffer();
   }
 
   findListeningPidsOnWindows(port) {
