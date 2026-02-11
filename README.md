@@ -78,7 +78,8 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 #### uv 部署
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+astrbot
 ```
 
 #### 宝塔面板部署
@@ -131,6 +132,16 @@ uv run main.py
 ```
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
+
+#### 系统包管理器安装
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# 或者使用 paru
+paru -S astrbot-git
+```
 
 #### 桌面端 Electron 打包
 

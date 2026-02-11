@@ -61,7 +61,18 @@ Docker / Docker Compose を使用した AstrBot のデプロイを推奨しま�
 #### uv デプロイ
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+astrbot
+```
+
+#### システムパッケージマネージャーでのインストール
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# または paru を使用
+paru -S astrbot-git
 ```
 
 #### 宝塔パネルデプロイ
@@ -114,6 +125,16 @@ uv run main.py
 ```
 
 または、公式ドキュメント [ソースコードから AstrBot をデプロイ](https://astrbot.app/deploy/astrbot/cli.html) をご参照ください。
+
+#### Установка через системный пакетный менеджер
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# или используйте paru
+paru -S astrbot-git
+```
 
 ## サポートされているメッセージプラットフォーム
 

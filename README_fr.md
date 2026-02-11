@@ -61,7 +61,18 @@ Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker]
 #### Déploiement uv
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+astrbot
+```
+
+#### Installation via le gestionnaire de paquets du système
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# ou utiliser paru
+paru -S astrbot-git
 ```
 
 #### Déploiement BT-Panel
@@ -114,6 +125,16 @@ uv run main.py
 ```
 
 Ou consultez la documentation officielle : [Déployer AstrBot depuis les sources](https://astrbot.app/deploy/astrbot/cli.html).
+
+#### Установка через системный пакетный менеджер
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# или используйте paru
+paru -S astrbot-git
+```
 
 ## Plateformes de messagerie prises en charge
 
