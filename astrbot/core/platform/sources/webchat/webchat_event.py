@@ -15,7 +15,7 @@ imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
 
 
 class WebChatMessageEvent(AstrMessageEvent):
-    def __init__(self, message_str, message_obj, platform_meta, session_id):
+    def __init__(self, message_str, message_obj, platform_meta, session_id) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         os.makedirs(imgs_dir, exist_ok=True)
 
@@ -26,8 +26,12 @@ class WebChatMessageEvent(AstrMessageEvent):
         session_id: str,
         streaming: bool = False,
     ) -> str | None:
-        cid = session_id.split("!")[-1]
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
+        request_id = str(message_id)
+        conversation_id = session_id.split("!")[-1]
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            request_id,
+            conversation_id,
+        )
         if not message:
             await web_chat_back_queue.put(
                 {
@@ -116,17 +120,21 @@ class WebChatMessageEvent(AstrMessageEvent):
 
         return data
 
-    async def send(self, message: MessageChain | None):
+    async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
         await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
         await super().send(MessageChain([]))
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
         final_data = ""
         reasoning_content = ""
-        cid = self.session_id.split("!")[-1]
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(cid)
         message_id = self.message_obj.message_id
+        request_id = str(message_id)
+        conversation_id = self.session_id.split("!")[-1]
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            request_id,
+            conversation_id,
+        )
         async for chain in generator:
             # 处理音频流（Live Mode）
             if chain.type == "audio_chunk":

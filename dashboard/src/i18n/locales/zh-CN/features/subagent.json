@@ -2,7 +2,7 @@
   "page": {
     "title": "SubAgent 编排",
     "beta": "实验性",
-    "subtitle": "主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。"
+    "subtitle": "主 LLM 可直接使用自身工具，也可通过 handoff 分派给各个 SubAgent。"
   },
   "actions": {
     "refresh": "刷新",

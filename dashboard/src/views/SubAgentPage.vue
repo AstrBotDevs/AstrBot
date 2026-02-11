@@ -142,17 +142,6 @@
                 </v-col>
               </v-row>
 
-              <div class="mt-3">
-                <div class="text-caption text-medium-emphasis">{{ tm('cards.previewTitle') }}</div>
-                <div class="d-flex align-center" style="gap: 8px; flex-wrap: wrap;">
-                  <v-chip size="small" variant="outlined" color="primary">
-                    {{ tm('cards.transferPrefix', { name: agent.name || '...' }) }}
-                  </v-chip>
-                  <v-chip size="small" variant="tonal" color="secondary" v-if="agent.persona_id">
-                    {{ tm('cards.personaChip', { id: agent.persona_id }) }}
-                  </v-chip>
-                </div>
-              </div>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>

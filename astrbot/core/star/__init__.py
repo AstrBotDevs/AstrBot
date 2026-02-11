@@ -15,7 +15,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
     author: str
     name: str
 
-    def __init__(self, context: Context, config: dict | None = None):
+    def __init__(self, context: Context, config: dict | None = None) -> None:
         StarTools.initialize(context)
         self.context = context
 
@@ -55,13 +55,13 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             options=options,
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """当插件被激活时会调用这个方法"""
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """当插件被禁用、重载插件时会调用这个方法"""
 
-    def __del__(self):
+    def __del__(self) -> None:
         """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
 
 

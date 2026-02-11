@@ -15,7 +15,7 @@ else:
 class DiscordBotClient(discord.Bot):
     """Discord客户端封装"""
 
-    def __init__(self, token: str, proxy: str | None = None):
+    def __init__(self, token: str, proxy: str | None = None) -> None:
         self.token = token
         self.proxy = proxy
 
@@ -32,7 +32,7 @@ class DiscordBotClient(discord.Bot):
         self.on_ready_once_callback: Callable[[], Awaitable[None]] | None = None
         self._ready_once_fired = False
 
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         """当机器人成功连接并准备就绪时触发"""
         if self.user is None:
             logger.error("[Discord] 客户端未正确加载用户信息 (self.user is None)")
@@ -93,7 +93,7 @@ class DiscordBotClient(discord.Bot):
             "type": "interaction",
         }
 
-    async def on_message(self, message: discord.Message):
+    async def on_message(self, message: discord.Message) -> None:
         """当接收到消息时触发"""
         if message.author.bot:
             return
@@ -130,12 +130,12 @@ class DiscordBotClient(discord.Bot):
 
         return str(interaction_data)
 
-    async def start_polling(self):
+    async def start_polling(self) -> None:
         """开始轮询消息，这是个阻塞方法"""
         await self.start(self.token)
 
     @override
-    async def close(self):
+    async def close(self) -> None:
         """关闭客户端"""
         if not self.is_closed():
             await super().close()

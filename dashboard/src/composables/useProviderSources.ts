@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -37,6 +38,12 @@ export function resolveDefaultTab(value?: string) {
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
 
+  const confirmDialog = useConfirmDialog()
+
+  async function askForConfirmation(message: string) {
+    return askForConfirmationDialog(message, confirmDialog)
+  }
+
   // ===== State =====
   const config = ref<Record<string, any>>({})
   const metadata = ref<Record<string, any>>({})
@@ -59,14 +66,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   let suppressSourceWatch = false
 
-  const providerTypes = [
+  const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
     { value: 'agent_runner', label: tm('providers.tabs.agentRunner'), icon: 'mdi-robot' },
     { value: 'speech_to_text', label: tm('providers.tabs.speechToText'), icon: 'mdi-microphone-message' },
     { value: 'text_to_speech', label: tm('providers.tabs.textToSpeech'), icon: 'mdi-volume-high' },
     { value: 'embedding', label: tm('providers.tabs.embedding'), icon: 'mdi-code-json' },
     { value: 'rerank', label: tm('providers.tabs.rerank'), icon: 'mdi-compare-vertical' }
-  ]
+  ])
 
   // ===== Computed =====
   const availableSourceTypes = computed(() => {
@@ -233,6 +240,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       customSchema.provider.items.key.hint = tm('providerSources.hints.key')
       customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
     }
+    // 为 proxy 字段添加描述和提示
+    if (customSchema.provider?.items?.proxy) {
+      customSchema.provider.items.proxy.description = tm('providerSources.labels.proxy')
+      customSchema.provider.items.proxy.hint = tm('providerSources.hints.proxy')
+    }
 
     return customSchema
   })
@@ -391,7 +403,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProviderSource(source: any) {
-    if (!confirm(tm('providerSources.deleteConfirm', { id: source.id }))) return
+    const confirmed = await askForConfirmation(
+      tm('providerSources.deleteConfirm', { id: source.id })
+    )
+    if (!confirmed) return
 
     try {
       await axios.post('/api/config/provider_sources/delete', { id: source.id })
@@ -553,7 +568,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProvider(provider: any) {
-    if (!confirm(tm('models.deleteConfirm', { id: provider.id }))) return
+    const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
+    if (!confirmed) return
 
     try {
       await axios.post('/api/config/provider/delete', { id: provider.id })

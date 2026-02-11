@@ -69,7 +69,7 @@ class Context:
         knowledge_base_manager: KnowledgeBaseManager,
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
-    ):
+    ) -> None:
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
         self._config = config
@@ -491,7 +491,7 @@ class Context:
         view_handler: Awaitable,
         methods: list,
         desc: str,
-    ):
+    ) -> None:
         """注册 Web API。
 
         Args:
@@ -565,7 +565,7 @@ class Context:
         """
         return self._db
 
-    def register_provider(self, provider: Provider):
+    def register_provider(self, provider: Provider) -> None:
         """注册一个 LLM Provider(Chat_Completion 类型)。
 
         Args:
@@ -626,7 +626,7 @@ class Context:
         awaitable: Callable[..., Awaitable[Any]],
         use_regex=False,
         ignore_prefix=False,
-    ):
+    ) -> None:
         """[DEPRECATED]注册一个命令。
 
         Args:
@@ -658,7 +658,7 @@ class Context:
             )
         star_handlers_registry.append(md)
 
-    def register_task(self, task: Awaitable, desc: str):
+    def register_task(self, task: Awaitable, desc: str) -> None:
         """[DEPRECATED]注册一个异步任务。
 
         Args:

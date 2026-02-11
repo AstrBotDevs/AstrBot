@@ -146,6 +146,10 @@ uv run main.py
 
 或者请参阅官方文档 [通过源码部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html) 。
 
+#### 桌面端 Electron 打包
+
+桌面端（Electron 打包，`pnpm` 工作流）构建流程请参阅：[`desktop/README.md`](desktop/README.md)。
+
 ## 支持的消息平台
 
 **官方维护**
@@ -278,6 +282,8 @@ pre-commit install
 
 <div align="center">
 
+_陪伴与能力从来不应该是对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人。_
+
 _私は、高性能ですから!_
 
-陪伴与能力从来不应该是对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人。
+<img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>

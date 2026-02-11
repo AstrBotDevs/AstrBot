@@ -42,6 +42,55 @@ class ConfigMetadataI18n:
         """
         result = {}
 
+        def convert_items(
+            group: str, section: str, items: dict[str, Any], prefix: str = ""
+        ) -> dict[str, Any]:
+            items_result: dict[str, Any] = {}
+
+            for field_key, field_data in items.items():
+                if not isinstance(field_data, dict):
+                    items_result[field_key] = field_data
+                    continue
+
+                field_name = field_key
+                field_path = f"{prefix}.{field_name}" if prefix else field_name
+
+                field_result = {
+                    key: value
+                    for key, value in field_data.items()
+                    if key not in {"description", "hint", "labels", "name"}
+                }
+
+                if "description" in field_data:
+                    field_result["description"] = (
+                        f"{group}.{section}.{field_path}.description"
+                    )
+                if "hint" in field_data:
+                    field_result["hint"] = f"{group}.{section}.{field_path}.hint"
+                if "labels" in field_data:
+                    field_result["labels"] = f"{group}.{section}.{field_path}.labels"
+                if "name" in field_data:
+                    field_result["name"] = f"{group}.{section}.{field_path}.name"
+
+                if "items" in field_data and isinstance(field_data["items"], dict):
+                    field_result["items"] = convert_items(
+                        group, section, field_data["items"], field_path
+                    )
+
+                if "template_schema" in field_data and isinstance(
+                    field_data["template_schema"], dict
+                ):
+                    field_result["template_schema"] = convert_items(
+                        group,
+                        section,
+                        field_data["template_schema"],
+                        f"{field_path}.template_schema",
+                    )
+
+                items_result[field_key] = field_result
+
+            return items_result
+
         for group_key, group_data in metadata.items():
             group_result = {
                 "name": f"{group_key}.name",
@@ -50,59 +99,19 @@ class ConfigMetadataI18n:
 
             for section_key, section_data in group_data.get("metadata", {}).items():
                 section_result = {
-                    "description": f"{group_key}.{section_key}.description",
-                    "type": section_data.get("type"),
+                    key: value
+                    for key, value in section_data.items()
+                    if key not in {"description", "hint", "labels", "name"}
                 }
+                section_result["description"] = f"{group_key}.{section_key}.description"
 
-                # 复制其他属性
-                for key in ["items", "condition", "_special", "invisible"]:
-                    if key in section_data:
-                        section_result[key] = section_data[key]
-
-                # 处理 hint
                 if "hint" in section_data:
                     section_result["hint"] = f"{group_key}.{section_key}.hint"
 
-                # 处理 items 中的字段
                 if "items" in section_data and isinstance(section_data["items"], dict):
-                    items_result = {}
-                    for field_key, field_data in section_data["items"].items():
-                        # 处理嵌套的点号字段名（如 provider_settings.enable）
-                        field_name = field_key
-
-                        field_result = {}
-
-                        # 复制基本属性
-                        for attr in [
-                            "type",
-                            "condition",
-                            "_special",
-                            "invisible",
-                            "options",
-                            "slider",
-                        ]:
-                            if attr in field_data:
-                                field_result[attr] = field_data[attr]
-
-                        # 转换文本属性为国际化键
-                        if "description" in field_data:
-                            field_result["description"] = (
-                                f"{group_key}.{section_key}.{field_name}.description"
-                            )
-
-                        if "hint" in field_data:
-                            field_result["hint"] = (
-                                f"{group_key}.{section_key}.{field_name}.hint"
-                            )
-
-                        if "labels" in field_data:
-                            field_result["labels"] = (
-                                f"{group_key}.{section_key}.{field_name}.labels"
-                            )
-
-                        items_result[field_key] = field_result
-
-                    section_result["items"] = items_result
+                    section_result["items"] = convert_items(
+                        group_key, section_key, section_data["items"]
+                    )
 
                 group_result["metadata"][section_key] = section_result
 

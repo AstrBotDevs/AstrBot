@@ -238,6 +238,7 @@ class ChatRoute(Route):
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
         """
+        supported = ["web_search_tavily", "web_search_bocha"]
         # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
         web_search_results = {}
         tool_call_parts = [
@@ -248,7 +249,7 @@ class ChatRoute(Route):
 
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
-                if tool_call.get("name") != "web_search_tavily" or not tool_call.get(
+                if tool_call.get("name") not in supported or not tool_call.get(
                     "result"
                 ):
                     continue
@@ -278,7 +279,7 @@ class ChatRoute(Route):
             if ref_index not in web_search_results:
                 continue
             payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temorary_cache.get("_ws_favicon", {}).get(payload["url"]):
+            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
                 payload["favicon"] = favicon
             used_refs.append(payload)
 
@@ -353,12 +354,15 @@ class ChatRoute(Route):
             return Response().error("session_id is empty").__dict__
 
         webchat_conv_id = session_id
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
 
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
 
         message_id = str(uuid.uuid4())
+        back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            message_id,
+            webchat_conv_id,
+        )
 
         async def stream():
             client_disconnected = False
@@ -531,6 +535,8 @@ class ChatRoute(Route):
                             refs = {}
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
+            finally:
+                webchat_queue_mgr.remove_back_queue(message_id)
 
         # 将消息放入会话特定的队列
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
@@ -645,7 +651,7 @@ class ChatRoute(Route):
                     attachment_ids.append(part["attachment_id"])
         return attachment_ids
 
-    async def _delete_attachments(self, attachment_ids: list[str]):
+    async def _delete_attachments(self, attachment_ids: list[str]) -> None:
         """删除附件（包括数据库记录和磁盘文件）"""
         try:
             attachments = await self.db.get_attachments(attachment_ids)

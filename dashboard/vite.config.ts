@@ -29,6 +29,7 @@ export default defineConfig({
     }
   },
   build: {
+    sourcemap: false,
     chunkSizeWarningLimit: 1024 * 1024 // Set the limit to 1 MB
   },
   optimizeDeps: {

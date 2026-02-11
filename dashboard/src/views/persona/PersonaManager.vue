@@ -110,7 +110,7 @@
         <!-- 创建/编辑 Persona 对话框 -->
         <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
             :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
-            @saved="handlePersonaSaved" @error="showError" />
+            @saved="handlePersonaSaved" @deleted="handlePersonaDeleted" @error="showError" />
 
         <!-- 查看 Persona 详情对话框 -->
         <v-dialog v-model="showViewDialog" max-width="700px">
@@ -260,6 +260,10 @@ import PersonaCard from './PersonaCard.vue';
 import PersonaForm from '@/components/shared/PersonaForm.vue';
 import CreateFolderDialog from './CreateFolderDialog.vue';
 import MoveToFolderDialog from './MoveToFolderDialog.vue';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
@@ -294,7 +298,8 @@ export default defineComponent({
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/persona');
-        return { t, tm };
+        const confirmDialog = useConfirmDialog();
+        return { t, tm, confirmDialog };
     },
     data() {
         return {
@@ -414,8 +419,18 @@ export default defineComponent({
             this.refreshCurrentFolder();
         },
 
+        handlePersonaDeleted(message: string) {
+            this.showSuccess(message);
+            this.refreshCurrentFolder();
+        },
+
         async confirmDeletePersona(persona: Persona) {
-            if (!confirm(this.tm('messages.deleteConfirm', { id: persona.persona_id }))) {
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: persona.persona_id }),
+                    this.confirmDialog,
+                ))
+            ) {
                 return;
             }
 

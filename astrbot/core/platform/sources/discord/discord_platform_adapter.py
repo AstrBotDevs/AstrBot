@@ -60,7 +60,7 @@ class DiscordPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
@@ -122,11 +122,11 @@ class DiscordPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         """主要运行逻辑"""
 
         # 初始化回调函数
-        async def on_received(message_data):
+        async def on_received(message_data) -> None:
             logger.debug(f"[Discord] 收到消息: {message_data}")
             if self.client_self_id is None:
                 self.client_self_id = message_data.get("bot_id")
@@ -143,7 +143,7 @@ class DiscordPlatformAdapter(Platform):
         self.client = DiscordBotClient(token, proxy)
         self.client.on_message_received = on_received
 
-        async def callback():
+        async def callback() -> None:
             if self.enable_command_register:
                 await self._collect_and_register_commands()
             if self.activity_name:
@@ -251,7 +251,7 @@ class DiscordPlatformAdapter(Platform):
         # 由于 on_interaction 已被禁用，我们只处理普通消息
         return self._convert_message_to_abm(data)
 
-    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None):
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""
         message_event = DiscordPlatformEvent(
             message_str=message.message_str,
@@ -323,7 +323,7 @@ class DiscordPlatformAdapter(Platform):
         self.commit_event(message_event)
 
     @override
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止适配器"""
         logger.info("[Discord] 正在终止适配器... (step 1: cancel polling task)")
         self.shutdown_event.set()
@@ -358,11 +358,11 @@ class DiscordPlatformAdapter(Platform):
                 logger.warning(f"[Discord] 客户端关闭异常: {e}")
         logger.info("[Discord] 适配器已终止。")
 
-    def register_handler(self, handler_info):
+    def register_handler(self, handler_info) -> None:
         """注册处理器信息"""
         self.registered_handlers.append(handler_info)
 
-    async def _collect_and_register_commands(self):
+    async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
         registered_commands = []
@@ -420,7 +420,7 @@ class DiscordPlatformAdapter(Platform):
 
         async def dynamic_callback(
             ctx: discord.ApplicationContext, params: str | None = None
-        ):
+        ) -> None:
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
             logger.debug(f"[Discord] 回调函数参数: {ctx}")
@@ -444,9 +444,20 @@ class DiscordPlatformAdapter(Platform):
                 logger.warning(f"[Discord] 指令 '{cmd_name}' defer 失败: {e}")
 
             # 2. 构建 AstrBotMessage
+            channel = ctx.channel
             abm = AstrBotMessage()
-            abm.type = self._get_message_type(ctx.channel, ctx.guild_id)
-            abm.group_id = self._get_channel_id(ctx.channel)
+            if channel is not None:
+                abm.type = self._get_message_type(channel, ctx.guild_id)
+                abm.group_id = self._get_channel_id(channel)
+            else:
+                # 防守式兜底：channel 取不到时，仍能根据 guild_id/channel_id 推断会话信息
+                abm.type = (
+                    MessageType.GROUP_MESSAGE
+                    if ctx.guild_id is not None
+                    else MessageType.FRIEND_MESSAGE
+                )
+                abm.group_id = str(ctx.channel_id)
+
             abm.message_str = message_str_for_filter
             abm.sender = MessageMember(
                 user_id=str(ctx.author.id),

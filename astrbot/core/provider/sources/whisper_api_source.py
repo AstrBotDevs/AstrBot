@@ -38,7 +38,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
         self.set_model(provider_config["model"])
 
-    async def _get_audio_format(self, file_path):
+    async def _get_audio_format(self, file_path) -> str | None:
         # 定义要检测的头部字节
         silk_header = b"SILK"
         amr_header = b"#!AMR"
@@ -107,3 +107,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             except Exception as e:
                 logger.error(f"Failed to remove temp file {audio_url}: {e}")
         return result.text
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

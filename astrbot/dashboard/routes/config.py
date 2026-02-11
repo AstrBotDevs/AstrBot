@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import inspect
 import os
 import traceback
@@ -58,7 +59,7 @@ def try_cast(value: Any, type_: str):
             return None
 
 
-def _expect_type(value, expected_type, path_key, errors, expected_name=None):
+def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> bool:
     if not isinstance(value, expected_type):
         errors.append(
             f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
@@ -68,7 +69,7 @@ def _expect_type(value, expected_type, path_key, errors, expected_name=None):
     return True
 
 
-def _validate_template_list(value, meta, path_key, errors, validate_fn):
+def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
     if not _expect_type(value, list, path_key, errors, "list"):
         return
 
@@ -101,7 +102,7 @@ def _validate_template_list(value, meta, path_key, errors, validate_fn):
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
-    def validate(data: dict, metadata: dict = schema, path=""):
+    def validate(data: dict, metadata: dict = schema, path="") -> None:
         for key, value in data.items():
             if key not in metadata:
                 continue
@@ -205,7 +206,9 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
-def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
+def save_config(
+    post_config: dict, config: AstrBotConfig, is_core: bool = False
+) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
@@ -407,8 +410,19 @@ class ConfigRoute(Route):
         return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
+        provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "provider_group": {
+                    "metadata": {
+                        "provider": CONFIG_METADATA_2["provider_group"]["metadata"][
+                            "provider"
+                        ]
+                    }
+                }
+            }
+        )
         config_schema = {
-            "provider": CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+            "provider": provider_metadata["provider_group"]["metadata"]["provider"]
         }
         data = {
             "config_schema": config_schema,
@@ -1209,7 +1223,7 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
-    async def _register_platform_logo(self, platform, platform_default_tmpl):
+    async def _register_platform_logo(self, platform, platform_default_tmpl) -> None:
         """注册平台logo文件并生成访问令牌"""
         if not platform.logo_path:
             return
@@ -1278,11 +1292,24 @@ class ConfigRoute(Route):
 
     async def _get_astrbot_config(self):
         config = self.config
+        metadata = copy.deepcopy(CONFIG_METADATA_2)
+        platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "platform_group": {
+                    "metadata": {
+                        "platform": metadata["platform_group"]["metadata"]["platform"]
+                    }
+                }
+            }
+        )
+        metadata["platform_group"]["metadata"]["platform"] = platform_i18n[
+            "platform_group"
+        ]["metadata"]["platform"]
 
         # 平台适配器的默认配置模板注入
-        platform_default_tmpl = CONFIG_METADATA_2["platform_group"]["metadata"][
-            "platform"
-        ]["config_template"]
+        platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][
+            "config_template"
+        ]
 
         # 收集需要注册logo的平台
         logo_registration_tasks = []
@@ -1300,14 +1327,14 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
-        provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
-            "provider"
-        ]["config_template"]
+        provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
+            "config_template"
+        ]
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
 
-        return {"metadata": CONFIG_METADATA_2, "config": config}
+        return {"metadata": metadata, "config": config}
 
     async def _get_plugin_config(self, plugin_name: str):
         ret: dict = {"metadata": None, "config": None}
@@ -1332,7 +1359,7 @@ class ConfigRoute(Route):
 
     async def _save_astrbot_configs(
         self, post_configs: dict, conf_id: str | None = None
-    ):
+    ) -> None:
         try:
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
@@ -1348,7 +1375,7 @@ class ConfigRoute(Route):
         except Exception as e:
             raise e
 
-    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str):
+    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str) -> None:
         md = None
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

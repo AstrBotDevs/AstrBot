@@ -289,6 +289,9 @@
             </v-card-text>
 
             <v-card-actions>
+                <v-btn v-if="editingPersona" color="error" variant="text" @click="deletePersona">
+                    {{ tm('buttons.delete') }}
+                </v-btn>
                 <v-spacer />
                 <v-btn color="grey" variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
@@ -304,6 +307,10 @@
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
     name: 'PersonaForm',
@@ -325,10 +332,11 @@ export default {
             default: null
         }
     },
-    emits: ['update:modelValue', 'saved', 'error'],
+    emits: ['update:modelValue', 'saved', 'error', 'deleted'],
     setup() {
         const { tm } = useModuleI18n('features/persona');
-        return { tm };
+        const confirmDialog = useConfirmDialog();
+        return { tm, confirmDialog };
     },
     data() {
         return {
@@ -589,6 +597,37 @@ export default {
                 this.$emit('error', error.response?.data?.message || this.tm('messages.saveError'));
             }
             this.saving = false;
+        },
+
+        async deletePersona() {
+            if (!this.editingPersona) return;
+
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: this.editingPersona.persona_id }),
+                    this.confirmDialog,
+                ))
+            ) {
+                return;
+            }
+
+            this.saving = true;
+            try {
+                const response = await axios.post('/api/persona/delete', {
+                    persona_id: this.editingPersona.persona_id
+                });
+
+                if (response.data.status === 'ok') {
+                    this.$emit('deleted', response.data.message || this.tm('messages.deleteSuccess'));
+                    this.closeDialog();
+                } else {
+                    this.$emit('error', response.data.message || this.tm('messages.deleteError'));
+                }
+            } catch (error) {
+                this.$emit('error', error.response?.data?.message || this.tm('messages.deleteError'));
+            } finally {
+                this.saving = false;
+            }
         },
 
         addDialogPair() {
