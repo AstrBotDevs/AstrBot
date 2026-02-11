@@ -79,9 +79,10 @@ class BufferedRotatingLogger {
     }
 
     if (!this.logPath) {
-      this.dropOldestUntilWithinLimit(chunk.length);
-      this.buffer.push(chunk);
-      this.bufferBytes += chunk.length;
+      const boundedChunk = this.clipChunkToBufferLimit(chunk);
+      this.dropOldestUntilWithinLimit(boundedChunk.length);
+      this.buffer.push(boundedChunk);
+      this.bufferBytes += boundedChunk.length;
       return;
     }
 
@@ -127,6 +128,13 @@ class BufferedRotatingLogger {
     if (this.bufferBytes < 0) {
       this.bufferBytes = 0;
     }
+  }
+
+  clipChunkToBufferLimit(chunk) {
+    if (chunk.length <= this.maxBufferBytes) {
+      return chunk;
+    }
+    return chunk.subarray(chunk.length - this.maxBufferBytes);
   }
 
   scheduleFlush() {
