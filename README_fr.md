@@ -66,17 +66,12 @@ uv tool install astrbot
 
 #### Installation via le gestionnaire de paquets du système
 
-```bash
-# windows & macos
-# Recommandé d'utiliser uv tool install
+##### Arch Linux
 
-# linux
-# basé sur debian, pas encore supporté
-# basé sur arch, peut être installé via AUR
+```bash
 yay -S astrbot-git
 # ou utiliser paru
 paru -S astrbot-git
-
 ```
 
 #### Déploiement BT-Panel
@@ -129,6 +124,16 @@ uv run main.py
 ```
 
 Ou consultez la documentation officielle : [Déployer AstrBot depuis les sources](https://astrbot.app/deploy/astrbot/cli.html).
+
+#### Установка через системный пакетный менеджер
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# или используйте paru
+paru -S astrbot-git
+```
 
 ## Plateformes de messagerie prises en charge
 

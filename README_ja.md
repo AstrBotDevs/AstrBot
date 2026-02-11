@@ -66,17 +66,12 @@ uv tool install astrbot
 
 #### システムパッケージマネージャーでのインストール
 
-```bash
-# windows & macos
-# uv tool install の使用を推奨します
+##### Arch Linux
 
-# linux
-# debian系、現在未対応
-# arch系、AUR経由でインストール可能
+```bash
 yay -S astrbot-git
 # または paru を使用
 paru -S astrbot-git
-
 ```
 
 #### 宝塔パネルデプロイ
@@ -129,6 +124,16 @@ uv run main.py
 ```
 
 または、公式ドキュメント [ソースコードから AstrBot をデプロイ](https://astrbot.app/deploy/astrbot/cli.html) をご参照ください。
+
+#### Установка через системный пакетный менеджер
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# или используйте paru
+paru -S astrbot-git
+```
 
 ## サポートされているメッセージプラットフォーム
 
