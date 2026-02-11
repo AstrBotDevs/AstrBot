@@ -371,7 +371,7 @@ class BackendManager {
     }
   }
 
-  startBackend() {
+  async startBackend() {
     if (this.shouldSkipStart()) {
       this.log('Skip backend start because app is quitting.');
       return;
@@ -402,7 +402,7 @@ class BackendManager {
       ensureDir(logsDir);
       backendLogPath = path.join(logsDir, 'backend.log');
     }
-    void this.backendLogger.setLogPath(backendLogPath);
+    await this.backendLogger.setLogPath(backendLogPath);
     const usePipedLogging = Boolean(backendLogPath);
 
     this.backendProcess = spawn(backendConfig.cmd, backendConfig.args || [], {
@@ -463,7 +463,7 @@ class BackendManager {
     }
     this.backendSpawning = true;
     try {
-      this.startBackend();
+      await this.startBackend();
       return await this.waitForBackend(maxWaitMs, true);
     } finally {
       this.backendSpawning = false;

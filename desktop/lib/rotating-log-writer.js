@@ -2,7 +2,7 @@
 
 const fs = require('fs/promises');
 const path = require('path');
-const { isIgnorableFsError } = require('./common');
+const { isIgnorableFsError, isLogRotationDebugEnabled } = require('./common');
 
 class RotatingLogWriter {
   constructor({ logPath = null, maxBytes = 0, backupCount = 0, label = 'log' }) {
@@ -163,6 +163,9 @@ class RotatingLogWriter {
   }
 
   reportError(action, targetPath, error) {
+    if (!isLogRotationDebugEnabled()) {
+      return;
+    }
     const details = error instanceof Error ? error.message : String(error);
     console.error(
       `[astrbot][${this.label}] ${action} failed for ${targetPath}: ${details}`,

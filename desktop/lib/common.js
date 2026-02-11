@@ -32,6 +32,13 @@ function parseEnvInt(raw, defaultValue) {
   return Number.isFinite(parsed) ? parsed : defaultValue;
 }
 
+function isLogRotationDebugEnabled() {
+  return (
+    process.env.ASTRBOT_LOG_ROTATION_DEBUG === '1' ||
+    process.env.NODE_ENV === 'development'
+  );
+}
+
 function parseLogMaxBytes(envValue) {
   const mb = parseEnvInt(envValue, LOG_ROTATION_DEFAULT_MAX_MB);
   const maxMb = mb > 0 ? mb : LOG_ROTATION_DEFAULT_MAX_MB;
@@ -80,9 +87,10 @@ module.exports = {
   delay,
   ensureDir,
   isIgnorableFsError,
+  isLogRotationDebugEnabled,
   normalizeUrl,
+  parseEnvInt,
   parseLogBackupCount,
   parseLogMaxBytes,
   waitForProcessExit,
 };
-

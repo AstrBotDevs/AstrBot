@@ -1,6 +1,7 @@
 'use strict';
 
 const { RotatingLogWriter } = require('./rotating-log-writer');
+const { parseEnvInt } = require('./common');
 
 const DEFAULT_FLUSH_INTERVAL_MS = 120;
 const DEFAULT_MAX_BUFFER_BYTES = 128 * 1024;
@@ -8,20 +9,9 @@ const MIN_FLUSH_INTERVAL_MS = 10;
 const MIN_MAX_BUFFER_BYTES = 4 * 1024;
 const MAX_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 
-function normalizeInt(raw, defaultValue) {
-  const parsed = Number.parseInt(`${raw ?? ''}`, 10);
-  return Number.isFinite(parsed) ? parsed : defaultValue;
-}
-
-function clampInt(raw, defaultValue, min, max) {
-  const value = normalizeInt(raw, defaultValue);
-  if (value < min) {
-    return min;
-  }
-  if (value > max) {
-    return max;
-  }
-  return value;
+function clampIntOption(raw, { defaultValue, min, max }) {
+  const value = parseEnvInt(raw, defaultValue);
+  return Math.min(Math.max(value, min), max);
 }
 
 class BufferedRotatingLogger {
@@ -34,21 +24,20 @@ class BufferedRotatingLogger {
     label = 'buffered-log',
   }) {
     this.logPath = logPath || null;
-    this.flushIntervalMs = clampInt(
-      flushIntervalMs,
-      DEFAULT_FLUSH_INTERVAL_MS,
-      MIN_FLUSH_INTERVAL_MS,
-      60 * 1000,
-    );
-    this.maxBufferBytes = clampInt(
-      maxBufferBytes,
-      DEFAULT_MAX_BUFFER_BYTES,
-      MIN_MAX_BUFFER_BYTES,
-      MAX_MAX_BUFFER_BYTES,
-    );
+    this.flushIntervalMs = clampIntOption(flushIntervalMs, {
+      defaultValue: DEFAULT_FLUSH_INTERVAL_MS,
+      min: MIN_FLUSH_INTERVAL_MS,
+      max: 60 * 1000,
+    });
+    this.maxBufferBytes = clampIntOption(maxBufferBytes, {
+      defaultValue: DEFAULT_MAX_BUFFER_BYTES,
+      min: MIN_MAX_BUFFER_BYTES,
+      max: MAX_MAX_BUFFER_BYTES,
+    });
     this.buffer = [];
     this.bufferBytes = 0;
     this.flushTimer = null;
+    this.pathSwitch = Promise.resolve();
     this.writer = new RotatingLogWriter({
       logPath: this.logPath,
       maxBytes,
@@ -59,22 +48,40 @@ class BufferedRotatingLogger {
 
   setLogPath(logPath) {
     const nextLogPath = logPath || null;
-    if (nextLogPath === this.logPath) {
-      return this.writer.flush();
-    }
-    const previousFlush = this.flush();
-    this.logPath = nextLogPath;
-    return previousFlush.finally(() => this.writer.setLogPath(nextLogPath));
+    this.pathSwitch = this.pathSwitch.then(async () => {
+      if (nextLogPath === this.logPath) {
+        await this.flush();
+        return;
+      }
+
+      const previousLogPath = this.logPath;
+      if (previousLogPath) {
+        await this.flush();
+      }
+
+      this.logPath = null;
+      await this.writer.setLogPath(nextLogPath);
+      this.logPath = nextLogPath;
+      await this.flush();
+    });
+    return this.pathSwitch;
   }
 
   log(payload) {
-    if (!this.logPath || payload === undefined || payload === null) {
+    if (payload === undefined || payload === null) {
       return;
     }
     const chunk = Buffer.isBuffer(payload)
       ? payload
       : Buffer.from(String(payload), 'utf8');
     if (!chunk.length) {
+      return;
+    }
+
+    if (!this.logPath) {
+      this.dropOldestUntilWithinLimit(chunk.length);
+      this.buffer.push(chunk);
+      this.bufferBytes += chunk.length;
       return;
     }
 
@@ -90,9 +97,12 @@ class BufferedRotatingLogger {
 
   flush() {
     this.clearFlushTimer();
-    if (!this.buffer.length || !this.logPath) {
-      this.buffer = [];
-      this.bufferBytes = 0;
+    if (!this.buffer.length) {
+      return this.writer.flush();
+    }
+    if (!this.logPath) {
+      // Path is switching or temporarily unavailable; keep buffered data.
+      this.dropOldestUntilWithinLimit(0);
       return this.writer.flush();
     }
 
@@ -102,6 +112,21 @@ class BufferedRotatingLogger {
     const payload = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
     this.writer.append(payload);
     return this.writer.flush();
+  }
+
+  dropOldestUntilWithinLimit(incomingBytes = 0) {
+    while (
+      this.buffer.length &&
+      this.bufferBytes + Math.max(0, incomingBytes) > this.maxBufferBytes
+    ) {
+      const removed = this.buffer.shift();
+      if (removed) {
+        this.bufferBytes -= removed.length;
+      }
+    }
+    if (this.bufferBytes < 0) {
+      this.bufferBytes = 0;
+    }
   }
 
   scheduleFlush() {
@@ -127,4 +152,3 @@ class BufferedRotatingLogger {
 module.exports = {
   BufferedRotatingLogger,
 };
-
