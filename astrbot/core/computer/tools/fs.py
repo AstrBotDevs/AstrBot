@@ -1,4 +1,5 @@
 import os
+import uuid
 from dataclasses import dataclass, field
 
 from astrbot.api import FunctionTool, logger
@@ -167,7 +168,9 @@ class FileDownloadTool(FunctionTool):
         try:
             name = os.path.basename(remote_path)
 
-            local_path = os.path.join(get_astrbot_temp_path(), name)
+            local_path = os.path.join(
+                get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+            )
 
             # Download file from sandbox
             await sb.download_file(remote_path, local_path)
@@ -183,12 +186,12 @@ class FileDownloadTool(FunctionTool):
                     logger.error(f"Error sending file message: {e}")
 
                 # remove
-                try:
-                    os.remove(local_path)
-                except Exception as e:
-                    logger.error(f"Error removing temp file {local_path}: {e}")
+                # try:
+                #     os.remove(local_path)
+                # except Exception as e:
+                #     logger.error(f"Error removing temp file {local_path}: {e}")
 
-                return f"File downloaded successfully to {local_path} and sent to user. The file has been removed from local storage."
+                return f"File downloaded successfully to {local_path} and sent to user."
 
             return f"File downloaded successfully to {local_path}"
         except Exception as e:

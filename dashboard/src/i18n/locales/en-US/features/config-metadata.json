@@ -819,6 +819,10 @@
         "description": "Log File Max Size (MB)",
         "hint": "Rotate when exceeding this size; default 20MB."
       },
+      "temp_dir_max_size": {
+        "description": "Temp Directory Size Limit (MB)",
+        "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
+      },
       "trace_log_enable": {
         "description": "Enable Trace File Logging",
         "hint": "Write trace events to a separate file (does not change console output)."

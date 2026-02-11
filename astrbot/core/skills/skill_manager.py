@@ -93,7 +93,6 @@ class SkillManager:
         self.skills_root = skills_root or get_astrbot_skills_path()
         self.config_path = os.path.join(get_astrbot_data_path(), SKILLS_CONFIG_FILENAME)
         os.makedirs(self.skills_root, exist_ok=True)
-        os.makedirs(get_astrbot_temp_path(), exist_ok=True)
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):

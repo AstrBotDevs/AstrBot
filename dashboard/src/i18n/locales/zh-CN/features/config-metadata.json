@@ -822,6 +822,10 @@
         "description": "日志文件大小上限 (MB)",
         "hint": "超过大小后自动轮转，默认 20MB。"
       },
+      "temp_dir_max_size": {
+        "description": "临时目录大小上限 (MB)",
+        "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。"
+      },
       "trace_log_enable": {
         "description": "启用 Trace 文件日志",
         "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。"

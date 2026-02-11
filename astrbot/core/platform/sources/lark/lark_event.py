@@ -21,7 +21,7 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.media_utils import (
     convert_audio_to_opus,
@@ -202,8 +202,11 @@ class LarkMessageEvent(AstrMessageEvent):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
                     # save as temp file
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    file_path = os.path.join(temp_dir, f"{uuid.uuid4()}_test.jpg")
+                    temp_dir = get_astrbot_temp_path()
+                    file_path = os.path.join(
+                        temp_dir,
+                        f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
+                    )
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:
