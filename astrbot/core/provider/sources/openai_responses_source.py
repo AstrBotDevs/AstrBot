@@ -653,7 +653,9 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 async for event in stream:
                     event_type = getattr(event, "type", "")
                     if event_type == "response.created":
-                        response_id = event.response.id
+                        response_obj = getattr(event, "response", None)
+                        if response_obj:
+                            response_id = getattr(response_obj, "id", None)
                         continue
 
                     if event_type == "response.output_text.delta":
@@ -686,10 +688,15 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                         )
 
                     if event_type == "response.failed":
-                        error_obj = getattr(event.response, "error", None)
+                        response_obj = getattr(event, "response", None)
+                        error_obj = (
+                            getattr(response_obj, "error", None)
+                            if response_obj
+                            else None
+                        )
                         if error_obj is not None:
                             raise Exception(
-                                f"Responses stream failed: {error_obj.code} {error_obj.message}"
+                                f"Responses stream failed: {getattr(error_obj, 'code', 'unknown')} {getattr(error_obj, 'message', '')}"
                             )
                         raise Exception("Responses stream failed.")
 

@@ -2,7 +2,6 @@ import asyncio
 import copy
 import inspect
 import os
-import re
 import traceback
 from pathlib import Path
 from typing import Any
@@ -39,7 +38,6 @@ from .util import (
 )
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
-
 
 
 def try_cast(value: Any, type_: str):

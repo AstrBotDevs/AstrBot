@@ -824,7 +824,9 @@ def _get_compress_provider(
     if not config.llm_compress_provider_id:
         return None
 
-    selected_provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+    selected_provider = plugin_context.get_provider_by_id(
+        config.llm_compress_provider_id
+    )
     if selected_provider is None:
         logger.warning(
             "未找到指定的上下文压缩模型 %s，将跳过压缩。",
