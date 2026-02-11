@@ -1,6 +1,7 @@
 import asyncio
 import itertools
 import logging
+import os
 import time
 import uuid
 from collections.abc import Awaitable
@@ -422,6 +423,14 @@ class AiocqhttpAdapter(Platform):
             )
             self.host = "0.0.0.0"
             self.port = 6199
+
+        logger.info(
+            "OneBot 反向 WS 服务启动中: platform_id=%s pid=%s listen=ws://%s:%s",
+            self.config.get("id", "unknown"),
+            os.getpid(),
+            self.host,
+            self.port,
+        )
 
         coro = self.bot.run_task(
             host=self.host,

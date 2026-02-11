@@ -218,6 +218,12 @@ class AstrBotDashboard:
             return None
 
         logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
+        logger.info(
+            "Dashboard 服务启动中: pid=%s listen=http://%s:%s",
+            os.getpid(),
+            host,
+            port,
+        )
 
         if host == "0.0.0.0":
             logger.info(
