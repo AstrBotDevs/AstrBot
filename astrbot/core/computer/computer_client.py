@@ -40,15 +40,19 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         upload_result = await booter.upload_file(zip_path, str(remote_zip))
         if not upload_result.get("success", False):
             raise RuntimeError("Failed to upload skills bundle to sandbox.")
-        # Always overwrite with local source of truth to avoid stale skills in long-lived sandboxes.
+        # Extract into a temp folder first, then replace skills atomically.
+        tmp_extract_root = f"{SANDBOX_SKILLS_ROOT}_tmp_extract"
         await booter.shell.exec(
-            f"mkdir -p {SANDBOX_SKILLS_ROOT} && "
-            f"rm -rf {SANDBOX_SKILLS_ROOT}/* && "
-            f"(unzip -o {remote_zip} -d {SANDBOX_SKILLS_ROOT} || "
+            f"mkdir -p {SANDBOX_SKILLS_ROOT} {tmp_extract_root} && "
+            f"rm -rf {tmp_extract_root}/* && "
+            f"(unzip -o {remote_zip} -d {tmp_extract_root} || "
             f"python3 -c \"import zipfile; z=zipfile.ZipFile('{remote_zip}'); "
-            f"z.extractall('{SANDBOX_SKILLS_ROOT}')\" || "
+            f"z.extractall('{tmp_extract_root}')\" || "
             f"python -c \"import zipfile; z=zipfile.ZipFile('{remote_zip}'); "
-            f"z.extractall('{SANDBOX_SKILLS_ROOT}')\"); "
+            f"z.extractall('{tmp_extract_root}')\") && "
+            f"find {SANDBOX_SKILLS_ROOT} -mindepth 1 -delete && "
+            f"cp -a {tmp_extract_root}/. {SANDBOX_SKILLS_ROOT}/ && "
+            f"rm -rf {tmp_extract_root} && "
             f"rm -f {remote_zip}"
         )
     finally:

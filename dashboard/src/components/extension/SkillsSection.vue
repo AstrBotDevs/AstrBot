@@ -311,6 +311,13 @@ export default {
       return payload.skills || [];
     };
 
+    const normalizeNeoItemsPayload = (res) => {
+      const payload = res?.data?.data || [];
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload.items)) return payload.items;
+      return [];
+    };
+
     const fetchSkills = async () => {
       loading.value = true;
       try {
@@ -406,8 +413,7 @@ export default {
         status: neoFilters.status || undefined,
       };
       const res = await axios.get("/api/skills/neo/candidates", { params });
-      const payload = res?.data?.data || {};
-      neoCandidates.value = payload.items || [];
+      neoCandidates.value = normalizeNeoItemsPayload(res);
     };
 
     const fetchNeoReleases = async () => {
@@ -416,8 +422,15 @@ export default {
         stage: neoFilters.stage || undefined,
       };
       const res = await axios.get("/api/skills/neo/releases", { params });
-      const payload = res?.data?.data || {};
-      neoReleases.value = payload.items || [];
+      neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
+        if (!item || typeof item !== "object") {
+          return item;
+        }
+        return {
+          ...item,
+          is_active: item.is_active ?? item.active ?? false,
+        };
+      });
     };
 
     const fetchNeoData = async () => {

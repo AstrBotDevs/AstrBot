@@ -386,6 +386,16 @@ async def test_neo_skills_routes(
     assert data["data"]["passed"] is True
 
     response = await test_client.post(
+        "/api/skills/neo/evaluate",
+        json={"candidate_id": "cand-1", "passed": "false", "score": 0.0},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["passed"] is False
+
+    response = await test_client.post(
         "/api/skills/neo/promote",
         json={"candidate_id": "cand-1", "stage": "stable"},
         headers=authenticated_header,

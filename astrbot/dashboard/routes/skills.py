@@ -250,9 +250,10 @@ class SkillsRoute(Route):
             endpoint, access_token = self._get_neo_client_config()
             data = await request.get_json()
             candidate_id = data.get("candidate_id")
-            passed = data.get("passed")
-            if not candidate_id or passed is None:
+            passed_value = data.get("passed")
+            if not candidate_id or passed_value is None:
                 return Response().error("Missing candidate_id or passed").__dict__
+            passed = _to_bool(passed_value, False)
 
             from shipyard_neo import BayClient
 
@@ -262,7 +263,7 @@ class SkillsRoute(Route):
             ) as client:
                 result = await client.skills.evaluate_candidate(
                     candidate_id,
-                    passed=bool(passed),
+                    passed=passed,
                     score=data.get("score"),
                     benchmark_id=data.get("benchmark_id"),
                     report=data.get("report"),
