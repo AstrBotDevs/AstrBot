@@ -62,6 +62,7 @@ AstrBot — это универсальная платформа Agent-чатб�
 
 ```bash
 uv tool install astrbot
+astrbot
 ```
 
 #### Развёртывание BT-Panel

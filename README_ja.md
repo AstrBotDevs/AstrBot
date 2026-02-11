@@ -62,6 +62,7 @@ Docker / Docker Compose を使用した AstrBot のデプロイを推奨しま�
 
 ```bash
 uv tool install astrbot
+astrbot
 ```
 
 #### システムパッケージマネージャーでのインストール

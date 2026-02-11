@@ -62,6 +62,7 @@ Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker]
 
 ```bash
 uv tool install astrbot
+astrbot
 ```
 
 #### Installation via le gestionnaire de paquets du système

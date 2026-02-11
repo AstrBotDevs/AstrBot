@@ -79,6 +79,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 ```bash
 uv tool install astrbot
+astrbot
 ```
 
 #### 宝塔面板部署

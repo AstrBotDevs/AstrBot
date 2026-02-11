@@ -64,6 +64,7 @@ Please refer to the official documentation: [Deploy AstrBot with Docker](https:/
 
 ```bash
 uv tool install astrbot
+astrbot
 ```
 
 #### System Package Manager Installation
