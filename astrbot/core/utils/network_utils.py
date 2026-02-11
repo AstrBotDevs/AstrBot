@@ -78,7 +78,7 @@ def log_connection_failure(
         )
     else:
         logger.error(
-            f"[{provider_label}] 网络连接失败 ({error_type})，未配置代理。错误: {error}"
+            f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}"
         )
 
 
