@@ -98,6 +98,8 @@ Runtime logs:
 - Backend log rotation envs:
   - `ASTRBOT_BACKEND_LOG_MAX_MB`
   - `ASTRBOT_BACKEND_LOG_BACKUP_COUNT`
+- Rotation debug logging:
+  - `ASTRBOT_LOG_ROTATION_DEBUG=1` (or `NODE_ENV=development`) to print filesystem errors from rotation operations.
 - On backend startup failure, the app dialog also shows the backend reason and backend log path.
 
 Timeout and loading controls:

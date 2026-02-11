@@ -2,6 +2,8 @@
 
 const path = require('path');
 const {
+  LOG_ROTATION_DEFAULT_BACKUP_COUNT,
+  LOG_ROTATION_DEFAULT_MAX_MB,
   appendRotatingLog,
   parseLogBackupCount,
   parseLogMaxBytes,
@@ -10,11 +12,11 @@ const {
 function createElectronLogger({ app, getRootDir }) {
   const electronLogMaxBytes = parseLogMaxBytes(
     process.env.ASTRBOT_ELECTRON_LOG_MAX_MB,
-    20,
+    LOG_ROTATION_DEFAULT_MAX_MB,
   );
   const electronLogBackupCount = parseLogBackupCount(
     process.env.ASTRBOT_ELECTRON_LOG_BACKUP_COUNT,
-    3,
+    LOG_ROTATION_DEFAULT_BACKUP_COUNT,
   );
 
   function getElectronLogPath() {
