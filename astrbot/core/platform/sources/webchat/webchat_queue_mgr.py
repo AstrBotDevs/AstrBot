@@ -89,7 +89,7 @@ class WebChatQueueMgr:
 
     async def clear_listener(self) -> None:
         self._listener_callback = None
-        for close_event in self._queue_close_events.values():
+        for close_event in list(self._queue_close_events.values()):
             close_event.set()
         self._queue_close_events.clear()
 

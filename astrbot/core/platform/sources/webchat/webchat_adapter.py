@@ -66,6 +66,7 @@ class WebChatAdapter(Platform):
             support_proactive_message=False,
         )
         self._shutdown_event = asyncio.Event()
+        self._webchat_queue_mgr = webchat_queue_mgr
 
     async def send_by_session(
         self,
@@ -194,7 +195,7 @@ class WebChatAdapter(Platform):
             abm = await self.convert_message(data)
             await self.handle_msg(abm)
 
-        bot = QueueListener(webchat_queue_mgr, callback, self._shutdown_event)
+        bot = QueueListener(self._webchat_queue_mgr, callback, self._shutdown_event)
         return bot.run()
 
     def meta(self) -> PlatformMetadata:
@@ -220,4 +221,4 @@ class WebChatAdapter(Platform):
 
     async def terminate(self) -> None:
         self._shutdown_event.set()
-        await webchat_queue_mgr.clear_listener()
+        await self._webchat_queue_mgr.clear_listener()

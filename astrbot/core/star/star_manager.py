@@ -193,6 +193,37 @@ class PluginManager:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
         return True
 
+    async def _import_plugin_with_dependency_recovery(
+        self,
+        path: str,
+        module_str: str,
+        root_dir_name: str,
+        requirements_path: str,
+    ) -> ModuleType:
+        try:
+            return __import__(path, fromlist=[module_str])
+        except (ModuleNotFoundError, ImportError) as import_exc:
+            if os.path.exists(requirements_path):
+                try:
+                    logger.info(
+                        f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
+                    )
+                    pip_installer.prefer_installed_dependencies(
+                        requirements_path=requirements_path
+                    )
+                    module = __import__(path, fromlist=[module_str])
+                    logger.info(
+                        f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。"
+                    )
+                    return module
+                except Exception as recover_exc:
+                    logger.info(
+                        f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
+                    )
+
+            await self._check_plugin_dept_update(target_plugin=root_dir_name)
+            return __import__(path, fromlist=[module_str])
+
     @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
         """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
@@ -406,32 +437,12 @@ class PluginManager:
 
                 # 尝试导入模块
                 try:
-                    module = __import__(path, fromlist=[module_str])
-                except (ModuleNotFoundError, ImportError) as import_exc:
-                    recovered_by_preferred_deps = False
-                    if os.path.exists(requirements_path):
-                        try:
-                            logger.info(
-                                f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
-                            )
-                            pip_installer.prefer_installed_dependencies(
-                                requirements_path=requirements_path
-                            )
-                            module = __import__(path, fromlist=[module_str])
-                            recovered_by_preferred_deps = True
-                            logger.info(
-                                f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。"
-                            )
-                        except Exception as recover_exc:
-                            logger.info(
-                                f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
-                            )
-                    if not recovered_by_preferred_deps:
-                        # 尝试安装依赖
-                        await self._check_plugin_dept_update(
-                            target_plugin=root_dir_name
-                        )
-                        module = __import__(path, fromlist=[module_str])
+                    module = await self._import_plugin_with_dependency_recovery(
+                        path=path,
+                        module_str=module_str,
+                        root_dir_name=root_dir_name,
+                        requirements_path=requirements_path,
+                    )
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
