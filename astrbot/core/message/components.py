@@ -156,7 +156,9 @@ class Record(BaseMessageComponent):
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            file_path = os.path.join(get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg")
+            file_path = os.path.join(
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
+            )
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(file_path)
