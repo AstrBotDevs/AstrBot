@@ -5,6 +5,7 @@ const path = require('path');
 
 const LOG_ROTATION_DEFAULT_MAX_MB = 20;
 const LOG_ROTATION_DEFAULT_BACKUP_COUNT = 3;
+const logSizeCache = new Map();
 
 function normalizeUrl(value) {
   try {
@@ -49,6 +50,38 @@ function isIgnorableFsError(error) {
   return Boolean(error && typeof error === 'object' && error.code === 'ENOENT');
 }
 
+function readLogSize(logPath) {
+  try {
+    return fs.statSync(logPath).size;
+  } catch (error) {
+    if (isIgnorableFsError(error)) {
+      return 0;
+    }
+    logRotationFsError('stat', logPath, error);
+    return 0;
+  }
+}
+
+function getCachedLogSize(logPath) {
+  if (logSizeCache.has(logPath)) {
+    return logSizeCache.get(logPath);
+  }
+  const size = readLogSize(logPath);
+  logSizeCache.set(logPath, size);
+  return size;
+}
+
+function setCachedLogSize(logPath, size) {
+  if (!logPath) {
+    return;
+  }
+  if (!Number.isFinite(size) || size < 0) {
+    logSizeCache.delete(logPath);
+    return;
+  }
+  logSizeCache.set(logPath, size);
+}
+
 function parseLogMaxBytes(
   maxMbRaw,
   defaultMaxMb = LOG_ROTATION_DEFAULT_MAX_MB,
@@ -72,23 +105,22 @@ function parseLogBackupCount(
   return defaultBackupCount;
 }
 
-function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0) {
+function rotateLogFileIfNeeded(
+  logPath,
+  maxBytes,
+  backupCount,
+  incomingBytes = 0,
+  currentSize = null,
+) {
   if (!logPath || !maxBytes || maxBytes <= 0) {
-    return;
+    return false;
   }
 
-  let currentSize = 0;
-  try {
-    currentSize = fs.statSync(logPath).size;
-  } catch (error) {
-    if (isIgnorableFsError(error)) {
-      return;
-    }
-    logRotationFsError('stat', logPath, error);
-    return;
-  }
-  if (currentSize + Math.max(0, incomingBytes) <= maxBytes) {
-    return;
+  const baseSize = Number.isFinite(currentSize)
+    ? currentSize
+    : getCachedLogSize(logPath);
+  if (baseSize + Math.max(0, incomingBytes) <= maxBytes) {
+    return false;
   }
 
   if (!backupCount || backupCount <= 0) {
@@ -96,11 +128,13 @@ function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0
       fs.truncateSync(logPath, 0);
     } catch (error) {
       if (isIgnorableFsError(error)) {
-        return;
+        setCachedLogSize(logPath, 0);
+        return true;
       }
       logRotationFsError('truncate', logPath, error);
     }
-    return;
+    setCachedLogSize(logPath, readLogSize(logPath));
+    return true;
   }
 
   const oldestPath = `${logPath}.${backupCount}`;
@@ -132,10 +166,13 @@ function rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes = 0
     fs.renameSync(logPath, `${logPath}.1`);
   } catch (error) {
     if (isIgnorableFsError(error)) {
-      return;
+      setCachedLogSize(logPath, readLogSize(logPath));
+      return true;
     }
     logRotationFsError('rename', `${logPath} -> ${logPath}.1`, error);
   }
+  setCachedLogSize(logPath, readLogSize(logPath));
+  return true;
 }
 
 function appendRotatingLog(logPath, payload, options = {}) {
@@ -154,10 +191,15 @@ function appendRotatingLog(logPath, payload, options = {}) {
   const backupCount = Number.isFinite(options.backupCount)
     ? options.backupCount
     : 0;
-
-  rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes);
+  let currentSize = getCachedLogSize(logPath);
+  if (
+    rotateLogFileIfNeeded(logPath, maxBytes, backupCount, incomingBytes, currentSize)
+  ) {
+    currentSize = getCachedLogSize(logPath);
+  }
   try {
     fs.appendFileSync(logPath, content, Buffer.isBuffer(content) ? undefined : 'utf8');
+    setCachedLogSize(logPath, currentSize + incomingBytes);
   } catch (error) {
     logRotationFsError('append', logPath, error);
   }

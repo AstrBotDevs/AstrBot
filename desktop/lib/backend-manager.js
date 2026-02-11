@@ -4,10 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const { BufferedRotatingLogger } = require('./buffered-rotating-logger');
 const {
   LOG_ROTATION_DEFAULT_BACKUP_COUNT,
   LOG_ROTATION_DEFAULT_MAX_MB,
-  appendRotatingLog,
   delay,
   ensureDir,
   normalizeUrl,
@@ -57,10 +57,13 @@ class BackendManager {
 
     this.backendProcess = null;
     this.backendConfig = null;
-    this.backendLogPath = null;
-    this.backendLogBuffer = [];
-    this.backendLogBufferBytes = 0;
-    this.backendLogFlushTimer = null;
+    this.backendLogger = new BufferedRotatingLogger({
+      logPath: null,
+      maxBytes: this.backendLogMaxBytes,
+      backupCount: this.backendLogBackupCount,
+      flushIntervalMs: BACKEND_LOG_FLUSH_INTERVAL_MS,
+      maxBufferBytes: BACKEND_LOG_MAX_BUFFER_BYTES,
+    });
     this.backendLastExitReason = null;
     this.backendStartupFailureReason = null;
     this.backendSpawning = false;
@@ -216,67 +219,6 @@ class BackendManager {
 
   canManageBackend() {
     return Boolean(this.getBackendConfig().cmd);
-  }
-
-  writeBackendLog(payload) {
-    if (!this.backendLogPath) {
-      return;
-    }
-    appendRotatingLog(this.backendLogPath, payload, {
-      maxBytes: this.backendLogMaxBytes,
-      backupCount: this.backendLogBackupCount,
-    });
-  }
-
-  clearBackendLogFlushTimer() {
-    if (this.backendLogFlushTimer === null) {
-      return;
-    }
-    clearTimeout(this.backendLogFlushTimer);
-    this.backendLogFlushTimer = null;
-  }
-
-  flushBackendLogBuffer() {
-    this.clearBackendLogFlushTimer();
-    if (!this.backendLogBuffer.length) {
-      return;
-    }
-    const chunks = this.backendLogBuffer;
-    this.backendLogBuffer = [];
-    this.backendLogBufferBytes = 0;
-    const payload = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
-    this.writeBackendLog(payload);
-  }
-
-  scheduleBackendLogFlush() {
-    if (this.backendLogFlushTimer !== null) {
-      return;
-    }
-    this.backendLogFlushTimer = setTimeout(() => {
-      this.backendLogFlushTimer = null;
-      this.flushBackendLogBuffer();
-    }, BACKEND_LOG_FLUSH_INTERVAL_MS);
-  }
-
-  queueBackendLog(payload) {
-    if (!this.backendLogPath || payload === undefined || payload === null) {
-      return;
-    }
-    const chunk = Buffer.isBuffer(payload)
-      ? payload
-      : Buffer.from(String(payload), 'utf8');
-    if (!chunk.length) {
-      return;
-    }
-
-    this.backendLogBuffer.push(chunk);
-    this.backendLogBufferBytes += chunk.length;
-
-    if (this.backendLogBufferBytes >= BACKEND_LOG_MAX_BUFFER_BYTES) {
-      this.flushBackendLogBuffer();
-      return;
-    }
-    this.scheduleBackendLogFlush();
   }
 
   async pingBackend(timeoutMs = 800) {
@@ -453,15 +395,15 @@ class BackendManager {
     if (backendConfig.webuiDir) {
       env.ASTRBOT_WEBUI_DIR = backendConfig.webuiDir;
     }
-    this.flushBackendLogBuffer();
-    this.backendLogPath = null;
+    let backendLogPath = null;
     if (backendConfig.rootDir) {
       env.ASTRBOT_ROOT = backendConfig.rootDir;
       const logsDir = path.join(backendConfig.rootDir, 'logs');
       ensureDir(logsDir);
-      this.backendLogPath = path.join(logsDir, 'backend.log');
+      backendLogPath = path.join(logsDir, 'backend.log');
     }
-    const usePipedLogging = Boolean(this.backendLogPath);
+    this.backendLogger.setLogPath(backendLogPath);
+    const usePipedLogging = Boolean(backendLogPath);
 
     this.backendProcess = spawn(backendConfig.cmd, backendConfig.args || [], {
       cwd: backendConfig.cwd,
@@ -474,12 +416,12 @@ class BackendManager {
     if (usePipedLogging) {
       if (this.backendProcess.stdout) {
         this.backendProcess.stdout.on('data', (chunk) => {
-          this.queueBackendLog(chunk);
+          this.backendLogger.log(chunk);
         });
       }
       if (this.backendProcess.stderr) {
         this.backendProcess.stderr.on('data', (chunk) => {
-          this.queueBackendLog(chunk);
+          this.backendLogger.log(chunk);
         });
       }
     }
@@ -488,7 +430,7 @@ class BackendManager {
       const launchLine = [backendConfig.cmd, ...(backendConfig.args || [])]
         .map((item) => JSON.stringify(item))
         .join(' ');
-      this.queueBackendLog(
+      this.backendLogger.log(
         `[${new Date().toISOString()}] [Electron] Start backend ${launchLine}\n`,
       );
     }
@@ -496,18 +438,18 @@ class BackendManager {
     this.backendProcess.on('error', (error) => {
       this.backendLastExitReason =
         error instanceof Error ? error.message : String(error);
-      this.queueBackendLog(
+      this.backendLogger.log(
         `[${new Date().toISOString()}] [Electron] Backend spawn error: ${
           error instanceof Error ? error.message : String(error)
         }\n`,
       );
-      this.flushBackendLogBuffer();
+      this.backendLogger.flush();
       this.backendProcess = null;
     });
 
     this.backendProcess.on('exit', (code, signal) => {
       this.backendLastExitReason = `Backend process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}).`;
-      this.flushBackendLogBuffer();
+      this.backendLogger.flush();
       this.backendProcess = null;
     });
   }
@@ -580,7 +522,7 @@ class BackendManager {
         await waitForProcessExit(processToStop, 1500);
       }
     }
-    this.flushBackendLogBuffer();
+    this.backendLogger.flush();
   }
 
   findListeningPidsOnWindows(port) {
