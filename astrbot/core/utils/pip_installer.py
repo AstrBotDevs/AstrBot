@@ -580,6 +580,26 @@ class PipInstaller:
             )
         importlib.invalidate_caches()
 
+    def prefer_installed_dependencies(self, requirements_path: str) -> None:
+        """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
+        if not is_packaged_electron_runtime():
+            return
+
+        target_site_packages = get_astrbot_site_packages_path()
+        if not os.path.isdir(target_site_packages):
+            return
+
+        requested_requirements = _extract_requirement_names(requirements_path)
+        if not requested_requirements:
+            return
+
+        _prepend_sys_path(target_site_packages)
+        _ensure_plugin_dependencies_preferred(
+            target_site_packages,
+            requested_requirements,
+        )
+        importlib.invalidate_caches()
+
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
