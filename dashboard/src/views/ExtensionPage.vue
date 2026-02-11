@@ -1298,7 +1298,7 @@ watch(activeTab, (newTab) => {
                               color="error"
                               variant="tonal"
                               prepend-icon="mdi-refresh"
-                              @click="handleReloadAllFailed(isActive)"
+                              @click="handleReloadAllFailed"
                           >
                               尝试一键重载修复
                           </v-btn>
