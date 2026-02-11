@@ -35,7 +35,7 @@ const props = defineProps({
   mode: {
     type: String,
     default: "readme",
-    validator: (value) => ["readme", "changelog"].includes(value),
+    validator: (value) => ["readme", "changelog", "first-notice"].includes(value),
   },
 });
 
@@ -166,19 +166,50 @@ const renderedHtml = computed(() => {
 });
 
 const modeConfig = computed(() => {
-  const isChangelog = props.mode === "changelog";
-  const keyBase = `core.common.${isChangelog ? "changelog" : "readme"}`;
+  if (props.mode === "changelog") {
+    return {
+      title: t("core.common.changelog.title"),
+      loading: t("core.common.changelog.loading"),
+      emptyTitle: t("core.common.changelog.empty.title"),
+      emptySubtitle: t("core.common.changelog.empty.subtitle"),
+      apiPath: "/api/plugin/changelog",
+      showGithubButton: false,
+      showRefreshButton: true,
+      refreshLabel: t("core.common.readme.buttons.refresh"),
+    };
+  }
+
+  if (props.mode === "first-notice") {
+    return {
+      title: t("core.common.firstNotice.title"),
+      loading: t("core.common.firstNotice.loading"),
+      emptyTitle: t("core.common.firstNotice.empty.title"),
+      emptySubtitle: t("core.common.firstNotice.empty.subtitle"),
+      apiPath: "/api/stat/first-notice",
+      showGithubButton: false,
+      showRefreshButton: false,
+      refreshLabel: "",
+    };
+  }
+
   return {
-    title: t(`${keyBase}.title`),
-    loading: t(`${keyBase}.loading`),
-    emptyTitle: t(`${keyBase}.empty.title`),
-    emptySubtitle: t(`${keyBase}.empty.subtitle`),
-    apiPath: `/api/plugin/${isChangelog ? "changelog" : "readme"}`,
+    title: t("core.common.readme.title"),
+    loading: t("core.common.readme.loading"),
+    emptyTitle: t("core.common.readme.empty.title"),
+    emptySubtitle: t("core.common.readme.empty.subtitle"),
+    apiPath: "/api/plugin/readme",
+    showGithubButton: true,
+    showRefreshButton: true,
+    refreshLabel: t("core.common.readme.buttons.refresh"),
   };
 });
 
+const requiresPluginName = computed(
+  () => props.mode === "readme" || props.mode === "changelog",
+);
+
 async function fetchContent() {
-  if (!props.pluginName) return;
+  if (requiresPluginName.value && !props.pluginName) return;
   const requestId = ++lastRequestId.value;
   loading.value = true;
   content.value = null;
@@ -186,9 +217,13 @@ async function fetchContent() {
   isEmpty.value = false;
 
   try {
-    const res = await axios.get(
-      `${modeConfig.value.apiPath}?name=${props.pluginName}`,
-    );
+    let params;
+    if (requiresPluginName.value) {
+      params = { name: props.pluginName };
+    } else if (props.mode === "first-notice") {
+      params = { locale: locale.value };
+    }
+    const res = await axios.get(modeConfig.value.apiPath, { params });
     if (requestId !== lastRequestId.value) return;
 
     if (res.data.status === "ok") {
@@ -207,7 +242,9 @@ async function fetchContent() {
 watch(
   [() => props.show, () => props.pluginName, () => props.mode],
   ([show, name]) => {
-    if (show && name) fetchContent();
+    if (!show) return;
+    if (requiresPluginName.value && !name) return;
+    fetchContent();
   },
   { immediate: true },
 );
@@ -273,22 +310,26 @@ function openExternalLink(url) {
   if (!url) return;
   window.open(url, "_blank", "noopener,noreferrer");
 }
+
+const showActionArea = computed(() => {
+  const hasGithub = modeConfig.value.showGithubButton && !!props.repoUrl;
+  return hasGithub || modeConfig.value.showRefreshButton;
+});
 </script>
 
 <template>
   <v-dialog v-model="_show" width="800">
     <v-card>
       <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h5">{{ modeConfig.title }}</span>
+        <span class="text-h2 pa-2">{{ modeConfig.title }}</span>
         <v-btn icon @click="_show = false" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-divider></v-divider>
-      <v-card-text style="height: 70vh; overflow-y: auto">
-        <div class="d-flex justify-space-between mb-4">
+      <v-card-text style="overflow-y: auto">
+        <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
-            v-if="repoUrl"
+            v-if="modeConfig.showGithubButton && repoUrl"
             color="primary"
             prepend-icon="mdi-github"
             @click="openExternalLink(repoUrl)"
@@ -296,11 +337,12 @@ function openExternalLink(url) {
             {{ t("core.common.readme.buttons.viewOnGithub") }}
           </v-btn>
           <v-btn
+            v-if="modeConfig.showRefreshButton"
             color="secondary"
             prepend-icon="mdi-refresh"
             @click="fetchContent"
           >
-            {{ t("core.common.readme.buttons.refresh") }}
+            {{ modeConfig.refreshLabel }}
           </v-btn>
         </div>
 
@@ -357,7 +399,6 @@ function openExternalLink(url) {
           </p>
         </div>
       </v-card-text>
-      <v-divider></v-divider>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="primary" variant="tonal" @click="_show = false">

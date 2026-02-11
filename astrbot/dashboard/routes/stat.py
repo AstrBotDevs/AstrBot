@@ -4,6 +4,7 @@ import threading
 import time
 import traceback
 from functools import cmp_to_key
+from pathlib import Path
 
 import aiohttp
 import psutil
@@ -37,6 +38,7 @@ class StatRoute(Route):
             "/stat/test-ghproxy-connection": ("POST", self.test_ghproxy_connection),
             "/stat/changelog": ("GET", self.get_changelog),
             "/stat/changelog/list": ("GET", self.list_changelog_versions),
+            "/stat/first-notice": ("GET", self.get_first_notice),
         }
         self.db_helper = db_helper
         self.register_routes()
@@ -276,6 +278,42 @@ class StatRoute(Route):
             )
 
             return Response().ok({"versions": versions}).__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"Error: {e!s}").__dict__
+
+    async def get_first_notice(self):
+        """读取项目根目录 FIRST_NOTICE.md 内容。"""
+        try:
+            locale = (request.args.get("locale") or "").strip()
+            if not re.match(r"^[A-Za-z0-9_-]*$", locale):
+                locale = ""
+
+            base_path = Path(get_astrbot_path())
+            candidates: list[Path] = []
+
+            if locale:
+                candidates.append(base_path / f"FIRST_NOTICE.{locale}.md")
+                if locale.lower().startswith("zh"):
+                    candidates.append(base_path / "FIRST_NOTICE.zh-CN.md")
+                elif locale.lower().startswith("en"):
+                    candidates.append(base_path / "FIRST_NOTICE.en-US.md")
+
+            candidates.extend(
+                [
+                    base_path / "FIRST_NOTICE.en-US.md",
+                    base_path / "FIRST_NOTICE.md",
+                ],
+            )
+
+            for notice_path in candidates:
+                if not notice_path.is_file():
+                    continue
+                content = notice_path.read_text(encoding="utf-8")
+                if content.strip():
+                    return Response().ok({"content": content}).__dict__
+
+            return Response().ok({"content": None}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"Error: {e!s}").__dict__
