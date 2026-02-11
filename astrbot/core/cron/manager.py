@@ -25,14 +25,14 @@ if TYPE_CHECKING:
 class CronJobManager:
     """Central scheduler for BasicCronJob and ActiveAgentCronJob."""
 
-    def __init__(self, db: BaseDatabase):
+    def __init__(self, db: BaseDatabase) -> None:
         self.db = db
         self.scheduler = AsyncIOScheduler()
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
         self._started = False
 
-    async def start(self, ctx: "Context"):
+    async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
         async with self._lock:
             if self._started:
@@ -41,14 +41,14 @@ class CronJobManager:
             self._started = True
             await self.sync_from_db()
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         async with self._lock:
             if not self._started:
                 return
             self.scheduler.shutdown(wait=False)
             self._started = False
 
-    async def sync_from_db(self):
+    async def sync_from_db(self) -> None:
         jobs = await self.db.list_cron_jobs()
         for job in jobs:
             if not job.enabled or not job.persistent:
@@ -136,11 +136,11 @@ class CronJobManager:
     async def list_jobs(self, job_type: str | None = None) -> list[CronJob]:
         return await self.db.list_cron_jobs(job_type)
 
-    def _remove_scheduled(self, job_id: str):
+    def _remove_scheduled(self, job_id: str) -> None:
         if self.scheduler.get_job(job_id):
             self.scheduler.remove_job(job_id)
 
-    def _schedule_job(self, job: CronJob):
+    def _schedule_job(self, job: CronJob) -> None:
         if not self._started:
             self.scheduler.start()
             self._started = True
@@ -188,7 +188,7 @@ class CronJobManager:
         aps_job = self.scheduler.get_job(job_id)
         return aps_job.next_run_time if aps_job else None
 
-    async def _run_job(self, job_id: str):
+    async def _run_job(self, job_id: str) -> None:
         job = await self.db.get_cron_job(job_id)
         if not job or not job.enabled:
             return
@@ -222,7 +222,7 @@ class CronJobManager:
                 # one-shot: remove after execution regardless of success
                 await self.delete_job(job_id)
 
-    async def _run_basic_job(self, job: CronJob):
+    async def _run_basic_job(self, job: CronJob) -> None:
         handler = self._basic_handlers.get(job.job_id)
         if not handler:
             raise RuntimeError(f"Basic cron job handler not found for {job.job_id}")
@@ -231,7 +231,7 @@ class CronJobManager:
         if asyncio.iscoroutine(result):
             await result
 
-    async def _run_active_agent_job(self, job: CronJob, start_time: datetime):
+    async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
         session_str = payload.get("session")
         if not session_str:
@@ -266,7 +266,7 @@ class CronJobManager:
         message: str,
         session_str: str,
         extras: dict,
-    ):
+    ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
             MainAgentBuildConfig,

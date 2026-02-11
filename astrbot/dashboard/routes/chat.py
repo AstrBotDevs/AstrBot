@@ -640,7 +640,7 @@ class ChatRoute(Route):
                     attachment_ids.append(part["attachment_id"])
         return attachment_ids
 
-    async def _delete_attachments(self, attachment_ids: list[str]):
+    async def _delete_attachments(self, attachment_ids: list[str]) -> None:
         """删除附件（包括数据库记录和磁盘文件）"""
         try:
             attachments = await self.db.get_attachments(attachment_ids)

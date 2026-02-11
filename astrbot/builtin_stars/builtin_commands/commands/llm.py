@@ -7,7 +7,7 @@ from astrbot.core.pipeline.engine.chain_runtime_flags import (
 
 
 class LLMCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def llm(self, event: AstrMessageEvent):

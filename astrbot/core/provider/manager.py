@@ -34,7 +34,7 @@ class ProviderManager:
         acm: AstrBotConfigManager,
         db_helper: BaseDatabase,
         persona_mgr: PersonaManager,
-    ):
+    ) -> None:
         self.reload_lock = asyncio.Lock()
         self.resource_lock = asyncio.Lock()
         self.persona_mgr = persona_mgr
@@ -99,7 +99,7 @@ class ProviderManager:
         provider_id: str,
         provider_type: ProviderType,
         umo: str | None = None,
-    ):
+    ) -> None:
         """设置提供商。
 
         Args:
@@ -247,7 +247,7 @@ class ProviderManager:
 
         return provider
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         # 逐个初始化提供商
         for provider_config in self.providers_config:
             try:
@@ -311,7 +311,7 @@ class ProviderManager:
         # 初始化 MCP Client 连接
         asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
 
-    def dynamic_import_provider(self, type: str):
+    def dynamic_import_provider(self, type: str) -> None:
         """动态导入提供商适配器模块
 
         Args:
@@ -468,7 +468,7 @@ class ProviderManager:
         provider_config["key"] = resolved_keys
         return provider_config
 
-    async def load_provider(self, provider_config: dict):
+    async def load_provider(self, provider_config: dict) -> None:
         # 如果 provider_source_id 存在且不为空，则从 provider_sources 中找到对应的配置并合并
         provider_config = self.get_merged_provider_config(provider_config)
 
@@ -609,7 +609,7 @@ class ProviderManager:
                 f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
             )
 
-    async def reload(self, provider_config: dict):
+    async def reload(self, provider_config: dict) -> None:
         async with self.reload_lock:
             await self.terminate_provider(provider_config["id"])
             if provider_config["enable"]:
@@ -655,7 +655,7 @@ class ProviderManager:
     def get_insts(self):
         return self.provider_insts
 
-    async def terminate_provider(self, provider_id: str):
+    async def terminate_provider(self, provider_id: str) -> None:
         if provider_id in self.inst_map:
             logger.info(
                 f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
@@ -691,7 +691,7 @@ class ProviderManager:
 
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
-    ):
+    ) -> None:
         """Delete provider and/or provider source from config and terminate the instances. Config will be saved after deletion."""
         async with self.resource_lock:
             # delete from config
@@ -711,7 +711,7 @@ class ProviderManager:
             config.save_config()
             logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
 
-    async def update_provider(self, origin_provider_id: str, new_config: dict):
+    async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""
         async with self.resource_lock:
             npid = new_config.get("id", None)
@@ -735,7 +735,7 @@ class ProviderManager:
             # reload instance
             await self.reload(new_config)
 
-    async def create_provider(self, new_config: dict):
+    async def create_provider(self, new_config: dict) -> None:
         """Add new provider config and load the instance. Config will be saved after addition."""
         async with self.resource_lock:
             npid = new_config.get("id", None)
@@ -751,7 +751,7 @@ class ProviderManager:
             # load instance
             await self.load_provider(new_config)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
                 await provider_inst.terminate()  # type: ignore

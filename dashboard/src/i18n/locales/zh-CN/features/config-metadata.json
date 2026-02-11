@@ -307,7 +307,7 @@
       },
       "kf_name": {
         "description": "微信客服账号名",
-        "hint": "可选。微信客服账号名(不是 ID)。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取"
+        "hint": "如果填写此项，即代表你将使用企业微信客服，而不是企业微信应用。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取。"
       },
       "lark_bot_name": {
         "description": "飞书机器人的名字",
@@ -457,11 +457,11 @@
       },
       "wecomaibot_friend_message_welcome_text": {
         "description": "企业微信智能机器人私聊欢迎语",
-        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。"
+        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，如 “💭 思考中...”。留空则不回复。"
       },
       "wecomaibot_init_respond_text": {
         "description": "企业微信智能机器人初始响应文本",
-        "hint": "当机器人收到消息时，首先回复的文本内容。留空则使用默认值。"
+        "hint": "当机器人收到消息时，首先回复的文本内容。留空则不设置。"
       },
       "wpp_active_message_poll": {
         "description": "是否启用主动消息轮询",
@@ -481,6 +481,14 @@
       "ws_reverse_token": {
         "description": "反向 Websocket Token",
         "hint": "反向 Websocket Token。未设置则不启用 Token 验证。"
+      },
+      "msg_push_webhook_url": {
+        "description": "企业微信消息推送 Webhook URL",
+        "hint": "用于主动消息推送，请在企微群->消息推送得到 URL。强烈建议设置此项以带来更好的消息发送体验。"
+      },
+      "only_use_webhook_url_to_send": {
+        "description": "仅使用 Webhook 发送消息",
+        "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
       }
     },
     "general": {

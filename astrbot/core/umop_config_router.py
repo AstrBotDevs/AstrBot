@@ -11,10 +11,10 @@ class UmopConfigRouter:
         """UMOP 到配置文件 ID 的映射"""
         self.sp = sp
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         await self._load_routing_table()
 
-    async def _load_routing_table(self):
+    async def _load_routing_table(self) -> None:
         """加载路由表"""
         # 从 SharedPreferences 中加载 umop_to_config_id 映射
         sp_data = await self.sp.get_async(
@@ -50,7 +50,7 @@ class UmopConfigRouter:
                 return config_id
         return None
 
-    async def update_routing_data(self, new_routing: dict[str, str]):
+    async def update_routing_data(self, new_routing: dict[str, str]) -> None:
         """更新路由表
 
         Args:
@@ -89,7 +89,7 @@ class UmopConfigRouter:
         self.umop_to_config_id[umo] = config_id
         await self.sp.global_put("umop_config_routing", self.umop_to_config_id)
 
-    async def delete_route(self, umo: str):
+    async def delete_route(self, umo: str) -> None:
         """删除一条路由
 
         Args:

@@ -13,7 +13,7 @@ from ._node_binding import get_chain_nodes
 class TTSCommand:
     """Toggle text-to-speech for the current routed chain."""
 
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def tts(self, event: AstrMessageEvent):

@@ -5,11 +5,25 @@ import os
 import sys
 from pathlib import Path
 
-from astrbot.core import LogBroker, LogManager, db_helper, logger
-from astrbot.core.config.default import VERSION
-from astrbot.core.initial_loader import InitialLoader
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+import runtime_bootstrap
+
+runtime_bootstrap.initialize_runtime_bootstrap()
+
+from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
+from astrbot.core.config.default import VERSION  # noqa: E402
+from astrbot.core.initial_loader import InitialLoader  # noqa: E402
+from astrbot.core.utils.astrbot_path import (  # noqa: E402
+    get_astrbot_config_path,
+    get_astrbot_data_path,
+    get_astrbot_plugin_path,
+    get_astrbot_root,
+    get_astrbot_site_packages_path,
+    get_astrbot_temp_path,
+)
+from astrbot.core.utils.io import (  # noqa: E402
+    download_dashboard,
+    get_dashboard_version,
+)
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
@@ -25,14 +39,23 @@ logo_tmpl = r"""
 """
 
 
-def check_env():
+def check_env() -> None:
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
         logger.error("请使用 Python3.10+ 运行本项目。")
         exit()
 
-    os.makedirs("data/config", exist_ok=True)
-    os.makedirs("data/plugins", exist_ok=True)
-    os.makedirs("data/temp", exist_ok=True)
+    astrbot_root = get_astrbot_root()
+    if astrbot_root not in sys.path:
+        sys.path.insert(0, astrbot_root)
+
+    site_packages_path = get_astrbot_site_packages_path()
+    if site_packages_path not in sys.path:
+        sys.path.insert(0, site_packages_path)
+
+    os.makedirs(get_astrbot_config_path(), exist_ok=True)
+    os.makedirs(get_astrbot_plugin_path(), exist_ok=True)
+    os.makedirs(get_astrbot_temp_path(), exist_ok=True)
+    os.makedirs(site_packages_path, exist_ok=True)
 
     # 针对问题 #181 的临时解决方案
     mimetypes.add_type("text/javascript", ".js")

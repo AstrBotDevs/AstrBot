@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-      GHCR_OWNER: soulter
+      GHCR_OWNER: astrbotdevs
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
 
     steps:
@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
-      GHCR_OWNER: soulter
+      GHCR_OWNER: astrbotdevs
       HAS_GHCR_TOKEN: ${{ secrets.GHCR_GITHUB_TOKEN != '' }}
 
     steps:

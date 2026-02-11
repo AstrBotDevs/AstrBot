@@ -18,7 +18,7 @@ THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
 
 
 class ConversationCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     def _resolve_agent_runner_type(self, message: AstrMessageEvent) -> str:
@@ -46,7 +46,7 @@ class ConversationCommands:
             return None
         return conv.persona_id
 
-    async def reset(self, message: AstrMessageEvent):
+    async def reset(self, message: AstrMessageEvent) -> None:
         """重置 LLM 会话"""
         umo = message.unified_msg_origin
         chain_config_id = (
@@ -114,7 +114,7 @@ class ConversationCommands:
 
         message.set_result(MessageEventResult().message(ret))
 
-    async def his(self, message: AstrMessageEvent, page: int = 1):
+    async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
         if not self.context.get_chat_provider_for_event(message):
             message.set_result(
@@ -157,7 +157,7 @@ class ConversationCommands:
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
 
-    async def convs(self, message: AstrMessageEvent, page: int = 1):
+    async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
         chain_config_id = (
             message.chain_config.config_id if message.chain_config else None
@@ -237,7 +237,7 @@ class ConversationCommands:
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
         return
 
-    async def new_conv(self, message: AstrMessageEvent):
+    async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
         agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
@@ -262,7 +262,7 @@ class ConversationCommands:
             MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"),
         )
 
-    async def groupnew_conv(self, message: AstrMessageEvent, sid: str = ""):
+    async def groupnew_conv(self, message: AstrMessageEvent, sid: str = "") -> None:
         """创建新群聊对话"""
         if sid:
             session = str(
@@ -293,7 +293,7 @@ class ConversationCommands:
         self,
         message: AstrMessageEvent,
         index: int | None = None,
-    ):
+    ) -> None:
         """通过 /ls 前面的序号切换对话"""
         if not isinstance(index, int):
             message.set_result(
@@ -328,7 +328,7 @@ class ConversationCommands:
                 ),
             )
 
-    async def rename_conv(self, message: AstrMessageEvent, new_name: str = ""):
+    async def rename_conv(self, message: AstrMessageEvent, new_name: str = "") -> None:
         """重命名对话"""
         if not new_name:
             message.set_result(MessageEventResult().message("请输入新的对话名称。"))
@@ -339,7 +339,7 @@ class ConversationCommands:
         )
         message.set_result(MessageEventResult().message("重命名对话成功。"))
 
-    async def del_conv(self, message: AstrMessageEvent):
+    async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
         chain_config_id = (
             message.chain_config.config_id if message.chain_config else None

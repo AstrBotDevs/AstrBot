@@ -19,9 +19,14 @@ export interface menu {
 // 所有键名都使用 core.navigation.* 格式
 const sidebarItem: menu[] = [
   {
+    title: 'core.navigation.welcome',
+    icon: 'mdi-hand-wave-outline',
+    to: '/welcome',
+  },
+  {
     title: 'core.navigation.platforms',
     icon: 'mdi-robot',
-    to: '/',
+    to: '/platforms',
   },
   {
     title: 'core.navigation.providers',

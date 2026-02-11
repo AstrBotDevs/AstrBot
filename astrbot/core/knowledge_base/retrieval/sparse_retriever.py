@@ -34,7 +34,7 @@ class SparseRetriever:
     - 使用 BM25 算法计算相关度
     """
 
-    def __init__(self, kb_db: KBSQLiteDatabase):
+    def __init__(self, kb_db: KBSQLiteDatabase) -> None:
         """初始化稀疏检索器
 
         Args:

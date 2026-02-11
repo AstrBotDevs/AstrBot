@@ -34,7 +34,7 @@ class AstrBotConfigManager:
         self,
         default_config: AstrBotConfig,
         sp: SharedPreferences,
-    ):
+    ) -> None:
         self.sp = sp
         self.confs: dict[str, AstrBotConfig] = {}
         """uuid / "default" -> AstrBotConfig"""
@@ -54,7 +54,7 @@ class AstrBotConfigManager:
             )
         return self.abconf_data
 
-    def _load_all_configs(self):
+    def _load_all_configs(self) -> None:
         """Load all configurations from the shared preferences."""
         abconf_data = self._get_abconf_data()
         self.abconf_data = abconf_data

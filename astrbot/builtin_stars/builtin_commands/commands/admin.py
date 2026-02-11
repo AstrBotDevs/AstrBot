@@ -5,10 +5,10 @@ from astrbot.core.utils.io import download_dashboard
 
 
 class AdminCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def op(self, event: AstrMessageEvent, admin_id: str = ""):
+    async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """授权管理员。op <admin_id>"""
         if not admin_id:
             event.set_result(
@@ -21,7 +21,7 @@ class AdminCommands:
         self.context.get_config().save_config()
         event.set_result(MessageEventResult().message("授权成功。"))
 
-    async def deop(self, event: AstrMessageEvent, admin_id: str = ""):
+    async def deop(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """取消授权管理员。deop <admin_id>"""
         if not admin_id:
             event.set_result(
@@ -39,7 +39,7 @@ class AdminCommands:
                 MessageEventResult().message("此用户 ID 不在管理员名单内。"),
             )
 
-    async def wl(self, event: AstrMessageEvent, sid: str = ""):
+    async def wl(self, event: AstrMessageEvent, sid: str = "") -> None:
         """添加白名单。wl <sid>"""
         if not sid:
             event.set_result(
@@ -55,7 +55,7 @@ class AdminCommands:
         cfg.save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
 
-    async def dwl(self, event: AstrMessageEvent, sid: str = ""):
+    async def dwl(self, event: AstrMessageEvent, sid: str = "") -> None:
         """删除白名单。dwl <sid>"""
         if not sid:
             event.set_result(
@@ -74,7 +74,7 @@ class AdminCommands:
         except ValueError:
             event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
 
-    async def update_dashboard(self, event: AstrMessageEvent):
+    async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
         await event.send(MessageChain().message("正在尝试更新管理面板..."))
         await download_dashboard(version=f"v{VERSION}", latest=False)

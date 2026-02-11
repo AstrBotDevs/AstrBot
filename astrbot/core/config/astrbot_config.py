@@ -33,7 +33,7 @@ class AstrBotConfig(dict):
         config_path: str = ASTRBOT_CONFIG_PATH,
         default_config: dict = DEFAULT_CONFIG,
         schema: dict | None = None,
-    ):
+    ) -> None:
         super().__init__()
 
         # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
@@ -66,7 +66,7 @@ class AstrBotConfig(dict):
         """将 Schema 转换成 Config"""
         conf = {}
 
-        def _parse_schema(schema: dict, conf: dict):
+        def _parse_schema(schema: dict, conf: dict) -> None:
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
@@ -148,7 +148,7 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict | None = None):
+    def save_config(self, replace_config: dict | None = None) -> None:
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
@@ -164,14 +164,14 @@ class AstrBotConfig(dict):
         except KeyError:
             return None
 
-    def __delattr__(self, key):
+    def __delattr__(self, key) -> None:
         try:
             del self[key]
             self.save_config()
         except KeyError:
             raise AttributeError(f"没有找到 Key: '{key}'")
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key, value) -> None:
         self[key] = value
 
     def check_exist(self) -> bool:

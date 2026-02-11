@@ -104,7 +104,7 @@ class TelegramPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         from_username = session.session_id
         await TelegramPlatformEvent.send_with_client(
             self.client,
@@ -119,7 +119,7 @@ class TelegramPlatformAdapter(Platform):
         return PlatformMetadata(name="telegram", description="telegram 适配器", id=id_)
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         await self.application.initialize()
         await self.application.start()
 
@@ -144,7 +144,7 @@ class TelegramPlatformAdapter(Platform):
         logger.info("Telegram Platform Adapter is running.")
         await queue
 
-    async def register_commands(self):
+    async def register_commands(self) -> None:
         """收集所有注册的指令并注册到 Telegram"""
         try:
             commands = self.collect_commands()
@@ -222,7 +222,7 @@ class TelegramPlatformAdapter(Platform):
             description = description[:30] + "..."
         return cmd_name, description
 
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_chat:
             logger.warning(
                 "Received a start command without an effective chat, skipping /start reply.",
@@ -233,7 +233,9 @@ class TelegramPlatformAdapter(Platform):
             text=self.config["start_message"],
         )
 
-    async def message_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def message_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
         # Handle media group messages
@@ -477,7 +479,7 @@ class TelegramPlatformAdapter(Platform):
             replace_existing=True,
         )
 
-    async def process_media_group(self, media_group_id: str):
+    async def process_media_group(self, media_group_id: str) -> None:
         """Process a complete media group by merging all collected messages.
 
         Args:
@@ -523,7 +525,7 @@ class TelegramPlatformAdapter(Platform):
         # Process the merged message
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = TelegramPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -536,7 +538,7 @@ class TelegramPlatformAdapter(Platform):
     def get_client(self) -> ExtBot:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         try:
             if self.scheduler.running:
                 self.scheduler.shutdown()

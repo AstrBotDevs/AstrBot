@@ -13,7 +13,7 @@ from ._node_binding import get_chain_nodes
 class T2ICommand:
     """Toggle text-to-image output for the current routed chain."""
 
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def t2i(self, event: AstrMessageEvent):

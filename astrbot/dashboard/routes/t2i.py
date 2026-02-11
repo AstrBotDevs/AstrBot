@@ -10,7 +10,9 @@ from .route import Response, Route, RouteContext
 
 
 class T2iRoute(Route):
-    def __init__(self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle):
+    def __init__(
+        self, context: RouteContext, core_lifecycle: AstrBotCoreLifecycle
+    ) -> None:
         super().__init__(context)
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config

@@ -458,7 +458,7 @@
       },
       "wecomaibot_init_respond_text": {
         "description": "WeCom AI Bot Initial Response Text",
-        "hint": "First reply when the bot receives a message. Leave empty to use default."
+        "hint": "First reply when the bot receives a message. Leave empty to disable."
       },
       "wpp_active_message_poll": {
         "description": "Enable Proactive Message Polling",
@@ -478,6 +478,14 @@
       "ws_reverse_token": {
         "description": "Reverse WebSocket Token",
         "hint": "Reverse WebSocket token. If not set, token verification is disabled."
+      },
+      "msg_push_webhook_url": {
+        "description": "WeCom Message Push Webhook URL",
+        "hint": "Used for proactive message push. It is strongly recommended to set this for a better message sending experience."
+      },
+      "only_use_webhook_url_to_send": {
+        "description": "Send Replies via Webhook Only",
+        "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
       }
     },
     "general": {

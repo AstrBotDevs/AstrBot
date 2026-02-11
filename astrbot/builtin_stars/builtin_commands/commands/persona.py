@@ -7,7 +7,7 @@ from ._node_binding import get_node_target, list_nodes_with_config
 
 
 class PersonaCommands:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     @staticmethod

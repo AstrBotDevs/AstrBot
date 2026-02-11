@@ -31,7 +31,7 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
 
 
 class DifyAPIClient:
-    def __init__(self, api_key: str, api_base: str = "https://api.dify.ai/v1"):
+    def __init__(self, api_key: str, api_base: str = "https://api.dify.ai/v1") -> None:
         self.api_key = api_key
         self.api_base = api_base
         self.session = ClientSession(trust_env=True)
@@ -155,7 +155,7 @@ class DifyAPIClient:
                 raise Exception(f"Dify 文件上传失败：{resp.status}. {text}")
             return await resp.json()  # {"id": "xxx", ...}
 
-    async def close(self):
+    async def close(self) -> None:
         await self.session.close()
 
     async def get_chat_convs(self, user: str, limit: int = 20):

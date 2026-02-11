@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.14.6"
+VERSION = "4.15.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -123,8 +123,9 @@ DEFAULT_CONFIG = {
     },
     # SubAgent orchestrator mode:
     # - main_enable = False: disabled; main LLM mounts tools normally (persona selection).
-    # - main_enable = True: enabled; main LLM will include handoff tools and can optionally
-    #   remove tools that are duplicated on subagents via remove_main_duplicate_tools.
+    # - main_enable = True: enabled; main LLM keeps its own tools and includes handoff
+    #   tools (transfer_to_*). remove_main_duplicate_tools can remove tools that are
+    #   duplicated on subagents from the main LLM toolset.
     "subagent_orchestrator": {
         "main_enable": False,
         "remove_main_duplicate_tools": False,
@@ -293,9 +294,11 @@ CONFIG_METADATA_2 = {
                         "id": "wecom_ai_bot",
                         "type": "wecom_ai_bot",
                         "enable": True,
-                        "wecomaibot_init_respond_text": "💭 思考中...",
+                        "wecomaibot_init_respond_text": "",
                         "wecomaibot_friend_message_welcome_text": "",
                         "wecom_ai_bot_name": "",
+                        "msg_push_webhook_url": "",
+                        "only_use_webhook_url_to_send": False,
                         "token": "",
                         "encoding_aes_key": "",
                         "unified_webhook_mode": True,
@@ -661,12 +664,22 @@ CONFIG_METADATA_2 = {
                     "wecomaibot_init_respond_text": {
                         "description": "企业微信智能机器人初始响应文本",
                         "type": "string",
-                        "hint": "当机器人收到消息时，首先回复的文本内容。留空则使用默认值。",
+                        "hint": "当机器人收到消息时，首先回复的文本内容。留空则不设置。",
                     },
                     "wecomaibot_friend_message_welcome_text": {
                         "description": "企业微信智能机器人私聊欢迎语",
                         "type": "string",
                         "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。",
+                    },
+                    "msg_push_webhook_url": {
+                        "description": "企业微信消息推送 Webhook URL",
+                        "type": "string",
+                        "hint": "用于 send_by_session 主动消息推送。格式示例: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx",
+                    },
+                    "only_use_webhook_url_to_send": {
+                        "description": "仅使用 Webhook 发送消息",
+                        "type": "bool",
+                        "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。",
                     },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",

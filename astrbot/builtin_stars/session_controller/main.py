@@ -17,11 +17,11 @@ from astrbot.core.utils.session_waiter import (
 class Main(Star):
     """会话控制"""
 
-    def __init__(self, context: Context):
+    def __init__(self, context: Context) -> None:
         super().__init__(context)
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=maxsize)
-    async def handle_session_control_agent(self, event: AstrMessageEvent):
+    async def handle_session_control_agent(self, event: AstrMessageEvent) -> None:
         """会话控制代理"""
         for session_filter in FILTERS:
             session_id = session_filter.filter(event)
@@ -92,7 +92,7 @@ class Main(Star):
                     async def empty_mention_waiter(
                         controller: SessionController,
                         event: AstrMessageEvent,
-                    ):
+                    ) -> None:
                         event.message_obj.message.insert(
                             0,
                             Comp.At(qq=event.get_self_id(), name=event.get_self_id()),

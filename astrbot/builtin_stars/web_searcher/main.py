@@ -199,7 +199,7 @@ class Main(star.Star):
                 return results
 
     @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str | None = None):
+    async def websearch(self, event: AstrMessageEvent, oper: str | None = None) -> None:
         """网页搜索指令（已废弃）"""
         event.set_result(
             MessageEventResult().message(
@@ -561,7 +561,7 @@ class Main(star.Star):
         self,
         event: AstrMessageEvent,
         req: ProviderRequest,
-    ):
+    ) -> None:
         """Get the session conversation for the given event."""
         chain_config_id = event.chain_config.config_id if event.chain_config else None
         cfg = self.context.get_config_by_id(chain_config_id)
