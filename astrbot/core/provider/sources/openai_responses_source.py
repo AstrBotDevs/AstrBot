@@ -3,7 +3,6 @@ import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
-import httpx
 from openai.types.responses.response import Response as OpenAIResponse
 from openai.types.responses.response_usage import ResponseUsage
 
@@ -53,44 +52,41 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             return messages
 
         message_dicts = self._ensure_message_to_dicts(messages)
-        payload = {
+        request_payload = {
             "model": self.get_model(),
             "input": self._messages_to_response_input(message_dicts),
         }
 
-        compact_url = self._build_compact_url()
-        headers = {
-            "Authorization": f"Bearer {self.get_current_key()}",
-            "Content-Type": "application/json",
-        }
-        headers.update(self._build_extra_headers())
-
-        proxy = self.provider_config.get("proxy", "")
-        client_kwargs: dict[str, Any] = {"timeout": self.timeout}
-        if proxy:
-            client_kwargs["proxy"] = proxy
+        request_options: dict[str, Any] = {}
+        extra_headers = self._build_extra_headers()
+        if extra_headers:
+            request_options["extra_headers"] = extra_headers
 
         try:
-            async with httpx.AsyncClient(**client_kwargs) as client:
-                response = await client.post(compact_url, json=payload, headers=headers)
-                response.raise_for_status()
-                compact_data = response.json()
+            compact_response = await self.client.responses.compact(
+                **request_payload,
+                **request_options,
+            )
         except Exception as e:
             if is_connection_error(e):
+                proxy = self.provider_config.get("proxy", "")
                 log_connection_failure("OpenAI", e, proxy)
             raise
+
+        if hasattr(compact_response, "model_dump"):
+            compact_data = compact_response.model_dump(mode="json")
+        elif isinstance(compact_response, dict):
+            compact_data = compact_response
+        else:
+            compact_data = {
+                "output": getattr(compact_response, "output", []),
+            }
 
         compact_input = self._extract_compact_input(compact_data)
         compact_messages = self._response_input_to_messages(compact_input)
         if not compact_messages:
             raise ValueError("Responses compact returned empty context.")
         return compact_messages
-
-    def _build_compact_url(self) -> str:
-        base_url = str(self.client.base_url).rstrip("/")
-        if base_url.endswith("/v1"):
-            return f"{base_url}/responses/compact"
-        return f"{base_url}/v1/responses/compact"
 
     def _extract_compact_input(self, compact_data: Any) -> list[dict[str, Any]]:
         if not isinstance(compact_data, dict):
@@ -470,6 +466,22 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 headers[str(key)] = str(value)
         return headers
 
+    def _resolve_tool_strict(
+        self,
+        tool: dict[str, Any],
+        function_body: dict[str, Any] | None,
+    ) -> bool | None:
+        if isinstance(function_body, dict) and isinstance(
+            function_body.get("strict"), bool
+        ):
+            return function_body["strict"]
+        if isinstance(tool.get("strict"), bool):
+            return tool["strict"]
+        default_strict = self.provider_config.get("responses_tool_strict")
+        if isinstance(default_strict, bool):
+            return default_strict
+        return None
+
     def _convert_tools_to_responses(
         self, tool_list: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
@@ -485,29 +497,31 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 name = function_body.get("name")
                 if not name:
                     continue
-                response_tools.append(
-                    {
-                        "type": "function",
-                        "name": name,
-                        "description": function_body.get("description", ""),
-                        "parameters": function_body.get("parameters", {}),
-                        "strict": False,
-                    }
-                )
+                response_tool = {
+                    "type": "function",
+                    "name": name,
+                    "description": function_body.get("description", ""),
+                    "parameters": function_body.get("parameters", {}),
+                }
+                strict = self._resolve_tool_strict(tool, function_body)
+                if strict is not None:
+                    response_tool["strict"] = strict
+                response_tools.append(response_tool)
                 continue
 
             name = tool.get("name")
             if not name:
                 continue
-            response_tools.append(
-                {
-                    "type": "function",
-                    "name": name,
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("parameters", {}),
-                    "strict": False,
-                }
-            )
+            response_tool = {
+                "type": "function",
+                "name": name,
+                "description": tool.get("description", ""),
+                "parameters": tool.get("parameters", {}),
+            }
+            strict = self._resolve_tool_strict(tool, None)
+            if strict is not None:
+                response_tool["strict"] = strict
+            response_tools.append(response_tool)
 
         return response_tools
 
