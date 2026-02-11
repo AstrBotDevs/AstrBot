@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 from asyncio import Queue
+from dataclasses import dataclass
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -12,13 +13,19 @@ from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
+@dataclass
+class PlatformTasks:
+    run: asyncio.Task
+    wrapper: asyncio.Task
+
+
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
         self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
         self._inst_map: dict[str, dict] = {}
-        self._platform_tasks: dict[str, tuple[asyncio.Task, asyncio.Task]] = {}
+        self._platform_tasks: dict[str, PlatformTasks] = {}
 
         self.astrbot_config = config
         self.platforms_config = config["platform"]
@@ -45,16 +52,27 @@ class PlatformManager:
             self._task_wrapper(run_task, platform=inst),
             name=f"{task_name}_wrapper",
         )
-        self._platform_tasks[inst.client_self_id] = (run_task, wrapper_task)
+        self._platform_tasks[inst.client_self_id] = PlatformTasks(
+            run=run_task,
+            wrapper=wrapper_task,
+        )
 
     async def _stop_platform_task(self, client_id: str) -> None:
         tasks = self._platform_tasks.pop(client_id, None)
         if not tasks:
             return
-        for task in tasks:
+        for task in (tasks.run, tasks.wrapper):
             if not task.done():
                 task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(tasks.run, tasks.wrapper, return_exceptions=True)
+
+    async def _terminate_inst_and_tasks(self, inst: Platform) -> None:
+        client_id = inst.client_self_id
+        try:
+            if getattr(inst, "terminate", None):
+                await inst.terminate()
+        finally:
+            await self._stop_platform_task(client_id)
 
     async def initialize(self) -> None:
         """初始化所有平台适配器"""
@@ -237,9 +255,7 @@ class PlatformManager:
             except Exception:
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
 
-            if getattr(inst, "terminate", None):
-                await inst.terminate()
-            await self._stop_platform_task(client_id)
+            await self._terminate_inst_and_tasks(inst)
 
     async def terminate(self) -> None:
         terminated_client_ids: set[str] = set()
@@ -253,11 +269,7 @@ class PlatformManager:
             client_id = inst.client_self_id
             if client_id in terminated_client_ids:
                 continue
-            try:
-                if getattr(inst, "terminate", None):
-                    await inst.terminate()
-            finally:
-                await self._stop_platform_task(client_id)
+            await self._terminate_inst_and_tasks(inst)
 
         self.platform_insts.clear()
         self._inst_map.clear()
