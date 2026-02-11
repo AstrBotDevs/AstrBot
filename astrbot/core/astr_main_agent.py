@@ -821,21 +821,19 @@ def _get_compress_provider(
     if config.context_limit_reached_strategy != "llm_compress":
         return None
 
-    _ = active_provider
-
     if not config.llm_compress_provider_id:
         return None
 
     selected_provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
     if selected_provider is None:
         logger.warning(
-            "Configured llm_compress_provider_id not found: %s. Skip compression.",
+            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
             config.llm_compress_provider_id,
         )
         return None
     if not isinstance(selected_provider, Provider):
         logger.warning(
-            "Configured llm_compress_provider_id is not a Provider: %s. Skip compression.",
+            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
             config.llm_compress_provider_id,
         )
         return None

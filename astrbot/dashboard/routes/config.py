@@ -40,139 +40,6 @@ from .util import (
 
 MAX_FILE_BYTES = 500 * 1024 * 1024
 
-_MASKED_SECRET_PLACEHOLDER = "***"
-
-_SENSITIVE_FIELD_NAMES = {
-    "access_token",
-    "api_key",
-    "apikey",
-    "authorization",
-    "bearer_token",
-    "client_secret",
-    "key",
-    "password",
-    "refresh_token",
-    "secret",
-    "token",
-}
-
-
-def _is_sensitive_field_name(name: str) -> bool:
-    lower_name = name.strip().lower()
-    if lower_name in _SENSITIVE_FIELD_NAMES:
-        return True
-
-    parts = [p for p in re.split(r"[^a-z0-9]+", lower_name) if p]
-    if not parts:
-        return False
-
-    if parts[-1] in {"key", "secret", "token", "password"}:
-        return True
-    if parts[0] in {"auth", "authorization"}:
-        return True
-    return "authorization" in parts
-
-
-def _mask_secret_value(value: Any) -> Any:
-    if isinstance(value, str):
-        if not value:
-            return value
-        return _MASKED_SECRET_PLACEHOLDER
-    if isinstance(value, list):
-        return [_mask_secret_value(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _mask_secret_value(item) for key, item in value.items()}
-    return value
-
-
-def _is_masked_secret_value(value: Any) -> bool:
-    if isinstance(value, str):
-        return value == _MASKED_SECRET_PLACEHOLDER
-    if isinstance(value, list):
-        return bool(value) and all(_is_masked_secret_value(item) for item in value)
-    if isinstance(value, dict):
-        return bool(value) and all(
-            _is_masked_secret_value(item) for item in value.values()
-        )
-    return False
-
-
-def sanitize_provider_config(provider_config: dict[str, Any]) -> dict[str, Any]:
-    sanitized = copy.deepcopy(provider_config)
-
-    def _sanitize_mapping(mapping: dict[str, Any]) -> None:
-        for key, value in list(mapping.items()):
-            if key == "custom_headers" and isinstance(value, dict):
-                sanitized_headers = {}
-                for header_key, header_value in value.items():
-                    if _is_sensitive_field_name(header_key):
-                        sanitized_headers[header_key] = _mask_secret_value(header_value)
-                    else:
-                        sanitized_headers[header_key] = header_value
-                mapping[key] = sanitized_headers
-                continue
-
-            if _is_sensitive_field_name(key):
-                mapping[key] = _mask_secret_value(value)
-                continue
-
-            if isinstance(value, dict):
-                _sanitize_mapping(value)
-            elif isinstance(value, list):
-                new_list = []
-                for item in value:
-                    if isinstance(item, dict):
-                        item_copy = copy.deepcopy(item)
-                        _sanitize_mapping(item_copy)
-                        new_list.append(item_copy)
-                    else:
-                        new_list.append(item)
-                mapping[key] = new_list
-
-    _sanitize_mapping(sanitized)
-    return sanitized
-
-
-def restore_masked_provider_config(
-    new_config: dict[str, Any], old_config: dict[str, Any]
-) -> dict[str, Any]:
-    restored = copy.deepcopy(new_config)
-
-    def _restore_mapping(mapping: dict[str, Any], old_mapping: dict[str, Any]) -> None:
-        for key, value in list(mapping.items()):
-            old_value = old_mapping.get(key)
-
-            if key == "custom_headers" and isinstance(value, dict):
-                old_headers = old_value if isinstance(old_value, dict) else {}
-                for header_key, header_value in list(value.items()):
-                    if (
-                        _is_sensitive_field_name(header_key)
-                        and _is_masked_secret_value(header_value)
-                        and header_key in old_headers
-                    ):
-                        value[header_key] = copy.deepcopy(old_headers[header_key])
-                continue
-
-            if _is_sensitive_field_name(key):
-                if _is_masked_secret_value(value) and old_value is not None:
-                    mapping[key] = copy.deepcopy(old_value)
-                continue
-
-            if isinstance(value, dict) and isinstance(old_value, dict):
-                _restore_mapping(value, old_value)
-                continue
-
-            if isinstance(value, list) and isinstance(old_value, list):
-                for idx, item in enumerate(value):
-                    if (
-                        isinstance(item, dict)
-                        and idx < len(old_value)
-                        and isinstance(old_value[idx], dict)
-                    ):
-                        _restore_mapping(item, old_value[idx])
-
-    _restore_mapping(restored, old_config)
-    return restored
 
 
 def try_cast(value: Any, type_: str):
@@ -829,10 +696,10 @@ class ConfigRoute(Route):
                 prov = self.core_lifecycle.provider_manager.get_merged_provider_config(
                     provider
                 )
-                provider_list.append(sanitize_provider_config(prov))
+                provider_list.append(prov)
             elif not ps_id and provider.get("provider_type", "") in provider_type_ls:
                 # agent runner, embedding, etc
-                provider_list.append(sanitize_provider_config(provider))
+                provider_list.append(provider)
         return Response().ok(provider_list).__dict__
 
     async def get_provider_model_list(self):
@@ -1313,15 +1180,6 @@ class ConfigRoute(Route):
         new_config = update_provider_config.get("config", None)
         if not origin_provider_id or not new_config:
             return Response().error("参数错误").__dict__
-
-        old_config = None
-        for provider in self.config.get("provider", []):
-            if provider.get("id") == origin_provider_id:
-                old_config = provider
-                break
-
-        if isinstance(old_config, dict):
-            new_config = restore_masked_provider_config(new_config, old_config)
 
         try:
             await self.core_lifecycle.provider_manager.update_provider(

@@ -381,9 +381,7 @@ class ChatRoute(Route):
                         except asyncio.TimeoutError:
                             continue
                         except asyncio.CancelledError:
-                            logger.debug(
-                                f"[WebChat] user {username} disconnected from stream."
-                            )
+                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
                             break
                         except Exception as e:
