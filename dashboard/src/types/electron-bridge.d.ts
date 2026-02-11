@@ -19,6 +19,7 @@ declare global {
         ok: boolean;
         reason: string | null;
       }>;
+      onTrayRestartBackend?: (callback: () => void) => () => void;
     };
   }
 }
