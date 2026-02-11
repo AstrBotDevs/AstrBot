@@ -36,7 +36,7 @@ let backendManager = null;
 
 app.commandLine.appendSwitch('disable-http-cache');
 
-const { logElectron } = createElectronLogger({
+const { logElectron, flushElectron } = createElectronLogger({
   app,
   getRootDir: () => (backendManager ? backendManager.getRootDir() : null),
 });
@@ -387,8 +387,12 @@ app.on('before-quit', (event) => {
         }
       }),
     )
-    .finally(() => {
+    .finally(async () => {
       logElectron('Backend stop finished, exiting app.');
+      await Promise.allSettled([
+        flushElectron(),
+        backendManager ? backendManager.flushLogs() : Promise.resolve(),
+      ]);
       app.exit(0);
     });
 });

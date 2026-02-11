@@ -1,6 +1,6 @@
 'use strict';
 
-const { appendRotatingLog, clearCachedLogSize } = require('./common');
+const { RotatingLogWriter } = require('./rotating-log-writer');
 
 const DEFAULT_FLUSH_INTERVAL_MS = 120;
 const DEFAULT_MAX_BUFFER_BYTES = 128 * 1024;
@@ -31,10 +31,9 @@ class BufferedRotatingLogger {
     backupCount,
     flushIntervalMs,
     maxBufferBytes,
+    label = 'buffered-log',
   }) {
-    this.logPath = logPath;
-    this.maxBytes = maxBytes;
-    this.backupCount = backupCount;
+    this.logPath = logPath || null;
     this.flushIntervalMs = clampInt(
       flushIntervalMs,
       DEFAULT_FLUSH_INTERVAL_MS,
@@ -50,15 +49,22 @@ class BufferedRotatingLogger {
     this.buffer = [];
     this.bufferBytes = 0;
     this.flushTimer = null;
+    this.writer = new RotatingLogWriter({
+      logPath: this.logPath,
+      maxBytes,
+      backupCount,
+      label,
+    });
   }
 
   setLogPath(logPath) {
-    const previousLogPath = this.logPath;
-    this.flush();
-    this.logPath = logPath || null;
-    if (previousLogPath && previousLogPath !== this.logPath) {
-      clearCachedLogSize(previousLogPath);
+    const nextLogPath = logPath || null;
+    if (nextLogPath === this.logPath) {
+      return this.writer.flush();
     }
+    const previousFlush = this.flush();
+    this.logPath = nextLogPath;
+    return previousFlush.finally(() => this.writer.setLogPath(nextLogPath));
   }
 
   log(payload) {
@@ -76,7 +82,7 @@ class BufferedRotatingLogger {
     this.bufferBytes += chunk.length;
 
     if (this.bufferBytes >= this.maxBufferBytes) {
-      this.flush();
+      void this.flush();
       return;
     }
     this.scheduleFlush();
@@ -87,17 +93,15 @@ class BufferedRotatingLogger {
     if (!this.buffer.length || !this.logPath) {
       this.buffer = [];
       this.bufferBytes = 0;
-      return;
+      return this.writer.flush();
     }
 
     const chunks = this.buffer;
     this.buffer = [];
     this.bufferBytes = 0;
     const payload = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks);
-    appendRotatingLog(this.logPath, payload, {
-      maxBytes: this.maxBytes,
-      backupCount: this.backupCount,
-    });
+    this.writer.append(payload);
+    return this.writer.flush();
   }
 
   scheduleFlush() {
@@ -106,7 +110,7 @@ class BufferedRotatingLogger {
     }
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
-      this.flush();
+      void this.flush();
     }, this.flushIntervalMs);
     this.flushTimer.unref?.();
   }
@@ -123,3 +127,4 @@ class BufferedRotatingLogger {
 module.exports = {
   BufferedRotatingLogger,
 };
+

@@ -217,6 +217,10 @@ class BackendManager {
     return Boolean(this.getBackendConfig().cmd);
   }
 
+  async flushLogs() {
+    await this.backendLogger.flush();
+  }
+
   async pingBackend(timeoutMs = 800) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -398,7 +402,7 @@ class BackendManager {
       ensureDir(logsDir);
       backendLogPath = path.join(logsDir, 'backend.log');
     }
-    this.backendLogger.setLogPath(backendLogPath);
+    void this.backendLogger.setLogPath(backendLogPath);
     const usePipedLogging = Boolean(backendLogPath);
 
     this.backendProcess = spawn(backendConfig.cmd, backendConfig.args || [], {
@@ -439,13 +443,13 @@ class BackendManager {
           error instanceof Error ? error.message : String(error)
         }\n`,
       );
-      this.backendLogger.flush();
+      void this.backendLogger.flush();
       this.backendProcess = null;
     });
 
     this.backendProcess.on('exit', (code, signal) => {
       this.backendLastExitReason = `Backend process exited (code=${code ?? 'null'}, signal=${signal ?? 'null'}).`;
-      this.backendLogger.flush();
+      void this.backendLogger.flush();
       this.backendProcess = null;
     });
   }
@@ -518,7 +522,7 @@ class BackendManager {
         await waitForProcessExit(processToStop, 1500);
       }
     }
-    this.backendLogger.flush();
+    await this.backendLogger.flush();
   }
 
   findListeningPidsOnWindows(port) {
