@@ -829,13 +829,13 @@ def _get_compress_provider(
     )
     if selected_provider is None:
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            "Configured llm_compress_provider_id not found: %s. Skip compression.",
             config.llm_compress_provider_id,
         )
         return None
     if not isinstance(selected_provider, Provider):
         logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
+            "Configured llm_compress_provider_id is not a Provider: %s. Skip compression.",
             config.llm_compress_provider_id,
         )
         return None
