@@ -19,7 +19,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
@@ -350,10 +350,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             elif isinstance(i, Record):
                 if i.file:
                     record_wav_path = await i.convert_to_file_path()  # wav 路径
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                    temp_dir = get_astrbot_temp_path()
                     record_tecent_silk_path = os.path.join(
                         temp_dir,
-                        f"{uuid.uuid4()}.silk",
+                        f"qqofficial_{uuid.uuid4()}.silk",
                     )
                     try:
                         duration = await wav_to_tencent_silk(

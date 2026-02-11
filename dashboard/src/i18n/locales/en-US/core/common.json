@@ -104,5 +104,13 @@
     "edit": "Edit",
     "copy": "Copy",
     "noData": "No data available"
+  },
+  "firstNotice": {
+    "title": "First Notice",
+    "loading": "Loading first notice...",
+    "empty": {
+      "title": "No first notice content available",
+      "subtitle": "FIRST_NOTICE.md was not found or is empty."
+    }
   }
 }

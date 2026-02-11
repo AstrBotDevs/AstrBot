@@ -36,7 +36,7 @@ let backendManager = null;
 
 app.commandLine.appendSwitch('disable-http-cache');
 
-const { logElectron } = createElectronLogger({
+const { logElectron, flushElectron } = createElectronLogger({
   app,
   getRootDir: () => (backendManager ? backendManager.getRootDir() : null),
 });
@@ -113,6 +113,29 @@ function updateTrayMenu() {
       click: () => {
         if (mainWindow) {
           mainWindow.reload();
+        }
+      },
+    },
+    {
+      label: shellTexts.trayRestartBackend,
+      click: async () => {
+        if (!backendManager) {
+          return;
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          showWindow();
+          const currentUrl = mainWindow.webContents.getURL();
+          if (currentUrl.startsWith(backendManager.getBackendUrl())) {
+            mainWindow.webContents.send('astrbot-desktop:tray-restart-backend');
+            return;
+          }
+        }
+
+        const result = await backendManager.restartBackend();
+        if (!result.ok) {
+          logElectron(
+            `Tray restart backend fallback failed: ${result.reason || 'unknown reason'}`,
+          );
         }
       },
     },
@@ -364,8 +387,12 @@ app.on('before-quit', (event) => {
         }
       }),
     )
-    .finally(() => {
+    .finally(async () => {
       logElectron('Backend stop finished, exiting app.');
+      await Promise.allSettled([
+        flushElectron(),
+        backendManager ? backendManager.flushLogs() : Promise.resolve(),
+      ]);
       app.exit(0);
     });
 });

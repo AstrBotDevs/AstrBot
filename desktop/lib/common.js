@@ -2,6 +2,9 @@
 
 const fs = require('fs');
 
+const LOG_ROTATION_DEFAULT_MAX_MB = 20;
+const LOG_ROTATION_DEFAULT_BACKUP_COUNT = 3;
+
 function normalizeUrl(value) {
   try {
     const url = new URL(value);
@@ -22,6 +25,33 @@ function ensureDir(value) {
     return;
   }
   fs.mkdirSync(value, { recursive: true });
+}
+
+function parseEnvInt(raw, defaultValue) {
+  const parsed = Number.parseInt(`${raw ?? ''}`, 10);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
+function isLogRotationDebugEnabled() {
+  return (
+    process.env.ASTRBOT_LOG_ROTATION_DEBUG === '1' ||
+    process.env.NODE_ENV === 'development'
+  );
+}
+
+function parseLogMaxBytes(envValue) {
+  const mb = parseEnvInt(envValue, LOG_ROTATION_DEFAULT_MAX_MB);
+  const maxMb = mb > 0 ? mb : LOG_ROTATION_DEFAULT_MAX_MB;
+  return maxMb * 1024 * 1024;
+}
+
+function parseLogBackupCount(envValue) {
+  const count = parseEnvInt(envValue, LOG_ROTATION_DEFAULT_BACKUP_COUNT);
+  return count >= 0 ? count : LOG_ROTATION_DEFAULT_BACKUP_COUNT;
+}
+
+function isIgnorableFsError(error) {
+  return Boolean(error && typeof error === 'object' && error.code === 'ENOENT');
 }
 
 function delay(ms) {
@@ -51,9 +81,35 @@ function waitForProcessExit(child, timeoutMs = 5000) {
   });
 }
 
+function formatLogTimestamp(date = new Date()) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hour = `${date.getHours()}`.padStart(2, '0');
+  const minute = `${date.getMinutes()}`.padStart(2, '0');
+  const second = `${date.getSeconds()}`.padStart(2, '0');
+  const millisecond = `${date.getMilliseconds()}`.padStart(3, '0');
+
+  const offsetMinutes = -date.getTimezoneOffset();
+  const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+  const absOffsetMinutes = Math.abs(offsetMinutes);
+  const offsetHour = `${Math.floor(absOffsetMinutes / 60)}`.padStart(2, '0');
+  const offsetMinute = `${absOffsetMinutes % 60}`.padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}.${millisecond} ${offsetSign}${offsetHour}${offsetMinute}`;
+}
+
 module.exports = {
+  LOG_ROTATION_DEFAULT_BACKUP_COUNT,
+  LOG_ROTATION_DEFAULT_MAX_MB,
   delay,
   ensureDir,
+  formatLogTimestamp,
+  isIgnorableFsError,
+  isLogRotationDebugEnabled,
   normalizeUrl,
+  parseEnvInt,
+  parseLogBackupCount,
+  parseLogMaxBytes,
   waitForProcessExit,
 };

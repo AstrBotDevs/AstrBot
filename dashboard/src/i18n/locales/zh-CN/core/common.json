@@ -104,5 +104,13 @@
     "edit": "编辑",
     "copy": "复制",
     "noData": "暂无数据"
+  },
+  "firstNotice": {
+    "title": "首次提示",
+    "loading": "正在加载首次提示...",
+    "empty": {
+      "title": "暂无首次提示内容",
+      "subtitle": "未找到 FIRST_NOTICE.md 或文件为空。"
+    }
   }
 }

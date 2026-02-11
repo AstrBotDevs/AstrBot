@@ -63,7 +63,18 @@ Please refer to the official documentation: [Deploy AstrBot with Docker](https:/
 #### uv Deployment
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+astrbot
+```
+
+#### System Package Manager Installation
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# or use paru
+paru -S astrbot-git
 ```
 
 #### BT-Panel Deployment
@@ -116,6 +127,16 @@ uv run main.py
 ```
 
 Or refer to the official documentation: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html).
+
+#### Установка через системный пакетный менеджер
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# или используйте paru
+paru -S astrbot-git
+```
 
 #### Desktop Electron Build
 
