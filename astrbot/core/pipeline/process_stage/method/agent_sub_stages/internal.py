@@ -190,6 +190,8 @@ class InternalAgentSubStage(Stage):
                 )
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    if reset_coro:
+                        reset_coro.close()
                     return
 
                 # apply reset
