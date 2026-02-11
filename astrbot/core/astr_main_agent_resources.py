@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import uuid
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -240,7 +241,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if "_&exists_" in json.dumps(result):
                 # Download the file from sandbox
                 name = os.path.basename(path)
-                local_path = os.path.join(get_astrbot_temp_path(), name)
+                local_path = os.path.join(get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}")
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
                 return local_path, True
@@ -352,11 +353,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             MessageChain(chain=components),
         )
 
-        if file_from_sandbox:
-            try:
-                os.remove(local_path)
-            except Exception as e:
-                logger.error(f"Error removing temp file {local_path}: {e}")
+        # if file_from_sandbox:
+        #     try:
+        #         os.remove(local_path)
+        #     except Exception as e:
+        #         logger.error(f"Error removing temp file {local_path}: {e}")
 
         return f"Message sent to session {target_session}"
 

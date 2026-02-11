@@ -203,6 +203,7 @@ DEFAULT_CONFIG = {
     "log_file_enable": False,
     "log_file_path": "logs/astrbot.log",
     "log_file_max_mb": 20,
+    "temp_dir_max_size": 1024,
     "trace_enable": False,
     "trace_log_enable": False,
     "trace_log_path": "logs/astrbot.trace.log",
@@ -2394,6 +2395,7 @@ CONFIG_METADATA_2 = {
             "log_file_enable": {"type": "bool"},
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
+            "temp_dir_max_size": {"type": "int"},
             "trace_log_enable": {"type": "bool"},
             "trace_log_path": {
                 "type": "string",
@@ -3371,6 +3373,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "日志文件大小上限 (MB)",
                         "type": "int",
                         "hint": "超过大小后自动轮转，默认 20MB。",
+                    },
+                    "temp_dir_max_size": {
+                        "description": "临时目录大小上限 (MB)",
+                        "type": "int",
+                        "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。",
                     },
                     "trace_log_enable": {
                         "description": "启用 Trace 文件日志",

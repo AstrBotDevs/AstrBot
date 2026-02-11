@@ -31,7 +31,7 @@ from enum import Enum
 from pydantic.v1 import BaseModel
 
 from astrbot.core import astrbot_config, file_token_service, logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
@@ -156,8 +156,7 @@ class Record(BaseMessageComponent):
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            file_path = os.path.join(get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg")
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(file_path)
@@ -245,8 +244,9 @@ class Video(BaseMessageComponent):
         if url and url.startswith("file:///"):
             return url[8:]
         if url and url.startswith("http"):
-            download_dir = os.path.join(get_astrbot_data_path(), "temp")
-            video_file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+            video_file_path = os.path.join(
+                get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}"
+            )
             await download_file(url, video_file_path)
             if os.path.exists(video_file_path):
                 return os.path.abspath(video_file_path)
@@ -445,8 +445,9 @@ class Image(BaseMessageComponent):
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            image_file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            image_file_path = os.path.join(
+                get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
+            )
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(image_file_path)
@@ -725,13 +726,12 @@ class File(BaseMessageComponent):
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")
-        download_dir = os.path.join(get_astrbot_data_path(), "temp")
-        os.makedirs(download_dir, exist_ok=True)
+        download_dir = get_astrbot_temp_path()
         if self.name:
             name, ext = os.path.splitext(self.name)
-            filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+            filename = f"fileseg_{name}_{uuid.uuid4().hex[:8]}{ext}"
         else:
-            filename = f"{uuid.uuid4().hex}"
+            filename = f"fileseg_{uuid.uuid4().hex}"
         file_path = os.path.join(download_dir, filename)
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)

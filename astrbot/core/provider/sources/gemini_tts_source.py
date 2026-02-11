@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -49,7 +49,7 @@ class ProviderGeminiTTSAPI(TTSProvider):
         self.voice_name: str = provider_config.get("gemini_tts_voice_name", "Leda")
 
     async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         path = os.path.join(temp_dir, f"gemini_tts_{uuid.uuid4()}.wav")
         prompt = f"{self.prefix}: {text}" if self.prefix else text
         response = await self.client.models.generate_content(

@@ -6,7 +6,7 @@ import uuid
 import edge_tts
 
 from astrbot.core import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -46,7 +46,7 @@ class ProviderEdgeTTS(TTSProvider):
         self.set_model("edge_tts")
 
     async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
         wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
 
