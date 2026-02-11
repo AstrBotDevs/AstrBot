@@ -81,11 +81,30 @@ function waitForProcessExit(child, timeoutMs = 5000) {
   });
 }
 
+function formatLogTimestamp(date = new Date()) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hour = `${date.getHours()}`.padStart(2, '0');
+  const minute = `${date.getMinutes()}`.padStart(2, '0');
+  const second = `${date.getSeconds()}`.padStart(2, '0');
+  const millisecond = `${date.getMilliseconds()}`.padStart(3, '0');
+
+  const offsetMinutes = -date.getTimezoneOffset();
+  const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+  const absOffsetMinutes = Math.abs(offsetMinutes);
+  const offsetHour = `${Math.floor(absOffsetMinutes / 60)}`.padStart(2, '0');
+  const offsetMinute = `${absOffsetMinutes % 60}`.padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}.${millisecond} ${offsetSign}${offsetHour}${offsetMinute}`;
+}
+
 module.exports = {
   LOG_ROTATION_DEFAULT_BACKUP_COUNT,
   LOG_ROTATION_DEFAULT_MAX_MB,
   delay,
   ensureDir,
+  formatLogTimestamp,
   isIgnorableFsError,
   isLogRotationDebugEnabled,
   normalizeUrl,

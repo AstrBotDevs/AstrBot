@@ -8,6 +8,7 @@ const { BufferedRotatingLogger } = require('./buffered-rotating-logger');
 const {
   delay,
   ensureDir,
+  formatLogTimestamp,
   normalizeUrl,
   parseLogBackupCount,
   parseLogMaxBytes,
@@ -391,6 +392,18 @@ class BackendManager {
     };
     if (this.app.isPackaged) {
       env.ASTRBOT_ELECTRON_CLIENT = '1';
+      const hasExplicitDashboardHost = Boolean(
+        process.env.DASHBOARD_HOST || process.env.ASTRBOT_DASHBOARD_HOST,
+      );
+      const hasExplicitDashboardPort = Boolean(
+        process.env.DASHBOARD_PORT || process.env.ASTRBOT_DASHBOARD_PORT,
+      );
+      if (!hasExplicitDashboardHost) {
+        env.DASHBOARD_HOST = '127.0.0.1';
+      }
+      if (!hasExplicitDashboardPort) {
+        env.DASHBOARD_PORT = '6185';
+      }
     }
     if (backendConfig.webuiDir) {
       env.ASTRBOT_WEBUI_DIR = backendConfig.webuiDir;
@@ -431,7 +444,7 @@ class BackendManager {
         .map((item) => JSON.stringify(item))
         .join(' ');
       this.backendLogger.log(
-        `[${new Date().toISOString()}] [Electron] Start backend ${launchLine}\n`,
+        `[${formatLogTimestamp()}] [Electron] Start backend ${launchLine}\n`,
       );
     }
 
@@ -439,7 +452,7 @@ class BackendManager {
       this.backendLastExitReason =
         error instanceof Error ? error.message : String(error);
       this.backendLogger.log(
-        `[${new Date().toISOString()}] [Electron] Backend spawn error: ${
+        `[${formatLogTimestamp()}] [Electron] Backend spawn error: ${
           error instanceof Error ? error.message : String(error)
         }\n`,
       );
