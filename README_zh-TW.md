@@ -61,7 +61,8 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
 #### uv 部署
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+astrbot
 ```
 
 #### 寶塔面板部署
@@ -114,6 +115,16 @@ uv run main.py
 ```
 
 或者請參閱官方文件 [透過原始碼部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html)。
+
+#### 系統套件管理員安裝
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# 或者使用 paru
+paru -S astrbot-git
+```
 
 ## 支援的訊息平台
 
@@ -244,4 +255,3 @@ pre-commit install
 </details>
 
 _私は、高性能ですから!_
-
