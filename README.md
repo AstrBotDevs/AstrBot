@@ -275,8 +275,6 @@ pre-commit install
 
 </div>
 
-</details>
-
 <div align="center">
 
 _陪伴与能力从来不应该是对立面。我们希望创造的是一个既能理解情绪、给予陪伴，也能可靠完成工作的机器人。_
@@ -284,3 +282,5 @@ _陪伴与能力从来不应该是对立面。我们希望创造的是一个既�
 _私は、高性能ですから!_
 
 <img src="https://files.astrbot.app/watashiwa-koseino-desukara.gif" width="100"/>
+
+</div>
