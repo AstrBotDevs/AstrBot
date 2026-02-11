@@ -18,6 +18,7 @@ class PlatformManager:
         """加载的 Platform 的实例"""
 
         self._inst_map: dict[str, dict] = {}
+        self._platform_tasks: dict[str, tuple[asyncio.Task, asyncio.Task]] = {}
 
         self.astrbot_config = config
         self.platforms_config = config["platform"]
@@ -38,6 +39,23 @@ class PlatformManager:
         sanitized = platform_id.replace(":", "_").replace("!", "_")
         return sanitized, sanitized != platform_id
 
+    def _start_platform_task(self, task_name: str, inst: Platform) -> None:
+        run_task = asyncio.create_task(inst.run(), name=task_name)
+        wrapper_task = asyncio.create_task(
+            self._task_wrapper(run_task, platform=inst),
+            name=f"{task_name}_wrapper",
+        )
+        self._platform_tasks[inst.client_self_id] = (run_task, wrapper_task)
+
+    async def _stop_platform_task(self, client_id: str) -> None:
+        tasks = self._platform_tasks.pop(client_id, None)
+        if not tasks:
+            return
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def initialize(self) -> None:
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
@@ -51,12 +69,7 @@ class PlatformManager:
         # 网页聊天
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
         self.platform_insts.append(webchat_inst)
-        asyncio.create_task(
-            self._task_wrapper(
-                asyncio.create_task(webchat_inst.run(), name="webchat"),
-                platform=webchat_inst,
-            ),
-        )
+        self._start_platform_task("webchat", webchat_inst)
 
     async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""
@@ -154,15 +167,9 @@ class PlatformManager:
             "client_id": inst.client_self_id,
         }
         self.platform_insts.append(inst)
-
-        asyncio.create_task(
-            self._task_wrapper(
-                asyncio.create_task(
-                    inst.run(),
-                    name=f"platform_{platform_config['type']}_{platform_config['id']}",
-                ),
-                platform=inst,
-            ),
+        self._start_platform_task(
+            f"platform_{platform_config['type']}_{platform_config['id']}",
+            inst,
         )
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnPlatformLoadedEvent,
@@ -232,11 +239,24 @@ class PlatformManager:
 
             if getattr(inst, "terminate", None):
                 await inst.terminate()
+            await self._stop_platform_task(client_id)
 
     async def terminate(self) -> None:
-        for inst in self.platform_insts:
-            if getattr(inst, "terminate", None):
-                await inst.terminate()
+        for platform_id in list(self._inst_map.keys()):
+            await self.terminate_platform(platform_id)
+
+        for inst in list(self.platform_insts):
+            try:
+                if getattr(inst, "terminate", None):
+                    await inst.terminate()
+            finally:
+                await self._stop_platform_task(inst.client_self_id)
+
+        self.platform_insts.clear()
+        self._inst_map.clear()
+
+        for client_id in list(self._platform_tasks.keys()):
+            await self._stop_platform_task(client_id)
 
     def get_insts(self):
         return self.platform_insts

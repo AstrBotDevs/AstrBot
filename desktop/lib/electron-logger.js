@@ -2,7 +2,11 @@
 
 const path = require('path');
 const { RotatingLogWriter } = require('./rotating-log-writer');
-const { parseLogBackupCount, parseLogMaxBytes } = require('./common');
+const {
+  formatLogTimestamp,
+  parseLogBackupCount,
+  parseLogMaxBytes,
+} = require('./common');
 
 function createElectronLogger({ app, getRootDir }) {
   const electronLogMaxBytes = parseLogMaxBytes(
@@ -28,7 +32,7 @@ function createElectronLogger({ app, getRootDir }) {
 
   function logElectron(message) {
     const logPath = getElectronLogPath();
-    const line = `[${new Date().toISOString()}] ${message}\n`;
+    const line = `[${formatLogTimestamp()}] ${message}\n`;
     void writer.setLogPath(logPath);
     void writer.append(line);
   }
@@ -47,4 +51,3 @@ function createElectronLogger({ app, getRootDir }) {
 module.exports = {
   createElectronLogger,
 };
-

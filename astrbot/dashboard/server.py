@@ -201,11 +201,16 @@ class AstrBotDashboard:
 
     def run(self):
         ip_addr = []
-        if p := os.environ.get("DASHBOARD_PORT"):
-            port = p
-        else:
-            port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
-        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
+        port = (
+            os.environ.get("DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
+        )
+        host = (
+            os.environ.get("DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
+        )
         enable = self.core_lifecycle.astrbot_config["dashboard"].get("enable", True)
 
         if not enable:

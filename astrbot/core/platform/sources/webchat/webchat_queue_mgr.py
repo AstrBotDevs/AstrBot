@@ -87,6 +87,14 @@ class WebChatQueueMgr:
         for conversation_id in list(self.queues.keys()):
             self._start_listener_if_needed(conversation_id)
 
+    def clear_listener(self):
+        self._listener_callback = None
+        for close_event in self._queue_close_events.values():
+            close_event.set()
+        for task in self._listener_tasks.values():
+            task.cancel()
+        self._listener_tasks.clear()
+
     def _start_listener_if_needed(self, conversation_id: str):
         if self._listener_callback is None:
             return
