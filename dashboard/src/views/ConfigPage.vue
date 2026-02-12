@@ -303,8 +303,26 @@ export default {
     this.getConfigInfoList(targetConfigId);
     // 初始化配置类型状态
     this.configType = this.isSystemConfig ? 'system' : 'normal';
+    
+    // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
+    window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
+  },
+
+  beforeUnmount() {
+    // 移除语言切换事件监听器
+    window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
   methods: {
+    // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
+    handleLocaleChange() {
+      // 重新加载当前配置
+      if (this.selectedConfigID) {
+        this.getConfig(this.selectedConfigID);
+      } else if (this.isSystemConfig) {
+        this.getConfig();
+      }
+    },
+
     getConfigInfoList(abconf_id) {
       // 获取配置列表
       axios.get('/api/config/abconfs').then((res) => {

@@ -14,7 +14,7 @@ import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 
-import { ref, computed, onMounted, reactive, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 const commonStore = useCommonStore();
@@ -1052,6 +1052,22 @@ onMounted(async () => {
   } catch (err) {
     toast(tm("messages.getMarketDataFailed") + " " + err, "error");
   }
+});
+
+// 处理语言切换事件，重新加载插件配置以获取插件的 i18n 数据
+const handleLocaleChange = () => {
+  // 如果配置对话框是打开的，重新加载当前插件的配置
+  if (configDialog.value && currentConfigPlugin.value) {
+    openExtensionConfig(currentConfigPlugin.value);
+  }
+};
+
+// 监听语言切换事件
+window.addEventListener("astrbot-locale-changed", handleLocaleChange);
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
 });
 
 // 搜索防抖处理
