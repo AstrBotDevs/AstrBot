@@ -128,13 +128,13 @@ uv run main.py
 
 Or refer to the official documentation: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html).
 
-#### Установка через системный пакетный менеджер
+#### System Package Manager Installation 
 
 ##### Arch Linux
 
 ```bash
 yay -S astrbot-git
-# или используйте paru
+# or use paru
 paru -S astrbot-git
 ```
 
