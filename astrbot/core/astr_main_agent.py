@@ -894,58 +894,60 @@ async def build_main_agent(
                     )
             # quoted message attachments
             reply_comps = [
-                comp
-                for comp in event.message_obj.message
-                if isinstance(comp, Reply) and comp.chain
+                comp for comp in event.message_obj.message if isinstance(comp, Reply)
             ]
             for comp in reply_comps:
-                if not comp.chain:
-                    continue
-                for reply_comp in comp.chain:
-                    if isinstance(reply_comp, Image):
-                        image_path = await reply_comp.convert_to_file_path()
-                        req.image_urls.append(image_path)
-                        req.extra_user_content_parts.append(
-                            TextPart(
-                                text=f"[Image Attachment in quoted message: path {image_path}]"
-                            )
-                        )
-                    elif isinstance(reply_comp, File):
-                        file_path = await reply_comp.get_file()
-                        file_name = reply_comp.name or os.path.basename(file_path)
-                        req.extra_user_content_parts.append(
-                            TextPart(
-                                text=(
-                                    f"[File Attachment in quoted message: "
-                                    f"name {file_name}, path {file_path}]"
+                has_embedded_image = False
+                if comp.chain:
+                    for reply_comp in comp.chain:
+                        if isinstance(reply_comp, Image):
+                            has_embedded_image = True
+                            image_path = await reply_comp.convert_to_file_path()
+                            req.image_urls.append(image_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=(
+                                        "[Image Attachment in quoted message: "
+                                        f"path {image_path}]"
+                                    )
                                 )
                             )
-                        )
+                        elif isinstance(reply_comp, File):
+                            file_path = await reply_comp.get_file()
+                            file_name = reply_comp.name or os.path.basename(file_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=(
+                                        f"[File Attachment in quoted message: "
+                                        f"name {file_name}, path {file_path}]"
+                                    )
+                                )
+                            )
 
-            # Fallback quoted image extraction for platforms/messages where Reply has no embedded chain.
-            # This mainly targets OneBot/Napcat reply-id-only payloads via get_msg/get_forward_msg.
-            fallback_reply_comps = [
-                comp
-                for comp in event.message_obj.message
-                if isinstance(comp, Reply) and not comp.chain
-            ]
-            for comp in fallback_reply_comps:
-                try:
-                    fallback_images = await extract_quoted_message_images(event, comp)
-                    for image_ref in fallback_images:
-                        if image_ref in req.image_urls:
-                            continue
-                        req.image_urls.append(image_ref)
-                        req.extra_user_content_parts.append(
-                            TextPart(
-                                text=(
-                                    "[Image Attachment in quoted message: "
-                                    f"path {image_ref}]"
+                # Fallback quoted image extraction for reply-id-only payloads, or when
+                # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
+                if not has_embedded_image:
+                    try:
+                        fallback_images = await extract_quoted_message_images(
+                            event, comp
+                        )
+                        for image_ref in fallback_images:
+                            if image_ref in req.image_urls:
+                                continue
+                            req.image_urls.append(image_ref)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=(
+                                        "[Image Attachment in quoted message: "
+                                        f"path {image_ref}]"
+                                    )
                                 )
                             )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug(
+                            "Failed to resolve fallback quoted images: %s",
+                            exc,
                         )
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("Failed to resolve fallback quoted images: %s", exc)
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation

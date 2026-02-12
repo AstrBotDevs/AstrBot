@@ -105,6 +105,33 @@ async def test_extract_quoted_message_text_fallback_get_msg_and_forward():
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_text_forward_placeholder_triggers_fallback():
+    reply = Reply(id="400", chain=[Plain(text="[Forward Message]")], message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "400"): {
+                "data": {
+                    "message": [{"type": "text", "data": {"text": "real content"}}]
+                }
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text == "real content"
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_forward_placeholder_fallback_failure():
+    reply = Reply(id="401", chain=[Plain(text="[Forward Message]")], message_str="")
+    event = _make_event(reply, responses={})
+
+    text = await extract_quoted_message_text(event)
+    assert text == "[Forward Message]"
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_images_from_reply_chain():
     reply = Reply(
         id="1",
@@ -141,6 +168,31 @@ async def test_extract_quoted_message_images_fallback_get_msg_direct_url():
 
     images = await extract_quoted_message_images(event)
     assert images == ["https://img.example.com/direct.jpg"]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_images_chain_placeholder_triggers_fallback():
+    reply = Reply(id="210", chain=[Plain(text="[Forward Message]")], message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "210"): {
+                "data": {
+                    "message": [
+                        {
+                            "type": "image",
+                            "data": {
+                                "url": "https://img.example.com/from-fallback.jpg"
+                            },
+                        }
+                    ]
+                }
+            }
+        },
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == ["https://img.example.com/from-fallback.jpg"]
 
 
 @pytest.mark.asyncio

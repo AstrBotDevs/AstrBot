@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 from astrbot import logger
@@ -30,6 +31,11 @@ _IMAGE_EXTENSIONS = {
     ".gif",
 }
 
+_FORWARD_PLACEHOLDER_PATTERN = re.compile(
+    r"^(?:[\(\[]?[^\]:\)]*[\)\]]?\s*:\s*)?\[(?:forward message|转发消息|合并转发)\]$",
+    flags=re.IGNORECASE,
+)
+
 
 def _find_first_reply_component(event: AstrMessageEvent) -> Reply | None:
     for comp in event.message_obj.message:
@@ -55,6 +61,15 @@ def _dedupe_keep_order(items: list[str]) -> list[str]:
 def _join_text_parts(parts: list[str]) -> str | None:
     text = "".join(parts).strip()
     return text or None
+
+
+def _is_forward_placeholder_only_text(text: str | None) -> bool:
+    if not isinstance(text, str):
+        return False
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return False
+    return all(_FORWARD_PLACEHOLDER_PATTERN.match(line) for line in lines)
 
 
 def _looks_like_image_file_name(name: str) -> bool:
@@ -637,19 +652,19 @@ async def extract_quoted_message_text(
         return None
 
     embedded_text = _extract_text_from_reply_component(reply)
-    if embedded_text:
+    if embedded_text and not _is_forward_placeholder_only_text(embedded_text):
         return embedded_text
 
     reply_id = getattr(reply, "id", None)
     if reply_id is None:
-        return None
+        return embedded_text
     reply_id_str = str(reply_id).strip()
     if not reply_id_str:
-        return None
+        return embedded_text
 
     msg_payload = await _call_action_compat(event, "get_msg", reply_id_str)
     if not msg_payload:
-        return None
+        return embedded_text
 
     text_parts: list[str] = []
     direct_text = _extract_text_from_onebot_get_msg_payload(msg_payload)
@@ -669,7 +684,7 @@ async def extract_quoted_message_text(
         if forward_text:
             text_parts.append(forward_text)
 
-    return "\n".join(text_parts).strip() or None
+    return "\n".join(text_parts).strip() or embedded_text
 
 
 async def extract_quoted_message_images(
