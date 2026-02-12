@@ -93,7 +93,7 @@ export function useI18n() {
     const keys = key.split('.');
 
     // 先尝试从动态翻译中获取
-    let value: any = dynamicTranslations.value;
+    let value: any = dynamicTranslations.value[currentLocale.value] ?? {};
     let foundInDynamic = true;
 
     for (const k of keys) {
