@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, TypedDict
 from urllib.parse import urlsplit
 
@@ -33,12 +34,57 @@ _IMAGE_EXTENSIONS = {
     ".gif",
 }
 
-_MAX_COMPONENT_CHAIN_DEPTH = 4
-_MAX_FORWARD_NODE_DEPTH = 6
-_MAX_FORWARD_FETCH = 32
-_WARN_ON_ACTION_FAILURE = os.getenv(
-    "ASTRBOT_QUOTED_ACTION_WARN", ""
-).strip().lower() in {"1", "true", "yes", "on"}
+_DEFAULT_MAX_COMPONENT_CHAIN_DEPTH = 4
+_DEFAULT_MAX_FORWARD_NODE_DEPTH = 6
+_DEFAULT_MAX_FORWARD_FETCH = 32
+
+
+def _read_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    if value <= 0:
+        return default
+    return value
+
+
+@dataclass(frozen=True)
+class QuotedMessageParserSettings:
+    max_component_chain_depth: int = _DEFAULT_MAX_COMPONENT_CHAIN_DEPTH
+    max_forward_node_depth: int = _DEFAULT_MAX_FORWARD_NODE_DEPTH
+    max_forward_fetch: int = _DEFAULT_MAX_FORWARD_FETCH
+    warn_on_action_failure: bool = False
+
+    @classmethod
+    def from_env(cls) -> QuotedMessageParserSettings:
+        return cls(
+            max_component_chain_depth=_read_int_env(
+                "ASTRBOT_QUOTED_MAX_COMPONENT_CHAIN_DEPTH",
+                _DEFAULT_MAX_COMPONENT_CHAIN_DEPTH,
+            ),
+            max_forward_node_depth=_read_int_env(
+                "ASTRBOT_QUOTED_MAX_FORWARD_NODE_DEPTH",
+                _DEFAULT_MAX_FORWARD_NODE_DEPTH,
+            ),
+            max_forward_fetch=_read_int_env(
+                "ASTRBOT_QUOTED_MAX_FORWARD_FETCH",
+                _DEFAULT_MAX_FORWARD_FETCH,
+            ),
+            warn_on_action_failure=os.getenv(
+                "ASTRBOT_QUOTED_ACTION_WARN",
+                "",
+            )
+            .strip()
+            .lower()
+            in {"1", "true", "yes", "on"},
+        )
+
+
+SETTINGS = QuotedMessageParserSettings.from_env()
 
 _FORWARD_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:[\(\[]?[^\]:\)]*[\)\]]?\s*:\s*)?\[(?:forward message|转发消息|合并转发)\]$",
@@ -157,7 +203,7 @@ def _extract_image_refs_from_component_chain(
     *,
     depth: int = 0,
 ) -> list[str]:
-    if not isinstance(chain, list) or depth > _MAX_COMPONENT_CHAIN_DEPTH:
+    if not isinstance(chain, list) or depth > SETTINGS.max_component_chain_depth:
         return []
 
     image_refs: list[str] = []
@@ -195,7 +241,7 @@ def _extract_text_from_component_chain(
     *,
     depth: int = 0,
 ) -> str | None:
-    if not isinstance(chain, list) or depth > _MAX_COMPONENT_CHAIN_DEPTH:
+    if not isinstance(chain, list) or depth > SETTINGS.max_component_chain_depth:
         return None
 
     parts: list[str] = []
@@ -267,6 +313,30 @@ def _extract_text_from_reply_component(reply: Reply, *, depth: int = 0) -> str |
     if reply.message_str and reply.message_str.strip():
         return reply.message_str.strip()
     return None
+
+
+class ReplyChainParser:
+    @staticmethod
+    def find_first_reply_component(event: AstrMessageEvent) -> Reply | None:
+        return _find_first_reply_component(event)
+
+    @staticmethod
+    def is_forward_placeholder_only_text(text: str | None) -> bool:
+        return _is_forward_placeholder_only_text(text)
+
+    @staticmethod
+    def extract_text_from_reply_component(
+        reply: Reply, *, depth: int = 0
+    ) -> str | None:
+        return _extract_text_from_reply_component(reply, depth=depth)
+
+    @staticmethod
+    def extract_image_refs_from_reply_component(
+        reply: Reply,
+        *,
+        depth: int = 0,
+    ) -> list[str]:
+        return _extract_image_refs_from_reply_component(reply, depth=depth)
 
 
 def _unwrap_onebot_data(payload: Any) -> dict[str, Any]:
@@ -409,7 +479,7 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
     *,
     depth: int = 0,
 ) -> tuple[str | None, list[str], list[str]]:
-    if not isinstance(nodes, list) or depth > _MAX_FORWARD_NODE_DEPTH:
+    if not isinstance(nodes, list) or depth > SETTINGS.max_forward_node_depth:
         return None, [], []
 
     texts: list[str] = []
@@ -517,6 +587,16 @@ def _parse_onebot_get_forward_payload(
     }
 
 
+class OneBotPayloadParser:
+    @staticmethod
+    def parse_get_msg_payload(payload: dict[str, Any]) -> ParsedOneBotMessage:
+        return _parse_onebot_get_msg_payload(payload)
+
+    @staticmethod
+    def parse_get_forward_payload(payload: dict[str, Any]) -> ParsedOneBotMessage:
+        return _parse_onebot_get_forward_payload(payload)
+
+
 def _unwrap_action_response(ret: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(ret, dict):
         return {}
@@ -545,7 +625,7 @@ class OneBotClient:
         action: str,
         params_list: list[dict[str, Any]],
         *,
-        warn_on_all_failed: bool = _WARN_ON_ACTION_FAILURE,
+        warn_on_all_failed: bool = SETTINGS.warn_on_action_failure,
     ) -> dict[str, Any] | None:
         if self._call_action is None:
             return None
@@ -745,7 +825,7 @@ async def _collect_text_and_images_from_forward_ids(
     onebot_client: OneBotClient,
     forward_ids: list[str],
     *,
-    max_fetch: int = _MAX_FORWARD_FETCH,
+    max_fetch: int = SETTINGS.max_forward_fetch,
 ) -> tuple[list[str], list[str]]:
     texts: list[str] = []
     image_refs: list[str] = []
@@ -771,7 +851,7 @@ async def _collect_text_and_images_from_forward_ids(
         if not forward_payload:
             continue
 
-        parsed = _parse_onebot_get_forward_payload(forward_payload)
+        parsed = OneBotPayloadParser.parse_get_forward_payload(forward_payload)
         if parsed["text"]:
             texts.append(parsed["text"])
         if parsed["image_refs"]:
@@ -796,12 +876,16 @@ class QuotedMessageExtractor:
         self._image_resolver = ImageResolver(event, self._client)
 
     async def text(self, reply_component: Reply | None = None) -> str | None:
-        reply = reply_component or _find_first_reply_component(self._event)
+        reply = reply_component or ReplyChainParser.find_first_reply_component(
+            self._event
+        )
         if not reply:
             return None
 
-        embedded_text = _extract_text_from_reply_component(reply)
-        if embedded_text and not _is_forward_placeholder_only_text(embedded_text):
+        embedded_text = ReplyChainParser.extract_text_from_reply_component(reply)
+        if embedded_text and not ReplyChainParser.is_forward_placeholder_only_text(
+            embedded_text
+        ):
             return embedded_text
 
         reply_id = getattr(reply, "id", None)
@@ -815,7 +899,7 @@ class QuotedMessageExtractor:
         if not msg_payload:
             return embedded_text
 
-        parsed = _parse_onebot_get_msg_payload(msg_payload)
+        parsed = OneBotPayloadParser.parse_get_msg_payload(msg_payload)
         text_parts: list[str] = []
         direct_text = parsed["text"]
         if direct_text:
@@ -833,11 +917,15 @@ class QuotedMessageExtractor:
         return "\n".join(text_parts).strip() or embedded_text
 
     async def images(self, reply_component: Reply | None = None) -> list[str]:
-        reply = reply_component or _find_first_reply_component(self._event)
+        reply = reply_component or ReplyChainParser.find_first_reply_component(
+            self._event
+        )
         if not reply:
             return []
 
-        image_refs = list(_extract_image_refs_from_reply_component(reply))
+        image_refs = list(
+            ReplyChainParser.extract_image_refs_from_reply_component(reply)
+        )
 
         reply_id = getattr(reply, "id", None)
         if reply_id is None:
@@ -850,7 +938,7 @@ class QuotedMessageExtractor:
         if not msg_payload:
             return await self._image_resolver.resolve_for_llm(image_refs)
 
-        parsed = _parse_onebot_get_msg_payload(msg_payload)
+        parsed = OneBotPayloadParser.parse_get_msg_payload(msg_payload)
         image_refs.extend(parsed["image_refs"])
 
         (

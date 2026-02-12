@@ -93,7 +93,9 @@ async def test_extract_quoted_message_images_no_reply_component():
 async def test_extract_quoted_message_text_reply_without_id_does_not_call_get_msg(
     reply_id: str | None,
 ):
-    reply = Reply(id="placeholder", chain=[Plain(text="quoted content")], message_str="")
+    reply = Reply(
+        id="placeholder", chain=[Plain(text="quoted content")], message_str=""
+    )
     object.__setattr__(reply, "id", reply_id)
     event = SimpleNamespace(
         message_obj=SimpleNamespace(message=[reply]),
@@ -319,7 +321,9 @@ async def test_extract_quoted_message_images_non_image_local_path_is_ignored(tmp
     non_image_file = tmp_path / "secret.txt"
     non_image_file.write_text("not an image", encoding="utf-8")
 
-    reply = Reply(id="placeholder", chain=[Image(file=str(non_image_file))], message_str="")
+    reply = Reply(
+        id="placeholder", chain=[Image(file=str(non_image_file))], message_str=""
+    )
     object.__setattr__(reply, "id", None)
     event = SimpleNamespace(
         message_obj=SimpleNamespace(message=[reply]),

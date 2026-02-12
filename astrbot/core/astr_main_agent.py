@@ -945,9 +945,12 @@ async def build_main_agent(
                                 )
                             )
                     except Exception as exc:  # noqa: BLE001
-                        logger.debug(
-                            "Failed to resolve fallback quoted images: %s",
+                        logger.warning(
+                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
+                            event.unified_msg_origin,
+                            getattr(comp, "id", None),
                             exc,
+                            exc_info=True,
                         )
 
             conversation = await _get_session_conv(event, plugin_context)
