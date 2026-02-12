@@ -1,6 +1,6 @@
 {
   "name": "astrbot-desktop",
-  "version": "4.15.0",
+  "version": "4.16.0",
   "description": "AstrBot desktop wrapper",
   "private": true,
   "main": "main.js",
