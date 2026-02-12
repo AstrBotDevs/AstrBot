@@ -296,6 +296,16 @@ class PlatformManager:
     def get_insts(self):
         return self.platform_insts
 
+    @staticmethod
+    def _get_platform_id(inst) -> str:
+        """安全获取平台ID，兼容dict和dataclass类型的config"""
+        config = getattr(inst, "config", None)
+        if config is None:
+            return "unknown"
+        if isinstance(config, dict):
+            return config.get("id", "unknown")
+        return getattr(config, "platform_id", getattr(config, "id", "unknown"))
+
     def get_all_stats(self) -> dict:
         """获取所有平台的统计信息
 
@@ -321,7 +331,7 @@ class PlatformManager:
                 logger.warning(f"获取平台统计信息失败: {e}")
                 stats_list.append(
                     {
-                        "id": getattr(inst, "config", {}).get("id", "unknown"),
+                        "id": self._get_platform_id(inst),
                         "type": "unknown",
                         "status": "unknown",
                         "error_count": 0,

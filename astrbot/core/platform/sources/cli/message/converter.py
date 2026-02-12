@@ -71,4 +71,6 @@ class MessageConverter:
             nickname=self.user_nickname,
         )
 
+        message.raw_message = None
+
         return message

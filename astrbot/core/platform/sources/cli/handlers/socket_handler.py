@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from astrbot import logger
+from astrbot.core.message.message_event_result import MessageChain
 
 from ..interfaces import IHandler, IMessageConverter, ISessionManager, ITokenValidator
 from ..message.response_builder import ResponseBuilder
@@ -34,7 +35,7 @@ class SocketClientHandler:
 
     RECV_BUFFER_SIZE = 4096
     MAX_REQUEST_SIZE = 1024 * 1024  # 1MB 最大请求大小
-    RESPONSE_TIMEOUT = 30.0
+    RESPONSE_TIMEOUT = 120.0
 
     def __init__(
         self,
@@ -181,14 +182,13 @@ class SocketClientHandler:
             message_chain = await asyncio.wait_for(
                 response_future, timeout=self.RESPONSE_TIMEOUT
             )
+            if message_chain is None:
+                # 管道完成但没有产生任何回复（被白名单/频率限制等拦截）
+                return ResponseBuilder.build_success(
+                    MessageChain([]), request_id
+                )
             return ResponseBuilder.build_success(message_chain, request_id)
         except asyncio.TimeoutError:
-            # 超时时取消延迟响应任务，防止资源泄露
-            if (
-                hasattr(message_event, "_response_delay_task")
-                and message_event._response_delay_task
-            ):
-                message_event._response_delay_task.cancel()
             return ResponseBuilder.build_error("Request timeout", request_id, "TIMEOUT")
 
     async def _get_logs(self, request: dict, request_id: str) -> str:

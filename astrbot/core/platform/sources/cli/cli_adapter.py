@@ -195,6 +195,39 @@ class CLIPlatformAdapter(Platform):
         """获取平台元数据"""
         return self.metadata
 
+    def unified_webhook(self) -> bool:
+        """CLI不使用webhook"""
+        return False
+
+    def get_stats(self) -> dict:
+        """获取平台统计信息（兼容CLIConfig数据类）"""
+        meta = self.meta()
+        meta_info = {
+            "id": meta.id,
+            "name": meta.name,
+            "display_name": meta.adapter_display_name or meta.name,
+            "description": meta.description,
+            "support_streaming_message": meta.support_streaming_message,
+            "support_proactive_message": meta.support_proactive_message,
+        }
+        return {
+            "id": meta.id or self.config.platform_id,
+            "type": meta.name,
+            "display_name": meta.adapter_display_name or meta.name,
+            "status": self._status.value,
+            "started_at": self._started_at.isoformat() if self._started_at else None,
+            "error_count": len(self._errors),
+            "last_error": {
+                "message": self.last_error.message,
+                "timestamp": self.last_error.timestamp.isoformat(),
+                "traceback": self.last_error.traceback,
+            }
+            if self.last_error
+            else None,
+            "unified_webhook": False,
+            "meta": meta_info,
+        }
+
     async def terminate(self) -> None:
         """终止平台运行"""
         self._running = False

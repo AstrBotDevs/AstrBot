@@ -81,7 +81,9 @@ class PlatformRoute(Route):
             平台适配器实例，未找到则返回 None
         """
         for platform in self.platform_manager.platform_insts:
-            if platform.config.get("webhook_uuid") == webhook_uuid:
+            config = platform.config
+            uuid_val = config.get("webhook_uuid") if isinstance(config, dict) else getattr(config, "webhook_uuid", None)
+            if uuid_val == webhook_uuid:
                 if platform.unified_webhook():
                     return platform
         return None
