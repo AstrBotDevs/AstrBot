@@ -192,6 +192,25 @@ async def test_extract_quoted_message_text_forward_placeholder_variants_trigger_
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_text_mixed_placeholder_does_not_trigger_fallback():
+    reply = Reply(
+        id="402",
+        chain=[Plain(text="Alice: [Forward Message]\nreal text")],
+        message_str="",
+    )
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "[Forward Message]" in text
+    assert "real text" in text
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_text_forward_placeholder_fallback_failure():
     reply = Reply(id="401", chain=[Plain(text="[Forward Message]")], message_str="")
     event = _make_event(reply, responses={})

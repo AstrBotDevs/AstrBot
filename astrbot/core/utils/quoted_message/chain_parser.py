@@ -20,7 +20,7 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from .image_refs import looks_like_image_file_name, normalize_file_like_url
-from .settings import SETTINGS
+from .settings import SETTINGS, QuotedMessageParserSettings
 
 _FORWARD_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:[\(\[]?[^\]:\)]*[\)\]]?\s*:\s*)?\[(?:forward message|转发消息|合并转发)\]$",
@@ -28,16 +28,22 @@ _FORWARD_PLACEHOLDER_PATTERN = re.compile(
 )
 
 
-class ParsedOneBotMessage(TypedDict):
+class ParsedOneBotPayload(TypedDict):
     text: str | None
     forward_ids: list[str]
     image_refs: list[str]
 
 
-class ParsedOneBotSegments(TypedDict):
-    text: str | None
-    forward_ids: list[str]
-    image_refs: list[str]
+def _build_parsed_payload(
+    text: str | None,
+    forward_ids: list[str] | None = None,
+    image_refs: list[str] | None = None,
+) -> ParsedOneBotPayload:
+    return {
+        "text": text,
+        "forward_ids": forward_ids or [],
+        "image_refs": image_refs or [],
+    }
 
 
 def _join_text_parts(parts: list[str]) -> str | None:
@@ -65,8 +71,9 @@ def _extract_image_refs_from_component_chain(
     chain: list[Any] | None,
     *,
     depth: int = 0,
+    settings: QuotedMessageParserSettings = SETTINGS,
 ) -> list[str]:
-    if not isinstance(chain, list) or depth > SETTINGS.max_component_chain_depth:
+    if not isinstance(chain, list) or depth > settings.max_component_chain_depth:
         return []
 
     image_refs: list[str] = []
@@ -78,13 +85,18 @@ def _extract_image_refs_from_component_chain(
                     break
         elif isinstance(seg, Reply):
             image_refs.extend(
-                _extract_image_refs_from_reply_component(seg, depth=depth + 1)
+                _extract_image_refs_from_reply_component(
+                    seg,
+                    depth=depth + 1,
+                    settings=settings,
+                )
             )
         elif isinstance(seg, Node):
             image_refs.extend(
                 _extract_image_refs_from_component_chain(
                     seg.content,
                     depth=depth + 1,
+                    settings=settings,
                 )
             )
         elif isinstance(seg, Nodes):
@@ -93,6 +105,7 @@ def _extract_image_refs_from_component_chain(
                     _extract_image_refs_from_component_chain(
                         node.content,
                         depth=depth + 1,
+                        settings=settings,
                     )
                 )
 
@@ -103,8 +116,9 @@ def _extract_text_from_component_chain(
     chain: list[Any] | None,
     *,
     depth: int = 0,
+    settings: QuotedMessageParserSettings = SETTINGS,
 ) -> str | None:
-    if not isinstance(chain, list) or depth > SETTINGS.max_component_chain_depth:
+    if not isinstance(chain, list) or depth > settings.max_component_chain_depth:
         return None
 
     parts: list[str] = []
@@ -129,7 +143,11 @@ def _extract_text_from_component_chain(
         elif isinstance(seg, Forward):
             parts.append("[Forward Message]")
         elif isinstance(seg, Reply):
-            nested = _extract_text_from_reply_component(seg, depth=depth + 1)
+            nested = _extract_text_from_reply_component(
+                seg,
+                depth=depth + 1,
+                settings=settings,
+            )
             if nested:
                 parts.append(nested)
         elif isinstance(seg, Node):
@@ -137,6 +155,7 @@ def _extract_text_from_component_chain(
             node_text = _extract_text_from_component_chain(
                 seg.content,
                 depth=depth + 1,
+                settings=settings,
             )
             if node_text:
                 parts.append(f"{node_sender}: {node_text}")
@@ -146,6 +165,7 @@ def _extract_text_from_component_chain(
                 node_text = _extract_text_from_component_chain(
                     node.content,
                     depth=depth + 1,
+                    settings=settings,
                 )
                 if node_text:
                     parts.append(f"{node_sender}: {node_text}")
@@ -157,19 +177,33 @@ def _extract_image_refs_from_reply_component(
     reply: Reply,
     *,
     depth: int = 0,
+    settings: QuotedMessageParserSettings = SETTINGS,
 ) -> list[str]:
     for attr in ("chain", "message", "origin", "content"):
         payload = getattr(reply, attr, None)
-        image_refs = _extract_image_refs_from_component_chain(payload, depth=depth)
+        image_refs = _extract_image_refs_from_component_chain(
+            payload,
+            depth=depth,
+            settings=settings,
+        )
         if image_refs:
             return image_refs
     return []
 
 
-def _extract_text_from_reply_component(reply: Reply, *, depth: int = 0) -> str | None:
+def _extract_text_from_reply_component(
+    reply: Reply,
+    *,
+    depth: int = 0,
+    settings: QuotedMessageParserSettings = SETTINGS,
+) -> str | None:
     for attr in ("chain", "message", "origin", "content"):
         payload = getattr(reply, attr, None)
-        text = _extract_text_from_component_chain(payload, depth=depth)
+        text = _extract_text_from_component_chain(
+            payload,
+            depth=depth,
+            settings=settings,
+        )
         if text:
             return text
 
@@ -227,14 +261,11 @@ def _extract_text_from_multimsg_json(raw_json: str) -> str | None:
     return "\n".join(texts).strip() or None
 
 
-def _extract_text_forward_ids_and_images_from_onebot_segments(
+def _parse_onebot_segments(
     segments: list[Any],
-) -> tuple[str | None, list[str], list[str]]:
-    parsed = _parse_onebot_segments(segments)
-    return parsed["text"], parsed["forward_ids"], parsed["image_refs"]
-
-
-def _parse_onebot_segments(segments: list[Any]) -> ParsedOneBotSegments:
+    *,
+    settings: QuotedMessageParserSettings = SETTINGS,
+) -> ParsedOneBotPayload:
     text_parts: list[str] = []
     forward_ids: list[str] = []
     image_refs: list[str] = []
@@ -295,6 +326,7 @@ def _parse_onebot_segments(segments: list[Any]) -> ParsedOneBotSegments:
                     _extract_text_forward_ids_and_images_from_forward_nodes(
                         nested_nodes if isinstance(nested_nodes, list) else [],
                         depth=1,
+                        settings=settings,
                     )
                 )
                 if nested_text:
@@ -311,19 +343,20 @@ def _parse_onebot_segments(segments: list[Any]) -> ParsedOneBotSegments:
                 if multimsg_text:
                     text_parts.append(multimsg_text)
 
-    return {
-        "text": _join_text_parts(text_parts),
-        "forward_ids": forward_ids,
-        "image_refs": normalize_and_dedupe_strings(image_refs),
-    }
+    return _build_parsed_payload(
+        _join_text_parts(text_parts),
+        forward_ids,
+        normalize_and_dedupe_strings(image_refs),
+    )
 
 
 def _extract_text_forward_ids_and_images_from_forward_nodes(
     nodes: list[Any],
     *,
     depth: int = 0,
+    settings: QuotedMessageParserSettings = SETTINGS,
 ) -> tuple[str | None, list[str], list[str]]:
-    if not isinstance(nodes, list) or depth > SETTINGS.max_forward_node_depth:
+    if not isinstance(nodes, list) or depth > settings.max_forward_node_depth:
         return None, [], []
 
     texts: list[str] = []
@@ -359,7 +392,7 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
                 else:
                     chain = [{"type": "text", "data": {"text": raw_content}}]
 
-        parsed_segments = _parse_onebot_segments(chain)
+        parsed_segments = _parse_onebot_segments(chain, settings=settings)
         node_text = parsed_segments["text"]
         node_forward_ids = parsed_segments["forward_ids"]
         node_images = parsed_segments["image_refs"]
@@ -377,18 +410,15 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
     )
 
 
-def _parse_onebot_get_msg_payload(payload: dict[str, Any]) -> ParsedOneBotMessage:
+def _parse_onebot_get_msg_payload(
+    payload: dict[str, Any],
+    *,
+    settings: QuotedMessageParserSettings = SETTINGS,
+) -> ParsedOneBotPayload:
     data = _unwrap_onebot_data(payload)
     segments = data.get("message") or data.get("messages")
     if isinstance(segments, list):
-        text, forward_ids, image_refs = (
-            _extract_text_forward_ids_and_images_from_onebot_segments(segments)
-        )
-        return {
-            "text": text,
-            "forward_ids": forward_ids,
-            "image_refs": image_refs,
-        }
+        return _parse_onebot_segments(segments, settings=settings)
 
     text: str | None = None
     if isinstance(segments, str) and segments.strip():
@@ -397,14 +427,14 @@ def _parse_onebot_get_msg_payload(payload: dict[str, Any]) -> ParsedOneBotMessag
         raw = data.get("raw_message")
         if isinstance(raw, str) and raw.strip():
             text = raw.strip()
-    return {
-        "text": text,
-        "forward_ids": [],
-        "image_refs": [],
-    }
+    return _build_parsed_payload(text)
 
 
-def _parse_onebot_get_forward_payload(payload: dict[str, Any]) -> ParsedOneBotMessage:
+def _parse_onebot_get_forward_payload(
+    payload: dict[str, Any],
+    *,
+    settings: QuotedMessageParserSettings = SETTINGS,
+) -> ParsedOneBotPayload:
     data = _unwrap_onebot_data(payload)
     nodes = (
         data.get("messages")
@@ -413,22 +443,21 @@ def _parse_onebot_get_forward_payload(payload: dict[str, Any]) -> ParsedOneBotMe
         or data.get("nodeList")
     )
     if not isinstance(nodes, list):
-        return {
-            "text": None,
-            "forward_ids": [],
-            "image_refs": [],
-        }
+        return _build_parsed_payload(None)
+
     text, forward_ids, image_refs = (
-        _extract_text_forward_ids_and_images_from_forward_nodes(nodes)
+        _extract_text_forward_ids_and_images_from_forward_nodes(
+            nodes,
+            settings=settings,
+        )
     )
-    return {
-        "text": text,
-        "forward_ids": forward_ids,
-        "image_refs": image_refs,
-    }
+    return _build_parsed_payload(text, forward_ids, image_refs)
 
 
 class ReplyChainParser:
+    def __init__(self, settings: QuotedMessageParserSettings = SETTINGS):
+        self._settings = settings
+
     @staticmethod
     def find_first_reply_component(event: AstrMessageEvent) -> Reply | None:
         return _find_first_reply_component(event)
@@ -437,28 +466,40 @@ class ReplyChainParser:
     def is_forward_placeholder_only_text(text: str | None) -> bool:
         return _is_forward_placeholder_only_text(text)
 
-    @staticmethod
     def extract_text_from_reply_component(
+        self,
         reply: Reply,
         *,
         depth: int = 0,
     ) -> str | None:
-        return _extract_text_from_reply_component(reply, depth=depth)
+        return _extract_text_from_reply_component(
+            reply,
+            depth=depth,
+            settings=self._settings,
+        )
 
-    @staticmethod
     def extract_image_refs_from_reply_component(
+        self,
         reply: Reply,
         *,
         depth: int = 0,
     ) -> list[str]:
-        return _extract_image_refs_from_reply_component(reply, depth=depth)
+        return _extract_image_refs_from_reply_component(
+            reply,
+            depth=depth,
+            settings=self._settings,
+        )
 
 
 class OneBotPayloadParser:
-    @staticmethod
-    def parse_get_msg_payload(payload: dict[str, Any]) -> ParsedOneBotMessage:
-        return _parse_onebot_get_msg_payload(payload)
+    def __init__(self, settings: QuotedMessageParserSettings = SETTINGS):
+        self._settings = settings
 
-    @staticmethod
-    def parse_get_forward_payload(payload: dict[str, Any]) -> ParsedOneBotMessage:
-        return _parse_onebot_get_forward_payload(payload)
+    def parse_get_msg_payload(self, payload: dict[str, Any]) -> ParsedOneBotPayload:
+        return _parse_onebot_get_msg_payload(payload, settings=self._settings)
+
+    def parse_get_forward_payload(
+        self,
+        payload: dict[str, Any],
+    ) -> ParsedOneBotPayload:
+        return _parse_onebot_get_forward_payload(payload, settings=self._settings)

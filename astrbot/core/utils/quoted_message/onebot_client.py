@@ -5,7 +5,7 @@ from typing import Any
 from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
-from .settings import SETTINGS
+from .settings import SETTINGS, QuotedMessageParserSettings
 
 
 def _unwrap_action_response(ret: dict[str, Any] | None) -> dict[str, Any]:
@@ -18,8 +18,13 @@ def _unwrap_action_response(ret: dict[str, Any] | None) -> dict[str, Any]:
 
 
 class OneBotClient:
-    def __init__(self, event: AstrMessageEvent):
+    def __init__(
+        self,
+        event: AstrMessageEvent,
+        settings: QuotedMessageParserSettings = SETTINGS,
+    ):
         self._call_action = self._resolve_call_action(event)
+        self._settings = settings
 
     @staticmethod
     def _resolve_call_action(event: AstrMessageEvent):
@@ -35,10 +40,12 @@ class OneBotClient:
         action: str,
         params_list: list[dict[str, Any]],
         *,
-        warn_on_all_failed: bool = SETTINGS.warn_on_action_failure,
+        warn_on_all_failed: bool | None = None,
     ) -> dict[str, Any] | None:
         if self._call_action is None:
             return None
+        if warn_on_all_failed is None:
+            warn_on_all_failed = self._settings.warn_on_action_failure
 
         last_error: Exception | None = None
         last_params: dict[str, Any] | None = None

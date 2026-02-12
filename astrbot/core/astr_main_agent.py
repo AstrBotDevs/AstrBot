@@ -52,6 +52,12 @@ from astrbot.core.tools.cron_tools import (
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.quoted_message.settings import (
+    SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
+)
+from astrbot.core.utils.quoted_message.settings import (
+    QuotedMessageParserSettings,
+)
 from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
@@ -477,11 +483,29 @@ async def _ensure_img_caption(
         logger.error("处理图片描述失败: %s", exc)
 
 
+def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Image Attachment in quoted message: path {image_path}]")
+    )
+
+
+def _get_quoted_message_parser_settings(
+    provider_settings: dict[str, object] | None,
+) -> QuotedMessageParserSettings:
+    if not isinstance(provider_settings, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS
+    overrides = provider_settings.get("quoted_message_parser")
+    if not isinstance(overrides, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
     img_cap_prov_id: str,
     plugin_context: Context,
+    quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -494,7 +518,11 @@ async def _process_quote_message(
     content_parts = []
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
     message_str = (
-        await extract_quoted_message_text(event, quote)
+        await extract_quoted_message_text(
+            event,
+            quote,
+            settings=quoted_message_settings,
+        )
         or quote.message_str
         or "[Empty Text]"
     )
@@ -603,11 +631,13 @@ async def _decorate_llm_request(
             )
 
     img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
+    quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
         req,
         img_cap_prov_id,
         plugin_context,
+        quoted_message_settings,
     )
 
     tz = config.timezone
@@ -899,6 +929,9 @@ async def build_main_agent(
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
             ]
+            quoted_message_settings = _get_quoted_message_parser_settings(
+                config.provider_settings
+            )
             fallback_quoted_image_count = 0
             for comp in reply_comps:
                 has_embedded_image = False
@@ -908,14 +941,7 @@ async def build_main_agent(
                             has_embedded_image = True
                             image_path = await reply_comp.convert_to_file_path()
                             req.image_urls.append(image_path)
-                            req.extra_user_content_parts.append(
-                                TextPart(
-                                    text=(
-                                        "[Image Attachment in quoted message: "
-                                        f"path {image_path}]"
-                                    )
-                                )
-                            )
+                            _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
                             file_path = await reply_comp.get_file()
                             file_name = reply_comp.name or os.path.basename(file_path)
@@ -933,7 +959,11 @@ async def build_main_agent(
                 if not has_embedded_image:
                     try:
                         fallback_images = normalize_and_dedupe_strings(
-                            await extract_quoted_message_images(event, comp)
+                            await extract_quoted_message_images(
+                                event,
+                                comp,
+                                settings=quoted_message_settings,
+                            )
                         )
                         remaining_limit = max(
                             config.max_quoted_fallback_images
@@ -961,14 +991,7 @@ async def build_main_agent(
                                 continue
                             req.image_urls.append(image_ref)
                             fallback_quoted_image_count += 1
-                            req.extra_user_content_parts.append(
-                                TextPart(
-                                    text=(
-                                        "[Image Attachment in quoted message: "
-                                        f"path {image_ref}]"
-                                    )
-                                )
-                            )
+                            _append_quoted_image_attachment(req, image_ref)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
