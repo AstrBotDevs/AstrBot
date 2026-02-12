@@ -183,6 +183,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         else:
             yield await self.provider.text_chat(**payload)
 
+    def _simple_print_message_role(self, tag: str = ""):
+        roles = []
+        for message in self.run_context.messages:
+            roles.append(message.role)
+        logger.debug(f"{tag} RunCtx.messages -> [{len(roles)}] {','.join(roles)}")
+
     @override
     async def step(self):
         """Process a single step of the agent.
@@ -203,9 +209,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # do truncate and compress
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        self._simple_print_message_role("[BefCompact]")
         self.run_context.messages = await self.context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
+        self._simple_print_message_role("[AftCompact]")
 
         async for llm_response in self._iter_llm_responses():
             if llm_response.is_chunk:
