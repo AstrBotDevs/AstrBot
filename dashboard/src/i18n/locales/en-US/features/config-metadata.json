@@ -247,6 +247,28 @@
           "description": "Sanitize History by Modalities",
           "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
         },
+        "max_quoted_fallback_images": {
+          "description": "Forwarded Image Fetch Limit",
+          "hint": "Maximum number of images injected from forwarded-message parsing; extra images are truncated."
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "Forwarded Rich-Text Parse Depth",
+            "hint": "Maximum recursive depth when parsing rich-text component chains inside forwarded messages."
+          },
+          "max_forward_node_depth": {
+            "description": "Forward Nesting Parse Depth",
+            "hint": "Maximum recursive depth when parsing nested forwarded nodes."
+          },
+          "max_forward_fetch": {
+            "description": "Forward Recursive Fetch Limit",
+            "hint": "Maximum number of recursive get_forward_msg fetch operations."
+          },
+          "warn_on_action_failure": {
+            "description": "Warn on Forward Parse Failure",
+            "hint": "When enabled, log warnings when all get_msg/get_forward_msg attempts fail."
+          }
+        },
         "max_agent_step": {
           "description": "Maximum Tool Call Rounds"
         },

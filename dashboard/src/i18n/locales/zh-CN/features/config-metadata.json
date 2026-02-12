@@ -250,6 +250,28 @@
           "description": "按模型能力清理历史上下文",
           "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"
         },
+        "max_quoted_fallback_images": {
+          "description": "转发消息中图片获取上限",
+          "hint": "转发消息解析到的图片最多注入数量，超出部分会截断。"
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "转发消息富文本解析深度",
+            "hint": "解析转发消息中的富文本组件链时允许的最大递归深度。"
+          },
+          "max_forward_node_depth": {
+            "description": "转发消息嵌套解析深度",
+            "hint": "解析嵌套转发节点时允许的最大递归深度。"
+          },
+          "max_forward_fetch": {
+            "description": "转发消息递归拉取上限",
+            "hint": "递归调用 get_forward_msg 拉取转发内容的最大次数。"
+          },
+          "warn_on_action_failure": {
+            "description": "转发消息解析失败告警",
+            "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。"
+          }
+        },
         "max_agent_step": {
           "description": "工具调用轮数上限"
         },
