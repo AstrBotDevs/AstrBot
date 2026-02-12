@@ -299,7 +299,7 @@ class PluginManager:
                 except KeyError:
                     logger.warning(f"模块 {module_name} 未载入")
 
-    async def reload_failed_plugin( self , dir_name ) :
+    async def reload_failed_plugin(self, dir_name):
         """
         重新加载未注册（加载失败）的插件
         Args:
@@ -309,18 +309,17 @@ class PluginManager:
                 - success (bool): 重载是否成功
                 - error_message (str|None): 错误信息，成功时为 None
         """
-        async with self._pm_lock :
-            if dir_name in self.failed_plugin_dict :
-                success,error = await self.load( specified_dir_name=dir_name )
-                if success :
-                    self.failed_plugin_dict.pop( dir_name , None )
-                    if not self.failed_plugin_dict :
+        async with self._pm_lock:
+            if dir_name in self.failed_plugin_dict:
+                success, error = await self.load(specified_dir_name=dir_name)
+                if success:
+                    self.failed_plugin_dict.pop(dir_name, None)
+                    if not self.failed_plugin_dict:
                         self.failed_plugin_info = ""
-                    return success,None
-                else :
-                    return False,error
-            return False,"插件不存在于失败列表中"
-
+                    return success, None
+                else:
+                    return False, error
+            return False, "插件不存在于失败列表中"
 
     async def reload(self, specified_plugin_name=None):
         """重新加载插件
@@ -656,11 +655,11 @@ class PluginManager:
                     logger.error(f"| {line}")
                 logger.error("----------------------------------")
                 fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
-                self.failed_plugin_dict[ root_dir_name ] = {
-                    "error" : str(e) ,
-                    "traceback" : errors
+                self.failed_plugin_dict[root_dir_name] = {
+                    "error": str(e),
+                    "traceback": errors,
                 }
-                #记录注册失败的插件名称，以便后续重载插件
+                # 记录注册失败的插件名称，以便后续重载插件
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:

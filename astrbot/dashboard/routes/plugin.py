@@ -76,16 +76,16 @@ class PluginRoute(Route):
 
         self._logo_cache = {}
 
-    async def reload_failed_plugins(self) :
-        if DEMO_MODE :
-            return(
+    async def reload_failed_plugins(self):
+        if DEMO_MODE:
+            return (
                 Response()
                 .error("You are not permitted to do this operation in demo mode")
                 .__dict__
             )
         try:
             data = await request.get_json()
-            dir_name = data.get("dir_name") # 这里拿的是目录名，不是插件名
+            dir_name = data.get("dir_name")  # 这里拿的是目录名，不是插件名
 
             if not dir_name:
                 return Response().error("缺少插件目录名").__dict__
