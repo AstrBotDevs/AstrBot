@@ -169,6 +169,16 @@ class RespondStage(Stage):
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
         )
 
+        # Restore original UMO before sending if in global context mode
+        from astrbot.core.config.default import ORIGINAL_UMO_KEY
+
+        original_umo = event.get_extra(ORIGINAL_UMO_KEY)
+        if original_umo:
+            logger.debug(
+                f"Restoring original UMO before sending: {event.unified_msg_origin} -> {original_umo}"
+            )
+            event.unified_msg_origin = original_umo
+
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
                 logger.warning("async_stream 为空，跳过发送。")

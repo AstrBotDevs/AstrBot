@@ -829,6 +829,38 @@ def _get_compress_provider(
     return provider
 
 
+def _apply_global_context_info(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """Add platform and session information to user prompt when in global unified context mode."""
+    from astrbot.core.config.default import (
+        GLOBAL_UNIFIED_CONTEXT_UMO,
+        ORIGINAL_UMO_KEY,
+    )
+
+    if event.unified_msg_origin != GLOBAL_UNIFIED_CONTEXT_UMO:
+        return
+
+    # Get original UMO from extras
+    original_umo = event.get_extra(ORIGINAL_UMO_KEY)
+    if not original_umo:
+        return
+
+    # Parse the original UMO to extract platform, message type, and session info
+    try:
+        parts = original_umo.split(":", 2)
+        if len(parts) != 3:
+            logger.warning(
+                f"Original UMO format is invalid (expected 3 parts): {original_umo}"
+            )
+            return
+
+        platform_id, message_type, session_id = parts
+        context_info = f"[Context: Platform={platform_id}, Type={message_type}, Session={session_id}]"
+        # Prepend context info to the user prompt
+        req.prompt = f"{context_info} {req.prompt or ''}"
+    except Exception as e:
+        logger.warning(f"Failed to parse original UMO for global context: {e}")
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -921,6 +953,9 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+
+    # Apply global context information if enabled
+    _apply_global_context_info(event, req)
 
     if config.file_extract_enabled:
         try:
