@@ -199,24 +199,23 @@ async def test_handle_api_error_content_moderated_without_patterns_raises():
         context_query = payloads["messages"]
         err = Exception("Content is moderated [WKE=file:content-moderated]")
 
-        success, *_rest = await provider._handle_api_error(
-            err,
-            payloads=payloads,
-            context_query=context_query,
-            func_tool=None,
-            chosen_key="test-key",
-            available_api_keys=["test-key"],
-            retry_cnt=0,
-            max_retries=10,
-        )
-        assert success is False
-        assert payloads["messages"][0]["content"] == [{"type": "text", "text": "hello"}]
+        with pytest.raises(Exception, match="content-moderated"):
+            await provider._handle_api_error(
+                err,
+                payloads=payloads,
+                context_query=context_query,
+                func_tool=None,
+                chosen_key="test-key",
+                available_api_keys=["test-key"],
+                retry_cnt=0,
+                max_retries=10,
+            )
     finally:
         await provider.terminate()
 
 
 @pytest.mark.asyncio
-async def test_handle_api_error_unknown_image_error_fallbacks_to_text():
+async def test_handle_api_error_unknown_image_error_raises():
     provider = _make_provider()
     try:
         payloads = {
@@ -235,17 +234,16 @@ async def test_handle_api_error_unknown_image_error_fallbacks_to_text():
         }
         context_query = payloads["messages"]
 
-        success, *_rest = await provider._handle_api_error(
-            Exception("some unknown provider image upload error"),
-            payloads=payloads,
-            context_query=context_query,
-            func_tool=None,
-            chosen_key="test-key",
-            available_api_keys=["test-key"],
-            retry_cnt=0,
-            max_retries=10,
-        )
-        assert success is False
-        assert payloads["messages"][0]["content"] == [{"type": "text", "text": "hello"}]
+        with pytest.raises(Exception, match="unknown provider image upload error"):
+            await provider._handle_api_error(
+                Exception("some unknown provider image upload error"),
+                payloads=payloads,
+                context_query=context_query,
+                func_tool=None,
+                chosen_key="test-key",
+                available_api_keys=["test-key"],
+                retry_cnt=0,
+                max_retries=10,
+            )
     finally:
         await provider.terminate()

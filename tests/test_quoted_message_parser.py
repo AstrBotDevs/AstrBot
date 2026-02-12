@@ -77,6 +77,18 @@ async def test_extract_quoted_message_text_no_reply_component():
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_images_no_reply_component():
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[Plain(text="unquoted message")]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("reply_id", [None, ""])
 async def test_extract_quoted_message_text_reply_without_id_does_not_call_get_msg(
     reply_id: str | None,
@@ -319,3 +331,47 @@ async def test_extract_quoted_message_images_deduplicates_across_sources():
         get_msg_only_url,
         forward_only_url,
     ]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_nested_forward_id_is_resolved():
+    nested_image = "https://img.example.com/nested.jpg"
+    reply = Reply(id="320", chain=[Plain(text="[Forward Message]")], message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "320"): {
+                "data": {"message": [{"type": "forward", "data": {"id": "fwd_1"}}]}
+            },
+            ("get_forward_msg", "fwd_1"): {
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Alice"},
+                            "message": [{"type": "forward", "data": {"id": "fwd_2"}}],
+                        }
+                    ]
+                }
+            },
+            ("get_forward_msg", "fwd_2"): {
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Bob"},
+                            "message": [
+                                {"type": "text", "data": {"text": "deep"}},
+                                {"type": "image", "data": {"url": nested_image}},
+                            ],
+                        }
+                    ]
+                }
+            },
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is not None
+    assert "Bob: deep" in text
+
+    images = await extract_quoted_message_images(event)
+    assert images == [nested_image]

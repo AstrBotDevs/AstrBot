@@ -548,17 +548,6 @@ class ProviderOpenAIOfficial(Provider):
                 "image_content_moderated",
             )
 
-        # 对于携带图片的请求，如果发生未知错误，先自动退化为文本重试一次，
-        # 尽可能避免直接把错误抛给用户。
-        if self._context_contains_image(context_query):
-            return await self._fallback_to_text_only_and_retry(
-                payloads,
-                context_query,
-                chosen_key,
-                available_api_keys,
-                func_tool,
-                f"image_request_error:{type(e).__name__}",
-            )
         if (
             "Function calling is not enabled" in str(e)
             or ("tool" in str(e).lower() and "support" in str(e).lower())

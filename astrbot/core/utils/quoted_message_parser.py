@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any
+from typing import Any, TypedDict
 
 from astrbot import logger
 from astrbot.core.message.components import (
@@ -35,6 +35,12 @@ _FORWARD_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:[\(\[]?[^\]:\)]*[\)\]]?\s*:\s*)?\[(?:forward message|转发消息|合并转发)\]$",
     flags=re.IGNORECASE,
 )
+
+
+class ParsedOneBotMessage(TypedDict):
+    text: str | None
+    forward_ids: list[str]
+    image_refs: list[str]
 
 
 def _find_first_reply_component(event: AstrMessageEvent) -> Reply | None:
@@ -316,14 +322,16 @@ def _extract_text_forward_ids_and_images_from_onebot_segments(
                 forward_ids.append(str(fid))
             else:
                 nested_nodes = seg_data.get("content")
-                nested_text, nested_images = (
-                    _extract_text_and_images_from_forward_nodes(
+                nested_text, nested_forward_ids, nested_images = (
+                    _extract_text_forward_ids_and_images_from_forward_nodes(
                         nested_nodes if isinstance(nested_nodes, list) else [],
                         depth=1,
                     )
                 )
                 if nested_text:
                     text_parts.append(nested_text)
+                if nested_forward_ids:
+                    forward_ids.extend(nested_forward_ids)
                 if nested_images:
                     image_refs.extend(nested_images)
         elif seg_type == "json":
@@ -337,15 +345,16 @@ def _extract_text_forward_ids_and_images_from_onebot_segments(
     return _join_text_parts(text_parts), forward_ids, _dedupe_keep_order(image_refs)
 
 
-def _extract_text_and_images_from_forward_nodes(
+def _extract_text_forward_ids_and_images_from_forward_nodes(
     nodes: list[Any],
     *,
     depth: int = 0,
-) -> tuple[str | None, list[str]]:
+) -> tuple[str | None, list[str], list[str]]:
     if not isinstance(nodes, list) or depth > 6:
-        return None, []
+        return None, [], []
 
     texts: list[str] = []
+    forward_ids: list[str] = []
     image_refs: list[str] = []
     indent = "  " * depth
 
@@ -377,66 +386,37 @@ def _extract_text_and_images_from_forward_nodes(
                 else:
                     chain = [{"type": "text", "data": {"text": raw_content}}]
 
-        node_text, _forward_ids, node_images = (
+        node_text, node_forward_ids, node_images = (
             _extract_text_forward_ids_and_images_from_onebot_segments(chain)
         )
         if node_text:
             texts.append(f"{indent}{sender_name}: {node_text}")
+        if node_forward_ids:
+            forward_ids.extend(node_forward_ids)
         if node_images:
             image_refs.extend(node_images)
 
-        for seg in chain:
-            if not isinstance(seg, dict):
-                continue
-            seg_type = seg.get("type")
-            if seg_type != "forward":
-                continue
-            seg_data = seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
-            nested_nodes = seg_data.get("content")
-            nested_text, nested_images = _extract_text_and_images_from_forward_nodes(
-                nested_nodes if isinstance(nested_nodes, list) else [],
-                depth=depth + 1,
-            )
-            if nested_text:
-                texts.append(nested_text)
-            if nested_images:
-                image_refs.extend(nested_images)
-
-    return "\n".join(texts).strip() or None, _dedupe_keep_order(image_refs)
-
-
-def _extract_text_from_onebot_get_msg_payload(payload: dict[str, Any]) -> str | None:
-    text, _forward_ids, _image_refs = (
-        _extract_text_forward_ids_and_images_from_onebot_get_msg_payload(payload)
+    return (
+        "\n".join(texts).strip() or None,
+        _dedupe_keep_order(forward_ids),
+        _dedupe_keep_order(image_refs),
     )
-    return text
 
 
-def _extract_image_refs_from_onebot_get_msg_payload(
+def _parse_onebot_get_msg_payload(
     payload: dict[str, Any],
-) -> list[str]:
-    _text, _forward_ids, image_refs = (
-        _extract_text_forward_ids_and_images_from_onebot_get_msg_payload(payload)
-    )
-    return image_refs
-
-
-def _extract_forward_ids_from_onebot_get_msg_payload(
-    payload: dict[str, Any],
-) -> list[str]:
-    _text, forward_ids, _image_refs = (
-        _extract_text_forward_ids_and_images_from_onebot_get_msg_payload(payload)
-    )
-    return forward_ids
-
-
-def _extract_text_forward_ids_and_images_from_onebot_get_msg_payload(
-    payload: dict[str, Any],
-) -> tuple[str | None, list[str], list[str]]:
+) -> ParsedOneBotMessage:
     data = _unwrap_onebot_data(payload)
     segments = data.get("message") or data.get("messages")
     if isinstance(segments, list):
-        return _extract_text_forward_ids_and_images_from_onebot_segments(segments)
+        text, forward_ids, image_refs = (
+            _extract_text_forward_ids_and_images_from_onebot_segments(segments)
+        )
+        return {
+            "text": text,
+            "forward_ids": forward_ids,
+            "image_refs": image_refs,
+        }
 
     text: str | None = None
     if isinstance(segments, str) and segments.strip():
@@ -445,30 +425,16 @@ def _extract_text_forward_ids_and_images_from_onebot_get_msg_payload(
         raw = data.get("raw_message")
         if isinstance(raw, str) and raw.strip():
             text = raw.strip()
-    return text, [], []
+    return {
+        "text": text,
+        "forward_ids": [],
+        "image_refs": [],
+    }
 
 
-def _extract_text_from_onebot_get_forward_payload(
+def _parse_onebot_get_forward_payload(
     payload: dict[str, Any],
-) -> str | None:
-    text, _image_refs = _extract_text_and_images_from_onebot_get_forward_payload(
-        payload
-    )
-    return text
-
-
-def _extract_image_refs_from_onebot_get_forward_payload(
-    payload: dict[str, Any],
-) -> list[str]:
-    _text, image_refs = _extract_text_and_images_from_onebot_get_forward_payload(
-        payload
-    )
-    return image_refs
-
-
-def _extract_text_and_images_from_onebot_get_forward_payload(
-    payload: dict[str, Any],
-) -> tuple[str | None, list[str]]:
+) -> ParsedOneBotMessage:
     data = _unwrap_onebot_data(payload)
     nodes = (
         data.get("messages")
@@ -477,8 +443,19 @@ def _extract_text_and_images_from_onebot_get_forward_payload(
         or data.get("nodeList")
     )
     if not isinstance(nodes, list):
-        return None, []
-    return _extract_text_and_images_from_forward_nodes(nodes)
+        return {
+            "text": None,
+            "forward_ids": [],
+            "image_refs": [],
+        }
+    text, forward_ids, image_refs = (
+        _extract_text_forward_ids_and_images_from_forward_nodes(nodes)
+    )
+    return {
+        "text": text,
+        "forward_ids": forward_ids,
+        "image_refs": image_refs,
+    }
 
 
 def _get_call_action(event: AstrMessageEvent):
@@ -673,6 +650,58 @@ async def _resolve_image_refs_for_llm(
     return _dedupe_keep_order(resolved)
 
 
+async def _collect_text_and_images_from_forward_ids(
+    event: AstrMessageEvent,
+    forward_ids: list[str],
+    *,
+    max_fetch: int = 32,
+) -> tuple[list[str], list[str]]:
+    texts: list[str] = []
+    image_refs: list[str] = []
+    pending: list[str] = []
+    seen: set[str] = set()
+
+    for fid in forward_ids:
+        if not isinstance(fid, str):
+            continue
+        cleaned = fid.strip()
+        if cleaned:
+            pending.append(cleaned)
+
+    fetch_count = 0
+    while pending and fetch_count < max_fetch:
+        current_id = pending.pop(0)
+        if current_id in seen:
+            continue
+        seen.add(current_id)
+        fetch_count += 1
+
+        forward_payload = await _call_action_compat(
+            event,
+            "get_forward_msg",
+            current_id,
+        )
+        if not forward_payload:
+            continue
+
+        parsed = _parse_onebot_get_forward_payload(forward_payload)
+        if parsed["text"]:
+            texts.append(parsed["text"])
+        if parsed["image_refs"]:
+            image_refs.extend(parsed["image_refs"])
+        for nested_id in parsed["forward_ids"]:
+            if nested_id not in seen:
+                pending.append(nested_id)
+
+    if pending:
+        logger.warning(
+            "quoted_message_parser: stop fetching nested forward messages after %d hops",
+            max_fetch,
+        )
+
+    return texts, _dedupe_keep_order(image_refs)
+
+
 async def extract_quoted_message_text(
     event: AstrMessageEvent,
     reply_component: Reply | None = None,
@@ -696,23 +725,17 @@ async def extract_quoted_message_text(
     if not msg_payload:
         return embedded_text
 
+    parsed = _parse_onebot_get_msg_payload(msg_payload)
     text_parts: list[str] = []
-    direct_text = _extract_text_from_onebot_get_msg_payload(msg_payload)
+    direct_text = parsed["text"]
     if direct_text:
         text_parts.append(direct_text)
 
-    forward_ids = _extract_forward_ids_from_onebot_get_msg_payload(msg_payload)
-    for forward_id in forward_ids:
-        forward_payload = await _call_action_compat(
-            event,
-            "get_forward_msg",
-            forward_id,
-        )
-        if not forward_payload:
-            continue
-        forward_text = _extract_text_from_onebot_get_forward_payload(forward_payload)
-        if forward_text:
-            text_parts.append(forward_text)
+    forward_texts, _forward_images = await _collect_text_and_images_from_forward_ids(
+        event,
+        parsed["forward_ids"],
+    )
+    text_parts.extend(forward_texts)
 
     return "\n".join(text_parts).strip() or embedded_text
 
@@ -739,19 +762,13 @@ async def extract_quoted_message_images(
     if not msg_payload:
         return await _resolve_image_refs_for_llm(event, image_refs)
 
-    image_refs.extend(_extract_image_refs_from_onebot_get_msg_payload(msg_payload))
-    forward_ids = _extract_forward_ids_from_onebot_get_msg_payload(msg_payload)
+    parsed = _parse_onebot_get_msg_payload(msg_payload)
+    image_refs.extend(parsed["image_refs"])
 
-    for forward_id in forward_ids:
-        forward_payload = await _call_action_compat(
-            event,
-            "get_forward_msg",
-            forward_id,
-        )
-        if not forward_payload:
-            continue
-        image_refs.extend(
-            _extract_image_refs_from_onebot_get_forward_payload(forward_payload)
-        )
+    _forward_texts, forward_images = await _collect_text_and_images_from_forward_ids(
+        event,
+        parsed["forward_ids"],
+    )
+    image_refs.extend(forward_images)
 
     return await _resolve_image_refs_for_llm(event, image_refs)
