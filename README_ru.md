@@ -48,6 +48,23 @@ AstrBot — это универсальная платформа Agent-чатб�
 6. 💻 Поддержка WebUI.
 7. 🌐 Поддержка интернационализации (i18n).
 
+<br>
+
+<table align="center">
+  <tr align="center">
+    <th>💙 Ролевые игры & Эмоциональная поддержка</th>
+    <th>✨ Проактивный Агент(Agent)</th>
+    <th>🚀 Универсальные Агентные возможности</th>
+    <th>🧩 Универсальные Агентные (Agentic) возможности</th>
+  </tr>
+  <tr>
+    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
+    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
+    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
+    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
+  </tr>
+</table>
+
 ## Быстрый старт
 
 #### Развёртывание Docker (Рекомендуется 🥳)
