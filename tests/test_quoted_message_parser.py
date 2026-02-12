@@ -199,6 +199,35 @@ async def test_extract_quoted_message_text_forward_placeholder_fallback_failure(
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_text_multimsg_malformed_config_does_not_raise():
+    reply = Reply(id="402", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "402"): {
+                "data": {
+                    "message": [
+                        {
+                            "type": "json",
+                            "data": {
+                                "data": (
+                                    '{"app":"com.tencent.multimsg",'
+                                    '"config":"oops","meta":{}}'
+                                )
+                            },
+                        },
+                        {"type": "text", "data": {"text": "still works"}},
+                    ]
+                }
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text == "still works"
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_images_from_reply_chain():
     reply = Reply(
         id="1",

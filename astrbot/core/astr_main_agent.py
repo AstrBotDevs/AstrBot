@@ -56,6 +56,7 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
 )
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 @dataclass(slots=True)
@@ -120,22 +121,6 @@ class MainAgentBuildResult:
     provider_request: ProviderRequest
     provider: Provider
     reset_coro: Coroutine | None = None
-
-
-def _normalize_and_dedupe_image_urls(image_urls: list[str] | None) -> list[str]:
-    if not image_urls:
-        return []
-    normalized: list[str] = []
-    seen: set[str] = set()
-    for image_url in image_urls:
-        if not isinstance(image_url, str):
-            continue
-        cleaned = image_url.strip()
-        if not cleaned or cleaned in seen:
-            continue
-        seen.add(cleaned)
-        normalized.append(cleaned)
-    return normalized
 
 
 def _select_provider(
@@ -972,7 +957,7 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
-    req.image_urls = _normalize_and_dedupe_image_urls(req.image_urls)
+    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
 
     if config.file_extract_enabled:
         try:

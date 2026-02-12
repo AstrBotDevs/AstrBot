@@ -20,6 +20,7 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 _IMAGE_EXTENSIONS = {
     ".jpg",
@@ -53,20 +54,6 @@ def _find_first_reply_component(event: AstrMessageEvent) -> Reply | None:
         if isinstance(comp, Reply):
             return comp
     return None
-
-
-def _dedupe_keep_order(items: list[str]) -> list[str]:
-    uniq: list[str] = []
-    seen: set[str] = set()
-    for item in items:
-        if not isinstance(item, str):
-            continue
-        item = item.strip()
-        if not item or item in seen:
-            continue
-        seen.add(item)
-        uniq.append(item)
-    return uniq
 
 
 def _join_text_parts(parts: list[str]) -> str | None:
@@ -164,7 +151,7 @@ def _extract_image_refs_from_component_chain(
                     )
                 )
 
-    return _dedupe_keep_order(image_refs)
+    return normalize_and_dedupe_strings(image_refs)
 
 
 def _extract_text_from_component_chain(
@@ -265,11 +252,19 @@ def _extract_text_from_multimsg_json(raw_json: str) -> str | None:
         return None
     if parsed.get("app") != "com.tencent.multimsg":
         return None
-    if parsed.get("config", {}).get("forward") != 1:
+    config = parsed.get("config")
+    if not isinstance(config, dict):
+        return None
+    if config.get("forward") != 1:
         return None
 
-    detail = parsed.get("meta", {}).get("detail", {}) or {}
-    news_items = detail.get("news", []) or []
+    meta = parsed.get("meta")
+    if not isinstance(meta, dict):
+        return None
+    detail = meta.get("detail")
+    if not isinstance(detail, dict):
+        return None
+    news_items = detail.get("news")
     if not isinstance(news_items, list):
         return None
 
@@ -366,7 +361,11 @@ def _extract_text_forward_ids_and_images_from_onebot_segments(
                 if multimsg_text:
                     text_parts.append(multimsg_text)
 
-    return _join_text_parts(text_parts), forward_ids, _dedupe_keep_order(image_refs)
+    return (
+        _join_text_parts(text_parts),
+        forward_ids,
+        normalize_and_dedupe_strings(image_refs),
+    )
 
 
 def _extract_text_forward_ids_and_images_from_forward_nodes(
@@ -422,8 +421,8 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
 
     return (
         "\n".join(texts).strip() or None,
-        _dedupe_keep_order(forward_ids),
-        _dedupe_keep_order(image_refs),
+        normalize_and_dedupe_strings(forward_ids),
+        normalize_and_dedupe_strings(image_refs),
     )
 
 
@@ -650,7 +649,7 @@ class ImageResolver:
         resolved: list[str] = []
         unresolved: list[str] = []
 
-        for image_ref in _dedupe_keep_order(image_refs):
+        for image_ref in normalize_and_dedupe_strings(image_refs):
             normalized = _normalize_image_ref(image_ref)
             if normalized:
                 resolved.append(normalized)
@@ -662,7 +661,7 @@ class ImageResolver:
             if resolved_ref:
                 resolved.append(resolved_ref)
 
-        return _dedupe_keep_order(resolved)
+        return normalize_and_dedupe_strings(resolved)
 
     async def _resolve_one(self, image_ref: str) -> str | None:
         resolved = _normalize_image_ref(image_ref)
@@ -749,7 +748,7 @@ async def _collect_text_and_images_from_forward_ids(
             max_fetch,
         )
 
-    return texts, _dedupe_keep_order(image_refs)
+    return texts, normalize_and_dedupe_strings(image_refs)
 
 
 class QuotedMessageExtractor:
