@@ -34,6 +34,12 @@ class ParsedOneBotMessage(TypedDict):
     image_refs: list[str]
 
 
+class ParsedOneBotSegments(TypedDict):
+    text: str | None
+    forward_ids: list[str]
+    image_refs: list[str]
+
+
 def _join_text_parts(parts: list[str]) -> str | None:
     text = "".join(parts).strip()
     return text or None
@@ -224,6 +230,11 @@ def _extract_text_from_multimsg_json(raw_json: str) -> str | None:
 def _extract_text_forward_ids_and_images_from_onebot_segments(
     segments: list[Any],
 ) -> tuple[str | None, list[str], list[str]]:
+    parsed = _parse_onebot_segments(segments)
+    return parsed["text"], parsed["forward_ids"], parsed["image_refs"]
+
+
+def _parse_onebot_segments(segments: list[Any]) -> ParsedOneBotSegments:
     text_parts: list[str] = []
     forward_ids: list[str] = []
     image_refs: list[str] = []
@@ -300,11 +311,11 @@ def _extract_text_forward_ids_and_images_from_onebot_segments(
                 if multimsg_text:
                     text_parts.append(multimsg_text)
 
-    return (
-        _join_text_parts(text_parts),
-        forward_ids,
-        normalize_and_dedupe_strings(image_refs),
-    )
+    return {
+        "text": _join_text_parts(text_parts),
+        "forward_ids": forward_ids,
+        "image_refs": normalize_and_dedupe_strings(image_refs),
+    }
 
 
 def _extract_text_forward_ids_and_images_from_forward_nodes(
@@ -348,9 +359,10 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
                 else:
                     chain = [{"type": "text", "data": {"text": raw_content}}]
 
-        node_text, node_forward_ids, node_images = (
-            _extract_text_forward_ids_and_images_from_onebot_segments(chain)
-        )
+        parsed_segments = _parse_onebot_segments(chain)
+        node_text = parsed_segments["text"]
+        node_forward_ids = parsed_segments["forward_ids"]
+        node_images = parsed_segments["image_refs"]
         if node_text:
             texts.append(f"{indent}{sender_name}: {node_text}")
         if node_forward_ids:
