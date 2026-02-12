@@ -36,6 +36,94 @@ from ..register import register_provider_adapter
     "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
+    def _get_image_moderation_error_patterns(self) -> list[str]:
+        configured = self.provider_config.get("image_moderation_error_patterns", [])
+        patterns: list[str] = []
+        if isinstance(configured, str):
+            configured = [configured]
+        if isinstance(configured, list):
+            for pattern in configured:
+                if not isinstance(pattern, str):
+                    continue
+                pattern = pattern.strip()
+                if pattern:
+                    patterns.append(pattern)
+        return patterns
+
+    @staticmethod
+    def _extract_error_text_candidates(error: Exception) -> list[str]:
+        candidates: list[str] = [str(error)]
+
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            candidates.append(json.dumps(body, ensure_ascii=False))
+            err_obj = body.get("error")
+            if isinstance(err_obj, dict):
+                for field in ("message", "type", "code", "param"):
+                    value = err_obj.get(field)
+                    if value is not None:
+                        candidates.append(str(value))
+        elif isinstance(body, str):
+            candidates.append(body)
+
+        response = getattr(error, "response", None)
+        if response is not None:
+            response_text = getattr(response, "text", None)
+            if isinstance(response_text, str):
+                candidates.append(response_text)
+
+        return candidates
+
+    def _is_content_moderated_upload_error(self, error: Exception) -> bool:
+        patterns = [
+            pattern.lower() for pattern in self._get_image_moderation_error_patterns()
+        ]
+        if not patterns:
+            return False
+        candidates = [
+            candidate.lower()
+            for candidate in self._extract_error_text_candidates(error)
+        ]
+        for pattern in patterns:
+            if any(pattern in candidate for candidate in candidates):
+                return True
+        return False
+
+    @staticmethod
+    def _context_contains_image(contexts: list[dict]) -> bool:
+        for context in contexts:
+            content = context.get("content")
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "image_url":
+                    return True
+        return False
+
+    async def _fallback_to_text_only_and_retry(
+        self,
+        payloads: dict,
+        context_query: list,
+        chosen_key: str,
+        available_api_keys: list[str],
+        func_tool: ToolSet | None,
+        reason: str,
+    ) -> tuple:
+        logger.warning(
+            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            reason,
+        )
+        new_contexts = await self._remove_image_from_context(context_query)
+        payloads["messages"] = new_contexts
+        return (
+            False,
+            chosen_key,
+            available_api_keys,
+            payloads,
+            new_contexts,
+            func_tool,
+        )
+
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
@@ -440,16 +528,36 @@ class ProviderOpenAIOfficial(Provider):
             )
         if "The model is not a VLM" in str(e):  # siliconcloud
             # 尝试删除所有 image
-            new_contexts = await self._remove_image_from_context(context_query)
-            payloads["messages"] = new_contexts
-            context_query = new_contexts
-            return (
-                False,
-                chosen_key,
-                available_api_keys,
+            return await self._fallback_to_text_only_and_retry(
                 payloads,
                 context_query,
+                chosen_key,
+                available_api_keys,
                 func_tool,
+                "model_not_vlm",
+            )
+        if self._is_content_moderated_upload_error(e):
+            if not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "image_content_moderated",
+            )
+
+        # 对于携带图片的请求，如果发生未知错误，先自动退化为文本重试一次，
+        # 尽可能避免直接把错误抛给用户。
+        if self._context_contains_image(context_query):
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                f"image_request_error:{type(e).__name__}",
             )
         if (
             "Function calling is not enabled" in str(e)
