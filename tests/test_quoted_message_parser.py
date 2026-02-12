@@ -33,6 +33,13 @@ class _DummyAPI:
         return self._responses[key]
 
 
+class _FailIfCalledAPI:
+    async def call_action(self, action: str, **params):
+        raise AssertionError(
+            f"call_action should not be called, got action={action}, params={params}"
+        )
+
+
 def _make_event(
     reply: Reply,
     responses: dict[tuple[str, str], dict] | None = None,
@@ -53,6 +60,35 @@ def _make_event(
 async def test_extract_quoted_message_text_from_reply_chain():
     reply = Reply(id="1", chain=[Plain(text="quoted content")], message_str="")
     event = _make_event(reply)
+    text = await extract_quoted_message_text(event)
+    assert text == "quoted content"
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_text_no_reply_component():
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[Plain(text="unquoted message")]),
+        bot=SimpleNamespace(api=_DummyAPI({}, {})),
+        get_group_id=lambda: "",
+    )
+
+    text = await extract_quoted_message_text(event)
+    assert text is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply_id", [None, ""])
+async def test_extract_quoted_message_text_reply_without_id_does_not_call_get_msg(
+    reply_id: str | None,
+):
+    reply = Reply(id="placeholder", chain=[Plain(text="quoted content")], message_str="")
+    object.__setattr__(reply, "id", reply_id)
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
     text = await extract_quoted_message_text(event)
     assert text == "quoted content"
 
@@ -104,22 +140,41 @@ async def test_extract_quoted_message_text_fallback_get_msg_and_forward():
     assert "Bob: [Image]world" in text
 
 
+@pytest.mark.parametrize(
+    "placeholder_text",
+    [
+        "[Forward Message]",
+        "[转发消息]",
+        "[合并转发]",
+        "Alice: [Forward Message]",
+        "(Alice): [转发消息]",
+        "[Forward Message]\n[转发消息]",
+        "Alice: [Forward Message]\n(Bob): [合并转发]",
+        "[转发消息]\n\n[合并转发]",
+    ],
+)
 @pytest.mark.asyncio
-async def test_extract_quoted_message_text_forward_placeholder_triggers_fallback():
-    reply = Reply(id="400", chain=[Plain(text="[Forward Message]")], message_str="")
+async def test_extract_quoted_message_text_forward_placeholder_variants_trigger_fallback(
+    placeholder_text: str,
+):
+    reply = Reply(id="400", chain=[Plain(text=placeholder_text)], message_str="")
     event = _make_event(
         reply,
         responses={
             ("get_msg", "400"): {
                 "data": {
-                    "message": [{"type": "text", "data": {"text": "real content"}}]
+                    "message": [
+                        {"type": "text", "data": {"text": "Bob: "}},
+                        {"type": "image", "data": {}},
+                        {"type": "text", "data": {"text": "world"}},
+                    ]
                 }
             }
         },
     )
 
     text = await extract_quoted_message_text(event)
-    assert text == "real content"
+    assert "Bob: [Image]world" in text
 
 
 @pytest.mark.asyncio
@@ -214,3 +269,53 @@ async def test_extract_quoted_message_images_fallback_resolve_file_id_with_get_i
 
     images = await extract_quoted_message_images(event)
     assert images == ["https://img.example.com/resolved.jpg"]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_images_deduplicates_across_sources():
+    dup_url = "https://img.example.com/dup.jpg"
+    chain_only_url = "https://img.example.com/only-chain.jpg"
+    get_msg_only_url = "https://img.example.com/only-get-msg.jpg"
+    forward_only_url = "https://img.example.com/only-forward.jpg"
+
+    reply = Reply(
+        id="310",
+        chain=[Image(file=dup_url), Image(file=chain_only_url)],
+        message_str="",
+    )
+
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "310"): {
+                "data": {
+                    "message": [
+                        {"type": "image", "data": {"url": dup_url}},
+                        {"type": "image", "data": {"url": get_msg_only_url}},
+                        {"type": "forward", "data": {"id": "999"}},
+                    ]
+                }
+            },
+            ("get_forward_msg", "999"): {
+                "data": {
+                    "messages": [
+                        {
+                            "sender": {"nickname": "Tester"},
+                            "message": [
+                                {"type": "image", "data": {"url": dup_url}},
+                                {"type": "image", "data": {"url": forward_only_url}},
+                            ],
+                        }
+                    ]
+                }
+            },
+        },
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == [
+        dup_url,
+        chain_only_url,
+        get_msg_only_url,
+        forward_only_url,
+    ]
