@@ -129,6 +129,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
             self.client, user_name, ChatAction.TYPING, message_thread_id
         )
 
+    async def send_typing(self) -> None:
+        message_thread_id = None
+        if self.get_message_type() == MessageType.GROUP_MESSAGE:
+            user_name = self.message_obj.group_id
+        else:
+            user_name = self.get_sender_id()
+
+        if "#" in user_name:
+            user_name, message_thread_id = user_name.split("#")
+
+        await self._ensure_typing(user_name, message_thread_id)
+
     @classmethod
     async def send_with_client(
         cls,
