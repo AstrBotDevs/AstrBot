@@ -122,6 +122,22 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
+def _normalize_and_dedupe_image_urls(image_urls: list[str] | None) -> list[str]:
+    if not image_urls:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for image_url in image_urls:
+        if not isinstance(image_url, str):
+            continue
+        cleaned = image_url.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return normalized
+
+
 def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
@@ -956,6 +972,7 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    req.image_urls = _normalize_and_dedupe_image_urls(req.image_urls)
 
     if config.file_extract_enabled:
         try:

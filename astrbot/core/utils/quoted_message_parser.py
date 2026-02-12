@@ -4,6 +4,7 @@ import json
 import os
 import re
 from typing import Any, TypedDict
+from urllib.parse import urlsplit
 
 from astrbot import logger
 from astrbot.core.message.components import (
@@ -30,6 +31,10 @@ _IMAGE_EXTENSIONS = {
     ".tiff",
     ".gif",
 }
+
+_MAX_COMPONENT_CHAIN_DEPTH = 4
+_MAX_FORWARD_NODE_DEPTH = 6
+_MAX_FORWARD_FETCH = 32
 
 _FORWARD_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:[\(\[]?[^\]:\)]*[\)\]]?\s*:\s*)?\[(?:forward message|转发消息|合并转发)\]$",
@@ -79,10 +84,25 @@ def _is_forward_placeholder_only_text(text: str | None) -> bool:
 
 
 def _looks_like_image_file_name(name: str) -> bool:
-    if not isinstance(name, str) or not name.strip():
+    normalized_name = _normalize_file_like_url(name)
+    if not isinstance(normalized_name, str) or not normalized_name.strip():
         return False
-    _, ext = os.path.splitext(name.strip().lower())
+    _, ext = os.path.splitext(normalized_name.strip().lower())
     return ext in _IMAGE_EXTENSIONS
+
+
+def _normalize_file_like_url(path: str | None) -> str | None:
+    if path is None:
+        return None
+    if not isinstance(path, str):
+        return None
+    if "?" not in path and "#" not in path:
+        return path
+    try:
+        split = urlsplit(path)
+    except Exception:
+        return path
+    return split.path or path
 
 
 def _normalize_image_ref(image_ref: str) -> str | None:
@@ -114,7 +134,7 @@ def _extract_image_refs_from_component_chain(
     *,
     depth: int = 0,
 ) -> list[str]:
-    if not isinstance(chain, list) or depth > 4:
+    if not isinstance(chain, list) or depth > _MAX_COMPONENT_CHAIN_DEPTH:
         return []
 
     image_refs: list[str] = []
@@ -152,7 +172,7 @@ def _extract_text_from_component_chain(
     *,
     depth: int = 0,
 ) -> str | None:
-    if not isinstance(chain, list) or depth > 4:
+    if not isinstance(chain, list) or depth > _MAX_COMPONENT_CHAIN_DEPTH:
         return None
 
     parts: list[str] = []
@@ -304,7 +324,7 @@ def _extract_text_forward_ids_and_images_from_onebot_segments(
             if (
                 isinstance(candidate_url, str)
                 and candidate_url.strip()
-                and _looks_like_image_file_name(candidate_url)
+                and _looks_like_image_file_name(_normalize_file_like_url(candidate_url))
             ):
                 image_refs.append(candidate_url.strip())
             candidate_file = seg_data.get("file")
@@ -312,7 +332,11 @@ def _extract_text_forward_ids_and_images_from_onebot_segments(
                 isinstance(candidate_file, str)
                 and candidate_file.strip()
                 and _looks_like_image_file_name(
-                    seg_data.get("name") or seg_data.get("file_name") or candidate_file
+                    _normalize_file_like_url(
+                        seg_data.get("name")
+                        or seg_data.get("file_name")
+                        or candidate_file
+                    )
                 )
             ):
                 image_refs.append(candidate_file.strip())
@@ -350,7 +374,7 @@ def _extract_text_forward_ids_and_images_from_forward_nodes(
     *,
     depth: int = 0,
 ) -> tuple[str | None, list[str], list[str]]:
-    if not isinstance(nodes, list) or depth > 6:
+    if not isinstance(nodes, list) or depth > _MAX_FORWARD_NODE_DEPTH:
         return None, [], []
 
     texts: list[str] = []
@@ -458,75 +482,6 @@ def _parse_onebot_get_forward_payload(
     }
 
 
-def _get_call_action(event: AstrMessageEvent):
-    bot = getattr(event, "bot", None)
-    api = getattr(bot, "api", None)
-    call_action = getattr(api, "call_action", None)
-    if not callable(call_action):
-        return None
-    return call_action
-
-
-async def _call_action_try_params(
-    event: AstrMessageEvent,
-    action: str,
-    params_list: list[dict[str, Any]],
-    *,
-    warn_on_all_failed: bool = True,
-) -> dict[str, Any] | None:
-    call_action = _get_call_action(event)
-    if call_action is None:
-        return None
-
-    last_error: Exception | None = None
-    last_params: dict[str, Any] | None = None
-    for params in params_list:
-        try:
-            result = await call_action(action, **params)
-            if isinstance(result, dict):
-                return result
-        except Exception as exc:
-            last_error = exc
-            last_params = params
-            logger.debug(
-                "quoted_message_parser: action %s failed with params %s: %s",
-                action,
-                {k: str(v)[:64] for k, v in params.items()},
-                exc,
-            )
-    if warn_on_all_failed and last_error is not None:
-        logger.warning(
-            "quoted_message_parser: all attempts failed for action %s, "
-            "last_params=%s, error=%s",
-            action,
-            (
-                {k: str(v)[:64] for k, v in last_params.items()}
-                if isinstance(last_params, dict)
-                else None
-            ),
-            last_error,
-        )
-    return None
-
-
-async def _call_action_compat(
-    event: AstrMessageEvent,
-    action: str,
-    message_id: str,
-) -> dict[str, Any] | None:
-    if not message_id.strip():
-        return None
-
-    params_list: list[dict[str, Any]] = [
-        {"message_id": message_id},
-        {"id": message_id},
-    ]
-    if message_id.isdigit():
-        int_id = int(message_id)
-        params_list.extend([{"message_id": int_id}, {"id": int_id}])
-    return await _call_action_try_params(event, action, params_list)
-
-
 def _unwrap_action_response(ret: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(ret, dict):
         return {}
@@ -534,6 +489,102 @@ def _unwrap_action_response(ret: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(data, dict):
         return data
     return ret
+
+
+class OneBotClient:
+    def __init__(self, event: AstrMessageEvent):
+        self._event = event
+        self._call_action = self._resolve_call_action(event)
+
+    @staticmethod
+    def _resolve_call_action(event: AstrMessageEvent):
+        bot = getattr(event, "bot", None)
+        api = getattr(bot, "api", None)
+        call_action = getattr(api, "call_action", None)
+        if not callable(call_action):
+            return None
+        return call_action
+
+    async def _call_action_try_params(
+        self,
+        action: str,
+        params_list: list[dict[str, Any]],
+        *,
+        warn_on_all_failed: bool = True,
+    ) -> dict[str, Any] | None:
+        if self._call_action is None:
+            return None
+
+        last_error: Exception | None = None
+        last_params: dict[str, Any] | None = None
+        for params in params_list:
+            try:
+                result = await self._call_action(action, **params)
+                if isinstance(result, dict):
+                    return result
+            except Exception as exc:
+                last_error = exc
+                last_params = params
+                logger.debug(
+                    "quoted_message_parser: action %s failed with params %s: %s",
+                    action,
+                    {k: str(v)[:64] for k, v in params.items()},
+                    exc,
+                )
+        if warn_on_all_failed and last_error is not None:
+            logger.warning(
+                "quoted_message_parser: all attempts failed for action %s, "
+                "last_params=%s, error=%s",
+                action,
+                (
+                    {k: str(v)[:64] for k, v in last_params.items()}
+                    if isinstance(last_params, dict)
+                    else None
+                ),
+                last_error,
+            )
+        return None
+
+    async def call(
+        self,
+        action: str,
+        params: dict[str, Any],
+        *,
+        warn_on_all_failed: bool = False,
+        unwrap_data: bool = True,
+    ) -> dict[str, Any] | None:
+        ret = await self._call_action_try_params(
+            action,
+            [params],
+            warn_on_all_failed=warn_on_all_failed,
+        )
+        if not unwrap_data:
+            return ret
+        return _unwrap_action_response(ret)
+
+    async def _call_action_compat(
+        self,
+        action: str,
+        message_id: str | int,
+    ) -> dict[str, Any] | None:
+        message_id_str = str(message_id).strip()
+        if not message_id_str:
+            return None
+
+        params_list: list[dict[str, Any]] = [
+            {"message_id": message_id_str},
+            {"id": message_id_str},
+        ]
+        if message_id_str.isdigit():
+            int_id = int(message_id_str)
+            params_list.extend([{"message_id": int_id}, {"id": int_id}])
+        return await self._call_action_try_params(action, params_list)
+
+    async def get_msg(self, message_id: str | int) -> dict[str, Any] | None:
+        return await self._call_action_compat("get_msg", message_id)
+
+    async def get_forward_msg(self, forward_id: str | int) -> dict[str, Any] | None:
+        return await self._call_action_compat("get_forward_msg", forward_id)
 
 
 def _build_image_id_candidates(image_ref: str) -> list[str]:
@@ -586,75 +637,78 @@ def _build_image_resolve_actions(
     return actions
 
 
-async def _resolve_onebot_image_ref(
-    event: AstrMessageEvent,
-    image_ref: str,
-) -> str | None:
-    resolved = _normalize_image_ref(image_ref)
-    if resolved:
-        return resolved
+class ImageResolver:
+    def __init__(
+        self,
+        event: AstrMessageEvent,
+        onebot_client: OneBotClient | None = None,
+    ):
+        self._event = event
+        self._client = onebot_client or OneBotClient(event)
 
-    actions = _build_image_resolve_actions(event, image_ref)
-    for action, params in actions:
-        ret = await _call_action_try_params(
-            event,
-            action,
-            [params],
-            warn_on_all_failed=False,
+    async def resolve_for_llm(self, image_refs: list[str]) -> list[str]:
+        resolved: list[str] = []
+        unresolved: list[str] = []
+
+        for image_ref in _dedupe_keep_order(image_refs):
+            normalized = _normalize_image_ref(image_ref)
+            if normalized:
+                resolved.append(normalized)
+            else:
+                unresolved.append(image_ref)
+
+        for image_ref in unresolved:
+            resolved_ref = await self._resolve_one(image_ref)
+            if resolved_ref:
+                resolved.append(resolved_ref)
+
+        return _dedupe_keep_order(resolved)
+
+    async def _resolve_one(self, image_ref: str) -> str | None:
+        resolved = _normalize_image_ref(image_ref)
+        if resolved:
+            return resolved
+
+        actions = _build_image_resolve_actions(self._event, image_ref)
+        for action, params in actions:
+            data = await self._client.call(
+                action,
+                params,
+                warn_on_all_failed=False,
+                unwrap_data=True,
+            )
+            if not isinstance(data, dict):
+                continue
+
+            url = data.get("url")
+            if isinstance(url, str):
+                normalized = _normalize_image_ref(url)
+                if normalized:
+                    return normalized
+
+            file_value = data.get("file")
+            if isinstance(file_value, str):
+                if file_value.startswith("base64://") or file_value.startswith(
+                    "data:image/"
+                ):
+                    return file_value
+                normalized = _normalize_image_ref(file_value)
+                if normalized:
+                    return normalized
+
+        logger.warning(
+            "quoted_message_parser: failed to resolve quoted image ref=%s after %d actions",
+            image_ref[:128],
+            len(actions),
         )
-        data = _unwrap_action_response(ret)
-
-        url = data.get("url")
-        if isinstance(url, str):
-            normalized = _normalize_image_ref(url)
-            if normalized:
-                return normalized
-
-        file_value = data.get("file")
-        if isinstance(file_value, str):
-            if file_value.startswith("base64://") or file_value.startswith(
-                "data:image/"
-            ):
-                return file_value
-            normalized = _normalize_image_ref(file_value)
-            if normalized:
-                return normalized
-
-    logger.warning(
-        "quoted_message_parser: failed to resolve quoted image ref=%s after %d actions",
-        image_ref[:128],
-        len(actions),
-    )
-    return None
-
-
-async def _resolve_image_refs_for_llm(
-    event: AstrMessageEvent,
-    image_refs: list[str],
-) -> list[str]:
-    resolved: list[str] = []
-    unresolved: list[str] = []
-
-    for image_ref in _dedupe_keep_order(image_refs):
-        normalized = _normalize_image_ref(image_ref)
-        if normalized:
-            resolved.append(normalized)
-        else:
-            unresolved.append(image_ref)
-
-    for image_ref in unresolved:
-        resolved_ref = await _resolve_onebot_image_ref(event, image_ref)
-        if resolved_ref:
-            resolved.append(resolved_ref)
-
-    return _dedupe_keep_order(resolved)
+        return None
 
 
 async def _collect_text_and_images_from_forward_ids(
-    event: AstrMessageEvent,
+    onebot_client: OneBotClient,
     forward_ids: list[str],
     *,
-    max_fetch: int = 32,
+    max_fetch: int = _MAX_FORWARD_FETCH,
 ) -> tuple[list[str], list[str]]:
     texts: list[str] = []
     image_refs: list[str] = []
@@ -676,11 +730,7 @@ async def _collect_text_and_images_from_forward_ids(
         seen.add(current_id)
         fetch_count += 1
 
-        forward_payload = await _call_action_compat(
-            event,
-            "get_forward_msg",
-            current_id,
-        )
+        forward_payload = await onebot_client.get_forward_msg(current_id)
         if not forward_payload:
             continue
 
@@ -702,73 +752,91 @@ async def _collect_text_and_images_from_forward_ids(
     return texts, _dedupe_keep_order(image_refs)
 
 
+class QuotedMessageExtractor:
+    def __init__(self, event: AstrMessageEvent):
+        self._event = event
+        self._client = OneBotClient(event)
+        self._image_resolver = ImageResolver(event, self._client)
+
+    async def text(self, reply_component: Reply | None = None) -> str | None:
+        reply = reply_component or _find_first_reply_component(self._event)
+        if not reply:
+            return None
+
+        embedded_text = _extract_text_from_reply_component(reply)
+        if embedded_text and not _is_forward_placeholder_only_text(embedded_text):
+            return embedded_text
+
+        reply_id = getattr(reply, "id", None)
+        if reply_id is None:
+            return embedded_text
+        reply_id_str = str(reply_id).strip()
+        if not reply_id_str:
+            return embedded_text
+
+        msg_payload = await self._client.get_msg(reply_id_str)
+        if not msg_payload:
+            return embedded_text
+
+        parsed = _parse_onebot_get_msg_payload(msg_payload)
+        text_parts: list[str] = []
+        direct_text = parsed["text"]
+        if direct_text:
+            text_parts.append(direct_text)
+
+        (
+            forward_texts,
+            _forward_images,
+        ) = await _collect_text_and_images_from_forward_ids(
+            self._client,
+            parsed["forward_ids"],
+        )
+        text_parts.extend(forward_texts)
+
+        return "\n".join(text_parts).strip() or embedded_text
+
+    async def images(self, reply_component: Reply | None = None) -> list[str]:
+        reply = reply_component or _find_first_reply_component(self._event)
+        if not reply:
+            return []
+
+        image_refs = list(_extract_image_refs_from_reply_component(reply))
+
+        reply_id = getattr(reply, "id", None)
+        if reply_id is None:
+            return await self._image_resolver.resolve_for_llm(image_refs)
+        reply_id_str = str(reply_id).strip()
+        if not reply_id_str:
+            return await self._image_resolver.resolve_for_llm(image_refs)
+
+        msg_payload = await self._client.get_msg(reply_id_str)
+        if not msg_payload:
+            return await self._image_resolver.resolve_for_llm(image_refs)
+
+        parsed = _parse_onebot_get_msg_payload(msg_payload)
+        image_refs.extend(parsed["image_refs"])
+
+        (
+            _forward_texts,
+            forward_images,
+        ) = await _collect_text_and_images_from_forward_ids(
+            self._client,
+            parsed["forward_ids"],
+        )
+        image_refs.extend(forward_images)
+
+        return await self._image_resolver.resolve_for_llm(image_refs)
+
+
 async def extract_quoted_message_text(
     event: AstrMessageEvent,
     reply_component: Reply | None = None,
 ) -> str | None:
-    reply = reply_component or _find_first_reply_component(event)
-    if not reply:
-        return None
-
-    embedded_text = _extract_text_from_reply_component(reply)
-    if embedded_text and not _is_forward_placeholder_only_text(embedded_text):
-        return embedded_text
-
-    reply_id = getattr(reply, "id", None)
-    if reply_id is None:
-        return embedded_text
-    reply_id_str = str(reply_id).strip()
-    if not reply_id_str:
-        return embedded_text
-
-    msg_payload = await _call_action_compat(event, "get_msg", reply_id_str)
-    if not msg_payload:
-        return embedded_text
-
-    parsed = _parse_onebot_get_msg_payload(msg_payload)
-    text_parts: list[str] = []
-    direct_text = parsed["text"]
-    if direct_text:
-        text_parts.append(direct_text)
-
-    forward_texts, _forward_images = await _collect_text_and_images_from_forward_ids(
-        event,
-        parsed["forward_ids"],
-    )
-    text_parts.extend(forward_texts)
-
-    return "\n".join(text_parts).strip() or embedded_text
+    return await QuotedMessageExtractor(event).text(reply_component)
 
 
 async def extract_quoted_message_images(
     event: AstrMessageEvent,
     reply_component: Reply | None = None,
 ) -> list[str]:
-    reply = reply_component or _find_first_reply_component(event)
-    if not reply:
-        return []
-
-    reply_image_refs = _extract_image_refs_from_reply_component(reply)
-    image_refs = list(reply_image_refs)
-
-    reply_id = getattr(reply, "id", None)
-    if reply_id is None:
-        return await _resolve_image_refs_for_llm(event, image_refs)
-    reply_id_str = str(reply_id).strip()
-    if not reply_id_str:
-        return await _resolve_image_refs_for_llm(event, image_refs)
-
-    msg_payload = await _call_action_compat(event, "get_msg", reply_id_str)
-    if not msg_payload:
-        return await _resolve_image_refs_for_llm(event, image_refs)
-
-    parsed = _parse_onebot_get_msg_payload(msg_payload)
-    image_refs.extend(parsed["image_refs"])
-
-    _forward_texts, forward_images = await _collect_text_and_images_from_forward_ids(
-        event,
-        parsed["forward_ids"],
-    )
-    image_refs.extend(forward_images)
-
-    return await _resolve_image_refs_for_llm(event, image_refs)
+    return await QuotedMessageExtractor(event).images(reply_component)

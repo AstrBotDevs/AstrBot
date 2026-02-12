@@ -238,6 +238,33 @@ async def test_extract_quoted_message_images_fallback_get_msg_direct_url():
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_images_file_url_with_query_string():
+    url_with_query = "https://img.example.com/direct.jpg?token=abc123#frag"
+    reply = Reply(id="205", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "205"): {
+                "data": {
+                    "message": [
+                        {
+                            "type": "file",
+                            "data": {
+                                "url": url_with_query,
+                                "name": "direct.jpg",
+                            },
+                        }
+                    ]
+                }
+            }
+        },
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == [url_with_query]
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_images_chain_placeholder_triggers_fallback():
     reply = Reply(id="210", chain=[Plain(text="[Forward Message]")], message_str="")
     event = _make_event(

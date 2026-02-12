@@ -66,6 +66,45 @@ async def test_handle_api_error_content_moderated_removes_images():
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_model_not_vlm_removes_images_and_retries_text_only():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+
+        success, *_rest = await provider._handle_api_error(
+            Exception("The model is not a VLM and cannot process images"),
+            payloads=payloads,
+            context_query=context_query,
+            func_tool=None,
+            chosen_key="test-key",
+            available_api_keys=["test-key"],
+            retry_cnt=0,
+            max_retries=10,
+        )
+
+        assert success is False
+        updated_context = payloads["messages"]
+        assert isinstance(updated_context, list)
+        assert updated_context[0]["content"] == [{"type": "text", "text": "hello"}]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_without_images_raises():
     provider = _make_provider(
         {"image_moderation_error_patterns": ["file:content-moderated"]}
