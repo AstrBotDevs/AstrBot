@@ -116,6 +116,11 @@ class SkillsRoute(Route):
             skill_mgr = SkillManager()
             skill_name = skill_mgr.install_skill_from_zip(temp_path, overwrite=True)
 
+            try:
+                await sync_skills_to_active_sandboxes()
+            except Exception:
+                logger.warning("Failed to sync uploaded skills to active sandboxes.")
+
             return (
                 Response()
                 .ok({"name": skill_name}, "Skill uploaded successfully.")
@@ -163,6 +168,10 @@ class SkillsRoute(Route):
             if not name:
                 return Response().error("Missing skill name").__dict__
             SkillManager().delete_skill(name)
+            try:
+                await sync_skills_to_active_sandboxes()
+            except Exception:
+                logger.warning("Failed to sync deleted skills to active sandboxes.")
             return Response().ok({"name": name}).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())

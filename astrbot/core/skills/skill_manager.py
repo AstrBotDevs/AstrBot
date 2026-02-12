@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from astrbot.core.utils.astrbot_path import (
@@ -16,9 +17,11 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 SKILLS_CONFIG_FILENAME = "skills.json"
+SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 # SANDBOX_SKILLS_ROOT = "/home/shared/skills"
 SANDBOX_SKILLS_ROOT = "skills"
+_SANDBOX_SKILLS_CACHE_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -91,7 +94,9 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 class SkillManager:
     def __init__(self, skills_root: str | None = None) -> None:
         self.skills_root = skills_root or get_astrbot_skills_path()
-        self.config_path = os.path.join(get_astrbot_data_path(), SKILLS_CONFIG_FILENAME)
+        data_path = Path(get_astrbot_data_path())
+        self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
+        self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
         os.makedirs(self.skills_root, exist_ok=True)
         os.makedirs(get_astrbot_temp_path(), exist_ok=True)
 
@@ -109,6 +114,54 @@ class SkillManager:
         with open(self.config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
 
+    def _load_sandbox_skills_cache(self) -> dict:
+        if not os.path.exists(self.sandbox_skills_cache_path):
+            return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
+        try:
+            with open(self.sandbox_skills_cache_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
+            skills = data.get("skills", [])
+            if not isinstance(skills, list):
+                skills = []
+            return {
+                "version": int(data.get("version", _SANDBOX_SKILLS_CACHE_VERSION)),
+                "skills": skills,
+            }
+        except Exception:
+            return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
+
+    def _save_sandbox_skills_cache(self, cache: dict) -> None:
+        cache["version"] = _SANDBOX_SKILLS_CACHE_VERSION
+        cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        with open(self.sandbox_skills_cache_path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+
+    def set_sandbox_skills_cache(self, skills: list[dict]) -> None:
+        """Persist sandbox skill metadata discovered from runtime side."""
+        deduped: dict[str, dict[str, str]] = {}
+        for item in skills:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            if not name or not _SKILL_NAME_RE.match(name):
+                continue
+            description = str(item.get("description", "") or "")
+            path = str(item.get("path", "") or "")
+            if not path:
+                path = f"{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
+            deduped[name] = {
+                "name": name,
+                "description": description,
+                "path": path.replace("\\", "/"),
+            }
+        cache = {
+            "version": _SANDBOX_SKILLS_CACHE_VERSION,
+            "skills": [deduped[name] for name in sorted(deduped)],
+        }
+        self._save_sandbox_skills_cache(cache)
+
     def list_skills(
         self,
         *,
@@ -125,7 +178,7 @@ class SkillManager:
         config = self._load_config()
         skill_configs = config.get("skills", {})
         modified = False
-        skills: list[SkillInfo] = []
+        skills_by_name: dict[str, SkillInfo] = {}
 
         for entry in sorted(Path(self.skills_root).iterdir()):
             if not entry.is_dir():
@@ -151,20 +204,50 @@ class SkillManager:
             else:
                 path_str = str(skill_md)
             path_str = path_str.replace("\\", "/")
-            skills.append(
-                SkillInfo(
+            skills_by_name[skill_name] = SkillInfo(
+                name=skill_name,
+                description=description,
+                path=path_str,
+                active=active,
+            )
+
+        if runtime == "sandbox":
+            cache = self._load_sandbox_skills_cache()
+            for item in cache.get("skills", []):
+                if not isinstance(item, dict):
+                    continue
+                skill_name = str(item.get("name", "")).strip()
+                if (
+                    not skill_name
+                    or skill_name in skills_by_name
+                    or not _SKILL_NAME_RE.match(skill_name)
+                ):
+                    continue
+                active = skill_configs.get(skill_name, {}).get("active", True)
+                if skill_name not in skill_configs:
+                    skill_configs[skill_name] = {"active": active}
+                    modified = True
+                if active_only and not active:
+                    continue
+                description = str(item.get("description", "") or "")
+                if show_sandbox_path:
+                    path_str = f"{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                else:
+                    path_str = str(item.get("path", "") or "")
+                    if not path_str:
+                        path_str = f"{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
                     description=description,
-                    path=path_str,
+                    path=path_str.replace("\\", "/"),
                     active=active,
                 )
-            )
 
         if modified:
             config["skills"] = skill_configs
             self._save_config(config)
 
-        return skills
+        return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def set_skill_active(self, name: str, active: bool) -> None:
         config = self._load_config()

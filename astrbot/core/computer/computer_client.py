@@ -1,10 +1,10 @@
-import os
+import json
 import shutil
 import uuid
 from pathlib import Path
 
 from astrbot.api import logger
-from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT
+from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_skills_path,
@@ -16,49 +16,225 @@ from .booters.local import LocalBooter
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
+_MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
+
+
+def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
+    skills: list[Path] = []
+    for entry in sorted(skills_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        skill_md = entry / "SKILL.md"
+        if skill_md.exists():
+            skills.append(entry)
+    return skills
+
+
+def _build_sync_and_scan_command() -> str:
+    script = f"""
+import json
+import shutil
+import zipfile
+from pathlib import Path
+
+root = Path({SANDBOX_SKILLS_ROOT!r})
+zip_path = root / "skills.zip"
+tmp_extract = Path(f"{{root}}_tmp_extract")
+managed_file = root / {_MANAGED_SKILLS_FILE!r}
+
+
+def parse_description(text: str) -> str:
+    if not text.startswith("---"):
+        return ""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return ""
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+    if end_idx is None:
+        return ""
+    for line in lines[1:end_idx]:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        if key.strip().lower() == "description":
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
+def remove_tree(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
+
+
+def load_managed_skills() -> list[str]:
+    if not managed_file.exists():
+        return []
+    try:
+        payload = json.loads(managed_file.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    items = payload.get("managed_skills", [])
+    if not isinstance(items, list):
+        return []
+    result: list[str] = []
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            result.append(item.strip())
+    return result
+
+
+def collect_skills() -> list[dict[str, str]]:
+    skills: list[dict[str, str]] = []
+    if not root.exists():
+        return skills
+    for skill_dir in sorted(root.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        description = ""
+        try:
+            text = skill_md.read_text(encoding="utf-8")
+            description = parse_description(text)
+        except Exception:
+            description = ""
+        skills.append(
+            {{
+                "name": skill_dir.name,
+                "description": description,
+                "path": f"{SANDBOX_SKILLS_ROOT}/{{skill_dir.name}}/SKILL.md",
+            }}
+        )
+    return skills
+
+
+root.mkdir(parents=True, exist_ok=True)
+for managed_name in load_managed_skills():
+    remove_tree(root / managed_name)
+
+current_managed: list[str] = []
+if zip_path.exists():
+    remove_tree(tmp_extract)
+    tmp_extract.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(tmp_extract)
+    for entry in sorted(tmp_extract.iterdir()):
+        if not entry.is_dir():
+            continue
+        target = root / entry.name
+        remove_tree(target)
+        shutil.copytree(entry, target)
+        current_managed.append(entry.name)
+
+remove_tree(tmp_extract)
+remove_tree(zip_path)
+managed_file.write_text(
+    json.dumps({{"managed_skills": current_managed}}, ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+print(
+    json.dumps(
+        {{
+            "managed_skills": current_managed,
+            "skills": collect_skills(),
+        }},
+        ensure_ascii=False,
+    )
+)
+""".strip()
+    return (
+        "if command -v python3 >/dev/null 2>&1; then PYBIN=python3; "
+        "elif command -v python >/dev/null 2>&1; then PYBIN=python; "
+        "else echo 'python not found in sandbox' >&2; exit 127; fi; "
+        "$PYBIN - <<'PY'\n"
+        f"{script}\n"
+        "PY"
+    )
+
+
+def _shell_exec_succeeded(result: dict) -> bool:
+    if "success" in result:
+        return bool(result.get("success"))
+    exit_code = result.get("exit_code")
+    return exit_code in (0, None)
+
+
+def _decode_sync_payload(stdout: str) -> dict | None:
+    text = stdout.strip()
+    if not text:
+        return None
+    candidates = [text]
+    candidates.extend([line.strip() for line in text.splitlines() if line.strip()])
+    for candidate in reversed(candidates):
+        try:
+            payload = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return None
+
+
+def _update_sandbox_skills_cache(payload: dict | None) -> None:
+    if not isinstance(payload, dict):
+        return
+    skills = payload.get("skills", [])
+    if not isinstance(skills, list):
+        return
+    SkillManager().set_sandbox_skills_cache(skills)
 
 
 async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
-    skills_root = get_astrbot_skills_path()
-    if not os.path.isdir(skills_root):
+    skills_root = Path(get_astrbot_skills_path())
+    if not skills_root.is_dir():
         return
-    if not any(Path(skills_root).iterdir()):
-        return
+    local_skill_dirs = _list_local_skill_dirs(skills_root)
 
-    temp_dir = get_astrbot_temp_path()
-    os.makedirs(temp_dir, exist_ok=True)
-    zip_base = os.path.join(temp_dir, "skills_bundle")
-    zip_path = f"{zip_base}.zip"
+    temp_dir = Path(get_astrbot_temp_path())
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    zip_base = temp_dir / "skills_bundle"
+    zip_path = zip_base.with_suffix(".zip")
 
     try:
-        if os.path.exists(zip_path):
-            os.remove(zip_path)
-        shutil.make_archive(zip_base, "zip", skills_root)
-        remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
-        logger.info("Uploading skills bundle to sandbox...")
-        await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-        upload_result = await booter.upload_file(zip_path, str(remote_zip))
-        if not upload_result.get("success", False):
-            raise RuntimeError("Failed to upload skills bundle to sandbox.")
-        # Extract into a temp folder first, then replace skills atomically.
-        tmp_extract_root = f"{SANDBOX_SKILLS_ROOT}_tmp_extract"
-        await booter.shell.exec(
-            f"mkdir -p {SANDBOX_SKILLS_ROOT} {tmp_extract_root} && "
-            f"rm -rf {tmp_extract_root}/* && "
-            f"(unzip -o {remote_zip} -d {tmp_extract_root} || "
-            f"python3 -c \"import zipfile; z=zipfile.ZipFile('{remote_zip}'); "
-            f"z.extractall('{tmp_extract_root}')\" || "
-            f"python -c \"import zipfile; z=zipfile.ZipFile('{remote_zip}'); "
-            f"z.extractall('{tmp_extract_root}')\") && "
-            f"find {SANDBOX_SKILLS_ROOT} -mindepth 1 -delete && "
-            f"cp -a {tmp_extract_root}/. {SANDBOX_SKILLS_ROOT}/ && "
-            f"rm -rf {tmp_extract_root} && "
-            f"rm -f {remote_zip}"
-        )
+        if local_skill_dirs:
+            if zip_path.exists():
+                zip_path.unlink()
+            shutil.make_archive(str(zip_base), "zip", str(skills_root))
+            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+            logger.info("Uploading skills bundle to sandbox...")
+            await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+            if not upload_result.get("success", False):
+                raise RuntimeError("Failed to upload skills bundle to sandbox.")
+        else:
+            logger.info(
+                "No local skills found. Keeping sandbox built-ins and refreshing metadata."
+            )
+            await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
+
+        sync_result = await booter.shell.exec(_build_sync_and_scan_command())
+        if not _shell_exec_succeeded(sync_result):
+            raise RuntimeError(
+                "Failed to apply sandbox skill sync strategy: "
+                f"stderr={sync_result.get('stderr', '')}"
+            )
+        payload = _decode_sync_payload(str(sync_result.get("stdout", "") or ""))
+        _update_sandbox_skills_cache(payload)
     finally:
-        if os.path.exists(zip_path):
+        if zip_path.exists():
             try:
-                os.remove(zip_path)
+                zip_path.unlink()
             except Exception:
                 logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
