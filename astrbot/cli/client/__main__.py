@@ -74,8 +74,17 @@ def get_temp_path() -> str:
     # 优先使用环境变量
     if root := os.environ.get("ASTRBOT_ROOT"):
         return os.path.join(root, "data", "temp")
+    # 通过源码目录定位
+    source_root = os.path.realpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../..")
+    )
+    temp_dir = os.path.join(source_root, "data", "temp")
+    if os.path.isdir(os.path.join(source_root, "data")):
+        return temp_dir
     # 默认使用系统临时目录
-    return "/tmp"
+    import tempfile
+
+    return tempfile.gettempdir()
 
 
 def load_auth_token() -> str:

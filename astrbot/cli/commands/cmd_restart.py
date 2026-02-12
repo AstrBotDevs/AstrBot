@@ -57,13 +57,13 @@ def launch_in_new_window(
         env["ASTRBOT_RELOAD"] = "1"
 
     if sys.platform == "win32":
-        # Windows: 使用 powershell 开新窗口
-        cmd_str = " ".join(f'"{c}"' if " " in str(c) else str(c) for c in cmd)
-        ps_script = f'Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd {astrbot_root}; {cmd_str}" -WindowStyle Normal'
+        # Windows: 使用 CREATE_NEW_CONSOLE 在新窗口启动，环境变量通过 env 直接传递
+        CREATE_NEW_CONSOLE = 0x00000010
         subprocess.Popen(
-            ["powershell", "-Command", ps_script],
+            cmd,
             env=env,
-            shell=False,
+            cwd=str(astrbot_root),
+            creationflags=CREATE_NEW_CONSOLE,
         )
     elif sys.platform == "darwin":
         # macOS: 使用 osascript 打开新的 Terminal 窗口
@@ -166,7 +166,7 @@ def find_and_kill_astrbot_processes(astrbot_root: Path) -> bool:
                         cmdline_lower = cmdline.lower()
                         if "astrbot" in cmdline_lower or "astrbot.exe" in cmdline_lower:
                             subprocess.run(
-                                ["taskkill", "/F", "/PID", str(pid)],
+                                ["taskkill", "/F", "/T", "/PID", str(pid)],
                                 capture_output=True,
                                 timeout=5,
                             )
