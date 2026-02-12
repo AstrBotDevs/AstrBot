@@ -16,6 +16,7 @@ from astrbot.core.config.default import (
     CONFIG_METADATA_3_SYSTEM,
     DEFAULT_CONFIG,
     DEFAULT_VALUE_MAP,
+    CONFIG_METADATA_TRANS
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -286,6 +287,7 @@ class ConfigRoute(Route):
                 "POST",
                 self.delete_provider_source,
             ),
+            "/config/i18n/trans": ("GET", self.get_i18n_translations),
         }
         self.register_routes()
 
@@ -1396,3 +1398,6 @@ class ConfigRoute(Route):
             md.config.save_config(post_configs)
         except Exception as e:
             raise e
+
+    async def get_i18n_translations(self):
+        CONFIG_METADATA_TRANS

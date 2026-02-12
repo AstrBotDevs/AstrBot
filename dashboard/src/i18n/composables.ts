@@ -1,10 +1,15 @@
 import { ref, computed } from 'vue';
 import { translations as staticTranslations } from './translations';
 import type { Locale } from './types';
+import axios from 'axios';
 
 // 全局状态
 const currentLocale = ref<Locale>('zh-CN');
 const translations = ref<Record<string, any>>({});
+const dynamicTranslations = ref<Record<Locale, Record<string, any>>>({
+  'zh-CN': {},
+  'en-US': {}
+});
 
 /**
  * 初始化i18n系统
@@ -43,22 +48,75 @@ function loadTranslations(locale: Locale) {
 }
 
 /**
+ * 加载动态翻译数据（一次性加载所有语言）
+ */
+export async function loadDynamicTranslations() {
+  try {
+    // 请求后端获取所有语言的翻译
+    const response = await axios.get("/config/i18n/trans");
+
+    if (response.data.code === 200 && response.data.data) {
+      // response.data.data 格式应为：
+      // {
+      //   'zh-CN': { ... },
+      //   'en-US': { ... }
+      // }
+
+      const data = response.data.data;
+
+      // 只更新zh-CN和en-US的翻译
+      if (data['zh-CN']) {
+        dynamicTranslations.value['zh-CN'] = {
+          ...dynamicTranslations.value['zh-CN'],
+          ...data['zh-CN']
+        };
+      }
+
+      if (data['en-US']) {
+        dynamicTranslations.value['en-US'] = {
+          ...dynamicTranslations.value['en-US'],
+          ...data['en-US']
+        };
+      }
+
+      console.log(`[i18n] 动态翻译数据加载成功: zh-CN, en-US`);
+      return data;
+    }
+  } catch (error) {
+    console.error(`[i18n] 加载动态翻译数据失败:`, error);
+  }
+}
+
+/**
  * 主要的翻译函数组合
  */
 export function useI18n() {
   // 翻译函数
   const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.');
-    let value: any = translations.value;
-    
-    // 遍历键路径
+
+    // 先尝试从动态翻译中获取
+    let value: any = dynamicTranslations.value;
+    let foundInDynamic = true;
+
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {
         value = value[k];
       } else {
-        console.warn(`Translation key not found: ${key}`);
-        // 返回带括号的键名，便于在开发时识别缺失的翻译
-        return `[MISSING: ${key}]`;
+        foundInDynamic = false;
+        break;
+      }
+    }
+
+    // 如果动态翻译中没有找到，从静态翻译中获取
+    if (!foundInDynamic) {
+      value = translations.value;
+      for (const k of keys) {
+        if (value && typeof value === 'object' && k in value) {
+          value = value[k];
+        } else {
+          return `[MISSING: ${key}]`;
+        }
       }
     }
     
@@ -101,12 +159,21 @@ export function useI18n() {
   // 检查是否已加载
   const isLoaded = computed(() => Object.keys(translations.value).length > 0);
   
+  // 更新动态翻译数据
+  const updateTranslations = (newTranslations: Record<string, any>) => {
+    dynamicTranslations.value = {
+      ...dynamicTranslations.value,
+      ...newTranslations
+    };
+  };
+
   return {
     t,
     locale,
     setLocale,
     availableLocales,
-    isLoaded
+    isLoaded,
+    updateTranslations
   };
 }
 
@@ -180,4 +247,5 @@ export async function setupI18n() {
     : 'zh-CN';
   
   await initI18n(initialLocale);
+  await loadDynamicTranslations();
 } 
