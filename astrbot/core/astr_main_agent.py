@@ -52,6 +52,10 @@ from astrbot.core.tools.cron_tools import (
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.quoted_message_parser import (
+    extract_quoted_message_images,
+    extract_quoted_message_text,
+)
 
 
 @dataclass(slots=True)
@@ -486,7 +490,11 @@ async def _process_quote_message(
 
     content_parts = []
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
-    message_str = quote.message_str or "[Empty Text]"
+    message_str = (
+        await extract_quoted_message_text(event, quote)
+        or quote.message_str
+        or "[Empty Text]"
+    )
     content_parts.append(f"{sender_info}{message_str}")
 
     image_seg = None
@@ -913,6 +921,31 @@ async def build_main_agent(
                                 )
                             )
                         )
+
+            # Fallback quoted image extraction for platforms/messages where Reply has no embedded chain.
+            # This mainly targets OneBot/Napcat reply-id-only payloads via get_msg/get_forward_msg.
+            fallback_reply_comps = [
+                comp
+                for comp in event.message_obj.message
+                if isinstance(comp, Reply) and not comp.chain
+            ]
+            for comp in fallback_reply_comps:
+                try:
+                    fallback_images = await extract_quoted_message_images(event, comp)
+                    for image_ref in fallback_images:
+                        if image_ref in req.image_urls:
+                            continue
+                        req.image_urls.append(image_ref)
+                        req.extra_user_content_parts.append(
+                            TextPart(
+                                text=(
+                                    "[Image Attachment in quoted message: "
+                                    f"path {image_ref}]"
+                                )
+                            )
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Failed to resolve fallback quoted images: %s", exc)
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
