@@ -119,7 +119,7 @@ class MainAgentBuildConfig:
     provider_settings: dict = field(default_factory=dict)
     subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
-    max_quoted_fallback_images: int = 10
+    max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
 
 

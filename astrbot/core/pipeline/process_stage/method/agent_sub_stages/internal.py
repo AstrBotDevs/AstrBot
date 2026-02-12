@@ -123,6 +123,7 @@ class InternalAgentSubStage(Stage):
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
     async def process(
