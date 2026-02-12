@@ -44,7 +44,7 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 1. 💯 無料 & オープンソース。
 2. ✨ AI大規模言語モデル対話、マルチモーダル、Agent、MCP、Skills、ナレッジベース、ペルソナ設定、対話の自動圧縮。
 3. 🤖 Dify、Alibaba Cloud Bailian（百煉）、Coze などのAgentプラットフォームへの接続をサポート。
-4. 🌐 マルチプラットフォーム：QQ、企業微信（WeCom）、飛書（Lark）、釘釘（DingTalk）、WeChat公式アカウント、Telegram、Slack、[その他](#supported-messaging-platforms)に対応。
+4. 🌐 マルチプラットフォーム：QQ、企業微信（WeCom）、飛書（Lark）、釘釘（DingTalk）、WeChat公式アカウント、Telegram、Slack、[その他](#サポートされているメッセージプラットフォーム)に対応。
 5. 📦 プラグイン拡張：800近い既存プラグインをワンクリックでインストール可能。
 6. 🛡️  隔離環境[Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html)：コードの安全な実行、Shell呼び出し、セッションレベルのリソース再利用。
 7. 💻 WebUI 対応。

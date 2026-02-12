@@ -44,7 +44,7 @@ AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègr
 1. 💯 Gratuit & Open Source.
 2. ✨ Dialogue avec de grands modèles d'IA, multimodal, Agent, MCP, Skills, Base de connaissances, Paramétrage de personnalité, compression automatique des dialogues.
 3. 🤖 Prise en charge de l'accès aux plateformes d'Agents telles que Dify, Alibaba Cloud Bailian, Coze, etc.
-4. 🌐 Multiplateforme : supporte QQ, WeChat Enterprise, Feishu, DingTalk, Comptes officiels WeChat, Telegram, Slack et [plus encore](#supported-messaging-platforms).
+4. 🌐 Multiplateforme : supporte QQ, WeChat Enterprise, Feishu, DingTalk, Comptes officiels WeChat, Telegram, Slack et [plus encore](#plateformes-de-messagerie-prises-en-charge).
 5. 📦 Extension par plugins, avec près de 800 plugins déjà disponibles pour une installation en un clic.
 6. 🛡️  Environnement isol [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) : exécution sécurisée de code, appels Shell et réutilisation des ressources au niveau de la session.
 7. 💻 Support WebUI.
