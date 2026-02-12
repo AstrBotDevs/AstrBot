@@ -113,6 +113,8 @@ class MainAgentBuildConfig:
     provider_settings: dict = field(default_factory=dict)
     subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
+    max_quoted_fallback_images: int = 10
+    """Maximum number of images injected from quoted-message fallback extraction."""
 
 
 @dataclass(slots=True)
@@ -897,6 +899,7 @@ async def build_main_agent(
             reply_comps = [
                 comp for comp in event.message_obj.message if isinstance(comp, Reply)
             ]
+            fallback_quoted_image_count = 0
             for comp in reply_comps:
                 has_embedded_image = False
                 if comp.chain:
@@ -929,13 +932,35 @@ async def build_main_agent(
                 # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
                 if not has_embedded_image:
                     try:
-                        fallback_images = await extract_quoted_message_images(
-                            event, comp
+                        fallback_images = normalize_and_dedupe_strings(
+                            await extract_quoted_message_images(event, comp)
                         )
+                        remaining_limit = max(
+                            config.max_quoted_fallback_images
+                            - fallback_quoted_image_count,
+                            0,
+                        )
+                        if remaining_limit <= 0 and fallback_images:
+                            logger.warning(
+                                "Skip quoted fallback images due to limit=%d for umo=%s",
+                                config.max_quoted_fallback_images,
+                                event.unified_msg_origin,
+                            )
+                            continue
+                        if len(fallback_images) > remaining_limit:
+                            logger.warning(
+                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                                event.unified_msg_origin,
+                                getattr(comp, "id", None),
+                                len(fallback_images),
+                                remaining_limit,
+                            )
+                            fallback_images = fallback_images[:remaining_limit]
                         for image_ref in fallback_images:
                             if image_ref in req.image_urls:
                                 continue
                             req.image_urls.append(image_ref)
+                            fallback_quoted_image_count += 1
                             req.extra_user_content_parts.append(
                                 TextPart(
                                     text=(

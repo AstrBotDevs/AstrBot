@@ -113,6 +113,42 @@ async def test_handle_api_error_model_not_vlm_removes_images_and_retries_text_on
 
 
 @pytest.mark.asyncio
+async def test_handle_api_error_model_not_vlm_after_fallback_raises():
+    provider = _make_provider()
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,abcd"},
+                        },
+                    ],
+                }
+            ]
+        }
+        context_query = payloads["messages"]
+
+        with pytest.raises(Exception, match="not a VLM"):
+            await provider._handle_api_error(
+                Exception("The model is not a VLM and cannot process images"),
+                payloads=payloads,
+                context_query=context_query,
+                func_tool=None,
+                chosen_key="test-key",
+                available_api_keys=["test-key"],
+                retry_cnt=1,
+                max_retries=10,
+                image_fallback_used=True,
+            )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_with_unserializable_body():
     provider = _make_provider({"image_moderation_error_patterns": ["blocked"]})
     try:
