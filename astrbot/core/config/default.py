@@ -3438,4 +3438,7 @@ v4.15.0之后，文本元数据使用静态文件存储
 
 插件可以通过修改这个配置文件来修改vue的i18n配置，动态的i18n注册配置文件
 """
-CONFIG_METADATA_TRANS = {}
+CONFIG_METADATA_TRANS = {
+    'zh-CN': {},
+    'en-US': {}
+}
