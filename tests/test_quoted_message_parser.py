@@ -267,6 +267,27 @@ async def test_extract_quoted_message_images_fallback_get_msg_direct_url():
 
 
 @pytest.mark.asyncio
+async def test_extract_quoted_message_images_data_image_ref_normalized_to_base64():
+    data_image_ref = "data:image/png;base64,abcd1234=="
+    reply = Reply(id="201", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "201"): {
+                "data": {
+                    "message": [
+                        {"type": "image", "data": {"url": data_image_ref}},
+                    ]
+                }
+            }
+        },
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == ["base64://abcd1234=="]
+
+
+@pytest.mark.asyncio
 async def test_extract_quoted_message_images_file_url_with_query_string():
     url_with_query = "https://img.example.com/direct.jpg?token=abc123#frag"
     reply = Reply(id="205", chain=None, message_str="")
@@ -291,6 +312,23 @@ async def test_extract_quoted_message_images_file_url_with_query_string():
 
     images = await extract_quoted_message_images(event)
     assert images == [url_with_query]
+
+
+@pytest.mark.asyncio
+async def test_extract_quoted_message_images_non_image_local_path_is_ignored(tmp_path):
+    non_image_file = tmp_path / "secret.txt"
+    non_image_file.write_text("not an image", encoding="utf-8")
+
+    reply = Reply(id="placeholder", chain=[Image(file=str(non_image_file))], message_str="")
+    object.__setattr__(reply, "id", None)
+    event = SimpleNamespace(
+        message_obj=SimpleNamespace(message=[reply]),
+        bot=SimpleNamespace(api=_FailIfCalledAPI()),
+        get_group_id=lambda: "",
+    )
+
+    images = await extract_quoted_message_images(event)
+    assert images == []
 
 
 @pytest.mark.asyncio

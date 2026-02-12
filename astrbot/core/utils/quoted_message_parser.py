@@ -36,6 +36,9 @@ _IMAGE_EXTENSIONS = {
 _MAX_COMPONENT_CHAIN_DEPTH = 4
 _MAX_FORWARD_NODE_DEPTH = 6
 _MAX_FORWARD_FETCH = 32
+_WARN_ON_ACTION_FAILURE = os.getenv(
+    "ASTRBOT_QUOTED_ACTION_WARN", ""
+).strip().lower() in {"1", "true", "yes", "on"}
 
 _FORWARD_PLACEHOLDER_PATTERN = re.compile(
     r"^(?:[\(\[]?[^\]:\)]*[\)\]]?\s*:\s*)?\[(?:forward message|转发消息|合并转发)\]$",
@@ -92,6 +95,40 @@ def _normalize_file_like_url(path: str | None) -> str | None:
     return split.path or path
 
 
+def _convert_data_image_to_base64_ref(image_ref: str) -> str | None:
+    if not isinstance(image_ref, str):
+        return None
+    value = image_ref.strip()
+    if not value:
+        return None
+    lower_value = value.lower()
+    if not lower_value.startswith("data:image/"):
+        return None
+
+    comma_index = value.find(",")
+    if comma_index <= 0:
+        return None
+    header = value[:comma_index].lower()
+    payload = value[comma_index + 1 :].strip()
+    if ";base64" not in header or not payload:
+        return None
+    return f"base64://{payload}"
+
+
+def _get_existing_local_path(value: str) -> str | None:
+    lower_value = value.lower()
+    if lower_value.startswith("file://"):
+        file_path = value[7:]
+        if file_path.startswith("/") and len(file_path) > 3 and file_path[2] == ":":
+            file_path = file_path[1:]
+        if file_path and os.path.exists(file_path):
+            return os.path.abspath(file_path)
+        return None
+    if os.path.exists(value):
+        return os.path.abspath(value)
+    return None
+
+
 def _normalize_image_ref(image_ref: str) -> str | None:
     if not isinstance(image_ref, str):
         return None
@@ -102,17 +139,16 @@ def _normalize_image_ref(image_ref: str) -> str | None:
 
     if lower_value.startswith(("http://", "https://")):
         return value
-    if lower_value.startswith("base64://") or lower_value.startswith("data:image/"):
+    if lower_value.startswith("base64://"):
         return value
-    if lower_value.startswith("file://"):
-        file_path = value[7:]
-        if file_path.startswith("/") and len(file_path) > 3 and file_path[2] == ":":
-            file_path = file_path[1:]
-        if file_path and os.path.exists(file_path):
-            return os.path.abspath(file_path)
-        return None
-    if os.path.exists(value):
-        return os.path.abspath(value)
+
+    data_image_ref = _convert_data_image_to_base64_ref(value)
+    if data_image_ref:
+        return data_image_ref
+
+    local_path = _get_existing_local_path(value)
+    if local_path and _looks_like_image_file_name(local_path):
+        return local_path
     return None
 
 
@@ -509,7 +545,7 @@ class OneBotClient:
         action: str,
         params_list: list[dict[str, Any]],
         *,
-        warn_on_all_failed: bool = True,
+        warn_on_all_failed: bool = _WARN_ON_ACTION_FAILURE,
     ) -> dict[str, Any] | None:
         if self._call_action is None:
             return None
@@ -653,6 +689,12 @@ class ImageResolver:
             normalized = _normalize_image_ref(image_ref)
             if normalized:
                 resolved.append(normalized)
+            elif _get_existing_local_path(image_ref):
+                # Drop non-image local paths instead of treating them as remote IDs.
+                logger.debug(
+                    "quoted_message_parser: skip non-image local path ref=%s",
+                    image_ref[:128],
+                )
             else:
                 unresolved.append(image_ref)
 
@@ -687,10 +729,6 @@ class ImageResolver:
 
             file_value = data.get("file")
             if isinstance(file_value, str):
-                if file_value.startswith("base64://") or file_value.startswith(
-                    "data:image/"
-                ):
-                    return file_value
                 normalized = _normalize_image_ref(file_value)
                 if normalized:
                     return normalized
