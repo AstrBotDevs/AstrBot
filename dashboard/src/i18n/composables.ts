@@ -53,15 +53,10 @@ function loadTranslations(locale: Locale) {
 export async function loadDynamicTranslations() {
   try {
     // 请求后端获取所有语言的翻译
-    const response = await axios.get("/config/i18n/trans");
+    const response = await axios.get("/api/config/i18n/trans");
 
-    if (response.data.code === 200 && response.data.data) {
-      // response.data.data 格式应为：
-      // {
-      //   'zh-CN': { ... },
-      //   'en-US': { ... }
-      // }
-
+    // 匹配后端的返回格式：{ status: 'ok', data: {...} }
+    if (response.data.status === 'ok' && response.data.data) {
       const data = response.data.data;
 
       // 只更新zh-CN和en-US的翻译
@@ -81,6 +76,8 @@ export async function loadDynamicTranslations() {
 
       console.log(`[i18n] 动态翻译数据加载成功: zh-CN, en-US`);
       return data;
+    } else {
+      console.warn(`[i18n] 动态翻译数据加载失败:`, response.data);
     }
   } catch (error) {
     console.error(`[i18n] 加载动态翻译数据失败:`, error);

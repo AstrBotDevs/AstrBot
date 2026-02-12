@@ -1400,4 +1400,9 @@ class ConfigRoute(Route):
             raise e
 
     async def get_i18n_translations(self):
-        CONFIG_METADATA_TRANS
+        """获取所有语言的配置元数据翻译"""
+        try:
+            # 直接返回 CONFIG_METADATA_TRANS 字典
+            return Response().ok(CONFIG_METADATA_TRANS).__dict__
+        except Exception as e:
+            return Response().error(str(e)).__dict__
