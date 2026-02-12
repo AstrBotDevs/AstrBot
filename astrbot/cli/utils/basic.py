@@ -15,8 +15,30 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 
 def get_astrbot_root() -> Path:
-    """获取Astrbot根目录路径"""
-    return Path.cwd()
+    """获取 AstrBot 根目录路径
+
+    查找顺序：
+    1. 环境变量 ASTRBOT_ROOT
+    2. 从当前目录向上查找包含 .astrbot 标记的目录
+    3. 回退到当前工作目录
+    """
+    # 1. 环境变量
+    import os
+
+    env_root = os.environ.get("ASTRBOT_ROOT")
+    if env_root:
+        p = Path(env_root)
+        if check_astrbot_root(p):
+            return p
+
+    # 2. 向上查找 .astrbot 标记
+    current = Path.cwd()
+    for parent in [current, *current.parents]:
+        if (parent / ".astrbot").exists():
+            return parent
+
+    # 3. 回退到当前目录
+    return current
 
 
 async def check_dashboard(astrbot_root: Path) -> None:

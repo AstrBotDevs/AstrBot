@@ -113,13 +113,14 @@ def launch_in_new_window(
 @click.option("--reload", "-r", is_flag=True, help="插件自动重载")
 @click.option("--port", "-p", help="Astrbot Dashboard端口", required=False, type=str)
 @click.option(
-    "--no-window",
+    "--new-window",
     is_flag=True,
-    help="在当前窗口运行（仅 Windows）",
+    help="在新窗口启动（仅 Windows/macOS/Linux 桌面环境）",
 )
+@click.option("--no-window", is_flag=True, hidden=True, help="内部使用：防止递归开窗口")
 @click.command()
-def run(reload: bool, port: str, no_window: bool) -> None:
-    """运行 AstrBot（Windows 默认新窗口，Linux/macOS 当前窗口）"""
+def run(reload: bool, port: str, new_window: bool, no_window: bool) -> None:
+    """运行 AstrBot（默认当前窗口）"""
     os.environ["ASTRBOT_CLI"] = "1"
     astrbot_root = get_astrbot_root()
 
@@ -128,14 +129,13 @@ def run(reload: bool, port: str, no_window: bool) -> None:
             f"{astrbot_root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
         )
 
-    # Windows: 默认在新窗口启动（除非指定 --no-window）
-    # Linux/macOS: 始终在当前窗口运行
-    if sys.platform == "win32" and not no_window:
+    # 仅在明确指定 --new-window 且非内部调用时才在新窗口启动
+    if new_window and not no_window:
         launch_in_new_window(astrbot_root, reload, port)
         click.echo("[OK] AstrBot 已在新窗口中启动")
         return
 
-    # 在当前窗口运行（Linux/macOS 默认，Windows 指定 --no-window）
+    # 默认在当前窗口运行
     try:
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
         sys.path.insert(0, str(astrbot_root))
