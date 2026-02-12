@@ -319,7 +319,7 @@ function openChangelogDialog() {
     </div>
     <iframe
       src="https://astrbot.app"
-      style="width: 100%; height: calc(100% - 56px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
+      style="width: 100%; height: calc(100% - 66px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
       ></iframe>
   </div>
 
