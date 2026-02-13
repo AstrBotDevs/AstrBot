@@ -296,13 +296,14 @@ class StatRoute(Route):
                 candidates.append(base_path / f"FIRST_NOTICE.{locale}.md")
                 if locale.lower().startswith("zh"):
                     candidates.append(base_path / "FIRST_NOTICE.md")
+                    candidates.append(base_path / "FIRST_NOTICE.zh-CN.md")
                 elif locale.lower().startswith("en"):
                     candidates.append(base_path / "FIRST_NOTICE.en-US.md")
 
             candidates.extend(
                 [
-                    base_path / "FIRST_NOTICE.en-US.md",
                     base_path / "FIRST_NOTICE.md",
+                    base_path / "FIRST_NOTICE.en-US.md",
                 ],
             )
 
