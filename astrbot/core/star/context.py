@@ -147,6 +147,7 @@ class Context:
         contexts: list[Message] | None = None,
         max_steps: int = 30,
         tool_call_timeout: int = 60,
+        background_task_wait_timeout: int = 300,
         **kwargs: Any,
     ) -> LLMResponse:
         """Run an agent loop that allows the LLM to call tools iteratively until a final answer is produced.
@@ -226,6 +227,7 @@ class Context:
             run_context=AgentContextWrapper(
                 context=agent_context,
                 tool_call_timeout=tool_call_timeout,
+                background_task_wait_timeout=background_task_wait_timeout,
             ),
             tool_executor=tool_executor,
             agent_hooks=agent_hooks,
