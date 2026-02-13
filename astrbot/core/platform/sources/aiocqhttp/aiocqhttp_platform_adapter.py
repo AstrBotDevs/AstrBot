@@ -1,5 +1,6 @@
 import asyncio
 import itertools
+import json
 import logging
 import time
 import uuid
@@ -138,6 +139,118 @@ class AiocqhttpAdapter(Platform):
             abm = await self._convert_handle_request_event(event)
 
         return abm
+
+    def _extract_forward_text_from_nodes(
+        self,
+        nodes: list[Any],
+        depth: int = 0,
+        max_depth: int = 5,
+    ) -> str:
+        if depth > max_depth or not isinstance(nodes, list):
+            return ""
+
+        lines: list[str] = []
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+
+            sender = node.get("sender", {}) if isinstance(node.get("sender"), dict) else {}
+            sender_name = (
+                sender.get("nickname")
+                or sender.get("card")
+                or sender.get("user_id")
+                or "未知用户"
+            )
+
+            raw_content = node.get("message")
+            if raw_content is None:
+                raw_content = node.get("content", [])
+
+            content_chain: list[Any] = []
+            if isinstance(raw_content, list):
+                content_chain = raw_content
+            elif isinstance(raw_content, str) and raw_content.strip():
+                try:
+                    parsed = json.loads(raw_content)
+                    if isinstance(parsed, list):
+                        content_chain = parsed
+                    else:
+                        content_chain = [{"type": "text", "data": {"text": raw_content}}]
+                except Exception:
+                    content_chain = [{"type": "text", "data": {"text": raw_content}}]
+
+            text_parts: list[str] = []
+            for seg in content_chain:
+                if not isinstance(seg, dict):
+                    continue
+                seg_type = seg.get("type")
+                seg_data = seg.get("data", {}) if isinstance(seg.get("data"), dict) else {}
+
+                if seg_type in ("text", "plain"):
+                    text = seg_data.get("text", "")
+                    if isinstance(text, str) and text:
+                        text_parts.append(text)
+                elif seg_type == "at":
+                    qq = seg_data.get("qq")
+                    if qq:
+                        text_parts.append(f"@{qq}")
+                elif seg_type == "image":
+                    text_parts.append("[图片]")
+                elif seg_type == "face":
+                    face_id = seg_data.get("id")
+                    text_parts.append(f"[表情:{face_id}]" if face_id is not None else "[表情]")
+                elif seg_type in ("forward", "forward_msg", "nodes"):
+                    nested = seg_data.get("content")
+                    if isinstance(nested, list):
+                        nested_text = self._extract_forward_text_from_nodes(
+                            nested,
+                            depth=depth + 1,
+                            max_depth=max_depth,
+                        )
+                        if nested_text:
+                            text_parts.append(nested_text)
+                    else:
+                        text_parts.append("[转发消息]")
+
+            node_text = "".join(text_parts).strip()
+            if node_text:
+                lines.append(f"{sender_name}: {node_text}")
+
+        return "\n".join(lines).strip()
+
+    async def _fetch_forward_text(self, forward_id: str) -> str:
+        if not forward_id:
+            return ""
+
+        candidates: list[dict[str, Any]] = [{"id": forward_id}]
+        if str(forward_id).isdigit():
+            candidates.insert(0, {"id": int(forward_id)})
+        candidates.extend([{"message_id": forward_id}, {"forward_id": forward_id}])
+
+        payload: dict[str, Any] | None = None
+        for params in candidates:
+            try:
+                payload = await self.bot.call_action("get_forward_msg", **params)
+                if isinstance(payload, dict):
+                    break
+            except Exception:
+                continue
+
+        if not isinstance(payload, dict):
+            return ""
+
+        data = payload.get("data", payload)
+        if not isinstance(data, dict):
+            return ""
+
+        nodes = (
+            data.get("messages")
+            or data.get("message")
+            or data.get("nodes")
+            or data.get("nodeList")
+        )
+        text = self._extract_forward_text_from_nodes(nodes if isinstance(nodes, list) else [])
+        return text.strip()
 
     async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
@@ -393,6 +506,33 @@ class AiocqhttpAdapter(Platform):
                     text = m["data"].get("markdown") or m["data"].get("content", "")
                     abm.message.append(Plain(text=text))
                     message_str += text
+            elif t in ("forward", "forward_msg"):
+                for m in m_group:
+                    data = m.get("data", {}) if isinstance(m.get("data"), dict) else {}
+                    if t in ComponentTypes:
+                        try:
+                            abm.message.append(ComponentTypes[t](**data))
+                        except Exception:
+                            pass
+
+                    fid = data.get("id") or data.get("message_id") or data.get("forward_id")
+                    if not fid:
+                        continue
+
+                    forward_text = await self._fetch_forward_text(str(fid))
+                    if not forward_text:
+                        # 至少保留占位，避免纯转发被识别为空输入
+                        if not message_str.strip():
+                            message_str = "[转发消息]"
+                        else:
+                            message_str += "\n[转发消息]"
+                        continue
+
+                    if message_str.strip():
+                        message_str += "\n"
+                    # 限制长度，避免超长转发导致上下文爆炸
+                    clipped = forward_text[:4000]
+                    message_str += f"[转发消息]\n{clipped}"
             else:
                 for m in m_group:
                     try:
