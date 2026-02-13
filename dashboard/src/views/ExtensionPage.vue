@@ -176,6 +176,283 @@ const refreshingMarket = ref(false);
 const sortBy = ref("default"); // default, stars, author, updated
 const sortOrder = ref("desc"); // desc (降序) or asc (升序)
 
+// Plugin collection import/export
+const collectionExportDialog = reactive({
+  show: false,
+  name: "",
+  description: "",
+  includeConfigs: true,
+  includePriority: true,
+  loading: false,
+});
+
+const collectionImport = reactive({
+  validating: false,
+  importing: false,
+  rawText: "",
+  validatedCollection: null,
+  preview: null,
+  previewLoading: false,
+  showConfirm: false,
+  mode: "add",
+  applyConfigs: true,
+  overwriteExistingConfigs: false,
+  applyPriority: true,
+  proxy: "",
+  result: null,
+  showResult: false,
+});
+
+const cleanModeConfirmed = ref(false);
+
+const collectionFileInput = ref(null);
+
+const safeFileName = (name) =>
+  (name || "collection")
+    .toString()
+    .trim()
+    .replace(/[\\/:*?"<>|\n\r\t]+/g, "_")
+    .slice(0, 120);
+
+const downloadJson = (filename, data) => {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    // Some environments (or browser settings) may block programmatic downloads.
+    // Fallback to opening a new tab so user can save manually.
+    toast(tm("collection.messages.downloadBlocked"), "warning");
+    window.open(url, "_blank", "noopener");
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+};
+
+const openExportCollectionDialog = () => {
+  collectionExportDialog.name = "";
+  collectionExportDialog.description = "";
+  collectionExportDialog.includeConfigs = true;
+  collectionExportDialog.includePriority = true;
+  collectionExportDialog.loading = false;
+  collectionExportDialog.show = true;
+};
+
+const exportCollection = async () => {
+  const name = (collectionExportDialog.name || "").trim();
+  if (!name) {
+    toast(tm("collection.messages.nameRequired"), "error");
+    return;
+  }
+
+  collectionExportDialog.loading = true;
+  try {
+    const res = await axios.get("/api/plugin/collection/export", {
+        params: {
+          name,
+          description: collectionExportDialog.description || undefined,
+          include_configs: collectionExportDialog.includeConfigs,
+          include_priority: collectionExportDialog.includePriority,
+        },
+      });
+
+    if (res.data.status === "error") {
+      toast(res.data.message || tm("collection.messages.exportFailed"), "error");
+      return;
+    }
+
+    const collection = res.data.data;
+    downloadJson(`${safeFileName(name)}.json`, collection);
+    toast(tm("collection.messages.exportSuccess"), "success");
+    collectionExportDialog.show = false;
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    toast(`${tm("collection.messages.exportFailed")}: ${errorMsg}`, "error");
+  } finally {
+    collectionExportDialog.loading = false;
+  }
+};
+
+const openImportFilePicker = () => {
+  if (!collectionFileInput.value) return;
+  collectionFileInput.value.value = null;
+  collectionFileInput.value.click();
+};
+
+const readSelectedCollectionFile = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.readAsText(file);
+  });
+};
+
+const refreshCollectionPreview = async () => {
+  if (!collectionImport.validatedCollection) return;
+
+  collectionImport.previewLoading = true;
+  try {
+    const previewRes = await axios.post("/api/plugin/collection/preview", {
+      collection: collectionImport.validatedCollection,
+      import_mode: collectionImport.mode,
+    });
+
+    if (previewRes.data.status === "ok") {
+      collectionImport.preview = previewRes.data.data;
+    } else {
+      toast(
+        previewRes.data.message || tm("collection.messages.previewFailed"),
+        "warning",
+      );
+    }
+  } catch (e) {
+    const errorMsg = e.response?.data?.message || e.message || String(e);
+    toast(`${tm("collection.messages.previewFailed")}: ${errorMsg}`, "warning");
+  } finally {
+    collectionImport.previewLoading = false;
+  }
+};
+
+const validateAndPreviewCollection = async (rawText) => {
+  collectionImport.validating = true;
+  collectionImport.rawText = rawText;
+  collectionImport.validatedCollection = null;
+  collectionImport.preview = null;
+  collectionImport.previewLoading = false;
+  collectionImport.showConfirm = false;
+  collectionImport.result = null;
+  collectionImport.showResult = false;
+
+  let collectionObj;
+  try {
+    collectionObj = JSON.parse(rawText);
+  } catch (e) {
+    toast(tm("collection.messages.invalidJson"), "error");
+    collectionImport.validating = false;
+    return;
+  }
+
+  try {
+    const res = await axios.post("/api/plugin/collection/validate", {
+      collection: collectionObj,
+    });
+
+    if (res.data.status === "error") {
+      toast(res.data.message || tm("collection.messages.validateFailed"), "error");
+      return;
+    }
+
+    const valid = Boolean(res.data?.data?.valid);
+    if (!valid) {
+      const errors = Array.isArray(res.data?.data?.errors)
+        ? res.data.data.errors.join("; ")
+        : "";
+      toast(
+        `${tm("collection.messages.validateFailed")}${errors ? `: ${errors}` : ""}`,
+        "error",
+      );
+      return;
+    }
+
+    // Validation endpoint returns { valid: true } (not the collection).
+    // Keep the original parsed collection for preview + import.
+    collectionImport.validatedCollection = collectionObj;
+    collectionImport.mode = "add";
+    collectionImport.applyConfigs = true;
+    collectionImport.overwriteExistingConfigs = false;
+    collectionImport.applyPriority = true;
+    collectionImport.proxy = getSelectedGitHubProxy();
+
+    // Fetch preview so user can see what will happen before importing.
+    await refreshCollectionPreview();
+
+    collectionImport.showConfirm = true;
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    toast(`${tm("collection.messages.validateFailed")}: ${errorMsg}`, "error");
+  } finally {
+    collectionImport.validating = false;
+  }
+};
+
+const onCollectionFileSelected = async (e) => {
+  const file = e?.target?.files?.[0];
+  if (!file) return;
+
+  if (file.size > 10 * 1024 * 1024) {
+    toast(tm("collection.messages.fileTooLarge"), "error");
+    return;
+  }
+
+  try {
+    const text = await readSelectedCollectionFile(file);
+    await validateAndPreviewCollection(text);
+  } catch (err) {
+    const errorMsg = err?.message || String(err);
+    toast(`${tm("collection.messages.readFailed")}: ${errorMsg}`, "error");
+  }
+};
+
+const getCollectionPluginCount = (collection) => {
+  if (!collection) return 0;
+  const plugins = collection.plugins || collection.items || [];
+  if (Array.isArray(plugins)) return plugins.length;
+  if (typeof plugins === "object" && plugins) return Object.keys(plugins).length;
+  return 0;
+};
+
+const confirmImportCollection = async () => {
+  if (!collectionImport.validatedCollection) return;
+  if (collectionImport.mode === "clean" && !cleanModeConfirmed.value) return;
+
+  collectionImport.importing = true;
+  try {
+    const proxy = collectionImport.proxy;
+    const payload = {
+      collection: collectionImport.validatedCollection,
+      import_mode: collectionImport.mode,
+      apply_configs: collectionImport.applyConfigs,
+      overwrite_existing_configs: collectionImport.overwriteExistingConfigs,
+      apply_priority: collectionImport.applyPriority,
+      ...(proxy ? { proxy } : {}),
+    };
+
+    const res = await axios.post("/api/plugin/collection/import", payload);
+    if (res.data.status === "error") {
+      toast(res.data.message || tm("collection.messages.importFailed"), "error");
+      return;
+    }
+
+    collectionImport.result = res.data.data;
+    collectionImport.showConfirm = false;
+    collectionImport.showResult = true;
+
+    toast(tm("collection.messages.importFinished"), "success");
+
+    try {
+      await getExtensions();
+      await checkAndPromptConflicts();
+    } catch (e) {
+      // Ignore refresh errors
+    }
+  } catch (err) {
+    const errorMsg = err.response?.data?.message || err.message || String(err);
+    toast(`${tm("collection.messages.importFailed")}: ${errorMsg}`, "error");
+  } finally {
+    collectionImport.importing = false;
+  }
+};
+
 // 插件市场拼音搜索
 const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
 const toPinyinText = (s) =>
@@ -1128,6 +1405,19 @@ watch(isListView, (newVal) => {
 });
 
 watch(
+  () => collectionImport.mode,
+  async (newMode, oldMode) => {
+    if (newMode === oldMode) return;
+    cleanModeConfirmed.value = false;
+
+    if (!collectionImport.showConfirm) return;
+    if (!collectionImport.validatedCollection) return;
+
+    await refreshCollectionPreview();
+  },
+);
+
+watch(
   () => route.fullPath,
   () => {
     const tab = extractTabFromHash(getLocationHash());
@@ -1254,6 +1544,26 @@ watch(activeTab, (newTab) => {
                       ? tm("buttons.hideSystemPlugins")
                       : tm("buttons.showSystemPlugins")
                   }}
+                </v-btn>
+
+                <v-btn
+                  class="ml-2"
+                  color="primary"
+                  variant="tonal"
+                  @click="openExportCollectionDialog"
+                >
+                  <v-icon>mdi-export</v-icon>
+                  {{ tm("collection.buttons.export") }}
+                </v-btn>
+
+                <v-btn
+                  class="ml-2"
+                  color="primary"
+                  variant="tonal"
+                  @click="openImportFilePicker"
+                >
+                  <v-icon>mdi-import</v-icon>
+                  {{ tm("collection.buttons.import") }}
                 </v-btn>
 
                 <v-btn
@@ -1498,11 +1808,7 @@ watch(activeTab, (newTab) => {
                             }}</v-tooltip>
                           </v-btn>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="reloadPlugin(item.name)"
-                          >
+                          <v-btn icon size="small" @click="reloadPlugin(item.name)">
                             <v-icon>mdi-refresh</v-icon>
                             <v-tooltip activator="parent" location="top">{{
                               tm("tooltips.reload")
@@ -1520,11 +1826,7 @@ watch(activeTab, (newTab) => {
                             }}</v-tooltip>
                           </v-btn>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="showPluginInfo(item)"
-                          >
+                          <v-btn icon size="small" @click="showPluginInfo(item)">
                             <v-icon>mdi-information</v-icon>
                             <v-tooltip activator="parent" location="top">{{
                               tm("tooltips.viewInfo")
@@ -1543,11 +1845,7 @@ watch(activeTab, (newTab) => {
                             }}</v-tooltip>
                           </v-btn>
 
-                          <v-btn
-                            icon
-                            size="small"
-                            @click="updateExtension(item.name)"
-                          >
+                          <v-btn icon size="small" @click="updateExtension(item.name)">
                             <v-icon>mdi-update</v-icon>
                             <v-tooltip activator="parent" location="top">{{
                               tm("tooltips.update")
@@ -1718,9 +2016,8 @@ watch(activeTab, (newTab) => {
                         >
                           {{
                             selectedSource
-                              ? customSources.find(
-                                  (s) => s.url === selectedSource,
-                                )?.name
+                              ? customSources.find((s) => s.url === selectedSource)
+                                  ?.name
                               : tm("market.defaultSource")
                           }}
                         </span>
@@ -1800,7 +2097,7 @@ watch(activeTab, (newTab) => {
                   "
                 ></div>
 
-                <!--右侧：操作按钮组-->
+                <!-- 右侧：操作按钮组 -->
                 <div class="d-flex align-center">
                   <v-tooltip location="top" :text="tm('market.addSource')">
                     <template v-slot:activator="{ props }">
@@ -2173,10 +2470,7 @@ watch(activeTab, (newTab) => {
                           </v-chip>
                         </template>
                         <v-list density="compact">
-                          <v-list-item
-                            v-for="tag in plugin.tags.slice(2)"
-                            :key="tag"
-                          >
+                          <v-list-item v-for="tag in plugin.tags.slice(2)" :key="tag">
                             <v-chip
                               :color="tag === 'danger' ? 'error' : 'primary'"
                               label
@@ -2281,6 +2575,345 @@ watch(activeTab, (newTab) => {
       </div>
     </v-col>
   </v-row>
+
+  <input
+    ref="collectionFileInput"
+    type="file"
+    accept="application/json,.json"
+    style="display: none"
+    @change="onCollectionFileSelected"
+  />
+
+  <v-dialog v-model="collectionExportDialog.show" max-width="560">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon class="mr-2">mdi-export</v-icon>
+        {{ tm("collection.dialogs.export.title") }}
+      </v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model="collectionExportDialog.name"
+          :label="tm('collection.fields.name')"
+          variant="outlined"
+          density="comfortable"
+          required
+        ></v-text-field>
+        <v-text-field
+          v-model="collectionExportDialog.description"
+          :label="tm('collection.fields.description')"
+          variant="outlined"
+          density="comfortable"
+        ></v-text-field>
+        <v-switch
+          v-model="collectionExportDialog.includeConfigs"
+          :label="tm('collection.fields.includeConfigs')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+        <v-switch
+          v-model="collectionExportDialog.includePriority"
+          :label="tm('collection.fields.includePriority')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="collectionExportDialog.show = false">{{
+          tm("buttons.cancel")
+        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="collectionExportDialog.loading"
+          @click="exportCollection"
+        >
+          {{ tm("collection.buttons.export") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="collectionImport.showConfirm" max-width="640">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon class="mr-2">mdi-import</v-icon>
+        {{ tm("collection.dialogs.import.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="mb-2">
+          <div class="text-subtitle-1 font-weight-medium">
+            {{ collectionImport.validatedCollection?.name || tm('collection.fields.unnamed') }}
+          </div>
+          <div class="text-body-2 text-medium-emphasis" v-if="collectionImport.validatedCollection?.description">
+            {{ collectionImport.validatedCollection.description }}
+          </div>
+          <div class="text-caption text-medium-emphasis mt-1">
+            {{ tm('collection.labels.pluginCount', { count: getCollectionPluginCount(collectionImport.validatedCollection) }) }}
+          </div>
+        </div>
+
+        <v-alert
+          v-if="collectionImport.previewLoading"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-3"
+        >
+          {{ tm('collection.preview.loading') }}
+        </v-alert>
+
+        <v-alert
+          v-else-if="collectionImport.preview"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-3"
+        >
+          <div class="text-body-2">
+            {{ tm('collection.preview.willInstall', { count: collectionImport.preview.plugins_to_install?.length ?? 0 }) }}
+          </div>
+          <div
+            class="text-caption text-medium-emphasis"
+            v-if="(collectionImport.preview.plugins_to_install?.length ?? 0) > 0"
+          >
+            {{ collectionImport.preview.plugins_to_install.map((p) => p.name).join(', ') }}
+          </div>
+          <div class="text-body-2 mt-2">
+            {{ tm('collection.preview.willSkip', { count: collectionImport.preview.plugins_to_skip?.length ?? 0 }) }}
+          </div>
+          <div class="text-body-2 mt-2" v-if="collectionImport.mode === 'clean'">
+            {{ tm('collection.preview.willUninstall', { count: collectionImport.preview.plugins_to_uninstall?.length ?? 0 }) }}
+          </div>
+          <div class="text-body-2 mt-2">
+            {{ tm('collection.preview.configsCount', { count: collectionImport.preview.configs_count ?? 0 }) }}
+          </div>
+          <div class="text-body-2 mt-2">
+            {{
+              tm('collection.preview.priorityOverrides', {
+                value: collectionImport.preview.has_priority_overrides
+                  ? tm('collection.result.yes')
+                  : tm('collection.result.no'),
+              })
+            }}
+          </div>
+        </v-alert>
+
+        <v-alert
+          v-if="collectionImport.mode === 'clean' && collectionImport.preview"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mb-3"
+        >
+          <div class="text-body-2">
+            {{
+              tm('collection.cleanMode.warning', {
+                count: collectionImport.preview.plugins_to_uninstall?.length ?? 0,
+              })
+            }}
+          </div>
+          <div
+            class="text-caption text-medium-emphasis"
+            v-if="(collectionImport.preview.plugins_to_uninstall?.length ?? 0) > 0"
+          >
+            {{ collectionImport.preview.plugins_to_uninstall.map((p) => p.name).join(', ') }}
+          </div>
+          <v-checkbox
+            v-model="cleanModeConfirmed"
+            hide-details
+            density="compact"
+            class="mt-2"
+            :label="tm('collection.cleanMode.confirmCheckbox', { count: collectionImport.preview.plugins_to_uninstall?.length ?? 0 })"
+          ></v-checkbox>
+        </v-alert>
+
+        <v-select
+          v-model="collectionImport.mode"
+          :items="[
+            { title: tm('collection.importModes.add'), value: 'add' },
+            { title: tm('collection.importModes.clean'), value: 'clean' },
+          ]"
+          :label="tm('collection.fields.importMode')"
+          variant="outlined"
+          density="comfortable"
+        ></v-select>
+
+        <v-switch
+          v-model="collectionImport.applyConfigs"
+          :label="tm('collection.fields.applyConfigs')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+
+        <div
+          v-if="collectionImport.applyConfigs"
+          class="pl-4"
+          style="border-left: 2px solid rgba(var(--v-border-color), 0.3)"
+        >
+          <v-switch
+            v-model="collectionImport.overwriteExistingConfigs"
+            :disabled="collectionImport.mode !== 'add'"
+            :label="tm('collection.fields.overwriteExistingConfigs')"
+            hide-details
+            density="comfortable"
+          ></v-switch>
+          <div class="text-caption text-medium-emphasis mt-1">
+            {{ tm('collection.fields.overwriteExistingConfigsHint') }}
+          </div>
+        </div>
+
+        <v-switch
+          v-model="collectionImport.applyPriority"
+          :label="tm('collection.fields.applyPriority')"
+          hide-details
+          density="comfortable"
+        ></v-switch>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="collectionImport.showConfirm = false">{{
+          tm("buttons.cancel")
+        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="collectionImport.importing"
+          :disabled="collectionImport.mode === 'clean' && !cleanModeConfirmed"
+          @click="confirmImportCollection"
+        >
+          {{ tm('collection.buttons.confirmImport') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="collectionImport.showResult" max-width="720">
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon class="mr-2">mdi-check-circle-outline</v-icon>
+        {{ tm('collection.dialogs.result.title') }}
+      </v-card-title>
+      <v-card-text>
+        <div v-if="collectionImport.result" style="white-space: pre-wrap">
+          <div>
+            {{
+              tm('collection.result.installed', {
+                count: Array.isArray(collectionImport.result.installed)
+                  ? collectionImport.result.installed.length
+                  : collectionImport.result.installed ?? 0,
+              })
+            }}
+          </div>
+          <div v-if="Array.isArray(collectionImport.result.installed) && collectionImport.result.installed.length">
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.installed.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.failed', {
+                count: Array.isArray(collectionImport.result.failed)
+                  ? collectionImport.result.failed.length
+                  : collectionImport.result.failed ?? 0,
+              })
+            }}
+          </div>
+          <div v-if="Array.isArray(collectionImport.result.failed) && collectionImport.result.failed.length">
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.failed.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.skipped', {
+                count: Array.isArray(collectionImport.result.skipped)
+                  ? collectionImport.result.skipped.length
+                  : collectionImport.result.skipped ?? 0,
+              })
+            }}
+          </div>
+          <div v-if="Array.isArray(collectionImport.result.skipped) && collectionImport.result.skipped.length">
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.skipped.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.uninstalled', {
+                count: Array.isArray(collectionImport.result.uninstalled)
+                  ? collectionImport.result.uninstalled.length
+                  : collectionImport.result.uninstalled ?? 0,
+              })
+            }}
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.uninstall_failed) && collectionImport.result.uninstall_failed.length">
+            {{ tm('collection.result.uninstallFailed', { count: collectionImport.result.uninstall_failed.length }) }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.uninstall_failed.join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.configsApplied', {
+                count: collectionImport.result.configs_applied ?? 0,
+              })
+            }}
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.reloaded) && collectionImport.result.reloaded.length">
+            {{ tm('collection.result.reloaded', { count: collectionImport.result.reloaded.length }) }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.reloaded.join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.reload_failed) && collectionImport.result.reload_failed.length">
+            {{ tm('collection.result.reloadFailed', { count: collectionImport.result.reload_failed.length }) }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.reload_failed.map((p) => p.name).join(', ') }}
+            </div>
+          </div>
+
+          <div class="mt-2" v-if="Array.isArray(collectionImport.result.installed) && collectionImport.result.installed.find((p) => p.exported_version_note)">
+            {{ tm('collection.result.exportedVersionNote') }}
+            <div class="text-caption text-medium-emphasis">
+              {{ collectionImport.result.installed.find((p) => p.exported_version_note)?.exported_version_note }}
+            </div>
+          </div>
+
+          <div class="mt-2">
+            {{
+              tm('collection.result.priorityApplied', {
+                count: collectionImport.result.priority_persisted === true
+                  ? tm('collection.result.yes')
+                  : collectionImport.result.priority_applied_in_memory === true
+                    ? 'yes (in memory)'
+                    : tm('collection.result.no'),
+              })
+            }}
+          </div>
+          <div
+            class="text-caption text-medium-emphasis"
+            v-if="collectionImport.result.priority_note"
+          >
+            {{ collectionImport.result.priority_note }}
+          </div>
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn variant="text" @click="collectionImport.showResult = false">{{
+          tm('buttons.close')
+        }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <!-- 配置对话框 -->
   <v-dialog v-model="configDialog" max-width="900">

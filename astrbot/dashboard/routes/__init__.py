@@ -2,6 +2,7 @@ from .auth import AuthRoute
 from .backup import BackupRoute
 from .chat import ChatRoute
 from .chatui_project import ChatUIProjectRoute
+from .collection import CollectionRoute
 from .command import CommandRoute
 from .config import ConfigRoute
 from .conversation import ConversationRoute
@@ -25,6 +26,7 @@ __all__ = [
     "BackupRoute",
     "ChatRoute",
     "ChatUIProjectRoute",
+    "CollectionRoute",
     "CommandRoute",
     "ConfigRoute",
     "ConversationRoute",
