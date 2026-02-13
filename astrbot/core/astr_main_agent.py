@@ -985,6 +985,7 @@ async def build_main_agent(
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
         llm_compress_provider=_get_compress_provider(config, plugin_context, provider),
+        llm_compress_use_compact_api=config.llm_compress_use_compact_api,
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,

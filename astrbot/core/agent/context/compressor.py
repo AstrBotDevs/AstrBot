@@ -1,3 +1,5 @@
+import typing as T
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from ..message import Message
@@ -154,6 +156,7 @@ class LLMSummaryCompressor:
         keep_recent: int = 4,
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
+        use_compact_api: bool = True,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -162,10 +165,12 @@ class LLMSummaryCompressor:
             keep_recent: The number of latest messages to keep (default: 4).
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            use_compact_api: Whether to prefer provider native compact API when available.
         """
         self.provider = provider
         self.keep_recent = keep_recent
         self.compression_threshold = compression_threshold
+        self.use_compact_api = use_compact_api
 
         self.instruction_text = instruction_text or (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
@@ -212,8 +217,13 @@ class LLMSummaryCompressor:
         if not callable(compact_context):
             return None
 
+        compact_context_callable = T.cast(
+            "Callable[[list[Message]], Awaitable[list[Message]]]",
+            compact_context,
+        )
+
         try:
-            compacted_messages = await compact_context(messages_to_summarize)
+            compacted_messages = await compact_context_callable(messages_to_summarize)
         except Exception as e:
             logger.warning(
                 f"Native compact failed, fallback to summary compression: {e}"
@@ -246,9 +256,8 @@ class LLMSummaryCompressor:
         if not messages_to_summarize:
             return messages
 
-        native_compact_supported = self._supports_native_compact()
-
-        if native_compact_supported:
+        # Only try native compact if user allows it and provider supports it
+        if self.use_compact_api and self._supports_native_compact():
             compacted = await self._try_native_compact(
                 system_messages,
                 messages_to_summarize,
