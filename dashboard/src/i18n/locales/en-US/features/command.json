@@ -14,6 +14,7 @@
     "headers": {
       "command": "Command",
       "type": "Type",
+      "priority": "Priority",
       "plugin": "Plugin",
       "description": "Description",
       "permission": "Permission",

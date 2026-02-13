@@ -14,6 +14,7 @@
     "headers": {
       "command": "指令",
       "type": "类型",
+      "priority": "优先级",
       "plugin": "所属插件",
       "description": "描述",
       "permission": "权限",

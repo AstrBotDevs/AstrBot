@@ -40,6 +40,7 @@ class CommandDescriptor:
     is_group: bool = False
     is_sub_command: bool = False
     reserved: bool = False
+    priority: int = 0
     config: CommandConfig | None = None
     has_conflict: bool = False
     sub_commands: list[CommandDescriptor] = field(default_factory=list)
@@ -334,6 +335,7 @@ def _build_descriptor(handler: StarHandlerMetadata) -> CommandDescriptor | None:
         is_group=isinstance(filter_ref, CommandGroupFilter),
         is_sub_command=is_sub_command,
         reserved=plugin_meta.reserved if plugin_meta else False,
+        priority=star_handlers_registry._get_effective_priority(handler),
     )
     return descriptor
 
@@ -533,6 +535,7 @@ def _descriptor_to_dict(desc: CommandDescriptor) -> dict[str, Any]:
         "is_group": desc.is_group,
         "has_conflict": desc.has_conflict,
         "reserved": desc.reserved,
+        "priority": desc.priority,
     }
     # 如果是指令组，包含子指令列表
     if desc.is_group and desc.sub_commands:

@@ -18,7 +18,12 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
-from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.star.star import star_registry
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    star_handlers_registry,
+)
 from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
@@ -59,6 +64,11 @@ class PluginRoute(Route):
             "/plugin/changelog": ("GET", self.get_plugin_changelog),
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
+            "/plugin/priority": [
+                ("GET", self.get_priority),
+                ("POST", self.update_priority),
+            ],
+            "/plugin/priority/reset": ("POST", self.reset_priority),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -394,6 +404,213 @@ class PluginRoute(Route):
             handlers.append(info)
 
         return handlers
+
+    def _build_filters_summary(self, handler: StarHandlerMetadata) -> str:
+        if handler.event_type != EventType.AdapterMessageEvent:
+            return "auto"
+
+        parts: list[str] = []
+        for f in handler.event_filters:
+            if isinstance(f, CommandFilter):
+                base = ""
+                if getattr(f, "parent_command_names", None):
+                    base = f.parent_command_names[0]
+                cmd = f"{base} {f.command_name}".strip()
+                parts.append(f"command: {cmd}")
+            elif isinstance(f, CommandGroupFilter):
+                try:
+                    cmd = f.get_complete_command_names()[0].strip()
+                except Exception:
+                    cmd = "command_group"
+                parts.append(f"command_group: {cmd}")
+            elif isinstance(f, RegexFilter):
+                parts.append(f"regex: {f.regex_str}")
+            elif isinstance(f, PermissionTypeFilter):
+                parts.append("permission")
+
+        return ", ".join(parts) if parts else "event_listener"
+
+    def _build_priority_map(self, stored: dict) -> dict[str, int]:
+        """Build a priority map from stored override data."""
+        return {
+            k: int(v.get("priority", 0))
+            for k, v in stored.items()
+            if isinstance(v, dict)
+        }
+
+    async def _load_priority_overrides(self) -> tuple[dict, dict[str, int]]:
+        """Load priority overrides from storage and return (stored_data, priority_map)."""
+        stored = await sp.global_get("handler_priority_overrides", {})
+        stored = stored if isinstance(stored, dict) else {}
+        return stored, self._build_priority_map(stored)
+
+    async def _save_and_apply_priority_overrides(self, stored: dict) -> None:
+        """Save priority overrides to storage and apply to registry."""
+        await sp.global_put("handler_priority_overrides", stored)
+        star_handlers_registry.load_priority_overrides(self._build_priority_map(stored))
+
+    async def get_priority(self):
+        try:
+            _, priority_map = await self._load_priority_overrides()
+            star_handlers_registry.load_priority_overrides(priority_map)
+
+            plugins = []
+            for star in star_registry:
+                if not star.module_path:
+                    continue
+
+                handlers_payload = []
+                handler_effective_priorities: list[int] = []
+                for handler_full_name in star.star_handler_full_names:
+                    handler = star_handlers_registry.get_handler_by_full_name(
+                        handler_full_name
+                    )
+                    if handler is None:
+                        continue
+
+                    effective_priority = int(
+                        priority_map.get(
+                            handler.handler_full_name,
+                            handler.extras_configs.get("priority", 0) or 0,
+                        )
+                        or 0
+                    )
+                    original_priority = int(
+                        handler.extras_configs.get("priority", 0) or 0
+                    )
+                    is_overridden = handler.handler_full_name in priority_map
+
+                    handlers_payload.append(
+                        {
+                            "handler_full_name": handler.handler_full_name,
+                            "handler_name": handler.handler_name,
+                            "event_type": handler.event_type.name,
+                            "priority": effective_priority,
+                            "original_priority": original_priority,
+                            "is_overridden": is_overridden,
+                            "enabled": handler.enabled,
+                            "description": handler.desc or "无描述",
+                            "filters_summary": self._build_filters_summary(handler),
+                        }
+                    )
+                    handler_effective_priorities.append(effective_priority)
+
+                plugins.append(
+                    {
+                        "name": star.name,
+                        "display_name": star.display_name,
+                        "module_path": star.module_path,
+                        "activated": star.activated,
+                        "reserved": star.reserved,
+                        "handlers": handlers_payload,
+                        "effective_priority": max(handler_effective_priorities)
+                        if handler_effective_priorities
+                        else 0,
+                    }
+                )
+
+            return Response().ok({"plugins": plugins}).__dict__
+        except Exception as e:
+            logger.error(f"/api/plugin/priority: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
+
+    async def update_priority(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        try:
+            data = await request.get_json()
+            updates = data.get("updates", []) if isinstance(data, dict) else []
+            if not isinstance(updates, list) or not updates:
+                return (
+                    Response().error("updates fields must be a non-empty list").__dict__
+                )
+
+            stored, priority_map = await self._load_priority_overrides()
+
+            for item in updates:
+                if not isinstance(item, dict):
+                    continue
+                handler_full_name = item.get("handler_full_name")
+                if not isinstance(handler_full_name, str) or not handler_full_name:
+                    continue
+                if "priority" not in item:
+                    continue
+                try:
+                    new_priority = int(item["priority"])
+                except (TypeError, ValueError):
+                    return (
+                        Response()
+                        .error(f"invalid priority for handler: {handler_full_name}")
+                        .__dict__
+                    )
+
+                handler = star_handlers_registry.get_handler_by_full_name(
+                    handler_full_name
+                )
+                if handler is None:
+                    return (
+                        Response()
+                        .error(f"handler not found: {handler_full_name}")
+                        .__dict__
+                    )
+
+                original_priority = handler.extras_configs.get("priority", 0)
+                stored[handler_full_name] = {
+                    "priority": new_priority,
+                    "original_priority": original_priority,
+                }
+                priority_map[handler_full_name] = new_priority
+
+            await self._save_and_apply_priority_overrides(stored)
+
+            return Response().ok(None, "优先级更新成功").__dict__
+        except Exception as e:
+            logger.error(f"/api/plugin/priority: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
+
+    async def reset_priority(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        try:
+            data = await request.get_json()
+            if not isinstance(data, dict):
+                return Response().error("invalid request body").__dict__
+
+            reset_all = data.get("reset_all", False) is True
+            handler_full_names = data.get("handler_full_names", [])
+
+            stored, _ = await self._load_priority_overrides()
+            if reset_all:
+                stored = {}
+            else:
+                if not isinstance(handler_full_names, list) or not handler_full_names:
+                    return (
+                        Response()
+                        .error(
+                            "handler_full_names must be a non-empty list or reset_all=true"
+                        )
+                        .__dict__
+                    )
+                for h in handler_full_names:
+                    if isinstance(h, str):
+                        stored.pop(h, None)
+
+            await self._save_and_apply_priority_overrides(stored)
+
+            return Response().ok(None, "重置成功").__dict__
+        except Exception as e:
+            logger.error(f"/api/plugin/priority/reset: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
 
     async def install_plugin(self):
         if DEMO_MODE:
