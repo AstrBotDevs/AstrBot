@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python -m pip install uv \
     && echo "3.12" > .python-version \
-    && uv export --format requirements.txt --output-file requirements.txt --frozen \
+    && uv export --format requirements.txt --output-file requirements.txt \
     && uv pip install -r requirements.txt --no-cache-dir --system \
     && uv pip install socksio uv pilk --no-cache-dir --system
 
