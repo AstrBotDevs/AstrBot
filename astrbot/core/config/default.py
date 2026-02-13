@@ -15,6 +15,7 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "wecom_ai_bot",
     "slack",
     "lark",
+    "line",
 ]
 
 # 默认配置
@@ -415,6 +416,7 @@ CONFIG_METADATA_2 = {
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
                     },
+                    # LINE's config is located in line_adapter.py
                     "Satori": {
                         "id": "satori",
                         "type": "satori",

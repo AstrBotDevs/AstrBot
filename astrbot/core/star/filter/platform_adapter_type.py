@@ -20,6 +20,7 @@ class PlatformAdapterType(enum.Flag):
     WEIXIN_OFFICIAL_ACCOUNT = enum.auto()
     SATORI = enum.auto()
     MISSKEY = enum.auto()
+    LINE = enum.auto()
     ALL = (
         AIOCQHTTP
         | QQOFFICIAL
@@ -34,6 +35,7 @@ class PlatformAdapterType(enum.Flag):
         | WEIXIN_OFFICIAL_ACCOUNT
         | SATORI
         | MISSKEY
+        | LINE
     )
 
 
@@ -51,6 +53,7 @@ ADAPTER_NAME_2_TYPE = {
     "weixin_official_account": PlatformAdapterType.WEIXIN_OFFICIAL_ACCOUNT,
     "satori": PlatformAdapterType.SATORI,
     "misskey": PlatformAdapterType.MISSKEY,
+    "line": PlatformAdapterType.LINE,
 }
 
 
