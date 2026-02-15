@@ -206,12 +206,55 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
+def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
+    """Compare and log Computer/sandbox configuration changes."""
+    old_ps = old_config.get("provider_settings", {})
+    new_ps = new_config.get("provider_settings", {})
+
+    # Check computer_use_runtime
+    old_runtime = old_ps.get("computer_use_runtime", "none")
+    new_runtime = new_ps.get("computer_use_runtime", "none")
+    if old_runtime != new_runtime:
+        logger.info(
+            "[Computer] Config changed: computer_use_runtime %s -> %s",
+            old_runtime,
+            new_runtime,
+        )
+
+    # Check sandbox sub-keys
+    old_sandbox = old_ps.get("sandbox", {})
+    new_sandbox = new_ps.get("sandbox", {})
+    all_keys = set(old_sandbox.keys()) | set(new_sandbox.keys())
+    for key in sorted(all_keys):
+        old_val = old_sandbox.get(key)
+        new_val = new_sandbox.get(key)
+        if old_val != new_val:
+            # Mask tokens/secrets in log output
+            if "token" in key or "secret" in key:
+                old_display = "***" if old_val else "(empty)"
+                new_display = "***" if new_val else "(empty)"
+            else:
+                old_display = old_val
+                new_display = new_val
+            logger.info(
+                "[Computer] Config changed: sandbox.%s %s -> %s",
+                key,
+                old_display,
+                new_display,
+            )
+
+
 def save_config(
     post_config: dict, config: AstrBotConfig, is_core: bool = False
 ) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
+
+    # Snapshot old Computer config for change detection
+    if is_core:
+        _log_computer_config_changes(dict(config), post_config)
+
     try:
         if is_core:
             errors, post_config = validate_config(
