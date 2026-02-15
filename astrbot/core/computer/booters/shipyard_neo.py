@@ -305,9 +305,14 @@ class ShipyardNeoBooter(ComputerBooter):
 
     async def shutdown(self) -> None:
         if self._client is not None:
+            sandbox_id = getattr(self._sandbox, "id", "unknown")
+            logger.info(
+                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id
+            )
             await self._client.__aexit__(None, None, None)
             self._client = None
             self._sandbox = None
+            logger.info("[Computer] Shipyard Neo sandbox shut down: id=%s", sandbox_id)
 
     @property
     def fs(self) -> FileSystemComponent:
@@ -340,6 +345,7 @@ class ShipyardNeoBooter(ComputerBooter):
             content = f.read()
         remote_path = file_name.lstrip("/")
         await self._sandbox.filesystem.upload(remote_path, content)
+        logger.info("[Computer] File uploaded to Neo sandbox: %s", remote_path)
         return {
             "success": True,
             "message": "File uploaded successfully",
@@ -355,6 +361,11 @@ class ShipyardNeoBooter(ComputerBooter):
             os.makedirs(local_dir, exist_ok=True)
         with open(local_path, "wb") as f:
             f.write(cast(bytes, content))
+        logger.info(
+            "[Computer] File downloaded from Neo sandbox: %s -> %s",
+            remote_path,
+            local_path,
+        )
 
     async def available(self) -> bool:
         if self._sandbox is None:
@@ -362,7 +373,14 @@ class ShipyardNeoBooter(ComputerBooter):
         try:
             await self._sandbox.refresh()
             status = getattr(self._sandbox.status, "value", str(self._sandbox.status))
-            return status not in {"failed", "expired"}
+            healthy = status not in {"failed", "expired"}
+            logger.info(
+                "[Computer] Neo sandbox health check: id=%s, status=%s, healthy=%s",
+                getattr(self._sandbox, "id", "unknown"),
+                status,
+                healthy,
+            )
+            return healthy
         except Exception as e:
             logger.error(f"Error checking Shipyard Neo sandbox availability: {e}")
             return False

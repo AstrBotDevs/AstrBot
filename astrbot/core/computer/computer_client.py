@@ -231,6 +231,11 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             )
         payload = _decode_sync_payload(str(sync_result.get("stdout", "") or ""))
         _update_sandbox_skills_cache(payload)
+        managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
+        logger.info(
+            "[Computer] Sandbox skill sync complete: managed=%d",
+            len(managed),
+        )
     finally:
         if zip_path.exists():
             try:
@@ -255,6 +260,9 @@ async def get_booter(
             session_booter.pop(session_id, None)
     if session_id not in session_booter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
+        logger.info(
+            f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
+        )
         if booter_type == "shipyard":
             from .booters.shipyard import ShipyardBooter
 
@@ -273,6 +281,9 @@ async def get_booter(
             token = sandbox_cfg.get("shipyard_neo_access_token", "")
             ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
             profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
+            logger.info(
+                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
+            )
             client = ShipyardNeoBooter(
                 endpoint_url=ep,
                 access_token=token,
@@ -288,6 +299,9 @@ async def get_booter(
 
         try:
             await client.boot(uuid_str)
+            logger.info(
+                f"[Computer] Sandbox booted successfully: type={booter_type}, session={session_id}"
+            )
             await _sync_skills_to_sandbox(client)
         except Exception as e:
             logger.error(f"Error booting sandbox for session {session_id}: {e}")
@@ -299,6 +313,9 @@ async def get_booter(
 
 async def sync_skills_to_active_sandboxes() -> None:
     """Best-effort skills synchronization for all active sandbox sessions."""
+    logger.info(
+        "[Computer] Syncing skills to %d active sandbox(es)", len(session_booter)
+    )
     for session_id, booter in list(session_booter.items()):
         try:
             if not await booter.available():
