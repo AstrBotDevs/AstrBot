@@ -876,6 +876,26 @@
         "description": "对外可达的回调接口地址",
         "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
       },
+      "dashboard": {
+        "ssl": {
+          "enable": {
+            "description": "启用 WebUI HTTPS",
+            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+          },
+          "cert_file": {
+            "description": "SSL 证书文件路径",
+            "hint": "证书文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。"
+          },
+          "key_file": {
+            "description": "SSL 私钥文件路径",
+            "hint": "私钥文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。"
+          },
+          "ca_certs": {
+            "description": "SSL CA 证书文件路径",
+            "hint": "可选。用于指定 CA 证书文件路径。"
+          }
+        }
+      },
       "timezone": {
         "description": "时区",
         "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
