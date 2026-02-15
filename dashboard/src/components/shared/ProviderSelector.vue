@@ -5,7 +5,7 @@
     </span>
     <span v-else class="provider-name-text">
       <template v-if="multiple">
-        {{ selectedSummary }}
+        {{ tm('providerSelector.selectedCount', { count: selectedProviders.length }) }}
       </template>
       <template v-else>
         {{ modelValue }}
@@ -14,6 +14,20 @@
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
       {{ buttonText || tm('providerSelector.buttonText') }}
     </v-btn>
+  </div>
+
+  <div v-if="multiple && selectedProviders.length > 0" class="selected-preview mt-2">
+    <v-chip
+      v-for="providerId in selectedProviders"
+      :key="`preview-${providerId}`"
+      size="x-small"
+      color="primary"
+      variant="tonal"
+      class="mr-1 mb-1"
+      label
+    >
+      {{ providerId }}
+    </v-chip>
   </div>
 
   <!-- Provider Selection Dialog -->
@@ -206,17 +220,6 @@ const hasSelection = computed(() => {
   return Boolean(props.modelValue)
 })
 
-const selectedSummary = computed(() => {
-  if (!props.multiple) {
-    return ''
-  }
-  const ids = selectedProviders.value
-  if (ids.length <= 2) {
-    return ids.join(', ')
-  }
-  return `${ids.slice(0, 2).join(', ')} +${ids.length - 2}`
-})
-
 const defaultTab = computed(() => {
   if (props.providerType === 'agent_runner' && props.providerSubtype) {
     return `select_agent_runner_provider:${props.providerSubtype}`
@@ -369,6 +372,11 @@ function closeProviderDrawer() {
   white-space: nowrap;
   max-width: calc(100% - 80px);
   display: inline-block;
+}
+
+.selected-preview {
+  width: 100%;
+  max-width: 100%;
 }
 
 .selected-order-list {
