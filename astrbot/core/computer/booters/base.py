@@ -1,4 +1,9 @@
-from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
+from ..olayer import (
+    BrowserComponent,
+    FileSystemComponent,
+    PythonComponent,
+    ShellComponent,
+)
 
 
 class ComputerBooter:
@@ -10,6 +15,12 @@ class ComputerBooter:
 
     @property
     def shell(self) -> ShellComponent: ...
+
+    @property
+    def browser(self) -> BrowserComponent:
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support browser capability."
+        )
 
     async def boot(self, session_id: str) -> None: ...
 
