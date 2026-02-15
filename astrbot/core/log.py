@@ -299,7 +299,9 @@ class LogManager:
     ) -> int:
         os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
         rotation = f"{max_mb} MB" if max_mb and max_mb > 0 else None
-        retention = f"{backup_count} files" if rotation else None
+        retention = (
+            backup_count if rotation and backup_count and backup_count > 0 else None
+        )
         if trace:
             return _loguru.add(
                 file_path,
@@ -363,13 +365,16 @@ class LogManager:
         if not enable_file:
             return
 
-        cls._file_sink_id = cls._add_file_sink(
-            file_path=cls._resolve_log_path(file_path),
-            level=logger.level,
-            max_mb=max_mb,
-            backup_count=3,
-            trace=False,
-        )
+        try:
+            cls._file_sink_id = cls._add_file_sink(
+                file_path=cls._resolve_log_path(file_path),
+                level=logger.level,
+                max_mb=max_mb,
+                backup_count=3,
+                trace=False,
+            )
+        except Exception as e:
+            logger.error(f"Failed to add file sink: {e}")
 
     @classmethod
     def configure_trace_logger(cls, config: dict | None) -> None:
