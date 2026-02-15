@@ -399,7 +399,9 @@ class ProviderOpenAIOfficial(Provider):
                 text_parts = []
                 for part in raw_content:
                     if isinstance(part, dict) and part.get("type") == "text":
-                        text_parts.append(part.get("text", ""))
+                        text_val = part.get("text", "")
+                        # Coerce to str in case text is null or non-string
+                        text_parts.append(str(text_val) if text_val is not None else "")
                 return "".join(text_parts)
             # Not content-part format, return string representation
             return str(raw_content)
@@ -416,27 +418,36 @@ class ProviderOpenAIOfficial(Provider):
                 and len(check_content) < 8192
             ):
                 try:
-                    parsed = json.loads(check_content.replace("'", '"'))
-                    if isinstance(parsed, list):
-                        # Only convert if it matches OpenAI content-part schema
-                        # i.e., at least one item has {'type': 'text', 'text': ...}
-                        has_content_part = any(
-                            isinstance(part, dict) and part.get("type") == "text"
-                            for part in parsed
-                        )
-                        if has_content_part:
-                            text_parts = []
-                            for part in parsed:
-                                if (
-                                    isinstance(part, dict)
-                                    and part.get("type") == "text"
-                                ):
-                                    text_parts.append(part.get("text", ""))
-                            if text_parts:
-                                return "".join(text_parts)
-                except (json.JSONDecodeError, TypeError):
-                    # Not a valid JSON, keep original string
-                    pass
+                    # First try standard JSON parsing
+                    parsed = json.loads(check_content)
+                except json.JSONDecodeError:
+                    # If that fails, try parsing as Python literal (handles single quotes)
+                    # This is safer than blind replace("'", '"') which corrupts apostrophes
+                    try:
+                        import ast
+
+                        parsed = ast.literal_eval(check_content)
+                    except (ValueError, SyntaxError):
+                        parsed = None
+
+                if isinstance(parsed, list):
+                    # Only convert if it matches OpenAI content-part schema
+                    # i.e., at least one item has {'type': 'text', 'text': ...}
+                    has_content_part = any(
+                        isinstance(part, dict) and part.get("type") == "text"
+                        for part in parsed
+                    )
+                    if has_content_part:
+                        text_parts = []
+                        for part in parsed:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                text_val = part.get("text", "")
+                                # Coerce to str in case text is null or non-string
+                                text_parts.append(
+                                    str(text_val) if text_val is not None else ""
+                                )
+                        if text_parts:
+                            return "".join(text_parts)
             return content
 
         return str(raw_content)
