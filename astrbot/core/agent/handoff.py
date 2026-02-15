@@ -44,6 +44,14 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                     "type": "string",
                     "description": "The input to be handed off to another agent. This should be a clear and concise request or task.",
                 },
+                "background_mission": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, run this handoff as a background mission: "
+                        "return immediately and notify the user when the subagent finishes. "
+                        "Use this for long-running or non-urgent tasks. Defaults to false."
+                    ),
+                },
             },
         }
 
