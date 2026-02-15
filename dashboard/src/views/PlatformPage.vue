@@ -195,7 +195,7 @@ import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
 import { useCommonStore } from '@/stores/common';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n, mergeDynamicTranslations } from '@/i18n/composables';
 import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -280,15 +280,25 @@ export default {
     this.statsRefreshInterval = setInterval(() => {
       this.getPlatformStats();
     }, 10000);
+    
+    // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
+    window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
 
   beforeUnmount() {
     if (this.statsRefreshInterval) {
       clearInterval(this.statsRefreshInterval);
     }
+    // 移除语言切换事件监听器
+    window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
 
   methods: {
+    // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
+    handleLocaleChange() {
+      this.getConfig();
+    },
+
     // 从工具函数导入
     getPlatformIcon(platform_id) {
       // 首先检查是否有来自插件的 logo_token
@@ -305,6 +315,12 @@ export default {
         this.config_data = res.data.data.config;
         this.fetched = true
         this.metadata = res.data.data.metadata;
+
+        // 将插件平台适配器的 i18n 翻译注入到前端 i18n 系统中
+        const platformI18n = res.data.data.platform_i18n_translations;
+        if (platformI18n && typeof platformI18n === 'object') {
+          mergeDynamicTranslations('features.config-metadata', platformI18n);
+        }
       }).catch((err) => {
         this.showError(err);
       });

@@ -5,6 +5,7 @@ import json
 import random
 import re
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -27,6 +28,7 @@ from astrbot.core.utils.network_utils import (
     is_connection_error,
     log_connection_failure,
 )
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
 
@@ -36,6 +38,128 @@ from ..register import register_provider_adapter
     "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
+    _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+
+    @classmethod
+    def _truncate_error_text_candidate(cls, text: str) -> str:
+        if len(text) <= cls._ERROR_TEXT_CANDIDATE_MAX_CHARS:
+            return text
+        return text[: cls._ERROR_TEXT_CANDIDATE_MAX_CHARS]
+
+    @staticmethod
+    def _safe_json_dump(value: Any) -> str | None:
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except Exception:
+            return None
+
+    def _get_image_moderation_error_patterns(self) -> list[str]:
+        """Return configured moderation patterns (case-insensitive substring match, not regex)."""
+        configured = self.provider_config.get("image_moderation_error_patterns", [])
+        patterns: list[str] = []
+        if isinstance(configured, str):
+            configured = [configured]
+        if isinstance(configured, list):
+            for pattern in configured:
+                if not isinstance(pattern, str):
+                    continue
+                pattern = pattern.strip()
+                if pattern:
+                    patterns.append(pattern)
+        return patterns
+
+    @staticmethod
+    def _extract_error_text_candidates(error: Exception) -> list[str]:
+        candidates: list[str] = []
+
+        def _append_candidate(candidate: Any):
+            if candidate is None:
+                return
+            text = str(candidate).strip()
+            if not text:
+                return
+            candidates.append(
+                ProviderOpenAIOfficial._truncate_error_text_candidate(text)
+            )
+
+        _append_candidate(str(error))
+
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            err_obj = body.get("error")
+            body_text = ProviderOpenAIOfficial._safe_json_dump(
+                {"error": err_obj} if isinstance(err_obj, dict) else body
+            )
+            _append_candidate(body_text)
+            if isinstance(err_obj, dict):
+                for field in ("message", "type", "code", "param"):
+                    value = err_obj.get(field)
+                    if value is not None:
+                        _append_candidate(value)
+        elif isinstance(body, str):
+            _append_candidate(body)
+
+        response = getattr(error, "response", None)
+        if response is not None:
+            response_text = getattr(response, "text", None)
+            if isinstance(response_text, str):
+                _append_candidate(response_text)
+
+        return normalize_and_dedupe_strings(candidates)
+
+    def _is_content_moderated_upload_error(self, error: Exception) -> bool:
+        patterns = [
+            pattern.lower() for pattern in self._get_image_moderation_error_patterns()
+        ]
+        if not patterns:
+            return False
+        candidates = [
+            candidate.lower()
+            for candidate in self._extract_error_text_candidates(error)
+        ]
+        for pattern in patterns:
+            if any(pattern in candidate for candidate in candidates):
+                return True
+        return False
+
+    @staticmethod
+    def _context_contains_image(contexts: list[dict]) -> bool:
+        for context in contexts:
+            content = context.get("content")
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "image_url":
+                    return True
+        return False
+
+    async def _fallback_to_text_only_and_retry(
+        self,
+        payloads: dict,
+        context_query: list,
+        chosen_key: str,
+        available_api_keys: list[str],
+        func_tool: ToolSet | None,
+        reason: str,
+        *,
+        image_fallback_used: bool = False,
+    ) -> tuple:
+        logger.warning(
+            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            reason,
+        )
+        new_contexts = await self._remove_image_from_context(context_query)
+        payloads["messages"] = new_contexts
+        return (
+            False,
+            chosen_key,
+            available_api_keys,
+            payloads,
+            new_contexts,
+            func_tool,
+            image_fallback_used,
+        )
+
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
@@ -403,6 +527,7 @@ class ProviderOpenAIOfficial(Provider):
         available_api_keys: list[str],
         retry_cnt: int,
         max_retries: int,
+        image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
         if "429" in str(e):
@@ -422,6 +547,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     context_query,
                     func_tool,
+                    image_fallback_used,
                 )
             raise e
         if "maximum context length" in str(e):
@@ -437,20 +563,34 @@ class ProviderOpenAIOfficial(Provider):
                 payloads,
                 context_query,
                 func_tool,
+                image_fallback_used,
             )
         if "The model is not a VLM" in str(e):  # siliconcloud
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
             # 尝试删除所有 image
-            new_contexts = await self._remove_image_from_context(context_query)
-            payloads["messages"] = new_contexts
-            context_query = new_contexts
-            return (
-                False,
-                chosen_key,
-                available_api_keys,
+            return await self._fallback_to_text_only_and_retry(
                 payloads,
                 context_query,
+                chosen_key,
+                available_api_keys,
                 func_tool,
+                "model_not_vlm",
+                image_fallback_used=True,
             )
+        if self._is_content_moderated_upload_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "image_content_moderated",
+                image_fallback_used=True,
+            )
+
         if (
             "Function calling is not enabled" in str(e)
             or ("tool" in str(e).lower() and "support" in str(e).lower())
@@ -461,7 +601,15 @@ class ProviderOpenAIOfficial(Provider):
                 f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
             )
             payloads.pop("tools", None)
-            return False, chosen_key, available_api_keys, payloads, context_query, None
+            return (
+                False,
+                chosen_key,
+                available_api_keys,
+                payloads,
+                context_query,
+                None,
+                image_fallback_used,
+            )
         # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
 
         if "tool" in str(e).lower() and "support" in str(e).lower():
@@ -501,6 +649,7 @@ class ProviderOpenAIOfficial(Provider):
         max_retries = 10
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
+        image_fallback_used = False
 
         last_exception = None
         retry_cnt = 0
@@ -518,6 +667,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     context_query,
                     func_tool,
+                    image_fallback_used,
                 ) = await self._handle_api_error(
                     e,
                     payloads,
@@ -527,6 +677,7 @@ class ProviderOpenAIOfficial(Provider):
                     available_api_keys,
                     retry_cnt,
                     max_retries,
+                    image_fallback_used=image_fallback_used,
                 )
                 if success:
                     break
@@ -564,6 +715,7 @@ class ProviderOpenAIOfficial(Provider):
         max_retries = 10
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
+        image_fallback_used = False
 
         last_exception = None
         retry_cnt = 0
@@ -582,6 +734,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     context_query,
                     func_tool,
+                    image_fallback_used,
                 ) = await self._handle_api_error(
                     e,
                     payloads,
@@ -591,6 +744,7 @@ class ProviderOpenAIOfficial(Provider):
                     available_api_keys,
                     retry_cnt,
                     max_retries,
+                    image_fallback_used=image_fallback_used,
                 )
                 if success:
                     break

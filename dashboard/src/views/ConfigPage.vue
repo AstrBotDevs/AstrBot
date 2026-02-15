@@ -4,29 +4,17 @@
     <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
       style="display: flex; flex-direction: column; align-items: start;">
 
-      <!-- 普通配置选择区域 -->
       <div class="d-flex flex-row pr-4"
-        style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
+        style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
         <div class="d-flex flex-row align-center" style="gap: 12px;">
           <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
             v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
-          <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a>
+          <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
 
         </div>
-
-        <v-btn-toggle v-model="configType" mandatory color="primary" variant="outlined" density="comfortable"
-          rounded="md" @update:model-value="onConfigTypeToggle">
-          <v-btn value="normal" prepend-icon="mdi-cog" size="large">
-            {{ tm('configSelection.normalConfig') }}
-          </v-btn>
-          <v-btn value="system" prepend-icon="mdi-cog-outline" size="large">
-            {{ tm('configSelection.systemConfig') }}
-          </v-btn>
-        </v-btn-toggle>
       </div>
-
       <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
@@ -252,6 +240,9 @@ export default {
     config_data_str(val) {
       this.config_data_has_changed = true;
     },
+    '$route.fullPath'(newVal) {
+      this.syncConfigTypeFromHash(newVal);
+    },
     initialConfigId(newVal) {
       if (!newVal) {
         return;
@@ -299,12 +290,57 @@ export default {
     }
   },
   mounted() {
+    const hashConfigType = this.extractConfigTypeFromHash(
+      this.$route?.fullPath || ''
+    );
+    this.configType = hashConfigType || 'normal';
+    this.isSystemConfig = this.configType === 'system';
+
     const targetConfigId = this.initialConfigId || 'default';
     this.getConfigInfoList(targetConfigId);
     // 初始化配置类型状态
     this.configType = this.isSystemConfig ? 'system' : 'normal';
+    
+    // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
+    window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
+  },
+
+  beforeUnmount() {
+    // 移除语言切换事件监听器
+    window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
   methods: {
+    // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
+    handleLocaleChange() {
+      // 重新加载当前配置
+      if (this.selectedConfigID) {
+        this.getConfig(this.selectedConfigID);
+      } else if (this.isSystemConfig) {
+        this.getConfig();
+      }
+    },
+
+  },
+  methods: {
+    extractConfigTypeFromHash(hash) {
+      const rawHash = String(hash || '');
+      const lastHashIndex = rawHash.lastIndexOf('#');
+      if (lastHashIndex === -1) {
+        return null;
+      }
+      const cleanHash = rawHash.slice(lastHashIndex + 1);
+      return cleanHash === 'system' || cleanHash === 'normal' ? cleanHash : null;
+    },
+    syncConfigTypeFromHash(hash) {
+      const configType = this.extractConfigTypeFromHash(hash);
+      if (!configType || configType === this.configType) {
+        return false;
+      }
+
+      this.configType = configType;
+      this.onConfigTypeToggle();
+      return true;
+    },
     getConfigInfoList(abconf_id) {
       // 获取配置列表
       axios.get('/api/config/abconfs').then((res) => {
@@ -550,19 +586,7 @@ export default {
       // 保持向后兼容性，更新 configType
       this.configType = this.isSystemConfig ? 'system' : 'normal';
 
-      this.fetched = false; // 重置加载状态
-
-      if (this.isSystemConfig) {
-        // 切换到系统配置
-        this.getConfig();
-      } else {
-        // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
-        if (this.selectedConfigID) {
-          this.getConfig(this.selectedConfigID);
-        } else {
-          this.getConfigInfoList("default");
-        }
-      }
+      this.onConfigTypeToggle();
     },
     openTestChat() {
       if (!this.selectedConfigID) {

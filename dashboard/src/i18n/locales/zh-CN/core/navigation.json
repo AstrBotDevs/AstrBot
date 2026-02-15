@@ -40,5 +40,9 @@
     "notFound": "未找到该版本的更新日志",
     "selectVersion": "选择版本",
     "current": "当前"
+  },
+  "configTabs": {
+    "normal": "普通配置",
+    "system": "系统配置"
   }
 }
