@@ -75,6 +75,7 @@ dev = [
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
+astr = "astrbot.cli.client.__main__:main"
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]

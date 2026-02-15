@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ruff format:*)",
+      "Bash(ruff check:*)",
+      "Bash(git -C \"C:\\\\Users\\\\29594\\\\Desktop\\\\astrbotcc\\\\AstrBot\" diff)",
+      "Bash(git -C \"C:\\\\Users\\\\29594\\\\Desktop\\\\astrbotcc\\\\AstrBot\" add -A)",
+      "Bash(git -C \"C:\\\\Users\\\\29594\\\\Desktop\\\\astrbotcc\\\\AstrBot\" commit -m \"style: ruff format\")"
+    ]
+  }
+}

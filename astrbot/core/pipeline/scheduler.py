@@ -85,4 +85,8 @@ class PipelineScheduler:
         if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
             await event.send(None)
 
+        # 通知事件管道已完成（鸭子类型，供需要收集完整响应的适配器使用）
+        if hasattr(event, "finalize"):
+            await event.finalize()
+
         logger.debug("pipeline 执行完毕。")
