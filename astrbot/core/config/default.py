@@ -196,6 +196,12 @@ DEFAULT_CONFIG = {
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "ssl": {
+            "enable": False,
+            "cert_file": "",
+            "key_file": "",
+            "ca_certs": "",
+        },
     },
     "platform": [],
     "platform_specific": {
@@ -2406,6 +2412,19 @@ CONFIG_METADATA_2 = {
                 "type": "string",
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
+            "dashboard.ssl.enable": {"type": "bool"},
+            "dashboard.ssl.cert_file": {
+                "type": "string",
+                "condition": {"dashboard.ssl.enable": True},
+            },
+            "dashboard.ssl.key_file": {
+                "type": "string",
+                "condition": {"dashboard.ssl.enable": True},
+            },
+            "dashboard.ssl.ca_certs": {
+                "type": "string",
+                "condition": {"dashboard.ssl.enable": True},
+            },
             "log_file_enable": {"type": "bool"},
             "log_file_path": {"type": "string", "condition": {"log_file_enable": True}},
             "log_file_max_mb": {"type": "int", "condition": {"log_file_enable": True}},
@@ -3419,6 +3438,29 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "string",
                         "hint": "控制台输出日志的级别。",
                         "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                    },
+                    "dashboard.ssl.enable": {
+                        "description": "启用 WebUI HTTPS",
+                        "type": "bool",
+                        "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.ssl.cert_file": {
+                        "description": "SSL 证书文件路径",
+                        "type": "string",
+                        "hint": "证书文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。",
+                        "condition": {"dashboard.ssl.enable": True},
+                    },
+                    "dashboard.ssl.key_file": {
+                        "description": "SSL 私钥文件路径",
+                        "type": "string",
+                        "hint": "私钥文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。",
+                        "condition": {"dashboard.ssl.enable": True},
+                    },
+                    "dashboard.ssl.ca_certs": {
+                        "description": "SSL CA 证书文件路径",
+                        "type": "string",
+                        "hint": "可选。用于指定 CA 证书文件路径。",
+                        "condition": {"dashboard.ssl.enable": True},
                     },
                     "log_file_enable": {
                         "description": "启用文件日志",
