@@ -222,7 +222,8 @@
       "togglePlugin": "插件",
       "viewHandlers": "查看行为",
       "updateTo": "更新到",
-      "reinstall": "重新安装"
+      "reinstall": "重新安装",
+      "extensionPage": "插件扩展页面"
     },
     "status": {
       "hasUpdate": "有新版本可用",
