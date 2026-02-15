@@ -45,7 +45,8 @@
     "unknownType": "Unknown type",
     "createProvider": "Create Provider",
     "manageProviders": "Provider Management",
-    "selectProviderPool": "Select Provider Pool..."
+    "selectProviderPool": "Select Provider Pool...",
+    "selectedCount": "{count} provider(s) selected"
   },
   "personaSelector": {
     "notSelected": "Not selected",

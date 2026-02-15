@@ -31,11 +31,15 @@
     },
     "ai": {
       "description": "模型",
-      "hint": "当使用非内置 Agent 执行器时,默认聊天模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
+      "hint": "当使用非内置 Agent 执行器时,默认对话模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
       "provider_settings": {
         "default_provider_id": {
-          "description": "默认聊天模型",
+          "description": "默认对话模型",
           "hint": "留空时使用第一个模型"
+        },
+        "fallback_chat_models": {
+          "description": "回退对话模型列表",
+          "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
         },
         "default_image_caption_provider_id": {
           "description": "默认图片转述模型",

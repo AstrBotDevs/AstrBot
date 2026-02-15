@@ -68,6 +68,7 @@ DEFAULT_CONFIG = {
     "provider_settings": {
         "enable": True,
         "default_provider_id": "",
+        "fallback_chat_models": [],
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -2207,6 +2208,10 @@ CONFIG_METADATA_2 = {
                     "default_provider_id": {
                         "type": "string",
                     },
+                    "fallback_chat_models": {
+                        "type": "list",
+                        "items": {"type": "string"},
+                    },
                     "wake_prefix": {
                         "type": "string",
                     },
@@ -2504,14 +2509,21 @@ CONFIG_METADATA_3 = {
             },
             "ai": {
                 "description": "模型",
-                "hint": "当使用非内置 Agent 执行器时，默认聊天模型和默认图片转述模型可能会无效，但某些插件会依赖此配置项来调用 AI 能力。",
+                "hint": "当使用非内置 Agent 执行器时，默认对话模型和默认图片转述模型可能会无效，但某些插件会依赖此配置项来调用 AI 能力。",
                 "type": "object",
                 "items": {
                     "provider_settings.default_provider_id": {
-                        "description": "默认聊天模型",
+                        "description": "默认对话模型",
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空时使用第一个模型",
+                    },
+                    "provider_settings.fallback_chat_models": {
+                        "description": "回退对话模型列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "_special": "select_providers",
+                        "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
