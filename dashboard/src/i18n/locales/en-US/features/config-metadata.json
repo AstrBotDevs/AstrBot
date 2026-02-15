@@ -37,6 +37,10 @@
           "description": "Default Chat Model",
           "hint": "Uses the first model when left empty"
         },
+        "fallback_chat_models": {
+          "description": "Fallback chat model IDs",
+          "hint": "When the primary chat model request fails, fallback to these chat models in order."
+        },
         "default_image_caption_provider_id": {
           "description": "Default Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"

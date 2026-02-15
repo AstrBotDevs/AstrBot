@@ -45,7 +45,8 @@
     "unknownType": "未知类型",
     "createProvider": "创建提供商",
     "manageProviders": "提供商管理",
-    "selectProviderPool": "选择提供商池..."
+    "selectProviderPool": "选择提供商池...",
+    "selectedCount": "已选择 {count} 个提供商"
   },
   "personaSelector": {
     "notSelected": "未选择",
