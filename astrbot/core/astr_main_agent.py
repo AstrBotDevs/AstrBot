@@ -871,10 +871,13 @@ def _get_compress_provider(
 
 
 def _get_fallback_chat_providers(
-    provider: Provider, plugin_context: Context
+    provider: Provider, plugin_context: Context, provider_settings: dict
 ) -> list[Provider]:
-    fallback_ids = provider.provider_config.get("fallback_chat_models", [])
+    fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
+        logger.warning(
+            "fallback_chat_models setting is not a list, skip fallback providers."
+        )
         return []
 
     provider_id = str(provider.provider_config.get("id", ""))
@@ -1125,7 +1128,9 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
-        fallback_providers=_get_fallback_chat_providers(provider, plugin_context),
+        fallback_providers=_get_fallback_chat_providers(
+            provider, plugin_context, config.provider_settings
+        ),
     )
 
     if apply_reset:
