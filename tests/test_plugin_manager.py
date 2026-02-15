@@ -40,6 +40,7 @@ def plugin_manager_pm(tmp_path):
     persona_manager = MagicMock()
     astrbot_config_mgr = MagicMock()
     knowledge_base_manager = MagicMock()
+    cron_manager = MagicMock()
 
     star_context = Context(
         event_queue,
@@ -52,6 +53,7 @@ def plugin_manager_pm(tmp_path):
         persona_manager,
         astrbot_config_mgr,
         knowledge_base_manager=knowledge_base_manager,
+        cron_manager=cron_manager,
     )
 
     # Create the PluginManager instance

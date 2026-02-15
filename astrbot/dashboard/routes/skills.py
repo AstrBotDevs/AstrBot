@@ -179,6 +179,7 @@ class SkillsRoute(Route):
 
     async def get_neo_candidates(self):
         try:
+            logger.info("[Neo] GET /skills/neo/candidates requested.")
             endpoint, access_token = self._get_neo_client_config()
             status = request.args.get("status")
             skill_key = request.args.get("skill_key")
@@ -197,13 +198,17 @@ class SkillsRoute(Route):
                     limit=limit,
                     offset=offset,
                 )
-                return Response().ok(_to_jsonable(candidates)).__dict__
+                result = _to_jsonable(candidates)
+                total = result.get("total", "?") if isinstance(result, dict) else "?"
+                logger.info(f"[Neo] Candidates fetched: total={total}")
+                return Response().ok(result).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
     async def get_neo_releases(self):
         try:
+            logger.info("[Neo] GET /skills/neo/releases requested.")
             endpoint, access_token = self._get_neo_client_config()
             skill_key = request.args.get("skill_key")
             stage = request.args.get("stage")
@@ -224,13 +229,17 @@ class SkillsRoute(Route):
                     limit=limit,
                     offset=offset,
                 )
-                return Response().ok(_to_jsonable(releases)).__dict__
+                result = _to_jsonable(releases)
+                total = result.get("total", "?") if isinstance(result, dict) else "?"
+                logger.info(f"[Neo] Releases fetched: total={total}")
+                return Response().ok(result).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
     async def get_neo_payload(self):
         try:
+            logger.info("[Neo] GET /skills/neo/payload requested.")
             endpoint, access_token = self._get_neo_client_config()
             payload_ref = request.args.get("payload_ref", "")
             if not payload_ref:
@@ -243,6 +252,7 @@ class SkillsRoute(Route):
                 access_token=access_token,
             ) as client:
                 payload = await client.skills.get_payload(payload_ref)
+                logger.info(f"[Neo] Payload fetched: ref={payload_ref}")
                 return Response().ok(_to_jsonable(payload)).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -256,6 +266,7 @@ class SkillsRoute(Route):
                 .__dict__
             )
         try:
+            logger.info("[Neo] POST /skills/neo/evaluate requested.")
             endpoint, access_token = self._get_neo_client_config()
             data = await request.get_json()
             candidate_id = data.get("candidate_id")
@@ -277,6 +288,9 @@ class SkillsRoute(Route):
                     benchmark_id=data.get("benchmark_id"),
                     report=data.get("report"),
                 )
+                logger.info(
+                    f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}"
+                )
                 return Response().ok(_to_jsonable(result)).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -290,6 +304,7 @@ class SkillsRoute(Route):
                 .__dict__
             )
         try:
+            logger.info("[Neo] POST /skills/neo/promote requested.")
             endpoint, access_token = self._get_neo_client_config()
             data = await request.get_json()
             candidate_id = data.get("candidate_id")
@@ -310,6 +325,9 @@ class SkillsRoute(Route):
                     candidate_id, stage=stage
                 )
                 release_json = _to_jsonable(release)
+                logger.info(
+                    f"[Neo] Candidate promoted: id={candidate_id}, stage={stage}"
+                )
 
                 sync_json = None
                 if stage == "stable" and sync_to_local:
@@ -329,7 +347,13 @@ class SkillsRoute(Route):
                             "map_path": sync_result.map_path,
                             "synced_at": sync_result.synced_at,
                         }
+                        logger.info(
+                            f"[Neo] Stable release synced to local: skill={sync_result.local_skill_name}"
+                        )
                     except Exception as sync_err:
+                        logger.error(
+                            f"[Neo] Stable sync failed, rolling back: {sync_err}"
+                        )
                         rollback_result = await client.skills.rollback_release(
                             str(release_json.get("id", ""))
                         )
@@ -364,6 +388,7 @@ class SkillsRoute(Route):
                 .__dict__
             )
         try:
+            logger.info("[Neo] POST /skills/neo/rollback requested.")
             endpoint, access_token = self._get_neo_client_config()
             data = await request.get_json()
             release_id = data.get("release_id")
@@ -377,6 +402,7 @@ class SkillsRoute(Route):
                 access_token=access_token,
             ) as client:
                 result = await client.skills.rollback_release(release_id)
+                logger.info(f"[Neo] Release rolled back: id={release_id}")
                 return Response().ok(_to_jsonable(result)).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -390,6 +416,7 @@ class SkillsRoute(Route):
                 .__dict__
             )
         try:
+            logger.info("[Neo] POST /skills/neo/sync requested.")
             endpoint, access_token = self._get_neo_client_config()
             data = await request.get_json()
             release_id = data.get("release_id")
@@ -410,6 +437,10 @@ class SkillsRoute(Route):
                     release_id=release_id,
                     skill_key=skill_key,
                     require_stable=require_stable,
+                )
+                logger.info(
+                    f"[Neo] Release synced to local: skill={result.local_skill_name}, "
+                    f"release_id={result.release_id}"
                 )
                 return (
                     Response()
