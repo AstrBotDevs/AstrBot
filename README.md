@@ -81,6 +81,10 @@ uv tool install astrbot
 astrbot
 ```
 
+#### 启动器一键部署（AstrBot Launcher）
+
+进入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 仓库，在 Releases 页最新版本下找到对应的系统安装包安装即可。
+
 #### 宝塔面板部署
 
 AstrBot 与宝塔面板合作，已上架至宝塔面板。
