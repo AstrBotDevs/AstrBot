@@ -154,11 +154,11 @@
           },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
-            "hint": "Shipyard Neo(Bay) 服务的 API 访问地址。"
+            "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
           },
           "shipyard_neo_access_token": {
             "description": "Shipyard Neo 访问令牌",
-            "hint": "用于访问 Shipyard Neo(Bay) 服务的访问令牌。"
+            "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。"
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",

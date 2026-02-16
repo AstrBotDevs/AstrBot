@@ -151,11 +151,11 @@
           },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
-            "hint": "API access address for Shipyard Neo(Bay) service."
+            "hint": "Bay API address, default http://127.0.0.1:8114."
           },
           "shipyard_neo_access_token": {
             "description": "Shipyard Neo Access Token",
-            "hint": "Access token for Shipyard Neo(Bay) service."
+            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",

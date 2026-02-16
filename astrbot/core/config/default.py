@@ -2687,7 +2687,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_endpoint": {
                         "description": "Shipyard Neo API Endpoint",
                         "type": "string",
-                        "hint": "Shipyard Neo(Bay) 服务的 API 访问地址。",
+                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",
@@ -2696,7 +2696,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_access_token": {
                         "description": "Shipyard Neo Access Token",
                         "type": "string",
-                        "hint": "用于访问 Shipyard Neo(Bay) 的访问令牌。",
+                        "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",
