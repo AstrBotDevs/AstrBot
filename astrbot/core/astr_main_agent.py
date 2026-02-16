@@ -45,6 +45,7 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
+from astrbot.core.provider.manager import llm_tools
 from astrbot.core.tools.cron_tools import (
     CREATE_CRON_JOB_TOOL,
     DELETE_CRON_JOB_TOOL,
@@ -769,6 +770,14 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
+    else:
+        # mcp tools
+        tool_set = req.func_tool
+        if not tool_set:
+            tool_set = ToolSet()
+        for tool in llm_tools.func_list:
+            if isinstance(tool, MCPTool):
+                tool_set.add_tool(tool)
 
 
 async def _handle_webchat(
