@@ -30,6 +30,66 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
+def _discover_bay_credentials(endpoint: str) -> str:
+    """Try to auto-discover Bay API key from credentials.json.
+
+    Search order:
+    1. BAY_DATA_DIR env var
+    2. Mono-repo relative path: ../pkgs/bay/ (dev layout)
+    3. Current working directory
+
+    Returns:
+        API key string, or empty string if not found.
+    """
+    import os
+
+    candidates: list[Path] = []
+
+    # 1. BAY_DATA_DIR env var
+    bay_data_dir = os.environ.get("BAY_DATA_DIR")
+    if bay_data_dir:
+        candidates.append(Path(bay_data_dir) / "credentials.json")
+
+    # 2. Mono-repo layout: AstrBot/../pkgs/bay/credentials.json
+    astrbot_root = Path(__file__).resolve().parents[3]  # astrbot/core/computer/ → root
+    candidates.append(astrbot_root.parent / "pkgs" / "bay" / "credentials.json")
+
+    # 3. Current working directory
+    candidates.append(Path.cwd() / "credentials.json")
+
+    for cred_path in candidates:
+        if not cred_path.is_file():
+            continue
+        try:
+            data = json.loads(cred_path.read_text())
+            api_key = data.get("api_key", "")
+            if api_key:
+                # Optionally verify endpoint matches
+                cred_endpoint = data.get("endpoint", "")
+                if (
+                    cred_endpoint
+                    and endpoint
+                    and cred_endpoint.rstrip("/") != endpoint.rstrip("/")
+                ):
+                    logger.warning(
+                        "[Computer] credentials.json endpoint mismatch: "
+                        "file=%s, configured=%s — using key anyway",
+                        cred_endpoint,
+                        endpoint,
+                    )
+                logger.info(
+                    "[Computer] Auto-discovered Bay API key from %s (prefix=%s)",
+                    cred_path,
+                    api_key[:12] + "..." if len(api_key) > 12 else api_key,
+                )
+                return api_key
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.debug("[Computer] Failed to read %s: %s", cred_path, exc)
+
+    logger.debug("[Computer] No Bay credentials.json found in search paths")
+    return ""
+
+
 def _build_sync_and_scan_command() -> str:
     script = f"""
 import json
@@ -281,6 +341,11 @@ async def get_booter(
             token = sandbox_cfg.get("shipyard_neo_access_token", "")
             ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
             profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
+
+            # Auto-discover token from Bay's credentials.json if not configured
+            if not token:
+                token = _discover_bay_credentials(ep)
+
             logger.info(
                 f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
             )
