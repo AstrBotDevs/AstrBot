@@ -279,7 +279,11 @@ class ShipyardNeoBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         _ = session_id
         if not self._endpoint_url or not self._access_token:
-            raise ValueError("Shipyard Neo sandbox configuration is incomplete.")
+            raise ValueError(
+                "Shipyard Neo sandbox configuration is incomplete. "
+                "Set endpoint (default http://127.0.0.1:8114) and access token, "
+                "or ensure Bay's credentials.json is accessible for auto-discovery."
+            )
 
         from shipyard_neo import BayClient
 
