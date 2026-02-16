@@ -40,6 +40,82 @@
     "updateAll": "Update All",
     "deleteSource": "Delete Source"
   },
+  "collection": {
+    "buttons": {
+      "export": "Export Collection",
+      "import": "Import Collection",
+      "confirmImport": "Confirm Import"
+    },
+    "dialogs": {
+      "export": {
+        "title": "Export Collection"
+      },
+      "import": {
+        "title": "Import Collection"
+      },
+      "result": {
+        "title": "Import Result"
+      }
+    },
+    "fields": {
+      "name": "Collection Name",
+      "description": "Description (optional)",
+      "includeConfigs": "Include configs",
+      "includePriority": "Include priority",
+      "importMode": "Import mode",
+      "applyConfigs": "Apply configs",
+      "overwriteExistingConfigs": "Also apply configs to already installed extensions (overwrites keys)",
+      "overwriteExistingConfigsHint": "Only applies to Add (add) mode. When off, configs are applied only to newly installed extensions.",
+      "applyPriority": "Apply priority",
+      "unnamed": "Unnamed collection"
+    },
+    "labels": {
+      "pluginCount": "Plugins: {count}"
+    },
+    "importModes": {
+      "add": "Add (add)",
+      "clean": "Clean then import (clean)"
+    },
+    "cleanMode": {
+      "warning": "Clean mode will uninstall {count} existing extensions that are not reserved and are not in this collection.",
+      "confirmCheckbox": "I understand this will uninstall {count} extensions"
+    },
+    "preview": {
+      "loading": "Fetching import preview...",
+      "willInstall": "Will install: {count}",
+      "willSkip": "Will skip (already installed): {count}",
+      "willUninstall": "Will uninstall (clean mode): {count}",
+      "configsCount": "Configs: {count}",
+      "priorityOverrides": "Priority overrides: {value}"
+    },
+    "messages": {
+      "nameRequired": "Please enter a collection name",
+      "exportSuccess": "Exported. Download started.",
+      "exportFailed": "Export failed",
+      "invalidJson": "Invalid JSON",
+      "validateFailed": "Validation failed",
+      "previewFailed": "Preview failed",
+      "downloadBlocked": "Download might be blocked by your browser. Please allow downloads or save from the new tab.",
+      "readFailed": "Failed to read file",
+      "fileTooLarge": "File too large (max 10MB)",
+      "importFailed": "Import failed",
+      "importFinished": "Import finished"
+    },
+    "result": {
+      "installed": "Installed: {count}",
+      "failed": "Failed: {count}",
+      "skipped": "Skipped: {count}",
+      "uninstalled": "Uninstalled: {count}",
+      "uninstallFailed": "Uninstall failed: {count}",
+      "reloaded": "Reloaded: {count}",
+      "reloadFailed": "Reload failed: {count}",
+      "configsApplied": "Configs applied: {count}",
+      "exportedVersionNote": "Exported version note:",
+      "priorityApplied": "Priority applied: {count}",
+      "yes": "Yes",
+      "no": "No"
+    }
+  },
   "status": {
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -220,7 +296,7 @@
       "uninstallPlugin": "Uninstall Extension",
       "reloadPlugin": "Reload Extension",
       "togglePlugin": "Extension",
-      "viewHandlers": "View Handlers",
+      "viewHandlers": "View Handlers ({count})",
       "updateTo": "Update to",
       "reinstall": "Reinstall"
     },
