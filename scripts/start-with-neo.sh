@@ -18,6 +18,7 @@ BAY_DIR="$NEO_ROOT/pkgs/bay"
 BAY_PORT="${BAY_PORT:-8114}"
 BAY_HOST="0.0.0.0"
 BAY_PID=""
+BAY_API_KEY=""  # Populated after Bay starts from credentials.json
 
 # ── 颜色 ──────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -117,9 +118,10 @@ cargo:
   default_size_limit_mb: 1024
   mount_path: "/workspace"
 
+# Security: auto-provision mode
+# Bay generates sk-bay-* key on first boot → credentials.json
 security:
-  api_key: null
-  allow_anonymous: true
+  allow_anonymous: false
 
 profiles:
   - id: python-default
@@ -176,7 +178,7 @@ ensure_ship_image() {
 start_bay() {
     log "Starting Bay on :$BAY_PORT ..."
 
-    (cd "$BAY_DIR" && uv run uvicorn app.main:app \
+    (cd "$BAY_DIR" && BAY_DATA_DIR="$BAY_DIR" uv run uvicorn app.main:app \
         --host "$BAY_HOST" \
         --port "$BAY_PORT" \
         --reload \
@@ -206,6 +208,43 @@ start_bay() {
     err "It may still be starting — check http://127.0.0.1:$BAY_PORT/health"
 }
 
+# ── 读取 Bay 自动生成的凭证 ───────────────────────────────────
+read_bay_credentials() {
+    local cred_file="$BAY_DIR/credentials.json"
+
+    # Wait briefly for credentials.json to appear (Bay writes it during startup)
+    local max_wait=5
+    local waited=0
+    while [[ $waited -lt $max_wait ]]; do
+        if [[ -f "$cred_file" ]]; then
+            break
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    if [[ -f "$cred_file" ]]; then
+        # Extract api_key using python (always available) — no jq dependency
+        BAY_API_KEY=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$cred_file'))
+    print(d.get('api_key', ''))
+except Exception:
+    print('')
+" 2>/dev/null || echo "")
+
+        if [[ -n "$BAY_API_KEY" ]]; then
+            ok "Auto-provisioned API key loaded from credentials.json"
+        else
+            warn "credentials.json found but api_key is empty"
+        fi
+    else
+        warn "credentials.json not found — Bay may be using an existing key or anonymous mode"
+        warn "Check Bay logs above for the API key, or look at: $cred_file"
+    fi
+}
+
 # ── 打印 AstrBot 配置提示 ────────────────────────────────────
 print_astrbot_config_hint() {
     echo ""
@@ -213,12 +252,21 @@ print_astrbot_config_hint() {
     echo -e "${GREEN}  Shipyard Neo Bay is running at http://127.0.0.1:$BAY_PORT ${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
     echo ""
+    if [[ -n "$BAY_API_KEY" ]]; then
+        echo -e "  ${CYAN}Bay API Key (auto-generated):${NC}"
+        echo -e "  ${YELLOW}$BAY_API_KEY${NC}"
+        echo ""
+    fi
     echo -e "  ${CYAN}AstrBot Dashboard 配置指引：${NC}"
     echo -e "  1. AI 配置 → Agent Computer Use"
     echo -e "     • Computer Use Runtime → ${YELLOW}沙箱${NC}"
     echo -e "     • 沙箱环境驱动器        → ${YELLOW}Shipyard Neo${NC}"
     echo -e "     • Shipyard Neo API Endpoint → ${YELLOW}http://127.0.0.1:$BAY_PORT${NC}"
-    echo -e "     • Shipyard Neo Access Token → ${YELLOW}（留空，已开启匿名访问）${NC}"
+    if [[ -n "$BAY_API_KEY" ]]; then
+        echo -e "     • Shipyard Neo Access Token → ${YELLOW}$BAY_API_KEY${NC}"
+    else
+        echo -e "     • Shipyard Neo Access Token → ${YELLOW}（查看 Bay 日志获取 key）${NC}"
+    fi
     echo -e "     • Shipyard Neo Profile     → ${YELLOW}python-default${NC}"
     echo ""
 }
@@ -242,6 +290,7 @@ main() {
     ensure_bay_config
     ensure_ship_image
     start_bay
+    read_bay_credentials
     print_astrbot_config_hint
     start_astrbot
 }
