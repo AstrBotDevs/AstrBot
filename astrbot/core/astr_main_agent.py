@@ -42,10 +42,10 @@ from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.manager import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
-from astrbot.core.provider.manager import llm_tools
 from astrbot.core.tools.cron_tools import (
     CREATE_CRON_JOB_TOOL,
     DELETE_CRON_JOB_TOOL,
