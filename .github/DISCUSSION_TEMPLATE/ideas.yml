@@ -1,0 +1,13 @@
+body:
+  - type: textarea
+    attributes:
+      label: 想法产生的背景 / Background of the idea
+      description: 为什么我们确实需要它？ / Why do we really need it?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 具体想法或解决方案 / Specific idea or solution
+      description: 请尽量详细地描述你的想法或方案 / Please describe your idea or proposal in detail.
+    validations:
+      required: true
