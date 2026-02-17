@@ -4,7 +4,7 @@
       <div class="d-flex align-center ga-2">
         <h3 class="mb-0">{{ tm('providerSources.title') }}</h3>
       </div>
-      <v-menu>
+      <StyledMenu>
         <template #activator="{ props }">
           <v-btn
             v-bind="props"
@@ -17,19 +17,61 @@
             {{ tm('providerSources.add') }}
           </v-btn>
         </template>
-        <v-list density="compact">
-          <v-list-item
-            v-for="sourceType in availableSourceTypes"
-            :key="sourceType.value"
-            @click="emitAddSource(sourceType.value)"
-          >
-            <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+        <v-list-item
+          v-for="sourceType in availableSourceTypes"
+          :key="sourceType.value"
+          class="styled-menu-item"
+          @click="emitAddSource(sourceType.value)"
+        >
+          <template #prepend>
+            <v-avatar size="18" rounded="0" class="me-2">
+              <v-img v-if="sourceType.icon" :src="sourceType.icon" alt="provider icon" cover></v-img>
+              <v-icon v-else size="16">mdi-shape-outline</v-icon>
+            </v-avatar>
+          </template>
+          <v-list-item-title>{{ sourceType.label }}</v-list-item-title>
+        </v-list-item>
+      </StyledMenu>
     </div>
 
-    <div v-if="displayedProviderSources.length > 0">
+    <div v-if="isMobile && displayedProviderSources.length > 0" class="px-4 pb-3">
+      <div class="d-flex align-center ga-2">
+        <v-select
+          :model-value="selectedId"
+          :items="mobileSourceItems"
+          item-title="label"
+          item-value="value"
+          :label="tm('providerSources.selectCreated')"
+          variant="solo-filled"
+          density="comfortable"
+          flat
+          hide-details
+          class="mobile-source-select"
+          @update:model-value="onMobileSourceChange"
+        >
+          <template #item="{ props: itemProps, item }">
+            <v-list-item v-bind="itemProps">
+              <template #prepend>
+                <v-avatar size="18" rounded="0" class="me-2">
+                  <v-img v-if="item.raw.icon" :src="item.raw.icon" alt="provider icon" cover></v-img>
+                  <v-icon v-else size="16">mdi-shape-outline</v-icon>
+                </v-avatar>
+              </template>
+            </v-list-item>
+          </template>
+        </v-select>
+        <v-btn
+          v-if="selectedProviderSource"
+          icon="mdi-delete"
+          variant="text"
+          size="small"
+          color="error"
+          @click.stop="emitDeleteSource(selectedProviderSource)"
+        ></v-btn>
+      </div>
+    </div>
+
+    <div v-else-if="displayedProviderSources.length > 0">
       <v-list class="provider-source-list" nav density="compact" lines="two">
         <v-list-item
           v-for="source in displayedProviderSources"
@@ -46,7 +88,7 @@
               <v-icon v-else size="32">mdi-creation</v-icon>
             </v-avatar>
           </template>
-          <v-list-item-title class="font-weight-bold">{{ getSourceDisplayName(source) }}</v-list-item-title>
+          <v-list-item-title class="font-weight-bold mb-1" style="font-family: Arial, Helvetica, sans-serif; font-size: 16px;">{{ getSourceDisplayName(source) }}</v-list-item-title>
           <v-list-item-subtitle class="text-truncate">{{ source.api_base || 'N/A' }}</v-list-item-subtitle>
           <template #append>
             <div class="d-flex align-center ga-1">
@@ -72,6 +114,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useDisplay } from 'vuetify'
+import StyledMenu from '@/components/shared/StyledMenu.vue'
 
 const props = defineProps({
   displayedProviderSources: {
@@ -106,11 +150,28 @@ const emit = defineEmits([
   'delete-provider-source'
 ])
 
+const { smAndDown } = useDisplay()
 const selectedId = computed(() => props.selectedProviderSource?.id || null)
+const isMobile = computed(() => smAndDown.value)
+const mobileSourceItems = computed(() =>
+  (props.displayedProviderSources || []).map((source) => ({
+    value: source.id,
+    label: props.getSourceDisplayName(source),
+    icon: props.resolveSourceIcon(source),
+    source
+  }))
+)
 
 const isActive = (source) => {
   if (source.isPlaceholder) return false
   return selectedId.value !== null && selectedId.value === source.id
+}
+
+const onMobileSourceChange = (sourceId) => {
+  const matched = mobileSourceItems.value.find((item) => item.value === sourceId)
+  if (matched?.source) {
+    emitSelectSource(matched.source)
+  }
 }
 
 const emitAddSource = (type) => emit('add-provider-source', type)
