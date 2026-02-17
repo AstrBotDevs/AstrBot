@@ -98,7 +98,6 @@ class SkillManager:
         self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
         self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
         os.makedirs(self.skills_root, exist_ok=True)
-        os.makedirs(get_astrbot_temp_path(), exist_ok=True)
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):

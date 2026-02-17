@@ -19,8 +19,8 @@
             :key="option.value"
             @click="addEntry(option.value)"
           >
-            <v-list-item-title>{{ option.label }}</v-list-item-title>
-            <v-list-item-subtitle v-if="option.hint">{{ option.hint }}</v-list-item-subtitle>
+            <v-list-item-title>{{ translateIfKey(option.label) }}</v-list-item-title>
+            <v-list-item-subtitle v-if="option.hint">{{ translateIfKey(option.hint) }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -58,7 +58,7 @@
           <div class="d-flex flex-column">
             <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
             <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
-              {{ getTemplate(entry)?.hint || getTemplate(entry)?.description }}
+              {{ translateIfKey(getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
             </v-list-item-subtitle>
           </div>
         </div>
@@ -82,10 +82,10 @@
               >
                 <div class="config-section mb-2">
                   <v-list-item-title class="config-title">
-                    {{ itemMeta?.description || itemKey }}
+                    {{ translateIfKey(itemMeta?.description) || itemKey }}
                   </v-list-item-title>
                   <v-list-item-subtitle class="config-hint" v-if="itemMeta?.hint">
-                    {{ itemMeta.hint }}
+                    {{ translateIfKey(itemMeta.hint) }}
                   </v-list-item-subtitle>
                 </div>
                 <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
@@ -94,10 +94,10 @@
                       <v-col cols="12" sm="6" class="property-info">
                         <v-list-item density="compact">
                           <v-list-item-title class="property-name">
-                            {{ childMeta?.description || childKey }}
+                            {{ translateIfKey(childMeta?.description) || childKey }}
                           </v-list-item-title>
                           <v-list-item-subtitle class="property-hint">
-                            {{ childMeta?.hint }}
+                            {{ translateIfKey(childMeta?.hint) }}
                           </v-list-item-subtitle>
                         </v-list-item>
                       </v-col>
@@ -122,11 +122,11 @@
                   <v-col cols="12" sm="6" class="property-info">
                     <v-list-item density="compact">
                       <v-list-item-title class="property-name">
-                        <span v-if="itemMeta?.description">{{ itemMeta?.description }} <span class="property-key">({{ itemKey }})</span></span>
+                        <span v-if="itemMeta?.description">{{ translateIfKey(itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
                         <span v-else>{{ itemKey }}</span>
                       </v-list-item-title>
                       <v-list-item-subtitle class="property-hint">
-                        {{ itemMeta?.hint }}
+                        {{ translateIfKey(itemMeta?.hint) }}
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-col>
@@ -153,7 +153,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
-import { useI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
   modelValue: {
@@ -168,6 +168,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
+const { tm, getRaw } = useModuleI18n('features/config-metadata')
 
 const expandedEntries = ref({})
 
@@ -195,7 +196,12 @@ const templateOptions = computed(() => {
 
 function templateLabel(key) {
   if (!key) return t('core.common.templateList.unknownTemplate') || '未指定模板'
-  return props.templates?.[key]?.name || key
+  return translateIfKey(props.templates?.[key]?.name || key)
+}
+
+function translateIfKey(value) {
+  if (!value || typeof value !== 'string') return value
+  return getRaw(value) ? tm(value) : value
 }
 
 function buildDefaults(itemsMeta = {}) {

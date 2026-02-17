@@ -62,6 +62,9 @@ class PluginManager:
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
 
+        self.failed_plugin_dict = {}
+        """加载失败插件的信息，用于后续可能的热重载"""
+
         self.failed_plugin_info = ""
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
@@ -193,6 +196,37 @@ class PluginManager:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
         return True
 
+    async def _import_plugin_with_dependency_recovery(
+        self,
+        path: str,
+        module_str: str,
+        root_dir_name: str,
+        requirements_path: str,
+    ) -> ModuleType:
+        try:
+            return __import__(path, fromlist=[module_str])
+        except (ModuleNotFoundError, ImportError) as import_exc:
+            if os.path.exists(requirements_path):
+                try:
+                    logger.info(
+                        f"插件 {root_dir_name} 导入失败，尝试从已安装依赖恢复: {import_exc!s}"
+                    )
+                    pip_installer.prefer_installed_dependencies(
+                        requirements_path=requirements_path
+                    )
+                    module = __import__(path, fromlist=[module_str])
+                    logger.info(
+                        f"插件 {root_dir_name} 已从 site-packages 恢复依赖，跳过重新安装。"
+                    )
+                    return module
+                except Exception as recover_exc:
+                    logger.info(
+                        f"插件 {root_dir_name} 已安装依赖恢复失败，将重新安装依赖: {recover_exc!s}"
+                    )
+
+            await self._check_plugin_dept_update(target_plugin=root_dir_name)
+            return __import__(path, fromlist=[module_str])
+
     @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
         """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
@@ -296,6 +330,28 @@ class PluginManager:
                 except KeyError:
                     logger.warning(f"模块 {module_name} 未载入")
 
+    async def reload_failed_plugin(self, dir_name):
+        """
+        重新加载未注册（加载失败）的插件
+        Args:
+            dir_name (str): 要重载的特定插件名称。
+        Returns:
+            tuple: 返回 load() 方法的结果，包含 (success, error_message)
+                - success (bool): 重载是否成功
+                - error_message (str|None): 错误信息，成功时为 None
+        """
+        async with self._pm_lock:
+            if dir_name in self.failed_plugin_dict:
+                success, error = await self.load(specified_dir_name=dir_name)
+                if success:
+                    self.failed_plugin_dict.pop(dir_name, None)
+                    if not self.failed_plugin_dict:
+                        self.failed_plugin_info = ""
+                    return success, None
+                else:
+                    return False, error
+            return False, "插件不存在于失败列表中"
+
     async def reload(self, specified_plugin_name=None):
         """重新加载插件
 
@@ -386,6 +442,12 @@ class PluginManager:
                     "reserved",
                     False,
                 )  # 是否是保留插件。目前在 astrbot/builtin_stars 目录下的都是保留插件。保留插件不可以卸载。
+                plugin_dir_path = (
+                    os.path.join(self.plugin_store_path, root_dir_name)
+                    if not reserved
+                    else os.path.join(self.reserved_plugin_path, root_dir_name)
+                )
+                requirements_path = os.path.join(plugin_dir_path, "requirements.txt")
 
                 path = "data.plugins." if not reserved else "astrbot.builtin_stars."
                 path += root_dir_name + "." + module_str
@@ -400,11 +462,12 @@ class PluginManager:
 
                 # 尝试导入模块
                 try:
-                    module = __import__(path, fromlist=[module_str])
-                except (ModuleNotFoundError, ImportError):
-                    # 尝试安装依赖
-                    await self._check_plugin_dept_update(target_plugin=root_dir_name)
-                    module = __import__(path, fromlist=[module_str])
+                    module = await self._import_plugin_with_dependency_recovery(
+                        path=path,
+                        module_str=module_str,
+                        root_dir_name=root_dir_name,
+                        requirements_path=requirements_path,
+                    )
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
@@ -412,11 +475,6 @@ class PluginManager:
 
                 # 检查 _conf_schema.json
                 plugin_config = None
-                plugin_dir_path = (
-                    os.path.join(self.plugin_store_path, root_dir_name)
-                    if not reserved
-                    else os.path.join(self.reserved_plugin_path, root_dir_name)
-                )
                 plugin_schema_path = os.path.join(
                     plugin_dir_path,
                     self.conf_schema_fname,
@@ -455,6 +513,16 @@ class PluginManager:
                         )
                     logger.info(metadata)
                     metadata.config = plugin_config
+                    p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                    p_author = (metadata.author or "unknown").lower().replace("/", "_")
+                    plugin_id = f"{p_author}/{p_name}"
+
+                    # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
+                    if metadata.star_cls_type:
+                        setattr(metadata.star_cls_type, "name", p_name)
+                        setattr(metadata.star_cls_type, "author", p_author)
+                        setattr(metadata.star_cls_type, "plugin_id", plugin_id)
+
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
                         if plugin_config and metadata.star_cls_type:
@@ -472,17 +540,10 @@ class PluginManager:
                                 context=self.context,
                             )
 
-                        p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                        p_author = (
-                            (metadata.author or "unknown").lower().replace("/", "_")
-                        )
-                        setattr(metadata.star_cls, "name", p_name)
-                        setattr(metadata.star_cls, "author", p_author)
-                        setattr(
-                            metadata.star_cls,
-                            "plugin_id",
-                            f"{p_author}/{p_name}",
-                        )
+                        if metadata.star_cls:
+                            setattr(metadata.star_cls, "name", p_name)
+                            setattr(metadata.star_cls, "author", p_author)
+                            setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
 
@@ -630,6 +691,11 @@ class PluginManager:
                     logger.error(f"| {line}")
                 logger.error("----------------------------------")
                 fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                self.failed_plugin_dict[root_dir_name] = {
+                    "error": str(e),
+                    "traceback": errors,
+                }
+                # 记录注册失败的插件名称，以便后续重载插件
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:

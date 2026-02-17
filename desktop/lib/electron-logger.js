@@ -1,10 +1,27 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
-const { ensureDir } = require('./common');
+const { RotatingLogWriter } = require('./rotating-log-writer');
+const {
+  formatLogTimestamp,
+  parseLogBackupCount,
+  parseLogMaxBytes,
+} = require('./common');
 
 function createElectronLogger({ app, getRootDir }) {
+  const electronLogMaxBytes = parseLogMaxBytes(
+    process.env.ASTRBOT_ELECTRON_LOG_MAX_MB,
+  );
+  const electronLogBackupCount = parseLogBackupCount(
+    process.env.ASTRBOT_ELECTRON_LOG_BACKUP_COUNT,
+  );
+  const writer = new RotatingLogWriter({
+    logPath: null,
+    maxBytes: electronLogMaxBytes,
+    backupCount: electronLogBackupCount,
+    label: 'electron-log',
+  });
+
   function getElectronLogPath() {
     const rootDir =
       process.env.ASTRBOT_ROOT ||
@@ -15,16 +32,19 @@ function createElectronLogger({ app, getRootDir }) {
 
   function logElectron(message) {
     const logPath = getElectronLogPath();
-    ensureDir(path.dirname(logPath));
-    const line = `[${new Date().toISOString()}] ${message}\n`;
-    try {
-      fs.appendFileSync(logPath, line, 'utf8');
-    } catch {}
+    const line = `[${formatLogTimestamp()}] ${message}\n`;
+    void writer.setLogPath(logPath);
+    void writer.append(line);
+  }
+
+  async function flushElectron() {
+    await writer.flush();
   }
 
   return {
     getElectronLogPath,
     logElectron,
+    flushElectron,
   };
 }
 

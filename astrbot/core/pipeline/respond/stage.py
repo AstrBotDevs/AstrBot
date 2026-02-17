@@ -61,16 +61,17 @@ class RespondStage(Stage):
         self.log_base = float(
             ctx.astrbot_config["platform_settings"]["segmented_reply"]["log_base"],
         )
-        interval_str: str = ctx.astrbot_config["platform_settings"]["segmented_reply"][
-            "interval"
-        ]
-        interval_str_ls = interval_str.replace(" ", "").split(",")
-        try:
-            self.interval = [float(t) for t in interval_str_ls]
-        except BaseException as e:
-            logger.error(f"解析分段回复的间隔时间失败。{e}")
-            self.interval = [1.5, 3.5]
-        logger.info(f"分段回复间隔时间：{self.interval}")
+        self.interval = [1.5, 3.5]
+        if self.enable_seg:
+            interval_str: str = ctx.astrbot_config["platform_settings"][
+                "segmented_reply"
+            ]["interval"]
+            interval_str_ls = interval_str.replace(" ", "").split(",")
+            try:
+                self.interval = [float(t) for t in interval_str_ls]
+            except BaseException as e:
+                logger.error(f"解析分段回复的间隔时间失败。{e}")
+            logger.info(f"分段回复间隔时间：{self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
         """分段回复 统计字数"""

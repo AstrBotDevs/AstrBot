@@ -5,55 +5,92 @@ import axios from 'axios';
 import VerticalSidebarVue from './vertical-sidebar/VerticalSidebar.vue';
 import VerticalHeaderVue from './vertical-header/VerticalHeader.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
+import ReadmeDialog from '@/components/shared/ReadmeDialog.vue';
 import Chat from '@/components/chat/Chat.vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useRouterLoadingStore } from '@/stores/routerLoading';
+import { useI18n } from '@/i18n/composables';
+
+const FIRST_NOTICE_SEEN_KEY = 'astrbot:first_notice_seen:v1';
 
 const customizer = useCustomizerStore();
+const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 
-// 计算是否在聊天页面（非全屏模式）
 const isChatPage = computed(() => {
   return route.path.startsWith('/chat');
 });
 
-// 计算是否显示 sidebar（仅在 bot 模式下显示）
 const showSidebar = computed(() => {
   return customizer.viewMode === 'bot';
 });
 
-// 计算是否显示 chat 页面（在 chat 模式下显示）
 const showChatPage = computed(() => {
   return customizer.viewMode === 'chat';
 });
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
+const showFirstNoticeDialog = ref(false);
 
-// 检查是否需要迁移
-const checkMigration = async () => {
+const checkMigration = async (): Promise<boolean> => {
   try {
     const response = await axios.get('/api/stat/version');
     if (response.data.status === 'ok' && response.data.data.need_migration) {
-      // 需要迁移，显示迁移对话框
       if (migrationDialog.value && typeof migrationDialog.value.open === 'function') {
         const result = await migrationDialog.value.open();
         if (result.success) {
-          // 迁移成功，可以显示成功消息
           console.log('Migration completed successfully:', result.message);
-          // 可以考虑刷新页面或显示成功通知
           window.location.reload();
         }
       }
+      return true;
     }
   } catch (error) {
     console.error('Failed to check migration status:', error);
   }
+  return false;
+};
+
+const maybeShowFirstNotice = async () => {
+  if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === '1') {
+    return;
+  }
+
+  try {
+    const response = await axios.get('/api/stat/first-notice', {
+      params: { locale: locale.value },
+    });
+    if (response.data.status !== 'ok') {
+      return;
+    }
+
+    const content = response.data?.data?.content;
+    if (typeof content === 'string' && content.trim().length > 0) {
+      showFirstNoticeDialog.value = true;
+      return;
+    }
+
+    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, '1');
+  } catch (error) {
+    console.error('Failed to load first notice:', error);
+  }
+};
+
+const onFirstNoticeDialogUpdate = (visible: boolean) => {
+  showFirstNoticeDialog.value = visible;
+  if (!visible) {
+    localStorage.setItem(FIRST_NOTICE_SEEN_KEY, '1');
+  }
 };
 
 onMounted(() => {
-  // 页面加载时检查是否需要迁移
-  setTimeout(checkMigration, 1000); // 延迟1秒执行，确保页面完全加载
+  setTimeout(async () => {
+    const migrationPending = await checkMigration();
+    if (!migrationPending) {
+      await maybeShowFirstNotice();
+    }
+  }, 1000);
 });
 </script>
 
@@ -62,7 +99,6 @@ onMounted(() => {
     <v-app :theme="useCustomizerStore().uiTheme"
       :class="[customizer.fontTheme, customizer.mini_sidebar ? 'mini-sidebar' : '', customizer.inputBg ? 'inputWithbg' : '']"
     >
-      <!-- 路由切换进度条 -->
       <v-progress-linear
         v-if="routerLoadingStore.isLoading"
         :model-value="routerLoadingStore.progress"
@@ -74,15 +110,15 @@ onMounted(() => {
       />
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
-      <v-main :style="{ 
+      <v-main :style="{
         height: showChatPage ? 'calc(100vh - 55px)' : undefined,
         overflow: showChatPage ? 'hidden' : undefined
       }">
-        <v-container 
-          fluid 
-          class="page-wrapper" 
+        <v-container
+          fluid
+          class="page-wrapper"
           :class="{ 'chat-mode-container': showChatPage }"
-          :style="{ 
+          :style="{
             height: showChatPage ? '100%' : 'calc(100% - 8px)',
             padding: (isChatPage || showChatPage) ? '0' : undefined,
             minHeight: showChatPage ? 'unset' : undefined
@@ -95,9 +131,13 @@ onMounted(() => {
           </div>
         </v-container>
       </v-main>
-      
-      <!-- Migration Dialog -->
+
       <MigrationDialog ref="migrationDialog" />
+      <ReadmeDialog
+        :show="showFirstNoticeDialog"
+        mode="first-notice"
+        @update:show="onFirstNoticeDialogUpdate"
+      />
     </v-app>
   </v-locale-provider>
 </template>

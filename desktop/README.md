@@ -91,6 +91,15 @@ Runtime logs:
 
 - Electron shell log: `~/.astrbot/logs/electron.log`
 - Backend stdout/stderr log: `~/.astrbot/logs/backend.log`
+- Both files rotate by size by default: `20MB` per file, keep `3` backups.
+- Electron log rotation envs:
+  - `ASTRBOT_ELECTRON_LOG_MAX_MB`
+  - `ASTRBOT_ELECTRON_LOG_BACKUP_COUNT`
+- Backend log rotation envs:
+  - `ASTRBOT_BACKEND_LOG_MAX_MB`
+  - `ASTRBOT_BACKEND_LOG_BACKUP_COUNT`
+- Rotation debug logging:
+  - `ASTRBOT_LOG_ROTATION_DEBUG=1` (or `NODE_ENV=development`) to print filesystem errors from rotation operations.
 - On backend startup failure, the app dialog also shows the backend reason and backend log path.
 
 Timeout and loading controls:

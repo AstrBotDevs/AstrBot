@@ -21,7 +21,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import sp
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
     convert_audio_format,
@@ -253,9 +253,9 @@ class DingtalkPlatformAdapter(Platform):
             "downloadCode": download_code,
             "robotCode": robot_code,
         }
-        temp_dir = Path(get_astrbot_data_path()) / "temp"
+        temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        f_path = temp_dir / f"dingtalk_file_{uuid.uuid4()}.{ext}"
+        f_path = temp_dir / f"dingtalk_{uuid.uuid4()}.{ext}"
         async with (
             aiohttp.ClientSession() as session,
             session.post(

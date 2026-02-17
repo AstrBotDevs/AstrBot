@@ -8,13 +8,11 @@ from typing import cast
 
 import botpy
 import botpy.message
-import botpy.types
-import botpy.types.message
 from botpy import Client
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -144,6 +142,41 @@ class QQOfficialPlatformAdapter(Platform):
         )
 
     @staticmethod
+    def _normalize_attachment_url(url: str | None) -> str:
+        if not url:
+            return ""
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        return f"https://{url}"
+
+    @staticmethod
+    def _append_attachments(
+        msg: list[BaseMessageComponent],
+        attachments: list | None,
+    ) -> None:
+        if not attachments:
+            return
+
+        for attachment in attachments:
+            content_type = cast(str, getattr(attachment, "content_type", "") or "")
+            url = QQOfficialPlatformAdapter._normalize_attachment_url(
+                cast(str | None, getattr(attachment, "url", None))
+            )
+            if not url:
+                continue
+
+            if content_type.startswith("image"):
+                msg.append(Image.fromURL(url))
+            else:
+                filename = cast(
+                    str,
+                    getattr(attachment, "filename", None)
+                    or getattr(attachment, "name", None)
+                    or "attachment",
+                )
+                msg.append(File(name=filename, file=url, url=url))
+
+    @staticmethod
     def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -172,14 +205,7 @@ class QQOfficialPlatformAdapter(Platform):
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
-            if message.attachments:
-                for i in message.attachments:
-                    if i.content_type.startswith("image"):
-                        url = i.url
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        img = Image.fromURL(url)
-                        msg.append(img)
+            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
 
         elif isinstance(message, botpy.message.Message) or isinstance(
@@ -196,14 +222,7 @@ class QQOfficialPlatformAdapter(Platform):
                 "",
             ).strip()
 
-            if message.attachments:
-                for i in message.attachments:
-                    if i.content_type.startswith("image"):
-                        url = i.url
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        img = Image.fromURL(url)
-                        msg.append(img)
+            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
             abm.message_str = plain_content
             abm.sender = MessageMember(

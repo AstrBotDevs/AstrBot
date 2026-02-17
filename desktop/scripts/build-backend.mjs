@@ -16,6 +16,8 @@ const kbStopwordsSrc = path.join(
   'hit_stopwords.txt',
 );
 const kbStopwordsDest = 'astrbot/core/knowledge_base/retrieval';
+const builtinStarsSrc = path.join(rootDir, 'astrbot', 'builtin_stars');
+const builtinStarsDest = 'astrbot/builtin_stars';
 
 const args = [
   'run',
@@ -33,10 +35,24 @@ const args = [
   'aiosqlite',
   '--collect-all',
   'pip',
+  '--collect-all',
+  'bs4',
+  '--collect-all',
+  'readability',
+  '--collect-all',
+  'lxml',
+  '--collect-all',
+  'lxml_html_clean',
+  '--collect-all',
+  'rfc3987_syntax',
   '--collect-submodules',
   'astrbot.api',
+  '--collect-submodules',
+  'astrbot.builtin_stars',
   '--collect-data',
   'certifi',
+  '--add-data',
+  `${builtinStarsSrc}${dataSeparator}${builtinStarsDest}`,
   '--add-data',
   `${kbStopwordsSrc}${dataSeparator}${kbStopwordsDest}`,
   '--distpath',

@@ -2,7 +2,7 @@
   <div class="d-flex align-center justify-space-between">
     <div>
       <span v-if="!modelValue || Object.keys(modelValue).length === 0" style="color: rgb(var(--v-theme-primaryText));">
-        暂无项目
+        {{ t('core.common.objectEditor.noItems') }}
       </span>
       <div v-else class="d-flex flex-wrap ga-2">
         <v-chip v-for="key in displayKeys" :key="key" size="x-small" label color="primary">
@@ -14,7 +14,7 @@
       </div>
     </div>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
-      {{ buttonText }}
+      {{ resolveButtonText }}
     </v-btn>
   </div>
 
@@ -22,7 +22,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title class="text-h3 py-4" style="font-weight: normal;">
-        {{ dialogTitle }}
+        {{ resolveDialogTitle }}
       </v-card-title>
 
       <v-card-text class="pa-4" style="max-height: 400px; overflow-y: auto;">
@@ -36,7 +36,7 @@
                   density="compact"
                   variant="outlined"
                   hide-details
-                  placeholder="键名"
+                  :placeholder="t('core.common.objectEditor.placeholders.keyName')"
                   @blur="updateKey(index, pair.key)"
                 ></v-text-field>
               </v-col>
@@ -47,7 +47,7 @@
                   density="compact"
                   variant="outlined"
                   hide-details
-                  placeholder="字符串值"
+                  :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="pair.type === 'number' || pair.type === 'float' || pair.type === 'int'" class="d-flex align-center gap-2 flex-grow-1">
                   <v-slider
@@ -68,7 +68,7 @@
                     density="compact"
                     variant="outlined"
                     hide-details
-                    placeholder="数值"
+                    :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
                     :style="pair.slider ? 'max-width: 120px;' : ''"
                   ></v-text-field>
                 </div>
@@ -85,7 +85,7 @@
                   density="compact"
                   variant="outlined"
                   hide-details="auto"
-                  placeholder="JSON"
+                  :placeholder="t('core.common.objectEditor.placeholders.jsonValue')"
                   @blur="updateJSON(index, pair.value)"
                   :error-messages="pair.jsonError"
                 ></v-text-field>
@@ -108,13 +108,13 @@
         <!-- Template schema fields -->
         <div v-if="hasTemplateSchema" class="mt-4">
           <v-divider class="mb-3"></v-divider>
-          <div class="text-caption text-grey mb-2">预设</div>
+          <div class="text-caption text-grey mb-2">{{ t('core.common.objectEditor.presets') }}</div>
           <div v-for="(template, templateKey) in templateSchema" :key="templateKey" class="template-field" :class="{ 'template-field-inactive': !isTemplateKeyAdded(templateKey) }">
             <v-row no-gutters align="center" class="mb-2">
               <v-col cols="4">
                 <div class="d-flex flex-column">
-                  <span class="text-caption font-weight-medium">{{ template.name || template.description || templateKey }}</span>
-                  <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ template.hint }}</span>
+                  <span class="text-caption font-weight-medium">{{ getTemplateTitle(template, templateKey) }}</span>
+                  <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ translateIfKey(template.hint) }}</span>
                 </div>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
@@ -125,7 +125,7 @@
                   density="compact"
                   variant="outlined"
                   hide-details
-                  placeholder="字符串值"
+                  :placeholder="t('core.common.objectEditor.placeholders.stringValue')"
                 ></v-text-field>
                 <div v-else-if="template.type === 'number' || template.type === 'float' || template.type === 'int'" class="d-flex align-center ga-4 flex-grow-1">
                   <v-slider
@@ -147,7 +147,7 @@
                     density="compact"
                     variant="outlined"
                     hide-details
-                    placeholder="数值"
+                    :placeholder="t('core.common.objectEditor.placeholders.numberValue')"
                     :style="template.slider ? 'max-width: 120px;' : ''"
                   ></v-text-field>
                 </div>
@@ -178,7 +178,7 @@
 
         <div v-if="localKeyValuePairs.length === 0 && !hasTemplateSchema" class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-code-json</v-icon>
-          <p class="text-grey mt-4">暂无参数</p>
+          <p class="text-grey mt-4">{{ t('core.common.objectEditor.noParams') }}</p>
         </div>
       </v-card-text>
 
@@ -187,7 +187,7 @@
         <div class="d-flex align-center ga-2">
           <v-text-field
             v-model="newKey"
-            label="新键名"
+            :label="t('core.common.objectEditor.newKeyLabel')"
             density="compact"
             variant="outlined"
             hide-details
@@ -196,7 +196,7 @@
           <v-select
             v-model="newValueType"
             :items="['string', 'number', 'boolean', 'json']"
-            label="值类型"
+            :label="t('core.common.objectEditor.valueTypeLabel')"
             density="compact"
             variant="outlined"
             hide-details
@@ -204,15 +204,15 @@
           ></v-select>
           <v-btn @click="addKeyValuePair" variant="tonal" color="primary">
             <v-icon>mdi-plus</v-icon>
-            添加
+            {{ t('core.common.add') }}
           </v-btn>
         </div>
       </v-card-text>
 
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
-        <v-btn variant="text" @click="cancelDialog">取消</v-btn>
-        <v-btn color="primary" @click="confirmDialog">确认</v-btn>
+        <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
+        <v-btn color="primary" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -220,9 +220,10 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { useI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 const { t } = useI18n()
+const { tm, getRaw } = useModuleI18n('features/config-metadata')
 
 const props = defineProps({
   modelValue: {
@@ -235,11 +236,11 @@ const props = defineProps({
   },
   buttonText: {
     type: String,
-    default: '修改'
+    default: ''
   },
   dialogTitle: {
     type: String,
-    default: '修改键值对'
+    default: ''
   },
   maxDisplayItems: {
     type: Number,
@@ -248,6 +249,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue'])
+
+const resolveButtonText = computed(() => props.buttonText || t('core.common.list.modifyButton'))
+const resolveDialogTitle = computed(() => props.dialogTitle || t('core.common.objectEditor.dialogTitle'))
 
 const dialog = ref(false)
 const localKeyValuePairs = ref([])
@@ -320,7 +324,7 @@ function addKeyValuePair() {
   if (key !== '') {
     const isKeyExists = localKeyValuePairs.value.some(pair => pair.key === key)
     if (isKeyExists) {
-      alert('键名已存在')
+      alert(t('core.common.objectEditor.keyExists'))
       return
     }
 
@@ -354,7 +358,7 @@ function updateJSON(index, newValue) {
     JSON.parse(newValue)
     localKeyValuePairs.value[index].jsonError = ''
   } catch (e) {
-    localKeyValuePairs.value[index].jsonError = 'JSON 格式错误'
+    localKeyValuePairs.value[index].jsonError = t('core.common.objectEditor.invalidJson')
   }
 }
 
@@ -374,7 +378,7 @@ function updateKey(index, newKey) {
   const isKeyExists = localKeyValuePairs.value.some((pair, i) => i !== index && pair.key === newKey)
   if (isKeyExists) {
     // 如果键名已存在，提示用户并恢复原值
-    alert('键名已存在')
+    alert(t('core.common.objectEditor.keyExists'))
     // 将键名恢复为修改前的原始值
     localKeyValuePairs.value[index].key = originalKey
     return
@@ -500,6 +504,15 @@ function cancelDialog() {
   // Reset to original state
   localKeyValuePairs.value = JSON.parse(JSON.stringify(originalKeyValuePairs.value))
   dialog.value = false
+}
+
+function translateIfKey(value) {
+  if (!value || typeof value !== 'string') return value
+  return getRaw(value) ? tm(value) : value
+}
+
+function getTemplateTitle(template, templateKey) {
+  return translateIfKey(template?.name || template?.description || templateKey)
 }
 </script>
 

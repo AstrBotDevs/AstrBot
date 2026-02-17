@@ -25,7 +25,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
@@ -344,7 +344,7 @@ class WecomPlatformAdapter(Platform):
                 self.client.media.download,
                 msg.media_id,
             )
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
@@ -400,7 +400,8 @@ class WecomPlatformAdapter(Platform):
                 self.client.media.download,
                 media_id,
             )
-            path = f"data/temp/wechat_kf_{media_id}.jpg"
+            temp_dir = get_astrbot_temp_path()
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
             with open(path, "wb") as f:
                 f.write(resp.content)
             abm.message = [Image(file=path, url=path)]
@@ -412,7 +413,7 @@ class WecomPlatformAdapter(Platform):
                 media_id,
             )
 
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)

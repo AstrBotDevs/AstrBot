@@ -27,7 +27,7 @@ export default {
     return {
       autoScroll: true,
       logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #0000FF; font-weight: bold;',
+        '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
         '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
         '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
         '\u001b[31m': 'color: #FF0000;',

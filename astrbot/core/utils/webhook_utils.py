@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from astrbot.core import astrbot_config, logger
@@ -20,6 +21,20 @@ def _get_dashboard_port() -> int:
         return 6185
 
 
+def _is_dashboard_ssl_enabled() -> bool:
+    env_ssl = os.environ.get("DASHBOARD_SSL_ENABLE") or os.environ.get(
+        "ASTRBOT_DASHBOARD_SSL_ENABLE"
+    )
+    if env_ssl is not None:
+        return env_ssl.strip().lower() in {"1", "true", "yes", "on"}
+
+    try:
+        return bool(astrbot_config.get("dashboard", {}).get("ssl", {}).get("enable"))
+    except Exception as e:
+        logger.error(f"获取 dashboard SSL 配置失败: {e!s}")
+        return False
+
+
 def log_webhook_info(platform_name: str, webhook_uuid: str) -> None:
     """打印美观的 webhook 信息日志
 
@@ -38,12 +53,13 @@ def log_webhook_info(platform_name: str, webhook_uuid: str) -> None:
 
     callback_base = callback_base.rstrip("/")
     webhook_url = f"{callback_base}/api/platform/webhook/{webhook_uuid}"
+    scheme = "https" if _is_dashboard_ssl_enabled() else "http"
 
     display_log = (
         "\n====================\n"
         f"🔗 机器人平台 {platform_name} 已启用统一 Webhook 模式\n"
         f"📍 Webhook 回调地址: \n"
-        f"   ➜  http://<your-ip>:{_get_dashboard_port()}/api/platform/webhook/{webhook_uuid}\n"
+        f"   ➜  {scheme}://<your-ip>:{_get_dashboard_port()}/api/platform/webhook/{webhook_uuid}\n"
         f"   ➜  {webhook_url}\n"
         "====================\n"
     )
