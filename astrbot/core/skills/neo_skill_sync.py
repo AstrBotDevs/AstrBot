@@ -44,6 +44,18 @@ class NeoSkillSyncResult:
 
 
 class NeoSkillSyncManager:
+    @staticmethod
+    def sync_result_to_dict(result: NeoSkillSyncResult) -> dict[str, str]:
+        return {
+            "skill_key": result.skill_key,
+            "local_skill_name": result.local_skill_name,
+            "release_id": result.release_id,
+            "candidate_id": result.candidate_id,
+            "payload_ref": result.payload_ref,
+            "map_path": result.map_path,
+            "synced_at": result.synced_at,
+        }
+
     def __init__(
         self,
         *,
@@ -224,3 +236,46 @@ class NeoSkillSyncManager:
             map_path=self.map_path,
             synced_at=_now_iso(),
         )
+
+    async def promote_with_optional_sync(
+        self,
+        client: Any,
+        *,
+        candidate_id: str,
+        stage: str,
+        sync_to_local: bool,
+    ) -> dict[str, Any]:
+        release = await client.skills.promote_candidate(candidate_id, stage=stage)
+        release_json = _to_jsonable(release)
+
+        sync_json: dict[str, Any] | None = None
+        rollback_json: dict[str, Any] | None = None
+        sync_error: str | None = None
+
+        if stage == "stable" and sync_to_local:
+            try:
+                sync_result = await self.sync_release(
+                    client,
+                    release_id=str(release_json.get("id", "")),
+                    require_stable=True,
+                )
+                sync_json = self.sync_result_to_dict(sync_result)
+            except Exception as err:
+                sync_error = str(err)
+                try:
+                    rollback = await client.skills.rollback_release(
+                        str(release_json.get("id", ""))
+                    )
+                    rollback_json = _to_jsonable(rollback)
+                except Exception as rollback_err:
+                    raise RuntimeError(
+                        "stable release synced failed and auto rollback also failed; "
+                        f"sync_error={sync_error}; rollback_error={rollback_err}"
+                    ) from rollback_err
+
+        return {
+            "release": release_json,
+            "sync": sync_json,
+            "rollback": rollback_json,
+            "sync_error": sync_error,
+        }

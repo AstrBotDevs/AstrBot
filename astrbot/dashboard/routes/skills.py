@@ -1,6 +1,7 @@
 import os
 import traceback
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from quart import request
 
@@ -298,51 +299,40 @@ class SkillsRoute(Route):
             return Response().error("Invalid stage, must be canary/stable").__dict__
 
         async def _do(client):
-            release = await client.skills.promote_candidate(candidate_id, stage=stage)
-            release_json = _to_jsonable(release)
+            sync_mgr = NeoSkillSyncManager()
+            result = await sync_mgr.promote_with_optional_sync(
+                client,
+                candidate_id=candidate_id,
+                stage=stage,
+                sync_to_local=sync_to_local,
+            )
+            release_json = result.get("release")
             logger.info(f"[Neo] Candidate promoted: id={candidate_id}, stage={stage}")
 
-            sync_json = None
-            if stage == "stable" and sync_to_local:
-                sync_mgr = NeoSkillSyncManager()
-                try:
-                    sync_result = await sync_mgr.sync_release(
-                        client,
-                        release_id=str(release_json.get("id", "")),
-                        require_stable=True,
-                    )
-                    sync_json = {
-                        "skill_key": sync_result.skill_key,
-                        "local_skill_name": sync_result.local_skill_name,
-                        "release_id": sync_result.release_id,
-                        "candidate_id": sync_result.candidate_id,
-                        "payload_ref": sync_result.payload_ref,
-                        "map_path": sync_result.map_path,
-                        "synced_at": sync_result.synced_at,
-                    }
-                    logger.info(
-                        f"[Neo] Stable release synced to local: skill={sync_result.local_skill_name}"
-                    )
-                except Exception as sync_err:
-                    logger.error(f"[Neo] Stable sync failed, rolling back: {sync_err}")
-                    rollback_result = await client.skills.rollback_release(
-                        str(release_json.get("id", ""))
-                    )
-                    resp = Response().error(
-                        "Stable promote synced failed and has been rolled back. "
-                        f"sync_error={sync_err}"
-                    )
-                    resp.data = {
-                        "release": release_json,
-                        "rollback": _to_jsonable(rollback_result),
-                    }
-                    return resp.__dict__
+            sync_json = result.get("sync")
+            did_sync_to_local = bool(sync_json)
+            if did_sync_to_local:
+                logger.info(
+                    f"[Neo] Stable release synced to local: skill={sync_json.get('local_skill_name', '')}"
+                )
+
+            if result.get("sync_error"):
+                resp = Response().error(
+                    "Stable promote synced failed and has been rolled back. "
+                    f"sync_error={result['sync_error']}"
+                )
+                resp.data = {
+                    "release": release_json,
+                    "rollback": result.get("rollback"),
+                }
+                return resp.__dict__
 
             # Try to push latest local skills to all active sandboxes.
-            try:
-                await sync_skills_to_active_sandboxes()
-            except Exception:
-                logger.warning("Failed to sync skills to active sandboxes.")
+            if not did_sync_to_local:
+                try:
+                    await sync_skills_to_active_sandboxes()
+                except Exception:
+                    logger.warning("Failed to sync skills to active sandboxes.")
 
             return Response().ok({"release": release_json, "sync": sync_json}).__dict__
 

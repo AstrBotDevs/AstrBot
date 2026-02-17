@@ -1,4 +1,5 @@
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -49,7 +50,27 @@ async def _get_neo_context(
 
 
 @dataclass
-class GetExecutionHistoryTool(FunctionTool):
+class NeoSkillToolBase(FunctionTool):
+    error_prefix: str = "Error"
+
+    async def _run(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        neo_call: Callable[[Any, Any], Awaitable[Any]],
+        error_action: str,
+    ) -> ToolExecResult:
+        if err := _ensure_admin(context):
+            return err
+        try:
+            client, sandbox = await _get_neo_context(context)
+            result = await neo_call(client, sandbox)
+            return _to_json_text(result)
+        except Exception as e:
+            return f"{self.error_prefix} {error_action}: {str(e)}"
+
+
+@dataclass
+class GetExecutionHistoryTool(NeoSkillToolBase):
     name: str = "astrbot_get_execution_history"
     description: str = "Get execution history from current sandbox."
     parameters: dict = field(
@@ -79,11 +100,9 @@ class GetExecutionHistoryTool(FunctionTool):
         has_notes: bool = False,
         has_description: bool = False,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            _client, sandbox = await _get_neo_context(context)
-            result = await sandbox.get_execution_history(
+        return await self._run(
+            context,
+            lambda _client, sandbox: sandbox.get_execution_history(
                 exec_type=exec_type,
                 success_only=success_only,
                 limit=limit,
@@ -91,14 +110,13 @@ class GetExecutionHistoryTool(FunctionTool):
                 tags=tags,
                 has_notes=has_notes,
                 has_description=has_description,
-            )
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error getting execution history: {str(e)}"
+            ),
+            error_action="getting execution history",
+        )
 
 
 @dataclass
-class AnnotateExecutionTool(FunctionTool):
+class AnnotateExecutionTool(NeoSkillToolBase):
     name: str = "astrbot_annotate_execution"
     description: str = "Annotate one execution history record."
     parameters: dict = field(
@@ -122,23 +140,20 @@ class AnnotateExecutionTool(FunctionTool):
         tags: str | None = None,
         notes: str | None = None,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            _client, sandbox = await _get_neo_context(context)
-            result = await sandbox.annotate_execution(
+        return await self._run(
+            context,
+            lambda _client, sandbox: sandbox.annotate_execution(
                 execution_id=execution_id,
                 description=description,
                 tags=tags,
                 notes=notes,
-            )
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error annotating execution: {str(e)}"
+            ),
+            error_action="annotating execution",
+        )
 
 
 @dataclass
-class CreateSkillPayloadTool(FunctionTool):
+class CreateSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_payload"
     description: str = "Create a generic skill payload and return payload_ref."
     parameters: dict = field(
@@ -167,18 +182,18 @@ class CreateSkillPayloadTool(FunctionTool):
         payload: dict[str, Any] | list[Any],
         kind: str = "astrbot_skill_v1",
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.create_payload(payload=payload, kind=kind)
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error creating skill payload: {str(e)}"
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.create_payload(
+                payload=payload,
+                kind=kind,
+            ),
+            error_action="creating skill payload",
+        )
 
 
 @dataclass
-class GetSkillPayloadTool(FunctionTool):
+class GetSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_get_skill_payload"
     description: str = "Get one skill payload by payload_ref."
     parameters: dict = field(
@@ -196,18 +211,15 @@ class GetSkillPayloadTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         payload_ref: str,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.get_payload(payload_ref)
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error getting skill payload: {str(e)}"
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.get_payload(payload_ref),
+            error_action="getting skill payload",
+        )
 
 
 @dataclass
-class CreateSkillCandidateTool(FunctionTool):
+class CreateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_candidate"
     description: str = "Create a skill candidate from source execution IDs."
     parameters: dict = field(
@@ -234,23 +246,20 @@ class CreateSkillCandidateTool(FunctionTool):
         scenario_key: str | None = None,
         payload_ref: str | None = None,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.create_candidate(
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.create_candidate(
                 skill_key=skill_key,
                 source_execution_ids=source_execution_ids,
                 scenario_key=scenario_key,
                 payload_ref=payload_ref,
-            )
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error creating skill candidate: {str(e)}"
+            ),
+            error_action="creating skill candidate",
+        )
 
 
 @dataclass
-class ListSkillCandidatesTool(FunctionTool):
+class ListSkillCandidatesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_candidates"
     description: str = "List skill candidates."
     parameters: dict = field(
@@ -274,23 +283,20 @@ class ListSkillCandidatesTool(FunctionTool):
         limit: int = 100,
         offset: int = 0,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.list_candidates(
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.list_candidates(
                 status=status,
                 skill_key=skill_key,
                 limit=limit,
                 offset=offset,
-            )
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error listing skill candidates: {str(e)}"
+            ),
+            error_action="listing skill candidates",
+        )
 
 
 @dataclass
-class EvaluateSkillCandidateTool(FunctionTool):
+class EvaluateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_evaluate_skill_candidate"
     description: str = "Evaluate a skill candidate."
     parameters: dict = field(
@@ -316,24 +322,21 @@ class EvaluateSkillCandidateTool(FunctionTool):
         benchmark_id: str | None = None,
         report: str | None = None,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.evaluate_candidate(
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.evaluate_candidate(
                 candidate_id,
                 passed=passed,
                 score=score,
                 benchmark_id=benchmark_id,
                 report=report,
-            )
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error evaluating skill candidate: {str(e)}"
+            ),
+            error_action="evaluating skill candidate",
+        )
 
 
 @dataclass
-class PromoteSkillCandidateTool(FunctionTool):
+class PromoteSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_promote_skill_candidate"
     description: str = "Promote one candidate to release stage (canary/stable)."
     parameters: dict = field(
@@ -370,52 +373,26 @@ class PromoteSkillCandidateTool(FunctionTool):
 
         try:
             client, _sandbox = await _get_neo_context(context)
-            release = await client.skills.promote_candidate(candidate_id, stage=stage)
-            release_json = _to_jsonable(release)
-
-            sync_json: dict[str, Any] | None = None
-            rollback_json: dict[str, Any] | None = None
-            if stage == "stable" and sync_to_local:
-                sync_mgr = NeoSkillSyncManager()
-                try:
-                    sync_result = await sync_mgr.sync_release(
-                        client,
-                        release_id=str(release_json.get("id", "")),
-                        require_stable=True,
-                    )
-                    sync_json = {
-                        "skill_key": sync_result.skill_key,
-                        "local_skill_name": sync_result.local_skill_name,
-                        "release_id": sync_result.release_id,
-                        "candidate_id": sync_result.candidate_id,
-                        "payload_ref": sync_result.payload_ref,
-                        "map_path": sync_result.map_path,
-                        "synced_at": sync_result.synced_at,
-                    }
-                except Exception as sync_err:
-                    # Keep state consistent by rolling back the new release.
-                    try:
-                        rollback = await client.skills.rollback_release(
-                            str(release_json.get("id", ""))
-                        )
-                        rollback_json = _to_jsonable(rollback)
-                    except Exception as rollback_err:
-                        return (
-                            "Error promoting skill candidate: stable release synced failed; "
-                            f"auto rollback also failed. sync_error={sync_err}; "
-                            f"rollback_error={rollback_err}"
-                        )
+            sync_mgr = NeoSkillSyncManager()
+            result = await sync_mgr.promote_with_optional_sync(
+                client,
+                candidate_id=candidate_id,
+                stage=stage,
+                sync_to_local=sync_to_local,
+            )
+            if result.get("sync_error"):
+                rollback_json = result.get("rollback")
+                if rollback_json:
                     return (
                         "Error promoting skill candidate: stable release synced failed; "
-                        f"auto rollback succeeded. sync_error={sync_err}; "
+                        f"auto rollback succeeded. sync_error={result['sync_error']}; "
                         f"rollback={_to_json_text(rollback_json)}"
                     )
-
             return _to_json_text(
                 {
-                    "release": release_json,
-                    "sync": sync_json,
-                    "rollback": rollback_json,
+                    "release": result.get("release"),
+                    "sync": result.get("sync"),
+                    "rollback": result.get("rollback"),
                 }
             )
         except Exception as e:
@@ -423,7 +400,7 @@ class PromoteSkillCandidateTool(FunctionTool):
 
 
 @dataclass
-class ListSkillReleasesTool(FunctionTool):
+class ListSkillReleasesTool(NeoSkillToolBase):
     name: str = "astrbot_list_skill_releases"
     description: str = "List skill releases."
     parameters: dict = field(
@@ -449,24 +426,21 @@ class ListSkillReleasesTool(FunctionTool):
         limit: int = 100,
         offset: int = 0,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.list_releases(
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.list_releases(
                 skill_key=skill_key,
                 active_only=active_only,
                 stage=stage,
                 limit=limit,
                 offset=offset,
-            )
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error listing skill releases: {str(e)}"
+            ),
+            error_action="listing skill releases",
+        )
 
 
 @dataclass
-class RollbackSkillReleaseTool(FunctionTool):
+class RollbackSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_rollback_skill_release"
     description: str = "Rollback one skill release."
     parameters: dict = field(
@@ -484,18 +458,15 @@ class RollbackSkillReleaseTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         release_id: str,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            result = await client.skills.rollback_release(release_id)
-            return _to_json_text(result)
-        except Exception as e:
-            return f"Error rolling back skill release: {str(e)}"
+        return await self._run(
+            context,
+            lambda client, _sandbox: client.skills.rollback_release(release_id),
+            error_action="rolling back skill release",
+        )
 
 
 @dataclass
-class SyncSkillReleaseTool(FunctionTool):
+class SyncSkillReleaseTool(NeoSkillToolBase):
     name: str = "astrbot_sync_skill_release"
     description: str = (
         "Sync stable Neo release payload to local SKILL.md and update mapping metadata."
@@ -519,27 +490,30 @@ class SyncSkillReleaseTool(FunctionTool):
         skill_key: str | None = None,
         require_stable: bool = True,
     ) -> ToolExecResult:
-        if err := _ensure_admin(context):
-            return err
-        try:
-            client, _sandbox = await _get_neo_context(context)
-            sync_mgr = NeoSkillSyncManager()
-            result = await sync_mgr.sync_release(
+        return await self._run(
+            context,
+            lambda client, _sandbox: _sync_release_to_dict(
                 client,
                 release_id=release_id,
                 skill_key=skill_key,
                 require_stable=require_stable,
-            )
-            return _to_json_text(
-                {
-                    "skill_key": result.skill_key,
-                    "local_skill_name": result.local_skill_name,
-                    "release_id": result.release_id,
-                    "candidate_id": result.candidate_id,
-                    "payload_ref": result.payload_ref,
-                    "map_path": result.map_path,
-                    "synced_at": result.synced_at,
-                }
-            )
-        except Exception as e:
-            return f"Error syncing skill release: {str(e)}"
+            ),
+            error_action="syncing skill release",
+        )
+
+
+async def _sync_release_to_dict(
+    client: Any,
+    *,
+    release_id: str | None,
+    skill_key: str | None,
+    require_stable: bool,
+) -> dict[str, str]:
+    sync_mgr = NeoSkillSyncManager()
+    result = await sync_mgr.sync_release(
+        client,
+        release_id=release_id,
+        skill_key=skill_key,
+        require_stable=require_stable,
+    )
+    return sync_mgr.sync_result_to_dict(result)
