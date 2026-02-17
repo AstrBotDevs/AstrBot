@@ -14,8 +14,13 @@
         </div>
 
         <!-- 选择对话框 -->
-        <v-dialog v-model="dialog" max-width="1000px" min-width="800px">
-            <v-card class="selector-dialog-card">
+        <v-dialog
+            v-model="dialog"
+            :max-width="$vuetify.display.smAndDown ? undefined : '1000px'"
+            :min-width="$vuetify.display.smAndDown ? undefined : '800px'"
+            scrollable
+        >
+            <v-card class="selector-dialog-card" :class="{ 'selector-dialog-card-mobile': $vuetify.display.smAndDown }">
                 <v-card-title class="dialog-title d-flex align-center py-4 px-5">
                     <v-icon class="mr-3" color="primary">mdi-account-circle</v-icon>
                     <span>{{ labels.dialogTitle || '选择项目' }}</span>
@@ -23,7 +28,7 @@
 
                 <v-divider />
 
-                <v-card-text class="pa-0" style="height: 600px; max-height: 80vh; overflow: hidden;">
+                <v-card-text class="selector-dialog-content pa-0">
                     <div class="selector-layout">
                         <!-- 左侧文件夹树 -->
                         <div class="folder-sidebar">
@@ -146,7 +151,7 @@
                     </div>
                 </v-card-text>
 
-                <v-card-actions class="pa-4">
+                <v-card-actions class="selector-dialog-actions pa-4">
                     <v-btn v-if="showCreateButton" variant="text" color="primary" prepend-icon="mdi-plus"
                         @click="$emit('create')">
                         {{ labels.createButton || '新建' }}
@@ -406,6 +411,12 @@ export default defineComponent({
     overflow: hidden;
 }
 
+.selector-dialog-content {
+    height: 600px;
+    max-height: 80vh;
+    overflow: hidden;
+}
+
 .dialog-title {
     font-size: 1.25rem;
     font-weight: 500;
@@ -518,21 +529,44 @@ export default defineComponent({
 }
 
 @media (max-width: 600px) {
+    .selector-dialog-card-mobile {
+        border-radius: 0;
+    }
+
+    .selector-dialog-content {
+        height: calc(100vh - 132px);
+        max-height: none;
+    }
+
+    .dialog-title {
+        font-size: 1.05rem;
+        padding: 12px 16px !important;
+    }
+
+    .selector-dialog-actions {
+        padding: 12px 16px !important;
+        gap: 8px;
+    }
+
+    .selector-dialog-actions .v-btn {
+        min-width: 0;
+    }
+
     .selector-layout {
         flex-direction: column;
-        height: auto;
-        max-height: 500px;
+        height: 100%;
+        max-height: none;
     }
 
     .folder-sidebar {
         width: 100%;
         border-right: none;
         border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-        max-height: 150px;
+        max-height: 35vh;
     }
 
     .items-list {
-        max-height: 300px;
+        max-height: none;
     }
 }
 </style>
