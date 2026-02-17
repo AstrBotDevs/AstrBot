@@ -514,9 +514,7 @@ class PluginManager:
                     logger.info(metadata)
                     metadata.config = plugin_config
                     p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                    p_author = (
-                        (metadata.author or "unknown").lower().replace("/", "_")
-                    )
+                    p_author = (metadata.author or "unknown").lower().replace("/", "_")
                     plugin_id = f"{p_author}/{p_name}"
 
                     # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
