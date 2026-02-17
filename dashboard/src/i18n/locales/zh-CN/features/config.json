@@ -69,6 +69,10 @@
     "normalConfig": "普通",
     "systemConfig": "系统"
   },
+  "search": {
+    "placeholder": "搜索配置项（字段名/描述/提示）",
+    "noResult": "未找到匹配的配置项"
+  },
   "configManagement": {
     "title": "配置文件管理",
     "description": "AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。",
