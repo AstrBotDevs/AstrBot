@@ -1029,6 +1029,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "NVIDIA": {
+                        "id": "nvidia",
+                        "provider": "nvidia",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://integrate.api.nvidia.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "Azure OpenAI": {
                         "id": "azure_openai",
                         "provider": "azure",
