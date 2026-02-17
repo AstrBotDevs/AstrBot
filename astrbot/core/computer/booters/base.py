@@ -17,10 +17,8 @@ class ComputerBooter:
     def shell(self) -> ShellComponent: ...
 
     @property
-    def browser(self) -> BrowserComponent:
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support browser capability."
-        )
+    def browser(self) -> BrowserComponent | None:
+        return None
 
     async def boot(self, session_id: str) -> None: ...
 
