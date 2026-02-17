@@ -503,6 +503,7 @@ export default {
         // 重置选择到之前的值
         this.$nextTick(() => {
           this.selectedConfigID = this.selectedConfigInfo.id || 'default';
+          this.getConfig(this.selectedConfigID);
         });
       } else {
         this.getConfig(value);
