@@ -22,6 +22,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..register import register_provider_adapter
+from .default import with_model_request_retry
 
 
 @register_provider_adapter(
@@ -204,6 +205,7 @@ class ProviderAnthropic(Provider):
         if usage.output_tokens is not None:
             token_usage.output = usage.output_tokens
 
+    @with_model_request_retry()
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -265,6 +267,10 @@ class ProviderAnthropic(Provider):
 
         return llm_response
 
+    @with_model_request_retry()
+    async def _create_message_stream(self, payloads: dict, extra_body: dict):
+        return self.client.messages.stream(**payloads, extra_body=extra_body)
+
     async def _query_stream(
         self,
         payloads: dict,
@@ -293,9 +299,8 @@ class ProviderAnthropic(Provider):
                 "type": "enabled",
             }
 
-        async with self.client.messages.stream(
-            **payloads, extra_body=extra_body
-        ) as stream:
+        stream_ctx = await self._create_message_stream(payloads, extra_body)
+        async with stream_ctx as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
                 if event.type == "message_start":

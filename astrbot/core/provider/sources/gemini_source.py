@@ -21,6 +21,7 @@ from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from ..register import register_provider_adapter
+from .default import get_model_request_async_retrying, with_model_request_retry
 
 
 class SuppressNonTextPartsWarning(logging.Filter):
@@ -513,6 +514,7 @@ class ProviderGoogleGenAI(Provider):
                 llm_response.reasoning_signature = base64.b64encode(ts).decode("utf-8")
         return MessageChain(chain=chain)
 
+    @with_model_request_retry()
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
@@ -598,6 +600,17 @@ class ProviderGoogleGenAI(Provider):
         return llm_response
 
     async def _query_stream(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        async for attempt in get_model_request_async_retrying():
+            with attempt:
+                async for response in self._query_stream_once(payloads, tools):
+                    yield response
+                return
+
+    async def _query_stream_once(
         self,
         payloads: dict,
         tools: ToolSet | None,
@@ -759,18 +772,7 @@ class ProviderGoogleGenAI(Provider):
 
         payloads = {"messages": context_query, "model": model}
 
-        retry = 10
-        keys = self.api_keys.copy()
-
-        for _ in range(retry):
-            try:
-                return await self._query(payloads, func_tool)
-            except APIError as e:
-                if await self._handle_api_error(e, keys):
-                    continue
-                break
-
-        raise Exception("请求失败。")
+        return await self._query(payloads, func_tool)
 
     async def text_chat_stream(
         self,
@@ -814,18 +816,8 @@ class ProviderGoogleGenAI(Provider):
 
         payloads = {"messages": context_query, "model": model}
 
-        retry = 10
-        keys = self.api_keys.copy()
-
-        for _ in range(retry):
-            try:
-                async for response in self._query_stream(payloads, func_tool):
-                    yield response
-                break
-            except APIError as e:
-                if await self._handle_api_error(e, keys):
-                    continue
-                break
+        async for response in self._query_stream(payloads, func_tool):
+            yield response
 
     async def get_models(self):
         try:
