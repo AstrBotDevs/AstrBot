@@ -276,7 +276,9 @@ class SkillsRoute(Route):
                 benchmark_id=data.get("benchmark_id"),
                 report=data.get("report"),
             )
-            logger.info(f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}")
+            logger.info(
+                f"[Neo] Candidate evaluated: id={candidate_id}, passed={passed}"
+            )
             return Response().ok(_to_jsonable(result)).__dict__
 
         return await self._with_neo_client(_do)
