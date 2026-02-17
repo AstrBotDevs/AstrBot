@@ -7,6 +7,8 @@ import io
 import logging
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 from collections import deque
@@ -18,6 +20,7 @@ logger = logging.getLogger("astrbot")
 
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
+_PIP_EXECUTABLE_PATCH_LOCK = threading.RLock()
 
 
 def _canonicalize_distribution_name(name: str) -> str:
@@ -43,9 +46,187 @@ def _get_pip_main():
 
 def _run_pip_main_with_output(pip_main, args: list[str]) -> tuple[int, str]:
     stream = io.StringIO()
-    with contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
+    with (
+        _patch_python_executable_for_pip_subprocesses(),
+        contextlib.redirect_stdout(stream),
+        contextlib.redirect_stderr(stream),
+    ):
         result_code = pip_main(args)
     return result_code, stream.getvalue()
+
+
+def _normalize_executable_path(candidate: str | None) -> str | None:
+    if not candidate:
+        return None
+
+    normalized = candidate.strip().strip('"').strip("'")
+    if not normalized:
+        return None
+
+    if os.path.sep not in normalized and (
+        os.path.altsep is None or os.path.altsep not in normalized
+    ):
+        resolved = shutil.which(normalized)
+        if not resolved:
+            return None
+        normalized = resolved
+
+    normalized = os.path.realpath(os.path.expanduser(normalized))
+    if not os.path.exists(normalized):
+        return None
+    if not os.access(normalized, os.X_OK):
+        return None
+    return normalized
+
+
+def _get_python_version_for_executable(executable: str) -> tuple[int, int] | None:
+    try:
+        completed = subprocess.run(
+            [
+                executable,
+                "-c",
+                "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except Exception:
+        return None
+
+    if completed.returncode != 0:
+        return None
+
+    output = completed.stdout.strip()
+    parts = output.split(".", maxsplit=1)
+    if len(parts) != 2:
+        return None
+
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+
+
+def _resolve_python_executable_for_pip_subprocesses() -> str | None:
+    requested_version = (sys.version_info.major, sys.version_info.minor)
+
+    candidate_names = [
+        f"python{requested_version[0]}.{requested_version[1]}",
+        f"python{requested_version[0]}",
+        "python3",
+        "python",
+    ]
+    candidates = [
+        os.environ.get("ASTRBOT_PIP_PYTHON"),
+        sys.executable,
+        os.environ.get("PYTHON"),
+        os.environ.get("PYTHONEXECUTABLE"),
+        getattr(sys, "_base_executable", None),
+        *candidate_names,
+    ]
+
+    same_version_fallback: str | None = None
+    any_version_fallback: str | None = None
+    seen: set[str] = set()
+
+    for candidate in candidates:
+        normalized = _normalize_executable_path(candidate)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+
+        detected_version = _get_python_version_for_executable(normalized)
+        if detected_version is None:
+            continue
+
+        if detected_version == requested_version:
+            if normalized == os.path.realpath(sys.executable):
+                return normalized
+            if same_version_fallback is None:
+                same_version_fallback = normalized
+            continue
+
+        if any_version_fallback is None:
+            any_version_fallback = normalized
+
+    return same_version_fallback or any_version_fallback
+
+
+def _is_pip_feature_enabled_in_args(args: list[str], feature: str) -> bool:
+    for index, token in enumerate(args):
+        if token == "--use-feature":
+            if index + 1 < len(args) and args[index + 1] == feature:
+                return True
+            continue
+
+        if token.startswith("--use-feature="):
+            enabled_features = token.split("=", maxsplit=1)[1]
+            if feature in {item.strip() for item in enabled_features.split(",")}:
+                return True
+
+    return False
+
+
+def _pip_supports_feature(feature: str) -> bool:
+    try:
+        from pip._internal.cli import cmdoptions as pip_cmdoptions
+    except Exception:
+        return False
+
+    use_new_feature = getattr(pip_cmdoptions, "use_new_feature", None)
+    choices = getattr(use_new_feature, "keywords", {}).get("choices", [])
+    if not isinstance(choices, (list, tuple, set)):
+        return False
+    return feature in choices
+
+
+@contextlib.contextmanager
+def _patch_python_executable_for_pip_subprocesses():
+    if not getattr(sys, "frozen", False):
+        yield
+        return
+
+    with _PIP_EXECUTABLE_PATCH_LOCK:
+        patched_executable = _resolve_python_executable_for_pip_subprocesses()
+        if not patched_executable:
+            logger.warning(
+                "Cannot find a runnable Python interpreter for pip subprocesses in "
+                "frozen runtime. Source-built dependencies may fail. "
+                "You can set ASTRBOT_PIP_PYTHON to a Python executable path."
+            )
+            yield
+            return
+
+        original_executable = sys.executable
+        original_python = os.environ.get("PYTHON")
+        original_python_executable = os.environ.get("PYTHONEXECUTABLE")
+
+        sys.executable = patched_executable
+        os.environ["PYTHON"] = patched_executable
+        os.environ["PYTHONEXECUTABLE"] = patched_executable
+
+        if os.path.realpath(original_executable) != patched_executable:
+            logger.info(
+                "Patched pip subprocess interpreter in frozen runtime: %s -> %s",
+                original_executable,
+                patched_executable,
+            )
+
+        try:
+            yield
+        finally:
+            sys.executable = original_executable
+            if original_python is None:
+                os.environ.pop("PYTHON", None)
+            else:
+                os.environ["PYTHON"] = original_python
+            if original_python_executable is None:
+                os.environ.pop("PYTHONEXECUTABLE", None)
+            else:
+                os.environ["PYTHONEXECUTABLE"] = original_python_executable
 
 
 def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
@@ -542,6 +723,7 @@ class PipInstaller:
         mirror: str | None = None,
     ) -> None:
         args = ["install"]
+        pip_install_args = self.pip_install_arg.split() if self.pip_install_arg else []
         requested_requirements: set[str] = set()
         if package_name:
             args.append(package_name)
@@ -563,8 +745,28 @@ class PipInstaller:
             args.extend(["--target", target_site_packages])
             args.extend(["--upgrade", "--force-reinstall"])
 
-        if self.pip_install_arg:
-            args.extend(self.pip_install_arg.split())
+            feature_name = "inprocess-build-deps"
+            feature_configured = _is_pip_feature_enabled_in_args(
+                [*args, *pip_install_args],
+                feature_name,
+            )
+            if feature_configured:
+                logger.info("Frozen runtime pip feature enabled: %s", feature_name)
+            elif _pip_supports_feature(feature_name):
+                args.extend(["--use-feature", feature_name])
+                logger.info(
+                    "Enabled pip feature for frozen runtime: %s",
+                    feature_name,
+                )
+            else:
+                logger.warning(
+                    "Current pip does not support --use-feature=%s. "
+                    "Build dependency installation may require subprocess fallback.",
+                    feature_name,
+                )
+
+        if pip_install_args:
+            args.extend(pip_install_args)
 
         logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         result_code = await self._run_pip_in_process(args)

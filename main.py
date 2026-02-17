@@ -2,10 +2,48 @@ import argparse
 import asyncio
 import mimetypes
 import os
+import runpy
 import sys
 from pathlib import Path
 
-import runtime_bootstrap
+
+def _run_python_compat_mode_if_needed() -> None:
+    """Support subprocess calls that expect a Python interpreter in frozen mode."""
+    if not getattr(sys, "frozen", False):
+        return
+
+    if len(sys.argv) < 2:
+        return
+
+    command = sys.argv[1]
+
+    if command == "-c":
+        if len(sys.argv) < 3:
+            raise SystemExit("astrbot-backend: argument expected for -c")
+        code = sys.argv[2]
+        sys.argv = ["-c", *sys.argv[3:]]
+        exec(code, {"__name__": "__main__", "__package__": None, "__spec__": None})  # noqa: S102
+        raise SystemExit(0)
+
+    if command == "-m":
+        if len(sys.argv) < 3:
+            raise SystemExit("astrbot-backend: argument expected for -m")
+        module_name = sys.argv[2]
+        sys.argv = [module_name, *sys.argv[3:]]
+        runpy.run_module(module_name, run_name="__main__", alter_sys=True)
+        raise SystemExit(0)
+
+    script_path = Path(command)
+    if script_path.is_file():
+        resolved_script = script_path.resolve().as_posix()
+        sys.argv = [resolved_script, *sys.argv[2:]]
+        runpy.run_path(resolved_script, run_name="__main__")
+        raise SystemExit(0)
+
+
+_run_python_compat_mode_if_needed()
+
+import runtime_bootstrap  # noqa: E402
 
 runtime_bootstrap.initialize_runtime_bootstrap()
 
