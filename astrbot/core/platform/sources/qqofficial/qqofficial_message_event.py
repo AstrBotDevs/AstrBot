@@ -152,7 +152,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload["msg_type"] = 7
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
-                        group_openid=source.group_openid, # type: ignore
+                        group_openid=source.group_openid,  # type: ignore
                         **retry_payload,
                     ),
                     payload=payload,
