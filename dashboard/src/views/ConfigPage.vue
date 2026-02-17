@@ -4,13 +4,24 @@
     <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
       style="display: flex; flex-direction: column; align-items: start;">
 
-      <div class="d-flex flex-row pr-4"
+      <div class="config-toolbar d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
-        <div class="d-flex flex-row align-center" style="gap: 12px;">
-          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
+        <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
+          <v-select class="config-select" style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
             v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
+          <v-text-field
+            class="config-search-input"
+            v-model="configSearchKeyword"
+            prepend-inner-icon="mdi-magnify"
+            :label="tm('search.placeholder')"
+            hide-details
+            density="compact"
+            rounded="md"
+            variant="outlined"
+            style="min-width: 280px;"
+          />
           <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
 
         </div>
@@ -34,6 +45,7 @@
           <AstrBotCoreConfigWrapper 
             :metadata="metadata" 
             :config_data="config_data"
+            :search-keyword="configSearchKeyword"
           />
 
           <v-tooltip :text="tm('actions.save')" location="left">
@@ -290,6 +302,7 @@ export default {
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
+      configSearchKeyword: '',
 
       // 系统配置开关
       isSystemConfig: false,
@@ -701,6 +714,21 @@ export default {
 
   .config-panel {
     width: 100%;
+  }
+
+  .config-toolbar {
+    padding-right: 0 !important;
+  }
+
+  .config-toolbar-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .config-select,
+  .config-search-input {
+    width: 100%;
+    min-width: 0 !important;
   }
 }
 

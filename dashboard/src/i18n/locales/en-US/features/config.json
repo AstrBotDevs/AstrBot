@@ -69,6 +69,10 @@
     "normalConfig": "Basic",
     "systemConfig": "System"
   },
+  "search": {
+    "placeholder": "Search config items (key/description/hint)",
+    "noResult": "No matching config items found"
+  },
   "configManagement": {
     "title": "Configuration Management",
     "description": "AstrBot supports separate configuration files for different bots. The `default` configuration is used by default.",
