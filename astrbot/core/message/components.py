@@ -25,10 +25,14 @@ import asyncio
 import base64
 import json
 import os
+import sys
 import uuid
 from enum import Enum
 
-from pydantic.v1 import BaseModel
+if sys.version_info >= (3, 14):
+    from pydantic import BaseModel
+else:
+    from pydantic.v1 import BaseModel
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -85,7 +89,7 @@ class BaseMessageComponent(BaseModel):
 
 
 class Plain(BaseMessageComponent):
-    type = ComponentType.Plain
+    type: ComponentType = ComponentType.Plain
     text: str
     convert: bool | None = True
 
@@ -100,7 +104,7 @@ class Plain(BaseMessageComponent):
 
 
 class Face(BaseMessageComponent):
-    type = ComponentType.Face
+    type: ComponentType = ComponentType.Face
     id: int
 
     def __init__(self, **_) -> None:
@@ -108,7 +112,7 @@ class Face(BaseMessageComponent):
 
 
 class Record(BaseMessageComponent):
-    type = ComponentType.Record
+    type: ComponentType = ComponentType.Record
     file: str | None = ""
     magic: bool | None = False
     url: str | None = ""
@@ -215,7 +219,7 @@ class Record(BaseMessageComponent):
 
 
 class Video(BaseMessageComponent):
-    type = ComponentType.Video
+    type: ComponentType = ComponentType.Video
     file: str
     cover: str | None = ""
     c: int | None = 2
@@ -301,7 +305,7 @@ class Video(BaseMessageComponent):
 
 
 class At(BaseMessageComponent):
-    type = ComponentType.At
+    type: ComponentType = ComponentType.At
     qq: int | str  # 此处str为all时代表所有人
     name: str | None = ""
 
@@ -323,28 +327,28 @@ class AtAll(At):
 
 
 class RPS(BaseMessageComponent):  # TODO
-    type = ComponentType.RPS
+    type: ComponentType = ComponentType.RPS
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Dice(BaseMessageComponent):  # TODO
-    type = ComponentType.Dice
+    type: ComponentType = ComponentType.Dice
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Shake(BaseMessageComponent):  # TODO
-    type = ComponentType.Shake
+    type: ComponentType = ComponentType.Shake
 
     def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Share(BaseMessageComponent):
-    type = ComponentType.Share
+    type: ComponentType = ComponentType.Share
     url: str
     title: str
     content: str | None = ""
@@ -355,7 +359,7 @@ class Share(BaseMessageComponent):
 
 
 class Contact(BaseMessageComponent):  # TODO
-    type = ComponentType.Contact
+    type: ComponentType = ComponentType.Contact
     _type: str  # type 字段冲突
     id: int | None = 0
 
@@ -364,7 +368,7 @@ class Contact(BaseMessageComponent):  # TODO
 
 
 class Location(BaseMessageComponent):  # TODO
-    type = ComponentType.Location
+    type: ComponentType = ComponentType.Location
     lat: float
     lon: float
     title: str | None = ""
@@ -375,7 +379,7 @@ class Location(BaseMessageComponent):  # TODO
 
 
 class Music(BaseMessageComponent):
-    type = ComponentType.Music
+    type: ComponentType = ComponentType.Music
     _type: str
     id: int | None = 0
     url: str | None = ""
@@ -392,7 +396,7 @@ class Music(BaseMessageComponent):
 
 
 class Image(BaseMessageComponent):
-    type = ComponentType.Image
+    type: ComponentType = ComponentType.Image
     file: str | None = ""
     _type: str | None = ""
     subType: int | None = 0
@@ -507,7 +511,7 @@ class Image(BaseMessageComponent):
 
 
 class Reply(BaseMessageComponent):
-    type = ComponentType.Reply
+    type: ComponentType = ComponentType.Reply
     id: str | int
     """所引用的消息 ID"""
     chain: list["BaseMessageComponent"] | None = []
@@ -543,7 +547,7 @@ class Poke(BaseMessageComponent):
 
 
 class Forward(BaseMessageComponent):
-    type = ComponentType.Forward
+    type: ComponentType = ComponentType.Forward
     id: str
 
     def __init__(self, **_) -> None:
@@ -553,7 +557,7 @@ class Forward(BaseMessageComponent):
 class Node(BaseMessageComponent):
     """群合并转发消息"""
 
-    type = ComponentType.Node
+    type: ComponentType = ComponentType.Node
     id: int | None = 0  # 忽略
     name: str | None = ""  # qq昵称
     uin: str | None = "0"  # qq号
@@ -605,7 +609,7 @@ class Node(BaseMessageComponent):
 
 
 class Nodes(BaseMessageComponent):
-    type = ComponentType.Nodes
+    type: ComponentType = ComponentType.Nodes
     nodes: list[Node]
 
     def __init__(self, nodes: list[Node], **_) -> None:
@@ -631,7 +635,7 @@ class Nodes(BaseMessageComponent):
 
 
 class Json(BaseMessageComponent):
-    type = ComponentType.Json
+    type: ComponentType = ComponentType.Json
     data: dict
 
     def __init__(self, data: str | dict, **_) -> None:
@@ -641,14 +645,14 @@ class Json(BaseMessageComponent):
 
 
 class Unknown(BaseMessageComponent):
-    type = ComponentType.Unknown
+    type: ComponentType = ComponentType.Unknown
     text: str
 
 
 class File(BaseMessageComponent):
     """文件消息段"""
 
-    type = ComponentType.File
+    type: ComponentType = ComponentType.File
     name: str | None = ""  # 名字
     file_: str | None = ""  # 本地路径
     url: str | None = ""  # url
@@ -783,7 +787,7 @@ class File(BaseMessageComponent):
 
 
 class WechatEmoji(BaseMessageComponent):
-    type = ComponentType.WechatEmoji
+    type: ComponentType = ComponentType.WechatEmoji
     md5: str | None = ""
     md5_len: int | None = 0
     cdnurl: str | None = ""
