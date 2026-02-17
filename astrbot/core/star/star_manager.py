@@ -194,6 +194,11 @@ class PluginManager:
                     await pip_installer.install(requirements_path=pth)
                 except Exception as e:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
+                    if target_plugin:
+                        raise Exception(
+                            "插件依赖安装失败，请检查插件 requirements.txt "
+                            "中的依赖版本或构建环境。"
+                        ) from e
         return True
 
     async def _import_plugin_with_dependency_recovery(
@@ -471,6 +476,19 @@ class PluginManager:
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
+                    fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                    self.failed_plugin_dict[root_dir_name] = {
+                        "error": str(e),
+                        "traceback": traceback.format_exc(),
+                    }
+                    if not reserved:
+                        logger.warning(
+                            f"插件 {root_dir_name} 导入失败，已自动卸载该插件。"
+                        )
+                        await self._cleanup_failed_plugin_install(
+                            dir_name=root_dir_name,
+                            plugin_path=plugin_dir_path,
+                        )
                     continue
 
                 # 检查 _conf_schema.json

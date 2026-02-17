@@ -1,86 +1,140 @@
-import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..');
 const outputDir = path.join(rootDir, 'desktop', 'resources', 'backend');
-const workDir = path.join(rootDir, 'desktop', 'resources', '.pyinstaller');
-const dataSeparator = process.platform === 'win32' ? ';' : ':';
-const kbStopwordsSrc = path.join(
-  rootDir,
-  'astrbot',
-  'core',
-  'knowledge_base',
-  'retrieval',
-  'hit_stopwords.txt',
-);
-const kbStopwordsDest = 'astrbot/core/knowledge_base/retrieval';
-const builtinStarsSrc = path.join(rootDir, 'astrbot', 'builtin_stars');
-const builtinStarsDest = 'astrbot/builtin_stars';
+const appDir = path.join(outputDir, 'app');
+const runtimeDir = path.join(outputDir, 'python');
+const manifestPath = path.join(outputDir, 'runtime-manifest.json');
+const launcherPath = path.join(outputDir, 'launch_backend.py');
 
-const args = [
-  'run',
-  '--with',
-  'pyinstaller',
-  'python',
-  '-m',
-  'PyInstaller',
-  '--noconfirm',
-  '--clean',
-  '--onefile',
-  '--name',
-  'astrbot-backend',
-  '--collect-all',
-  'aiosqlite',
-  '--collect-all',
-  'pip',
-  '--collect-all',
-  'bs4',
-  '--collect-all',
-  'readability',
-  '--collect-all',
-  'lxml',
-  '--collect-all',
-  'lxml_html_clean',
-  '--collect-all',
-  'rfc3987_syntax',
-  '--collect-submodules',
-  'astrbot.api',
-  '--collect-submodules',
-  'astrbot.builtin_stars',
-  '--collect-data',
-  'certifi',
-  '--add-data',
-  `${builtinStarsSrc}${dataSeparator}${builtinStarsDest}`,
-  '--add-data',
-  `${kbStopwordsSrc}${dataSeparator}${kbStopwordsDest}`,
-  '--distpath',
-  outputDir,
-  '--workpath',
-  workDir,
-  '--specpath',
-  workDir,
-  path.join(rootDir, 'main.py'),
+const runtimeSource =
+  process.env.ASTRBOT_DESKTOP_CPYTHON_HOME ||
+  process.env.ASTRBOT_DESKTOP_BACKEND_RUNTIME;
+
+if (!runtimeSource) {
+  console.error(
+    'Missing CPython runtime source. Set ASTRBOT_DESKTOP_CPYTHON_HOME ' +
+      '(recommended) or ASTRBOT_DESKTOP_BACKEND_RUNTIME.',
+  );
+  process.exit(1);
+}
+
+const runtimeSourceReal = path.resolve(rootDir, runtimeSource);
+if (!fs.existsSync(runtimeSourceReal)) {
+  console.error(`CPython runtime source does not exist: ${runtimeSourceReal}`);
+  process.exit(1);
+}
+
+const sourceEntries = [
+  ['astrbot', 'astrbot'],
+  ['main.py', 'main.py'],
+  ['runtime_bootstrap.py', 'runtime_bootstrap.py'],
+  ['requirements.txt', 'requirements.txt'],
 ];
 
-const result = spawnSync('uv', args, {
-  cwd: rootDir,
-  stdio: 'inherit',
-  shell: process.platform === 'win32',
-});
+const shouldCopy = (srcPath) => {
+  const base = path.basename(srcPath);
+  if (base === '__pycache__' || base === '.pytest_cache' || base === '.ruff_cache') {
+    return false;
+  }
+  if (base === '.git' || base === '.mypy_cache' || base === '.DS_Store') {
+    return false;
+  }
+  if (base.endsWith('.pyc') || base.endsWith('.pyo')) {
+    return false;
+  }
+  return true;
+};
 
-if (result.error) {
-  console.error(`Failed to run 'uv': ${result.error.message}`);
-  process.exit(typeof result.status === 'number' ? result.status : 1);
+const copyTree = (fromPath, toPath, { dereference = false } = {}) => {
+  fs.cpSync(fromPath, toPath, {
+    recursive: true,
+    force: true,
+    filter: shouldCopy,
+    dereference,
+  });
+};
+
+const resolveRuntimePython = (runtimeRoot) => {
+  const candidates =
+    process.platform === 'win32'
+      ? ['python.exe', path.join('Scripts', 'python.exe')]
+      : [path.join('bin', 'python3'), path.join('bin', 'python')];
+
+  for (const relativeCandidate of candidates) {
+    const candidate = path.join(runtimeRoot, relativeCandidate);
+    if (fs.existsSync(candidate)) {
+      return {
+        absolute: candidate,
+        relative: path.relative(outputDir, candidate),
+      };
+    }
+  }
+
+  return null;
+};
+
+const writeLauncherScript = () => {
+  const content = `from __future__ import annotations
+
+import runpy
+import sys
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parent
+APP_DIR = BACKEND_DIR / "app"
+
+sys.path.insert(0, str(APP_DIR))
+
+main_file = APP_DIR / "main.py"
+if not main_file.is_file():
+    raise FileNotFoundError(f"Backend entrypoint not found: {main_file}")
+
+sys.argv[0] = str(main_file)
+runpy.run_path(str(main_file), run_name="__main__")
+`;
+  fs.writeFileSync(launcherPath, content, 'utf8');
+};
+
+fs.rmSync(outputDir, { recursive: true, force: true });
+fs.mkdirSync(outputDir, { recursive: true });
+fs.mkdirSync(appDir, { recursive: true });
+
+for (const [srcRelative, destRelative] of sourceEntries) {
+  const sourcePath = path.join(rootDir, srcRelative);
+  const targetPath = path.join(appDir, destRelative);
+  if (!fs.existsSync(sourcePath)) {
+    console.error(`Backend source path does not exist: ${sourcePath}`);
+    process.exit(1);
+  }
+  copyTree(sourcePath, targetPath);
 }
 
-if (result.status !== 0) {
+copyTree(runtimeSourceReal, runtimeDir, { dereference: true });
+
+const runtimePython = resolveRuntimePython(runtimeDir);
+if (!runtimePython) {
   console.error(
-    `'uv' exited with status ${result.status} while running PyInstaller. ` +
-      'Verify that uv and pyinstaller are installed and that arguments are valid.',
+    `Cannot find Python executable in runtime: ${runtimeDir}. ` +
+      'Expected python under bin/ or Scripts/.',
   );
-  process.exit(result.status ?? 1);
+  process.exit(1);
 }
 
-process.exit(0);
+writeLauncherScript();
+
+const manifest = {
+  mode: 'cpython-runtime',
+  python: runtimePython.relative,
+  entrypoint: path.basename(launcherPath),
+  app: path.relative(outputDir, appDir),
+};
+fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+console.log(`Prepared CPython backend runtime in ${outputDir}`);
+console.log(`Runtime source: ${runtimeSourceReal}`);
+console.log(`Python executable: ${runtimePython.relative}`);

@@ -38,6 +38,10 @@ desktop/dist/
 desktop/out/
 desktop/resources/backend/astrbot-backend*
 desktop/resources/backend/*.exe
+desktop/resources/backend/app/
+desktop/resources/backend/python/
+desktop/resources/backend/launch_backend.py
+desktop/resources/backend/runtime-manifest.json
 desktop/resources/webui/*
 desktop/resources/.pyinstaller/
 package-lock.json

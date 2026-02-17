@@ -54,6 +54,7 @@ class BackendManager {
 
     this.backendProcess = null;
     this.backendConfig = null;
+    this.packagedBackendManifest = null;
     this.backendLogger = new BufferedRotatingLogger({
       logPath: null,
       maxBytes: this.backendLogMaxBytes,
@@ -114,7 +115,7 @@ class BackendManager {
     if (!this.app.isPackaged) {
       return path.resolve(this.baseDir, '..');
     }
-    return this.resolveBackendRoot();
+    return this.getPackagedBackendAppDir() || this.resolveBackendRoot();
   }
 
   resolveWebuiDir() {
@@ -129,31 +130,118 @@ class BackendManager {
     return fs.existsSync(indexPath) ? candidate : null;
   }
 
-  getPackagedBackendPath() {
+  getPackagedBackendDir() {
     if (!this.app.isPackaged) {
       return null;
     }
-    const filename =
-      process.platform === 'win32' ? 'astrbot-backend.exe' : 'astrbot-backend';
-    const candidate = path.join(process.resourcesPath, 'backend', filename);
+    return path.join(process.resourcesPath, 'backend');
+  }
+
+  getPackagedBackendManifest() {
+    if (!this.app.isPackaged) {
+      return null;
+    }
+    if (this.packagedBackendManifest) {
+      return this.packagedBackendManifest;
+    }
+
+    const backendDir = this.getPackagedBackendDir();
+    if (!backendDir) {
+      return null;
+    }
+    const manifestPath = path.join(backendDir, 'runtime-manifest.json');
+    if (!fs.existsSync(manifestPath)) {
+      return null;
+    }
+
+    try {
+      const raw = fs.readFileSync(manifestPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        this.packagedBackendManifest = parsed;
+      }
+    } catch (error) {
+      this.log(
+        `Failed to parse packaged backend manifest: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      this.packagedBackendManifest = null;
+    }
+
+    return this.packagedBackendManifest;
+  }
+
+  getPackagedBackendAppDir() {
+    const backendDir = this.getPackagedBackendDir();
+    if (!backendDir) {
+      return null;
+    }
+
+    const manifest = this.getPackagedBackendManifest();
+    const appRelative =
+      manifest && typeof manifest.app === 'string' && manifest.app
+        ? manifest.app
+        : 'app';
+    const candidate = path.join(backendDir, appRelative);
     return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  getPackagedBackendLaunchScriptPath() {
+    const backendDir = this.getPackagedBackendDir();
+    if (!backendDir) {
+      return null;
+    }
+
+    const manifest = this.getPackagedBackendManifest();
+    const entryRelative =
+      manifest && typeof manifest.entrypoint === 'string' && manifest.entrypoint
+        ? manifest.entrypoint
+        : 'launch_backend.py';
+    const candidate = path.join(backendDir, entryRelative);
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  getPackagedRuntimePythonPath() {
+    const backendDir = this.getPackagedBackendDir();
+    if (!backendDir) {
+      return null;
+    }
+
+    const manifest = this.getPackagedBackendManifest();
+    const pythonRelative =
+      manifest && typeof manifest.python === 'string' && manifest.python
+        ? manifest.python
+        : process.platform === 'win32'
+          ? path.join('python', 'Scripts', 'python.exe')
+          : path.join('python', 'bin', 'python3');
+
+    const candidate = path.join(backendDir, pythonRelative);
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  buildPackagedBackendLaunch(webuiDir) {
+    const runtimePython = this.getPackagedRuntimePythonPath();
+    const launchScript = this.getPackagedBackendLaunchScriptPath();
+    if (!runtimePython || !launchScript) {
+      return null;
+    }
+
+    const args = [launchScript];
+    if (webuiDir) {
+      args.push('--webui-dir', webuiDir);
+    }
+
+    return {
+      cmd: runtimePython,
+      args,
+      shell: false,
+    };
   }
 
   buildDefaultBackendLaunch(webuiDir) {
     if (this.app.isPackaged) {
-      const packagedBackend = this.getPackagedBackendPath();
-      if (!packagedBackend) {
-        return null;
-      }
-      const args = [];
-      if (webuiDir) {
-        args.push('--webui-dir', webuiDir);
-      }
-      return {
-        cmd: packagedBackend,
-        args,
-        shell: false,
-      };
+      return this.buildPackagedBackendLaunch(webuiDir);
     }
 
     const args = ['run', 'main.py'];
@@ -641,9 +729,9 @@ class BackendManager {
       `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
     );
 
-    const expectedImageName = (
-      path.basename(this.getPackagedBackendPath() || '') || 'astrbot-backend.exe'
-    ).toLowerCase();
+    const expectedImageName = path
+      .basename(this.getBackendConfig().cmd || 'python.exe')
+      .toLowerCase();
 
     for (const pid of pids) {
       const processInfo = this.getWindowsProcessInfo(pid);
