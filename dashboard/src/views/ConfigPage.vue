@@ -15,6 +15,17 @@
 
         </div>
       </div>
+      <v-slide-y-transition>
+        <div v-if="fetched && hasUnsavedChanges" class="unsaved-changes-banner-wrap">
+          <v-banner
+            icon="$warning"
+            lines="one"
+            class="unsaved-changes-banner my-4"
+          >
+            {{ tm('messages.unsavedChangesNotice') }}
+          </v-banner>
+        </div>
+      </v-slide-y-transition>
       <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
@@ -235,6 +246,12 @@ export default {
       });
       return items;
     },
+    hasUnsavedChanges() {
+      if (!this.fetched) {
+        return false;
+      }
+      return this.getConfigSnapshot(this.config_data) !== this.lastSavedConfigSnapshot;
+    }
   },
   watch: {
     config_data_str(val) {
@@ -269,6 +286,7 @@ export default {
       save_message: "",
       save_message_success: "",
   configContentKey: 0,
+      lastSavedConfigSnapshot: '',
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
@@ -383,6 +401,7 @@ export default {
         params: params
       }).then((res) => {
         this.config_data = res.data.data.config;
+        this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
         this.fetched = true
         this.metadata = res.data.data.metadata;
         this.configContentKey += 1;
@@ -407,6 +426,7 @@ export default {
 
       axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
+          this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
@@ -601,6 +621,9 @@ export default {
     closeTestChat() {
       this.testChatDrawer = false;
       this.testConfigId = null;
+    },
+    getConfigSnapshot(config) {
+      return JSON.stringify(config ?? {});
     }
   },
 }
@@ -610,6 +633,26 @@ export default {
 <style>
 .v-tab {
   text-transform: none !important;
+}
+
+.unsaved-changes-banner {
+  border-radius: 8px;
+}
+
+.v-theme--light .unsaved-changes-banner {
+  background-color: #f1f4f9 !important;
+}
+
+.v-theme--dark .unsaved-changes-banner {
+  background-color: #2d2d2d !important;
+}
+
+.unsaved-changes-banner-wrap {
+  position: sticky;
+  top: calc(var(--v-layout-top, 64px));
+  z-index: 20;
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 /* 按钮切换样式优化 */
