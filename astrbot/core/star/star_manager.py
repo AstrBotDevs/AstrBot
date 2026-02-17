@@ -513,6 +513,18 @@ class PluginManager:
                         )
                     logger.info(metadata)
                     metadata.config = plugin_config
+                    p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                    p_author = (
+                        (metadata.author or "unknown").lower().replace("/", "_")
+                    )
+                    plugin_id = f"{p_author}/{p_name}"
+
+                    # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
+                    if metadata.star_cls_type:
+                        setattr(metadata.star_cls_type, "name", p_name)
+                        setattr(metadata.star_cls_type, "author", p_author)
+                        setattr(metadata.star_cls_type, "plugin_id", plugin_id)
+
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
                         if plugin_config and metadata.star_cls_type:
@@ -530,17 +542,10 @@ class PluginManager:
                                 context=self.context,
                             )
 
-                        p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                        p_author = (
-                            (metadata.author or "unknown").lower().replace("/", "_")
-                        )
-                        setattr(metadata.star_cls, "name", p_name)
-                        setattr(metadata.star_cls, "author", p_author)
-                        setattr(
-                            metadata.star_cls,
-                            "plugin_id",
-                            f"{p_author}/{p_name}",
-                        )
+                        if metadata.star_cls:
+                            setattr(metadata.star_cls, "name", p_name)
+                            setattr(metadata.star_cls, "author", p_author)
+                            setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
 
