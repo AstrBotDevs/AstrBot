@@ -49,7 +49,7 @@ class ExecuteShellTool(FunctionTool):
         if context.context.event.role != "admin":
             return (
                 "error: Permission denied. Local shell execution is only allowed for admin users. "
-                "Tell user to set admins in AstrBot WebUI by adding their user ID to the admins list if they need this feature."
+                "Tell user to set admins in `AstrBot WebUI -> Config -> General Config` by adding their user ID to the admins list if they need this feature."
                 f"User's ID is: {context.context.event.get_sender_id()}. User's ID can be found by using /sid command."
             )
 
