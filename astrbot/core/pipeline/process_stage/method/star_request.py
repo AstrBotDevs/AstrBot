@@ -52,7 +52,7 @@ class StarRequestSubStage(Stage):
                 logger.error(traceback_text)
                 logger.error(f"Star {handler.handler_full_name} handle error: {e}")
 
-                suppress_default_error_reply = await call_event_hook(
+                await call_event_hook(
                     event,
                     EventType.OnPluginErrorEvent,
                     md.name,
@@ -61,7 +61,7 @@ class StarRequestSubStage(Stage):
                     traceback_text,
                 )
 
-                if not suppress_default_error_reply and event.is_at_or_wake_command:
+                if not event.is_stopped() and event.is_at_or_wake_command:
                     ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
                     event.set_result(MessageEventResult().message(ret))
                     yield
