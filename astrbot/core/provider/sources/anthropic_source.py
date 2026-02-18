@@ -33,20 +33,29 @@ class ProviderAnthropic(Provider):
         self,
         provider_config,
         provider_settings,
+        *,
+        use_api_key: bool = True,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
         )
 
-        self.chosen_api_key: str = ""
-        self.api_keys: list = super().get_keys()
-        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
+        self.thinking_config = provider_config.get("anth_thinking_config", {})
 
+        if use_api_key:
+            self._init_api_key(provider_config)
+
+        self.set_model(provider_config.get("model", "unknown"))
+
+    def _init_api_key(self, provider_config: dict) -> None:
+        self.chosen_api_key: str = ""
+        self.api_keys: list = super().get_keys()
+        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.client = AsyncAnthropic(
             api_key=self.chosen_api_key,
             timeout=self.timeout,
@@ -54,14 +63,26 @@ class ProviderAnthropic(Provider):
             http_client=self._create_http_client(provider_config),
         )
 
-        self.thinking_config = provider_config.get("anth_thinking_config", {})
-
-        self.set_model(provider_config.get("model", "unknown"))
-
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
         """创建带代理的 HTTP 客户端"""
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("Anthropic", proxy)
+
+    def _apply_thinking_config(self, payloads: dict) -> None:
+        thinking_type = self.thinking_config.get("type", "")
+        if thinking_type == "adaptive":
+            payloads["thinking"] = {"type": "adaptive"}
+            effort = self.thinking_config.get("effort", "")
+            output_cfg = dict(payloads.get("output_config", {}))
+            if effort:
+                output_cfg["effort"] = effort
+            if output_cfg:
+                payloads["output_config"] = output_cfg
+        elif self.thinking_config.get("budget"):
+            payloads["thinking"] = {
+                "budget_tokens": self.thinking_config.get("budget"),
+                "type": "enabled",
+            }
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
@@ -213,11 +234,7 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 1024
-        if self.thinking_config.get("budget"):
-            payloads["thinking"] = {
-                "budget_tokens": self.thinking_config.get("budget"),
-                "type": "enabled",
-            }
+        self._apply_thinking_config(payloads)
 
         try:
             completion = await self.client.messages.create(
@@ -287,11 +304,7 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 1024
-        if self.thinking_config.get("budget"):
-            payloads["thinking"] = {
-                "budget_tokens": self.thinking_config.get("budget"),
-                "type": "enabled",
-            }
+        self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
             **payloads, extra_body=extra_body

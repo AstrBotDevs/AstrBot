@@ -1177,10 +1177,22 @@
       },
       "anth_thinking_config": {
         "description": "思考配置",
+        "type": {
+          "description": "思考类型",
+          "hint": "设为 'adaptive' 以使用自适应思考（推荐 Opus 4.6+ / Sonnet 4.6+）。留空则使用手动预算模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
         "budget": {
           "description": "思考预算",
-          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。仅在思考类型为空时生效。Opus 4.6 / Sonnet 4.6 已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "思考深度",
+          "hint": "当思考类型为 'adaptive' 时控制思考深度。'high' 为默认值。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort"
         }
+      },
+      "oauth_token": {
+        "description": "OAuth Token",
+        "hint": "在终端运行 `claude setup-token` 获取长期有效的 OAuth Token，然后粘贴到此处。Token 有效期为 1 年。"
       },
       "minimax-group-id": {
         "description": "用户组",

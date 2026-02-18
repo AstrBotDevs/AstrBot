@@ -182,7 +182,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const basicSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const fields = ['id', 'key', 'api_base']
+    const isOAuth = editableProviderSource.value.type === 'anthropic_oauth'
+    const fields = isOAuth ? ['id', 'oauth_token', 'api_base'] : ['id', 'key', 'api_base']
     const basic: Record<string, any> = {}
 
     fields.forEach((field) => {
@@ -203,7 +204,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const excluded = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider']
+    const excluded = ['id', 'key', 'oauth_token', 'api_base', 'enable', 'type', 'provider_type', 'provider']
     const advanced: Record<string, any> = {}
 
     for (const key of Object.keys(editableProviderSource.value)) {
@@ -243,6 +244,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       customSchema.provider.items.id.hint = tm('providerSources.hints.id')
       customSchema.provider.items.key.hint = tm('providerSources.hints.key')
       customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
+    }
+    // 为 oauth_token 字段添加自定义 hint
+    if (customSchema.provider?.items?.oauth_token) {
+      customSchema.provider.items.oauth_token.hint = tm('providerSources.hints.oauthToken')
     }
     // 为 proxy 字段添加描述和提示
     if (customSchema.provider?.items?.proxy) {

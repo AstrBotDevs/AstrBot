@@ -978,7 +978,19 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "anth_thinking_config": {"budget": 0},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                    },
+                    "Anthropic (Claude Code OAuth)": {
+                        "id": "anthropic_claude_code_oauth",
+                        "provider": "anthropic",
+                        "type": "anthropic_oauth",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "api_base": "https://api.anthropic.com",
+                        "timeout": 120,
+                        "proxy": "",
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                        "oauth_token": "",
                     },
                     "Moonshot": {
                         "id": "moonshot",
@@ -1528,6 +1540,11 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。",
                         "condition": {"provider": "xai"},
                     },
+                    "oauth_token": {
+                        "description": "OAuth Token",
+                        "type": "string",
+                        "hint": "在终端运行 `claude setup-token` 获取长期有效的 OAuth Token，然后粘贴到此处。Token 有效期为 1 年。",
+                    },
                     "rerank_api_base": {
                         "description": "重排序模型 API Base URL",
                         "type": "string",
@@ -1939,13 +1956,25 @@ CONFIG_METADATA_2 = {
                         },
                     },
                     "anth_thinking_config": {
-                        "description": "Thinking Config",
+                        "description": "思考配置",
                         "type": "object",
                         "items": {
+                            "type": {
+                                "description": "思考类型",
+                                "type": "string",
+                                "options": ["", "adaptive"],
+                                "hint": "Opus 4.6+ / Sonnet 4.6+ 推荐设为 'adaptive'。留空则使用手动 budget 模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
+                            },
                             "budget": {
-                                "description": "Thinking Budget",
+                                "description": "思考预算",
                                 "type": "int",
-                                "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+                                "hint": "手动 budget_tokens，需 >= 1024。仅在 type 为空时生效。Opus 4.6 / Sonnet 4.6 上已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+                            },
+                            "effort": {
+                                "description": "思考深度",
+                                "type": "string",
+                                "options": ["", "low", "medium", "high", "max"],
+                                "hint": "type 为 'adaptive' 时控制思考深度。默认 'high'。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort",
                             },
                         },
                     },
