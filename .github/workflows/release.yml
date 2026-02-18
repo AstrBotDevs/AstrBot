@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to build (branch/tag/SHA)"
+        description: "Git ref to release from (branch/tag/SHA); leave empty to use selected branch"
         required: false
-        default: "master"
+        default: ""
       tag:
-        description: "Release tag to publish assets to (for example: v4.14.6)"
+        description: "Release tag to publish assets to (required for workflow_dispatch, for example: v4.14.6)"
         required: false
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
 
       - name: Resolve tag
         id: tag
@@ -41,7 +41,8 @@ jobs:
           elif [ -n "${{ inputs.tag }}" ]; then
             tag="${{ inputs.tag }}"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            echo "workflow_dispatch requires 'tag' input (for example: v4.17.5)." >&2
+            exit 1
           fi
           if [ -z "$tag" ]; then
             echo "Failed to resolve tag." >&2
@@ -141,7 +142,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
 
       - name: Resolve tag
         id: tag
@@ -152,7 +153,8 @@ jobs:
           elif [ -n "${{ inputs.tag }}" ]; then
             tag="${{ inputs.tag }}"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            echo "workflow_dispatch requires 'tag' input (for example: v4.17.5)." >&2
+            exit 1
           fi
           if [ -z "$tag" ]; then
             echo "Failed to resolve tag." >&2
@@ -272,7 +274,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
 
       - name: Resolve tag
         id: tag
@@ -283,7 +285,8 @@ jobs:
           elif [ -n "${{ inputs.tag }}" ]; then
             tag="${{ inputs.tag }}"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            echo "workflow_dispatch requires 'tag' input (for example: v4.17.5)." >&2
+            exit 1
           fi
           if [ -z "$tag" ]; then
             echo "Failed to resolve tag." >&2
@@ -356,7 +359,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
