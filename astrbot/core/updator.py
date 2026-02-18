@@ -85,10 +85,9 @@ class AstrBotUpdator(RepoZipUpdator):
         return []
 
     @staticmethod
-    def _reset_pyinstaller_environment() -> None:
+    def _reset_frozen_bootloader_environment() -> None:
         if not getattr(sys, "frozen", False):
             return
-        os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
         for key in list(os.environ.keys()):
             if key.startswith("_PYI_"):
                 os.environ.pop(key, None)
@@ -121,7 +120,7 @@ class AstrBotUpdator(RepoZipUpdator):
         executable = sys.executable
 
         try:
-            self._reset_pyinstaller_environment()
+            self._reset_frozen_bootloader_environment()
             reboot_argv = self._build_reboot_argv(executable)
             self._exec_reboot(executable, reboot_argv)
         except Exception as e:
