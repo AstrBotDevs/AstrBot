@@ -315,7 +315,7 @@ const sortedPlugins = computed(() => {
 const RANDOM_PLUGINS_COUNT = 6;
 
 const randomPlugins = computed(() => {
-  const allPlugins = filteredMarketPlugins.value;
+  const allPlugins = pluginMarketData.value;
   if (allPlugins.length === 0) return [];
 
   const pluginsByName = new Map(allPlugins.map((plugin) => [plugin.name, plugin]));
@@ -340,7 +340,7 @@ const shufflePlugins = (plugins) => {
 };
 
 const refreshRandomPlugins = () => {
-  const shuffled = shufflePlugins(filteredMarketPlugins.value);
+  const shuffled = shufflePlugins(pluginMarketData.value);
   randomPluginNames.value = shuffled
     .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
     .map((plugin) => plugin.name);
@@ -1073,6 +1073,7 @@ const refreshPluginMarket = async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    refreshRandomPlugins();
     currentPage.value = 1; // 重置到第一页
 
     toast(tm("messages.refreshSuccess"), "success");
@@ -1121,6 +1122,7 @@ onMounted(async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    refreshRandomPlugins();
   } catch (err) {
     toast(tm("messages.getMarketDataFailed") + " " + err, "error");
   }
@@ -1155,14 +1157,6 @@ watch(marketSearch, (newVal) => {
     currentPage.value = 1;
   }, 300); // 300ms 防抖延迟
 });
-
-watch(
-  filteredMarketPlugins,
-  () => {
-    refreshRandomPlugins();
-  },
-  { immediate: true },
-);
 
 // 监听显示模式变化并保存到 localStorage
 watch(isListView, (newVal) => {
@@ -1942,7 +1936,7 @@ watch(activeTab, (newTab) => {
                   color="primary"
                   variant="tonal"
                   prepend-icon="mdi-shuffle-variant"
-                  :disabled="filteredMarketPlugins.length === 0"
+                  :disabled="pluginMarketData.length === 0"
                   @click="refreshRandomPlugins"
                 >
                   {{ tm("buttons.reshuffle") }}
