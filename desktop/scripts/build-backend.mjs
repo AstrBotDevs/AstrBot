@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +25,29 @@ if (!runtimeSource) {
 const runtimeSourceReal = path.resolve(rootDir, runtimeSource);
 if (!fs.existsSync(runtimeSourceReal)) {
   console.error(`CPython runtime source does not exist: ${runtimeSourceReal}`);
+  process.exit(1);
+}
+
+const normalizePathForCompare = (targetPath) => {
+  const resolved = path.resolve(targetPath).replace(/[\\/]+$/, '');
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+};
+
+const isSameOrSubPath = (targetPath, parentPath) => {
+  const target = normalizePathForCompare(targetPath);
+  const parent = normalizePathForCompare(parentPath);
+  return target === parent || target.startsWith(`${parent}${path.sep}`);
+};
+
+if (
+  isSameOrSubPath(runtimeSourceReal, outputDir) ||
+  isSameOrSubPath(outputDir, runtimeSourceReal)
+) {
+  console.error(
+    `CPython runtime source overlaps with backend output directory. ` +
+      `runtime=${runtimeSourceReal}, output=${outputDir}. ` +
+      'Please set ASTRBOT_DESKTOP_CPYTHON_HOME to a separate runtime directory.',
+  );
   process.exit(1);
 }
 

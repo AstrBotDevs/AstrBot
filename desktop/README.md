@@ -40,7 +40,7 @@ pnpm --dir desktop install --frozen-lockfile
 pnpm --dir desktop run dist:full
 ```
 
-If you are already developing in this repository, you can directly reuse the local virtual environment as runtime:
+If you are already developing in this repository, you can directly reuse the local virtual environment as the runtime:
 
 ```bash
 uv sync
