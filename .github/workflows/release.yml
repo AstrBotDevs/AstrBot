@@ -120,16 +120,6 @@ jobs:
             os: linux
             arch: arm64
             pbs_target: aarch64-unknown-linux-gnu
-          - name: windows-x64
-            runner: windows-2022
-            os: win
-            arch: amd64
-            pbs_target: x86_64-pc-windows-msvc
-          - name: windows-arm64
-            runner: windows-11-arm
-            os: win
-            arch: arm64
-            pbs_target: aarch64-pc-windows-msvc
           - name: macos-x64
             runner: macos-15-intel
             os: mac
@@ -337,21 +327,6 @@ jobs:
             dashboard/pnpm-lock.yaml
             desktop/pnpm-lock.yaml
 
-      - name: Prepare OpenSSL for Windows ARM64
-        if: ${{ matrix.os == 'win' && matrix.arch == 'arm64' }}
-        shell: pwsh
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-          & C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-          & C:\vcpkg\vcpkg.exe install openssl:arm64-windows
-
-          "VCPKG_ROOT=C:\vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VCPKGRS_TRIPLET=arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "OPENSSL_DIR=C:\vcpkg\installed\arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "OPENSSL_ROOT_DIR=C:\vcpkg\installed\arm64-windows" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "OPENSSL_LIB_DIR=C:\vcpkg\installed\arm64-windows\lib" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "OPENSSL_INCLUDE_DIR=C:\vcpkg\installed\arm64-windows\include" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Install dependencies
         shell: bash
         run: |
@@ -488,12 +463,309 @@ jobs:
           if-no-files-found: error
           path: desktop/dist/release/*
 
+  build-desktop-windows:
+    name: Build windows-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            arch: amd64
+            pbs_target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            arch: arm64
+            pbs_target: aarch64-pc-windows-msvc
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      PYTHON_BUILD_STANDALONE_RELEASE: "20260211"
+      PYTHON_BUILD_STANDALONE_VERSION: "3.12.12"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            echo "workflow_dispatch requires 'tag' input (for example: v4.17.5)." >&2
+            exit 1
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Python
+        id: setup-python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Resolve packaged CPython runtime source
+        shell: bash
+        env:
+          RUNNER_TEMP_DIR: ${{ runner.temp }}
+          SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+          PYTHON_BUILD_STANDALONE_TARGET: ${{ matrix.pbs_target }}
+        run: |
+          if [ -z "$SETUP_PYTHON_PATH" ]; then
+            echo "actions/setup-python did not return python-path output." >&2
+            exit 1
+          fi
+          "$SETUP_PYTHON_PATH" - <<'PY' >> "$GITHUB_ENV"
+          import os
+          import pathlib
+          import shutil
+          import subprocess
+          import tarfile
+          import time
+          import urllib.parse
+          import urllib.request
+
+          release = (os.environ.get("PYTHON_BUILD_STANDALONE_RELEASE") or "").strip()
+          version = (os.environ.get("PYTHON_BUILD_STANDALONE_VERSION") or "").strip()
+          target = (os.environ.get("PYTHON_BUILD_STANDALONE_TARGET") or "").strip()
+          if not release or not version or not target:
+              raise RuntimeError(
+                  "Missing python-build-standalone selection envs: "
+                  "PYTHON_BUILD_STANDALONE_RELEASE / PYTHON_BUILD_STANDALONE_VERSION / PYTHON_BUILD_STANDALONE_TARGET."
+              )
+
+          asset_name = (
+              f"cpython-{version}+{release}-{target}-install_only_stripped.tar.gz"
+          )
+          asset_url = (
+              "https://github.com/astral-sh/python-build-standalone/releases/download/"
+              f"{release}/{urllib.parse.quote(asset_name)}"
+          )
+
+          runner_temp = pathlib.Path(
+              os.environ.get("RUNNER_TEMP_DIR") or os.environ["RUNNER_TEMP"]
+          )
+          target_runtime_root = runner_temp / "astrbot-cpython-runtime"
+          download_archive_path = runner_temp / asset_name
+          extract_root = runner_temp / "astrbot-cpython-runtime-extract"
+          if target_runtime_root.exists():
+              shutil.rmtree(target_runtime_root)
+          if extract_root.exists():
+              shutil.rmtree(extract_root)
+          extract_root.mkdir(parents=True, exist_ok=True)
+
+          last_error = None
+          for attempt in range(1, 4):
+              try:
+                  with urllib.request.urlopen(asset_url, timeout=180) as response:
+                      with download_archive_path.open("wb") as output:
+                          shutil.copyfileobj(response, output)
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  if attempt >= 3:
+                      raise RuntimeError(
+                          f"Failed to download python-build-standalone asset: {asset_url}"
+                      ) from exc
+                  time.sleep(attempt * 2)
+          if last_error and not download_archive_path.exists():
+              raise RuntimeError(
+                  f"Failed to download python-build-standalone asset: {asset_url}"
+              ) from last_error
+
+          with tarfile.open(download_archive_path, "r:gz") as archive:
+              archive.extractall(extract_root)
+
+          source_runtime_root = extract_root / "python"
+          if not source_runtime_root.is_dir():
+              raise RuntimeError(
+                  "Invalid python-build-standalone archive layout: missing top-level python/ directory."
+              )
+          shutil.copytree(source_runtime_root, target_runtime_root, symlinks=False)
+
+          verify_candidates = [
+              target_runtime_root / "python.exe",
+              target_runtime_root / "Scripts" / "python.exe",
+          ]
+          verify_binary = next(
+              (candidate for candidate in verify_candidates if candidate.is_file()), None
+          )
+          if verify_binary is None:
+              raise RuntimeError(
+                  f"Cannot find verification runtime binary under {target_runtime_root}"
+              )
+
+          version_check = subprocess.run(
+              [str(verify_binary), "-V"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if version_check.returncode != 0:
+              raise RuntimeError(
+                  "Packaged runtime probe failed: "
+                  + (
+                      version_check.stderr.strip()
+                      or version_check.stdout.strip()
+                      or f"exit={version_check.returncode}"
+                  )
+              )
+
+          ssl_check = subprocess.run(
+              [str(verify_binary), "-c", "import ssl"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if ssl_check.returncode != 0:
+              raise RuntimeError(
+                  "Packaged runtime ssl probe failed: "
+                  + (
+                      ssl_check.stderr.strip()
+                      or ssl_check.stdout.strip()
+                      or f"exit={ssl_check.returncode}"
+                  )
+              )
+
+          print(f"ASTRBOT_DESKTOP_CPYTHON_HOME={target_runtime_root}")
+          print(f"ASTRBOT_DESKTOP_CPYTHON_ASSET={asset_name}")
+          PY
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.13.0'
+          cache: "pnpm"
+          cache-dependency-path: |
+            dashboard/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir desktop install --frozen-lockfile
+
+      - name: Build desktop package
+        shell: bash
+        env:
+          SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+        run: |
+          pnpm --dir dashboard run build
+          pnpm --dir desktop run build:webui
+          pnpm --dir desktop run build:backend
+          if [ -z "$SETUP_PYTHON_PATH" ]; then
+            echo "actions/setup-python did not return python-path output." >&2
+            exit 1
+          fi
+          "$SETUP_PYTHON_PATH" - <<'PY'
+          import pathlib
+          import subprocess
+
+          runtime_root = pathlib.Path("desktop/resources/backend/python")
+          candidates = [
+              runtime_root / "python.exe",
+              runtime_root / "Scripts" / "python.exe",
+          ]
+          runtime_python = next((candidate for candidate in candidates if candidate.is_file()), None)
+          if runtime_python is None:
+              raise RuntimeError(f"Packaged runtime python executable is missing under {runtime_root}")
+
+          version_check = subprocess.run(
+              [str(runtime_python), "-V"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if version_check.returncode != 0:
+              raise RuntimeError(
+                  "Packaged runtime python smoke test failed: "
+                  + (version_check.stderr.strip() or version_check.stdout.strip())
+              )
+
+          ssl_check = subprocess.run(
+              [str(runtime_python), "-c", "import ssl"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if ssl_check.returncode != 0:
+              raise RuntimeError(
+                  "Packaged runtime ssl smoke test failed: "
+                  + (ssl_check.stderr.strip() or ssl_check.stdout.strip())
+              )
+          PY
+          pnpm --dir desktop run sync:version
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            arch_flag="--arm64"
+          else
+            arch_flag="--x64"
+          fi
+          pnpm --dir desktop exec electron-builder --publish never --win nsis zip "$arch_flag"
+
+      - name: Normalize artifact names
+        shell: bash
+        env:
+          NAME_PREFIX: AstrBot-${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-win
+        run: |
+          shopt -s nullglob
+          out_dir="desktop/dist/release"
+          mkdir -p "$out_dir"
+          files=(
+            desktop/dist/*.zip
+            desktop/dist/*.exe
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No Windows desktop artifacts found to rename." >&2
+            exit 1
+          fi
+          for src in "${files[@]}"; do
+            file="$(basename "$src")"
+            case "$file" in
+              *.exe)
+                dest="$out_dir/${NAME_PREFIX}.exe"
+                ;;
+              *.zip)
+                dest="$out_dir/${NAME_PREFIX}.zip"
+                ;;
+              *)
+                continue
+                ;;
+            esac
+            cp "$src" "$dest"
+          done
+          ls -la "$out_dir"
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: AstrBot-${{ steps.tag.outputs.tag }}-${{ matrix.arch }}-win
+          if-no-files-found: error
+          path: desktop/dist/release/*
+
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-24.04
     needs:
       - build-dashboard
       - build-desktop
+      - build-desktop-windows
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
