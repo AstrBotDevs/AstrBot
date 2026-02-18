@@ -46,7 +46,8 @@ def _apply_provider_metadata_overrides(
     override_fn = getattr(provider, "get_model_metadata_overrides", None)
     if not callable(override_fn):
         return
-    for mid, overrides in override_fn(model_ids).items():
+    overrides_map = override_fn(model_ids) or {}
+    for mid, overrides in overrides_map.items():
         merged = dict(metadata_map.get(mid, {}))
         if "limit" in overrides:
             merged["limit"] = {**merged.get("limit", {}), **overrides["limit"]}
