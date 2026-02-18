@@ -41,7 +41,6 @@ class RespondStage(Stage):
         Comp.Location: lambda comp: bool(comp.lat is not None and comp.lon is not None), # 位置
         Comp.Contact: lambda comp: bool(comp._type and comp.id), # 推荐好友 or 群
         Comp.Shake: lambda _: True, # 窗口抖动（戳一戳）
-        Comp.Anonymous: lambda _: True, # 匿名发消息
         Comp.Dice: lambda _: True, # 掷骰子魔法表情
         Comp.RPS: lambda _: True, # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
