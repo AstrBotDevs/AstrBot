@@ -105,7 +105,7 @@
                 <v-col cols="12" md="7" class="subagent-actions">
                   <ProviderSelector
                     v-model="agent.provider_id"
-                    provider-type="chat_completion"
+                    provider-type="chat_completion,agent_runner"
                     :label="tm('form.providerLabel')"
                     :hint="tm('form.providerHint')"
                     persistent-hint
