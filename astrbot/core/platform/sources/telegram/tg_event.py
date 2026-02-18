@@ -367,7 +367,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                                     user_name=user_name,
                                     message_thread_id=message_thread_id,
                                     document=path,
-                                    filename="voice_message.wav",
                                     caption=delta or i.text or None,
                                     **cast(Any, payload),
                                 )
