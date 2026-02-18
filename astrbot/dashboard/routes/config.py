@@ -49,8 +49,11 @@ def _apply_provider_metadata_overrides(
     overrides_map = override_fn(model_ids) or {}
     for mid, overrides in overrides_map.items():
         merged = dict(metadata_map.get(mid, {}))
-        if "limit" in overrides:
-            merged["limit"] = {**merged.get("limit", {}), **overrides["limit"]}
+        for key, value in overrides.items():
+            if isinstance(value, dict):
+                merged[key] = {**merged.get(key, {}), **value}
+            else:
+                merged[key] = value
         metadata_map[mid] = merged
 
 

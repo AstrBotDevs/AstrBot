@@ -36,10 +36,14 @@ class ProviderAnthropicOAuth(ProviderAnthropic):
         provider_config: dict,
         provider_settings: dict,
     ) -> None:
-        # 让父类通过 key 字段解析 API keys 列表（支持多组轮询）
-        super().__init__(provider_config, provider_settings)
+        # 禁用父类的 API key 客户端初始化，避免重复构造客户端
+        super().__init__(provider_config, provider_settings, use_api_key=False)
 
-        # 使用 auth_token 替换父类的 api_key 客户端（OAuth 使用 Bearer 认证）
+        # 手动解析 key 列表（父类跳过了 _init_api_key）
+        self.api_keys: list = self.get_keys()
+        self.chosen_api_key: str = self.api_keys[0] if self.api_keys else ""
+
+        # 使用 auth_token（OAuth Bearer 认证）构建客户端
         self.client = AsyncAnthropic(
             auth_token=self.chosen_api_key,
             timeout=self.timeout,
