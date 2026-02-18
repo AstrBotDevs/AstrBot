@@ -100,6 +100,14 @@ class StarHandlerRegistry(Generic[T]):
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[EventType.OnPluginErrorEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: EventType,
         only_activated=True,
         plugins_name: list[str] | None = None,
@@ -192,6 +200,7 @@ class EventType(enum.Enum):
     OnUsingLLMToolEvent = enum.auto()  # 使用 LLM 工具
     OnLLMToolRespondEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
+    OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
 
 
 H = TypeVar("H", bound=Callable[..., Any])
