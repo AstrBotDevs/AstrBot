@@ -153,7 +153,7 @@ Backend build errors:
 
 - `Missing CPython runtime source`: set `ASTRBOT_DESKTOP_CPYTHON_HOME` (or `ASTRBOT_DESKTOP_BACKEND_RUNTIME`).
 - `Cannot find Python executable in runtime`: runtime directory is invalid or incomplete.
-- `Failed to detect purelib from runtime python`: runtime Python cannot run correctly.
+- `Failed to detect purelib from runtime Python`: runtime Python cannot run correctly.
 
 If Electron download times out on restricted networks, configure mirrors before install:
 

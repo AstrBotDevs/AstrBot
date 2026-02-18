@@ -20,6 +20,7 @@ const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
 const BACKEND_LOG_FLUSH_INTERVAL_MS = 120;
 const BACKEND_LOG_MAX_BUFFER_BYTES = 128 * 1024;
 const WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 2000;
+const WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS = 5000;
 
 function parseBackendTimeoutMs(app) {
   const defaultTimeoutMs = app.isPackaged ? 0 : 20000;
@@ -56,6 +57,7 @@ class BackendManager {
     this.backendProcess = null;
     this.backendConfig = null;
     this.packagedBackendConfig = null;
+    this.windowsProcessCommandLineCache = new Map();
     this.backendLogger = new BufferedRotatingLogger({
       logPath: null,
       maxBytes: this.backendLogMaxBytes,
@@ -737,10 +739,24 @@ class BackendManager {
     );
   }
 
-  queryWindowsProcessCommandLine(pid, shellName) {
+  queryWindowsProcessCommandLineByPowerShell(pid) {
     const query = `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -ne $p) { $p.CommandLine }`;
     return spawnSync(
-      shellName,
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command', query],
+      {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+        windowsHide: true,
+        timeout: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
+      },
+    );
+  }
+
+  queryWindowsProcessCommandLineByPwsh(pid) {
+    const query = `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -ne $p) { $p.CommandLine }`;
+    return spawnSync(
+      'pwsh',
       ['-NoProfile', '-NonInteractive', '-Command', query],
       {
         stdio: ['ignore', 'pipe', 'ignore'],
@@ -763,20 +779,52 @@ class BackendManager {
     );
   }
 
+  pruneWindowsProcessCommandLineCache() {
+    const now = Date.now();
+    for (const [pid, cached] of this.windowsProcessCommandLineCache.entries()) {
+      if (
+        !cached ||
+        now - cached.timestampMs > WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS
+      ) {
+        this.windowsProcessCommandLineCache.delete(pid);
+      }
+    }
+  }
+
   getWindowsProcessCommandLine(pid) {
     const numericPid = Number.parseInt(`${pid}`, 10);
     if (!Number.isInteger(numericPid)) {
       return null;
     }
 
-    for (const shellName of ['powershell', 'pwsh']) {
+    const cached = this.windowsProcessCommandLineCache.get(numericPid);
+    if (
+      cached &&
+      Date.now() - cached.timestampMs <= WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS
+    ) {
+      return cached.commandLine;
+    }
+    this.windowsProcessCommandLineCache.delete(numericPid);
+
+    const queryAttempts = [
+      {
+        shellName: 'powershell',
+        run: () => this.queryWindowsProcessCommandLineByPowerShell(numericPid),
+      },
+      {
+        shellName: 'pwsh',
+        run: () => this.queryWindowsProcessCommandLineByPwsh(numericPid),
+      },
+    ];
+
+    for (const queryAttempt of queryAttempts) {
       let result = null;
       try {
-        result = this.queryWindowsProcessCommandLine(numericPid, shellName);
+        result = queryAttempt.run();
       } catch (error) {
         if (error instanceof Error && error.message) {
           this.log(
-            `Failed to query process command line by ${shellName} for pid=${numericPid}: ${error.message}`,
+            `Failed to query process command line by ${queryAttempt.shellName} for pid=${numericPid}: ${error.message}`,
           );
         }
         continue;
@@ -787,19 +835,25 @@ class BackendManager {
       }
       if (result.error && result.error.code === 'ETIMEDOUT') {
         this.log(
-          `Timed out (${WINDOWS_PROCESS_QUERY_TIMEOUT_MS}ms) querying process command line by ${shellName} for pid=${numericPid}.`,
+          `Timed out (${WINDOWS_PROCESS_QUERY_TIMEOUT_MS}ms) querying process command line by ${queryAttempt.shellName} for pid=${numericPid}.`,
         );
         continue;
       }
 
       if (result.status === 0) {
         const commandLine = this.parseWindowsProcessCommandLine(result);
-        if (commandLine) {
-          return commandLine;
-        }
+        this.windowsProcessCommandLineCache.set(numericPid, {
+          commandLine,
+          timestampMs: Date.now(),
+        });
+        return commandLine;
       }
     }
 
+    this.windowsProcessCommandLineCache.set(numericPid, {
+      commandLine: null,
+      timestampMs: Date.now(),
+    });
     return null;
   }
 
@@ -874,6 +928,7 @@ class BackendManager {
     if (!this.app.isPackaged || process.platform !== 'win32') {
       return false;
     }
+    this.pruneWindowsProcessCommandLineCache();
 
     const port = this.getBackendPort();
     if (!port) {

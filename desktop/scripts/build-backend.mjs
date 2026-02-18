@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +52,60 @@ if (
   process.exit(1);
 }
 
+const parseExpectedRuntimeVersion = (rawVersion, sourceName) => {
+  const match = /^(\d+)\.(\d+)$/.exec(String(rawVersion).trim());
+  if (!match) {
+    console.error(
+      `Invalid expected Python version from ${sourceName}: ${rawVersion}. ` +
+        'Expected format <major>.<minor>.',
+    );
+    process.exit(1);
+  }
+  return {
+    major: Number.parseInt(match[1], 10),
+    minor: Number.parseInt(match[2], 10),
+  };
+};
+
+const readProjectRequiresPythonLowerBound = () => {
+  const pyprojectPath = path.join(rootDir, 'pyproject.toml');
+  if (!fs.existsSync(pyprojectPath)) {
+    return null;
+  }
+  const content = fs.readFileSync(pyprojectPath, 'utf8');
+  const requiresPythonMatch = /^\s*requires-python\s*=\s*"([^"]+)"/m.exec(content);
+  if (!requiresPythonMatch) {
+    return null;
+  }
+  const lowerBoundMatch = />=\s*(\d+)\.(\d+)/.exec(requiresPythonMatch[1]);
+  if (!lowerBoundMatch) {
+    return null;
+  }
+  return `${lowerBoundMatch[1]}.${lowerBoundMatch[2]}`;
+};
+
+const resolveExpectedRuntimeVersion = () => {
+  if (process.env.ASTRBOT_DESKTOP_EXPECTED_PYTHON) {
+    return parseExpectedRuntimeVersion(
+      process.env.ASTRBOT_DESKTOP_EXPECTED_PYTHON,
+      'ASTRBOT_DESKTOP_EXPECTED_PYTHON',
+    );
+  }
+
+  const projectLowerBound = readProjectRequiresPythonLowerBound();
+  if (projectLowerBound) {
+    return parseExpectedRuntimeVersion(projectLowerBound, 'pyproject.toml requires-python');
+  }
+
+  console.error(
+    'Unable to determine expected runtime Python version. ' +
+      'Set ASTRBOT_DESKTOP_EXPECTED_PYTHON or declare project.requires-python in pyproject.toml.',
+  );
+  process.exit(1);
+};
+
+const expectedRuntimeVersion = resolveExpectedRuntimeVersion();
+
 const sourceEntries = [
   ['astrbot', 'astrbot'],
   ['main.py', 'main.py'],
@@ -100,6 +155,60 @@ const resolveRuntimePython = (runtimeRoot) => {
   return null;
 };
 
+const validateRuntimePython = (pythonExecutable) => {
+  const probe = spawnSync(
+    pythonExecutable,
+    ['-c', 'import sys, pip; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 5000,
+    },
+  );
+
+  if (probe.error) {
+    const reason =
+      probe.error.code === 'ETIMEDOUT'
+        ? 'runtime Python probe timed out'
+        : probe.error.message || String(probe.error);
+    console.error(`Runtime Python probe failed: ${reason}`);
+    process.exit(1);
+  }
+
+  if (probe.status !== 0) {
+    const stderrText = (probe.stderr || '').trim();
+    console.error(
+      `Runtime Python probe failed with exit code ${probe.status}. ` +
+        (stderrText ? `stderr: ${stderrText}` : ''),
+    );
+    process.exit(1);
+  }
+
+  const versionMatch = /(\d+)\.(\d+)/.exec((probe.stdout || '').trim());
+  if (!versionMatch) {
+    console.error(
+      `Runtime Python probe did not report a valid version. Output: ${(probe.stdout || '').trim()}`,
+    );
+    process.exit(1);
+  }
+
+  const actualVersion = {
+    major: Number.parseInt(versionMatch[1], 10),
+    minor: Number.parseInt(versionMatch[2], 10),
+  };
+  if (
+    actualVersion.major !== expectedRuntimeVersion.major ||
+    actualVersion.minor !== expectedRuntimeVersion.minor
+  ) {
+    console.error(
+      `Runtime Python version mismatch: expected ${expectedRuntimeVersion.major}.${expectedRuntimeVersion.minor}, ` +
+        `got ${actualVersion.major}.${actualVersion.minor}.`,
+    );
+    process.exit(1);
+  }
+};
+
 const writeLauncherScript = () => {
   const content = `from __future__ import annotations
 
@@ -121,6 +230,16 @@ runpy.run_path(str(main_file), run_name="__main__")
 `;
   fs.writeFileSync(launcherPath, content, 'utf8');
 };
+
+const sourceRuntimePython = resolveRuntimePython(runtimeSourceReal);
+if (!sourceRuntimePython) {
+  console.error(
+    `Cannot find Python executable in runtime source: ${runtimeSourceReal}. ` +
+      'Expected python under bin/ or Scripts/.',
+  );
+  process.exit(1);
+}
+validateRuntimePython(sourceRuntimePython.absolute);
 
 fs.rmSync(outputDir, { recursive: true, force: true });
 fs.mkdirSync(outputDir, { recursive: true });
