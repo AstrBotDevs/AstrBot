@@ -14,4 +14,4 @@ class ProviderAIHubMix(ProviderOpenAIOfficial):
         super().__init__(provider_config, provider_settings)
         # Reference to: https://aihubmix.com/appstore
         # Use this code can enjoy 10% off prices for AIHubMix API calls.
-        self.client._custom_headers["APP-Code"] = "KRLC5702" # type: ignore
+        self.client._custom_headers["APP-Code"] = "KRLC5702"  # type: ignore
