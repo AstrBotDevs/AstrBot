@@ -20,7 +20,6 @@ const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
 const BACKEND_LOG_FLUSH_INTERVAL_MS = 120;
 const BACKEND_LOG_MAX_BUFFER_BYTES = 128 * 1024;
 const WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 2000;
-const WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS = 5000;
 
 function parseBackendTimeoutMs(app) {
   const defaultTimeoutMs = app.isPackaged ? 0 : 20000;
@@ -32,6 +31,54 @@ function parseBackendTimeoutMs(app) {
     return parsed;
   }
   return defaultTimeoutMs;
+}
+
+function resolvePackagedBackendConfig(backendDir, logFn) {
+  if (!fs.existsSync(backendDir)) {
+    return null;
+  }
+
+  const manifestPath = path.join(backendDir, 'runtime-manifest.json');
+  let manifest = null;
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (parsed && typeof parsed === 'object') {
+        manifest = parsed;
+      }
+    } catch (error) {
+      if (typeof logFn === 'function') {
+        logFn(
+          `Failed to parse packaged backend manifest: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+  }
+
+  const configFromManifest = manifest && typeof manifest === 'object' ? manifest : {};
+  const resolvePath = (key, defaultRelative) => {
+    const relativePath =
+      typeof configFromManifest[key] === 'string' && configFromManifest[key]
+        ? configFromManifest[key]
+        : defaultRelative;
+    const candidate = path.join(backendDir, relativePath);
+    return fs.existsSync(candidate) ? candidate : null;
+  };
+
+  const defaultPythonRelative =
+    process.platform === 'win32'
+      ? path.join('python', 'Scripts', 'python.exe')
+      : path.join('python', 'bin', 'python3');
+
+  return {
+    backendDir,
+    manifest,
+    appDir: resolvePath('app', 'app'),
+    launchScriptPath: resolvePath('entrypoint', 'launch_backend.py'),
+    runtimePythonPath: resolvePath('python', defaultPythonRelative),
+  };
 }
 
 class BackendManager {
@@ -57,7 +104,7 @@ class BackendManager {
     this.backendProcess = null;
     this.backendConfig = null;
     this.packagedBackendConfig = null;
-    this.windowsProcessCommandLineCache = new Map();
+    this.backendConfigResolutionError = null;
     this.backendLogger = new BufferedRotatingLogger({
       logPath: null,
       maxBytes: this.backendLogMaxBytes,
@@ -143,68 +190,45 @@ class BackendManager {
     }
 
     const backendDir = path.join(process.resourcesPath, 'backend');
-    if (!fs.existsSync(backendDir)) {
-      return null;
-    }
-
-    const parseManifest = () => {
-      const manifestPath = path.join(backendDir, 'runtime-manifest.json');
-      if (!fs.existsSync(manifestPath)) {
-        return null;
-      }
-      try {
-        const raw = fs.readFileSync(manifestPath, 'utf8');
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          return parsed;
-        }
-      } catch (error) {
-        this.log(
-          `Failed to parse packaged backend manifest: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-      return null;
-    };
-
-    const resolveManifestPath = (manifest, key, defaultRelative) => {
-      const relativePath =
-        manifest && typeof manifest[key] === 'string' && manifest[key]
-          ? manifest[key]
-          : defaultRelative;
-      const candidate = path.join(backendDir, relativePath);
-      return fs.existsSync(candidate) ? candidate : null;
-    };
-
-    const manifest = parseManifest();
-    const manifestForPathResolve = manifest || {};
-    const defaultPythonRelative =
-      process.platform === 'win32'
-        ? path.join('python', 'Scripts', 'python.exe')
-        : path.join('python', 'bin', 'python3');
-
-    this.packagedBackendConfig = Object.freeze({
-      backendDir,
-      manifest,
-      appDir: resolveManifestPath(manifestForPathResolve, 'app', 'app'),
-      launchScriptPath: resolveManifestPath(
-        manifestForPathResolve,
-        'entrypoint',
-        'launch_backend.py',
-      ),
-      runtimePythonPath: resolveManifestPath(
-        manifestForPathResolve,
-        'python',
-        defaultPythonRelative,
-      ),
-    });
-
+    this.packagedBackendConfig = resolvePackagedBackendConfig(backendDir, (message) =>
+      this.log(message),
+    );
     return this.packagedBackendConfig;
   }
 
   getPackagedBackendConfig() {
     return this.loadPackagedBackendConfig();
+  }
+
+  getPackagedBackendLaunchFailureReason() {
+    if (!this.app.isPackaged) {
+      return null;
+    }
+    const backendDir = path.join(process.resourcesPath, 'backend');
+    const packagedBackendConfig = this.getPackagedBackendConfig();
+    if (!packagedBackendConfig) {
+      return (
+        `Packaged backend directory is missing: ${backendDir}. ` +
+        'Please rebuild desktop backend runtime.'
+      );
+    }
+
+    const missingParts = [];
+    if (!packagedBackendConfig.runtimePythonPath) {
+      missingParts.push('runtime python executable');
+    }
+    if (!packagedBackendConfig.launchScriptPath) {
+      missingParts.push('launch backend script');
+    }
+    if (!missingParts.length) {
+      return null;
+    }
+
+    return (
+      `Packaged backend runtime is incomplete (${missingParts.join(', ')}). ` +
+      `backendDir=${packagedBackendConfig.backendDir}. ` +
+      'Please run `pnpm --dir desktop run build:backend` before packaging.'
+    );
   }
 
   buildPackagedBackendLaunch(webuiDir) {
@@ -250,6 +274,8 @@ class BackendManager {
   resolveBackendConfig() {
     const webuiDir = this.resolveWebuiDir();
     const customCmd = process.env.ASTRBOT_BACKEND_CMD;
+    this.backendConfigResolutionError = null;
+
     const launch = customCmd
       ? {
           cmd: customCmd,
@@ -257,6 +283,13 @@ class BackendManager {
           shell: true,
         }
       : this.buildDefaultBackendLaunch(webuiDir);
+    if (!customCmd && this.app.isPackaged && !launch) {
+      const failureReason =
+        this.getPackagedBackendLaunchFailureReason() || 'Backend command is not configured.';
+      this.backendConfigResolutionError = failureReason;
+      this.log(failureReason);
+    }
+
     const cwd = process.env.ASTRBOT_BACKEND_CWD || this.resolveBackendCwd();
     const rootDir = process.env.ASTRBOT_ROOT || this.resolveBackendRoot();
     ensureDir(cwd);
@@ -296,6 +329,10 @@ class BackendManager {
 
   canManageBackend() {
     return Boolean(this.getBackendConfig().cmd);
+  }
+
+  getBackendCommandUnavailableReason() {
+    return this.backendConfigResolutionError || 'Backend command is not configured.';
   }
 
   async flushLogs() {
@@ -551,7 +588,7 @@ class BackendManager {
     if (!this.canManageBackend()) {
       return {
         ok: false,
-        reason: 'Backend command is not configured.',
+        reason: this.getBackendCommandUnavailableReason(),
       };
     }
     this.backendSpawning = true;
@@ -747,46 +784,14 @@ class BackendManager {
     );
   }
 
-  pruneWindowsProcessCommandLineCache() {
-    const now = Date.now();
-    for (const [pid, cached] of this.windowsProcessCommandLineCache.entries()) {
-      if (
-        !cached ||
-        now - cached.timestampMs > WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS
-      ) {
-        this.windowsProcessCommandLineCache.delete(pid);
-      }
-    }
-  }
-
-  getCachedWindowsCommandLine(numericPid) {
-    const cached = this.windowsProcessCommandLineCache.get(numericPid);
-    if (
-      cached &&
-      Date.now() - cached.timestampMs <= WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS
-    ) {
-      return { hit: true, commandLine: cached.commandLine };
-    }
-    this.windowsProcessCommandLineCache.delete(numericPid);
-    return { hit: false, commandLine: null };
-  }
-
-  setCachedWindowsCommandLine(numericPid, commandLine) {
-    this.windowsProcessCommandLineCache.set(numericPid, {
-      commandLine,
-      timestampMs: Date.now(),
-    });
-  }
-
-  getWindowsProcessCommandLine(pid) {
+  getWindowsProcessCommandLine(pid, commandLineCache = null) {
     const numericPid = Number.parseInt(`${pid}`, 10);
     if (!Number.isInteger(numericPid)) {
       return null;
     }
 
-    const cached = this.getCachedWindowsCommandLine(numericPid);
-    if (cached.hit) {
-      return cached.commandLine;
+    if (commandLineCache && commandLineCache.has(numericPid)) {
+      return commandLineCache.get(numericPid);
     }
 
     const queryAttempts = ['powershell', 'pwsh'];
@@ -816,12 +821,16 @@ class BackendManager {
 
       if (result.status === 0) {
         const commandLine = this.parseWindowsProcessCommandLine(result);
-        this.setCachedWindowsCommandLine(numericPid, commandLine);
+        if (commandLineCache) {
+          commandLineCache.set(numericPid, commandLine);
+        }
         return commandLine;
       }
     }
 
-    this.setCachedWindowsCommandLine(numericPid, null);
+    if (commandLineCache) {
+      commandLineCache.set(numericPid, null);
+    }
     return null;
   }
 
@@ -860,13 +869,13 @@ class BackendManager {
     return markers;
   }
 
-  matchesBackendCommandLine(pid, markers) {
+  matchesBackendCommandLine(pid, markers, commandLineCache = null) {
     if (!markers.length) {
       this.log(`Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`);
       return false;
     }
 
-    const commandLine = this.getWindowsProcessCommandLine(pid);
+    const commandLine = this.getWindowsProcessCommandLine(pid, commandLineCache);
     if (!commandLine) {
       this.log(
         `Skip unmanaged cleanup for pid=${pid}: unable to resolve process command line.`,
@@ -889,6 +898,7 @@ class BackendManager {
     processInfo,
     backendConfig,
     allowImageOnlyMatch = false,
+    commandLineCache = null,
   ) {
     const expectedImageName = this.getExpectedWindowsBackendImageName(backendConfig);
     const actualImageName = processInfo.imageName.toLowerCase();
@@ -904,14 +914,13 @@ class BackendManager {
     }
 
     const markers = this.buildBackendCommandLineMarkers(backendConfig);
-    return this.matchesBackendCommandLine(pid, markers);
+    return this.matchesBackendCommandLine(pid, markers, commandLineCache);
   }
 
   async stopUnmanagedBackendByPort() {
     if (!this.app.isPackaged || process.platform !== 'win32') {
       return false;
     }
-    this.pruneWindowsProcessCommandLineCache();
 
     const port = this.getBackendPort();
     if (!port) {
@@ -943,6 +952,7 @@ class BackendManager {
         'Backend config is unavailable during unmanaged cleanup; falling back to image-name-only matching.',
       );
     }
+    const commandLineCache = new Map();
 
     for (const pid of pids) {
       const processInfo = this.getWindowsProcessInfo(pid);
@@ -956,6 +966,7 @@ class BackendManager {
           processInfo,
           backendConfig,
           !hasBackendConfig,
+          commandLineCache,
         )
       ) {
         continue;
@@ -1007,9 +1018,12 @@ class BackendManager {
     if (running) {
       return true;
     }
-    if (!this.backendAutoStart || !this.canManageBackend()) {
-      this.backendStartupFailureReason =
-        'Backend auto-start is disabled or backend command is not configured.';
+    if (!this.backendAutoStart) {
+      this.backendStartupFailureReason = 'Backend auto-start is disabled.';
+      return false;
+    }
+    if (!this.canManageBackend()) {
+      this.backendStartupFailureReason = this.getBackendCommandUnavailableReason();
       return false;
     }
     const waitResult = await this.startBackendAndWait(this.backendTimeoutMs);
@@ -1033,7 +1047,7 @@ class BackendManager {
     if (!this.canManageBackend()) {
       return {
         ok: false,
-        reason: 'Backend command is not configured.',
+        reason: this.getBackendCommandUnavailableReason(),
       };
     }
     if (this.backendSpawning || this.backendRestarting) {
@@ -1096,7 +1110,7 @@ class BackendManager {
     if (!this.canManageBackend()) {
       return {
         ok: false,
-        reason: 'Backend command is not configured.',
+        reason: this.getBackendCommandUnavailableReason(),
       };
     }
     if (this.backendSpawning || this.backendRestarting) {

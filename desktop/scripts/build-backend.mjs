@@ -72,11 +72,6 @@ const extractLowerBoundFromPythonSpecifier = (rawSpecifier) => {
   }
 
   const clauses = rawSpecifier.replace(/\s+/g, '').split(',').filter(Boolean);
-  for (const clause of clauses) {
-    if (clause.includes('<') || clause.includes('!=')) {
-      return null;
-    }
-  }
   let bestLowerBound = null;
 
   const updateLowerBound = (major, minor) => {
