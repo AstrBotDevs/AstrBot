@@ -357,13 +357,21 @@ class PluginManager:
         async with self._pm_lock:
             if dir_name in self.failed_plugin_dict:
                 success, error = await self.load(specified_dir_name=dir_name)
-                if success:
-                    self.failed_plugin_dict.pop(dir_name, None)
-                    if not self.failed_plugin_dict:
-                        self.failed_plugin_info = ""
-                    return success, None
-                else:
+                if not success:
                     return False, error
+                plugin_reloaded = any(
+                    star.root_dir_name == dir_name
+                    for star in self.context.get_all_stars()
+                )
+                if not plugin_reloaded:
+                    return (
+                        False,
+                        f"插件 {dir_name} 重载失败：未在插件目录中找到可加载插件。",
+                    )
+                self.failed_plugin_dict.pop(dir_name, None)
+                if not self.failed_plugin_dict:
+                    self.failed_plugin_info = ""
+                return True, None
             return False, "插件不存在于失败列表中"
 
     async def reload(self, specified_plugin_name=None):
@@ -445,6 +453,8 @@ class PluginManager:
             return False, "未找到任何插件模块"
 
         fail_rec = ""
+        has_target_filter = bool(specified_module_path or specified_dir_name)
+        matched_target = False
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -471,6 +481,7 @@ class PluginManager:
                     continue
                 if specified_dir_name and root_dir_name != specified_dir_name:
                     continue
+                matched_target = True
 
                 logger.info(f"正在载入插件 {root_dir_name} ...")
 
@@ -492,11 +503,7 @@ class PluginManager:
                     }
                     if not reserved:
                         logger.warning(
-                            f"插件 {root_dir_name} 导入失败，已自动卸载该插件。"
-                        )
-                        await self._cleanup_failed_plugin_install(
-                            dir_name=root_dir_name,
-                            plugin_path=plugin_dir_path,
+                            f"{root_dir_name}插件安装失败，插件目录：{plugin_dir_path}"
                         )
                     continue
 
@@ -733,6 +740,10 @@ class PluginManager:
             logger.error(f"同步指令配置失败: {e!s}")
             logger.error(traceback.format_exc())
 
+        if has_target_filter and not matched_target:
+            target_label = specified_dir_name or specified_module_path
+            return False, f"未找到指定插件：{target_label}"
+
         if not fail_rec:
             return True, None
         self.failed_plugin_info = fail_rec
@@ -808,10 +819,8 @@ class PluginManager:
         async with self._pm_lock:
             plugin_path = ""
             dir_name = ""
-            cleanup_required = False
             try:
                 plugin_path = await self.updator.install(repo_url, proxy)
-                cleanup_required = True
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
@@ -856,10 +865,12 @@ class PluginManager:
 
                 return plugin_info
             except Exception:
-                if cleanup_required and dir_name and plugin_path:
-                    await self._cleanup_failed_plugin_install(
-                        dir_name=dir_name,
-                        plugin_path=plugin_path,
+                if plugin_path:
+                    plugin_dir_name = dir_name or os.path.basename(plugin_path)
+                    logger.warning(
+                        "%s插件安装失败，插件目录：%s",
+                        plugin_dir_name,
+                        plugin_path,
                     )
                 raise
 
@@ -1123,7 +1134,6 @@ class PluginManager:
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
-        cleanup_required = False
 
         # 第一步：检查是否已安装同目录名的插件，先终止旧插件
         existing_plugin = None
@@ -1145,7 +1155,6 @@ class PluginManager:
 
         try:
             self.updator.unzip_file(zip_file_path, desti_dir)
-            cleanup_required = True
 
             # 第二步：解压后，读取新插件的 metadata.yaml，检查是否存在同名但不同目录的插件
             try:
@@ -1222,9 +1231,9 @@ class PluginManager:
 
             return plugin_info
         except Exception:
-            if cleanup_required:
-                await self._cleanup_failed_plugin_install(
-                    dir_name=dir_name,
-                    plugin_path=desti_dir,
-                )
+            logger.warning(
+                "%s插件安装失败，插件目录：%s",
+                dir_name,
+                desti_dir,
+            )
             raise
