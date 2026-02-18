@@ -6,7 +6,7 @@ from typing import Any, cast
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
 from telegram.constants import ChatAction
-from telegram.error import Forbidden
+from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -152,8 +152,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             else:
                 await client.send_voice(voice=path, **cast(Any, payload))
-        except Forbidden as e:
-            # python-telegram-bot wraps all 403 responses as Forbidden;
+        except BadRequest as e:
+            # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
             # distinguish the voice-privacy case via the API error message.
             if "Voice_messages_forbidden" not in e.message:
                 raise
