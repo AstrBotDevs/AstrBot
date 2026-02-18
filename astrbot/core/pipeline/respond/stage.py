@@ -39,7 +39,7 @@ class RespondStage(Stage):
         Comp.Music: lambda comp: (comp.id and comp._type and comp._type != 'custom') or (comp._type == 'custom' and comp.url and comp.audio and comp.title), # 音乐分享
         Comp.Forward: lambda comp: bool(comp.id), # 合并转发
         Comp.Location: lambda comp: bool(comp.lat is not None and comp.lon is not None), # 位置
-        Comp.Contact: lambda comp: bool(comp.type and comp.id), # 推荐好友 or 群
+        Comp.Contact: lambda comp: bool(comp._type and comp.id), # 推荐好友 or 群
         Comp.Shake: lambda _: True, # 窗口抖动（戳一戳）
         Comp.Anonymous: lambda _: True, # 匿名发消息
         Comp.Dice: lambda _: True, # 掷骰子魔法表情
