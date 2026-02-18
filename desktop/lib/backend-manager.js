@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { BufferedRotatingLogger } = require('./buffered-rotating-logger');
+const { resolvePackagedBackendState } = require('./packaged-backend-config');
+const { shouldKillUnmanagedBackendProcess } = require('./windows-backend-cleanup');
 const {
   delay,
   ensureDir,
@@ -19,7 +21,6 @@ const PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS = 5 * 60 * 1000;
 const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
 const BACKEND_LOG_FLUSH_INTERVAL_MS = 120;
 const BACKEND_LOG_MAX_BUFFER_BYTES = 128 * 1024;
-const WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 2000;
 
 function parseBackendTimeoutMs(app) {
   const defaultTimeoutMs = app.isPackaged ? 0 : 20000;
@@ -31,54 +32,6 @@ function parseBackendTimeoutMs(app) {
     return parsed;
   }
   return defaultTimeoutMs;
-}
-
-function resolvePackagedBackendConfig(backendDir, logFn) {
-  if (!fs.existsSync(backendDir)) {
-    return null;
-  }
-
-  const manifestPath = path.join(backendDir, 'runtime-manifest.json');
-  let manifest = null;
-  if (fs.existsSync(manifestPath)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      if (parsed && typeof parsed === 'object') {
-        manifest = parsed;
-      }
-    } catch (error) {
-      if (typeof logFn === 'function') {
-        logFn(
-          `Failed to parse packaged backend manifest: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
-  }
-
-  const configFromManifest = manifest && typeof manifest === 'object' ? manifest : {};
-  const resolvePath = (key, defaultRelative) => {
-    const relativePath =
-      typeof configFromManifest[key] === 'string' && configFromManifest[key]
-        ? configFromManifest[key]
-        : defaultRelative;
-    const candidate = path.join(backendDir, relativePath);
-    return fs.existsSync(candidate) ? candidate : null;
-  };
-
-  const defaultPythonRelative =
-    process.platform === 'win32'
-      ? path.join('python', 'Scripts', 'python.exe')
-      : path.join('python', 'bin', 'python3');
-
-  return {
-    backendDir,
-    manifest,
-    appDir: resolvePath('app', 'app'),
-    launchScriptPath: resolvePath('entrypoint', 'launch_backend.py'),
-    runtimePythonPath: resolvePath('python', defaultPythonRelative),
-  };
 }
 
 class BackendManager {
@@ -103,8 +56,7 @@ class BackendManager {
 
     this.backendProcess = null;
     this.backendConfig = null;
-    this.packagedBackendConfig = null;
-    this.backendConfigResolutionError = null;
+    this.packagedBackendState = null;
     this.backendLogger = new BufferedRotatingLogger({
       logPath: null,
       maxBytes: this.backendLogMaxBytes,
@@ -165,8 +117,8 @@ class BackendManager {
     if (!this.app.isPackaged) {
       return path.resolve(this.baseDir, '..');
     }
-    const packagedBackendConfig = this.getPackagedBackendConfig();
-    return (packagedBackendConfig && packagedBackendConfig.appDir) || this.resolveBackendRoot();
+    const packagedBackendState = this.getPackagedBackendState();
+    return (packagedBackendState?.config?.appDir || null) || this.resolveBackendRoot();
   }
 
   resolveWebuiDir() {
@@ -181,85 +133,25 @@ class BackendManager {
     return fs.existsSync(indexPath) ? candidate : null;
   }
 
-  loadPackagedBackendConfig() {
+  loadPackagedBackendState() {
     if (!this.app.isPackaged) {
       return null;
     }
-    if (this.packagedBackendConfig) {
-      return this.packagedBackendConfig;
+    if (this.packagedBackendState) {
+      return this.packagedBackendState;
     }
-
-    const backendDir = path.join(process.resourcesPath, 'backend');
-    this.packagedBackendConfig = resolvePackagedBackendConfig(backendDir, (message) =>
-      this.log(message),
+    this.packagedBackendState = resolvePackagedBackendState(
+      process.resourcesPath,
+      (message) => this.log(message),
     );
-    return this.packagedBackendConfig;
+    return this.packagedBackendState;
   }
 
-  getPackagedBackendConfig() {
-    return this.loadPackagedBackendConfig();
-  }
-
-  getPackagedBackendLaunchFailureReason() {
-    if (!this.app.isPackaged) {
-      return null;
-    }
-    const backendDir = path.join(process.resourcesPath, 'backend');
-    const packagedBackendConfig = this.getPackagedBackendConfig();
-    if (!packagedBackendConfig) {
-      return (
-        `Packaged backend directory is missing: ${backendDir}. ` +
-        'Please rebuild desktop backend runtime.'
-      );
-    }
-
-    const missingParts = [];
-    if (!packagedBackendConfig.runtimePythonPath) {
-      missingParts.push('runtime python executable');
-    }
-    if (!packagedBackendConfig.launchScriptPath) {
-      missingParts.push('launch backend script');
-    }
-    if (!missingParts.length) {
-      return null;
-    }
-
-    return (
-      `Packaged backend runtime is incomplete (${missingParts.join(', ')}). ` +
-      `backendDir=${packagedBackendConfig.backendDir}. ` +
-      'Please run `pnpm --dir desktop run build:backend` before packaging.'
-    );
-  }
-
-  buildPackagedBackendLaunch(webuiDir) {
-    const packagedBackendConfig = this.getPackagedBackendConfig();
-    if (!packagedBackendConfig) {
-      return null;
-    }
-
-    const runtimePython = packagedBackendConfig.runtimePythonPath;
-    const launchScript = packagedBackendConfig.launchScriptPath;
-    if (!runtimePython || !launchScript) {
-      return null;
-    }
-
-    const args = [launchScript];
-    if (webuiDir) {
-      args.push('--webui-dir', webuiDir);
-    }
-
-    return {
-      cmd: runtimePython,
-      args,
-      shell: false,
-    };
+  getPackagedBackendState() {
+    return this.loadPackagedBackendState();
   }
 
   buildDefaultBackendLaunch(webuiDir) {
-    if (this.app.isPackaged) {
-      return this.buildPackagedBackendLaunch(webuiDir);
-    }
-
     const args = ['run', 'main.py'];
     if (webuiDir) {
       args.push('--webui-dir', webuiDir);
@@ -274,20 +166,30 @@ class BackendManager {
   resolveBackendConfig() {
     const webuiDir = this.resolveWebuiDir();
     const customCmd = process.env.ASTRBOT_BACKEND_CMD;
-    this.backendConfigResolutionError = null;
+    let launch = null;
+    let failureReason = null;
 
-    const launch = customCmd
-      ? {
-          cmd: customCmd,
-          args: [],
-          shell: true,
-        }
-      : this.buildDefaultBackendLaunch(webuiDir);
-    if (!customCmd && this.app.isPackaged && !launch) {
-      const failureReason =
-        this.getPackagedBackendLaunchFailureReason() || 'Backend command is not configured.';
-      this.backendConfigResolutionError = failureReason;
-      this.log(failureReason);
+    if (customCmd) {
+      launch = {
+        cmd: customCmd,
+        args: [],
+        shell: true,
+      };
+    } else if (this.app.isPackaged) {
+      const packagedBackendState = this.getPackagedBackendState();
+      if (packagedBackendState?.ok && packagedBackendState.config) {
+        launch = {
+          cmd: packagedBackendState.config.runtimePythonPath,
+          args: [packagedBackendState.config.launchScriptPath, ...(webuiDir ? ['--webui-dir', webuiDir] : [])],
+          shell: false,
+        };
+      } else {
+        failureReason =
+          packagedBackendState?.failureReason || 'Backend command is not configured.';
+        this.log(failureReason);
+      }
+    } else {
+      launch = this.buildDefaultBackendLaunch(webuiDir);
     }
 
     const cwd = process.env.ASTRBOT_BACKEND_CWD || this.resolveBackendCwd();
@@ -303,6 +205,7 @@ class BackendManager {
       cwd,
       webuiDir,
       rootDir,
+      failureReason,
     };
     return this.backendConfig;
   }
@@ -332,7 +235,7 @@ class BackendManager {
   }
 
   getBackendCommandUnavailableReason() {
-    return this.backendConfigResolutionError || 'Backend command is not configured.';
+    return this.getBackendConfig().failureReason || 'Backend command is not configured.';
   }
 
   async flushLogs() {
@@ -739,184 +642,6 @@ class BackendManager {
     return { imageName, pid: parsedPid };
   }
 
-  normalizeWindowsPathForMatch(value) {
-    return String(value || '')
-      .replace(/\//g, '\\')
-      .toLowerCase();
-  }
-
-  isGenericWindowsPythonImage(imageName) {
-    const normalized = String(imageName || '').toLowerCase();
-    return (
-      normalized === 'python.exe' ||
-      normalized === 'pythonw.exe' ||
-      normalized === 'py.exe'
-    );
-  }
-
-  queryWindowsProcessCommandLine(shellName, pid) {
-    const query = `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -ne $p) { $p.CommandLine }`;
-    const args = ['-NoProfile', '-NonInteractive', '-Command', query];
-    const options = {
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf8',
-      windowsHide: true,
-      timeout: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
-    };
-    if (shellName === 'powershell') {
-      return spawnSync('powershell', args, options);
-    }
-    if (shellName === 'pwsh') {
-      return spawnSync('pwsh', args, options);
-    }
-    throw new Error(`Unsupported shell for process command line query: ${shellName}`);
-  }
-
-  parseWindowsProcessCommandLine(result) {
-    if (!result || !result.stdout) {
-      return null;
-    }
-    return (
-      result.stdout
-        .split(/\r?\n/)
-        .map((item) => item.trim())
-        .find((item) => item.length > 0) || null
-    );
-  }
-
-  getWindowsProcessCommandLine(pid, commandLineCache = null) {
-    const numericPid = Number.parseInt(`${pid}`, 10);
-    if (!Number.isInteger(numericPid)) {
-      return null;
-    }
-
-    if (commandLineCache && commandLineCache.has(numericPid)) {
-      return commandLineCache.get(numericPid);
-    }
-
-    const queryAttempts = ['powershell', 'pwsh'];
-
-    for (const shellName of queryAttempts) {
-      let result = null;
-      try {
-        result = this.queryWindowsProcessCommandLine(shellName, numericPid);
-      } catch (error) {
-        if (error instanceof Error && error.message) {
-          this.log(
-            `Failed to query process command line by ${shellName} for pid=${numericPid}: ${error.message}`,
-          );
-        }
-        continue;
-      }
-
-      if (result.error && result.error.code === 'ENOENT') {
-        continue;
-      }
-      if (result.error && result.error.code === 'ETIMEDOUT') {
-        this.log(
-          `Timed out (${WINDOWS_PROCESS_QUERY_TIMEOUT_MS}ms) querying process command line by ${shellName} for pid=${numericPid}.`,
-        );
-        continue;
-      }
-
-      if (result.status === 0) {
-        const commandLine = this.parseWindowsProcessCommandLine(result);
-        if (commandLineCache) {
-          commandLineCache.set(numericPid, commandLine);
-        }
-        return commandLine;
-      }
-    }
-
-    if (commandLineCache) {
-      commandLineCache.set(numericPid, null);
-    }
-    return null;
-  }
-
-  getFallbackWindowsBackendImageName() {
-    const fallbackCmdRaw = process.env.ASTRBOT_BACKEND_CMD || 'python.exe';
-    const fallbackCmd = String(fallbackCmdRaw).trim().split(/\s+/, 1)[0] || 'python.exe';
-    return path.basename(fallbackCmd).toLowerCase();
-  }
-
-  getExpectedWindowsBackendImageName(backendConfig) {
-    const safeBackendConfig =
-      backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
-    return path
-      .basename(safeBackendConfig.cmd || this.getFallbackWindowsBackendImageName())
-      .toLowerCase();
-  }
-
-  buildBackendCommandLineMarkers(backendConfig) {
-    const safeBackendConfig =
-      backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
-    const markers = [];
-    if (!Array.isArray(safeBackendConfig.args) || safeBackendConfig.args.length === 0) {
-      return markers;
-    }
-
-    const primaryArg = safeBackendConfig.args[0];
-    if (typeof primaryArg !== 'string' || !primaryArg) {
-      return markers;
-    }
-
-    const resolvedPrimaryArg = path.isAbsolute(primaryArg)
-      ? primaryArg
-      : path.resolve(safeBackendConfig.cwd || process.cwd(), primaryArg);
-    markers.push(this.normalizeWindowsPathForMatch(resolvedPrimaryArg));
-    markers.push(this.normalizeWindowsPathForMatch(path.basename(primaryArg)));
-    return markers;
-  }
-
-  matchesBackendCommandLine(pid, markers, commandLineCache = null) {
-    if (!markers.length) {
-      this.log(`Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`);
-      return false;
-    }
-
-    const commandLine = this.getWindowsProcessCommandLine(pid, commandLineCache);
-    if (!commandLine) {
-      this.log(
-        `Skip unmanaged cleanup for pid=${pid}: unable to resolve process command line.`,
-      );
-      return false;
-    }
-
-    const normalizedCommandLine = this.normalizeWindowsPathForMatch(commandLine);
-    const matched = markers.some((marker) => marker && normalizedCommandLine.includes(marker));
-    if (!matched) {
-      this.log(
-        `Skip unmanaged cleanup for pid=${pid}: command line does not match AstrBot backend launch marker.`,
-      );
-    }
-    return matched;
-  }
-
-  shouldKillUnmanagedBackendProcess(
-    pid,
-    processInfo,
-    backendConfig,
-    allowImageOnlyMatch = false,
-    commandLineCache = null,
-  ) {
-    const expectedImageName = this.getExpectedWindowsBackendImageName(backendConfig);
-    const actualImageName = processInfo.imageName.toLowerCase();
-    if (actualImageName !== expectedImageName) {
-      this.log(
-        `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
-      );
-      return false;
-    }
-
-    if (allowImageOnlyMatch || !this.isGenericWindowsPythonImage(expectedImageName)) {
-      return true;
-    }
-
-    const markers = this.buildBackendCommandLineMarkers(backendConfig);
-    return this.matchesBackendCommandLine(pid, markers, commandLineCache);
-  }
-
   async stopUnmanagedBackendByPort() {
     if (!this.app.isPackaged || process.platform !== 'win32') {
       return false;
@@ -960,15 +685,17 @@ class BackendManager {
         this.log(`Skip unmanaged cleanup for pid=${pid}: unable to resolve process info.`);
         continue;
       }
-      if (
-        !this.shouldKillUnmanagedBackendProcess(
-          pid,
-          processInfo,
-          backendConfig,
-          !hasBackendConfig,
-          commandLineCache,
-        )
-      ) {
+      const shouldKill = shouldKillUnmanagedBackendProcess({
+        pid,
+        processInfo,
+        backendConfig,
+        allowImageOnlyMatch: !hasBackendConfig,
+        commandLineCache,
+        spawnSync,
+        log: (message) => this.log(message),
+        fallbackCmdRaw: process.env.ASTRBOT_BACKEND_CMD || 'python.exe',
+      });
+      if (!shouldKill) {
         continue;
       }
 

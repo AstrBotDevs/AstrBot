@@ -81,7 +81,7 @@ desktop/resources/backend/
   app/                   # AstrBot backend source snapshot used in packaged mode
   python/                # Bundled CPython runtime directory
   launch_backend.py      # Launcher executed by Electron
-  runtime-manifest.json  # Runtime metadata (python path, entrypoint, app path)
+  runtime-manifest.json  # Runtime metadata (Python path, entrypoint, app path)
 ```
 
 Electron reads `runtime-manifest.json` and starts backend with:

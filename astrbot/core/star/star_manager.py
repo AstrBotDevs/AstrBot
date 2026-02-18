@@ -40,6 +40,13 @@ except ImportError:
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
 
+class PluginDependencyInstallError(Exception):
+    def __init__(self, plugin_name: str, requirements_path: str, message: str) -> None:
+        super().__init__(message)
+        self.plugin_name = plugin_name
+        self.requirements_path = requirements_path
+
+
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         self.updator = PluginUpdator()
@@ -195,9 +202,11 @@ class PluginManager:
                 except Exception as e:
                     logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
                     if target_plugin:
-                        raise Exception(
-                            "插件依赖安装失败，请检查插件 requirements.txt "
-                            "中的依赖版本或构建环境。"
+                        raise PluginDependencyInstallError(
+                            plugin_name=p,
+                            requirements_path=pth,
+                            message="插件依赖安装失败，请检查插件 requirements.txt "
+                            "中的依赖版本或构建环境。",
                         ) from e
         return True
 
