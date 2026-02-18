@@ -14,6 +14,7 @@ const launcherPath = path.join(outputDir, 'launch_backend.py');
 const runtimeSource =
   process.env.ASTRBOT_DESKTOP_CPYTHON_HOME ||
   process.env.ASTRBOT_DESKTOP_BACKEND_RUNTIME;
+const requirePipProbe = process.env.ASTRBOT_DESKTOP_REQUIRE_PIP === '1';
 
 const fail = (message) => {
   return new Error(message);
@@ -204,21 +205,48 @@ print(json.dumps({"requires_python": requires_python}))
 
 const resolveExpectedRuntimeVersion = () => {
   if (process.env.ASTRBOT_DESKTOP_EXPECTED_PYTHON) {
-    return parseExpectedRuntimeVersion(
-      process.env.ASTRBOT_DESKTOP_EXPECTED_PYTHON,
-      'ASTRBOT_DESKTOP_EXPECTED_PYTHON',
-    );
+    return {
+      expectedRuntimeVersion: parseExpectedRuntimeVersion(
+        process.env.ASTRBOT_DESKTOP_EXPECTED_PYTHON,
+        'ASTRBOT_DESKTOP_EXPECTED_PYTHON',
+      ),
+      isLowerBoundRuntimeVersion: false,
+      source: 'ASTRBOT_DESKTOP_EXPECTED_PYTHON',
+    };
   }
 
   const projectLowerBound = readProjectRequiresPythonLowerBound();
   if (projectLowerBound) {
-    return parseExpectedRuntimeVersion(projectLowerBound, 'pyproject.toml requires-python');
+    return {
+      expectedRuntimeVersion: parseExpectedRuntimeVersion(
+        projectLowerBound,
+        'pyproject.toml requires-python',
+      ),
+      isLowerBoundRuntimeVersion: true,
+      source: 'pyproject.toml requires-python',
+    };
   }
 
   throw fail(
     'Unable to determine expected runtime Python version. ' +
       'Set ASTRBOT_DESKTOP_EXPECTED_PYTHON or declare project.requires-python in pyproject.toml.',
   );
+};
+
+const compareMajorMinor = (left, right) => {
+  if (left.major < right.major) {
+    return -1;
+  }
+  if (left.major > right.major) {
+    return 1;
+  }
+  if (left.minor < right.minor) {
+    return -1;
+  }
+  if (left.minor > right.minor) {
+    return 1;
+  }
+  return 0;
 };
 
 const sourceEntries = [
@@ -270,10 +298,13 @@ const resolveRuntimePython = (runtimeRoot) => {
   return null;
 };
 
-const validateRuntimePython = (pythonExecutable, expectedRuntimeVersion) => {
+const validateRuntimePython = (pythonExecutable, expectedRuntimeConstraint) => {
+  const probeScript = requirePipProbe
+    ? 'import sys, pip; print(sys.version_info[0], sys.version_info[1])'
+    : 'import sys; print(sys.version_info[0], sys.version_info[1])';
   const probe = spawnSync(
     pythonExecutable,
-    ['-c', 'import sys, pip; print(f"{sys.version_info.major}.{sys.version_info.minor}")'],
+    ['-c', probeScript],
     {
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
@@ -292,29 +323,47 @@ const validateRuntimePython = (pythonExecutable, expectedRuntimeVersion) => {
 
   if (probe.status !== 0) {
     const stderrText = (probe.stderr || '').trim();
+    if (requirePipProbe) {
+      throw fail(
+        `Runtime Python probe failed with exit code ${probe.status}. ` +
+          `pip import check is enabled by ASTRBOT_DESKTOP_REQUIRE_PIP=1. ` +
+          (stderrText ? `stderr: ${stderrText}` : ''),
+      );
+    }
     throw fail(
       `Runtime Python probe failed with exit code ${probe.status}. ` +
         (stderrText ? `stderr: ${stderrText}` : ''),
     );
   }
 
-  const versionMatch = /(\d+)\.(\d+)/.exec((probe.stdout || '').trim());
-  if (!versionMatch) {
+  const parts = (probe.stdout || '').trim().split(/\s+/);
+  if (parts.length < 2) {
     throw fail(
       `Runtime Python probe did not report a valid version. Output: ${(probe.stdout || '').trim()}`,
     );
   }
 
   const actualVersion = {
-    major: Number.parseInt(versionMatch[1], 10),
-    minor: Number.parseInt(versionMatch[2], 10),
+    major: Number.parseInt(parts[0], 10),
+    minor: Number.parseInt(parts[1], 10),
   };
-  if (
-    actualVersion.major !== expectedRuntimeVersion.major ||
-    actualVersion.minor !== expectedRuntimeVersion.minor
-  ) {
+  const expectedRuntimeVersion = expectedRuntimeConstraint.expectedRuntimeVersion;
+  const compareResult = compareMajorMinor(actualVersion, expectedRuntimeVersion);
+  if (expectedRuntimeConstraint.isLowerBoundRuntimeVersion) {
+    if (compareResult < 0) {
+      throw fail(
+        `Runtime Python version is too low for ${expectedRuntimeConstraint.source}: ` +
+          `expected >= ${expectedRuntimeVersion.major}.${expectedRuntimeVersion.minor}, ` +
+          `got ${actualVersion.major}.${actualVersion.minor}.`,
+      );
+    }
+    return;
+  }
+
+  if (compareResult !== 0) {
     throw fail(
-      `Runtime Python version mismatch: expected ${expectedRuntimeVersion.major}.${expectedRuntimeVersion.minor}, ` +
+      `Runtime Python version mismatch for ${expectedRuntimeConstraint.source}: ` +
+        `expected ${expectedRuntimeVersion.major}.${expectedRuntimeVersion.minor}, ` +
         `got ${actualVersion.major}.${actualVersion.minor}.`,
     );
   }
@@ -344,7 +393,7 @@ runpy.run_path(str(main_file), run_name="__main__")
 
 const main = () => {
   const runtimeSourceReal = resolveAndValidateRuntimeSource();
-  const expectedRuntimeVersion = resolveExpectedRuntimeVersion();
+  const expectedRuntimeConstraint = resolveExpectedRuntimeVersion();
 
   const sourceRuntimePython = resolveRuntimePython(runtimeSourceReal);
   if (!sourceRuntimePython) {
@@ -353,7 +402,7 @@ const main = () => {
         'Expected python under bin/ or Scripts/.',
     );
   }
-  validateRuntimePython(sourceRuntimePython.absolute, expectedRuntimeVersion);
+  validateRuntimePython(sourceRuntimePython.absolute, expectedRuntimeConstraint);
 
   fs.rmSync(outputDir, { recursive: true, force: true });
   fs.mkdirSync(outputDir, { recursive: true });

@@ -436,7 +436,6 @@ class PipInstaller:
         package_name: str | None = None,
         requirements_path: str | None = None,
         mirror: str | None = None,
-        wheel_only: bool = False,
     ) -> None:
         args = ["install"]
         pip_install_args: list[str] = []
@@ -473,24 +472,11 @@ class PipInstaller:
 
         if pip_install_args:
             args.extend(pip_install_args)
-        if wheel_only:
-            if not any(
-                token == "--only-binary" or token.startswith("--only-binary=")
-                for token in args
-            ):
-                args.extend(["--only-binary", ":all:"])
-            if "--prefer-binary" not in args:
-                args.append("--prefer-binary")
 
         logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         result_code = await self._run_pip_in_process(args)
 
         if result_code != 0:
-            if wheel_only:
-                raise Exception(
-                    "安装失败：插件依赖 wheel-only 检测未通过或依赖安装失败，"
-                    "请检查是否存在无可用 wheel 的依赖。"
-                )
             raise Exception(f"安装失败，错误码：{result_code}")
 
         if target_site_packages:

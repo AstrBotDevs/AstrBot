@@ -857,14 +857,35 @@ class BackendManager {
     return null;
   }
 
-  buildWindowsUnmanagedBackendMatcher(backendConfig) {
+  getFallbackWindowsBackendImageName() {
+    const fallbackCmdRaw = process.env.ASTRBOT_BACKEND_CMD || 'python.exe';
+    const fallbackCmd = String(fallbackCmdRaw).trim().split(/\s+/, 1)[0] || 'python.exe';
+    return path.basename(fallbackCmd).toLowerCase();
+  }
+
+  shouldKillUnmanagedBackendProcess(
+    pid,
+    processInfo,
+    backendConfig,
+    allowImageOnlyMatch = false,
+  ) {
     const safeBackendConfig =
       backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
     const expectedImageName = path
-      .basename(safeBackendConfig.cmd || 'python.exe')
+      .basename(safeBackendConfig.cmd || this.getFallbackWindowsBackendImageName())
       .toLowerCase();
-    const requireStrictCommandLineCheck =
-      this.isGenericWindowsPythonImage(expectedImageName);
+    const actualImageName = processInfo.imageName.toLowerCase();
+    if (actualImageName !== expectedImageName) {
+      this.log(
+        `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
+      );
+      return false;
+    }
+
+    if (allowImageOnlyMatch || !this.isGenericWindowsPythonImage(expectedImageName)) {
+      return true;
+    }
+
     const expectedCommandLineMarkers = [];
     if (Array.isArray(safeBackendConfig.args) && safeBackendConfig.args.length > 0) {
       const primaryArg = safeBackendConfig.args[0];
@@ -881,38 +902,7 @@ class BackendManager {
       }
     }
 
-    return {
-      expectedImageName,
-      requireStrictCommandLineCheck,
-      expectedCommandLineMarkers,
-    };
-  }
-
-  buildFallbackWindowsUnmanagedBackendMatcher() {
-    const fallbackCmdRaw = process.env.ASTRBOT_BACKEND_CMD || 'python.exe';
-    const fallbackCmd = String(fallbackCmdRaw).trim().split(/\s+/, 1)[0] || 'python.exe';
-    return {
-      expectedImageName: path.basename(fallbackCmd).toLowerCase(),
-      // Fallback mode only checks image name to avoid false negatives
-      // when backend config is unavailable in current session.
-      requireStrictCommandLineCheck: false,
-      expectedCommandLineMarkers: [],
-    };
-  }
-
-  shouldKillUnmanagedBackendProcess(pid, processInfo, processMatcher) {
-    const actualImageName = processInfo.imageName.toLowerCase();
-    if (actualImageName !== processMatcher.expectedImageName) {
-      this.log(
-        `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
-      );
-      return false;
-    }
-
-    if (!processMatcher.requireStrictCommandLineCheck) {
-      return true;
-    }
-    if (!processMatcher.expectedCommandLineMarkers.length) {
+    if (!expectedCommandLineMarkers.length) {
       this.log(
         `Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`,
       );
@@ -928,7 +918,7 @@ class BackendManager {
     }
 
     const normalizedCommandLine = this.normalizeWindowsPathForMatch(commandLine);
-    const markerMatched = processMatcher.expectedCommandLineMarkers.some(
+    const markerMatched = expectedCommandLineMarkers.some(
       (marker) => marker && normalizedCommandLine.includes(marker),
     );
     if (!markerMatched) {
@@ -971,9 +961,6 @@ class BackendManager {
       );
     }
     const hasBackendConfig = backendConfig && typeof backendConfig === 'object';
-    const processMatcher = hasBackendConfig
-      ? this.buildWindowsUnmanagedBackendMatcher(backendConfig)
-      : this.buildFallbackWindowsUnmanagedBackendMatcher();
     if (!hasBackendConfig) {
       this.log(
         'Backend config is unavailable during unmanaged cleanup; falling back to image-name-only matching.',
@@ -986,7 +973,14 @@ class BackendManager {
         this.log(`Skip unmanaged cleanup for pid=${pid}: unable to resolve process info.`);
         continue;
       }
-      if (!this.shouldKillUnmanagedBackendProcess(pid, processInfo, processMatcher)) {
+      if (
+        !this.shouldKillUnmanagedBackendProcess(
+          pid,
+          processInfo,
+          backendConfig,
+          !hasBackendConfig,
+        )
+      ) {
         continue;
       }
 
