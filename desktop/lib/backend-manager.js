@@ -858,16 +858,20 @@ class BackendManager {
   }
 
   buildWindowsUnmanagedBackendMatcher(backendConfig) {
-    const expectedImageName = path.basename(backendConfig.cmd || 'python.exe').toLowerCase();
+    const safeBackendConfig =
+      backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
+    const expectedImageName = path
+      .basename(safeBackendConfig.cmd || 'python.exe')
+      .toLowerCase();
     const requireStrictCommandLineCheck =
       this.isGenericWindowsPythonImage(expectedImageName);
     const expectedCommandLineMarkers = [];
-    if (Array.isArray(backendConfig.args) && backendConfig.args.length > 0) {
-      const primaryArg = backendConfig.args[0];
+    if (Array.isArray(safeBackendConfig.args) && safeBackendConfig.args.length > 0) {
+      const primaryArg = safeBackendConfig.args[0];
       if (typeof primaryArg === 'string' && primaryArg) {
         const resolvedPrimaryArg = path.isAbsolute(primaryArg)
           ? primaryArg
-          : path.resolve(backendConfig.cwd || process.cwd(), primaryArg);
+          : path.resolve(safeBackendConfig.cwd || process.cwd(), primaryArg);
         expectedCommandLineMarkers.push(
           this.normalizeWindowsPathForMatch(resolvedPrimaryArg),
         );
@@ -881,6 +885,18 @@ class BackendManager {
       expectedImageName,
       requireStrictCommandLineCheck,
       expectedCommandLineMarkers,
+    };
+  }
+
+  buildFallbackWindowsUnmanagedBackendMatcher() {
+    const fallbackCmdRaw = process.env.ASTRBOT_BACKEND_CMD || 'python.exe';
+    const fallbackCmd = String(fallbackCmdRaw).trim().split(/\s+/, 1)[0] || 'python.exe';
+    return {
+      expectedImageName: path.basename(fallbackCmd).toLowerCase(),
+      // Fallback mode only checks image name to avoid false negatives
+      // when backend config is unavailable in current session.
+      requireStrictCommandLineCheck: false,
+      expectedCommandLineMarkers: [],
     };
   }
 
@@ -944,8 +960,25 @@ class BackendManager {
       `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
     );
 
-    const backendConfig = this.getBackendConfig();
-    const processMatcher = this.buildWindowsUnmanagedBackendMatcher(backendConfig);
+    let backendConfig = null;
+    try {
+      backendConfig = this.getBackendConfig();
+    } catch (error) {
+      this.log(
+        `Failed to resolve backend config during unmanaged cleanup: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    const hasBackendConfig = backendConfig && typeof backendConfig === 'object';
+    const processMatcher = hasBackendConfig
+      ? this.buildWindowsUnmanagedBackendMatcher(backendConfig)
+      : this.buildFallbackWindowsUnmanagedBackendMatcher();
+    if (!hasBackendConfig) {
+      this.log(
+        'Backend config is unavailable during unmanaged cleanup; falling back to image-name-only matching.',
+      );
+    }
 
     for (const pid of pids) {
       const processInfo = this.getWindowsProcessInfo(pid);

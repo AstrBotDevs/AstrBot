@@ -439,9 +439,17 @@ class PipInstaller:
         wheel_only: bool = False,
     ) -> None:
         args = ["install"]
-        pip_install_args = (
-            shlex.split(self.pip_install_arg) if self.pip_install_arg else []
-        )
+        pip_install_args: list[str] = []
+        if self.pip_install_arg:
+            try:
+                pip_install_args = shlex.split(self.pip_install_arg)
+            except ValueError as exc:
+                logger.warning(
+                    "Failed to parse pip_install_arg with shlex (%s). "
+                    "Falling back to legacy whitespace split.",
+                    exc,
+                )
+                pip_install_args = self.pip_install_arg.split()
         requested_requirements: set[str] = set()
         if package_name:
             args.append(package_name)
