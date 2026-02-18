@@ -12,28 +12,13 @@ const manifestPath = path.join(outputDir, 'runtime-manifest.json');
 const launcherPath = path.join(outputDir, 'launch_backend.py');
 
 const runtimeSource =
-  process.env.ASTRBOT_DESKTOP_CPYTHON_HOME ||
-  process.env.ASTRBOT_DESKTOP_BACKEND_RUNTIME;
+  process.env.ASTRBOT_DESKTOP_BACKEND_RUNTIME ||
+  process.env.ASTRBOT_DESKTOP_CPYTHON_HOME;
 const requirePipProbe = process.env.ASTRBOT_DESKTOP_REQUIRE_PIP === '1';
-
-const fail = (message) => {
-  return new Error(message);
-};
-
-const normalizePathForCompare = (targetPath) => {
-  const resolved = path.resolve(targetPath).replace(/[\\/]+$/, '');
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-};
-
-const isSameOrSubPath = (targetPath, parentPath) => {
-  const target = normalizePathForCompare(targetPath);
-  const parent = normalizePathForCompare(parentPath);
-  return target === parent || target.startsWith(`${parent}${path.sep}`);
-};
 
 const resolveAndValidateRuntimeSource = () => {
   if (!runtimeSource) {
-    throw fail(
+    throw new Error(
       'Missing CPython runtime source. Set ASTRBOT_DESKTOP_CPYTHON_HOME ' +
         '(recommended) or ASTRBOT_DESKTOP_BACKEND_RUNTIME.',
     );
@@ -41,14 +26,23 @@ const resolveAndValidateRuntimeSource = () => {
 
   const runtimeSourceReal = path.resolve(rootDir, runtimeSource);
   if (!fs.existsSync(runtimeSourceReal)) {
-    throw fail(`CPython runtime source does not exist: ${runtimeSourceReal}`);
+    throw new Error(`CPython runtime source does not exist: ${runtimeSourceReal}`);
   }
 
-  if (
-    isSameOrSubPath(runtimeSourceReal, outputDir) ||
-    isSameOrSubPath(outputDir, runtimeSourceReal)
-  ) {
-    throw fail(
+  const normalizeForCompare = (targetPath) => {
+    const resolved = path.resolve(targetPath).replace(/[\\/]+$/, '');
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+
+  const runtimeNorm = normalizeForCompare(runtimeSourceReal);
+  const outputNorm = normalizeForCompare(outputDir);
+  const runtimeIsOutputOrSub =
+    runtimeNorm === outputNorm || runtimeNorm.startsWith(`${outputNorm}${path.sep}`);
+  const outputIsRuntimeOrSub =
+    outputNorm === runtimeNorm || outputNorm.startsWith(`${runtimeNorm}${path.sep}`);
+
+  if (runtimeIsOutputOrSub || outputIsRuntimeOrSub) {
+    throw new Error(
       `CPython runtime source overlaps with backend output directory. ` +
         `runtime=${runtimeSourceReal}, output=${outputDir}. ` +
         'Please set ASTRBOT_DESKTOP_CPYTHON_HOME to a separate runtime directory.',
@@ -61,7 +55,7 @@ const resolveAndValidateRuntimeSource = () => {
 const parseExpectedRuntimeVersion = (rawVersion, sourceName) => {
   const match = /^(\d+)\.(\d+)$/.exec(String(rawVersion).trim());
   if (!match) {
-    throw fail(
+    throw new Error(
       `Invalid expected Python version from ${sourceName}: ${rawVersion}. ` +
         'Expected format <major>.<minor>.',
     );
@@ -78,6 +72,11 @@ const extractLowerBoundFromPythonSpecifier = (rawSpecifier) => {
   }
 
   const clauses = rawSpecifier.replace(/\s+/g, '').split(',').filter(Boolean);
+  for (const clause of clauses) {
+    if (clause.includes('<') || clause.includes('!=')) {
+      return null;
+    }
+  }
   let bestLowerBound = null;
 
   const updateLowerBound = (major, minor) => {
@@ -91,7 +90,7 @@ const extractLowerBoundFromPythonSpecifier = (rawSpecifier) => {
   };
 
   for (const clause of clauses) {
-    const match = /^(>=|>|==|~=)(\d+)(?:\.(\d+))?/.exec(clause);
+    const match = /^(>=|>|==|~=)(\d+)(?:\.(\d+))?$/.exec(clause);
     if (!match) {
       continue;
     }
@@ -227,7 +226,7 @@ const resolveExpectedRuntimeVersion = () => {
     };
   }
 
-  throw fail(
+  throw new Error(
     'Unable to determine expected runtime Python version. ' +
       'Set ASTRBOT_DESKTOP_EXPECTED_PYTHON or declare project.requires-python in pyproject.toml.',
   );
@@ -318,19 +317,19 @@ const validateRuntimePython = (pythonExecutable, expectedRuntimeConstraint) => {
       probe.error.code === 'ETIMEDOUT'
         ? 'runtime Python probe timed out'
         : probe.error.message || String(probe.error);
-    throw fail(`Runtime Python probe failed: ${reason}`);
+    throw new Error(`Runtime Python probe failed: ${reason}`);
   }
 
   if (probe.status !== 0) {
     const stderrText = (probe.stderr || '').trim();
     if (requirePipProbe) {
-      throw fail(
+      throw new Error(
         `Runtime Python probe failed with exit code ${probe.status}. ` +
           `pip import check is enabled by ASTRBOT_DESKTOP_REQUIRE_PIP=1. ` +
           (stderrText ? `stderr: ${stderrText}` : ''),
       );
     }
-    throw fail(
+    throw new Error(
       `Runtime Python probe failed with exit code ${probe.status}. ` +
         (stderrText ? `stderr: ${stderrText}` : ''),
     );
@@ -338,7 +337,7 @@ const validateRuntimePython = (pythonExecutable, expectedRuntimeConstraint) => {
 
   const parts = (probe.stdout || '').trim().split(/\s+/);
   if (parts.length < 2) {
-    throw fail(
+    throw new Error(
       `Runtime Python probe did not report a valid version. Output: ${(probe.stdout || '').trim()}`,
     );
   }
@@ -351,7 +350,7 @@ const validateRuntimePython = (pythonExecutable, expectedRuntimeConstraint) => {
   const compareResult = compareMajorMinor(actualVersion, expectedRuntimeVersion);
   if (expectedRuntimeConstraint.isLowerBoundRuntimeVersion) {
     if (compareResult < 0) {
-      throw fail(
+      throw new Error(
         `Runtime Python version is too low for ${expectedRuntimeConstraint.source}: ` +
           `expected >= ${expectedRuntimeVersion.major}.${expectedRuntimeVersion.minor}, ` +
           `got ${actualVersion.major}.${actualVersion.minor}.`,
@@ -361,7 +360,7 @@ const validateRuntimePython = (pythonExecutable, expectedRuntimeConstraint) => {
   }
 
   if (compareResult !== 0) {
-    throw fail(
+    throw new Error(
       `Runtime Python version mismatch for ${expectedRuntimeConstraint.source}: ` +
         `expected ${expectedRuntimeVersion.major}.${expectedRuntimeVersion.minor}, ` +
         `got ${actualVersion.major}.${actualVersion.minor}.`,
@@ -397,7 +396,7 @@ const main = () => {
 
   const sourceRuntimePython = resolveRuntimePython(runtimeSourceReal);
   if (!sourceRuntimePython) {
-    throw fail(
+    throw new Error(
       `Cannot find Python executable in runtime source: ${runtimeSourceReal}. ` +
         'Expected python under bin/ or Scripts/.',
     );
@@ -412,7 +411,7 @@ const main = () => {
     const sourcePath = path.join(rootDir, srcRelative);
     const targetPath = path.join(appDir, destRelative);
     if (!fs.existsSync(sourcePath)) {
-      throw fail(`Backend source path does not exist: ${sourcePath}`);
+      throw new Error(`Backend source path does not exist: ${sourcePath}`);
     }
     copyTree(sourcePath, targetPath);
   }
@@ -421,7 +420,7 @@ const main = () => {
 
   const runtimePython = resolveRuntimePython(runtimeDir);
   if (!runtimePython) {
-    throw fail(
+    throw new Error(
       `Cannot find Python executable in runtime: ${runtimeDir}. ` +
         'Expected python under bin/ or Scripts/.',
     );

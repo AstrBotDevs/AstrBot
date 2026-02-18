@@ -118,7 +118,8 @@ class BackendManager {
     if (!this.app.isPackaged) {
       return path.resolve(this.baseDir, '..');
     }
-    return this.getPackagedBackendAppDir() || this.resolveBackendRoot();
+    const packagedBackendConfig = this.getPackagedBackendConfig();
+    return (packagedBackendConfig && packagedBackendConfig.appDir) || this.resolveBackendRoot();
   }
 
   resolveWebuiDir() {
@@ -131,41 +132,6 @@ class BackendManager {
     const candidate = path.join(process.resourcesPath, 'webui');
     const indexPath = path.join(candidate, 'index.html');
     return fs.existsSync(indexPath) ? candidate : null;
-  }
-
-  getPackagedBackendDir() {
-    const packagedBackendConfig = this.loadPackagedBackendConfig();
-    return packagedBackendConfig ? packagedBackendConfig.backendDir : null;
-  }
-
-  parsePackagedBackendManifest(backendDir) {
-    const manifestPath = path.join(backendDir, 'runtime-manifest.json');
-    if (!fs.existsSync(manifestPath)) {
-      return null;
-    }
-    try {
-      const raw = fs.readFileSync(manifestPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    } catch (error) {
-      this.log(
-        `Failed to parse packaged backend manifest: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    return null;
-  }
-
-  resolveManifestPath(backendDir, manifest, key, defaultRelative) {
-    const relativePath =
-      manifest && typeof manifest[key] === 'string' && manifest[key]
-        ? manifest[key]
-        : defaultRelative;
-    const candidate = path.join(backendDir, relativePath);
-    return fs.existsSync(candidate) ? candidate : null;
   }
 
   loadPackagedBackendConfig() {
@@ -181,7 +147,37 @@ class BackendManager {
       return null;
     }
 
-    const manifest = this.parsePackagedBackendManifest(backendDir);
+    const parseManifest = () => {
+      const manifestPath = path.join(backendDir, 'runtime-manifest.json');
+      if (!fs.existsSync(manifestPath)) {
+        return null;
+      }
+      try {
+        const raw = fs.readFileSync(manifestPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch (error) {
+        this.log(
+          `Failed to parse packaged backend manifest: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      return null;
+    };
+
+    const resolveManifestPath = (manifest, key, defaultRelative) => {
+      const relativePath =
+        manifest && typeof manifest[key] === 'string' && manifest[key]
+          ? manifest[key]
+          : defaultRelative;
+      const candidate = path.join(backendDir, relativePath);
+      return fs.existsSync(candidate) ? candidate : null;
+    };
+
+    const manifest = parseManifest();
     const manifestForPathResolve = manifest || {};
     const defaultPythonRelative =
       process.platform === 'win32'
@@ -191,15 +187,13 @@ class BackendManager {
     this.packagedBackendConfig = Object.freeze({
       backendDir,
       manifest,
-      appDir: this.resolveManifestPath(backendDir, manifestForPathResolve, 'app', 'app'),
-      launchScriptPath: this.resolveManifestPath(
-        backendDir,
+      appDir: resolveManifestPath(manifestForPathResolve, 'app', 'app'),
+      launchScriptPath: resolveManifestPath(
         manifestForPathResolve,
         'entrypoint',
         'launch_backend.py',
       ),
-      runtimePythonPath: this.resolveManifestPath(
-        backendDir,
+      runtimePythonPath: resolveManifestPath(
         manifestForPathResolve,
         'python',
         defaultPythonRelative,
@@ -209,28 +203,12 @@ class BackendManager {
     return this.packagedBackendConfig;
   }
 
-  getPackagedBackendManifest() {
-    const packagedBackendConfig = this.loadPackagedBackendConfig();
-    return packagedBackendConfig ? packagedBackendConfig.manifest : null;
-  }
-
-  getPackagedBackendAppDir() {
-    const packagedBackendConfig = this.loadPackagedBackendConfig();
-    return packagedBackendConfig ? packagedBackendConfig.appDir : null;
-  }
-
-  getPackagedBackendLaunchScriptPath() {
-    const packagedBackendConfig = this.loadPackagedBackendConfig();
-    return packagedBackendConfig ? packagedBackendConfig.launchScriptPath : null;
-  }
-
-  getPackagedRuntimePythonPath() {
-    const packagedBackendConfig = this.loadPackagedBackendConfig();
-    return packagedBackendConfig ? packagedBackendConfig.runtimePythonPath : null;
+  getPackagedBackendConfig() {
+    return this.loadPackagedBackendConfig();
   }
 
   buildPackagedBackendLaunch(webuiDir) {
-    const packagedBackendConfig = this.loadPackagedBackendConfig();
+    const packagedBackendConfig = this.getPackagedBackendConfig();
     if (!packagedBackendConfig) {
       return null;
     }
@@ -739,32 +717,22 @@ class BackendManager {
     );
   }
 
-  queryWindowsProcessCommandLineByPowerShell(pid) {
+  queryWindowsProcessCommandLine(shellName, pid) {
     const query = `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -ne $p) { $p.CommandLine }`;
-    return spawnSync(
-      'powershell',
-      ['-NoProfile', '-NonInteractive', '-Command', query],
-      {
-        stdio: ['ignore', 'pipe', 'ignore'],
-        encoding: 'utf8',
-        windowsHide: true,
-        timeout: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
-      },
-    );
-  }
-
-  queryWindowsProcessCommandLineByPwsh(pid) {
-    const query = `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -ne $p) { $p.CommandLine }`;
-    return spawnSync(
-      'pwsh',
-      ['-NoProfile', '-NonInteractive', '-Command', query],
-      {
-        stdio: ['ignore', 'pipe', 'ignore'],
-        encoding: 'utf8',
-        windowsHide: true,
-        timeout: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
-      },
-    );
+    const args = ['-NoProfile', '-NonInteractive', '-Command', query];
+    const options = {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
+    };
+    if (shellName === 'powershell') {
+      return spawnSync('powershell', args, options);
+    }
+    if (shellName === 'pwsh') {
+      return spawnSync('pwsh', args, options);
+    }
+    throw new Error(`Unsupported shell for process command line query: ${shellName}`);
   }
 
   parseWindowsProcessCommandLine(result) {
@@ -791,40 +759,46 @@ class BackendManager {
     }
   }
 
+  getCachedWindowsCommandLine(numericPid) {
+    const cached = this.windowsProcessCommandLineCache.get(numericPid);
+    if (
+      cached &&
+      Date.now() - cached.timestampMs <= WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS
+    ) {
+      return { hit: true, commandLine: cached.commandLine };
+    }
+    this.windowsProcessCommandLineCache.delete(numericPid);
+    return { hit: false, commandLine: null };
+  }
+
+  setCachedWindowsCommandLine(numericPid, commandLine) {
+    this.windowsProcessCommandLineCache.set(numericPid, {
+      commandLine,
+      timestampMs: Date.now(),
+    });
+  }
+
   getWindowsProcessCommandLine(pid) {
     const numericPid = Number.parseInt(`${pid}`, 10);
     if (!Number.isInteger(numericPid)) {
       return null;
     }
 
-    const cached = this.windowsProcessCommandLineCache.get(numericPid);
-    if (
-      cached &&
-      Date.now() - cached.timestampMs <= WINDOWS_PROCESS_COMMAND_LINE_CACHE_TTL_MS
-    ) {
+    const cached = this.getCachedWindowsCommandLine(numericPid);
+    if (cached.hit) {
       return cached.commandLine;
     }
-    this.windowsProcessCommandLineCache.delete(numericPid);
 
-    const queryAttempts = [
-      {
-        shellName: 'powershell',
-        run: () => this.queryWindowsProcessCommandLineByPowerShell(numericPid),
-      },
-      {
-        shellName: 'pwsh',
-        run: () => this.queryWindowsProcessCommandLineByPwsh(numericPid),
-      },
-    ];
+    const queryAttempts = ['powershell', 'pwsh'];
 
-    for (const queryAttempt of queryAttempts) {
+    for (const shellName of queryAttempts) {
       let result = null;
       try {
-        result = queryAttempt.run();
+        result = this.queryWindowsProcessCommandLine(shellName, numericPid);
       } catch (error) {
         if (error instanceof Error && error.message) {
           this.log(
-            `Failed to query process command line by ${queryAttempt.shellName} for pid=${numericPid}: ${error.message}`,
+            `Failed to query process command line by ${shellName} for pid=${numericPid}: ${error.message}`,
           );
         }
         continue;
@@ -835,25 +809,19 @@ class BackendManager {
       }
       if (result.error && result.error.code === 'ETIMEDOUT') {
         this.log(
-          `Timed out (${WINDOWS_PROCESS_QUERY_TIMEOUT_MS}ms) querying process command line by ${queryAttempt.shellName} for pid=${numericPid}.`,
+          `Timed out (${WINDOWS_PROCESS_QUERY_TIMEOUT_MS}ms) querying process command line by ${shellName} for pid=${numericPid}.`,
         );
         continue;
       }
 
       if (result.status === 0) {
         const commandLine = this.parseWindowsProcessCommandLine(result);
-        this.windowsProcessCommandLineCache.set(numericPid, {
-          commandLine,
-          timestampMs: Date.now(),
-        });
+        this.setCachedWindowsCommandLine(numericPid, commandLine);
         return commandLine;
       }
     }
 
-    this.windowsProcessCommandLineCache.set(numericPid, {
-      commandLine: null,
-      timestampMs: Date.now(),
-    });
+    this.setCachedWindowsCommandLine(numericPid, null);
     return null;
   }
 
@@ -863,49 +831,38 @@ class BackendManager {
     return path.basename(fallbackCmd).toLowerCase();
   }
 
-  shouldKillUnmanagedBackendProcess(
-    pid,
-    processInfo,
-    backendConfig,
-    allowImageOnlyMatch = false,
-  ) {
+  getExpectedWindowsBackendImageName(backendConfig) {
     const safeBackendConfig =
       backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
-    const expectedImageName = path
+    return path
       .basename(safeBackendConfig.cmd || this.getFallbackWindowsBackendImageName())
       .toLowerCase();
-    const actualImageName = processInfo.imageName.toLowerCase();
-    if (actualImageName !== expectedImageName) {
-      this.log(
-        `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
-      );
-      return false;
+  }
+
+  buildBackendCommandLineMarkers(backendConfig) {
+    const safeBackendConfig =
+      backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
+    const markers = [];
+    if (!Array.isArray(safeBackendConfig.args) || safeBackendConfig.args.length === 0) {
+      return markers;
     }
 
-    if (allowImageOnlyMatch || !this.isGenericWindowsPythonImage(expectedImageName)) {
-      return true;
+    const primaryArg = safeBackendConfig.args[0];
+    if (typeof primaryArg !== 'string' || !primaryArg) {
+      return markers;
     }
 
-    const expectedCommandLineMarkers = [];
-    if (Array.isArray(safeBackendConfig.args) && safeBackendConfig.args.length > 0) {
-      const primaryArg = safeBackendConfig.args[0];
-      if (typeof primaryArg === 'string' && primaryArg) {
-        const resolvedPrimaryArg = path.isAbsolute(primaryArg)
-          ? primaryArg
-          : path.resolve(safeBackendConfig.cwd || process.cwd(), primaryArg);
-        expectedCommandLineMarkers.push(
-          this.normalizeWindowsPathForMatch(resolvedPrimaryArg),
-        );
-        expectedCommandLineMarkers.push(
-          this.normalizeWindowsPathForMatch(path.basename(primaryArg)),
-        );
-      }
-    }
+    const resolvedPrimaryArg = path.isAbsolute(primaryArg)
+      ? primaryArg
+      : path.resolve(safeBackendConfig.cwd || process.cwd(), primaryArg);
+    markers.push(this.normalizeWindowsPathForMatch(resolvedPrimaryArg));
+    markers.push(this.normalizeWindowsPathForMatch(path.basename(primaryArg)));
+    return markers;
+  }
 
-    if (!expectedCommandLineMarkers.length) {
-      this.log(
-        `Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`,
-      );
+  matchesBackendCommandLine(pid, markers) {
+    if (!markers.length) {
+      this.log(`Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`);
       return false;
     }
 
@@ -918,16 +875,36 @@ class BackendManager {
     }
 
     const normalizedCommandLine = this.normalizeWindowsPathForMatch(commandLine);
-    const markerMatched = expectedCommandLineMarkers.some(
-      (marker) => marker && normalizedCommandLine.includes(marker),
-    );
-    if (!markerMatched) {
+    const matched = markers.some((marker) => marker && normalizedCommandLine.includes(marker));
+    if (!matched) {
       this.log(
         `Skip unmanaged cleanup for pid=${pid}: command line does not match AstrBot backend launch marker.`,
       );
+    }
+    return matched;
+  }
+
+  shouldKillUnmanagedBackendProcess(
+    pid,
+    processInfo,
+    backendConfig,
+    allowImageOnlyMatch = false,
+  ) {
+    const expectedImageName = this.getExpectedWindowsBackendImageName(backendConfig);
+    const actualImageName = processInfo.imageName.toLowerCase();
+    if (actualImageName !== expectedImageName) {
+      this.log(
+        `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
+      );
       return false;
     }
-    return true;
+
+    if (allowImageOnlyMatch || !this.isGenericWindowsPythonImage(expectedImageName)) {
+      return true;
+    }
+
+    const markers = this.buildBackendCommandLineMarkers(backendConfig);
+    return this.matchesBackendCommandLine(pid, markers);
   }
 
   async stopUnmanagedBackendByPort() {

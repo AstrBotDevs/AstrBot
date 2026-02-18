@@ -70,7 +70,7 @@ pnpm --dir desktop run dev
 
 - `dist:full` runs WebUI build + backend runtime packaging + Electron packaging.
 - In packaged app mode, backend data root defaults to `~/.astrbot` (can be overridden by `ASTRBOT_ROOT`).
-- Backend build requires `ASTRBOT_DESKTOP_CPYTHON_HOME` (or `ASTRBOT_DESKTOP_BACKEND_RUNTIME`) to point to a CPython runtime directory.
+- Backend build requires a CPython runtime directory via `ASTRBOT_DESKTOP_BACKEND_RUNTIME` or `ASTRBOT_DESKTOP_CPYTHON_HOME`; if both are set, `ASTRBOT_DESKTOP_BACKEND_RUNTIME` takes precedence.
 
 ## Packaged Backend Layout
 
