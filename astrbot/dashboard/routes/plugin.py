@@ -73,6 +73,7 @@ class PluginRoute(Route):
             EventType.OnDecoratingResultEvent: "回复消息前",
             EventType.OnCallingFuncToolEvent: "函数工具",
             EventType.OnAfterMessageSentEvent: "发送消息后",
+            EventType.OnPluginErrorEvent: "插件报错时",
         }
 
         self._logo_cache = {}
