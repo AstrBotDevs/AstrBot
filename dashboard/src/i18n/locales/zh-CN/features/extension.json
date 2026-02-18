@@ -3,7 +3,7 @@
   "subtitle": "管理和配置系统插件",
   "tabs": {
     "installedPlugins": "AstrBot 插件",
-    "market": "AstrBot 插件市场", 
+    "market": "AstrBot 插件市场",
     "installedMcpServers": "MCP",
     "skills": "Skills",
     "handlersOperation": "管理行为"
@@ -38,7 +38,8 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
-    "deleteSource": "删除源"
+    "deleteSource": "删除源",
+    "reshuffle": "随机一发"
   },
   "status": {
     "enabled": "启用",
@@ -103,7 +104,9 @@
     "sourceUpdated": "插件源更新成功",
     "defaultOfficialSource": "默认官方源",
     "sourceExists": "该插件源已存在",
-    "installPlugin": "安装插件"
+    "installPlugin": "安装插件",
+    "randomPlugins": "🎲 随机插件",
+    "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {
     "default": "默认排序",
