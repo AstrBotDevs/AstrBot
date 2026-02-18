@@ -383,7 +383,6 @@ class ChatRoute(Route):
                         except asyncio.CancelledError:
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
-                            break
                         except Exception as e:
                             logger.error(f"WebChat stream error: {e}")
                             continue

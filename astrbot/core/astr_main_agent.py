@@ -816,7 +816,6 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
 def _get_compress_provider(
     config: MainAgentBuildConfig,
     plugin_context: Context,
-    active_provider: Provider | None,
 ) -> Provider | None:
     if config.context_limit_reached_strategy != "llm_compress":
         return None
@@ -984,7 +983,7 @@ async def build_main_agent(
         streaming=config.streaming_response,
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent=config.llm_compress_keep_recent,
-        llm_compress_provider=_get_compress_provider(config, plugin_context, provider),
+        llm_compress_provider=_get_compress_provider(config, plugin_context),
         llm_compress_use_compact_api=config.llm_compress_use_compact_api,
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
