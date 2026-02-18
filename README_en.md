@@ -172,8 +172,8 @@ For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/REA
 - Discord
 - Satori
 - Misskey
+- LINE
 - WhatsApp (Coming Soon)
-- LINE (Coming Soon)
 
 **Community Maintained**
 

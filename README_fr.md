@@ -168,8 +168,8 @@ paru -S astrbot-git
 - Discord
 - Satori
 - Misskey
+- LINE
 - WhatsApp (Bientôt disponible)
-- LINE (Bientôt disponible)
 
 **Maintenues par la communauté**
 
