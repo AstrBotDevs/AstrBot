@@ -168,7 +168,7 @@ export const resolveExpectedRuntimeVersion = ({ rootDir }) => {
   );
 };
 
-const runPythonProbe = ({ pythonExecutable, requirePipProbe }) => {
+const probePythonVersion = ({ pythonExecutable, requirePipProbe }) => {
   const probeScript = requirePipProbe
     ? 'import sys, pip; print(sys.version_info[0], sys.version_info[1])'
     : 'import sys; print(sys.version_info[0], sys.version_info[1])';
@@ -196,11 +196,7 @@ const runPythonProbe = ({ pythonExecutable, requirePipProbe }) => {
     );
   }
 
-  return probe.stdout || '';
-};
-
-const parseProbeVersion = (stdoutText) => {
-  const trimmedOutput = String(stdoutText || '').trim();
+  const trimmedOutput = String(probe.stdout || '').trim();
   const parts = trimmedOutput.split(/\s+/);
   if (parts.length < 2) {
     throw new Error(
@@ -224,11 +220,10 @@ export const validateRuntimePython = ({
   expectedRuntimeConstraint,
   requirePipProbe,
 }) => {
-  const probeOutput = runPythonProbe({
+  const actualVersion = probePythonVersion({
     pythonExecutable,
     requirePipProbe,
   });
-  const actualVersion = parseProbeVersion(probeOutput);
   const expectedRuntimeVersion = expectedRuntimeConstraint.expectedRuntimeVersion;
   const compareResult = compareMajorMinor(actualVersion, expectedRuntimeVersion);
   if (expectedRuntimeConstraint.isLowerBoundRuntimeVersion) {
