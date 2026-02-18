@@ -128,6 +128,7 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "local",
+        "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard",
             "shipyard_endpoint": "",
@@ -2736,6 +2737,11 @@ CONFIG_METADATA_3 = {
                         "options": ["none", "local", "sandbox"],
                         "labels": ["无", "本地", "沙箱"],
                         "hint": "选择 Computer Use 运行环境。",
+                    },
+                    "provider_settings.computer_use_require_admin": {
+                        "description": "需要 AstrBot 管理员权限",
+                        "type": "bool",
+                        "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",

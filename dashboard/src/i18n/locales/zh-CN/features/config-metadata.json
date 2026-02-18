@@ -152,6 +152,10 @@
           "description": "运行环境",
           "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
         },
+        "computer_use_require_admin": {
+          "description": "需要 AstrBot 管理员权限",
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+        },
         "sandbox": {
           "booter": {
             "description": "沙箱环境驱动器"
