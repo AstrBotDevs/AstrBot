@@ -96,30 +96,65 @@ const installRuntimeDependencies = (runtimePython) => {
     throw new Error(`Backend requirements file does not exist: ${requirementsPath}`);
   }
 
-  const installArgs = [
-    '-m',
-    'pip',
-    '--disable-pip-version-check',
-    'install',
-    '--no-cache-dir',
-    '-r',
-    requirementsPath,
-  ];
-  const installResult = spawnSync(runtimePython.absolute, installArgs, {
-    cwd: outputDir,
-    stdio: 'inherit',
-    windowsHide: true,
-  });
+  const runPipInstall = (extraArgs = []) => {
+    const installArgs = [
+      '-m',
+      'pip',
+      '--disable-pip-version-check',
+      'install',
+      '--no-cache-dir',
+      '-r',
+      requirementsPath,
+      ...extraArgs,
+    ];
+    const installResult = spawnSync(runtimePython.absolute, installArgs, {
+      cwd: outputDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    if (installResult.stdout) {
+      process.stdout.write(installResult.stdout);
+    }
+    if (installResult.stderr) {
+      process.stderr.write(installResult.stderr);
+    }
+    return installResult;
+  };
+
+  let installResult = runPipInstall();
   if (installResult.error) {
     throw new Error(
       `Failed to install backend runtime dependencies: ${installResult.error.message}`,
     );
   }
-  if (installResult.status !== 0) {
-    throw new Error(
-      `Backend runtime dependency installation failed with exit code ${installResult.status}.`,
-    );
+  if (installResult.status === 0) {
+    return;
   }
+
+  const outputText = `${installResult.stderr || ''}\n${installResult.stdout || ''}`;
+  const shouldRetryWithBreakSystemPackages =
+    outputText.includes('externally-managed-environment') ||
+    outputText.includes('This environment is externally managed');
+
+  if (shouldRetryWithBreakSystemPackages) {
+    console.warn(
+      'Detected externally managed Python runtime; retrying pip install with --break-system-packages.',
+    );
+    installResult = runPipInstall(['--break-system-packages']);
+    if (installResult.error) {
+      throw new Error(
+        `Failed to install backend runtime dependencies: ${installResult.error.message}`,
+      );
+    }
+    if (installResult.status === 0) {
+      return;
+    }
+  }
+
+  throw new Error(
+    `Backend runtime dependency installation failed with exit code ${installResult.status}.`,
+  );
 };
 
 const main = () => {
