@@ -244,6 +244,61 @@ def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
             )
 
 
+async def _validate_neo_connectivity(
+    post_config: dict,
+) -> str | None:
+    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
+
+    Returns a warning message string if Bay isn't reachable, or None if
+    everything looks fine (or Neo isn't configured).
+    """
+    ps = post_config.get("provider_settings", {})
+    runtime = ps.get("computer_use_runtime", "none")
+    sandbox = ps.get("sandbox", {})
+    booter = sandbox.get("booter", "")
+
+    # Only check when sandbox mode + shipyard_neo is selected
+    if runtime != "sandbox" or booter != "shipyard_neo":
+        return None
+
+    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
+    if not endpoint:
+        return "⚠️ Shipyard Neo endpoint 未设置"
+
+    access_token = sandbox.get("shipyard_neo_access_token", "")
+    if not access_token:
+        # Try auto-discovery
+        from astrbot.core.computer.computer_client import _discover_bay_credentials
+
+        access_token = _discover_bay_credentials(endpoint)
+
+    if not access_token:
+        return (
+            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
+            "或确保 Bay 的 credentials.json 可被自动发现。"
+        )
+
+    # Connectivity check
+    import aiohttp
+
+    health_url = f"{endpoint}/health"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    return (
+                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                        f"请确认 Bay 正在运行: {endpoint}"
+                    )
+    except Exception:
+        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+
+    return None
+
+
 def save_config(
     post_config: dict, config: AstrBotConfig, is_core: bool = False
 ) -> None:
@@ -955,6 +1010,11 @@ class ConfigRoute(Route):
 
             await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+
+            # Non-blocking Bay connectivity check
+            warning = await _validate_neo_connectivity(config)
+            if warning:
+                return Response().ok(None, f"保存成功。{warning}").__dict__
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
