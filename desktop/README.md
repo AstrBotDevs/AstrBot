@@ -40,6 +40,19 @@ pnpm --dir desktop install --frozen-lockfile
 pnpm --dir desktop run dist:full
 ```
 
+Recommended runtime source for local packaging is `python-build-standalone` (same family used in CI):
+
+```bash
+PBS_RELEASE=20260211
+PBS_VERSION=3.12.12
+PBS_TARGET=aarch64-apple-darwin # e.g. x86_64-apple-darwin / x86_64-unknown-linux-gnu / x86_64-pc-windows-msvc
+RUNTIME_BASE="$HOME/.cache/astrbot-python-runtime/$PBS_TARGET-$PBS_VERSION"
+mkdir -p "$RUNTIME_BASE"
+curl -L "https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_RELEASE}/cpython-${PBS_VERSION}%2B${PBS_RELEASE}-${PBS_TARGET}-install_only_stripped.tar.gz" \
+  | tar -xzf - -C "$RUNTIME_BASE"
+export ASTRBOT_DESKTOP_CPYTHON_HOME="$RUNTIME_BASE/python"
+```
+
 `ASTRBOT_DESKTOP_CPYTHON_HOME` must point to a standalone/distributable CPython runtime directory.
 Virtual environments (for example `.venv`, detected by `pyvenv.cfg`) are not supported for packaged runtime builds.
 

@@ -114,28 +114,36 @@ jobs:
             runner: ubuntu-24.04
             os: linux
             arch: amd64
+            pbs_target: x86_64-unknown-linux-gnu
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
+            pbs_target: aarch64-unknown-linux-gnu
           - name: windows-x64
             runner: windows-2022
             os: win
             arch: amd64
+            pbs_target: x86_64-pc-windows-msvc
           - name: windows-arm64
             runner: windows-11-arm
             os: win
             arch: arm64
+            pbs_target: aarch64-pc-windows-msvc
           - name: macos-x64
             runner: macos-15-intel
             os: mac
             arch: amd64
+            pbs_target: x86_64-apple-darwin
           - name: macos-arm64
             runner: macos-15
             os: mac
             arch: arm64
+            pbs_target: aarch64-apple-darwin
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      PYTHON_BUILD_STANDALONE_RELEASE: "20260211"
+      PYTHON_BUILD_STANDALONE_VERSION: "3.12.12"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -172,6 +180,7 @@ jobs:
         env:
           RUNNER_TEMP_DIR: ${{ runner.temp }}
           SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+          PYTHON_BUILD_STANDALONE_TARGET: ${{ matrix.pbs_target }}
         run: |
           if [ -z "$SETUP_PYTHON_PATH" ]; then
             echo "actions/setup-python did not return python-path output." >&2
@@ -183,31 +192,27 @@ jobs:
           import shutil
           import subprocess
           import sys
+          import tarfile
+          import time
+          import urllib.parse
+          import urllib.request
 
-          executable = pathlib.Path(sys.executable).resolve()
-          candidate_roots = []
-          if sys.platform == "win32":
-              candidate_roots.extend([executable.parent, executable.parent.parent])
-          else:
-              candidate_roots.extend([executable.parent.parent, executable.parent])
-
-          def is_runtime_root(root: pathlib.Path) -> bool:
-              if sys.platform == "win32":
-                  return (root / "python.exe").is_file() or (
-                      root / "Scripts" / "python.exe"
-                  ).is_file()
-              return (root / "bin" / "python3").is_file() or (
-                  root / "bin" / "python"
-              ).is_file()
-
-          source_runtime_root = next(
-              (candidate for candidate in candidate_roots if is_runtime_root(candidate)),
-              None,
-          )
-          if source_runtime_root is None:
+          release = (os.environ.get("PYTHON_BUILD_STANDALONE_RELEASE") or "").strip()
+          version = (os.environ.get("PYTHON_BUILD_STANDALONE_VERSION") or "").strip()
+          target = (os.environ.get("PYTHON_BUILD_STANDALONE_TARGET") or "").strip()
+          if not release or not version or not target:
               raise RuntimeError(
-                  f"Cannot resolve runtime root from executable: {executable}"
+                  "Missing python-build-standalone selection envs: "
+                  "PYTHON_BUILD_STANDALONE_RELEASE / PYTHON_BUILD_STANDALONE_VERSION / PYTHON_BUILD_STANDALONE_TARGET."
               )
+
+          asset_name = (
+              f"cpython-{version}+{release}-{target}-install_only_stripped.tar.gz"
+          )
+          asset_url = (
+              "https://github.com/astral-sh/python-build-standalone/releases/download/"
+              f"{release}/{urllib.parse.quote(asset_name)}"
+          )
 
           target_runtime_root = (
               pathlib.Path(
@@ -217,98 +222,49 @@ jobs:
           )
           if target_runtime_root.exists():
               shutil.rmtree(target_runtime_root)
+
+          download_archive_path = pathlib.Path(
+              os.environ.get("RUNNER_TEMP_DIR") or os.environ["RUNNER_TEMP"]
+          ) / asset_name
+          extract_root = pathlib.Path(
+              os.environ.get("RUNNER_TEMP_DIR") or os.environ["RUNNER_TEMP"]
+          ) / "astrbot-cpython-runtime-extract"
+          if extract_root.exists():
+              shutil.rmtree(extract_root)
+          extract_root.mkdir(parents=True, exist_ok=True)
+
+          last_error = None
+          for attempt in range(1, 4):
+              try:
+                  with urllib.request.urlopen(asset_url, timeout=180) as response:
+                      with download_archive_path.open("wb") as output:
+                          shutil.copyfileobj(response, output)
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  if attempt >= 3:
+                      raise RuntimeError(
+                          f"Failed to download python-build-standalone asset: {asset_url}"
+                      ) from exc
+                  time.sleep(attempt * 2)
+          if last_error and not download_archive_path.exists():
+              raise RuntimeError(
+                  f"Failed to download python-build-standalone asset: {asset_url}"
+              ) from last_error
+
+          with tarfile.open(download_archive_path, "r:gz") as archive:
+              archive.extractall(extract_root)
+
+          source_runtime_root = extract_root / "python"
+          if not source_runtime_root.is_dir():
+              raise RuntimeError(
+                  "Invalid python-build-standalone archive layout: missing top-level python/ directory."
+              )
           shutil.copytree(
               source_runtime_root,
               target_runtime_root,
               symlinks=sys.platform != "win32",
           )
-
-          if sys.platform == "darwin":
-              probe_binary = target_runtime_root / "bin" / "python3"
-              if not probe_binary.is_file():
-                  raise RuntimeError(
-                      f"Cannot find runtime probe binary: {probe_binary}"
-                  )
-
-              probe = subprocess.run(
-                  ["otool", "-L", str(probe_binary)],
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.PIPE,
-                  text=True,
-                  check=False,
-              )
-              if probe.returncode != 0:
-                  raise RuntimeError(
-                      f"Failed to inspect runtime binary by otool: {probe.stderr.strip()}"
-                  )
-
-              old_dependency = None
-              for line in probe.stdout.splitlines()[1:]:
-                  candidate = line.strip().split(" (", 1)[0]
-                  if (
-                      candidate.startswith(
-                          "/Library/Frameworks/Python.framework/Versions/"
-                      )
-                      and candidate.endswith("/Python")
-                  ):
-                      old_dependency = candidate
-                      break
-
-              if old_dependency:
-                  patched = 0
-                  for file_path in target_runtime_root.rglob("*"):
-                      if not file_path.is_file():
-                          continue
-                      file_mode = file_path.stat().st_mode
-                      if (
-                          file_path.name != "Python"
-                          and file_path.suffix not in {".dylib", ".so"}
-                          and (file_mode & 0o111) == 0
-                      ):
-                          continue
-                      inspected = subprocess.run(
-                          ["otool", "-L", str(file_path)],
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL,
-                          text=True,
-                          check=False,
-                      )
-                      if (
-                          inspected.returncode != 0
-                          or old_dependency not in inspected.stdout
-                      ):
-                          continue
-
-                      relative_libpython = pathlib.Path(
-                          os.path.relpath(
-                              target_runtime_root / "Python", file_path.parent
-                          )
-                      ).as_posix()
-                      new_dependency = f"@loader_path/{relative_libpython}"
-
-                      subprocess.run(
-                          [
-                              "install_name_tool",
-                              "-change",
-                              old_dependency,
-                              new_dependency,
-                              str(file_path),
-                          ],
-                          check=True,
-                      )
-                      subprocess.run(
-                          ["codesign", "--force", "--sign", "-", str(file_path)],
-                          check=True,
-                          stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL,
-                      )
-                      patched += 1
-
-                  if patched == 0:
-                      raise RuntimeError(
-                          "Detected absolute Python.framework linkage on macOS runtime, "
-                          "but failed to patch any binary."
-                      )
 
           if sys.platform == "win32":
               verify_candidates = [
@@ -338,7 +294,7 @@ jobs:
           )
           if verify.returncode != 0:
               raise RuntimeError(
-                  "Relocated runtime probe failed: "
+                  "Packaged runtime probe failed: "
                   + (
                       verify.stderr.strip()
                       or verify.stdout.strip()
@@ -346,7 +302,25 @@ jobs:
                   )
               )
 
+          ssl_verify = subprocess.run(
+              [str(verify_binary), "-c", "import ssl"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if ssl_verify.returncode != 0:
+              raise RuntimeError(
+                  "Packaged runtime ssl probe failed: "
+                  + (
+                      ssl_verify.stderr.strip()
+                      or ssl_verify.stdout.strip()
+                      or f"exit={ssl_verify.returncode}"
+                  )
+              )
+
           print(f"ASTRBOT_DESKTOP_CPYTHON_HOME={target_runtime_root}")
+          print(f"ASTRBOT_DESKTOP_CPYTHON_ASSET={asset_name}")
           PY
 
       - name: Setup pnpm
@@ -430,7 +404,7 @@ jobs:
               )
 
           module_check = subprocess.run(
-              [str(runtime_python), "-c", "import aiohttp"],
+              [str(runtime_python), "-c", "import ssl, aiohttp"],
               stdout=subprocess.PIPE,
               stderr=subprocess.PIPE,
               text=True,
@@ -438,7 +412,7 @@ jobs:
           )
           if module_check.returncode != 0:
               raise RuntimeError(
-                  "Packaged runtime dependency smoke test failed (import aiohttp): "
+                  "Packaged runtime dependency smoke test failed (import ssl, aiohttp): "
                   + (module_check.stderr.strip() or module_check.stdout.strip())
               )
 
