@@ -158,8 +158,9 @@ paru -S astrbot-git
 - Discord
 - Satori
 - Misskey
+- LINE
 - Whatsapp（即將支援）
-- LINE（即將支援）
+
 
 **社群維護**
 

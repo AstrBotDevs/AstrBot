@@ -158,8 +158,9 @@ paru -S astrbot-git
 - Discord
 - Satori
 - Misskey
+- LINE
 - WhatsApp (Скоро)
-- LINE (Скоро)
+
 
 **Поддерживаемые сообществом**
 

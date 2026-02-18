@@ -154,7 +154,8 @@ paru -S astrbot-git
 
 **官方维护**
 
-- QQ (官方平台 & OneBot)
+- QQ
+- OneBot v11 协议实现
 - Telegram
 - 企微应用 & 企微智能机器人
 - 微信客服 & 微信公众号
@@ -162,10 +163,10 @@ paru -S astrbot-git
 - 钉钉
 - Slack
 - Discord
+- LINE
 - Satori
 - Misskey
 - Whatsapp (将支持)
-- LINE (将支持)
 
 **社区维护**
 
