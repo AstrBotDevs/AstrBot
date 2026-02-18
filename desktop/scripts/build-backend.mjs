@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -89,6 +90,38 @@ const writeRuntimeManifest = (runtimePython) => {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 };
 
+const installRuntimeDependencies = (runtimePython) => {
+  const requirementsPath = path.join(appDir, 'requirements.txt');
+  if (!fs.existsSync(requirementsPath)) {
+    throw new Error(`Backend requirements file does not exist: ${requirementsPath}`);
+  }
+
+  const installArgs = [
+    '-m',
+    'pip',
+    '--disable-pip-version-check',
+    'install',
+    '--no-cache-dir',
+    '-r',
+    requirementsPath,
+  ];
+  const installResult = spawnSync(runtimePython.absolute, installArgs, {
+    cwd: outputDir,
+    stdio: 'inherit',
+    windowsHide: true,
+  });
+  if (installResult.error) {
+    throw new Error(
+      `Failed to install backend runtime dependencies: ${installResult.error.message}`,
+    );
+  }
+  if (installResult.status !== 0) {
+    throw new Error(
+      `Backend runtime dependency installation failed with exit code ${installResult.status}.`,
+    );
+  }
+};
+
 const main = () => {
   const runtimeSourceReal = resolveAndValidateRuntimeSource({
     rootDir,
@@ -116,6 +149,7 @@ const main = () => {
   prepareOutputDirs();
   copyAppSources();
   const runtimePython = prepareRuntimeExecutable(runtimeSourceReal);
+  installRuntimeDependencies(runtimePython);
   writeLauncherScript();
   writeRuntimeManifest(runtimePython);
 
