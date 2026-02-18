@@ -664,6 +664,7 @@ jobs:
         shell: bash
         env:
           SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+          PIP_ONLY_BINARY: cryptography
         run: |
           pnpm --dir dashboard run build
           pnpm --dir desktop run build:webui
