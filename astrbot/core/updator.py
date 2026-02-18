@@ -8,7 +8,7 @@ from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import download_file
-from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
+from astrbot.core.utils.update_guard import ensure_packaged_update_allowed
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 
@@ -90,10 +90,7 @@ class AstrBotUpdator(RepoZipUpdator):
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
             raise Exception("不支持更新此方式启动的AstrBot")  # 避免版本管理混乱
-        if is_packaged_electron_runtime():
-            raise Exception(
-                "桌面打包版不支持在线更新，请下载最新安装包并替换当前应用。"
-            )
+        ensure_packaged_update_allowed()
 
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None

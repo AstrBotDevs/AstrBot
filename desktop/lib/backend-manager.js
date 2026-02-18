@@ -162,40 +162,55 @@ class BackendManager {
     };
   }
 
-  resolveBackendConfig() {
-    const webuiDir = this.resolveWebuiDir();
+  resolveLaunchCommand(webuiDir) {
     const customCmd = process.env.ASTRBOT_BACKEND_CMD;
-    let launch = null;
-    let failureReason = null;
-
     if (customCmd) {
-      launch = {
-        cmd: customCmd,
-        args: [],
-        shell: true,
+      return {
+        launch: {
+          cmd: customCmd,
+          args: [],
+          shell: true,
+        },
+        failureReason: null,
       };
-    } else if (this.app.isPackaged) {
+    }
+
+    if (this.app.isPackaged) {
       const packagedBackendState = this.getPackagedBackendState();
       if (packagedBackendState?.ok && packagedBackendState.config) {
-        launch = {
-          cmd: packagedBackendState.config.runtimePythonPath,
-          args: [packagedBackendState.config.launchScriptPath, ...(webuiDir ? ['--webui-dir', webuiDir] : [])],
-          shell: false,
+        return {
+          launch: {
+            cmd: packagedBackendState.config.runtimePythonPath,
+            args: [packagedBackendState.config.launchScriptPath, ...(webuiDir ? ['--webui-dir', webuiDir] : [])],
+            shell: false,
+          },
+          failureReason: null,
         };
-      } else {
-        failureReason =
-          packagedBackendState?.failureReason || 'Backend command is not configured.';
-        this.log(failureReason);
       }
-    } else {
-      launch = this.buildDefaultBackendLaunch(webuiDir);
+      return {
+        launch: null,
+        failureReason: packagedBackendState?.failureReason || 'Backend command is not configured.',
+      };
     }
+
+    return {
+      launch: this.buildDefaultBackendLaunch(webuiDir),
+      failureReason: null,
+    };
+  }
+
+  resolveBackendConfig() {
+    const webuiDir = this.resolveWebuiDir();
+    const { launch, failureReason } = this.resolveLaunchCommand(webuiDir);
 
     const cwd = process.env.ASTRBOT_BACKEND_CWD || this.resolveBackendCwd();
     const rootDir = process.env.ASTRBOT_ROOT || this.resolveBackendRoot();
     ensureDir(cwd);
     if (rootDir) {
       ensureDir(rootDir);
+    }
+    if (failureReason) {
+      this.log(failureReason);
     }
     this.backendConfig = {
       cmd: launch ? launch.cmd : null,
@@ -641,6 +656,25 @@ class BackendManager {
     return { imageName, pid: parsedPid };
   }
 
+  shouldKillUnmanagedProcess({
+    pid,
+    processInfo,
+    backendConfig,
+    commandLineCache,
+  }) {
+    const hasBackendConfig = backendConfig && typeof backendConfig === 'object';
+    return shouldKillUnmanagedBackendProcess({
+      pid,
+      processInfo,
+      backendConfig,
+      allowImageOnlyMatch: !hasBackendConfig,
+      commandLineCache,
+      spawnSync,
+      log: (message) => this.log(message),
+      fallbackCmdRaw: process.env.ASTRBOT_BACKEND_CMD || 'python.exe',
+    });
+  }
+
   async stopUnmanagedBackendByPort() {
     if (!this.app.isPackaged || process.platform !== 'win32') {
       return false;
@@ -684,15 +718,11 @@ class BackendManager {
         this.log(`Skip unmanaged cleanup for pid=${pid}: unable to resolve process info.`);
         continue;
       }
-      const shouldKill = shouldKillUnmanagedBackendProcess({
+      const shouldKill = this.shouldKillUnmanagedProcess({
         pid,
         processInfo,
         backendConfig,
-        allowImageOnlyMatch: !hasBackendConfig,
         commandLineCache,
-        spawnSync,
-        log: (message) => this.log(message),
-        fallbackCmdRaw: process.env.ASTRBOT_BACKEND_CMD || 'python.exe',
       });
       if (!shouldKill) {
         continue;

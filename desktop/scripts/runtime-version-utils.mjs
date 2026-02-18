@@ -65,19 +65,12 @@ const extractLowerBoundFromPythonSpecifier = (rawSpecifier) => {
 };
 
 const parsePyprojectProbeOutput = (stdoutText) => {
-  const lines = String(stdoutText || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    try {
-      const parsed = JSON.parse(lines[i]);
-      if (parsed && typeof parsed === 'object') {
-        return parsed;
-      }
-    } catch {}
+  try {
+    const parsed = JSON.parse(String(stdoutText || '').trim());
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
   }
-  return null;
 };
 
 const readProjectRequiresPythonLowerBound = (rootDir) => {
