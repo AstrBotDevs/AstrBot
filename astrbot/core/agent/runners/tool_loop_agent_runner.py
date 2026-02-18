@@ -85,6 +85,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_instruction: str | None = None,
         llm_compress_keep_recent: int = 0,
         llm_compress_provider: Provider | None = None,
+        # llm_compress_use_compact_api: 
+        #   some provider has its on compact logic, such as OpenAI Responses API,
+        #   when this is True, the agent will try to use the provider's compact API if available,
+        #   and fall back to compressor if not.
         llm_compress_use_compact_api: bool = True,
         # truncate by turns compressor
         truncate_turns: int = 1,

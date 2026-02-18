@@ -214,6 +214,10 @@ class STTProvider(AbstractProvider):
         )
         await self.get_text(sample_audio_path)
 
+    def supports_native_compact(self) -> bool:
+        """Check if the provider supports native context compact, such as OpenAI Responses API"""
+        return True
+
 
 class TTSProvider(AbstractProvider):
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
