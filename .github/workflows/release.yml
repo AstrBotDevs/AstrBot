@@ -136,7 +136,6 @@ jobs:
             arch: arm64
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      ASTRBOT_DESKTOP_CPYTHON_HOME: ".venv"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -166,9 +165,28 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Setup Python
+        id: setup-python
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Resolve packaged CPython runtime source
+        shell: bash
+        env:
+          SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+        run: |
+          if [ -z "$SETUP_PYTHON_PATH" ]; then
+            echo "actions/setup-python did not return python-path output." >&2
+            exit 1
+          fi
+          "$SETUP_PYTHON_PATH" - <<'PY' >> "$GITHUB_ENV"
+          import pathlib
+          import sys
+
+          executable = pathlib.Path(sys.executable).resolve()
+          runtime_root = executable.parent if sys.platform == "win32" else executable.parent.parent
+          print(f"ASTRBOT_DESKTOP_CPYTHON_HOME={runtime_root}")
+          PY
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

@@ -33,19 +33,18 @@ Run commands from repository root:
 
 ```bash
 uv sync
-export ASTRBOT_DESKTOP_CPYTHON_HOME="$(pwd)/.venv"
-# export ASTRBOT_DESKTOP_CPYTHON_HOME=/path/to/cpython-runtime
+export ASTRBOT_DESKTOP_CPYTHON_HOME=/path/to/cpython-runtime
 pnpm --dir dashboard install
 pnpm --dir dashboard build
 pnpm --dir desktop install --frozen-lockfile
 pnpm --dir desktop run dist:full
 ```
 
-If you are already developing in this repository, you can directly reuse the local virtual environment as the runtime:
+`ASTRBOT_DESKTOP_CPYTHON_HOME` must point to a standalone/distributable CPython runtime directory.
+Virtual environments (for example `.venv`, detected by `pyvenv.cfg`) are not supported for packaged runtime builds.
 
 ```bash
-uv sync
-export ASTRBOT_DESKTOP_CPYTHON_HOME="$(pwd)/.venv"
+export ASTRBOT_DESKTOP_CPYTHON_HOME=/path/to/cpython-runtime
 pnpm --dir desktop run build:backend
 ```
 

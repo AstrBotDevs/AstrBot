@@ -67,6 +67,13 @@ export const resolveAndValidateRuntimeSource = ({ rootDir, outputDir, runtimeSou
         'to a dedicated CPython runtime directory instead of the repository root or its parent.',
     );
   }
+  if (fs.existsSync(path.join(runtimeSourceReal, 'pyvenv.cfg'))) {
+    throw new Error(
+      `CPython runtime source must be a distributable CPython runtime, not a virtual environment: ${runtimeSourceReal}. ` +
+        'Detected pyvenv.cfg. Please set ASTRBOT_DESKTOP_CPYTHON_HOME (or ASTRBOT_DESKTOP_BACKEND_RUNTIME) ' +
+        'to a standalone CPython runtime directory.',
+    );
+  }
 
   return runtimeSourceReal;
 };
