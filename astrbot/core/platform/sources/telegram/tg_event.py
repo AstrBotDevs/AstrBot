@@ -6,6 +6,7 @@ from typing import Any, cast
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
 from telegram.constants import ChatAction
+from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -119,6 +120,65 @@ class TelegramPlatformEvent(AstrMessageEvent):
             client, user_name, ChatAction.TYPING, message_thread_id
         )
 
+    @classmethod
+    async def _send_voice_with_fallback(
+        cls,
+        client: ExtBot,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        caption: str | None = None,
+        user_name: str = "",
+        message_thread_id: str | None = None,
+        use_media_action: bool = False,
+    ) -> None:
+        """Send a voice message, falling back to a document if the user's
+        privacy settings forbid voice messages (``BadRequest`` with
+        ``Voice_messages_forbidden``).
+
+        When *use_media_action* is ``True`` the helper wraps the send calls
+        with ``_send_media_with_action`` (used by the streaming path).
+        """
+        try:
+            if use_media_action:
+                await cls._send_media_with_action(
+                    client,
+                    ChatAction.UPLOAD_VOICE,
+                    client.send_voice,
+                    user_name=user_name,
+                    message_thread_id=message_thread_id,
+                    voice=path,
+                    **cast(Any, payload),
+                )
+            else:
+                await client.send_voice(voice=path, **cast(Any, payload))
+        except BadRequest as e:
+            # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
+            # distinguish the voice-privacy case via the API error message.
+            if "Voice_messages_forbidden" not in e.message:
+                raise
+            logger.warning(
+                "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
+                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+            )
+            if use_media_action:
+                await cls._send_media_with_action(
+                    client,
+                    ChatAction.UPLOAD_DOCUMENT,
+                    client.send_document,
+                    user_name=user_name,
+                    message_thread_id=message_thread_id,
+                    document=path,
+                    caption=caption,
+                    **cast(Any, payload),
+                )
+            else:
+                await client.send_document(
+                    document=path,
+                    caption=caption,
+                    **cast(Any, payload),
+                )
+
     async def _ensure_typing(
         self,
         user_name: str,
@@ -211,7 +271,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
-                await client.send_voice(voice=path, **cast(Any, payload))
+                await cls._send_voice_with_fallback(
+                    client,
+                    path,
+                    payload,
+                    caption=i.text or None,
+                    use_media_action=False,
+                )
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -330,14 +396,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, Record):
                         path = await i.convert_to_file_path()
-                        await self._send_media_with_action(
+                        await self._send_voice_with_fallback(
                             self.client,
-                            ChatAction.UPLOAD_VOICE,
-                            self.client.send_voice,
+                            path,
+                            payload,
+                            caption=i.text or delta or None,
                             user_name=user_name,
                             message_thread_id=message_thread_id,
-                            voice=path,
-                            **cast(Any, payload),
+                            use_media_action=True,
                         )
                         continue
                     else:

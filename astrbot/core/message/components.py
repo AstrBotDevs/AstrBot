@@ -119,6 +119,8 @@ class Record(BaseMessageComponent):
     cache: bool | None = True
     proxy: bool | None = True
     timeout: int | None = 0
+    # Original text content (e.g. TTS source text), used as caption in fallback scenarios
+    text: str | None = None
     # 额外
     path: str | None
 
