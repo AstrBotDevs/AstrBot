@@ -36,7 +36,7 @@ class RespondStage(Stage):
         Comp.Json: lambda comp: bool(comp.data), # Json 卡片
         Comp.Xml: lambda comp: bool(comp.data), # Xml 卡片
         Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
-        Comp.Music: lambda comp: (comp.id and comp.type and comp.type != 'custom') or (comp.type == 'custom' and comp.url and comp.audio and comp.title), # 音乐分享
+        Comp.Music: lambda comp: (comp.id and comp._type and comp._type != 'custom') or (comp._type == 'custom' and comp.url and comp.audio and comp.title), # 音乐分享
         Comp.Forward: lambda comp: bool(comp.id), # 合并转发
         Comp.Location: lambda comp: bool(comp.lat is not None and comp.lon is not None), # 位置
         Comp.Contact: lambda comp: bool(comp.type and comp.id), # 推荐好友 or 群
