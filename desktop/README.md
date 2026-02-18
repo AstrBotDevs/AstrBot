@@ -33,7 +33,8 @@ Run commands from repository root:
 
 ```bash
 uv sync
-export ASTRBOT_DESKTOP_CPYTHON_HOME=/path/to/cpython-runtime
+export ASTRBOT_DESKTOP_CPYTHON_HOME="$(pwd)/.venv"
+# export ASTRBOT_DESKTOP_CPYTHON_HOME=/path/to/cpython-runtime
 pnpm --dir dashboard install
 pnpm --dir dashboard build
 pnpm --dir desktop install --frozen-lockfile
