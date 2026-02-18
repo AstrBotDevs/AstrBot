@@ -65,13 +65,13 @@ class LangRoute(Route):
             return Response().error("lang 为必填参数。").__dict__
         try:
             t.load_locale(
-                locale = lang,
+                locale = lang.lower(),
                 files = None
             )
         except ValueError as exc:
             return Response().error(str(exc)).__dict__
         payload = {
-            "lang": lang,
+            "lang": lang.lower(),
             "message": f"语言已设置为 {lang}"
         }
         return Response().ok(payload).__dict__
