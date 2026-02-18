@@ -161,9 +161,6 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-
       - name: Setup Python
         id: setup-python
         uses: actions/setup-python@v6
@@ -384,7 +381,6 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          uv sync
           pnpm --dir dashboard install --frozen-lockfile
           pnpm --dir desktop install --frozen-lockfile
 
