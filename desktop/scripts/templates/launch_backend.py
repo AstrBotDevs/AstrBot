@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import runpy
 import sys
@@ -15,12 +16,23 @@ def configure_windows_dll_search_path() -> None:
         return
 
     runtime_executable_dir = Path(sys.executable).resolve().parent
+    site_packages_dirs = [
+        runtime_executable_dir / "Lib" / "site-packages",
+        BACKEND_DIR / "python" / "Lib" / "site-packages",
+    ]
     candidates = [
         runtime_executable_dir,
         runtime_executable_dir / "DLLs",
         BACKEND_DIR / "python",
         BACKEND_DIR / "python" / "DLLs",
     ]
+    for site_packages_dir in site_packages_dirs:
+        candidates.extend(
+            [
+                site_packages_dir / "cryptography.libs",
+                site_packages_dir / "cryptography" / "hazmat" / "bindings",
+            ],
+        )
 
     normalized_added: set[str] = set()
     path_entries: list[str] = []
@@ -49,7 +61,45 @@ def configure_windows_dll_search_path() -> None:
         )
 
 
+def preload_windows_runtime_dlls() -> None:
+    if sys.platform != "win32":
+        return
+
+    runtime_executable_dir = Path(sys.executable).resolve().parent
+    runtime_dll_dir = runtime_executable_dir / "DLLs"
+    backend_runtime_dir = BACKEND_DIR / "python"
+    backend_runtime_dll_dir = backend_runtime_dir / "DLLs"
+    candidate_dirs = [
+        runtime_executable_dir,
+        runtime_dll_dir,
+        backend_runtime_dir,
+        backend_runtime_dll_dir,
+    ]
+    patterns = [
+        "python3.dll",
+        "python*.dll",
+        "vcruntime*.dll",
+        "libcrypto-*.dll",
+        "libssl-*.dll",
+    ]
+    loaded: set[str] = set()
+    for candidate_dir in candidate_dirs:
+        if not candidate_dir.is_dir():
+            continue
+        for pattern in patterns:
+            for dll_path in candidate_dir.glob(pattern):
+                normalized_path = str(dll_path.resolve()).lower()
+                if normalized_path in loaded:
+                    continue
+                loaded.add(normalized_path)
+                try:
+                    ctypes.WinDLL(str(dll_path))
+                except OSError:
+                    continue
+
+
 configure_windows_dll_search_path()
+preload_windows_runtime_dlls()
 
 sys.path.insert(0, str(APP_DIR))
 
