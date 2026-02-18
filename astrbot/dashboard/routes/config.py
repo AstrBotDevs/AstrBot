@@ -40,6 +40,19 @@ from .util import (
 MAX_FILE_BYTES = 500 * 1024 * 1024
 
 
+def _apply_provider_metadata_overrides(
+    provider: Any, model_ids: list[str], metadata_map: dict
+) -> None:
+    override_fn = getattr(provider, "get_model_metadata_overrides", None)
+    if not callable(override_fn):
+        return
+    for mid, overrides in override_fn(model_ids).items():
+        merged = dict(metadata_map.get(mid, {}))
+        if "limit" in overrides:
+            merged["limit"] = {**merged.get("limit", {}), **overrides["limit"]}
+        metadata_map[mid] = merged
+
+
 def try_cast(value: Any, type_: str):
     if type_ == "int":
         try:
@@ -727,6 +740,8 @@ class ConfigRoute(Route):
                 if meta:
                     metadata_map[model_id] = meta
 
+            _apply_provider_metadata_overrides(provider, models, metadata_map)
+
             ret = {
                 "models": models,
                 "provider_id": provider_id,
@@ -871,6 +886,8 @@ class ConfigRoute(Route):
                 meta = LLM_METADATAS.get(model_id)
                 if meta:
                     metadata_map[model_id] = meta
+
+            _apply_provider_metadata_overrides(inst, models, metadata_map)
 
             # 销毁实例（如果有 terminate 方法）
             terminate_fn = getattr(inst, "terminate", None)

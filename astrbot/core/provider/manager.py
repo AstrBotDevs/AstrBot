@@ -299,6 +299,10 @@ class ProviderManager:
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
                 )
+            case "anthropic_oauth":
+                from .sources.anthropic_oauth_source import (
+                    ProviderAnthropicOAuth as ProviderAnthropicOAuth,
+                )
             case "googlegenai_chat_completion":
                 from .sources.gemini_source import (
                     ProviderGoogleGenAI as ProviderGoogleGenAI,
