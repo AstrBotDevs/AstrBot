@@ -173,19 +173,185 @@ jobs:
       - name: Resolve packaged CPython runtime source
         shell: bash
         env:
-          SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+          RUNNER_TEMP_DIR: ${{ runner.temp }}
+          UV_NO_CONFIG: "1"
         run: |
-          if [ -z "$SETUP_PYTHON_PATH" ]; then
-            echo "actions/setup-python did not return python-path output." >&2
+          uv python install 3.12 --managed-python
+          RUNTIME_PY="$(uv python find --managed-python --no-project 3.12)"
+          if [ -z "$RUNTIME_PY" ]; then
+            echo "Failed to resolve uv-managed Python runtime for packaging." >&2
             exit 1
           fi
-          "$SETUP_PYTHON_PATH" - <<'PY' >> "$GITHUB_ENV"
+          "$RUNTIME_PY" - <<'PY' >> "$GITHUB_ENV"
+          import os
           import pathlib
+          import shutil
+          import subprocess
           import sys
 
           executable = pathlib.Path(sys.executable).resolve()
-          runtime_root = executable.parent if sys.platform == "win32" else executable.parent.parent
-          print(f"ASTRBOT_DESKTOP_CPYTHON_HOME={runtime_root}")
+          candidate_roots = []
+          if sys.platform == "win32":
+              candidate_roots.extend([executable.parent, executable.parent.parent])
+          else:
+              candidate_roots.extend([executable.parent.parent, executable.parent])
+
+          def is_runtime_root(root: pathlib.Path) -> bool:
+              if sys.platform == "win32":
+                  return (root / "python.exe").is_file() or (
+                      root / "Scripts" / "python.exe"
+                  ).is_file()
+              return (root / "bin" / "python3").is_file() or (
+                  root / "bin" / "python"
+              ).is_file()
+
+          source_runtime_root = next(
+              (candidate for candidate in candidate_roots if is_runtime_root(candidate)),
+              None,
+          )
+          if source_runtime_root is None:
+              raise RuntimeError(
+                  f"Cannot resolve runtime root from executable: {executable}"
+              )
+
+          target_runtime_root = (
+              pathlib.Path(
+                  os.environ.get("RUNNER_TEMP_DIR") or os.environ["RUNNER_TEMP"]
+              )
+              / "astrbot-cpython-runtime"
+          )
+          if target_runtime_root.exists():
+              shutil.rmtree(target_runtime_root)
+          shutil.copytree(
+              source_runtime_root,
+              target_runtime_root,
+              symlinks=sys.platform != "win32",
+          )
+
+          if sys.platform == "darwin":
+              probe_binary = target_runtime_root / "bin" / "python3"
+              if not probe_binary.is_file():
+                  raise RuntimeError(
+                      f"Cannot find runtime probe binary: {probe_binary}"
+                  )
+
+              probe = subprocess.run(
+                  ["otool", "-L", str(probe_binary)],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+                  check=False,
+              )
+              if probe.returncode != 0:
+                  raise RuntimeError(
+                      f"Failed to inspect runtime binary by otool: {probe.stderr.strip()}"
+                  )
+
+              old_dependency = None
+              for line in probe.stdout.splitlines()[1:]:
+                  candidate = line.strip().split(" (", 1)[0]
+                  if (
+                      candidate.startswith(
+                          "/Library/Frameworks/Python.framework/Versions/"
+                      )
+                      and candidate.endswith("/Python")
+                  ):
+                      old_dependency = candidate
+                      break
+
+              if old_dependency:
+                  patched = 0
+                  for file_path in target_runtime_root.rglob("*"):
+                      if not file_path.is_file():
+                          continue
+                      file_mode = file_path.stat().st_mode
+                      if (
+                          file_path.name != "Python"
+                          and file_path.suffix not in {".dylib", ".so"}
+                          and (file_mode & 0o111) == 0
+                      ):
+                          continue
+                      inspected = subprocess.run(
+                          ["otool", "-L", str(file_path)],
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL,
+                          text=True,
+                          check=False,
+                      )
+                      if (
+                          inspected.returncode != 0
+                          or old_dependency not in inspected.stdout
+                      ):
+                          continue
+
+                      relative_libpython = pathlib.Path(
+                          os.path.relpath(
+                              target_runtime_root / "Python", file_path.parent
+                          )
+                      ).as_posix()
+                      new_dependency = f"@loader_path/{relative_libpython}"
+
+                      subprocess.run(
+                          [
+                              "install_name_tool",
+                              "-change",
+                              old_dependency,
+                              new_dependency,
+                              str(file_path),
+                          ],
+                          check=True,
+                      )
+                      subprocess.run(
+                          ["codesign", "--force", "--sign", "-", str(file_path)],
+                          check=True,
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL,
+                      )
+                      patched += 1
+
+                  if patched == 0:
+                      raise RuntimeError(
+                          "Detected absolute Python.framework linkage on macOS runtime, "
+                          "but failed to patch any binary."
+                      )
+
+          if sys.platform == "win32":
+              verify_candidates = [
+                  target_runtime_root / "python.exe",
+                  target_runtime_root / "Scripts" / "python.exe",
+              ]
+          else:
+              verify_candidates = [
+                  target_runtime_root / "bin" / "python3",
+                  target_runtime_root / "bin" / "python",
+              ]
+
+          verify_binary = next(
+              (candidate for candidate in verify_candidates if candidate.is_file()), None
+          )
+          if verify_binary is None:
+              raise RuntimeError(
+                  f"Cannot find verification runtime binary under {target_runtime_root}"
+              )
+
+          verify = subprocess.run(
+              [str(verify_binary), "-V"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if verify.returncode != 0:
+              raise RuntimeError(
+                  "Relocated runtime probe failed: "
+                  + (
+                      verify.stderr.strip()
+                      or verify.stdout.strip()
+                      or f"exit={verify.returncode}"
+                  )
+              )
+
+          print(f"ASTRBOT_DESKTOP_CPYTHON_HOME={target_runtime_root}")
           PY
 
       - name: Setup pnpm
@@ -226,10 +392,83 @@ jobs:
 
       - name: Build desktop package
         shell: bash
+        env:
+          SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
         run: |
           pnpm --dir dashboard run build
           pnpm --dir desktop run build:webui
           pnpm --dir desktop run build:backend
+          if [ -z "$SETUP_PYTHON_PATH" ]; then
+            echo "actions/setup-python did not return python-path output." >&2
+            exit 1
+          fi
+          "$SETUP_PYTHON_PATH" - <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+
+          runtime_root = pathlib.Path("desktop/resources/backend/python")
+          if sys.platform == "win32":
+              candidates = [
+                  runtime_root / "python.exe",
+                  runtime_root / "Scripts" / "python.exe",
+              ]
+          else:
+              candidates = [
+                  runtime_root / "bin" / "python3",
+                  runtime_root / "bin" / "python",
+              ]
+          runtime_python = next((candidate for candidate in candidates if candidate.is_file()), None)
+          if runtime_python is None:
+              raise RuntimeError(f"Packaged runtime python executable is missing under {runtime_root}")
+
+          version_check = subprocess.run(
+              [str(runtime_python), "-V"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.PIPE,
+              text=True,
+              check=False,
+          )
+          if version_check.returncode != 0:
+              raise RuntimeError(
+                  "Packaged runtime python smoke test failed: "
+                  + (version_check.stderr.strip() or version_check.stdout.strip())
+              )
+
+          if sys.platform == "darwin":
+              deps = subprocess.run(
+                  ["otool", "-L", str(runtime_python)],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+                  check=False,
+              )
+              if deps.returncode != 0:
+                  raise RuntimeError(
+                      f"Failed to inspect macOS runtime by otool: {deps.stderr.strip()}"
+                  )
+              if "/Library/Frameworks/Python.framework/" in deps.stdout:
+                  raise RuntimeError(
+                      "Packaged runtime still links to absolute /Library/Frameworks/Python.framework path."
+                  )
+
+          if sys.platform.startswith("linux"):
+              deps = subprocess.run(
+                  ["ldd", str(runtime_python)],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+                  text=True,
+                  check=False,
+              )
+              if deps.returncode != 0:
+                  raise RuntimeError(
+                      f"Failed to inspect Linux runtime by ldd: {deps.stderr.strip()}"
+                  )
+              if "not found" in deps.stdout:
+                  raise RuntimeError(
+                      "Packaged runtime has unresolved shared libraries:\\n" + deps.stdout
+                  )
+          PY
           pnpm --dir desktop run sync:version
           pnpm --dir desktop exec electron-builder --publish never
 
