@@ -44,16 +44,27 @@ export const resolveAndValidateRuntimeSource = ({ rootDir, outputDir, runtimeSou
 
   const runtimeNorm = normalizeForCompare(runtimeSourceReal);
   const outputNorm = normalizeForCompare(outputDir);
+  const projectRootNorm = normalizeForCompare(rootDir);
   const runtimeIsOutputOrSub =
     runtimeNorm === outputNorm || runtimeNorm.startsWith(`${outputNorm}${path.sep}`);
   const outputIsRuntimeOrSub =
     outputNorm === runtimeNorm || outputNorm.startsWith(`${runtimeNorm}${path.sep}`);
+  const runtimeContainsProjectRoot =
+    runtimeNorm === projectRootNorm || projectRootNorm.startsWith(`${runtimeNorm}${path.sep}`);
 
   if (runtimeIsOutputOrSub || outputIsRuntimeOrSub) {
     throw new Error(
       `CPython runtime source overlaps with backend output directory. ` +
         `runtime=${runtimeSourceReal}, output=${outputDir}. ` +
         'Please set ASTRBOT_DESKTOP_CPYTHON_HOME to a separate runtime directory.',
+    );
+  }
+  if (runtimeContainsProjectRoot) {
+    throw new Error(
+      `CPython runtime source is too broad and contains the project root. ` +
+        `runtime=${runtimeSourceReal}, projectRoot=${path.resolve(rootDir)}. ` +
+        'Please point ASTRBOT_DESKTOP_CPYTHON_HOME (or ASTRBOT_DESKTOP_BACKEND_RUNTIME) ' +
+        'to a dedicated CPython runtime directory instead of the repository root or its parent.',
     );
   }
 

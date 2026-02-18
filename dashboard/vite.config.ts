@@ -5,8 +5,21 @@ import vuetify from 'vite-plugin-vuetify';
 
 const normalizeNestedTypeSelectorPlugin = {
   postcssPlugin: 'normalize-nested-type-selector',
-  Rule(rule: { parent?: { type?: string }; selector?: string }) {
+  Rule(rule: {
+    parent?: { type?: string; parent?: unknown; selector?: string };
+    selector?: string;
+    source?: { input?: { file?: string; from?: string } };
+  }) {
     if (rule.parent?.type !== 'rule' || typeof rule.selector !== 'string') {
+      return;
+    }
+
+    const sourceFile = String(rule.source?.input?.file || rule.source?.input?.from || '')
+      .replace(/\\/g, '/')
+      .toLowerCase();
+    const isProjectSource = sourceFile.includes('/dashboard/src/');
+    const isMonacoVendor = sourceFile.includes('/node_modules/monaco-editor/');
+    if (!isProjectSource && !isMonacoVendor) {
       return;
     }
 
