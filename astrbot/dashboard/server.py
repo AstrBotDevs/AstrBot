@@ -28,6 +28,7 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+from .routes.lang_route import LangRoute
 
 
 class _AddrWithPort(Protocol):
@@ -107,6 +108,7 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
+        self.lang_route = LangRoute(self.context)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
