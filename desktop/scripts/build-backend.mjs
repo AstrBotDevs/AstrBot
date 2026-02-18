@@ -33,25 +33,11 @@ const runtimeSource =
 const requirePipProbe = process.env.ASTRBOT_DESKTOP_REQUIRE_PIP === '1';
 
 const sourceEntries = [
-  ['astrbot', 'astrbot'],
-  ['main.py', 'main.py'],
-  ['runtime_bootstrap.py', 'runtime_bootstrap.py'],
-  ['requirements.txt', 'requirements.txt'],
+  'astrbot',
+  'main.py',
+  'runtime_bootstrap.py',
+  'requirements.txt',
 ];
-
-const resolveRuntimePythonOrThrow = ({ runtimeRoot, errorSubject }) => {
-  const runtimePython = resolveRuntimePython({
-    runtimeRoot,
-    outputDir,
-  });
-  if (!runtimePython) {
-    throw new Error(
-      `Cannot find Python executable in ${errorSubject}: ${runtimeRoot}. ` +
-        'Expected python under bin/ or Scripts/.',
-    );
-  }
-  return runtimePython;
-};
 
 const prepareOutputDirs = () => {
   fs.rmSync(outputDir, { recursive: true, force: true });
@@ -60,9 +46,9 @@ const prepareOutputDirs = () => {
 };
 
 const copyAppSources = () => {
-  for (const [srcRelative, destRelative] of sourceEntries) {
-    const sourcePath = path.join(rootDir, srcRelative);
-    const targetPath = path.join(appDir, destRelative);
+  for (const relativePath of sourceEntries) {
+    const sourcePath = path.join(rootDir, relativePath);
+    const targetPath = path.join(appDir, relativePath);
     if (!fs.existsSync(sourcePath)) {
       throw new Error(`Backend source path does not exist: ${sourcePath}`);
     }
@@ -72,10 +58,17 @@ const copyAppSources = () => {
 
 const prepareRuntimeExecutable = (runtimeSourceReal) => {
   copyTree(runtimeSourceReal, runtimeDir, { dereference: true });
-  return resolveRuntimePythonOrThrow({
+  const runtimePython = resolveRuntimePython({
     runtimeRoot: runtimeDir,
-    errorSubject: 'runtime',
+    outputDir,
   });
+  if (!runtimePython) {
+    throw new Error(
+      `Cannot find Python executable in runtime: ${runtimeDir}. ` +
+        'Expected python under bin/ or Scripts/.',
+    );
+  }
+  return runtimePython;
 };
 
 const writeLauncherScript = () => {
@@ -104,10 +97,16 @@ const main = () => {
   });
   const expectedRuntimeConstraint = resolveExpectedRuntimeVersion({ rootDir });
 
-  const sourceRuntimePython = resolveRuntimePythonOrThrow({
+  const sourceRuntimePython = resolveRuntimePython({
     runtimeRoot: runtimeSourceReal,
-    errorSubject: 'runtime source',
+    outputDir,
   });
+  if (!sourceRuntimePython) {
+    throw new Error(
+      `Cannot find Python executable in runtime source: ${runtimeSourceReal}. ` +
+        'Expected python under bin/ or Scripts/.',
+    );
+  }
   validateRuntimePython({
     pythonExecutable: sourceRuntimePython.absolute,
     expectedRuntimeConstraint,

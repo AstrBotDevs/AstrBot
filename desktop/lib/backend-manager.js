@@ -177,22 +177,31 @@ class BackendManager {
     };
   }
 
-  resolveBackendConfig() {
-    const webuiDir = this.resolveWebuiDir();
-    let launch = null;
-    let failureReason = null;
-
+  resolveLaunchStrategy(webuiDir) {
     const customCmd = process.env.ASTRBOT_BACKEND_CMD;
     if (customCmd) {
-      launch = { cmd: customCmd, args: [], shell: true };
-    } else if (this.app.isPackaged) {
-      ({ launch, failureReason } = this.buildLaunchForPackagedBackend(
+      return {
+        launch: { cmd: customCmd, args: [], shell: true },
+        failureReason: null,
+      };
+    }
+
+    if (this.app.isPackaged) {
+      return this.buildLaunchForPackagedBackend(
         this.getPackagedBackendState(),
         webuiDir,
-      ));
-    } else {
-      launch = this.buildDefaultBackendLaunch(webuiDir);
+      );
     }
+
+    return {
+      launch: this.buildDefaultBackendLaunch(webuiDir),
+      failureReason: null,
+    };
+  }
+
+  resolveBackendConfig() {
+    const webuiDir = this.resolveWebuiDir();
+    const { launch, failureReason } = this.resolveLaunchStrategy(webuiDir);
 
     const cwd = process.env.ASTRBOT_BACKEND_CWD || this.resolveBackendCwd();
     const rootDir = process.env.ASTRBOT_ROOT || this.resolveBackendRoot();

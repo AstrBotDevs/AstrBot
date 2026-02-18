@@ -6,6 +6,26 @@ const WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 2000;
 const COMMAND_LINE_QUERY_UNAVAILABLE_KEY = '__command_line_query_unavailable__';
 const COMMAND_LINE_FALLBACK_LOGGED_KEY = '__command_line_fallback_logged__';
 
+function isQueryUnavailable(cache) {
+  return !!(cache && cache.get(COMMAND_LINE_QUERY_UNAVAILABLE_KEY));
+}
+
+function setQueryUnavailable(cache, value) {
+  if (cache) {
+    cache.set(COMMAND_LINE_QUERY_UNAVAILABLE_KEY, !!value);
+  }
+}
+
+function wasFallbackLogged(cache) {
+  return !!(cache && cache.get(COMMAND_LINE_FALLBACK_LOGGED_KEY));
+}
+
+function markFallbackLogged(cache) {
+  if (cache) {
+    cache.set(COMMAND_LINE_FALLBACK_LOGGED_KEY, true);
+  }
+}
+
 function normalizeWindowsPathForMatch(value) {
   return String(value || '')
     .replace(/\//g, '\\')
@@ -23,7 +43,7 @@ function getWindowsProcessCommandLine({ pid, commandLineCache, spawnSync, log, t
     return { commandLine: null, commandLineQueryUnavailable: false };
   }
 
-  if (commandLineCache && commandLineCache.get(COMMAND_LINE_QUERY_UNAVAILABLE_KEY) === true) {
+  if (isQueryUnavailable(commandLineCache)) {
     return { commandLine: null, commandLineQueryUnavailable: true };
   }
 
@@ -85,22 +105,20 @@ function getWindowsProcessCommandLine({ pid, commandLineCache, spawnSync, log, t
           .find((item) => item.length > 0) || null;
       if (commandLineCache) {
         commandLineCache.set(numericPid, commandLine);
-        commandLineCache.set(COMMAND_LINE_QUERY_UNAVAILABLE_KEY, false);
+        setQueryUnavailable(commandLineCache, false);
       }
       return { commandLine, commandLineQueryUnavailable: false };
     }
   }
 
   if (!hasAvailableShell) {
-    if (commandLineCache) {
-      commandLineCache.set(COMMAND_LINE_QUERY_UNAVAILABLE_KEY, true);
-    }
+    setQueryUnavailable(commandLineCache, true);
     return { commandLine: null, commandLineQueryUnavailable: true };
   }
 
   if (commandLineCache) {
     commandLineCache.set(numericPid, null);
-    commandLineCache.set(COMMAND_LINE_QUERY_UNAVAILABLE_KEY, false);
+    setQueryUnavailable(commandLineCache, false);
   }
   return { commandLine: null, commandLineQueryUnavailable: false };
 }
@@ -126,36 +144,28 @@ function buildBackendCommandLineMarkers(backendConfig) {
   ];
 }
 
-function shouldKillUnmanagedBackendProcess({
-  pid,
-  processInfo,
-  backendConfig,
-  allowImageOnlyMatch,
-  commandLineCache,
-  spawnSync,
-  log,
-  fallbackCmdRaw,
-}) {
+function getExpectedImageName(backendConfig, fallbackCmdRaw) {
   const safeBackendConfig =
     backendConfig && typeof backendConfig === 'object' ? backendConfig : {};
   const fallbackCmd = String(fallbackCmdRaw || 'python.exe')
     .trim()
     .split(/\s+/, 1)[0];
-  const expectedImageName = path
+  return path
     .basename(safeBackendConfig.cmd || fallbackCmd || 'python.exe')
     .toLowerCase();
-  const actualImageName = processInfo.imageName.toLowerCase();
-  if (actualImageName !== expectedImageName) {
-    log(
-      `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
-    );
-    return false;
-  }
+}
 
-  if (allowImageOnlyMatch || !isGenericWindowsPythonImage(expectedImageName)) {
-    return true;
-  }
+function matchesExpectedImage(processInfo, expectedImageName) {
+  return processInfo.imageName.toLowerCase() === expectedImageName;
+}
 
+function matchesBackendMarkers({
+  pid,
+  backendConfig,
+  commandLineCache,
+  spawnSync,
+  log,
+}) {
   const markers = buildBackendCommandLineMarkers(backendConfig);
   if (!markers.length) {
     log(`Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`);
@@ -171,8 +181,8 @@ function shouldKillUnmanagedBackendProcess({
   });
   if (!commandLine) {
     if (commandLineQueryUnavailable) {
-      if (commandLineCache && !commandLineCache.get(COMMAND_LINE_FALLBACK_LOGGED_KEY)) {
-        commandLineCache.set(COMMAND_LINE_FALLBACK_LOGGED_KEY, true);
+      if (!wasFallbackLogged(commandLineCache)) {
+        markFallbackLogged(commandLineCache);
         log(
           'Neither powershell nor pwsh is available. ' +
             'Falling back to image-name-only matching for generic Python backend cleanup.',
@@ -192,6 +202,37 @@ function shouldKillUnmanagedBackendProcess({
     );
   }
   return matched;
+}
+
+function shouldKillUnmanagedBackendProcess({
+  pid,
+  processInfo,
+  backendConfig,
+  allowImageOnlyMatch,
+  commandLineCache,
+  spawnSync,
+  log,
+  fallbackCmdRaw,
+}) {
+  const expectedImageName = getExpectedImageName(backendConfig, fallbackCmdRaw);
+  if (!matchesExpectedImage(processInfo, expectedImageName)) {
+    log(
+      `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
+    );
+    return false;
+  }
+
+  if (allowImageOnlyMatch || !isGenericWindowsPythonImage(expectedImageName)) {
+    return true;
+  }
+
+  return matchesBackendMarkers({
+    pid,
+    backendConfig,
+    commandLineCache,
+    spawnSync,
+    log,
+  });
 }
 
 module.exports = {
