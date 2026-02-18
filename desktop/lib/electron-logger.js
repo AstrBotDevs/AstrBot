@@ -42,7 +42,6 @@ function createElectronLogger({ app, getRootDir }) {
   }
 
   return {
-    getElectronLogPath,
     logElectron,
     flushElectron,
   };

@@ -74,10 +74,6 @@ class BackendManager {
     return this.backendUrl;
   }
 
-  getBackendTimeoutMs() {
-    return this.backendTimeoutMs;
-  }
-
   getRootDir() {
     return (
       process.env.ASTRBOT_ROOT ||
@@ -96,14 +92,6 @@ class BackendManager {
 
   getStartupFailureReason() {
     return this.backendStartupFailureReason;
-  }
-
-  isSpawning() {
-    return this.backendSpawning;
-  }
-
-  isRestarting() {
-    return this.backendRestarting;
   }
 
   resolveBackendRoot() {

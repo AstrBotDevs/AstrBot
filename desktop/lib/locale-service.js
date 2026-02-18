@@ -170,5 +170,4 @@ function createLocaleService({ app, getRootDir }) {
 
 module.exports = {
   createLocaleService,
-  normalizeLocale,
 };

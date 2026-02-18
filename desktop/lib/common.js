@@ -100,8 +100,6 @@ function formatLogTimestamp(date = new Date()) {
 }
 
 module.exports = {
-  LOG_ROTATION_DEFAULT_BACKUP_COUNT,
-  LOG_ROTATION_DEFAULT_MAX_MB,
   delay,
   ensureDir,
   formatLogTimestamp,
