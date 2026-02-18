@@ -93,6 +93,7 @@ const readProjectRequiresPythonLowerBound = (rootDir) => {
           { cmd: 'python', prefixArgs: [] },
         ];
 
+  let probeErrorMessage = null;
   for (const probeCommand of probeCommands) {
     const probe = spawnSync(
       probeCommand.cmd,
@@ -112,11 +113,28 @@ const readProjectRequiresPythonLowerBound = (rootDir) => {
     }
 
     const parsedOutput = parsePyprojectProbeOutput(probe.stdout);
+    if (!parsedOutput) {
+      continue;
+    }
+    if (parsedOutput.error) {
+      const details =
+        typeof parsedOutput.message === 'string' && parsedOutput.message
+          ? parsedOutput.message
+          : `Probe reported error: ${parsedOutput.error}`;
+      probeErrorMessage =
+        `Failed to read project.requires-python from ${pyprojectPath}. ` +
+        details;
+      continue;
+    }
     const requiresPythonSpecifier = parsedOutput?.requires_python;
     const lowerBound = extractLowerBoundFromPythonSpecifier(requiresPythonSpecifier);
     if (lowerBound) {
       return lowerBound;
     }
+  }
+
+  if (probeErrorMessage) {
+    throw new Error(probeErrorMessage);
   }
 
   return null;
