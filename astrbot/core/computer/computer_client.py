@@ -91,7 +91,24 @@ def _discover_bay_credentials(endpoint: str) -> str:
     return ""
 
 
-def _build_sync_and_scan_command() -> str:
+def _build_python_exec_command(script: str) -> str:
+    return (
+        "if command -v python3 >/dev/null 2>&1; then PYBIN=python3; "
+        "elif command -v python >/dev/null 2>&1; then PYBIN=python; "
+        "else echo 'python not found in sandbox' >&2; exit 127; fi; "
+        "$PYBIN - <<'PY'\n"
+        f"{script}\n"
+        "PY"
+    )
+
+
+def _build_apply_sync_command() -> str:
+    """Build shell command for sync stage only.
+
+    This stage mutates sandbox files (managed skill replacement) but does not scan
+    metadata. Keeping it separate allows callers to preserve old behavior while
+    reusing the apply step independently.
+    """
     script = f"""
 import json
 import shutil
@@ -101,6 +118,77 @@ from pathlib import Path
 root = Path({SANDBOX_SKILLS_ROOT!r})
 zip_path = root / "skills.zip"
 tmp_extract = Path(f"{{root}}_tmp_extract")
+managed_file = root / {_MANAGED_SKILLS_FILE!r}
+
+
+def remove_tree(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
+
+
+def load_managed_skills() -> list[str]:
+    if not managed_file.exists():
+        return []
+    try:
+        payload = json.loads(managed_file.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    items = payload.get("managed_skills", [])
+    if not isinstance(items, list):
+        return []
+    result: list[str] = []
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            result.append(item.strip())
+    return result
+
+
+root.mkdir(parents=True, exist_ok=True)
+for managed_name in load_managed_skills():
+    remove_tree(root / managed_name)
+
+current_managed: list[str] = []
+if zip_path.exists():
+    remove_tree(tmp_extract)
+    tmp_extract.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(tmp_extract)
+    for entry in sorted(tmp_extract.iterdir()):
+        if not entry.is_dir():
+            continue
+        target = root / entry.name
+        remove_tree(target)
+        shutil.copytree(entry, target)
+        current_managed.append(entry.name)
+
+remove_tree(tmp_extract)
+remove_tree(zip_path)
+managed_file.write_text(
+    json.dumps({{"managed_skills": current_managed}}, ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+print(json.dumps({{"managed_skills": current_managed}}, ensure_ascii=False))
+""".strip()
+    return _build_python_exec_command(script)
+
+
+def _build_scan_command() -> str:
+    """Build shell command for scan stage only.
+
+    This stage is read-oriented: it scans SKILL.md metadata and returns the
+    historical payload shape consumed by cache update logic.
+    """
+    script = f"""
+import json
+from pathlib import Path
+
+root = Path({SANDBOX_SKILLS_ROOT!r})
 managed_file = root / {_MANAGED_SKILLS_FILE!r}
 
 
@@ -124,15 +212,6 @@ def parse_description(text: str) -> str:
         if key.strip().lower() == "description":
             return value.strip().strip('"').strip("'")
     return ""
-
-
-def remove_tree(path: Path) -> None:
-    if not path.exists():
-        return
-    if path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
-    else:
-        path.unlink(missing_ok=True)
 
 
 def load_managed_skills() -> list[str]:
@@ -180,48 +259,25 @@ def collect_skills() -> list[dict[str, str]]:
     return skills
 
 
-root.mkdir(parents=True, exist_ok=True)
-for managed_name in load_managed_skills():
-    remove_tree(root / managed_name)
-
-current_managed: list[str] = []
-if zip_path.exists():
-    remove_tree(tmp_extract)
-    tmp_extract.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(tmp_extract)
-    for entry in sorted(tmp_extract.iterdir()):
-        if not entry.is_dir():
-            continue
-        target = root / entry.name
-        remove_tree(target)
-        shutil.copytree(entry, target)
-        current_managed.append(entry.name)
-
-remove_tree(tmp_extract)
-remove_tree(zip_path)
-managed_file.write_text(
-    json.dumps({{"managed_skills": current_managed}}, ensure_ascii=False, indent=2),
-    encoding="utf-8",
-)
 print(
     json.dumps(
         {{
-            "managed_skills": current_managed,
+            "managed_skills": load_managed_skills(),
             "skills": collect_skills(),
         }},
         ensure_ascii=False,
     )
 )
 """.strip()
-    return (
-        "if command -v python3 >/dev/null 2>&1; then PYBIN=python3; "
-        "elif command -v python >/dev/null 2>&1; then PYBIN=python; "
-        "else echo 'python not found in sandbox' >&2; exit 127; fi; "
-        "$PYBIN - <<'PY'\n"
-        f"{script}\n"
-        "PY"
-    )
+    return _build_python_exec_command(script)
+
+
+def _build_sync_and_scan_command() -> str:
+    """Legacy combined command kept for backward compatibility.
+
+    New code paths should prefer apply + scan split helpers.
+    """
+    return f"{_build_apply_sync_command()}\n{_build_scan_command()}"
 
 
 def _shell_exec_succeeded(result: dict) -> bool:
@@ -229,6 +285,19 @@ def _shell_exec_succeeded(result: dict) -> bool:
         return bool(result.get("success"))
     exit_code = result.get("exit_code")
     return exit_code in (0, None)
+
+
+def _format_exec_error_detail(result: dict) -> str:
+    """Format shell execution details for better observability.
+
+    Keep the message compact while still surfacing exit code and stderr/stdout.
+    """
+    exit_code = result.get("exit_code")
+    stderr = str(result.get("stderr", "") or "").strip()
+    stdout = str(result.get("stdout", "") or "").strip()
+    stderr_text = stderr[:500]
+    stdout_text = stdout[:300]
+    return f"exit_code={exit_code}, stderr={stderr_text!r}, stdout_tail={stdout_text!r}"
 
 
 def _decode_sync_payload(stdout: str) -> dict | None:
@@ -256,7 +325,44 @@ def _update_sandbox_skills_cache(payload: dict | None) -> None:
     SkillManager().set_sandbox_skills_cache(skills)
 
 
+async def _apply_skills_to_sandbox(booter: ComputerBooter) -> None:
+    """Apply local skill bundle to sandbox filesystem only.
+
+    This function is intentionally limited to file mutation. Metadata scanning is
+    executed in a separate phase to keep failure domains clear.
+    """
+    logger.info("[Computer] Skill sync phase=apply start")
+    apply_result = await booter.shell.exec(_build_apply_sync_command())
+    if not _shell_exec_succeeded(apply_result):
+        detail = _format_exec_error_detail(apply_result)
+        logger.error("[Computer] Skill sync phase=apply failed: %s", detail)
+        raise RuntimeError(f"Failed to apply sandbox skill sync strategy: {detail}")
+    logger.info("[Computer] Skill sync phase=apply done")
+
+
+async def _scan_sandbox_skills(booter: ComputerBooter) -> dict | None:
+    """Scan sandbox skills and return normalized payload for cache update."""
+    logger.info("[Computer] Skill sync phase=scan start")
+    scan_result = await booter.shell.exec(_build_scan_command())
+    if not _shell_exec_succeeded(scan_result):
+        detail = _format_exec_error_detail(scan_result)
+        logger.error("[Computer] Skill sync phase=scan failed: %s", detail)
+        raise RuntimeError(f"Failed to scan sandbox skills after sync: {detail}")
+
+    payload = _decode_sync_payload(str(scan_result.get("stdout", "") or ""))
+    if payload is None:
+        logger.warning("[Computer] Skill sync phase=scan returned empty payload")
+    else:
+        logger.info("[Computer] Skill sync phase=scan done")
+    return payload
+
+
 async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
+    """Sync local skills to sandbox and refresh cache.
+
+    Backward-compatible orchestrator: keep historical behavior while internally
+    splitting into `apply` and `scan` phases.
+    """
     skills_root = Path(get_astrbot_skills_path())
     if not skills_root.is_dir():
         return
@@ -284,13 +390,10 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             )
             await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
 
-        sync_result = await booter.shell.exec(_build_sync_and_scan_command())
-        if not _shell_exec_succeeded(sync_result):
-            raise RuntimeError(
-                "Failed to apply sandbox skill sync strategy: "
-                f"stderr={sync_result.get('stderr', '')}"
-            )
-        payload = _decode_sync_payload(str(sync_result.get("stdout", "") or ""))
+        # Keep backward-compatible behavior while splitting lifecycle into two
+        # observable phases: apply (filesystem mutation) + scan (metadata read).
+        await _apply_skills_to_sandbox(booter)
+        payload = await _scan_sandbox_skills(booter)
         _update_sandbox_skills_cache(payload)
         managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
         logger.info(
