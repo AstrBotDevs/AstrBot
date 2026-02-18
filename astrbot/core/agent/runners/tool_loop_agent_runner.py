@@ -357,6 +357,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 ),
             )
+            return
 
         if not llm_resp.tools_call_name:
             # 如果没有工具调用，转换到完成状态
