@@ -8,10 +8,14 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.migration.helper import check_migration_needed_v4, do_migration_v4
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
 
 from .route import Response, Route, RouteContext
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
+DESKTOP_PACKAGED_UPDATE_BLOCK_MESSAGE = (
+    "桌面打包版不支持在线更新。请下载最新安装包并替换当前应用。"
+)
 
 
 class UpdateRoute(Route):
@@ -86,6 +90,9 @@ class UpdateRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def update_project(self):
+        if is_packaged_electron_runtime():
+            return Response().error(DESKTOP_PACKAGED_UPDATE_BLOCK_MESSAGE).__dict__
+
         data = await request.json
         version = data.get("version", "")
         reboot = data.get("reboot", True)
@@ -137,6 +144,9 @@ class UpdateRoute(Route):
             return Response().error(e.__str__()).__dict__
 
     async def update_dashboard(self):
+        if is_packaged_electron_runtime():
+            return Response().error(DESKTOP_PACKAGED_UPDATE_BLOCK_MESSAGE).__dict__
+
         try:
             try:
                 await download_dashboard(version=f"v{VERSION}", latest=False)
