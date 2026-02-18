@@ -43,7 +43,7 @@ class RespondStage(Stage):
         Comp.Shake: lambda _: True, # 窗口抖动（戳一戳）
         Comp.Anonymous: lambda _: True, # 匿名发消息
         Comp.Dice: lambda _: True, # 掷骰子魔法表情
-        Comp.Rps: lambda _: True, # 猜拳魔法表情
+        Comp.RPS: lambda _: True, # 猜拳魔法表情
         Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
 
