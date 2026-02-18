@@ -121,6 +121,8 @@ class Record(BaseMessageComponent):
     timeout: int | None = 0
     # 额外
     path: str | None
+    # Original TTS source text, used as fallback caption when voice cannot be sent
+    text: str | None = None
 
     def __init__(self, file: str | None, **_) -> None:
         for k in _:

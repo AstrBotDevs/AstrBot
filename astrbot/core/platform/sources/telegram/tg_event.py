@@ -211,7 +211,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
-                await client.send_voice(voice=path, **cast(Any, payload))
+                try:
+                    await client.send_voice(voice=path, **cast(Any, payload))
+                except Exception as e:
+                    if "Voice_messages_forbidden" in str(e):
+                        logger.warning(
+                            "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
+                            "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+                        )
+                        await client.send_document(
+                            document=path,
+                            caption=i.text or None,
+                            **cast(Any, payload),
+                        )
+                    else:
+                        raise
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -330,15 +344,35 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, Record):
                         path = await i.convert_to_file_path()
-                        await self._send_media_with_action(
-                            self.client,
-                            ChatAction.UPLOAD_VOICE,
-                            self.client.send_voice,
-                            user_name=user_name,
-                            message_thread_id=message_thread_id,
-                            voice=path,
-                            **cast(Any, payload),
-                        )
+                        try:
+                            await self._send_media_with_action(
+                                self.client,
+                                ChatAction.UPLOAD_VOICE,
+                                self.client.send_voice,
+                                user_name=user_name,
+                                message_thread_id=message_thread_id,
+                                voice=path,
+                                **cast(Any, payload),
+                            )
+                        except Exception as e:
+                            if "Voice_messages_forbidden" in str(e):
+                                logger.warning(
+                                    "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
+                                    "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+                                )
+                                await self._send_media_with_action(
+                                    self.client,
+                                    ChatAction.UPLOAD_DOCUMENT,
+                                    self.client.send_document,
+                                    user_name=user_name,
+                                    message_thread_id=message_thread_id,
+                                    document=path,
+                                    filename="voice_message.wav",
+                                    caption=delta or i.text or None,
+                                    **cast(Any, payload),
+                                )
+                            else:
+                                raise
                         continue
                     else:
                         logger.warning(f"不支持的消息类型: {type(i)}")
