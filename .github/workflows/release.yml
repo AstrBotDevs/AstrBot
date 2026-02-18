@@ -174,15 +174,13 @@ jobs:
         shell: bash
         env:
           RUNNER_TEMP_DIR: ${{ runner.temp }}
-          UV_NO_CONFIG: "1"
+          SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
         run: |
-          uv python install 3.12 --managed-python
-          RUNTIME_PY="$(uv python find --managed-python --no-project 3.12)"
-          if [ -z "$RUNTIME_PY" ]; then
-            echo "Failed to resolve uv-managed Python runtime for packaging." >&2
+          if [ -z "$SETUP_PYTHON_PATH" ]; then
+            echo "actions/setup-python did not return python-path output." >&2
             exit 1
           fi
-          "$RUNTIME_PY" - <<'PY' >> "$GITHUB_ENV"
+          "$SETUP_PYTHON_PATH" - <<'PY' >> "$GITHUB_ENV"
           import os
           import pathlib
           import shutil
