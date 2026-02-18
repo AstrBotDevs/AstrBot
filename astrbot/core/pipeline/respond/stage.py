@@ -38,7 +38,7 @@ class RespondStage(Stage):
         Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
         Comp.Music: lambda comp: (comp.id and comp.type and comp.type != 'custom') or (comp.type == 'custom' and comp.url and comp.audio and comp.title), # 音乐分享
         Comp.Forward: lambda comp: bool(comp.id), # 合并转发
-        Comp.Location: lambda comp: bool(comp.lat and comp.lon), # 位置
+        Comp.Location: lambda comp: bool(comp.lat is not None and comp.lon is not None), # 位置
         Comp.Contact: lambda comp: bool(comp.type and comp.id), # 推荐好友 or 群
         Comp.Shake: lambda _: True, # 窗口抖动（戳一戳）
         Comp.Anonymous: lambda _: True, # 匿名发消息
