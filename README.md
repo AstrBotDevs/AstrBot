@@ -185,6 +185,7 @@ paru -S astrbot-git
 - DeepSeek
 - Ollama (本地部署)
 - LM Studio (本地部署)
+- [AIHubMix](https://aihubmix.com/?aff=4bfH)
 - [优云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
 - [302.AI](https://share.302.ai/rr1M3l)
 - [小马算力](https://www.tokenpony.cn/3YPyf)
