@@ -44,70 +44,14 @@ class AstrBotUpdator(RepoZipUpdator):
         except psutil.NoSuchProcess:
             pass
 
-    @staticmethod
-    def _is_option_arg(arg: str) -> bool:
-        return arg.startswith("-")
-
-    @classmethod
-    def _collect_flag_values(cls, argv: list[str], flag: str) -> str | None:
-        try:
-            idx = argv.index(flag)
-        except ValueError:
-            return None
-
-        if idx + 1 >= len(argv):
-            return None
-
-        value_parts: list[str] = []
-        for arg in argv[idx + 1 :]:
-            if cls._is_option_arg(arg):
-                break
-            if arg:
-                value_parts.append(arg)
-
-        if not value_parts:
-            return None
-
-        return " ".join(value_parts).strip() or None
-
-    @classmethod
-    def _resolve_webui_dir_arg(cls, argv: list[str]) -> str | None:
-        return cls._collect_flag_values(argv, "--webui-dir")
-
-    def _build_frozen_reboot_args(self) -> list[str]:
-        argv = list(sys.argv[1:])
-        webui_dir = self._resolve_webui_dir_arg(argv)
-        if not webui_dir:
-            webui_dir = os.environ.get("ASTRBOT_WEBUI_DIR")
-
-        if webui_dir:
-            return ["--webui-dir", webui_dir]
-        return []
-
-    @staticmethod
-    def _reset_frozen_bootloader_environment() -> None:
-        if not getattr(sys, "frozen", False):
-            return
-        for key in list(os.environ.keys()):
-            if key.startswith("_PYI_"):
-                os.environ.pop(key, None)
-
     def _build_reboot_argv(self, executable: str) -> list[str]:
         if os.environ.get("ASTRBOT_CLI") == "1":
             args = sys.argv[1:]
             return [executable, "-m", "astrbot.cli.__main__", *args]
-        if getattr(sys, "frozen", False):
-            args = self._build_frozen_reboot_args()
-            return [executable, *args]
         return [executable, *sys.argv]
 
     @staticmethod
     def _exec_reboot(executable: str, argv: list[str]) -> None:
-        if os.name == "nt" and getattr(sys, "frozen", False):
-            quoted_executable = f'"{executable}"' if " " in executable else executable
-            quoted_args = [f'"{arg}"' if " " in arg else arg for arg in argv[1:]]
-            os.execl(executable, quoted_executable, *quoted_args)
-            return
         os.execv(executable, argv)
 
     def _reboot(self, delay: int = 3) -> None:
@@ -120,7 +64,6 @@ class AstrBotUpdator(RepoZipUpdator):
         executable = sys.executable
 
         try:
-            self._reset_frozen_bootloader_environment()
             reboot_argv = self._build_reboot_argv(executable)
             self._exec_reboot(executable, reboot_argv)
         except Exception as e:
