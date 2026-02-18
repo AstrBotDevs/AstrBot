@@ -96,20 +96,23 @@ const installRuntimeDependencies = (runtimePython) => {
     throw new Error(`Backend requirements file does not exist: ${requirementsPath}`);
   }
 
-  const installArgs = [
-    '-m',
-    'pip',
-    '--disable-pip-version-check',
-    'install',
-    '--no-cache-dir',
-    '-r',
-    requirementsPath,
-  ];
-  const installResult = spawnSync(runtimePython.absolute, installArgs, {
-    cwd: outputDir,
-    stdio: 'inherit',
-    windowsHide: true,
-  });
+  const runPipInstall = (pipArgs) => {
+    const installArgs = [
+      '-m',
+      'pip',
+      '--disable-pip-version-check',
+      'install',
+      '--no-cache-dir',
+      ...pipArgs,
+    ];
+    return spawnSync(runtimePython.absolute, installArgs, {
+      cwd: outputDir,
+      stdio: 'inherit',
+      windowsHide: true,
+    });
+  };
+
+  const installResult = runPipInstall(['-r', requirementsPath]);
   if (installResult.error) {
     throw new Error(
       `Failed to install backend runtime dependencies: ${installResult.error.message}`,
@@ -119,6 +122,21 @@ const installRuntimeDependencies = (runtimePython) => {
     throw new Error(
       `Backend runtime dependency installation failed with exit code ${installResult.status}.`,
     );
+  }
+
+  if (process.platform === 'win32') {
+    // greenlet and some binary wheels require MSVC runtime DLLs on end-user machines.
+    const msvcRuntimeResult = runPipInstall(['--only-binary=:all:', 'msvc-runtime']);
+    if (msvcRuntimeResult.error) {
+      throw new Error(
+        `Failed to install Windows MSVC runtime package: ${msvcRuntimeResult.error.message}`,
+      );
+    }
+    if (msvcRuntimeResult.status !== 0) {
+      throw new Error(
+        `Windows MSVC runtime installation failed with exit code ${msvcRuntimeResult.status}.`,
+      );
+    }
   }
 };
 
