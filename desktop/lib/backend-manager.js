@@ -117,8 +117,7 @@ class BackendManager {
     if (!this.app.isPackaged) {
       return path.resolve(this.baseDir, '..');
     }
-    const packagedBackendState = this.getPackagedBackendState();
-    return (packagedBackendState?.config?.appDir || null) || this.resolveBackendRoot();
+    return this.resolveBackendRoot();
   }
 
   resolveWebuiDir() {
