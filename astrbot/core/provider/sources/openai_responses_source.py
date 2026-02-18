@@ -21,19 +21,6 @@ from .openai_source import ProviderOpenAIOfficial
 @register_provider_adapter(
     "openai_responses",
     "OpenAI API Responses Provider Adapter",
-    default_config_tmpl={
-        "id": "openai_responses",
-        "provider": "openai",
-        "type": "openai_responses",
-        "provider_type": "chat_completion",
-        "enable": True,
-        "key": [],
-        "api_base": "https://api.openai.com/v1",
-        "timeout": 120,
-        "proxy": "",
-        "custom_headers": {},
-        "custom_extra_body": {},
-    },
     provider_display_name="OpenAI Responses",
 )
 class ProviderOpenAIResponses(ProviderOpenAIOfficial):
