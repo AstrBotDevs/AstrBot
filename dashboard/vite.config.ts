@@ -3,6 +3,30 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vuetify from 'vite-plugin-vuetify';
 
+const normalizeNestedTypeSelectorPlugin = {
+  postcssPlugin: 'normalize-nested-type-selector',
+  Rule(rule: { parent?: { type?: string }; selector?: string }) {
+    if (rule.parent?.type !== 'rule' || typeof rule.selector !== 'string') {
+      return;
+    }
+
+    const segments = rule.selector
+      .split(',')
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    if (!segments.length) {
+      return;
+    }
+
+    const typeOnlyPattern = /^[a-zA-Z][\w-]*$/;
+    if (!segments.every((segment) => typeOnlyPattern.test(segment))) {
+      return;
+    }
+
+    rule.selector = segments.map((segment) => `:is(${segment})`).join(', ');
+  }
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -24,6 +48,9 @@ export default defineConfig({
     }
   },
   css: {
+    postcss: {
+      plugins: [normalizeNestedTypeSelectorPlugin]
+    },
     preprocessorOptions: {
       scss: {}
     }
