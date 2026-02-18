@@ -135,6 +135,7 @@ jobs:
             arch: arm64
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      ASTRBOT_DESKTOP_CPYTHON_HOME: ".venv"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6

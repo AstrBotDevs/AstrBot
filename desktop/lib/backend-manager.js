@@ -710,6 +710,48 @@ class BackendManager {
     return { imageName, pid: parsedPid };
   }
 
+  normalizeWindowsPathForMatch(value) {
+    return String(value || '')
+      .replace(/\//g, '\\')
+      .toLowerCase();
+  }
+
+  isGenericWindowsPythonImage(imageName) {
+    const normalized = String(imageName || '').toLowerCase();
+    return (
+      normalized === 'python.exe' ||
+      normalized === 'pythonw.exe' ||
+      normalized === 'py.exe'
+    );
+  }
+
+  getWindowsProcessCommandLine(pid) {
+    const numericPid = Number.parseInt(`${pid}`, 10);
+    if (!Number.isInteger(numericPid)) {
+      return null;
+    }
+
+    const query = `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${numericPid}"; if ($null -ne $p) { $p.CommandLine }`;
+    const result = spawnSync(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command', query],
+      {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+        windowsHide: true,
+      },
+    );
+    if (result.status !== 0 || !result.stdout) {
+      return null;
+    }
+
+    const line = result.stdout
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .find((item) => item.length > 0);
+    return line || null;
+  }
+
   async stopUnmanagedBackendByPort() {
     if (!this.app.isPackaged || process.platform !== 'win32') {
       return false;
@@ -729,9 +771,25 @@ class BackendManager {
       `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
     );
 
-    const expectedImageName = path
-      .basename(this.getBackendConfig().cmd || 'python.exe')
-      .toLowerCase();
+    const backendConfig = this.getBackendConfig();
+    const expectedImageName = path.basename(backendConfig.cmd || 'python.exe').toLowerCase();
+    const requireStrictCommandLineCheck =
+      this.isGenericWindowsPythonImage(expectedImageName);
+    const expectedCommandLineMarkers = [];
+    if (Array.isArray(backendConfig.args) && backendConfig.args.length > 0) {
+      const primaryArg = backendConfig.args[0];
+      if (typeof primaryArg === 'string' && primaryArg) {
+        const resolvedPrimaryArg = path.isAbsolute(primaryArg)
+          ? primaryArg
+          : path.resolve(backendConfig.cwd || process.cwd(), primaryArg);
+        expectedCommandLineMarkers.push(
+          this.normalizeWindowsPathForMatch(resolvedPrimaryArg),
+        );
+        expectedCommandLineMarkers.push(
+          this.normalizeWindowsPathForMatch(path.basename(primaryArg)),
+        );
+      }
+    }
 
     for (const pid of pids) {
       const processInfo = this.getWindowsProcessInfo(pid);
@@ -746,6 +804,32 @@ class BackendManager {
           `Skip unmanaged cleanup for pid=${pid}: unexpected process image ${processInfo.imageName}.`,
         );
         continue;
+      }
+
+      if (requireStrictCommandLineCheck) {
+        if (!expectedCommandLineMarkers.length) {
+          this.log(
+            `Skip unmanaged cleanup for pid=${pid}: backend launch marker is unavailable.`,
+          );
+          continue;
+        }
+        const commandLine = this.getWindowsProcessCommandLine(pid);
+        if (!commandLine) {
+          this.log(
+            `Skip unmanaged cleanup for pid=${pid}: unable to resolve process command line.`,
+          );
+          continue;
+        }
+        const normalizedCommandLine = this.normalizeWindowsPathForMatch(commandLine);
+        const markerMatched = expectedCommandLineMarkers.some(
+          (marker) => marker && normalizedCommandLine.includes(marker),
+        );
+        if (!markerMatched) {
+          this.log(
+            `Skip unmanaged cleanup for pid=${pid}: command line does not match AstrBot backend launch marker.`,
+          );
+          continue;
+        }
       }
 
       try {
