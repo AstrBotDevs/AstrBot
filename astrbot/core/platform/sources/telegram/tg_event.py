@@ -6,6 +6,7 @@ from typing import Any, cast
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
 from telegram.constants import ChatAction
+from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -24,6 +25,14 @@ from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 class TelegramPlatformEvent(AstrMessageEvent):
     # Telegram 的最大消息长度限制
     MAX_MESSAGE_LENGTH = 4096
+    VOICE_MESSAGES_FORBIDDEN_KEY = "voice_messages_forbidden"
+    VOICE_FALLBACK_NOTICE = (
+        "Voice messages are disabled in your Telegram settings, so I sent text instead."
+    )
+    VOICE_FALLBACK_TEXT = (
+        "I could not deliver the voice response because your Telegram account "
+        "does not accept voice messages."
+    )
 
     SPLIT_PATTERNS = {
         "paragraph": re.compile(r"\n\n"),
@@ -119,6 +128,33 @@ class TelegramPlatformEvent(AstrMessageEvent):
             client, user_name, ChatAction.TYPING, message_thread_id
         )
 
+    @classmethod
+    def _is_voice_messages_forbidden_error(cls, err: BadRequest) -> bool:
+        return cls.VOICE_MESSAGES_FORBIDDEN_KEY in str(err).lower()
+
+    @classmethod
+    async def _handle_voice_forbidden_fallback(
+        cls,
+        client: ExtBot,
+        payload: dict[str, Any],
+        user_name: str,
+        message_thread_id: str | None,
+        has_plain_text: bool,
+    ) -> None:
+        logger.warning(
+            "[Telegram] Voice message blocked by user settings. "
+            f"chat_id={payload.get('chat_id')}, "
+            f"message_thread_id={payload.get('message_thread_id')}. Falling back to text."
+        )
+        await cls._send_chat_action(
+            client, user_name, ChatAction.TYPING, message_thread_id
+        )
+        await client.send_message(text=cls.VOICE_FALLBACK_NOTICE, **cast(Any, payload))
+        if not has_plain_text:
+            await client.send_message(
+                text=cls.VOICE_FALLBACK_TEXT, **cast(Any, payload)
+            )
+
     async def _ensure_typing(
         self,
         user_name: str,
@@ -162,6 +198,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         at_flag = False
         message_thread_id = None
+        has_plain_text = any(
+            isinstance(seg, Plain) and bool(seg.text and seg.text.strip())
+            for seg in message.chain
+        )
         if "#" in user_name:
             # it's a supergroup chat with message_thread_id
             user_name, message_thread_id = user_name.split("#")
@@ -211,7 +251,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
-                await client.send_voice(voice=path, **cast(Any, payload))
+                try:
+                    await client.send_voice(voice=path, **cast(Any, payload))
+                except BadRequest as e:
+                    if not cls._is_voice_messages_forbidden_error(e):
+                        raise
+                    await cls._handle_voice_forbidden_fallback(
+                        client=client,
+                        payload=payload,
+                        user_name=user_name,
+                        message_thread_id=message_thread_id,
+                        has_plain_text=has_plain_text,
+                    )
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -330,15 +381,31 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, Record):
                         path = await i.convert_to_file_path()
-                        await self._send_media_with_action(
-                            self.client,
-                            ChatAction.UPLOAD_VOICE,
-                            self.client.send_voice,
-                            user_name=user_name,
-                            message_thread_id=message_thread_id,
-                            voice=path,
-                            **cast(Any, payload),
+                        has_plain_text = bool(delta.strip()) or any(
+                            isinstance(seg, Plain)
+                            and bool(seg.text and seg.text.strip())
+                            for seg in chain.chain
                         )
+                        try:
+                            await self._send_media_with_action(
+                                self.client,
+                                ChatAction.UPLOAD_VOICE,
+                                self.client.send_voice,
+                                user_name=user_name,
+                                message_thread_id=message_thread_id,
+                                voice=path,
+                                **cast(Any, payload),
+                            )
+                        except BadRequest as e:
+                            if not self._is_voice_messages_forbidden_error(e):
+                                raise
+                            await self._handle_voice_forbidden_fallback(
+                                client=self.client,
+                                payload=payload,
+                                user_name=user_name,
+                                message_thread_id=message_thread_id,
+                                has_plain_text=has_plain_text,
+                            )
                         continue
                     else:
                         logger.warning(f"不支持的消息类型: {type(i)}")
