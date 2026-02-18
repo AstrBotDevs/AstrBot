@@ -6,7 +6,10 @@ from typing import Any
 from quart import request
 
 from astrbot.core import DEMO_MODE, logger
-from astrbot.core.computer.computer_client import sync_skills_to_active_sandboxes
+from astrbot.core.computer.computer_client import (
+    _discover_bay_credentials,
+    sync_skills_to_active_sandboxes,
+)
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -61,11 +64,15 @@ class SkillsRoute(Route):
         sandbox = provider_settings.get("sandbox", {})
         endpoint = sandbox.get("shipyard_neo_endpoint", "")
         access_token = sandbox.get("shipyard_neo_access_token", "")
+
+        # Auto-discover token from Bay's credentials.json if not configured
+        if not access_token and endpoint:
+            access_token = _discover_bay_credentials(endpoint)
+
         if not endpoint or not access_token:
             raise ValueError(
-                "Shipyard Neo configuration is incomplete. "
-                "Please set provider_settings.sandbox.shipyard_neo_endpoint "
-                "and shipyard_neo_access_token."
+                "Shipyard Neo endpoint or access token not configured. "
+                "Set them in Dashboard or ensure Bay's credentials.json is accessible."
             )
         return endpoint, access_token
 
@@ -83,6 +90,10 @@ class SkillsRoute(Route):
                 access_token=access_token,
             ) as client:
                 return await operation(client)
+        except ValueError as e:
+            # Config not ready — expected when Neo isn't set up yet
+            logger.debug("[Neo] %s", e)
+            return Response().error(str(e)).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
