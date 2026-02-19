@@ -462,7 +462,7 @@ export default {
         const allNames = [];
         const enabledNames = [];
         for (const agent of agents) {
-          const name = String(agent?.name || '').trim();
+          const name = String(agent?.name || '').trim().toLowerCase();
           if (!name) {
             continue;
           }
@@ -486,7 +486,7 @@ export default {
       const seen = new Set();
       for (const item of scopeList) {
         const rawValue = String(item || '').trim();
-        const value = rawValue.toLowerCase() === 'all' ? '*' : rawValue;
+        const value = rawValue.toLowerCase() === 'all' ? '*' : rawValue.toLowerCase();
         if (!value || seen.has(value)) {
           continue;
         }

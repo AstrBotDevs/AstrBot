@@ -762,6 +762,61 @@ def _sanitize_context_by_modalities(
     req.contexts = sanitized_contexts
 
 
+def _filter_visible_mcp_tools(
+    tools: ToolSet | None,
+    agent_name: str,
+) -> ToolSet | None:
+    if not tools:
+        return tools
+
+    filtered = ToolSet()
+    for tool in tools.tools:
+        if isinstance(tool, MCPTool) and not is_mcp_tool_visible_to_agent(
+            tool, agent_name
+        ):
+            continue
+        filtered.add_tool(tool)
+    return filtered
+
+
+def _filter_tools_by_plugins(
+    tools: ToolSet,
+    plugins_name: set[str],
+) -> ToolSet:
+    filtered = ToolSet()
+    for tool in tools.tools:
+        if isinstance(tool, MCPTool):
+            # MCP visibility has already been filtered by agent scope.
+            filtered.add_tool(tool)
+            continue
+
+        mp = tool.handler_module_path
+        if not mp:
+            continue
+        plugin = star_map.get(mp)
+        if not plugin:
+            continue
+        if plugin.name in plugins_name or plugin.reserved:
+            filtered.add_tool(tool)
+
+    return filtered
+
+
+def _inject_global_mcp_tools(
+    base_tools: ToolSet | None,
+    agent_name: str,
+) -> ToolSet:
+    result = ToolSet()
+    if base_tools:
+        for tool in base_tools.tools:
+            result.add_tool(tool)
+
+    for tool in llm_tools.func_list:
+        if isinstance(tool, MCPTool) and is_mcp_tool_visible_to_agent(tool, agent_name):
+            result.add_tool(tool)
+    return result
+
+
 def _plugin_tool_fix(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -779,43 +834,12 @@ def _plugin_tool_fix(
         req: 提供者请求
         inject_mcp: 是否自动注入全局 MCP 工具，默认 True（向后兼容）
     """
-    if req.func_tool:
-        filtered_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
-            if isinstance(tool, MCPTool) and not is_mcp_tool_visible_to_agent(
-                tool, agent_name
-            ):
-                continue
-            filtered_tool_set.add_tool(tool)
-        req.func_tool = filtered_tool_set
+    req.func_tool = _filter_visible_mcp_tools(req.func_tool, agent_name)
 
     if event.plugins_name is not None and req.func_tool:
-        new_tool_set = ToolSet()
-        for tool in req.func_tool.tools:
-            if isinstance(tool, MCPTool):
-                if is_mcp_tool_visible_to_agent(tool, agent_name):
-                    new_tool_set.add_tool(tool)
-                continue
-            mp = tool.handler_module_path
-            if not mp:
-                continue
-            plugin = star_map.get(mp)
-            if not plugin:
-                continue
-            if plugin.name in event.plugins_name or plugin.reserved:
-                new_tool_set.add_tool(tool)
-        req.func_tool = new_tool_set
+        req.func_tool = _filter_tools_by_plugins(req.func_tool, set(event.plugins_name))
     elif inject_mcp:
-        # 仅在配置允许时注入 MCP 工具
-        tool_set = req.func_tool
-        if not tool_set:
-            tool_set = ToolSet()
-        for tool in llm_tools.func_list:
-            if isinstance(tool, MCPTool) and is_mcp_tool_visible_to_agent(
-                tool, agent_name
-            ):
-                tool_set.add_tool(tool)
-        req.func_tool = tool_set
+        req.func_tool = _inject_global_mcp_tools(req.func_tool, agent_name)
 
 
 async def _handle_webchat(

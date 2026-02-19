@@ -38,6 +38,15 @@ def test_get_mcp_scopes_from_agent_scope_string():
     assert get_mcp_scopes_from_config(cfg) == ("main",)
 
 
+def test_get_mcp_scopes_returns_none_for_non_mapping_configs():
+    assert get_mcp_scopes_from_config(None) is None
+    assert get_mcp_scopes_from_config([]) is None
+
+
+def test_get_mcp_scopes_returns_none_when_no_scope_keys():
+    assert get_mcp_scopes_from_config({"command": "python"}) is None
+
+
 def test_strip_scope_fields():
     cfg = {"agent_scope": "main", "scopes": ["x"], "command": "python"}
     strip_mcp_scope_fields(cfg)

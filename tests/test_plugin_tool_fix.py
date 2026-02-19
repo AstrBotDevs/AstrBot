@@ -12,6 +12,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from dataclasses import dataclass
 
 # Import only the minimal dependencies needed for the test
+from astrbot.core.agent.mcp_scope import (
+    is_scope_allowed_for_agent,
+    normalize_mcp_scope_value,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 
 
@@ -85,12 +89,10 @@ def plugin_tool_fix_logic(
         return hasattr(tool, "mcp_server_name")
 
     def is_scope_allowed(tool):
-        scopes = getattr(tool, "mcp_server_scopes", None)
-        if scopes is None:
-            return True
-        if "*" in scopes:
-            return True
-        return agent_name in scopes
+        return is_scope_allowed_for_agent(
+            normalize_mcp_scope_value(getattr(tool, "mcp_server_scopes", None)),
+            agent_name,
+        )
 
     if req.func_tool:
         filtered_tool_set = ToolSet()
@@ -344,3 +346,20 @@ class TestPluginToolFix:
 
         tool_names = {t.name for t in req.func_tool.tools}
         assert tool_names == {"visible", "regular_tool"}
+
+    def test_scope_matching_is_case_insensitive(self):
+        """Scope matching should be case-insensitive to mirror production behavior."""
+        event = MockEvent(plugins_name=None)
+        req = MockProviderRequest(func_tool=ToolSet())
+        llm_tools_list = [MockMCPTool("mixed_case_tool", scopes=("MyAgent",))]
+
+        plugin_tool_fix_logic(
+            event,
+            req,
+            {},
+            llm_tools_list,
+            inject_mcp=True,
+            agent_name="myagent",
+        )
+
+        assert {t.name for t in req.func_tool.tools} == {"mixed_case_tool"}
