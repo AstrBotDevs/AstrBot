@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import cast
+from typing import cast, Any
 
 from wechatpy import WeChatClient
 from wechatpy.replies import ImageReply, TextReply, VoiceReply
@@ -11,7 +11,6 @@ from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
-
 class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
     def __init__(
         self,
@@ -20,9 +19,11 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: WeChatClient,
+        message_out: dict[Any, Any]
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
+        self.message_out = message_out
 
     @staticmethod
     async def send_with_client(
@@ -32,8 +33,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
     ) -> None:
         pass
 
-    async def split_plain(self, plain: str) -> list[str]:
-        """将长文本分割成多个小文本, 每个小文本长度不超过 2048 字符
+    async def split_plain(self, plain: str, max_length: int = 1024) -> list[str]:
+        """将长文本分割成多个小文本, 每个小文本长度不超过 max_length 字符
 
         Args:
             plain (str): 要分割的长文本
@@ -41,18 +42,18 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             list[str]: 分割后的文本列表
 
         """
-        if len(plain) <= 2048:
+        if len(plain) <= max_length:
             return [plain]
         result = []
         start = 0
         while start < len(plain):
-            # 剩下的字符串长度<2048时结束
-            if start + 2048 >= len(plain):
+            # 剩下的字符串长度<max_length时结束
+            if start + max_length >= len(plain):
                 result.append(plain[start:])
                 break
 
             # 向前搜索分割标点符号
-            end = min(start + 2048, len(plain))
+            end = min(start + max_length, len(plain))
             cut_position = end
             for i in range(end, start, -1):
                 if i < len(plain) and plain[i - 1] in [
@@ -87,19 +88,13 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             if isinstance(comp, Plain):
                 # Split long text messages if needed
                 plain_chunks = await self.split_plain(comp.text)
-                for chunk in plain_chunks:
-                    if active_send_mode:
+                if active_send_mode:
+                    for chunk in plain_chunks:
                         self.client.message.send_text(message_obj.sender.user_id, chunk)
-                    else:
-                        reply = TextReply(
-                            content=chunk,
-                            message=cast(dict, self.message_obj.raw_message)["message"],
-                        )
-                        xml = reply.render()
-                        future = cast(dict, self.message_obj.raw_message)["future"]
-                        assert isinstance(future, asyncio.Future)
-                        future.set_result(xml)
-                    await asyncio.sleep(0.5)  # Avoid sending too fast
+                else:
+                    # disable passive sending, just store the chunks in 
+                    logger.debug(f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent.")
+                    self.message_out['cached_xml']=plain_chunks
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
