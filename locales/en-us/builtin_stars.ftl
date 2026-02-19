@@ -133,3 +133,17 @@ builtin-stars-setunset-unset-success = Session { $uid } variable { $key } remove
 ### astrbot/builtin_stars/builtin_commands/commands/sid.py
 builtin-stars-sid-base-info = UMO: "{ $sid }" This value can be used for whitelist settings.{"\u000A"}UID: "{ $user_id }" This value can be used for admin settings.{"\u000A"}Message session source info:{"\u000A"}  Bot ID: "{ $umo_platform }"{"\u000A"}  Message type: "{ $umo_msg_type }"{"\u000A"}  Session ID: "{ $umo_session_id }"{"\u000A"}This source info can be used for routing config.
 builtin-stars-sid-unique-session-group-tip = {"\u000A"}{"\u000A"}Unique-session mode is currently enabled. Group ID: "{ $group_id }". You can also add this ID to whitelist to allow the whole group.
+
+### astrbot/builtin_stars/builtin_commands/commands/admin.py
+builtin-stars-admin-op-usage = Usage: /op <id> to grant admin; /deop <id> to revoke admin. Use /sid to get the ID.
+builtin-stars-admin-op-success = Authorization granted successfully.
+builtin-stars-admin-deop-usage = Usage: /deop <id> to revoke admin. Use /sid to get the ID.
+builtin-stars-admin-deop-success = Authorization revoked successfully.
+builtin-stars-admin-deop-not-in-list = This user ID is not in the admin list.
+builtin-stars-admin-wl-usage = Usage: /wl <id> to add whitelist; /dwl <id> to remove whitelist. Use /sid to get the ID.
+builtin-stars-admin-wl-success = Added to whitelist successfully.
+builtin-stars-admin-dwl-usage = Usage: /dwl <id> to remove whitelist. Use /sid to get the ID.
+builtin-stars-admin-dwl-success = Removed from whitelist successfully.
+builtin-stars-admin-dwl-not-in-list = This SID is not in the whitelist.
+builtin-stars-admin-update-dashboard-start = Trying to update dashboard...
+builtin-stars-admin-update-dashboard-finished = Dashboard update completed.

@@ -1,5 +1,6 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain, MessageEventResult
+from astrbot.core import t
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.io import download_dashboard
 
@@ -13,30 +14,34 @@ class AdminCommands:
         if not admin_id:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。",
+                    t("builtin-stars-admin-op-usage"),
                 ),
             )
             return
         self.context.get_config()["admins_id"].append(str(admin_id))
         self.context.get_config().save_config()
-        event.set_result(MessageEventResult().message("授权成功。"))
+        event.set_result(
+            MessageEventResult().message(t("builtin-stars-admin-op-success"))
+        )
 
     async def deop(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """取消授权管理员。deop <admin_id>"""
         if not admin_id:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /deop <id> 取消管理员。可通过 /sid 获取 ID。",
+                    t("builtin-stars-admin-deop-usage"),
                 ),
             )
             return
         try:
             self.context.get_config()["admins_id"].remove(str(admin_id))
             self.context.get_config().save_config()
-            event.set_result(MessageEventResult().message("取消授权成功。"))
+            event.set_result(
+                MessageEventResult().message(t("builtin-stars-admin-deop-success"))
+            )
         except ValueError:
             event.set_result(
-                MessageEventResult().message("此用户 ID 不在管理员名单内。"),
+                MessageEventResult().message(t("builtin-stars-admin-deop-not-in-list")),
             )
 
     async def wl(self, event: AstrMessageEvent, sid: str = "") -> None:
@@ -44,21 +49,23 @@ class AdminCommands:
         if not sid:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。",
+                    t("builtin-stars-admin-wl-usage"),
                 ),
             )
             return
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         cfg["platform_settings"]["id_whitelist"].append(str(sid))
         cfg.save_config()
-        event.set_result(MessageEventResult().message("添加白名单成功。"))
+        event.set_result(
+            MessageEventResult().message(t("builtin-stars-admin-wl-success"))
+        )
 
     async def dwl(self, event: AstrMessageEvent, sid: str = "") -> None:
         """删除白名单。dwl <sid>"""
         if not sid:
             event.set_result(
                 MessageEventResult().message(
-                    "使用方法: /dwl <id> 删除白名单。可通过 /sid 获取 ID。",
+                    t("builtin-stars-admin-dwl-usage"),
                 ),
             )
             return
@@ -66,12 +73,20 @@ class AdminCommands:
             cfg = self.context.get_config(umo=event.unified_msg_origin)
             cfg["platform_settings"]["id_whitelist"].remove(str(sid))
             cfg.save_config()
-            event.set_result(MessageEventResult().message("删除白名单成功。"))
+            event.set_result(
+                MessageEventResult().message(t("builtin-stars-admin-dwl-success"))
+            )
         except ValueError:
-            event.set_result(MessageEventResult().message("此 SID 不在白名单内。"))
+            event.set_result(
+                MessageEventResult().message(t("builtin-stars-admin-dwl-not-in-list"))
+            )
 
     async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
-        await event.send(MessageChain().message("正在尝试更新管理面板..."))
+        await event.send(
+            MessageChain().message(t("builtin-stars-admin-update-dashboard-start"))
+        )
         await download_dashboard(version=f"v{VERSION}", latest=False)
-        await event.send(MessageChain().message("管理面板更新完成。"))
+        await event.send(
+            MessageChain().message(t("builtin-stars-admin-update-dashboard-finished"))
+        )

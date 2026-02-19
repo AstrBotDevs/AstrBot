@@ -133,3 +133,17 @@ builtin-stars-setunset-unset-success = 会话 { $uid } 变量 { $key } 移除成
 ### astrbot/builtin_stars/builtin_commands/commands/sid.py
 builtin-stars-sid-base-info = UMO: 「{ $sid }」 此值可用于设置白名单。{"\u000A"}UID: 「{ $user_id }」 此值可用于设置管理员。{"\u000A"}消息会话来源信息:{"\u000A"}  机器人 ID: 「{ $umo_platform }」{"\u000A"}  消息类型: 「{ $umo_msg_type }」{"\u000A"}  会话 ID: 「{ $umo_session_id }」{"\u000A"}消息来源可用于配置机器人的配置文件路由。
 builtin-stars-sid-unique-session-group-tip = {"\u000A"}{"\u000A"}当前处于独立会话模式，此群 ID: 「{ $group_id }」，也可将此 ID 加入白名单来放行整个群聊。
+
+### astrbot/builtin_stars/builtin_commands/commands/admin.py
+builtin-stars-admin-op-usage = 使用方法: /op <id> 授权管理员；/deop <id> 取消管理员。可通过 /sid 获取 ID。
+builtin-stars-admin-op-success = 授权成功。
+builtin-stars-admin-deop-usage = 使用方法: /deop <id> 取消管理员。可通过 /sid 获取 ID。
+builtin-stars-admin-deop-success = 取消授权成功。
+builtin-stars-admin-deop-not-in-list = 此用户 ID 不在管理员名单内。
+builtin-stars-admin-wl-usage = 使用方法: /wl <id> 添加白名单；/dwl <id> 删除白名单。可通过 /sid 获取 ID。
+builtin-stars-admin-wl-success = 添加白名单成功。
+builtin-stars-admin-dwl-usage = 使用方法: /dwl <id> 删除白名单。可通过 /sid 获取 ID。
+builtin-stars-admin-dwl-success = 删除白名单成功。
+builtin-stars-admin-dwl-not-in-list = 此 SID 不在白名单内。
+builtin-stars-admin-update-dashboard-start = 正在尝试更新管理面板...
+builtin-stars-admin-update-dashboard-finished = 管理面板更新完成。
