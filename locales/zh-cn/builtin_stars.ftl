@@ -165,3 +165,23 @@ builtin-stars-alter-cmd-command-not-found = 未找到该指令
 builtin-stars-alter-cmd-updated = 已将「{ $cmd_name }」{ $cmd_group_str } 的权限级别调整为 { $cmd_type }。
 builtin-stars-alter-cmd-group-label = 指令组
 builtin-stars-alter-cmd-command-label = 指令
+
+### astrbot/builtin_stars/builtin_commands/commands/persona.py
+builtin-stars-persona-none = 无
+builtin-stars-persona-current-conversation-not-found = 当前对话不存在，请先使用 /new 新建一个对话。
+builtin-stars-persona-name-with-custom-rule = { $persona_name } (自定义规则)
+builtin-stars-persona-new-conversation = 新对话
+builtin-stars-persona-overview = [Persona]{"\u000A"}{"\u000A"}- 人格情景列表: `/persona list`{"\u000A"}- 设置人格情景: `/persona 人格`{"\u000A"}- 人格情景详细信息: `/persona view 人格`{"\u000A"}- 取消人格: `/persona unset`{"\u000A"}{"\u000A"}默认人格情景: { $default_persona_name }{"\u000A"}当前对话 { $curr_cid_title } 的人格情景: { $curr_persona_name }{"\u000A"}{"\u000A"}配置人格情景请前往管理面板-配置页{"\u000A"}
+builtin-stars-persona-list-title = 📂 人格列表：{"\u000A"}
+builtin-stars-persona-list-total = {"\u000A"}共 { $total_count } 个人格
+builtin-stars-persona-list-set-tip = {"\u000A"}*使用 `/persona <人格名>` 设置人格
+builtin-stars-persona-list-view-tip = *使用 `/persona view <人格名>` 查看详细信息
+builtin-stars-persona-view-need-name = 请输入人格情景名
+builtin-stars-persona-view-detail-title = 人格 { $persona_name } 的详细信息：{"\u000A"}
+builtin-stars-persona-view-not-found = 人格 { $persona_name } 不存在
+builtin-stars-persona-unset-no-conversation = 当前没有对话，无法取消人格。
+builtin-stars-persona-unset-success = 取消人格成功。
+builtin-stars-persona-set-no-conversation = 当前没有对话，请先开始对话或使用 /new 创建一个对话。
+builtin-stars-persona-custom-rule-warning = 提醒：由于自定义规则，您现在切换的人格将不会生效。
+builtin-stars-persona-set-success = 设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。{ $force_warn_msg }
+builtin-stars-persona-set-not-found = 不存在该人格情景。使用 /persona list 查看所有。
