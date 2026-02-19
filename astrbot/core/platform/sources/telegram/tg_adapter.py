@@ -174,14 +174,14 @@ class TelegramPlatformAdapter(Platform):
             if not handler_metadata.enabled:
                 continue
             for event_filter in handler_metadata.event_filters:
-                cmd_info = self._extract_command_info(
+                cmd_info_list = self._extract_command_info(
                     event_filter,
                     handler_metadata,
                     skip_commands,
                 )
-                if cmd_info:
-                    cmd_name, description = cmd_info
-                    command_dict.setdefault(cmd_name, description)
+                if cmd_info_list:
+                    for cmd_name, description in cmd_info_list:
+                        command_dict.setdefault(cmd_name, description)
 
         commands_a = sorted(command_dict.keys())
         return [BotCommand(cmd, command_dict[cmd]) for cmd in commands_a]
@@ -191,9 +191,9 @@ class TelegramPlatformAdapter(Platform):
         event_filter,
         handler_metadata,
         skip_commands: set,
-    ) -> tuple[str, str] | None:
-        """从事件过滤器中提取指令信息"""
-        cmd_name = None
+    ) -> list[tuple[str, str]] | None:
+        """从事件过滤器中提取指令信息，包括所有别名"""
+        cmd_names = []
         is_group = False
         if isinstance(event_filter, CommandFilter) and event_filter.command_name:
             if (
@@ -201,26 +201,32 @@ class TelegramPlatformAdapter(Platform):
                 and event_filter.parent_command_names != [""]
             ):
                 return None
-            cmd_name = event_filter.command_name
+            # 收集主命令名和所有别名
+            cmd_names = [event_filter.command_name]
+            if event_filter.alias:
+                cmd_names.extend(event_filter.alias)
         elif isinstance(event_filter, CommandGroupFilter):
             if event_filter.parent_group:
                 return None
-            cmd_name = event_filter.group_name
+            cmd_names = [event_filter.group_name]
             is_group = True
 
-        if not cmd_name or cmd_name in skip_commands:
-            return None
+        result = []
+        for cmd_name in cmd_names:
+            if not cmd_name or cmd_name in skip_commands:
+                continue
+            if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+                continue
 
-        if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
-            return None
+            # Build description.
+            description = handler_metadata.desc or (
+                f"Command group: {cmd_name}" if is_group else f"Command: {cmd_name}"
+            )
+            if len(description) > 30:
+                description = description[:30] + "..."
+            result.append((cmd_name, description))
 
-        # Build description.
-        description = handler_metadata.desc or (
-            f"指令组: {cmd_name} (包含多个子指令)" if is_group else f"指令: {cmd_name}"
-        )
-        if len(description) > 30:
-            description = description[:30] + "..."
-        return cmd_name, description
+        return result if result else None
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_chat:
