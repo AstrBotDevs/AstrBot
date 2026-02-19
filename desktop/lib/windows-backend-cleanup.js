@@ -7,6 +7,12 @@ const commandLineCache = new Map();
 let commandLineQueryUnavailable = false;
 let commandLineFallbackLogged = false;
 
+function resetWindowsBackendCleanupState() {
+  commandLineCache.clear();
+  commandLineQueryUnavailable = false;
+  commandLineFallbackLogged = false;
+}
+
 function normalizeWindowsPathForMatch(value) {
   return String(value || '')
     .replace(/\//g, '\\')
@@ -209,5 +215,6 @@ function shouldKillUnmanagedBackendProcess({
 }
 
 module.exports = {
+  resetWindowsBackendCleanupState,
   shouldKillUnmanagedBackendProcess,
 };

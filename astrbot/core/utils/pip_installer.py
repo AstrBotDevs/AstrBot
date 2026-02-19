@@ -489,7 +489,7 @@ class PipInstaller:
             args.extend(["--target", target_site_packages])
             args.extend(["--upgrade", "--force-reinstall"])
             pip_install_args = _strip_binary_selector_args(pip_install_args)
-            args.append("--only-binary=:all")
+            args.append("--only-binary=:all:")
 
         if pip_install_args:
             args.extend(pip_install_args)

@@ -6,7 +6,10 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { BufferedRotatingLogger } = require('./buffered-rotating-logger');
 const { resolvePackagedBackendState } = require('./packaged-backend-config');
-const { shouldKillUnmanagedBackendProcess } = require('./windows-backend-cleanup');
+const {
+  resetWindowsBackendCleanupState,
+  shouldKillUnmanagedBackendProcess,
+} = require('./windows-backend-cleanup');
 const {
   delay,
   ensureDir,
@@ -676,6 +679,7 @@ class BackendManager {
     this.log(
       `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
     );
+    resetWindowsBackendCleanupState();
     const backendConfig = this.getBackendConfig();
     const hasBackendCommand = Boolean(backendConfig.cmd);
     if (!hasBackendCommand) {
