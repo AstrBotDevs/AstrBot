@@ -111,6 +111,10 @@ reportMissingImports = false
 include = ["astrbot"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+addopts = "--ignore=tests/test_cli"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
