@@ -11,6 +11,21 @@ APP_DIR = BACKEND_DIR / "app"
 _WINDOWS_DLL_DIRECTORY_HANDLES: list[object] = []
 
 
+def configure_stdio_utf8() -> None:
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+
 def configure_windows_dll_search_path() -> None:
     if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
         return
@@ -98,6 +113,7 @@ def preload_windows_runtime_dlls() -> None:
                     continue
 
 
+configure_stdio_utf8()
 configure_windows_dll_search_path()
 preload_windows_runtime_dlls()
 

@@ -414,6 +414,8 @@ class BackendManager {
     const env = {
       ...process.env,
       PYTHONUNBUFFERED: '1',
+      PYTHONUTF8: process.env.PYTHONUTF8 || '1',
+      PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8',
     };
     if (this.app.isPackaged) {
       env.ASTRBOT_ELECTRON_CLIENT = '1';
