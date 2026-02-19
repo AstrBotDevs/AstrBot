@@ -20,7 +20,10 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import PluginManager
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_temp_path,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -196,10 +199,11 @@ class PluginRoute(Route):
 
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
         """构建注册表源信息"""
+        data_dir = get_astrbot_data_path()
         if custom_url:
             # 对自定义URL生成一个安全的文件名
             url_hash = hashlib.md5(custom_url.encode()).hexdigest()[:8]
-            cache_file = f"data/plugins_custom_{url_hash}.json"
+            cache_file = os.path.join(data_dir, f"plugins_custom_{url_hash}.json")
 
             # 更安全的后缀处理方式
             if custom_url.endswith(".json"):
@@ -209,7 +213,7 @@ class PluginRoute(Route):
 
             urls = [custom_url]
         else:
-            cache_file = "data/plugins.json"
+            cache_file = os.path.join(data_dir, "plugins.json")
             md5_url = "https://api.soulter.top/astrbot/plugins-md5"
             urls = [
                 "https://api.soulter.top/astrbot/plugins",
