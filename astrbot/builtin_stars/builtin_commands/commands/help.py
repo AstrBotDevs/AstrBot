@@ -2,6 +2,7 @@ import aiohttp
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import t
 from astrbot.core.config.default import VERSION
 from astrbot.core.star import command_management
 from astrbot.core.utils.io import get_dashboard_version
@@ -73,12 +74,18 @@ class HelpCommand:
         dashboard_version = await get_dashboard_version()
         command_lines = await self._build_reserved_command_lines()
         commands_section = (
-            "\n".join(command_lines) if command_lines else "暂无启用的内置指令"
+            "\n".join(command_lines)
+            if command_lines
+            else t("builtin-stars-help-no-enabled-reserved-commands")
         )
 
         msg_parts = [
-            f"AstrBot v{VERSION}(WebUI: {dashboard_version})",
-            "内置指令:",
+            t(
+                "builtin-stars-help-header",
+                version=VERSION,
+                dashboard_version=dashboard_version,
+            ),
+            t("builtin-stars-help-reserved-command-title"),
             commands_section,
         ]
         if notice:
