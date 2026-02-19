@@ -113,3 +113,9 @@ builtin-stars-provider-key-switch-success = Key switched successfully.
 ### astrbot/builtin_stars/builtin_commands/commands/t2i.py
 builtin-stars-t2i-disabled = Text-to-image mode has been disabled.
 builtin-stars-t2i-enabled = Text-to-image mode has been enabled.
+
+### astrbot/builtin_stars/builtin_commands/commands/tts.py
+builtin-stars-tts-status-enabled-prefix = Enabled
+builtin-stars-tts-status-disabled-prefix = Disabled
+builtin-stars-tts-enabled-but-global-disabled = { $status_text } text-to-speech for the current session. But TTS is not enabled in global config. Please enable it in WebUI.
+builtin-stars-tts-toggle-result = { $status_text } text-to-speech for the current session.
