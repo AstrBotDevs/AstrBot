@@ -3,28 +3,9 @@
 const path = require('path');
 
 const WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 2000;
-const COMMAND_LINE_QUERY_UNAVAILABLE_KEY = '__command_line_query_unavailable__';
-const COMMAND_LINE_FALLBACK_LOGGED_KEY = '__command_line_fallback_logged__';
-
-function isQueryUnavailable(cache) {
-  return !!(cache && cache.get(COMMAND_LINE_QUERY_UNAVAILABLE_KEY));
-}
-
-function setQueryUnavailable(cache, value) {
-  if (cache) {
-    cache.set(COMMAND_LINE_QUERY_UNAVAILABLE_KEY, !!value);
-  }
-}
-
-function wasFallbackLogged(cache) {
-  return !!(cache && cache.get(COMMAND_LINE_FALLBACK_LOGGED_KEY));
-}
-
-function markFallbackLogged(cache) {
-  if (cache) {
-    cache.set(COMMAND_LINE_FALLBACK_LOGGED_KEY, true);
-  }
-}
+const commandLineCache = new Map();
+let commandLineQueryUnavailable = false;
+let commandLineFallbackLogged = false;
 
 function normalizeWindowsPathForMatch(value) {
   return String(value || '')
@@ -37,17 +18,17 @@ function isGenericWindowsPythonImage(imageName) {
   return normalized === 'python.exe' || normalized === 'pythonw.exe' || normalized === 'py.exe';
 }
 
-function getWindowsProcessCommandLine({ pid, commandLineCache, spawnSync, log, timeoutMs }) {
+function getWindowsProcessCommandLine({ pid, spawnSync, log, timeoutMs }) {
   const numericPid = Number.parseInt(`${pid}`, 10);
   if (!Number.isInteger(numericPid)) {
     return { commandLine: null, commandLineQueryUnavailable: false };
   }
 
-  if (isQueryUnavailable(commandLineCache)) {
+  if (commandLineQueryUnavailable) {
     return { commandLine: null, commandLineQueryUnavailable: true };
   }
 
-  if (commandLineCache && commandLineCache.has(numericPid)) {
+  if (commandLineCache.has(numericPid)) {
     return {
       commandLine: commandLineCache.get(numericPid),
       commandLineQueryUnavailable: false,
@@ -103,23 +84,19 @@ function getWindowsProcessCommandLine({ pid, commandLineCache, spawnSync, log, t
           .split(/\r?\n/)
           .map((item) => item.trim())
           .find((item) => item.length > 0) || null;
-      if (commandLineCache) {
-        commandLineCache.set(numericPid, commandLine);
-        setQueryUnavailable(commandLineCache, false);
-      }
+      commandLineCache.set(numericPid, commandLine);
+      commandLineQueryUnavailable = false;
       return { commandLine, commandLineQueryUnavailable: false };
     }
   }
 
   if (!hasAvailableShell) {
-    setQueryUnavailable(commandLineCache, true);
+    commandLineQueryUnavailable = true;
     return { commandLine: null, commandLineQueryUnavailable: true };
   }
 
-  if (commandLineCache) {
-    commandLineCache.set(numericPid, null);
-    setQueryUnavailable(commandLineCache, false);
-  }
+  commandLineCache.set(numericPid, null);
+  commandLineQueryUnavailable = false;
   return { commandLine: null, commandLineQueryUnavailable: false };
 }
 
@@ -162,7 +139,6 @@ function matchesExpectedImage(processInfo, expectedImageName) {
 function matchesBackendMarkers({
   pid,
   backendConfig,
-  commandLineCache,
   spawnSync,
   log,
 }) {
@@ -174,15 +150,14 @@ function matchesBackendMarkers({
 
   const { commandLine, commandLineQueryUnavailable } = getWindowsProcessCommandLine({
     pid,
-    commandLineCache,
     spawnSync,
     log,
     timeoutMs: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
   });
   if (!commandLine) {
     if (commandLineQueryUnavailable) {
-      if (!wasFallbackLogged(commandLineCache)) {
-        markFallbackLogged(commandLineCache);
+      if (!commandLineFallbackLogged) {
+        commandLineFallbackLogged = true;
         log(
           'Neither powershell nor pwsh is available. ' +
             'Falling back to image-name-only matching for generic Python backend cleanup.',
@@ -209,7 +184,6 @@ function shouldKillUnmanagedBackendProcess({
   processInfo,
   backendConfig,
   allowImageOnlyMatch,
-  commandLineCache,
   spawnSync,
   log,
   fallbackCmdRaw,
@@ -229,7 +203,6 @@ function shouldKillUnmanagedBackendProcess({
   return matchesBackendMarkers({
     pid,
     backendConfig,
-    commandLineCache,
     spawnSync,
     log,
   });

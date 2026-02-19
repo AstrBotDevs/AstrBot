@@ -2,43 +2,7 @@ import { fileURLToPath, URL } from 'url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vuetify from 'vite-plugin-vuetify';
-
-const normalizeNestedTypeSelectorPlugin = {
-  postcssPlugin: 'normalize-nested-type-selector',
-  Rule(rule: {
-    parent?: { type?: string; parent?: unknown; selector?: string };
-    selector?: string;
-    source?: { input?: { file?: string; from?: string } };
-  }) {
-    if (rule.parent?.type !== 'rule' || typeof rule.selector !== 'string') {
-      return;
-    }
-
-    const sourceFile = String(rule.source?.input?.file || rule.source?.input?.from || '')
-      .replace(/\\/g, '/')
-      .toLowerCase();
-    const isProjectSource = sourceFile.includes('/dashboard/src/');
-    const isMonacoVendor = sourceFile.includes('/node_modules/monaco-editor/');
-    if (!isProjectSource && !isMonacoVendor) {
-      return;
-    }
-
-    const segments = rule.selector
-      .split(',')
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    if (!segments.length) {
-      return;
-    }
-
-    const typeOnlyPattern = /^[a-zA-Z][\w-]*$/;
-    if (!segments.every((segment) => typeOnlyPattern.test(segment))) {
-      return;
-    }
-
-    rule.selector = segments.map((segment) => `:is(${segment})`).join(', ');
-  }
-};
+import normalizeNestedTypeSelectorPlugin from './src/plugins/normalize-nested-type-selector';
 
 // https://vitejs.dev/config/
 export default defineConfig({
