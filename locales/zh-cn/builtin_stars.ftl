@@ -129,3 +129,7 @@ builtin-stars-llm-toggle-result = { $status } LLM 聊天功能。
 builtin-stars-setunset-set-success = 会话 { $uid } 变量 { $key } 存储成功。使用 /unset 移除。
 builtin-stars-setunset-key-not-found = 没有那个变量名。格式 /unset 变量名。
 builtin-stars-setunset-unset-success = 会话 { $uid } 变量 { $key } 移除成功。
+
+### astrbot/builtin_stars/builtin_commands/commands/sid.py
+builtin-stars-sid-base-info = UMO: 「{ $sid }」 此值可用于设置白名单。{"\u000A"}UID: 「{ $user_id }」 此值可用于设置管理员。{"\u000A"}消息会话来源信息:{"\u000A"}  机器人 ID: 「{ $umo_platform }」{"\u000A"}  消息类型: 「{ $umo_msg_type }」{"\u000A"}  会话 ID: 「{ $umo_session_id }」{"\u000A"}消息来源可用于配置机器人的配置文件路由。
+builtin-stars-sid-unique-session-group-tip = {"\u000A"}{"\u000A"}当前处于独立会话模式，此群 ID: 「{ $group_id }」，也可将此 ID 加入白名单来放行整个群聊。

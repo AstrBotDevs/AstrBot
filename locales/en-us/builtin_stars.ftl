@@ -129,3 +129,7 @@ builtin-stars-llm-toggle-result = { $status } LLM chat feature.
 builtin-stars-setunset-set-success = Session { $uid } variable { $key } stored successfully. Use /unset to remove it.
 builtin-stars-setunset-key-not-found = Variable name not found. Usage: /unset <variable_name>.
 builtin-stars-setunset-unset-success = Session { $uid } variable { $key } removed successfully.
+
+### astrbot/builtin_stars/builtin_commands/commands/sid.py
+builtin-stars-sid-base-info = UMO: "{ $sid }" This value can be used for whitelist settings.{"\u000A"}UID: "{ $user_id }" This value can be used for admin settings.{"\u000A"}Message session source info:{"\u000A"}  Bot ID: "{ $umo_platform }"{"\u000A"}  Message type: "{ $umo_msg_type }"{"\u000A"}  Session ID: "{ $umo_session_id }"{"\u000A"}This source info can be used for routing config.
+builtin-stars-sid-unique-session-group-tip = {"\u000A"}{"\u000A"}Unique-session mode is currently enabled. Group ID: "{ $group_id }". You can also add this ID to whitelist to allow the whole group.
