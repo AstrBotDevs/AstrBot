@@ -124,3 +124,8 @@ builtin-stars-tts-toggle-result = { $status_text } text-to-speech for the curren
 builtin-stars-llm-status-disabled = Disabled
 builtin-stars-llm-status-enabled = Enabled
 builtin-stars-llm-toggle-result = { $status } LLM chat feature.
+
+### astrbot/builtin_stars/builtin_commands/commands/setunset.py
+builtin-stars-setunset-set-success = Session { $uid } variable { $key } stored successfully. Use /unset to remove it.
+builtin-stars-setunset-key-not-found = Variable name not found. Usage: /unset <variable_name>.
+builtin-stars-setunset-unset-success = Session { $uid } variable { $key } removed successfully.
