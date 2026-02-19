@@ -41,3 +41,10 @@ builtin-stars-astrbot-ltm-empty-image-url = Image URL is empty.
 builtin-stars-astrbot-ltm-image-caption-failed = Failed to get image caption: { $error }
 builtin-stars-astrbot-ltm-recorded-message = ltm | { $umo } | { $message }
 builtin-stars-astrbot-ltm-recorded-ai-response = Recorded AI response: { $umo } | { $message }
+
+### astrbot/builtin_stars/session_controller/main.py
+builtin-stars-session-controller-empty-mention-llm-prompt = Note: you are chatting with a user on social media. The user only used @ to wake you up and did not provide content in this message. They may send the actual content in the next message. Please ask politely what they want to talk about or what help they need. Keep the reply aligned with persona and avoid sounding mechanical. Only output the reply content, and nothing else.
+builtin-stars-session-controller-llm-response-failed = LLM response failed: { $error }
+builtin-stars-session-controller-empty-mention-fallback-reply = What would you like to ask? 😄
+builtin-stars-session-controller-empty-mention-handler-error = An error occurred, please contact the administrator: { $error }
+builtin-stars-session-controller-handle-empty-mention-error = handle_empty_mention error: { $error }
