@@ -1,0 +1,14 @@
+agent-max-steps-reached = Agent reached max steps ({$max_step}), forcing a final response.
+agent-tool-call = 🔨 Calling tool: {$tool_name}
+agent-tool-call-unknown = 🔨 Calling tool...
+agent-request-failed = {"\u000A"}{"\u000A"}AstrBot request failed.{"\u000A"}Error type: {$error_type}{"\u000A"}Error message: {$error_message}{"\u000A"}{"\u000A"}Please check the platform logs for error details.{"\u000A"}
+agent-error-in-hook = Error in on_agent_done hook
+live-agent-stream-tts = [Live Agent] Using streaming TTS (native get_audio_stream support)
+live-agent-tts-info = [Live Agent] Using TTS ({$provider_type} using get_audio, will generate audio sentence by sentence)
+live-agent-runtime-error = [Live Agent] Runtime error: {$error}
+live-agent-feeder-error = [Live Agent Feeder] Error: {$error}
+live-tts-stream-error = [Live TTS Stream] Error: {$error}
+live-tts-simulated-error = [Live TTS Simulated] Error processing text '{$text_preview}...': {$error}
+live-tts-simulated-critical = [Live TTS Simulated] Critical Error: {$error}
+tts-stats-send-failed = Failed to send TTS statistics: {$error}
+live-agent-feeder-sentence = [Live Agent Feeder] Sentence: {$sentence}

@@ -1,0 +1,14 @@
+agent-max-steps-reached = Agent 已达到最大步数限制 ({$max_step})，强制返回最终响应。
+agent-tool-call = 🔨 调用工具: {$tool_name}
+agent-tool-call-unknown = 🔨 调用工具...
+agent-request-failed = {"\u000A"}{"\u000A"}AstrBot 请求失败。{"\u000A"}错误类型: {$error_type}{"\u000A"}错误信息: {$error_message}{"\u000A"}{"\u000A"}请在平台日志查看和分享错误详情。{"\u000A"}
+agent-error-in-hook = on_agent_done 钩子执行错误
+live-agent-stream-tts = [Live Agent] 使用流式 TTS（原生支持 get_audio_stream）
+live-agent-tts-info = [Live Agent] 使用 TTS（{$provider_type} {"\u000A"}使用 get_audio，将按句子分块生成音频）
+live-agent-runtime-error = [Live Agent] 运行时发生错误: {$error}
+live-agent-feeder-error = [Live Agent Feeder] 错误: {$error}
+live-tts-stream-error = [Live TTS Stream] 错误: {$error}
+live-tts-simulated-error = [Live TTS Simulated] 处理文本 '{$text_preview}...' 时出错: {$error}
+live-tts-simulated-critical = [Live TTS Simulated] 严重错误: {$error}
+tts-stats-send-failed = 发送 TTS 统计信息失败: {$error}
+live-agent-feeder-sentence = [Live Agent Feeder] 分句: {$sentence}
