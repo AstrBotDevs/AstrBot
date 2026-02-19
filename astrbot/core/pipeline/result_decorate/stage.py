@@ -383,21 +383,19 @@ class ResultDecorateStage(Stage):
                     )
                     result.chain = [node]
 
-            has_plain = any(isinstance(item, Plain) for item in result.chain)
-            if has_plain:
-                # at 回复
-                if (
-                    self.reply_with_mention
-                    and event.get_message_type() != MessageType.FRIEND_MESSAGE
-                ):
-                    result.chain.insert(
-                        0,
-                        At(qq=event.get_sender_id(), name=event.get_sender_name()),
-                    )
-                    if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
-                        result.chain[1].text = "\n" + result.chain[1].text
+            # at 回复
+            if (
+                self.reply_with_mention
+                and event.get_message_type() != MessageType.FRIEND_MESSAGE
+            ):
+                result.chain.insert(
+                    0,
+                    At(qq=event.get_sender_id(), name=event.get_sender_name()),
+                )
+                if len(result.chain) > 1 and isinstance(result.chain[1], Plain):
+                    result.chain[1].text = "\n" + result.chain[1].text
 
-                # 引用回复
-                if self.reply_with_quote:
-                    if not any(isinstance(item, File) for item in result.chain):
-                        result.chain.insert(0, Reply(id=event.message_obj.message_id))
+            # 引用回复
+            if self.reply_with_quote:
+                if not any(isinstance(item, File) for item in result.chain):
+                    result.chain.insert(0, Reply(id=event.message_obj.message_id))
