@@ -152,3 +152,16 @@ builtin-stars-admin-update-dashboard-finished = Dashboard update completed.
 builtin-stars-help-no-enabled-reserved-commands = No enabled built-in commands.
 builtin-stars-help-header = AstrBot v{ $version } (WebUI: { $dashboard_version })
 builtin-stars-help-reserved-command-title = Built-in commands:
+
+### astrbot/builtin_stars/builtin_commands/commands/alter_cmd.py
+builtin-stars-alter-cmd-usage = This command sets permissions for a command or command group.{"\u000A"}Format: /alter_cmd <cmd_name> <admin/member>{"\u000A"}Example 1: /alter_cmd c1 admin sets c1 as admin-only command{"\u000A"}Example 2: /alter_cmd g1 c1 admin sets sub-command c1 in group g1 as admin-only{"\u000A"}/alter_cmd reset config opens reset permission config
+builtin-stars-alter-cmd-reset-config-menu = Fine-grained permission config for reset command{"\u000A"}Current config:{"\u000A"}1. Group + unique session ON: { $group_unique_on }{"\u000A"}2. Group + unique session OFF: { $group_unique_off }{"\u000A"}3. Private chat: { $private }{"\u000A"}Update format:{"\u000A"}/alter_cmd reset scene <scene_index> <admin/member>{"\u000A"}Example: /alter_cmd reset scene 2 member
+builtin-stars-alter-cmd-scene-and-perm-required = Scene index and permission type are required.
+builtin-stars-alter-cmd-scene-index-invalid = Scene index must be a number between 1 and 3.
+builtin-stars-alter-cmd-perm-type-invalid = Invalid permission type, only admin or member is allowed.
+builtin-stars-alter-cmd-reset-scene-updated = Updated reset command permission to { $perm_type } in scene { $scene_name }.
+builtin-stars-alter-cmd-type-invalid = Invalid command type, available types are admin and member.
+builtin-stars-alter-cmd-command-not-found = Command not found.
+builtin-stars-alter-cmd-updated = Permission level of "{ $cmd_name }" { $cmd_group_str } has been set to { $cmd_type }.
+builtin-stars-alter-cmd-group-label = command group
+builtin-stars-alter-cmd-command-label = command
