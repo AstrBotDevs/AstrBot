@@ -10,7 +10,7 @@ class TestMessageConverter:
     @pytest.fixture
     def converter(self):
         """创建 MessageConverter 实例"""
-        from astrbot.core.platform.sources.cli.message.converter import MessageConverter
+        from astrbot.core.platform.sources.cli.cli_event import MessageConverter
 
         return MessageConverter()
 
@@ -70,7 +70,7 @@ class TestMessageConverter:
 
     def test_custom_default_session_id(self):
         """测试自定义默认 session_id"""
-        from astrbot.core.platform.sources.cli.message.converter import MessageConverter
+        from astrbot.core.platform.sources.cli.cli_event import MessageConverter
 
         converter = MessageConverter(default_session_id="custom_session")
         message = converter.convert("Test")
@@ -79,7 +79,7 @@ class TestMessageConverter:
 
     def test_custom_user_info(self):
         """测试自定义用户信息"""
-        from astrbot.core.platform.sources.cli.message.converter import MessageConverter
+        from astrbot.core.platform.sources.cli.cli_event import MessageConverter
 
         converter = MessageConverter(
             user_id="custom_user",

@@ -20,12 +20,10 @@ class TestTokenManager:
     def token_manager(self, temp_data_path):
         """创建 TokenManager 实例"""
         with patch(
-            "astrbot.core.platform.sources.cli.config.token_manager.get_astrbot_data_path",
+            "astrbot.core.platform.sources.cli.cli_adapter.get_astrbot_data_path",
             return_value=temp_data_path,
         ):
-            from astrbot.core.platform.sources.cli.config.token_manager import (
-                TokenManager,
-            )
+            from astrbot.core.platform.sources.cli.cli_adapter import TokenManager
 
             return TokenManager()
 
@@ -48,12 +46,10 @@ class TestTokenManager:
             f.write(expected_token)
 
         with patch(
-            "astrbot.core.platform.sources.cli.config.token_manager.get_astrbot_data_path",
+            "astrbot.core.platform.sources.cli.cli_adapter.get_astrbot_data_path",
             return_value=temp_data_path,
         ):
-            from astrbot.core.platform.sources.cli.config.token_manager import (
-                TokenManager,
-            )
+            from astrbot.core.platform.sources.cli.cli_adapter import TokenManager
 
             manager = TokenManager()
             assert manager.token == expected_token
@@ -76,12 +72,10 @@ class TestTokenManager:
     def test_validate_without_server_token(self, temp_data_path):
         """测试服务器无 Token 时跳过验证"""
         with patch(
-            "astrbot.core.platform.sources.cli.config.token_manager.get_astrbot_data_path",
+            "astrbot.core.platform.sources.cli.cli_adapter.get_astrbot_data_path",
             return_value=temp_data_path,
         ):
-            from astrbot.core.platform.sources.cli.config.token_manager import (
-                TokenManager,
-            )
+            from astrbot.core.platform.sources.cli.cli_adapter import TokenManager
 
             manager = TokenManager()
             # 模拟 _ensure_token 返回 None（Token 生成失败场景）
@@ -99,12 +93,10 @@ class TestTokenManager:
             f.write("")
 
         with patch(
-            "astrbot.core.platform.sources.cli.config.token_manager.get_astrbot_data_path",
+            "astrbot.core.platform.sources.cli.cli_adapter.get_astrbot_data_path",
             return_value=temp_data_path,
         ):
-            from astrbot.core.platform.sources.cli.config.token_manager import (
-                TokenManager,
-            )
+            from astrbot.core.platform.sources.cli.cli_adapter import TokenManager
 
             manager = TokenManager()
             token = manager.token

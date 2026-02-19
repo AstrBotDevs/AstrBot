@@ -1,19 +1,13 @@
-"""
-CLI Platform Adapter - CLI平台适配器
+"""CLI平台适配器
 
 编排层：组合各模块实现CLI测试功能。
-遵循Unix哲学：原子化模块、显式I/O、管道编排。
-
-重构后架构:
-    cli_adapter.py (编排层 <200行)
-    ├── ConfigLoader 加载配置
-    ├── TokenManager 管理认证
-    ├── SessionManager 管理会话
-    ├── MessageConverter 转换消息
-    └── Handler (Socket/TTY/File)
 """
 
 import asyncio
+import json
+import os
+import secrets
+import time
 from collections.abc import Awaitable
 from typing import Any
 
@@ -21,19 +15,183 @@ from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import Platform, PlatformMetadata
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 from ...register import register_platform_adapter
-from .config.config_loader import ConfigLoader
-from .config.token_manager import TokenManager
-from .connection_info_writer import write_connection_info
-from .handlers.file_handler import FileHandler
-from .handlers.socket_handler import SocketClientHandler, SocketModeHandler
-from .handlers.tty_handler import TTYHandler
-from .message.converter import MessageConverter
-from .platform_detector import detect_platform
-from .session.session_manager import SessionManager
-from .socket_factory import create_socket_server
+from .cli_event import MessageConverter
+from .file_handler import FileHandler
+from .socket_handler import (
+    SocketClientHandler,
+    SocketModeHandler,
+    write_connection_info,
+)
+from .socket_server import create_socket_server, detect_platform
+from .tty_handler import TTYHandler
+
+# ------------------------------------------------------------------
+# Token管理
+# ------------------------------------------------------------------
+
+
+class TokenManager:
+    """Token管理器"""
+
+    TOKEN_FILE = ".cli_token"
+
+    def __init__(self):
+        self._token: str | None = None
+        self._token_file = os.path.join(get_astrbot_data_path(), self.TOKEN_FILE)
+
+    @property
+    def token(self) -> str | None:
+        if self._token is None:
+            self._token = self._ensure_token()
+        return self._token
+
+    def _ensure_token(self) -> str | None:
+        try:
+            if os.path.exists(self._token_file):
+                with open(self._token_file, encoding="utf-8") as f:
+                    token = f.read().strip()
+                if token:
+                    logger.info("[CLI] Authentication token loaded from file")
+                    return token
+
+            token = secrets.token_urlsafe(32)
+            with open(self._token_file, "w", encoding="utf-8") as f:
+                f.write(token)
+            try:
+                os.chmod(self._token_file, 0o600)
+            except OSError:
+                pass
+            logger.info(f"[CLI] Generated new authentication token: {token}")
+            logger.info(f"[CLI] Token saved to: {self._token_file}")
+            return token
+        except Exception as e:
+            logger.error(f"[CLI] Failed to ensure token: {e}")
+            logger.warning("[CLI] Authentication disabled due to token error")
+            return None
+
+    def validate(self, provided_token: str) -> bool:
+        if not self.token:
+            return True
+        if not provided_token:
+            logger.warning("[CLI] Request rejected: missing auth_token")
+            return False
+        if provided_token != self.token:
+            logger.warning(
+                f"[CLI] Request rejected: invalid auth_token (length={len(provided_token)})"
+            )
+            return False
+        return True
+
+
+# ------------------------------------------------------------------
+# 会话管理
+# ------------------------------------------------------------------
+
+
+class SessionManager:
+    """会话管理器"""
+
+    CLEANUP_INTERVAL = 10
+
+    def __init__(self, ttl: int = 30, enabled: bool = False):
+        self.ttl = ttl
+        self.enabled = enabled
+        self._timestamps: dict[str, float] = {}
+        self._cleanup_task: asyncio.Task | None = None
+        self._running = False
+
+    def register(self, session_id: str) -> None:
+        if not self.enabled:
+            return
+        if session_id not in self._timestamps:
+            self._timestamps[session_id] = time.time()
+            logger.debug(
+                f"[CLI] Created isolated session: {session_id}, TTL={self.ttl}s"
+            )
+
+    def touch(self, session_id: str) -> None:
+        if self.enabled and session_id in self._timestamps:
+            self._timestamps[session_id] = time.time()
+
+    def is_expired(self, session_id: str) -> bool:
+        if not self.enabled:
+            return False
+        timestamp = self._timestamps.get(session_id)
+        if timestamp is None:
+            return True
+        return time.time() - timestamp > self.ttl
+
+    def start_cleanup_task(self) -> None:
+        if not self.enabled:
+            return
+        self._running = True
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        logger.info(f"[CLI] Session cleanup task started, TTL={self.ttl}s")
+
+    async def stop_cleanup_task(self) -> None:
+        self._running = False
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _cleanup_loop(self) -> None:
+        while self._running:
+            try:
+                await asyncio.sleep(self.CLEANUP_INTERVAL)
+                if not self.enabled:
+                    continue
+                current_time = time.time()
+                expired = [
+                    sid
+                    for sid, ts in list(self._timestamps.items())
+                    if current_time - ts > self.ttl
+                ]
+                for session_id in expired:
+                    logger.info(f"[CLI] Cleaning expired session: {session_id}")
+                    self._timestamps.pop(session_id, None)
+                if expired:
+                    logger.info(f"[CLI] Cleaned {len(expired)} expired sessions")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[CLI] Session cleanup error: {e}")
+        logger.info("[CLI] Session cleanup task stopped")
+
+
+# ------------------------------------------------------------------
+# 配置加载
+# ------------------------------------------------------------------
+
+
+def _load_config(platform_config: dict, platform_settings: dict | None = None) -> dict:
+    """加载配置，合并配置文件覆盖"""
+    config_filename = platform_config.get("config_file", "cli_config.json")
+    config_path = os.path.join(get_astrbot_data_path(), config_filename)
+
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                file_config = json.load(f)
+            logger.info(f"[CLI] Loaded config from {config_path}")
+            if "platform_config" in file_config:
+                merged = platform_config.copy()
+                merged.update(file_config["platform_config"])
+                platform_config = merged
+        except Exception as e:
+            logger.warning(f"[CLI] Failed to load config from {config_path}: {e}")
+
+    return platform_config
+
+
+# ------------------------------------------------------------------
+# CLI平台适配器
+# ------------------------------------------------------------------
 
 
 @register_platform_adapter(
@@ -54,10 +212,7 @@ from .socket_factory import create_socket_server
     support_streaming_message=False,
 )
 class CLIPlatformAdapter(Platform):
-    """CLI平台适配器 - 编排层
-
-    通过组合各模块实现CLI测试功能。
-    """
+    """CLI平台适配器"""
 
     def __init__(
         self,
@@ -65,17 +220,33 @@ class CLIPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        """初始化CLI平台适配器"""
         super().__init__(platform_config, event_queue)
 
         # 加载配置
-        self.config = ConfigLoader.load(platform_config, platform_settings)
+        cfg = _load_config(platform_config, platform_settings)
+        self.mode = cfg.get("mode", "socket")
+        self.socket_type = cfg.get("socket_type", "auto")
+        self.socket_path = cfg.get("socket_path") or os.path.join(
+            get_astrbot_temp_path(), "astrbot.sock"
+        )
+        self.tcp_host = cfg.get("tcp_host", "127.0.0.1")
+        self.tcp_port = cfg.get("tcp_port", 0)
+        self.input_file = cfg.get("input_file") or os.path.join(
+            get_astrbot_temp_path(), "astrbot_cli", "input.txt"
+        )
+        self.output_file = cfg.get("output_file") or os.path.join(
+            get_astrbot_temp_path(), "astrbot_cli", "output.txt"
+        )
+        self.poll_interval = cfg.get("poll_interval", 1.0)
+        self.use_isolated_sessions = cfg.get("use_isolated_sessions", False)
+        self.session_ttl = cfg.get("session_ttl", 30)
+        self.whitelist = cfg.get("whitelist", [])
+        self.platform_id = cfg.get("id", "cli")
 
-        # 初始化各模块
+        # 初始化模块
         self.token_manager = TokenManager()
         self.session_manager = SessionManager(
-            ttl=self.config.session_ttl,
-            enabled=self.config.use_isolated_sessions,
+            ttl=self.session_ttl, enabled=self.use_isolated_sessions
         )
         self.message_converter = MessageConverter()
 
@@ -83,7 +254,7 @@ class CLIPlatformAdapter(Platform):
         self.metadata = PlatformMetadata(
             name="cli",
             description="命令行模拟器",
-            id=self.config.platform_id,
+            id=self.platform_id,
             support_streaming_message=False,
         )
 
@@ -92,29 +263,23 @@ class CLIPlatformAdapter(Platform):
         self._output_queue: asyncio.Queue = asyncio.Queue()
         self._handler = None
 
-        logger.info("[CLI] Adapter initialized, mode=%s", self.config.mode)
+        logger.info(f"[CLI] Adapter initialized, mode={self.mode}")
 
     def run(self) -> Awaitable[Any]:
-        """启动CLI平台"""
         return self._run_loop()
 
     async def _run_loop(self) -> None:
-        """主运行循环 - 根据模式选择Handler"""
         self._running = True
-
-        # 启动会话清理任务
         self.session_manager.start_cleanup_task()
 
         try:
-            # 根据模式创建并运行Handler
-            if self.config.mode == "socket":
+            if self.mode == "socket":
                 await self._run_socket_mode()
-            elif self.config.mode == "tty":
+            elif self.mode == "tty":
                 await self._run_tty_mode()
-            elif self.config.mode == "file":
+            elif self.mode == "file":
                 await self._run_file_mode()
             else:
-                # auto模式：有TTY用交互，无TTY用socket
                 import sys
 
                 if sys.stdin.isatty():
@@ -126,15 +291,14 @@ class CLIPlatformAdapter(Platform):
             await self.session_manager.stop_cleanup_task()
 
     async def _run_socket_mode(self) -> None:
-        """Socket模式"""
         platform_info = detect_platform()
         server = create_socket_server(
             platform_info,
             {
-                "socket_type": self.config.socket_type,
-                "socket_path": self.config.socket_path,
-                "tcp_host": self.config.tcp_host,
-                "tcp_port": self.config.tcp_port,
+                "socket_type": self.socket_type,
+                "socket_path": self.socket_path,
+                "tcp_host": self.tcp_host,
+                "tcp_port": self.tcp_port,
             },
             self.token_manager.token,
         )
@@ -146,7 +310,7 @@ class CLIPlatformAdapter(Platform):
             platform_meta=self.metadata,
             output_queue=self._output_queue,
             event_committer=self.commit_event,
-            use_isolated_sessions=self.config.use_isolated_sessions,
+            use_isolated_sessions=self.use_isolated_sessions,
             data_path=get_astrbot_data_path(),
         )
 
@@ -160,7 +324,6 @@ class CLIPlatformAdapter(Platform):
         await self._handler.run()
 
     async def _run_tty_mode(self) -> None:
-        """TTY交互模式"""
         self._handler = TTYHandler(
             message_converter=self.message_converter,
             platform_meta=self.metadata,
@@ -170,11 +333,10 @@ class CLIPlatformAdapter(Platform):
         await self._handler.run()
 
     async def _run_file_mode(self) -> None:
-        """文件轮询模式"""
         self._handler = FileHandler(
-            input_file=self.config.input_file,
-            output_file=self.config.output_file,
-            poll_interval=self.config.poll_interval,
+            input_file=self.input_file,
+            output_file=self.output_file,
+            poll_interval=self.poll_interval,
             message_converter=self.message_converter,
             platform_meta=self.metadata,
             output_queue=self._output_queue,
@@ -187,20 +349,16 @@ class CLIPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        """通过会话发送消息"""
         await self._output_queue.put(message_chain)
         await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
-        """获取平台元数据"""
         return self.metadata
 
     def unified_webhook(self) -> bool:
-        """CLI不使用webhook"""
         return False
 
     def get_stats(self) -> dict:
-        """获取平台统计信息（兼容CLIConfig数据类）"""
         meta = self.meta()
         meta_info = {
             "id": meta.id,
@@ -211,7 +369,7 @@ class CLIPlatformAdapter(Platform):
             "support_proactive_message": meta.support_proactive_message,
         }
         return {
-            "id": meta.id or self.config.platform_id,
+            "id": meta.id or self.platform_id,
             "type": meta.name,
             "display_name": meta.adapter_display_name or meta.name,
             "status": self._status.value,
@@ -229,7 +387,6 @@ class CLIPlatformAdapter(Platform):
         }
 
     async def terminate(self) -> None:
-        """终止平台运行"""
         self._running = False
         if self._handler:
             self._handler.stop()

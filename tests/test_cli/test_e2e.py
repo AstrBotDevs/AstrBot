@@ -34,8 +34,10 @@ class TestCLIEndToEnd:
     async def test_message_converter_to_event_flow(self):
         """测试消息转换到事件的完整流程"""
         from astrbot.core.platform.platform_metadata import PlatformMetadata
-        from astrbot.core.platform.sources.cli.cli_event import CLIMessageEvent
-        from astrbot.core.platform.sources.cli.message.converter import MessageConverter
+        from astrbot.core.platform.sources.cli.cli_event import (
+            CLIMessageEvent,
+            MessageConverter,
+        )
 
         # 1. 创建消息转换器
         converter = MessageConverter()
@@ -71,7 +73,7 @@ class TestCLIEndToEnd:
         """测试响应构建器处理消息链"""
         from astrbot.core.message.components import Image, Plain
         from astrbot.core.message.message_event_result import MessageChain
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -98,7 +100,7 @@ class TestCLIEndToEnd:
     @pytest.mark.asyncio
     async def test_session_lifecycle(self):
         """测试会话生命周期"""
-        from astrbot.core.platform.sources.cli.session.session_manager import (
+        from astrbot.core.platform.sources.cli.cli_adapter import (
             SessionManager,
         )
 
@@ -121,12 +123,12 @@ class TestCLIEndToEnd:
         """测试Token验证流程"""
         import tempfile
 
-        from astrbot.core.platform.sources.cli.config.token_manager import TokenManager
+        from astrbot.core.platform.sources.cli.cli_adapter import TokenManager
 
         # 使用临时目录避免影响真实token文件
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch(
-                "astrbot.core.platform.sources.cli.config.token_manager.get_astrbot_data_path"
+                "astrbot.core.platform.sources.cli.cli_adapter.get_astrbot_data_path"
             ) as mock_path:
                 mock_path.return_value = tmpdir
 
@@ -153,8 +155,10 @@ class TestCLIEndToEnd:
         from astrbot.core.message.components import Plain
         from astrbot.core.message.message_event_result import MessageChain
         from astrbot.core.platform.platform_metadata import PlatformMetadata
-        from astrbot.core.platform.sources.cli.cli_event import CLIMessageEvent
-        from astrbot.core.platform.sources.cli.message.converter import MessageConverter
+        from astrbot.core.platform.sources.cli.cli_event import (
+            CLIMessageEvent,
+            MessageConverter,
+        )
 
         # 1. 使用MessageConverter创建真实的消息对象
         converter = MessageConverter()
@@ -195,11 +199,12 @@ class TestCLIEndToEnd:
         import tempfile
 
         from astrbot.core.message.components import Image, Plain
-        from astrbot.core.platform.sources.cli.message.image_processor import (
-            ChainPreprocessor,
-            ImageExtractor,
+        from astrbot.core.platform.sources.cli.cli_event import (
             ImageProcessor,
+            preprocess_chain,
         )
+
+        # ImageExtractor和ChainPreprocessor已合并到ImageProcessor和preprocess_chain
 
         # 1. 创建临时图片文件
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f:
@@ -220,17 +225,17 @@ class TestCLIEndToEnd:
             ]
 
             # 4. 提取图片信息
-            images = ImageExtractor.extract(chain)
+            images = ImageProcessor.extract_images(chain)
             assert len(images) == 2
             assert images[0].type == "url"
             assert images[0].url == "https://example.com/remote.png"
 
             # 5. 预处理消息链（本地文件转base64）
             local_image = Image(file=f"file:///{temp_path}")
-            preprocess_chain = MagicMock()
-            preprocess_chain.chain = [local_image]
+            preprocess_mock = MagicMock()
+            preprocess_mock.chain = [local_image]
 
-            ChainPreprocessor.preprocess(preprocess_chain)
+            preprocess_chain(preprocess_mock)
 
             # 验证本地文件已转换为base64
             assert local_image.file.startswith("base64://")
@@ -241,7 +246,7 @@ class TestCLIEndToEnd:
     @pytest.mark.asyncio
     async def test_error_response_building(self):
         """测试错误响应构建"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -266,7 +271,7 @@ class TestCLIEndToEnd:
     @pytest.mark.asyncio
     async def test_isolated_session_creation(self):
         """测试隔离会话创建"""
-        from astrbot.core.platform.sources.cli.message.converter import MessageConverter
+        from astrbot.core.platform.sources.cli.cli_event import MessageConverter
 
         converter = MessageConverter()
 

@@ -19,7 +19,7 @@ class TestResponseBuilder:
 
     def test_build_success_basic(self, mock_message_chain):
         """测试构建基本成功响应"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -33,7 +33,7 @@ class TestResponseBuilder:
 
     def test_build_success_with_extra(self, mock_message_chain):
         """测试构建带额外字段的成功响应"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -45,7 +45,7 @@ class TestResponseBuilder:
 
     def test_build_error_basic(self):
         """测试构建基本错误响应"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -58,7 +58,7 @@ class TestResponseBuilder:
 
     def test_build_error_with_request_id(self):
         """测试构建带 request_id 的错误响应"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -69,7 +69,7 @@ class TestResponseBuilder:
 
     def test_build_error_with_error_code(self):
         """测试构建带错误代码的错误响应"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -83,7 +83,7 @@ class TestResponseBuilder:
     def test_build_success_with_url_image(self):
         """测试构建带 URL 图片的成功响应"""
         from astrbot.core.message.components import Image
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 
@@ -103,7 +103,7 @@ class TestResponseBuilder:
 
     def test_build_success_chinese_text(self, mock_message_chain):
         """测试构建中文文本响应"""
-        from astrbot.core.platform.sources.cli.message.response_builder import (
+        from astrbot.core.platform.sources.cli.cli_event import (
             ResponseBuilder,
         )
 

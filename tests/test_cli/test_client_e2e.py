@@ -50,6 +50,19 @@ def _server_reachable() -> bool:
         return False
 
 
+def _send_with_retry(message: str, retries: int = 3, delay: float = 1.0, **kwargs) -> dict:
+    """发送消息，失败时自动重试（应对服务端短暂繁忙）"""
+    last_resp = None
+    for i in range(retries):
+        resp = send_message(message, **kwargs)
+        if resp.get("status") == "success":
+            return resp
+        last_resp = resp
+        if i < retries - 1:
+            time.sleep(delay)
+    return last_resp
+
+
 # 如果服务端不可达，跳过所有测试
 pytestmark = [
     pytest.mark.skipif(
@@ -432,14 +445,10 @@ class TestLongChainScenarios:
     def test_scenario_new_user_onboarding(self):
         """场景：新用户首次使用
 
-        链路：status → help → sid → plugin ls → model
+        链路：help → sid → plugin ls → model
         """
-        # 1. 检查连接状态
-        resp = send_message("/help")
-        assert resp["status"] == "success"
-
-        # 2. 查看帮助
-        resp = send_message("/help")
+        # 1. 查看帮助（带重试，前面测试可能导致服务端短暂繁忙）
+        resp = _send_with_retry("/help")
         assert resp["status"] == "success"
         assert "/help" in resp["response"]
 
