@@ -41,3 +41,10 @@ builtin-stars-astrbot-ltm-empty-image-url = 图片 URL 为空。
 builtin-stars-astrbot-ltm-image-caption-failed = 获取图片描述失败: { $error }
 builtin-stars-astrbot-ltm-recorded-message = ltm | { $umo } | { $message }
 builtin-stars-astrbot-ltm-recorded-ai-response = 已记录 AI 回复: { $umo } | { $message }
+
+### astrbot/builtin_stars/session_controller/main.py
+builtin-stars-session-controller-empty-mention-llm-prompt = 注意，你正在社交媒体上与用户聊天，用户只是通过@唤醒你，但并未在这条消息中输入内容，他可能会在下一条发送想说的话。请友好地询问用户想聊什么或需要什么帮助，回复应符合人设，不要太机械化。你只需输出要回复用户的内容，不要输出其他信息。
+builtin-stars-session-controller-llm-response-failed = LLM 回复失败: { $error }
+builtin-stars-session-controller-empty-mention-fallback-reply = 想要问什么呢？😄
+builtin-stars-session-controller-empty-mention-handler-error = 发生错误，请联系管理员: { $error }
+builtin-stars-session-controller-handle-empty-mention-error = handle_empty_mention 处理失败: { $error }
