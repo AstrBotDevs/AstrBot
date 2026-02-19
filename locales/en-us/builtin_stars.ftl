@@ -109,3 +109,7 @@ builtin-stars-provider-key-switch-tip = {"\u000A"}Use /key <idx> to switch key.
 builtin-stars-provider-key-invalid-index = Invalid key index.
 builtin-stars-provider-key-switch-unknown-error = Unknown error when switching key: { $error }
 builtin-stars-provider-key-switch-success = Key switched successfully.
+
+### astrbot/builtin_stars/builtin_commands/commands/t2i.py
+builtin-stars-t2i-disabled = Text-to-image mode has been disabled.
+builtin-stars-t2i-enabled = Text-to-image mode has been enabled.
