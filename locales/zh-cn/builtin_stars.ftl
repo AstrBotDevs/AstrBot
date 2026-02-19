@@ -119,3 +119,8 @@ builtin-stars-tts-status-enabled-prefix = 已开启
 builtin-stars-tts-status-disabled-prefix = 已关闭
 builtin-stars-tts-enabled-but-global-disabled = { $status_text }当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。
 builtin-stars-tts-toggle-result = { $status_text }当前会话的文本转语音。
+
+### astrbot/builtin_stars/builtin_commands/commands/llm.py
+builtin-stars-llm-status-disabled = 关闭
+builtin-stars-llm-status-enabled = 开启
+builtin-stars-llm-toggle-result = { $status } LLM 聊天功能。
