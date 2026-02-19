@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import t
 
 if TYPE_CHECKING:
     from astrbot.core.db.po import Persona
@@ -54,7 +55,7 @@ class PersonaCommands:
         l = message.message_str.split(" ")  # noqa: E741
         umo = message.unified_msg_origin
 
-        curr_persona_name = "无"
+        curr_persona_name = t("builtin-stars-persona-none")
         cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
         default_persona = await self.context.persona_manager.get_default_persona_v3(
             umo=umo,
@@ -66,7 +67,7 @@ class PersonaCommands:
             )
         ).get("persona_id")
 
-        curr_cid_title = "无"
+        curr_cid_title = t("builtin-stars-persona-none")
         if cid:
             conv = await self.context.conversation_manager.get_conversation(
                 unified_msg_origin=umo,
@@ -76,7 +77,7 @@ class PersonaCommands:
             if conv is None:
                 message.set_result(
                     MessageEventResult().message(
-                        "当前对话不存在，请先使用 /new 新建一个对话。",
+                        t("builtin-stars-persona-current-conversation-not-found"),
                     ),
                 )
                 return
@@ -86,27 +87,28 @@ class PersonaCommands:
                 curr_persona_name = conv.persona_id
 
             if force_applied_persona_id:
-                curr_persona_name = f"{curr_persona_name} (自定义规则)"
+                curr_persona_name = t(
+                    "builtin-stars-persona-name-with-custom-rule",
+                    persona_name=curr_persona_name,
+                )
 
-            curr_cid_title = conv.title if conv.title else "新对话"
+            curr_cid_title = (
+                conv.title
+                if conv.title
+                else t("builtin-stars-persona-new-conversation")
+            )
             curr_cid_title += f"({cid[:4]})"
 
         if len(l) == 1:
             message.set_result(
                 MessageEventResult()
                 .message(
-                    f"""[Persona]
-
-- 人格情景列表: `/persona list`
-- 设置人格情景: `/persona 人格`
-- 人格情景详细信息: `/persona view 人格`
-- 取消人格: `/persona unset`
-
-默认人格情景: {default_persona["name"]}
-当前对话 {curr_cid_title} 的人格情景: {curr_persona_name}
-
-配置人格情景请前往管理面板-配置页
-""",
+                    t(
+                        "builtin-stars-persona-overview",
+                        default_persona_name=default_persona["name"],
+                        curr_cid_title=curr_cid_title,
+                        curr_persona_name=curr_persona_name,
+                    ),
                 )
                 .use_t2i(False),
             )
@@ -115,7 +117,7 @@ class PersonaCommands:
             folder_tree = await self.context.persona_manager.get_folder_tree()
             all_personas = self.context.persona_manager.personas
 
-            lines = ["📂 人格列表：\n"]
+            lines = [t("builtin-stars-persona-list-title")]
 
             # 构建树状输出
             tree_lines = self._build_tree_output(folder_tree, all_personas)
@@ -131,15 +133,19 @@ class PersonaCommands:
 
             # 统计信息
             total_count = len(all_personas)
-            lines.append(f"\n共 {total_count} 个人格")
-            lines.append("\n*使用 `/persona <人格名>` 设置人格")
-            lines.append("*使用 `/persona view <人格名>` 查看详细信息")
+            lines.append(t("builtin-stars-persona-list-total", total_count=total_count))
+            lines.append(t("builtin-stars-persona-list-set-tip"))
+            lines.append(t("builtin-stars-persona-list-view-tip"))
 
             msg = "\n".join(lines)
             message.set_result(MessageEventResult().message(msg).use_t2i(False))
         elif l[1] == "view":
             if len(l) == 2:
-                message.set_result(MessageEventResult().message("请输入人格情景名"))
+                message.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-persona-view-need-name")
+                    )
+                )
                 return
             ps = l[2].strip()
             if persona := next(
@@ -149,28 +155,32 @@ class PersonaCommands:
                 ),
                 None,
             ):
-                msg = f"人格{ps}的详细信息：\n"
+                msg = t("builtin-stars-persona-view-detail-title", persona_name=ps)
                 msg += f"{persona['prompt']}\n"
             else:
-                msg = f"人格{ps}不存在"
+                msg = t("builtin-stars-persona-view-not-found", persona_name=ps)
             message.set_result(MessageEventResult().message(msg))
         elif l[1] == "unset":
             if not cid:
                 message.set_result(
-                    MessageEventResult().message("当前没有对话，无法取消人格。"),
+                    MessageEventResult().message(
+                        t("builtin-stars-persona-unset-no-conversation")
+                    ),
                 )
                 return
             await self.context.conversation_manager.update_conversation_persona_id(
                 message.unified_msg_origin,
                 "[%None]",
             )
-            message.set_result(MessageEventResult().message("取消人格成功。"))
+            message.set_result(
+                MessageEventResult().message(t("builtin-stars-persona-unset-success"))
+            )
         else:
             ps = "".join(l[1:]).strip()
             if not cid:
                 message.set_result(
                     MessageEventResult().message(
-                        "当前没有对话，请先开始对话或使用 /new 创建一个对话。",
+                        t("builtin-stars-persona-set-no-conversation"),
                     ),
                 )
                 return
@@ -187,18 +197,19 @@ class PersonaCommands:
                 )
                 force_warn_msg = ""
                 if force_applied_persona_id:
-                    force_warn_msg = (
-                        "提醒：由于自定义规则，您现在切换的人格将不会生效。"
-                    )
+                    force_warn_msg = t("builtin-stars-persona-custom-rule-warning")
 
                 message.set_result(
                     MessageEventResult().message(
-                        f"设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。{force_warn_msg}",
+                        t(
+                            "builtin-stars-persona-set-success",
+                            force_warn_msg=force_warn_msg,
+                        ),
                     ),
                 )
             else:
                 message.set_result(
                     MessageEventResult().message(
-                        "不存在该人格情景。使用 /persona list 查看所有。",
+                        t("builtin-stars-persona-set-not-found"),
                     ),
                 )

@@ -165,3 +165,23 @@ builtin-stars-alter-cmd-command-not-found = Command not found.
 builtin-stars-alter-cmd-updated = Permission level of "{ $cmd_name }" { $cmd_group_str } has been set to { $cmd_type }.
 builtin-stars-alter-cmd-group-label = command group
 builtin-stars-alter-cmd-command-label = command
+
+### astrbot/builtin_stars/builtin_commands/commands/persona.py
+builtin-stars-persona-none = None
+builtin-stars-persona-current-conversation-not-found = Current conversation does not exist. Please create one with /new first.
+builtin-stars-persona-name-with-custom-rule = { $persona_name } (custom rule)
+builtin-stars-persona-new-conversation = New Conversation
+builtin-stars-persona-overview = [Persona]{"\u000A"}{"\u000A"}- Persona list: `/persona list`{"\u000A"}- Set persona: `/persona <persona_name>`{"\u000A"}- Persona details: `/persona view <persona_name>`{"\u000A"}- Unset persona: `/persona unset`{"\u000A"}{"\u000A"}Default persona: { $default_persona_name }{"\u000A"}Persona of current conversation { $curr_cid_title }: { $curr_persona_name }{"\u000A"}{"\u000A"}Configure personas in WebUI -> Config page{"\u000A"}
+builtin-stars-persona-list-title = 📂 Persona list:{"\u000A"}
+builtin-stars-persona-list-total = {"\u000A"}Total personas: { $total_count }
+builtin-stars-persona-list-set-tip = {"\u000A"}*Use `/persona <persona_name>` to set persona
+builtin-stars-persona-list-view-tip = *Use `/persona view <persona_name>` to view details
+builtin-stars-persona-view-need-name = Please input a persona name.
+builtin-stars-persona-view-detail-title = Details of persona { $persona_name }:{"\u000A"}
+builtin-stars-persona-view-not-found = Persona { $persona_name } does not exist.
+builtin-stars-persona-unset-no-conversation = No current conversation, cannot unset persona.
+builtin-stars-persona-unset-success = Persona unset successfully.
+builtin-stars-persona-set-no-conversation = No current conversation. Please start one first or create one with /new.
+builtin-stars-persona-custom-rule-warning = Reminder: due to custom rules, the persona you switch to now will not take effect.
+builtin-stars-persona-set-success = Persona set successfully. If you switched to a different persona, use /reset to clear context and avoid old persona context affecting the new one. { $force_warn_msg }
+builtin-stars-persona-set-not-found = Persona does not exist. Use /persona list to view all.
