@@ -148,7 +148,7 @@ paru -S astrbot-git
 
 #### 桌面端（Tauri）
 
-桌面端已迁移为独立仓库（Tauri）：[https://github.com/zouyonghe/AstrBot-desktop](https://github.com/zouyonghe/AstrBot-desktop)。
+桌面端已迁移为独立仓库（Tauri）：[https://github.com/AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
 ## 支持的消息平台
 

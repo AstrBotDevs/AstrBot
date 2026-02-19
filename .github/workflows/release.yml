@@ -210,3 +210,49 @@ jobs:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         shell: bash
         run: uv publish
+
+  trigger-desktop-tauri:
+    name: Trigger Desktop Tauri Build
+    runs-on: ubuntu-24.04
+    needs: publish-release
+    env:
+      ASTRBOT_DESKTOP_REPO: ${{ vars.ASTRBOT_DESKTOP_REPO || format('{0}/AstrBot-desktop', github.repository_owner) }}
+      ASTRBOT_DESKTOP_WORKFLOW_REF: ${{ vars.ASTRBOT_DESKTOP_WORKFLOW_REF || 'main' }}
+    steps:
+      - name: Resolve source tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          elif [ -n "${{ inputs.ref }}" ]; then
+            tag="${{ inputs.ref }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger AstrBot Desktop workflow
+        env:
+          GH_TOKEN: ${{ secrets.ASTRBOT_DESKTOP_TRIGGER_TOKEN }}
+          SOURCE_GIT_URL: https://github.com/${{ github.repository }}.git
+          SOURCE_GIT_REF: ${{ steps.tag.outputs.tag }}
+        shell: bash
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::warning::Secret ASTRBOT_DESKTOP_TRIGGER_TOKEN is not set; skip triggering desktop build."
+            exit 0
+          fi
+
+          gh api \
+            --method POST \
+            "repos/${ASTRBOT_DESKTOP_REPO}/actions/workflows/build-desktop-tauri.yml/dispatches" \
+            -f ref="${ASTRBOT_DESKTOP_WORKFLOW_REF}" \
+            -f inputs[source_git_url]="${SOURCE_GIT_URL}" \
+            -f inputs[source_git_ref]="${SOURCE_GIT_REF}"

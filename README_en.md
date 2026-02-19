@@ -156,7 +156,7 @@ paru -S astrbot-git
 
 #### Desktop (Tauri)
 
-Desktop packaging has moved to a standalone Tauri repository: [https://github.com/zouyonghe/AstrBot-desktop](https://github.com/zouyonghe/AstrBot-desktop).
+Desktop packaging has moved to a standalone Tauri repository: [https://github.com/AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
 
 ## Supported Messaging Platforms
 
