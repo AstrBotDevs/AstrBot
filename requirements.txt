@@ -1,3 +1,6 @@
+# This file is used by desktop packaged runtime builds (`desktop/scripts/build-backend.mjs`).
+# Keep `pyproject.toml` as the dependency source of truth and refresh this file with:
+# `uv export --format requirements.txt --no-hashes -o requirements.txt`
 aiocqhttp>=1.4.4
 aiodocker>=0.24.0
 aiohttp>=3.11.18

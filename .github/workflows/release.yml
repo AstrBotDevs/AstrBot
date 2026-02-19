@@ -210,73 +210,7 @@ jobs:
             echo "actions/setup-python did not return python-path output." >&2
             exit 1
           fi
-          "$SETUP_PYTHON_PATH" - <<'PY'
-          import pathlib
-          import subprocess
-          import sys
-
-          runtime_root = pathlib.Path("desktop/resources/backend/python")
-          if sys.platform == "win32":
-              candidates = [
-                  runtime_root / "python.exe",
-                  runtime_root / "Scripts" / "python.exe",
-              ]
-          else:
-              candidates = [
-                  runtime_root / "bin" / "python3",
-                  runtime_root / "bin" / "python",
-              ]
-          runtime_python = next((candidate for candidate in candidates if candidate.is_file()), None)
-          if runtime_python is None:
-              raise RuntimeError(f"Packaged runtime python executable is missing under {runtime_root}")
-
-          version_check = subprocess.run(
-              [str(runtime_python), "-V"],
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True,
-              check=False,
-          )
-          if version_check.returncode != 0:
-              raise RuntimeError(
-                  "Packaged runtime python smoke test failed: "
-                  + (version_check.stderr.strip() or version_check.stdout.strip())
-              )
-
-          if sys.platform == "darwin":
-              deps = subprocess.run(
-                  ["otool", "-L", str(runtime_python)],
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.PIPE,
-                  text=True,
-                  check=False,
-              )
-              if deps.returncode != 0:
-                  raise RuntimeError(
-                      f"Failed to inspect macOS runtime by otool: {deps.stderr.strip()}"
-                  )
-              if "/Library/Frameworks/Python.framework/" in deps.stdout:
-                  raise RuntimeError(
-                      "Packaged runtime still links to absolute /Library/Frameworks/Python.framework path."
-                  )
-
-          if sys.platform.startswith("linux"):
-              deps = subprocess.run(
-                  ["ldd", str(runtime_python)],
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.PIPE,
-                  text=True,
-                  check=False,
-              )
-              if deps.returncode != 0:
-                  raise RuntimeError(
-                      f"Failed to inspect Linux runtime by ldd: {deps.stderr.strip()}"
-                  )
-              if "not found" in deps.stdout:
-                  raise RuntimeError(
-                      "Packaged runtime has unresolved shared libraries:\\n" + deps.stdout
-                  )
-          PY
+          "$SETUP_PYTHON_PATH" .github/scripts/smoke_test_packaged_runtime.py desktop/resources/backend/python
           pnpm --dir desktop run sync:version
           pnpm --dir desktop exec electron-builder --publish never
 
@@ -422,45 +356,7 @@ jobs:
             echo "actions/setup-python did not return python-path output." >&2
             exit 1
           fi
-          "$SETUP_PYTHON_PATH" - <<'PY'
-          import pathlib
-          import subprocess
-
-          runtime_root = pathlib.Path("desktop/resources/backend/python")
-          candidates = [
-              runtime_root / "python.exe",
-              runtime_root / "Scripts" / "python.exe",
-          ]
-          runtime_python = next((candidate for candidate in candidates if candidate.is_file()), None)
-          if runtime_python is None:
-              raise RuntimeError(f"Packaged runtime python executable is missing under {runtime_root}")
-
-          version_check = subprocess.run(
-              [str(runtime_python), "-V"],
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True,
-              check=False,
-          )
-          if version_check.returncode != 0:
-              raise RuntimeError(
-                  "Packaged runtime python smoke test failed: "
-                  + (version_check.stderr.strip() or version_check.stdout.strip())
-              )
-
-          ssl_check = subprocess.run(
-              [str(runtime_python), "-c", "import ssl"],
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True,
-              check=False,
-          )
-          if ssl_check.returncode != 0:
-              raise RuntimeError(
-                  "Packaged runtime ssl smoke test failed: "
-                  + (ssl_check.stderr.strip() or ssl_check.stdout.strip())
-              )
-          PY
+          "$SETUP_PYTHON_PATH" .github/scripts/smoke_test_packaged_runtime.py desktop/resources/backend/python
           pnpm --dir desktop run sync:version
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             arch_flag="--arm64"

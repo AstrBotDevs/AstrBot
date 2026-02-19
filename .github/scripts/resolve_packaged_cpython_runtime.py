@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import pathlib
 import shutil
@@ -42,6 +44,72 @@ def _download_with_retries(
     raise RuntimeError(
         f"Failed to download python-build-standalone asset: {url}"
     ) from last_error
+
+
+def _build_request(url: str) -> urllib.request.Request:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "astrbot-release-workflow",
+    }
+    github_token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    if github_token:
+        headers["Authorization"] = f"Bearer {github_token}"
+    return urllib.request.Request(url, headers=headers)
+
+
+def _read_json_with_retries(url: str, retries: int = 3) -> dict:
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            request = _build_request(url)
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.load(response)
+        except Exception as exc:  # pragma: no cover - network-path fallback
+            last_error = exc
+            if attempt >= retries:
+                raise RuntimeError(f"Failed to fetch release metadata: {url}") from exc
+            time.sleep(attempt * 2)
+
+    raise RuntimeError(f"Failed to fetch release metadata: {url}") from last_error
+
+
+def _resolve_expected_sha256(release: str, asset_name: str) -> str:
+    release_api_url = (
+        "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/"
+        f"{urllib.parse.quote(release)}"
+    )
+    release_data = _read_json_with_retries(release_api_url)
+    assets = release_data.get("assets")
+    if not isinstance(assets, list):
+        raise RuntimeError("Invalid GitHub release metadata: missing assets list.")
+
+    matched_asset = next(
+        (
+            item
+            for item in assets
+            if isinstance(item, dict) and item.get("name") == asset_name
+        ),
+        None,
+    )
+    if matched_asset is None:
+        raise RuntimeError(
+            f"Cannot find expected python-build-standalone asset in release {release}: {asset_name}"
+        )
+
+    digest = matched_asset.get("digest")
+    if not isinstance(digest, str) or not digest.startswith("sha256:"):
+        raise RuntimeError(
+            f"Release metadata does not provide sha256 digest for asset: {asset_name}"
+        )
+    return digest.split(":", 1)[1].lower()
+
+
+def _calculate_sha256(file_path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with file_path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _resolve_runtime_python(runtime_root: pathlib.Path) -> pathlib.Path:
@@ -99,6 +167,7 @@ def main() -> None:
         "https://github.com/astral-sh/python-build-standalone/releases/download/"
         f"{release}/{urllib.parse.quote(asset_name)}"
     )
+    expected_sha256 = _resolve_expected_sha256(release, asset_name)
 
     target_runtime_root = runner_temp / "astrbot-cpython-runtime"
     download_archive_path = runner_temp / asset_name
@@ -111,6 +180,12 @@ def main() -> None:
     extract_root.mkdir(parents=True, exist_ok=True)
 
     _download_with_retries(asset_url, download_archive_path)
+    actual_sha256 = _calculate_sha256(download_archive_path)
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            "Downloaded runtime archive sha256 mismatch: "
+            + f"expected={expected_sha256} actual={actual_sha256}"
+        )
 
     with tarfile.open(download_archive_path, "r:gz") as archive:
         archive.extractall(extract_root)
