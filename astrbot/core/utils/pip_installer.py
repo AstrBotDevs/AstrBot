@@ -131,6 +131,25 @@ def _extract_requirement_names(requirements_path: str) -> set[str]:
     return names
 
 
+def _strip_binary_selector_args(args: list[str]) -> list[str]:
+    normalized: list[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+
+        if arg in {"--only-binary", "--no-binary"}:
+            skip_next = True
+            continue
+
+        if arg.startswith("--only-binary=") or arg.startswith("--no-binary="):
+            continue
+
+        normalized.append(arg)
+    return normalized
+
+
 def _extract_top_level_modules(
     distribution: importlib_metadata.Distribution,
 ) -> set[str]:
@@ -469,6 +488,8 @@ class PipInstaller:
             _prepend_sys_path(target_site_packages)
             args.extend(["--target", target_site_packages])
             args.extend(["--upgrade", "--force-reinstall"])
+            pip_install_args = _strip_binary_selector_args(pip_install_args)
+            args.append("--only-binary=:all")
 
         if pip_install_args:
             args.extend(pip_install_args)
