@@ -152,3 +152,16 @@ builtin-stars-admin-update-dashboard-finished = 管理面板更新完成。
 builtin-stars-help-no-enabled-reserved-commands = 暂无启用的内置指令
 builtin-stars-help-header = AstrBot v{ $version }(WebUI: { $dashboard_version })
 builtin-stars-help-reserved-command-title = 内置指令:
+
+### astrbot/builtin_stars/builtin_commands/commands/alter_cmd.py
+builtin-stars-alter-cmd-usage = 该指令用于设置指令或指令组的权限。{"\u000A"}格式: /alter_cmd <cmd_name> <admin/member>{"\u000A"}例1: /alter_cmd c1 admin 将 c1 设为管理员指令{"\u000A"}例2: /alter_cmd g1 c1 admin 将 g1 指令组的 c1 子指令设为管理员指令{"\u000A"}/alter_cmd reset config 打开 reset 权限配置
+builtin-stars-alter-cmd-reset-config-menu = reset命令权限细粒度配置{"\u000A"}当前配置：{"\u000A"}1. 群聊+会话隔离开: { $group_unique_on }{"\u000A"}2. 群聊+会话隔离关: { $group_unique_off }{"\u000A"}3. 私聊: { $private }{"\u000A"}修改指令格式：{"\u000A"}/alter_cmd reset scene <场景编号> <admin/member>{"\u000A"}例如: /alter_cmd reset scene 2 member
+builtin-stars-alter-cmd-scene-and-perm-required = 场景编号和权限类型不能为空
+builtin-stars-alter-cmd-scene-index-invalid = 场景编号必须是 1-3 之间的数字
+builtin-stars-alter-cmd-perm-type-invalid = 权限类型错误，只能是 admin 或 member
+builtin-stars-alter-cmd-reset-scene-updated = 已将 reset 命令在 { $scene_name} 场景下的权限设为 { $perm_type }
+builtin-stars-alter-cmd-type-invalid = 指令类型错误，可选类型有 admin, member
+builtin-stars-alter-cmd-command-not-found = 未找到该指令
+builtin-stars-alter-cmd-updated = 已将「{ $cmd_name }」{ $cmd_group_str } 的权限级别调整为 { $cmd_type }。
+builtin-stars-alter-cmd-group-label = 指令组
+builtin-stars-alter-cmd-command-label = 指令
