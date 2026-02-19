@@ -91,8 +91,8 @@ const passwordRules = computed(() => [
   (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
 ]);
 const confirmPasswordRules = computed(() => [
-  (v: string) => !!newPassword.value || t('core.header.accountDialog.validation.passwordRequired'),
-  (v: string) => v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
+  (v: string) => !newPassword.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => !newPassword.value || v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
 ]);
 const usernameRules = computed(() => [
   (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
@@ -101,7 +101,7 @@ const usernameRules = computed(() => [
 // 显示密码相关
 const showPassword = ref(false);
 const showNewPassword = ref(false);
-const showConfirmPassword = ref(false);;
+const showConfirmPassword = ref(false);
 
 // 账户修改状态
 const accountEditStatus = ref({
@@ -175,21 +175,14 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  // md5加密
-  // @ts-ignore
-  if (password.value != '') {
-    password.value = md5(password.value);
-  }
-  if (newPassword.value != '') {
-    newPassword.value = md5(newPassword.value);
-  }
-  if (confirmPassword.value != '') {
-    confirmPassword.value = md5(confirmPassword.value);
-  }
+  const passwordHash = password.value ? md5(password.value) : '';
+  const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
+  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : '';
+
   axios.post('/api/auth/account/edit', {
-    password: password.value,
-    new_password: newPassword.value,
-    confirm_password: confirmPassword.value,
+    password: passwordHash,
+    new_password: newPasswordHash,
+    confirm_password: confirmPasswordHash,
     new_username: newUsername.value ? newUsername.value : username
   })
     .then((res) => {
