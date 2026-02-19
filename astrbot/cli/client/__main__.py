@@ -10,26 +10,11 @@ AstrBot CLI Client - 跨平台Socket客户端
     echo "你好" | astr
 """
 
-# 抑制框架导入时的日志输出（必须在所有导入之前执行）
-import logging
+import io
+import sys
 
-# 禁用所有 astrbot 相关日志
-logging.getLogger("astrbot").setLevel(logging.CRITICAL + 1)
-logging.getLogger("astrbot.core").setLevel(logging.CRITICAL + 1)
-# 禁用根日志记录器的控制台输出
-root = logging.getLogger()
-root.setLevel(logging.CRITICAL + 1)
-# 移除可能存在的控制台处理器
-for handler in root.handlers[:]:
-    if isinstance(handler, logging.StreamHandler):
-        root.removeHandler(handler)
+import click
 
-import io  # noqa: E402
-import sys  # noqa: E402
-
-import click  # noqa: E402
-
-# 仅使用标准库导入，不导入astrbot框架
 # Windows UTF-8 输出支持（仅在非测试环境下替换，避免与 pytest capture 冲突）
 if sys.platform == "win32" and "pytest" not in sys.modules:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
