@@ -7,6 +7,8 @@ from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
 
+from astrbot.core.utils.active_event_registry import active_event_registry
+
 from . import STAGES_ORDER
 from .context import PipelineContext
 from .stage import registered_stages
@@ -79,10 +81,14 @@ class PipelineScheduler:
             event (AstrMessageEvent): 事件对象
 
         """
-        await self._process_stages(event)
+        active_event_registry.register(event)
+        try:
+            await self._process_stages(event)
 
-        # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
-        if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
-            await event.send(None)
+            # 如果没有发送操作, 则发送一个空消息, 以便于后续的处理
+            if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
+                await event.send(None)
 
-        logger.debug("pipeline 执行完毕。")
+            logger.debug("pipeline 执行完毕。")
+        finally:
+            active_event_registry.unregister(event)
