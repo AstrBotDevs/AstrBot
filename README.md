@@ -269,6 +269,16 @@ pre-commit install
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - 伟大的猫猫框架
 
+开源项目友情链接：
+
+- [NoneBot2](https://github.com/nonebot/nonebot2) - 优秀的 Python 异步 ChatBot 框架
+- [Koishi](https://github.com/koishijs/koishi) - 优秀的 Node.js ChatBot 框架
+- [MaiBot](https://github.com/Mai-with-u/MaiBot) - 优秀的拟人化 AI ChatBot
+- [nekro-agent](https://github.com/KroMiose/nekro-agent) - 优秀的 Agent ChatBot
+- [LangBot](https://github.com/langbot-app/LangBot) - 优秀的多平台 AI ChatBot
+- [ChatLuna](https://github.com/ChatLunaLab/chatluna) - 优秀的多平台 AI ChatBot Koishi 插件
+- [Operit AI](https://github.com/AAswordman/Operit) - 优秀的 AI 智能助手 Android APP
+
 ## ⭐ Star History
 
 > [!TIP]
