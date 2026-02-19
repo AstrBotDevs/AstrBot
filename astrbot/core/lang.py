@@ -46,4 +46,4 @@ class Lang:
         """
         return self._l10n.format_value(key, kwargs)
 
-t = Lang(locale="zh-cn")
+t = Lang(locale="en")
