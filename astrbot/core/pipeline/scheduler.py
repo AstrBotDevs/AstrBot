@@ -6,7 +6,6 @@ from astrbot.core.platform.sources.webchat.webchat_event import WebChatMessageEv
 from astrbot.core.platform.sources.wecom_ai_bot.wecomai_event import (
     WecomAIBotMessageEvent,
 )
-
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from . import STAGES_ORDER
