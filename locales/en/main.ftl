@@ -4,6 +4,6 @@ main-webui-not-found = The specified WebUI directory { $webui_dir } does not exi
 main-webui-latest = WebUI version is up to date.
 main-webui-version-mismatch = Detected WebUI version ({ $v }) does not match current AstrBot version (v{ $version }).
 main-downloading-dashboard = Starting to download dashboard files... Peak hours (evening) may result in slower speeds. If downloads fail repeatedly, please go to https://github.com/AstrBotDevs/AstrBot/releases/latest to download dist.zip and extract the dist folder into the data directory.
-main-download-dashboard-failed = Failed to download dashboard files: { $error }.
+main-download-dashboard-failed = Failed to download dashboard files: { $e }.
 main-download-dashboard-success = Dashboard download complete.
 main-argparse-webui-dir-help = Specify the WebUI static file directory path.
