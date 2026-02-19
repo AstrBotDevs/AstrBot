@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write
 
+env:
+  PYTHON_BUILD_STANDALONE_RELEASE: "20260211"
+  PYTHON_BUILD_STANDALONE_VERSION: "3.12.12"
+
 jobs:
   build-dashboard:
     name: Build Dashboard
@@ -114,26 +118,20 @@ jobs:
             runner: ubuntu-24.04
             os: linux
             arch: amd64
-            pbs_target: x86_64-unknown-linux-gnu
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
-            pbs_target: aarch64-unknown-linux-gnu
           - name: macos-x64
             runner: macos-15-intel
             os: mac
             arch: amd64
-            pbs_target: x86_64-apple-darwin
           - name: macos-arm64
             runner: macos-15
             os: mac
             arch: arm64
-            pbs_target: aarch64-apple-darwin
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      PYTHON_BUILD_STANDALONE_RELEASE: "20260211"
-      PYTHON_BUILD_STANDALONE_VERSION: "3.12.12"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -171,12 +169,15 @@ jobs:
           RUNNER_TEMP_DIR: ${{ runner.temp }}
           SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
           GITHUB_TOKEN: ${{ github.token }}
-          PYTHON_BUILD_STANDALONE_TARGET: ${{ matrix.pbs_target }}
+          PYTHON_BUILD_STANDALONE_PLATFORM: ${{ matrix.os }}
+          PYTHON_BUILD_STANDALONE_ARCH: ${{ matrix.arch }}
         run: |
           if [ -z "$SETUP_PYTHON_PATH" ]; then
             echo "actions/setup-python did not return python-path output." >&2
             exit 1
           fi
+          PYTHON_BUILD_STANDALONE_TARGET="$("$SETUP_PYTHON_PATH" .github/scripts/resolve_pbs_target.py --platform "$PYTHON_BUILD_STANDALONE_PLATFORM" --arch "$PYTHON_BUILD_STANDALONE_ARCH")"
+          echo "PYTHON_BUILD_STANDALONE_TARGET=$PYTHON_BUILD_STANDALONE_TARGET" >> "$GITHUB_ENV"
           "$SETUP_PYTHON_PATH" .github/scripts/resolve_packaged_cpython_runtime.py >> "$GITHUB_ENV"
 
       - name: Setup pnpm
@@ -271,15 +272,13 @@ jobs:
       matrix:
         include:
           - runner: windows-2022
+            os: windows
             arch: amd64
-            pbs_target: x86_64-pc-windows-msvc
           - runner: windows-11-arm
+            os: windows
             arch: arm64
-            pbs_target: aarch64-pc-windows-msvc
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      PYTHON_BUILD_STANDALONE_RELEASE: "20260211"
-      PYTHON_BUILD_STANDALONE_VERSION: "3.12.12"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -317,12 +316,15 @@ jobs:
           RUNNER_TEMP_DIR: ${{ runner.temp }}
           SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
           GITHUB_TOKEN: ${{ github.token }}
-          PYTHON_BUILD_STANDALONE_TARGET: ${{ matrix.pbs_target }}
+          PYTHON_BUILD_STANDALONE_PLATFORM: ${{ matrix.os }}
+          PYTHON_BUILD_STANDALONE_ARCH: ${{ matrix.arch }}
         run: |
           if [ -z "$SETUP_PYTHON_PATH" ]; then
             echo "actions/setup-python did not return python-path output." >&2
             exit 1
           fi
+          PYTHON_BUILD_STANDALONE_TARGET="$("$SETUP_PYTHON_PATH" .github/scripts/resolve_pbs_target.py --platform "$PYTHON_BUILD_STANDALONE_PLATFORM" --arch "$PYTHON_BUILD_STANDALONE_ARCH")"
+          echo "PYTHON_BUILD_STANDALONE_TARGET=$PYTHON_BUILD_STANDALONE_TARGET" >> "$GITHUB_ENV"
           "$SETUP_PYTHON_PATH" .github/scripts/resolve_packaged_cpython_runtime.py >> "$GITHUB_ENV"
 
       - name: Setup pnpm

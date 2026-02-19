@@ -6,7 +6,11 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { BufferedRotatingLogger } = require('./buffered-rotating-logger');
 const { resolvePackagedBackendState } = require('./packaged-backend-config');
-const { WindowsBackendCleaner } = require('./windows-backend-cleanup');
+const {
+  createWindowsBackendCleanupState,
+  prefetchWindowsProcessCommandLines,
+  shouldKillUnmanagedBackendProcess,
+} = require('./windows-backend-cleanup');
 const {
   delay,
   ensureDir,
@@ -21,6 +25,7 @@ const PACKAGED_BACKEND_TIMEOUT_FALLBACK_MS = 5 * 60 * 1000;
 const GRACEFUL_RESTART_WAIT_FALLBACK_MS = 20 * 1000;
 const BACKEND_LOG_FLUSH_INTERVAL_MS = 120;
 const BACKEND_LOG_MAX_BUFFER_BYTES = 128 * 1024;
+const DEFAULT_BACKEND_COMMAND_UNAVAILABLE_REASON = 'Backend command is not configured.';
 
 function parseBackendTimeoutMs(app) {
   const defaultTimeoutMs = app.isPackaged ? 0 : 20000;
@@ -32,6 +37,93 @@ function parseBackendTimeoutMs(app) {
     return parsed;
   }
   return defaultTimeoutMs;
+}
+
+function buildBackendConfig({
+  cmd,
+  args,
+  shell,
+  cwd,
+  webuiDir,
+  rootDir,
+  failureReason,
+}) {
+  return {
+    cmd: cmd || null,
+    args: Array.isArray(args) ? args : [],
+    shell: typeof shell === 'boolean' ? shell : true,
+    cwd,
+    webuiDir,
+    rootDir,
+    failureReason: failureReason || null,
+  };
+}
+
+function resolveBackendConfigResult({
+  app,
+  env,
+  log,
+  resolveWebuiDir,
+  resolveBackendCwd,
+  resolveBackendRoot,
+  getPackagedBackendState,
+  buildDefaultBackendLaunch,
+  buildLaunchForPackagedBackend,
+}) {
+  const webuiDir = resolveWebuiDir();
+  let launch = null;
+  let failureReason = null;
+
+  const customCmd = env.ASTRBOT_BACKEND_CMD;
+  if (customCmd) {
+    launch = { cmd: customCmd, args: [], shell: true };
+  } else if (app.isPackaged) {
+    ({ launch, failureReason } = buildLaunchForPackagedBackend(
+      getPackagedBackendState(),
+      webuiDir,
+    ));
+  } else {
+    launch = buildDefaultBackendLaunch(webuiDir);
+  }
+
+  const cwd = env.ASTRBOT_BACKEND_CWD || resolveBackendCwd();
+  const rootDir = env.ASTRBOT_ROOT || resolveBackendRoot();
+  ensureDir(cwd);
+  if (rootDir) {
+    ensureDir(rootDir);
+  }
+
+  if (!launch || !launch.cmd) {
+    const reason = failureReason || DEFAULT_BACKEND_COMMAND_UNAVAILABLE_REASON;
+    log(reason);
+    return {
+      ok: false,
+      reason,
+      config: buildBackendConfig({
+        cmd: null,
+        args: [],
+        shell: true,
+        cwd,
+        webuiDir,
+        rootDir,
+        failureReason: reason,
+      }),
+    };
+  }
+
+  return {
+    ok: true,
+    reason: null,
+    config: buildBackendConfig({
+      cmd: launch.cmd,
+      args: launch.args,
+      shell: launch.shell,
+      cwd,
+      webuiDir,
+      rootDir,
+      failureReason: null,
+    }),
+  };
 }
 
 class BackendManager {
@@ -68,12 +160,6 @@ class BackendManager {
     this.backendStartupFailureReason = null;
     this.backendSpawning = false;
     this.backendRestarting = false;
-    this.unmanagedCleanupBaseContext = {
-      fallbackCmdRaw: process.env.ASTRBOT_BACKEND_CMD || 'python.exe',
-      spawnSync,
-      log: (message) => this.log(message),
-    };
-    this.windowsBackendCleaner = new WindowsBackendCleaner();
   }
 
   getBackendUrl() {
@@ -156,7 +242,8 @@ class BackendManager {
       return {
         launch: null,
         failureReason:
-          packagedBackendState?.failureReason || 'Backend command is not configured.',
+          packagedBackendState?.failureReason ||
+          DEFAULT_BACKEND_COMMAND_UNAVAILABLE_REASON,
       };
     }
 
@@ -171,62 +258,38 @@ class BackendManager {
     };
   }
 
-  resolveBackendConfig() {
-    const webuiDir = this.resolveWebuiDir();
-    let launch = null;
-    let failureReason = null;
-    const customCmd = process.env.ASTRBOT_BACKEND_CMD;
-    if (customCmd) {
-      launch = { cmd: customCmd, args: [], shell: true };
-    } else if (this.app.isPackaged) {
-      ({ launch, failureReason } = this.buildLaunchForPackagedBackend(
-        this.getPackagedBackendState(),
-        webuiDir,
-      ));
-    } else {
-      launch = this.buildDefaultBackendLaunch(webuiDir);
-    }
-
-    const cwd = process.env.ASTRBOT_BACKEND_CWD || this.resolveBackendCwd();
-    const rootDir = process.env.ASTRBOT_ROOT || this.resolveBackendRoot();
-    ensureDir(cwd);
-    if (rootDir) {
-      ensureDir(rootDir);
-    }
-    if (failureReason) {
-      this.log(failureReason);
-    }
-    this.backendConfig = {
-      cmd: launch ? launch.cmd : null,
-      args: launch ? launch.args : [],
-      shell: launch ? launch.shell : true,
-      cwd,
-      webuiDir,
-      rootDir,
-      failureReason,
-    };
-    return this.backendConfig;
-  }
-
   getBackendConfig() {
     if (!this.backendConfig) {
       try {
-        return this.resolveBackendConfig();
+        const result = resolveBackendConfigResult({
+          app: this.app,
+          env: process.env,
+          log: (message) => this.log(message),
+          resolveWebuiDir: () => this.resolveWebuiDir(),
+          resolveBackendCwd: () => this.resolveBackendCwd(),
+          resolveBackendRoot: () => this.resolveBackendRoot(),
+          getPackagedBackendState: () => this.getPackagedBackendState(),
+          buildDefaultBackendLaunch: (webuiDir) =>
+            this.buildDefaultBackendLaunch(webuiDir),
+          buildLaunchForPackagedBackend: (packagedBackendState, webuiDir) =>
+            this.buildLaunchForPackagedBackend(packagedBackendState, webuiDir),
+        });
+        this.backendConfig = result.config;
       } catch (error) {
         this.log(
           `Failed to resolve backend config: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        this.backendConfig = {
+        this.backendConfig = buildBackendConfig({
           cmd: null,
           args: [],
           shell: true,
           cwd: process.env.ASTRBOT_BACKEND_CWD || this.resolveBackendCwd(),
           webuiDir: this.resolveWebuiDir(),
           rootDir: process.env.ASTRBOT_ROOT || this.resolveBackendRoot(),
-          failureReason: 'Backend command is not configured.',
-        };
+          failureReason: DEFAULT_BACKEND_COMMAND_UNAVAILABLE_REASON,
+        });
       }
     }
     return this.backendConfig;
@@ -250,7 +313,10 @@ class BackendManager {
   }
 
   getBackendCommandUnavailableReason() {
-    return this.getBackendConfig().failureReason || 'Backend command is not configured.';
+    return (
+      this.getBackendConfig().failureReason ||
+      DEFAULT_BACKEND_COMMAND_UNAVAILABLE_REASON
+    );
   }
 
   async flushLogs() {
@@ -677,27 +743,45 @@ class BackendManager {
     this.log(
       `Attempting unmanaged backend cleanup by port=${port} pids=${pids.join(',')}`,
     );
-    this.windowsBackendCleaner.resetState();
     const backendConfig = this.getBackendConfig();
     const hasBackendCommand = Boolean(backendConfig.cmd);
+    const fallbackCmdRaw = process.env.ASTRBOT_BACKEND_CMD || 'python.exe';
+    const cleanupState = createWindowsBackendCleanupState();
     if (!hasBackendCommand) {
       this.log(
         'Backend command is not configured during unmanaged cleanup; falling back to image-name-only matching.',
       );
     }
 
+    const processEntries = [];
     for (const pid of pids) {
       const processInfo = this.getWindowsProcessInfo(pid);
       if (!processInfo) {
         this.log(`Skip unmanaged cleanup for pid=${pid}: unable to resolve process info.`);
         continue;
       }
-      const shouldKill = this.windowsBackendCleaner.shouldKillUnmanagedBackendProcess({
-        pid,
-        processInfo,
+      processEntries.push({ pid, processInfo });
+    }
+
+    if (hasBackendCommand && processEntries.length > 0) {
+      prefetchWindowsProcessCommandLines({
+        pids: processEntries.map((entry) => entry.pid),
+        spawnSync,
+        log: (message) => this.log(message),
+        cleanupState,
+      });
+    }
+
+    for (const entry of processEntries) {
+      const shouldKill = shouldKillUnmanagedBackendProcess({
+        pid: entry.pid,
+        processInfo: entry.processInfo,
         backendConfig,
         allowImageOnlyMatch: !hasBackendCommand,
-        ...this.unmanagedCleanupBaseContext,
+        fallbackCmdRaw,
+        spawnSync,
+        log: (message) => this.log(message),
+        cleanupState,
       });
       if (!shouldKill) {
         continue;
@@ -706,7 +790,7 @@ class BackendManager {
       try {
         // Synchronous taskkill is acceptable here because unmanaged cleanup
         // is performed only during shutdown/restart control flows.
-        spawnSync('taskkill', ['/pid', `${pid}`, '/t', '/f'], {
+        spawnSync('taskkill', ['/pid', `${entry.pid}`, '/t', '/f'], {
           stdio: 'ignore',
           windowsHide: true,
         });

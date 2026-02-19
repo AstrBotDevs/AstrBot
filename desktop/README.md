@@ -43,9 +43,11 @@ pnpm --dir desktop run dist:full
 Recommended runtime source for local packaging is `python-build-standalone` (same family used in CI):
 
 ```bash
-PBS_RELEASE=20260211
-PBS_VERSION=3.12.12
-PBS_TARGET=aarch64-apple-darwin # e.g. x86_64-apple-darwin / x86_64-unknown-linux-gnu / x86_64-pc-windows-msvc
+PBS_RELEASE="$(awk -F'"' '/PYTHON_BUILD_STANDALONE_RELEASE:/ { print $2; exit }' .github/workflows/release.yml)"
+PBS_VERSION="$(awk -F'"' '/PYTHON_BUILD_STANDALONE_VERSION:/ { print $2; exit }' .github/workflows/release.yml)"
+PBS_PLATFORM=mac # linux / mac / windows
+PBS_ARCH=arm64   # amd64 / arm64
+PBS_TARGET="$(python3 .github/scripts/resolve_pbs_target.py --platform "$PBS_PLATFORM" --arch "$PBS_ARCH")"
 RUNTIME_BASE="$HOME/.cache/astrbot-python-runtime/$PBS_TARGET-$PBS_VERSION"
 mkdir -p "$RUNTIME_BASE"
 curl -L "https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_RELEASE}/cpython-${PBS_VERSION}%2B${PBS_RELEASE}-${PBS_TARGET}-install_only_stripped.tar.gz" \
