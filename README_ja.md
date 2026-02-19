@@ -168,8 +168,8 @@ paru -S astrbot-git
 - Discord
 - Satori
 - Misskey
+- LINE
 - WhatsApp (近日対応予定)
-- LINE (近日対応予定)
 
 **コミュニティメンテナンス**
 

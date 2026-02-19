@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { translations as staticTranslations } from './translations';
 import type { Locale } from './types';
+import axios from 'axios';
 
 // 全局状态
 const currentLocale = ref<Locale>('zh-CN');
@@ -96,6 +97,16 @@ export function useI18n() {
       window.dispatchEvent(new CustomEvent('astrbot-locale-changed', {
         detail: { locale: newLocale }
       }));
+
+      axios.post("/api/setLang", { lang: newLocale })
+          .then(response => {
+            if (response.data.code !== 200) {
+              console.error('Failed to set language on server:', response.data.message);
+            }
+          })
+          .catch(error => {
+            console.error('Error setting language on server:', error);
+          });
     }
   };
   
@@ -225,4 +236,14 @@ export async function setupI18n() {
     : 'zh-CN';
   
   await initI18n(initialLocale);
+
+  axios.post("/api/setLang", { lang: initialLocale })
+      .then(response => {
+        if (response.data.code !== 200) {
+          console.error('Failed to set language on server:', response.data.message);
+        }
+      })
+      .catch(error => {
+        console.error('Error setting language on server:', error);
+      });
 } 
