@@ -170,6 +170,7 @@ jobs:
         env:
           RUNNER_TEMP_DIR: ${{ runner.temp }}
           SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+          GITHUB_TOKEN: ${{ github.token }}
           PYTHON_BUILD_STANDALONE_TARGET: ${{ matrix.pbs_target }}
         run: |
           if [ -z "$SETUP_PYTHON_PATH" ]; then
@@ -315,6 +316,7 @@ jobs:
         env:
           RUNNER_TEMP_DIR: ${{ runner.temp }}
           SETUP_PYTHON_PATH: ${{ steps.setup-python.outputs.python-path }}
+          GITHUB_TOKEN: ${{ github.token }}
           PYTHON_BUILD_STANDALONE_TARGET: ${{ matrix.pbs_target }}
         run: |
           if [ -z "$SETUP_PYTHON_PATH" ]; then
