@@ -32,3 +32,12 @@ builtin-stars-astrbot-main-no-conversation-active-reply = 当前未处于对话�
 builtin-stars-astrbot-main-conversation-not-found-active-reply = 未找到对话，无法主动回复。
 builtin-stars-astrbot-main-active-reply-failed = 主动回复失败: { $error }
 builtin-stars-astrbot-main-ltm-error = 长期记忆处理失败: { $error }
+
+### astrbot/builtin_stars/astrbot/long_term_memory.py
+builtin-stars-astrbot-ltm-invalid-max-count = 长期记忆配置项 group_message_max_cnt 无效，使用默认值 300: { $error }
+builtin-stars-astrbot-ltm-provider-not-found = 未找到 ID 为 { $provider_id } 的提供商。
+builtin-stars-astrbot-ltm-provider-type-invalid = 提供商类型错误 ({ $provider_type })，无法获取图片描述。
+builtin-stars-astrbot-ltm-empty-image-url = 图片 URL 为空。
+builtin-stars-astrbot-ltm-image-caption-failed = 获取图片描述失败: { $error }
+builtin-stars-astrbot-ltm-recorded-message = ltm | { $umo } | { $message }
+builtin-stars-astrbot-ltm-recorded-ai-response = 已记录 AI 回复: { $umo } | { $message }
