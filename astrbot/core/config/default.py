@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
         "wl_ignore_admin_on_friend": True,
         "reply_with_mention": False,
         "reply_with_quote": False,
+        "reply_with_quote_scope": "all",  # all | group_only | private_only
         "path_mapping": [],
         "segmented_reply": {
             "enable": False,
@@ -882,6 +883,17 @@ CONFIG_METADATA_2 = {
                     "reply_with_quote": {
                         "type": "bool",
                         "hint": "启用后，机器人回复消息时会引用原消息。实际效果以具体的平台适配器为准。",
+                    },
+                    "reply_with_quote_scope": {
+                        "type": "string",
+                        "options": ["all", "group_only", "private_only"],
+                        "labels": [
+                            "全部开启",
+                            "仅群聊",
+                            "仅私聊",
+                        ],
+                        "hint": "选择引用回复的生效范围。",
+                        "condition": {"reply_with_quote": True},
                     },
                     "path_mapping": {
                         "type": "list",
@@ -3105,6 +3117,13 @@ CONFIG_METADATA_3 = {
                     "platform_settings.reply_with_quote": {
                         "description": "回复时引用发送人消息",
                         "type": "bool",
+                    },
+                    "platform_settings.reply_with_quote_scope": {
+                        "description": "引用回复范围",
+                        "type": "string",
+                        "options": ["all", "group_only", "private_only"],
+                        "labels": ["全部开启", "仅群聊", "仅私聊"],
+                        "condition": {"platform_settings.reply_with_quote": True},
                     },
                     "platform_settings.forward_threshold": {
                         "description": "转发消息的字数阈值",

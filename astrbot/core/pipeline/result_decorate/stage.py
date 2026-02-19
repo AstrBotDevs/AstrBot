@@ -29,6 +29,9 @@ class ResultDecorateStage(Stage):
         self.reply_with_quote = ctx.astrbot_config["platform_settings"][
             "reply_with_quote"
         ]
+        self.reply_with_quote_scope = ctx.astrbot_config["platform_settings"].get(
+            "reply_with_quote_scope", "all"
+        )
         self.t2i_word_threshold = ctx.astrbot_config["t2i_word_threshold"]
         try:
             self.t2i_word_threshold = int(self.t2i_word_threshold)
@@ -399,5 +402,11 @@ class ResultDecorateStage(Stage):
 
                 # 引用回复
                 if self.reply_with_quote:
-                    if not any(isinstance(item, File) for item in result.chain):
+                    is_private = event.get_message_type() == MessageType.FRIEND_MESSAGE
+                    should_quote = (
+                        self.reply_with_quote_scope == "all"
+                        or (self.reply_with_quote_scope == "private_only" and is_private)
+                        or (self.reply_with_quote_scope == "group_only" and not is_private)
+                    )
+                    if should_quote and not any(isinstance(item, File) for item in result.chain):
                         result.chain.insert(0, Reply(id=event.message_obj.message_id))
