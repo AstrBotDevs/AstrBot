@@ -113,3 +113,9 @@ builtin-stars-provider-key-switch-success = 切换 Key 成功。
 ### astrbot/builtin_stars/builtin_commands/commands/t2i.py
 builtin-stars-t2i-disabled = 已关闭文本转图片模式。
 builtin-stars-t2i-enabled = 已开启文本转图片模式。
+
+### astrbot/builtin_stars/builtin_commands/commands/tts.py
+builtin-stars-tts-status-enabled-prefix = 已开启
+builtin-stars-tts-status-disabled-prefix = 已关闭
+builtin-stars-tts-enabled-but-global-disabled = { $status_text }当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。
+builtin-stars-tts-toggle-result = { $status_text }当前会话的文本转语音。

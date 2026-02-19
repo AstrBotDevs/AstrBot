@@ -2,6 +2,7 @@
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import t
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 
 
@@ -22,15 +23,27 @@ class TTSCommand:
         new_status = not ses_tts
         await SessionServiceManager.set_tts_status_for_session(umo, new_status)
 
-        status_text = "已开启" if new_status else "已关闭"
+        status_text = (
+            t("builtin-stars-tts-status-enabled-prefix")
+            if new_status
+            else t("builtin-stars-tts-status-disabled-prefix")
+        )
 
         if new_status and not tts_enable:
             event.set_result(
                 MessageEventResult().message(
-                    f"{status_text}当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。",
+                    t(
+                        "builtin-stars-tts-enabled-but-global-disabled",
+                        status_text=status_text,
+                    ),
                 ),
             )
         else:
             event.set_result(
-                MessageEventResult().message(f"{status_text}当前会话的文本转语音。"),
+                MessageEventResult().message(
+                    t(
+                        "builtin-stars-tts-toggle-result",
+                        status_text=status_text,
+                    )
+                ),
             )
