@@ -119,3 +119,8 @@ builtin-stars-tts-status-enabled-prefix = Enabled
 builtin-stars-tts-status-disabled-prefix = Disabled
 builtin-stars-tts-enabled-but-global-disabled = { $status_text } text-to-speech for the current session. But TTS is not enabled in global config. Please enable it in WebUI.
 builtin-stars-tts-toggle-result = { $status_text } text-to-speech for the current session.
+
+### astrbot/builtin_stars/builtin_commands/commands/llm.py
+builtin-stars-llm-status-disabled = Disabled
+builtin-stars-llm-status-enabled = Enabled
+builtin-stars-llm-toggle-result = { $status } LLM chat feature.
