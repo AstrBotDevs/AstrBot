@@ -124,3 +124,8 @@ builtin-stars-tts-toggle-result = { $status_text }当前会话的文本转语音
 builtin-stars-llm-status-disabled = 关闭
 builtin-stars-llm-status-enabled = 开启
 builtin-stars-llm-toggle-result = { $status } LLM 聊天功能。
+
+### astrbot/builtin_stars/builtin_commands/commands/setunset.py
+builtin-stars-setunset-set-success = 会话 { $uid } 变量 { $key } 存储成功。使用 /unset 移除。
+builtin-stars-setunset-key-not-found = 没有那个变量名。格式 /unset 变量名。
+builtin-stars-setunset-unset-success = 会话 { $uid } 变量 { $key } 移除成功。
