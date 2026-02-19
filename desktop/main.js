@@ -124,11 +124,6 @@ function updateTrayMenu() {
         }
         if (mainWindow && !mainWindow.isDestroyed()) {
           showWindow();
-          const currentUrl = mainWindow.webContents.getURL();
-          if (currentUrl.startsWith(backendManager.getBackendUrl())) {
-            mainWindow.webContents.send('astrbot-desktop:tray-restart-backend');
-            return;
-          }
         }
 
         const result = await backendManager.restartBackend();
