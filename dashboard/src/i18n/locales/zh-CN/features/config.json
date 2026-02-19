@@ -28,6 +28,7 @@
   "messages": {
     "configApplied": "配置成功应用。如要保存，需再点击右下角保存按钮。",
     "configApplyError": "配置未应用，Json 格式错误。",
+    "unsavedChangesNotice": "当前配置有未保存修改。请点击右下角保存按钮以生效。",
     "saveSuccess": "配置保存成功",
     "saveError": "配置保存失败",
     "loadError": "配置加载失败",
@@ -67,6 +68,10 @@
     "selectConfig": "选择配置文件",
     "normalConfig": "普通",
     "systemConfig": "系统"
+  },
+  "search": {
+    "placeholder": "搜索配置项（字段名/描述/提示）",
+    "noResult": "未找到匹配的配置项"
   },
   "configManagement": {
     "title": "配置文件管理",

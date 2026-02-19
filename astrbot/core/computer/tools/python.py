@@ -5,8 +5,9 @@ import mcp
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
-from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
+from astrbot.core.message.message_event_result import MessageChain
 
 param_schema = {
     "type": "object",
@@ -25,7 +26,7 @@ param_schema = {
 }
 
 
-def handle_result(result: dict) -> ToolExecResult:
+async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult:
     data = result.get("data", {})
     output = data.get("output", {})
     error = data.get("error", "")
@@ -44,6 +45,9 @@ def handle_result(result: dict) -> ToolExecResult:
                     type="image", data=img["image/png"], mimeType="image/png"
                 )
             )
+
+            if event.get_platform_name() == "webchat":
+                await event.send(message=MessageChain().base64_image(img["image/png"]))
     if text:
         resp.content.append(mcp.types.TextContent(type="text", text=text))
 
@@ -68,7 +72,7 @@ class PythonTool(FunctionTool):
         )
         try:
             result = await sb.python.exec(code, silent=silent)
-            return handle_result(result)
+            return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"
 
@@ -84,11 +88,14 @@ class LocalPythonTool(FunctionTool):
         self, context: ContextWrapper[AstrAgentContext], code: str, silent: bool = False
     ) -> ToolExecResult:
         if context.context.event.role != "admin":
-            return "error: Permission denied. Local Python execution is only allowed for admin users. Tell user to set admins in AstrBot WebUI."
-
+            return (
+                "error: Permission denied. Local Python execution is only allowed for admin users. "
+                "Tell user to set admins in `AstrBot WebUI -> Config -> General Config` by adding their user ID to the admins list if they need this feature."
+                f"User's ID is: {context.context.event.get_sender_id()}. User's ID can be found by using /sid command."
+            )
         sb = get_local_booter()
         try:
             result = await sb.python.exec(code, silent=silent)
-            return handle_result(result)
+            return await handle_result(result, context.context.event)
         except Exception as e:
             return f"Error executing code: {str(e)}"

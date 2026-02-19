@@ -20,6 +20,7 @@ from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import PluginManager
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .route import Response, Route, RouteContext
 
@@ -53,11 +54,13 @@ class PluginRoute(Route):
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
             "/plugin/on": ("POST", self.on_plugin),
+            "/plugin/reload-failed": ("POST", self.reload_failed_plugins),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
             "/plugin/changelog": ("GET", self.get_plugin_changelog),
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
+            "/plugin/source/get-failed-plugins": ("GET", self.get_failed_plugins),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -73,6 +76,33 @@ class PluginRoute(Route):
         }
 
         self._logo_cache = {}
+
+    async def reload_failed_plugins(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+        try:
+            data = await request.get_json()
+            dir_name = data.get("dir_name")  # 这里拿的是目录名，不是插件名
+
+            if not dir_name:
+                return Response().error("缺少插件目录名").__dict__
+
+            # 调用 star_manager.py 中的函数
+            # 注意：传入的是目录名
+            success, err = await self.plugin_manager.reload_failed_plugin(dir_name)
+
+            if success:
+                return Response().ok(None, f"插件 {dir_name} 重载成功。").__dict__
+            else:
+                return Response().error(f"重载失败: {err}").__dict__
+
+        except Exception as e:
+            logger.error(f"/api/plugin/reload-failed: {traceback.format_exc()}")
+            return Response().error(str(e)).__dict__
 
     async def reload_plugins(self):
         if DEMO_MODE:
@@ -261,7 +291,7 @@ class PluginRoute(Route):
             logger.warning(f"加载插件市场缓存失败: {e}")
         return None
 
-    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None):
+    def _save_plugin_cache(self, cache_file: str, data, md5: str | None = None) -> None:
         """保存插件市场数据到本地缓存"""
         try:
             # 确保目录存在
@@ -332,6 +362,10 @@ class PluginRoute(Route):
             .ok(_plugin_resp, message=self.plugin_manager.failed_plugin_info)
             .__dict__
         )
+
+    async def get_failed_plugins(self):
+        """专门获取加载失败的插件列表(字典格式)"""
+        return Response().ok(self.plugin_manager.failed_plugin_dict).__dict__
 
     async def get_plugin_handlers_info(self, handler_full_names: list[str]):
         """解析插件行为"""
@@ -431,7 +465,10 @@ class PluginRoute(Route):
             file = await request.files
             file = file["file"]
             logger.info(f"正在安装用户上传的插件 {file.filename}")
-            file_path = f"data/temp/{file.filename}"
+            file_path = os.path.join(
+                get_astrbot_temp_path(),
+                f"plugin_upload_{file.filename}",
+            )
             await file.save(file_path)
             plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
             # self.core_lifecycle.restart()

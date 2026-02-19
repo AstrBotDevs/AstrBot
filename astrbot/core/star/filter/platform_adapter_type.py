@@ -20,6 +20,7 @@ class PlatformAdapterType(enum.Flag):
     WEIXIN_OFFICIAL_ACCOUNT = enum.auto()
     SATORI = enum.auto()
     MISSKEY = enum.auto()
+    LINE = enum.auto()
     ALL = (
         AIOCQHTTP
         | QQOFFICIAL
@@ -34,6 +35,7 @@ class PlatformAdapterType(enum.Flag):
         | WEIXIN_OFFICIAL_ACCOUNT
         | SATORI
         | MISSKEY
+        | LINE
     )
 
 
@@ -51,11 +53,12 @@ ADAPTER_NAME_2_TYPE = {
     "weixin_official_account": PlatformAdapterType.WEIXIN_OFFICIAL_ACCOUNT,
     "satori": PlatformAdapterType.SATORI,
     "misskey": PlatformAdapterType.MISSKEY,
+    "line": PlatformAdapterType.LINE,
 }
 
 
 class PlatformAdapterTypeFilter(HandlerFilter):
-    def __init__(self, platform_adapter_type_or_str: PlatformAdapterType | str):
+    def __init__(self, platform_adapter_type_or_str: PlatformAdapterType | str) -> None:
         if isinstance(platform_adapter_type_or_str, str):
             self.platform_type = ADAPTER_NAME_2_TYPE.get(platform_adapter_type_or_str)
         else:

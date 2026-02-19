@@ -78,12 +78,12 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import axios from 'axios';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
+import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
@@ -136,10 +136,12 @@ const wfr = ref(null);
 const migrationDialog = ref(null);
 const backupDialog = ref(null);
 
-const restartAstrBot = () => {
-    axios.post('/api/stat/restart-core').then(() => {
-        wfr.value.check();
-    })
+const restartAstrBot = async () => {
+    try {
+        await restartAstrBotRuntime(wfr.value);
+    } catch (error) {
+        console.error(error);
+    }
 }
 
 const startMigration = async () => {

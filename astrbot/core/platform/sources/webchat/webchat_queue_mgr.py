@@ -54,7 +54,7 @@ class WebChatQueueMgr:
                 if not request_ids:
                     self._conversation_back_requests.pop(conversation_id, None)
 
-    def remove_queues(self, conversation_id: str):
+    def remove_queues(self, conversation_id: str) -> None:
         """Remove queues for the given conversation ID"""
         for request_id in list(
             self._conversation_back_requests.get(conversation_id, set())
@@ -86,6 +86,19 @@ class WebChatQueueMgr:
         self._listener_callback = callback
         for conversation_id in list(self.queues.keys()):
             self._start_listener_if_needed(conversation_id)
+
+    async def clear_listener(self) -> None:
+        self._listener_callback = None
+        for close_event in list(self._queue_close_events.values()):
+            close_event.set()
+        self._queue_close_events.clear()
+
+        listener_tasks = list(self._listener_tasks.values())
+        for task in listener_tasks:
+            task.cancel()
+        if listener_tasks:
+            await asyncio.gather(*listener_tasks, return_exceptions=True)
+        self._listener_tasks.clear()
 
     def _start_listener_if_needed(self, conversation_id: str):
         if self._listener_callback is None:

@@ -31,11 +31,15 @@
     },
     "ai": {
       "description": "模型",
-      "hint": "当使用非内置 Agent 执行器时,默认聊天模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
+      "hint": "当使用非内置 Agent 执行器时,默认对话模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
       "provider_settings": {
         "default_provider_id": {
-          "description": "默认聊天模型",
+          "description": "默认对话模型",
           "hint": "留空时使用第一个模型"
+        },
+        "fallback_chat_models": {
+          "description": "回退对话模型列表",
+          "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
         },
         "default_image_caption_provider_id": {
           "description": "默认图片转述模型",
@@ -197,7 +201,10 @@
         },
         "context_limit_reached_strategy": {
           "description": "超出模型上下文窗口时的处理方式",
-          "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
+          "labels": [
+            "按对话轮数截断",
+            "由 LLM 压缩上下文"
+          ],
           "hint": "当按对话轮数截断时，会根据上面\"丢弃对话轮数\"的配置丢弃最旧的 N 轮对话。当由 LLM 压缩上下文时，会使用指定的模型进行上下文压缩。"
         },
         "llm_compress_instruction": {
@@ -247,6 +254,28 @@
           "description": "按模型能力清理历史上下文",
           "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"
         },
+        "max_quoted_fallback_images": {
+          "description": "转发消息中图片获取上限",
+          "hint": "转发消息解析到的图片最多注入数量，超出部分会截断。"
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "转发消息富文本解析深度",
+            "hint": "解析转发消息中的富文本组件链时允许的最大递归深度。"
+          },
+          "max_forward_node_depth": {
+            "description": "转发消息嵌套解析深度",
+            "hint": "解析嵌套转发节点时允许的最大递归深度。"
+          },
+          "max_forward_fetch": {
+            "description": "转发消息递归拉取上限",
+            "hint": "递归调用 get_forward_msg 拉取转发内容的最大次数。"
+          },
+          "warn_on_action_failure": {
+            "description": "转发消息解析失败告警",
+            "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。"
+          }
+        },
         "max_agent_step": {
           "description": "工具调用轮数上限"
         },
@@ -272,7 +301,6 @@
             "关闭流式回复"
           ]
         },
-
         "wake_prefix": {
           "description": "LLM 聊天额外唤醒前缀",
           "hint": "如果唤醒前缀为 /, 额外聊天唤醒前缀为 chat,则需要 /chat 才会触发 LLM 请求"
@@ -295,6 +323,243 @@
   },
   "platform_group": {
     "name": "平台配置",
+    "platform": {
+      "description": "消息平台适配器",
+      "active_send_mode": {
+        "description": "是否换用主动发送接口"
+      },
+      "appid": {
+        "description": "appid",
+        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
+      },
+      "callback_server_host": {
+        "description": "回调服务器主机",
+        "hint": "回调服务器主机。留空则不启用回调服务器。"
+      },
+      "card_template_id": {
+        "description": "卡片模板 ID",
+        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。"
+      },
+      "discord_activity_name": {
+        "description": "Discord 活动名称",
+        "hint": "可选的 Discord 活动名称。留空则不设置活动。"
+      },
+      "discord_command_register": {
+        "description": "是否自动将插件指令注册为 Discord 斜杠指令"
+      },
+      "discord_proxy": {
+        "description": "Discord 代理地址",
+        "hint": "可选的代理地址：http://ip:port"
+      },
+      "discord_token": {
+        "description": "Discord Bot Token",
+        "hint": "在此处填入你的 Discord Bot Token"
+      },
+      "enable": {
+        "description": "启用",
+        "hint": "是否启用该适配器。未启用的适配器对应的消息平台将不会接收到消息。"
+      },
+      "enable_group_c2c": {
+        "description": "启用消息列表单聊",
+        "hint": "启用后，机器人可以接收到 QQ 消息列表中的私聊消息。你可能需要在 QQ 机器人平台上通过扫描二维码的方式添加机器人为你的好友。详见文档。"
+      },
+      "enable_guild_direct_message": {
+        "description": "启用频道私聊",
+        "hint": "启用后，机器人可以接收到频道的私聊消息。"
+      },
+      "id": {
+        "description": "机器人名称",
+        "hint": "机器人名称"
+      },
+      "is_sandbox": {
+        "description": "沙箱模式"
+      },
+      "kf_name": {
+        "description": "微信客服账号名",
+        "hint": "如果填写此项，即代表你将使用企业微信客服，而不是企业微信应用。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取。"
+      },
+      "lark_bot_name": {
+        "description": "飞书机器人的名字",
+        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。"
+      },
+      "lark_connection_mode": {
+        "description": "订阅方式",
+        "labels": [
+          "长连接模式",
+          "推送至服务器模式"
+        ]
+      },
+      "lark_encrypt_key": {
+        "description": "Encrypt Key",
+        "hint": "用于解密飞书回调数据的加密密钥"
+      },
+      "lark_verification_token": {
+        "description": "Verification Token",
+        "hint": "用于验证飞书回调请求的令牌"
+      },
+      "misskey_allow_insecure_downloads": {
+        "description": "允许不安全下载（禁用 SSL 验证）",
+        "hint": "当远端服务器存在证书问题导致无法正常下载时，自动禁用 SSL 验证作为回退方案。适用于某些图床的证书配置问题。启用有安全风险，仅在必要时使用。"
+      },
+      "misskey_default_visibility": {
+        "description": "默认帖子可见性",
+        "hint": "机器人发帖时的默认可见性设置。public：公开，home：主页时间线，followers：仅关注者。"
+      },
+      "misskey_download_chunk_size": {
+        "description": "流式下载分块大小（字节）",
+        "hint": "流式下载和计算 MD5 时使用的每次读取字节数，过小会增加开销，过大会占用内存。"
+      },
+      "misskey_download_timeout": {
+        "description": "远端下载超时时间（秒）",
+        "hint": "下载远程文件时的超时时间（秒），用于异步上传回退到本地上传的场景。"
+      },
+      "misskey_enable_chat": {
+        "description": "启用聊天消息响应",
+        "hint": "启用后，机器人将会监听和响应私信聊天消息"
+      },
+      "misskey_enable_file_upload": {
+        "description": "启用文件上传到 Misskey",
+        "hint": "启用后，适配器会尝试将消息链中的文件上传到 Misskey。URL 文件会先尝试服务器端上传，异步上传失败时会回退到下载后本地上传。"
+      },
+      "misskey_instance_url": {
+        "description": "Misskey 实例 URL",
+        "hint": "例如 https://misskey.example，填写 Bot 账号所在的 Misskey 实例地址"
+      },
+      "misskey_local_only": {
+        "description": "仅限本站（不参与联合）",
+        "hint": "启用后，机器人发出的帖子将仅在本实例可见，不会联合到其他实例"
+      },
+      "misskey_max_download_bytes": {
+        "description": "最大允许下载字节数（超出则中止）",
+        "hint": "如果希望限制下载文件的最大大小以防止 OOM，请填写最大字节数；留空或 null 表示不限制。"
+      },
+      "misskey_token": {
+        "description": "Misskey Access Token",
+        "hint": "连接服务设置生成的 API 鉴权访问令牌（Access token）"
+      },
+      "misskey_upload_concurrency": {
+        "description": "并发上传限制",
+        "hint": "同时进行的文件上传任务上限（整数，默认 3）。"
+      },
+      "misskey_upload_folder": {
+        "description": "上传到网盘的目标文件夹 ID",
+        "hint": "可选：填写 Misskey 网盘中目标文件夹的 ID，上传的文件将放置到该文件夹内。留空则使用账号网盘根目录。"
+      },
+      "port": {
+        "description": "回调服务器端口",
+        "hint": "回调服务器端口。留空则不启用回调服务器。"
+      },
+      "satori_api_base_url": {
+        "description": "Satori API 终结点",
+        "hint": "Satori API 的基础地址。"
+      },
+      "satori_auto_reconnect": {
+        "description": "启用自动重连",
+        "hint": "断开连接时是否自动重新连接 WebSocket。"
+      },
+      "satori_endpoint": {
+        "description": "Satori WebSocket 终结点",
+        "hint": "Satori 事件的 WebSocket 端点。"
+      },
+      "satori_heartbeat_interval": {
+        "description": "Satori 心跳间隔",
+        "hint": "发送心跳消息的间隔（秒）。"
+      },
+      "satori_reconnect_delay": {
+        "description": "Satori 重连延迟",
+        "hint": "尝试重新连接前的延迟时间（秒）。"
+      },
+      "satori_token": {
+        "description": "Satori 令牌",
+        "hint": "用于 Satori API 身份验证的令牌。"
+      },
+      "secret": {
+        "description": "secret",
+        "hint": "必填项。"
+      },
+      "slack_connection_mode": {
+        "description": "Slack Connection Mode",
+        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode."
+      },
+      "slack_webhook_host": {
+        "description": "Slack Webhook Host",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_path": {
+        "description": "Slack Webhook Path",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_port": {
+        "description": "Slack Webhook Port",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "telegram_command_auto_refresh": {
+        "description": "Telegram 命令自动刷新",
+        "hint": "启用后，AstrBot 将会在运行时自动刷新 Telegram 命令。(单独设置此项无效)"
+      },
+      "telegram_command_register": {
+        "description": "Telegram 命令注册",
+        "hint": "启用后，AstrBot 将会自动注册 Telegram 命令。"
+      },
+      "telegram_command_register_interval": {
+        "description": "Telegram 命令自动刷新间隔",
+        "hint": "Telegram 命令自动刷新间隔，单位为秒。"
+      },
+      "telegram_token": {
+        "description": "Bot Token",
+        "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"
+      },
+      "type": {
+        "description": "适配器类型"
+      },
+      "unified_webhook_mode": {
+        "description": "统一 Webhook 模式",
+        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
+      },
+      "webhook_uuid": {
+        "description": "Webhook UUID",
+        "hint": "统一 Webhook 模式下的唯一标识符，创建平台时自动生成。"
+      },
+      "wecom_ai_bot_name": {
+        "description": "企业微信智能机器人的名字",
+        "hint": "请务必填写正确，否则无法使用一些指令。"
+      },
+      "wecomaibot_friend_message_welcome_text": {
+        "description": "企业微信智能机器人私聊欢迎语",
+        "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，如 “💭 思考中...”。留空则不回复。"
+      },
+      "wecomaibot_init_respond_text": {
+        "description": "企业微信智能机器人初始响应文本",
+        "hint": "当机器人收到消息时，首先回复的文本内容。留空则不设置。"
+      },
+      "wpp_active_message_poll": {
+        "description": "是否启用主动消息轮询",
+        "hint": "只有当你发现微信消息没有按时同步到 AstrBot 时，才需要启用这个功能，默认不启用。"
+      },
+      "wpp_active_message_poll_interval": {
+        "description": "主动消息轮询间隔",
+        "hint": "主动消息轮询间隔，单位为秒，默认 3 秒，最大不要超过 60 秒，否则可能被认为是旧消息。"
+      },
+      "ws_reverse_host": {
+        "description": "反向 Websocket 主机",
+        "hint": "AstrBot 将作为服务器端。"
+      },
+      "ws_reverse_port": {
+        "description": "反向 Websocket 端口"
+      },
+      "ws_reverse_token": {
+        "description": "反向 Websocket Token",
+        "hint": "反向 Websocket Token。未设置则不启用 Token 验证。"
+      },
+      "msg_push_webhook_url": {
+        "description": "企业微信消息推送 Webhook URL",
+        "hint": "用于主动消息推送，请在企微群->消息推送得到 URL。强烈建议设置此项以带来更好的消息发送体验。"
+      },
+      "only_use_webhook_url_to_send": {
+        "description": "仅使用 Webhook 发送消息",
+        "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
+      }
+    },
     "general": {
       "description": "基本",
       "admins_id": {
@@ -583,6 +848,10 @@
         "description": "日志文件大小上限 (MB)",
         "hint": "超过大小后自动轮转，默认 20MB。"
       },
+      "temp_dir_max_size": {
+        "description": "临时目录大小上限 (MB)",
+        "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。"
+      },
       "trace_log_enable": {
         "description": "启用 Trace 文件日志",
         "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。"
@@ -607,6 +876,26 @@
         "description": "对外可达的回调接口地址",
         "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
       },
+      "dashboard": {
+        "ssl": {
+          "enable": {
+            "description": "启用 WebUI HTTPS",
+            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+          },
+          "cert_file": {
+            "description": "SSL 证书文件路径",
+            "hint": "证书文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。"
+          },
+          "key_file": {
+            "description": "SSL 私钥文件路径",
+            "hint": "私钥文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。"
+          },
+          "ca_certs": {
+            "description": "SSL CA 证书文件路径",
+            "hint": "可选。用于指定 CA 证书文件路径。"
+          }
+        }
+      },
       "timezone": {
         "description": "时区",
         "hint": "时区设置。请填写 IANA 时区名称, 如 Asia/Shanghai, 为空时使用系统默认时区。所有时区请查看: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
@@ -617,6 +906,443 @@
       },
       "no_proxy": {
         "description": "直连地址列表"
+      }
+    }
+  },
+  "provider_group": {
+    "provider": {
+      "genie_onnx_model_dir": {
+        "description": "ONNX Model Directory",
+        "hint": "The directory path containing the ONNX model files"
+      },
+      "genie_language": {
+        "description": "Language"
+      },
+      "xai_native_search": {
+        "description": "启用原生搜索功能",
+        "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。"
+      },
+      "rerank_api_base": {
+        "description": "重排序模型 API Base URL",
+        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+      },
+      "rerank_api_key": {
+        "description": "API Key",
+        "hint": "如果不需要 API Key, 请留空。"
+      },
+      "rerank_model": {
+        "description": "重排序模型名称"
+      },
+      "return_documents": {
+        "description": "是否在排序结果中返回文档原文",
+        "hint": "默认值false，以减少网络传输开销。"
+      },
+      "instruct": {
+        "description": "自定义排序任务类型说明",
+        "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
+      },
+      "launch_model_if_not_running": {
+        "description": "模型未运行时自动启动",
+        "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"
+      },
+      "modalities": {
+        "description": "模型能力",
+        "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+        "labels": [
+          "文本",
+          "图像",
+          "工具使用"
+        ]
+      },
+      "custom_headers": {
+        "description": "自定义添加请求头",
+        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
+      },
+      "custom_extra_body": {
+        "description": "自定义请求体参数",
+        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+        "template_schema": {
+          "temperature": {
+            "description": "温度参数",
+            "hint": "控制输出的随机性，范围通常为 0-2。值越高越随机。",
+            "name": "Temperature"
+          },
+          "top_p": {
+            "description": "Top-p 采样",
+            "hint": "核采样参数，范围通常为 0-1。控制模型考虑的概率质量。",
+            "name": "Top-p"
+          },
+          "max_tokens": {
+            "description": "最大令牌数",
+            "hint": "生成的最大令牌数。",
+            "name": "Max Tokens"
+          }
+        }
+      },
+      "gpt_weights_path": {
+        "description": "GPT模型文件路径",
+        "hint": "即“.ckpt”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)"
+      },
+      "sovits_weights_path": {
+        "description": "SoVITS模型文件路径",
+        "hint": "即“.pth”后缀的文件，请使用绝对路径，路径两端不要带双引号，不填则默认用GPT_SoVITS内置的SoVITS模型(建议直接在GPT_SoVITS中改默认模型)"
+      },
+      "gsv_default_parms": {
+        "description": "GPT_SoVITS默认参数",
+        "hint": "参考音频文件路径、参考音频文本必填，其他参数根据个人爱好自行填写",
+        "gsv_ref_audio_path": {
+          "description": "参考音频文件路径",
+          "hint": "必填！请使用绝对路径！路径两端不要带双引号！"
+        },
+        "gsv_prompt_text": {
+          "description": "参考音频文本",
+          "hint": "必填！请填写参考音频讲述的文本"
+        },
+        "gsv_prompt_lang": {
+          "description": "参考音频文本语言",
+          "hint": "请填写参考音频讲述的文本的语言，默认为中文"
+        },
+        "gsv_aux_ref_audio_paths": {
+          "description": "辅助参考音频文件路径",
+          "hint": "辅助参考音频文件，可不填"
+        },
+        "gsv_text_lang": {
+          "description": "文本语言",
+          "hint": "默认为中文"
+        },
+        "gsv_top_k": {
+          "description": "生成语音的多样性",
+          "hint": ""
+        },
+        "gsv_top_p": {
+          "description": "核采样的阈值",
+          "hint": ""
+        },
+        "gsv_temperature": {
+          "description": "生成语音的随机性",
+          "hint": ""
+        },
+        "gsv_text_split_method": {
+          "description": "切分文本的方法",
+          "hint": "可选值：  `cut0`：不切分    `cut1`：四句一切   `cut2`：50字一切    `cut3`：按中文句号切    `cut4`：按英文句号切    `cut5`：按标点符号切"
+        },
+        "gsv_batch_size": {
+          "description": "批处理大小",
+          "hint": ""
+        },
+        "gsv_batch_threshold": {
+          "description": "批处理阈值",
+          "hint": ""
+        },
+        "gsv_split_bucket": {
+          "description": "将文本分割成桶以便并行处理",
+          "hint": ""
+        },
+        "gsv_speed_factor": {
+          "description": "语音播放速度",
+          "hint": "1为原始语速"
+        },
+        "gsv_fragment_interval": {
+          "description": "语音片段之间的间隔时间",
+          "hint": ""
+        },
+        "gsv_streaming_mode": {
+          "description": "启用流模式",
+          "hint": ""
+        },
+        "gsv_seed": {
+          "description": "随机种子",
+          "hint": "用于结果的可重复性"
+        },
+        "gsv_parallel_infer": {
+          "description": "并行执行推理",
+          "hint": ""
+        },
+        "gsv_repetition_penalty": {
+          "description": "重复惩罚因子",
+          "hint": ""
+        },
+        "gsv_media_type": {
+          "description": "输出媒体的类型",
+          "hint": "建议用wav"
+        }
+      },
+      "embedding_dimensions": {
+        "description": "嵌入维度",
+        "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。"
+      },
+      "embedding_model": {
+        "description": "嵌入模型",
+        "hint": "嵌入模型名称。"
+      },
+      "embedding_api_key": {
+        "description": "API Key"
+      },
+      "embedding_api_base": {
+        "description": "API Base URL"
+      },
+      "volcengine_cluster": {
+        "description": "火山引擎集群",
+        "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
+      },
+      "volcengine_voice_type": {
+        "description": "火山引擎音色",
+        "hint": "输入声音id(Voice_type)"
+      },
+      "volcengine_speed_ratio": {
+        "description": "语速设置",
+        "hint": "语速设置，范围为 0.2 到 3.0,默认值为 1.0"
+      },
+      "volcengine_volume_ratio": {
+        "description": "音量设置",
+        "hint": "音量设置，范围为 0.0 到 2.0,默认值为 1.0"
+      },
+      "azure_tts_voice": {
+        "description": "音色设置",
+        "hint": "API 音色"
+      },
+      "azure_tts_style": {
+        "description": "风格设置",
+        "hint": "声音特定的讲话风格。 可以表达快乐、同情和平静等情绪。"
+      },
+      "azure_tts_role": {
+        "description": "模仿设置（可选）",
+        "hint": "讲话角色扮演。 声音可以模仿不同的年龄和性别，但声音名称不会更改。 例如，男性语音可以提高音调和改变语调来模拟女性语音，但语音名称不会更改。 如果角色缺失或不受声音的支持，则会忽略此属性。"
+      },
+      "azure_tts_rate": {
+        "description": "语速设置",
+        "hint": "指示文本的讲出速率。可在字词或句子层面应用语速。 速率变化应为原始音频的 0.5 到 2 倍。"
+      },
+      "azure_tts_volume": {
+        "description": "语音音量设置",
+        "hint": "指示语音的音量级别。 可在句子层面应用音量的变化。以从 0.0 到 100.0（从最安静到最大声，例如 75）的数字表示。 默认值为 100.0。"
+      },
+      "azure_tts_region": {
+        "description": "API 地区",
+        "hint": "Azure_TTS 处理数据所在区域，具体参考 https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions"
+      },
+      "azure_tts_subscription_key": {
+        "description": "服务订阅密钥",
+        "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）"
+      },
+      "dashscope_tts_voice": {
+        "description": "音色"
+      },
+      "gm_resp_image_modal": {
+        "description": "启用图片模态",
+        "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。"
+      },
+      "gm_native_search": {
+        "description": "启用原生搜索功能",
+        "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档"
+      },
+      "gm_native_coderunner": {
+        "description": "启用原生代码执行器",
+        "hint": "启用后所有函数工具将全部失效"
+      },
+      "gm_url_context": {
+        "description": "启用URL上下文功能",
+        "hint": "启用后所有函数工具将全部失效"
+      },
+      "gm_safety_settings": {
+        "description": "安全过滤器",
+        "hint": "设置模型输入的内容安全过滤级别。过滤级别分类为NONE(不屏蔽)、HIGH(高风险时屏蔽)、MEDIUM_AND_ABOVE(中等风险及以上屏蔽)、LOW_AND_ABOVE(低风险及以上时屏蔽)，具体参见Gemini API文档。",
+        "harassment": {
+          "description": "骚扰内容",
+          "hint": "负面或有害评论"
+        },
+        "hate_speech": {
+          "description": "仇恨言论",
+          "hint": "粗鲁、无礼或亵渎性质内容"
+        },
+        "sexually_explicit": {
+          "description": "露骨色情内容",
+          "hint": "包含性行为或其他淫秽内容的引用"
+        },
+        "dangerous_content": {
+          "description": "危险内容",
+          "hint": "宣扬、助长或鼓励有害行为的信息"
+        }
+      },
+      "gm_thinking_config": {
+        "description": "思考配置",
+        "budget": {
+          "description": "思考预算",
+          "hint": "用于指定模型推理时使用的思考 token 数量上限。参见: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+        },
+        "level": {
+          "description": "思考级别",
+          "hint": "推荐用于 Gemini 3 及以上模型，可控制推理行为。参见: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+        }
+      },
+      "anth_thinking_config": {
+        "description": "思考配置",
+        "budget": {
+          "description": "思考预算",
+          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        }
+      },
+      "minimax-group-id": {
+        "description": "用户组",
+        "hint": "于账户管理->基本信息中可见"
+      },
+      "minimax-langboost": {
+        "description": "指定语言/方言",
+        "hint": "增强对指定的小语种和方言的识别能力，设置后可以提升在指定小语种/方言场景下的语音表现"
+      },
+      "minimax-voice-speed": {
+        "description": "语速",
+        "hint": "生成声音的语速, 取值[0.5, 2], 默认为1.0, 取值越大，语速越快"
+      },
+      "minimax-voice-vol": {
+        "description": "音量",
+        "hint": "生成声音的音量, 取值(0, 10], 默认为1.0, 取值越大，音量越高"
+      },
+      "minimax-voice-pitch": {
+        "description": "语调",
+        "hint": "生成声音的语调, 取值[-12, 12], 默认为0"
+      },
+      "minimax-is-timber-weight": {
+        "description": "启用混合音色",
+        "hint": "启用混合音色, 支持以自定义权重混合最多四种音色, 启用后自动忽略单一音色设置"
+      },
+      "minimax-timber-weight": {
+        "description": "混合音色",
+        "hint": "混合音色及其权重, 最多支持四种音色, 权重为整数, 取值[1, 100]. 可在官网API语音调试台预览代码获得预设以及编写模板, 需要严格按照json字符串格式编写, 可以查看控制台判断是否解析成功. 具体结构可参照默认值以及官网代码预览."
+      },
+      "minimax-voice-id": {
+        "description": "单一音色",
+        "hint": "单一音色编号, 详见官网文档"
+      },
+      "minimax-voice-emotion": {
+        "description": "情绪",
+        "hint": "控制合成语音的情绪。当为 auto 时，将根据文本内容自动选择情绪。"
+      },
+      "minimax-voice-latex": {
+        "description": "支持朗读latex公式",
+        "hint": "朗读latex公式, 但是需要确保输入文本按官网要求格式化"
+      },
+      "minimax-voice-english-normalization": {
+        "description": "支持英语文本规范化",
+        "hint": "可提升数字阅读场景的性能，但会略微增加延迟"
+      },
+      "rag_options": {
+        "description": "RAG 选项",
+        "hint": "检索知识库设置, 非必填。仅 Agent 应用类型支持(智能体应用, 包括 RAG 应用)。阿里云百炼应用开启此功能后将无法多轮对话。",
+        "pipeline_ids": {
+          "description": "知识库 ID 列表",
+          "hint": "对指定知识库内所有文档进行检索, 前往 https://bailian.console.aliyun.com/ 数据应用->知识索引创建和获取 ID。"
+        },
+        "file_ids": {
+          "description": "非结构化文档 ID, 传入该参数将对指定非结构化文档进行检索。",
+          "hint": "对指定非结构化文档进行检索。前往 https://bailian.console.aliyun.com/ 数据管理创建和获取 ID。"
+        },
+        "output_reference": {
+          "description": "是否输出知识库/文档的引用",
+          "hint": "在每次回答尾部加上引用源。默认为 False。"
+        }
+      },
+      "sensevoice_hint": {
+        "description": "部署SenseVoice",
+        "hint": "启用前请 pip 安装 funasr、funasr_onnx、torchaudio、torch、modelscope、jieba 库（默认使用CPU，大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
+      },
+      "is_emotion": {
+        "description": "情绪识别",
+        "hint": "是否开启情绪识别。happy｜sad｜angry｜neutral｜fearful｜disgusted｜surprised｜unknown"
+      },
+      "stt_model": {
+        "description": "模型名称",
+        "hint": "modelscope 上的模型名称。默认：iic/SenseVoiceSmall。"
+      },
+      "variables": {
+        "description": "工作流固定输入变量",
+        "hint": "可选。工作流固定输入变量，将会作为工作流的输入。也可以在对话时使用 /set 指令动态设置变量。如果变量名冲突，优先使用动态设置的变量。"
+      },
+      "dashscope_app_type": {
+        "description": "应用类型",
+        "hint": "百炼应用的应用类型。"
+      },
+      "timeout": {
+        "description": "超时时间",
+        "hint": "超时时间，单位为秒。"
+      },
+      "openai-tts-voice": {
+        "description": "voice",
+        "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "fishaudio-tts-character": {
+        "description": "character",
+        "hint": "fishaudio TTS 的角色。默认为可莉。更多角色请访问：https://fish.audio/zh-CN/discovery"
+      },
+      "fishaudio-tts-reference-id": {
+        "description": "reference_id",
+        "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID"
+      },
+      "whisper_hint": {
+        "description": "本地部署 Whisper 模型须知",
+        "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
+      },
+      "id": {
+        "description": "ID"
+      },
+      "type": {
+        "description": "模型提供商种类"
+      },
+      "provider_type": {
+        "description": "模型提供商能力种类"
+      },
+      "enable": {
+        "description": "启用"
+      },
+      "key": {
+        "description": "API Key"
+      },
+      "api_base": {
+        "description": "API Base URL"
+      },
+      "model": {
+        "description": "模型 ID",
+        "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。"
+      },
+      "max_context_tokens": {
+        "description": "模型上下文窗口大小",
+        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有），也可手动修改。"
+      },
+      "dify_api_key": {
+        "description": "API Key",
+        "hint": "Dify API Key。此项必填。"
+      },
+      "dify_api_base": {
+        "description": "API Base URL",
+        "hint": "Dify API Base URL。默认为 https://api.dify.ai/v1"
+      },
+      "dify_api_type": {
+        "description": "Dify 应用类型",
+        "hint": "Dify API 类型。根据 Dify 官网，目前支持 chat, chatflow, agent, workflow 三种应用类型。"
+      },
+      "dify_workflow_output_key": {
+        "description": "Dify Workflow 输出变量名",
+        "hint": "Dify Workflow 输出变量名。当应用类型为 workflow 时才使用。默认为 astrbot_wf_output。"
+      },
+      "dify_query_input_key": {
+        "description": "Prompt 输入变量名",
+        "hint": "发送的消息文本内容对应的输入变量名。默认为 astrbot_text_query。"
+      },
+      "coze_api_key": {
+        "description": "Coze API Key",
+        "hint": "Coze API 密钥，用于访问 Coze 服务。"
+      },
+      "bot_id": {
+        "description": "Bot ID",
+        "hint": "Coze 机器人的 ID，在 Coze 平台上创建机器人后获得。"
+      },
+      "coze_api_base": {
+        "description": "API Base URL",
+        "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn"
+      },
+      "auto_save_history": {
+        "description": "由 Coze 管理对话记录",
+        "hint": "启用后，将由 Coze 进行对话历史记录管理, 此时 AstrBot 本地保存的上下文不会生效(仅供浏览), 对 AstrBot 的上下文进行的操作也不会生效。如果为禁用, 则使用 AstrBot 管理上下文。"
       }
     }
   },

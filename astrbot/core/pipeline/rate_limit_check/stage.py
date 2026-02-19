@@ -19,7 +19,7 @@ class RateLimitStage(Stage):
     如果触发限流，将 stall 流水线，直到下一个时间窗口来临时自动唤醒。
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # 存储每个会话的请求时间队列
         self.event_timestamps: defaultdict[str, deque[datetime]] = defaultdict(deque)
         # 为每个会话设置一个锁，避免并发冲突

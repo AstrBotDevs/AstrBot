@@ -33,7 +33,7 @@ class Document(BaseDocModel, table=True):
 
 
 class DocumentStorage:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.engine: AsyncEngine | None = None
@@ -43,7 +43,7 @@ class DocumentStorage:
             "sqlite_init.sql",
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
         async with self.engine.begin() as conn:  # type: ignore
@@ -80,7 +80,7 @@ class DocumentStorage:
 
             await conn.commit()
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Connect to the SQLite database."""
         if self.engine is None:
             self.engine = create_async_engine(
@@ -211,7 +211,7 @@ class DocumentStorage:
             await session.flush()  # Flush to get all IDs
             return [doc.id for doc in documents]  # type: ignore
 
-    async def delete_document_by_doc_id(self, doc_id: str):
+    async def delete_document_by_doc_id(self, doc_id: str) -> None:
         """Delete a document by its doc_id.
 
         Args:
@@ -249,7 +249,7 @@ class DocumentStorage:
                 return self._document_to_dict(document)
             return None
 
-    async def update_document_by_doc_id(self, doc_id: str, new_text: str):
+    async def update_document_by_doc_id(self, doc_id: str, new_text: str) -> None:
         """Update a document by its doc_id.
 
         Args:
@@ -269,7 +269,7 @@ class DocumentStorage:
                 document.updated_at = datetime.now()
                 session.add(document)
 
-    async def delete_documents(self, metadata_filters: dict):
+    async def delete_documents(self, metadata_filters: dict) -> None:
         """Delete documents by their metadata filters.
 
         Args:
@@ -384,7 +384,7 @@ class DocumentStorage:
             "updated_at": row[5],
         }
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the connection to the SQLite database."""
         if self.engine:
             await self.engine.dispose()

@@ -2,7 +2,7 @@
   "page": {
     "title": "SubAgent Orchestration",
     "beta": "Experimental",
-    "subtitle": "The main LLM only chats and delegates; tools live on individual SubAgents."
+    "subtitle": "The main LLM can use its own tools directly and delegate tasks to SubAgents via handoff."
   },
   "actions": {
     "refresh": "Refresh",

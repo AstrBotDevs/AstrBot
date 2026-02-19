@@ -3,6 +3,7 @@ import sys
 import time
 import traceback
 import typing as T
+from dataclasses import dataclass
 
 from mcp.types import (
     BlobResourceContents,
@@ -14,8 +15,9 @@ from mcp.types import (
 )
 
 from astrbot import logger
-from astrbot.core.agent.message import TextPart, ThinkPart
+from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -44,6 +46,28 @@ else:
     from typing_extensions import override
 
 
+@dataclass(slots=True)
+class _HandleFunctionToolsResult:
+    kind: T.Literal["message_chain", "tool_call_result_blocks", "cached_image"]
+    message_chain: MessageChain | None = None
+    tool_call_result_blocks: list[ToolCallMessageSegment] | None = None
+    cached_image: T.Any = None
+
+    @classmethod
+    def from_message_chain(cls, chain: MessageChain) -> "_HandleFunctionToolsResult":
+        return cls(kind="message_chain", message_chain=chain)
+
+    @classmethod
+    def from_tool_call_result_blocks(
+        cls, blocks: list[ToolCallMessageSegment]
+    ) -> "_HandleFunctionToolsResult":
+        return cls(kind="tool_call_result_blocks", tool_call_result_blocks=blocks)
+
+    @classmethod
+    def from_cached_image(cls, image: T.Any) -> "_HandleFunctionToolsResult":
+        return cls(kind="cached_image", cached_image=image)
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def reset(
@@ -67,6 +91,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -96,6 +121,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.context_manager = ContextManager(self.context_config)
 
         self.provider = provider
+        self.fallback_providers: list[Provider] = []
+        seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
+        for fallback_provider in fallback_providers or []:
+            fallback_id = str(fallback_provider.provider_config.get("id", ""))
+            if fallback_provider is provider:
+                continue
+            if fallback_id and fallback_id in seen_provider_ids:
+                continue
+            self.fallback_providers.append(fallback_provider)
+            if fallback_id:
+                seen_provider_ids.add(fallback_id)
         self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.tool_executor = tool_executor
@@ -125,7 +161,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         messages = []
         # append existing messages in the run context
         for msg in request.contexts:
-            messages.append(Message.model_validate(msg))
+            m = Message.model_validate(msg)
+            if isinstance(msg, dict) and msg.get("_no_save"):
+                m._no_save = True
+            messages.append(m)
         if request.prompt is not None:
             m = await request.assemble_context()
             messages.append(Message.model_validate(m))
@@ -139,22 +178,102 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats = AgentStats()
         self.stats.start_time = time.time()
 
-    async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
+    async def _iter_llm_responses(
+        self, *, include_model: bool = True
+    ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
             "contexts": self.run_context.messages,  # list[Message]
             "func_tool": self.req.func_tool,
-            "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
         }
-
+        if include_model:
+            # For primary provider we keep explicit model selection if provided.
+            payload["model"] = self.req.model
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
             async for resp in stream:  # type: ignore
                 yield resp
         else:
             yield await self.provider.text_chat(**payload)
+
+    async def _iter_llm_responses_with_fallback(
+        self,
+    ) -> T.AsyncGenerator[LLMResponse, None]:
+        """Wrap _iter_llm_responses with provider fallback handling."""
+        candidates = [self.provider, *self.fallback_providers]
+        total_candidates = len(candidates)
+        last_exception: Exception | None = None
+        last_err_response: LLMResponse | None = None
+
+        for idx, candidate in enumerate(candidates):
+            candidate_id = candidate.provider_config.get("id", "<unknown>")
+            is_last_candidate = idx == total_candidates - 1
+            if idx > 0:
+                logger.warning(
+                    "Switched from %s to fallback chat provider: %s",
+                    self.provider.provider_config.get("id", "<unknown>"),
+                    candidate_id,
+                )
+            self.provider = candidate
+            has_stream_output = False
+            try:
+                async for resp in self._iter_llm_responses(include_model=idx == 0):
+                    if resp.is_chunk:
+                        has_stream_output = True
+                        yield resp
+                        continue
+
+                    if (
+                        resp.role == "err"
+                        and not has_stream_output
+                        and (not is_last_candidate)
+                    ):
+                        last_err_response = resp
+                        logger.warning(
+                            "Chat Model %s returns error response, trying fallback to next provider.",
+                            candidate_id,
+                        )
+                        break
+
+                    yield resp
+                    return
+
+                if has_stream_output:
+                    return
+            except Exception as exc:  # noqa: BLE001
+                last_exception = exc
+                logger.warning(
+                    "Chat Model %s request error: %s",
+                    candidate_id,
+                    exc,
+                    exc_info=True,
+                )
+                continue
+
+        if last_err_response:
+            yield last_err_response
+            return
+        if last_exception:
+            yield LLMResponse(
+                role="err",
+                completion_text=(
+                    "All chat models failed: "
+                    f"{type(last_exception).__name__}: {last_exception}"
+                ),
+            )
+            return
+        yield LLMResponse(
+            role="err",
+            completion_text="All available chat models are unavailable.",
+        )
+
+    def _simple_print_message_role(self, tag: str = ""):
+        roles = []
+        for message in self.run_context.messages:
+            roles.append(message.role)
+        logger.debug(f"{tag} RunCtx.messages -> [{len(roles)}] {','.join(roles)}")
 
     @override
     async def step(self):
@@ -176,11 +295,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # do truncate and compress
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
+        self._simple_print_message_role("[BefCompact]")
         self.run_context.messages = await self.context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
+        self._simple_print_message_role("[AftCompact]")
 
-        async for llm_response in self._iter_llm_responses():
+        async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 # update ttft
                 if self.stats.time_to_first_token == 0:
@@ -236,6 +357,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 ),
             )
+            return
 
         if not llm_resp.tools_call_name:
             # 如果没有工具调用，转换到完成状态
@@ -286,20 +408,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 llm_resp, _ = await self._resolve_tool_exec(llm_resp)
 
             tool_call_result_blocks = []
+            cached_images = []  # Collect cached images for LLM visibility
             async for result in self._handle_function_tools(self.req, llm_resp):
-                if isinstance(result, list):
-                    tool_call_result_blocks = result
-                elif isinstance(result, MessageChain):
-                    if result.type is None:
+                if result.kind == "tool_call_result_blocks":
+                    if result.tool_call_result_blocks is not None:
+                        tool_call_result_blocks = result.tool_call_result_blocks
+                elif result.kind == "cached_image":
+                    if result.cached_image is not None:
+                        # Collect cached image info
+                        cached_images.append(result.cached_image)
+                elif result.kind == "message_chain":
+                    chain = result.message_chain
+                    if chain is None or chain.type is None:
                         # should not happen
                         continue
-                    if result.type == "tool_direct_result":
+                    if chain.type == "tool_direct_result":
                         ar_type = "tool_call_result"
                     else:
-                        ar_type = result.type
+                        ar_type = chain.type
                     yield AgentResponse(
                         type=ar_type,
-                        data=AgentResponseData(chain=result),
+                        data=AgentResponseData(chain=chain),
                     )
 
             # 将结果添加到上下文中
@@ -326,6 +455,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.run_context.messages.extend(
                 tool_calls_result.to_openai_messages_model()
             )
+
+            # If there are cached images and the model supports image input,
+            # append a user message with images so LLM can see them
+            if cached_images:
+                modalities = self.provider.provider_config.get("modalities", [])
+                supports_image = "image" in modalities
+                if supports_image:
+                    # Build user message with images for LLM to review
+                    image_parts = []
+                    for cached_img in cached_images:
+                        img_data = tool_image_cache.get_image_base64_by_path(
+                            cached_img.file_path, cached_img.mime_type
+                        )
+                        if img_data:
+                            base64_data, mime_type = img_data
+                            image_parts.append(
+                                TextPart(
+                                    text=f"[Image from tool '{cached_img.tool_name}', path='{cached_img.file_path}']"
+                                )
+                            )
+                            image_parts.append(
+                                ImageURLPart(
+                                    image_url=ImageURLPart.ImageURL(
+                                        url=f"data:{mime_type};base64,{base64_data}",
+                                        id=cached_img.file_path,
+                                    )
+                                )
+                            )
+                    if image_parts:
+                        self.run_context.messages.append(
+                            Message(role="user", content=image_parts)
+                        )
+                        logger.debug(
+                            f"Appended {len(cached_images)} cached image(s) to context for LLM review"
+                        )
 
             self.req.append_tool_calls_result(tool_calls_result)
 
@@ -362,7 +526,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         req: ProviderRequest,
         llm_response: LLMResponse,
-    ) -> T.AsyncGenerator[MessageChain | list[ToolCallMessageSegment], None]:
+    ) -> T.AsyncGenerator[_HandleFunctionToolsResult, None]:
         """处理函数工具调用。"""
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
@@ -373,18 +537,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
-            yield MessageChain(
-                type="tool_call",
-                chain=[
-                    Json(
-                        data={
-                            "id": func_tool_id,
-                            "name": func_tool_name,
-                            "args": func_tool_args,
-                            "ts": time.time(),
-                        }
-                    )
-                ],
+            yield _HandleFunctionToolsResult.from_message_chain(
+                MessageChain(
+                    type="tool_call",
+                    chain=[
+                        Json(
+                            data={
+                                "id": func_tool_id,
+                                "name": func_tool_name,
+                                "args": func_tool_args,
+                                "ts": time.time(),
+                            }
+                        )
+                    ],
+                )
             )
             try:
                 if not req.func_tool:
@@ -470,15 +636,28 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 ),
                             )
                         elif isinstance(res.content[0], ImageContent):
+                            # Cache the image instead of sending directly
+                            cached_img = tool_image_cache.save_image(
+                                base64_data=res.content[0].data,
+                                tool_call_id=func_tool_id,
+                                tool_name=func_tool_name,
+                                index=0,
+                                mime_type=res.content[0].mimeType or "image/png",
+                            )
                             tool_call_result_blocks.append(
                                 ToolCallMessageSegment(
                                     role="tool",
                                     tool_call_id=func_tool_id,
-                                    content="The tool has successfully returned an image and sent directly to the user. You can describe it in your next response.",
+                                    content=(
+                                        f"Image returned and cached at path='{cached_img.file_path}'. "
+                                        f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                                        f"with type='image' and path='{cached_img.file_path}'."
+                                    ),
                                 ),
                             )
-                            yield MessageChain(type="tool_direct_result").base64_image(
-                                res.content[0].data,
+                            # Yield image info for LLM visibility (will be handled in step())
+                            yield _HandleFunctionToolsResult.from_cached_image(
+                                cached_img
                             )
                         elif isinstance(res.content[0], EmbeddedResource):
                             resource = res.content[0].resource
@@ -495,16 +674,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 and resource.mimeType
                                 and resource.mimeType.startswith("image/")
                             ):
+                                # Cache the image instead of sending directly
+                                cached_img = tool_image_cache.save_image(
+                                    base64_data=resource.blob,
+                                    tool_call_id=func_tool_id,
+                                    tool_name=func_tool_name,
+                                    index=0,
+                                    mime_type=resource.mimeType,
+                                )
                                 tool_call_result_blocks.append(
                                     ToolCallMessageSegment(
                                         role="tool",
                                         tool_call_id=func_tool_id,
-                                        content="The tool has successfully returned an image and sent directly to the user. You can describe it in your next response.",
+                                        content=(
+                                            f"Image returned and cached at path='{cached_img.file_path}'. "
+                                            f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
+                                            f"with type='image' and path='{cached_img.file_path}'."
+                                        ),
                                     ),
                                 )
-                                yield MessageChain(
-                                    type="tool_direct_result",
-                                ).base64_image(resource.blob)
+                                # Yield image info for LLM visibility
+                                yield _HandleFunctionToolsResult.from_cached_image(
+                                    cached_img
+                                )
                             else:
                                 tool_call_result_blocks.append(
                                     ToolCallMessageSegment(
@@ -565,23 +757,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # yield the last tool call result
         if tool_call_result_blocks:
             last_tcr_content = str(tool_call_result_blocks[-1].content)
-            yield MessageChain(
-                type="tool_call_result",
-                chain=[
-                    Json(
-                        data={
-                            "id": func_tool_id,
-                            "ts": time.time(),
-                            "result": last_tcr_content,
-                        }
-                    )
-                ],
+            yield _HandleFunctionToolsResult.from_message_chain(
+                MessageChain(
+                    type="tool_call_result",
+                    chain=[
+                        Json(
+                            data={
+                                "id": func_tool_id,
+                                "ts": time.time(),
+                                "result": last_tcr_content,
+                            }
+                        )
+                    ],
+                )
             )
             logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:
-            yield tool_call_result_blocks
+            yield _HandleFunctionToolsResult.from_tool_call_result_blocks(
+                tool_call_result_blocks
+            )
 
     def _build_tool_requery_context(
         self, tool_names: list[str]

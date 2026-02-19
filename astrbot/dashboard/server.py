@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import socket
+from pathlib import Path
 from typing import Protocol, cast
 
 import jwt
@@ -34,6 +35,12 @@ class _AddrWithPort(Protocol):
 
 
 APP: Quart
+
+
+def _parse_env_bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class AstrBotDashboard:
@@ -190,7 +197,7 @@ class AstrBotDashboard:
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
 
-    def _init_jwt_secret(self):
+    def _init_jwt_secret(self) -> None:
         if not self.config.get("dashboard", {}).get("jwt_secret", None):
             # 如果没有设置 JWT 密钥，则生成一个新的密钥
             jwt_secret = os.urandom(32).hex()
@@ -201,19 +208,33 @@ class AstrBotDashboard:
 
     def run(self):
         ip_addr = []
-        if p := os.environ.get("DASHBOARD_PORT"):
-            port = p
-        else:
-            port = self.core_lifecycle.astrbot_config["dashboard"].get("port", 6185)
-        host = self.core_lifecycle.astrbot_config["dashboard"].get("host", "0.0.0.0")
-        enable = self.core_lifecycle.astrbot_config["dashboard"].get("enable", True)
+        dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
+        port = (
+            os.environ.get("DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or dashboard_config.get("port", 6185)
+        )
+        host = (
+            os.environ.get("DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or dashboard_config.get("host", "0.0.0.0")
+        )
+        enable = dashboard_config.get("enable", True)
+        ssl_config = dashboard_config.get("ssl", {})
+        if not isinstance(ssl_config, dict):
+            ssl_config = {}
+        ssl_enable = _parse_env_bool(
+            os.environ.get("DASHBOARD_SSL_ENABLE")
+            or os.environ.get("ASTRBOT_DASHBOARD_SSL_ENABLE"),
+            bool(ssl_config.get("enable", False)),
+        )
+        scheme = "https" if ssl_enable else "http"
 
         if not enable:
             logger.info("WebUI 已被禁用")
             return None
 
-        logger.info(f"正在启动 WebUI, 监听地址: http://{host}:{port}")
-
+        logger.info(f"正在启动 WebUI, 监听地址: {scheme}://{host}:{port}")
         if host == "0.0.0.0":
             logger.info(
                 "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
@@ -241,9 +262,9 @@ class AstrBotDashboard:
             raise Exception(f"端口 {port} 已被占用")
 
         parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
-        parts.append(f"   ➜  本地: http://localhost:{port}\n")
+        parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
-            parts.append(f"   ➜  网络: http://{ip}:{port}\n")
+            parts.append(f"   ➜  网络: {scheme}://{ip}:{port}\n")
         parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
         display = "".join(parts)
 
@@ -257,11 +278,45 @@ class AstrBotDashboard:
         # 配置 Hypercorn
         config = HyperConfig()
         config.bind = [f"{host}:{port}"]
+        if ssl_enable:
+            cert_file = (
+                os.environ.get("DASHBOARD_SSL_CERT")
+                or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+                or ssl_config.get("cert_file", "")
+            )
+            key_file = (
+                os.environ.get("DASHBOARD_SSL_KEY")
+                or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+                or ssl_config.get("key_file", "")
+            )
+            ca_certs = (
+                os.environ.get("DASHBOARD_SSL_CA_CERTS")
+                or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+                or ssl_config.get("ca_certs", "")
+            )
+
+            cert_path = Path(cert_file).expanduser()
+            key_path = Path(key_file).expanduser()
+            if not cert_file or not key_file:
+                raise ValueError(
+                    "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
+                )
+            if not cert_path.is_file():
+                raise ValueError(f"SSL 证书文件不存在: {cert_path}")
+            if not key_path.is_file():
+                raise ValueError(f"SSL 私钥文件不存在: {key_path}")
+
+            config.certfile = str(cert_path.resolve())
+            config.keyfile = str(key_path.resolve())
+
+            if ca_certs:
+                ca_path = Path(ca_certs).expanduser()
+                if not ca_path.is_file():
+                    raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
+                config.ca_certs = str(ca_path.resolve())
 
         # 根据配置决定是否禁用访问日志
-        disable_access_log = self.core_lifecycle.astrbot_config.get(
-            "dashboard", {}
-        ).get("disable_access_log", True)
+        disable_access_log = dashboard_config.get("disable_access_log", True)
         if disable_access_log:
             config.accesslog = None
         else:
@@ -271,6 +326,6 @@ class AstrBotDashboard:
 
         return serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
         logger.info("AstrBot WebUI 已经被优雅地关闭")

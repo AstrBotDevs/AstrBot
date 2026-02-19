@@ -4,29 +4,39 @@
     <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
       style="display: flex; flex-direction: column; align-items: start;">
 
-      <!-- 普通配置选择区域 -->
-      <div class="d-flex flex-row pr-4"
-        style="margin-bottom: 16px; align-items: center; gap: 12px; justify-content: space-between; width: 100%;">
-        <div class="d-flex flex-row align-center" style="gap: 12px;">
-          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
+      <div class="config-toolbar d-flex flex-row pr-4"
+        style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
+        <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
+          <v-select class="config-select" style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
             v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
-          <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a>
+          <v-text-field
+            class="config-search-input"
+            v-model="configSearchKeyword"
+            prepend-inner-icon="mdi-magnify"
+            :label="tm('search.placeholder')"
+            hide-details
+            density="compact"
+            rounded="md"
+            variant="outlined"
+            style="min-width: 280px;"
+          />
+          <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
 
         </div>
-
-        <v-btn-toggle v-model="configType" mandatory color="primary" variant="outlined" density="comfortable"
-          rounded="md" @update:model-value="onConfigTypeToggle">
-          <v-btn value="normal" prepend-icon="mdi-cog" size="large">
-            {{ tm('configSelection.normalConfig') }}
-          </v-btn>
-          <v-btn value="system" prepend-icon="mdi-cog-outline" size="large">
-            {{ tm('configSelection.systemConfig') }}
-          </v-btn>
-        </v-btn-toggle>
       </div>
-
+      <v-slide-y-transition>
+        <div v-if="fetched && hasUnsavedChanges" class="unsaved-changes-banner-wrap">
+          <v-banner
+            icon="$warning"
+            lines="one"
+            class="unsaved-changes-banner my-4"
+          >
+            {{ tm('messages.unsavedChangesNotice') }}
+          </v-banner>
+        </div>
+      </v-slide-y-transition>
       <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
@@ -35,6 +45,7 @@
           <AstrBotCoreConfigWrapper 
             :metadata="metadata" 
             :config_data="config_data"
+            :search-keyword="configSearchKeyword"
           />
 
           <v-tooltip :text="tm('actions.save')" location="left">
@@ -190,6 +201,11 @@ import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
+import {
+  askForConfirmation as askForConfirmationDialog,
+  useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
   name: 'ConfigPage',
@@ -208,10 +224,12 @@ export default {
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/config');
+    const confirmDialog = useConfirmDialog();
 
     return {
       t,
-      tm
+      tm,
+      confirmDialog
     };
   },
 
@@ -240,10 +258,19 @@ export default {
       });
       return items;
     },
+    hasUnsavedChanges() {
+      if (!this.fetched) {
+        return false;
+      }
+      return this.getConfigSnapshot(this.config_data) !== this.lastSavedConfigSnapshot;
+    }
   },
   watch: {
     config_data_str(val) {
       this.config_data_has_changed = true;
+    },
+    '$route.fullPath'(newVal) {
+      this.syncConfigTypeFromHash(newVal);
     },
     initialConfigId(newVal) {
       if (!newVal) {
@@ -271,9 +298,11 @@ export default {
       save_message: "",
       save_message_success: "",
   configContentKey: 0,
+      lastSavedConfigSnapshot: '',
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
+      configSearchKeyword: '',
 
       // 系统配置开关
       isSystemConfig: false,
@@ -292,12 +321,57 @@ export default {
     }
   },
   mounted() {
+    const hashConfigType = this.extractConfigTypeFromHash(
+      this.$route?.fullPath || ''
+    );
+    this.configType = hashConfigType || 'normal';
+    this.isSystemConfig = this.configType === 'system';
+
     const targetConfigId = this.initialConfigId || 'default';
     this.getConfigInfoList(targetConfigId);
     // 初始化配置类型状态
     this.configType = this.isSystemConfig ? 'system' : 'normal';
+    
+    // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
+    window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
+  },
+
+  beforeUnmount() {
+    // 移除语言切换事件监听器
+    window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
   methods: {
+    // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
+    handleLocaleChange() {
+      // 重新加载当前配置
+      if (this.selectedConfigID) {
+        this.getConfig(this.selectedConfigID);
+      } else if (this.isSystemConfig) {
+        this.getConfig();
+      }
+    },
+
+  },
+  methods: {
+    extractConfigTypeFromHash(hash) {
+      const rawHash = String(hash || '');
+      const lastHashIndex = rawHash.lastIndexOf('#');
+      if (lastHashIndex === -1) {
+        return null;
+      }
+      const cleanHash = rawHash.slice(lastHashIndex + 1);
+      return cleanHash === 'system' || cleanHash === 'normal' ? cleanHash : null;
+    },
+    syncConfigTypeFromHash(hash) {
+      const configType = this.extractConfigTypeFromHash(hash);
+      if (!configType || configType === this.configType) {
+        return false;
+      }
+
+      this.configType = configType;
+      this.onConfigTypeToggle();
+      return true;
+    },
     getConfigInfoList(abconf_id) {
       // 获取配置列表
       axios.get('/api/config/abconfs').then((res) => {
@@ -340,6 +414,7 @@ export default {
         params: params
       }).then((res) => {
         this.config_data = res.data.data.config;
+        this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
         this.fetched = true
         this.metadata = res.data.data.metadata;
         this.configContentKey += 1;
@@ -364,14 +439,13 @@ export default {
 
       axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
+          this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
 
           if (this.isSystemConfig) {
-            axios.post('/api/stat/restart-core').then(() => {
-              this.$refs.wfr.check();
-            })
+            restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
           }
         } else {
           this.save_message = res.data.message || this.messages.saveError;
@@ -429,6 +503,7 @@ export default {
         // 重置选择到之前的值
         this.$nextTick(() => {
           this.selectedConfigID = this.selectedConfigInfo.id || 'default';
+          this.getConfig(this.selectedConfigID);
         });
       } else {
         this.getConfig(value);
@@ -473,8 +548,9 @@ export default {
         this.createNewConfig();
       }
     },
-    confirmDeleteConfig(config) {
-      if (confirm(this.tm('configManagement.confirmDelete').replace('{name}', config.name))) {
+    async confirmDeleteConfig(config) {
+      const message = this.tm('configManagement.confirmDelete').replace('{name}', config.name);
+      if (await askForConfirmationDialog(message, this.confirmDialog)) {
         this.deleteConfig(config.id);
       }
     },
@@ -544,19 +620,7 @@ export default {
       // 保持向后兼容性，更新 configType
       this.configType = this.isSystemConfig ? 'system' : 'normal';
 
-      this.fetched = false; // 重置加载状态
-
-      if (this.isSystemConfig) {
-        // 切换到系统配置
-        this.getConfig();
-      } else {
-        // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
-        if (this.selectedConfigID) {
-          this.getConfig(this.selectedConfigID);
-        } else {
-          this.getConfigInfoList("default");
-        }
-      }
+      this.onConfigTypeToggle();
     },
     openTestChat() {
       if (!this.selectedConfigID) {
@@ -571,6 +635,9 @@ export default {
     closeTestChat() {
       this.testChatDrawer = false;
       this.testConfigId = null;
+    },
+    getConfigSnapshot(config) {
+      return JSON.stringify(config ?? {});
     }
   },
 }
@@ -580,6 +647,26 @@ export default {
 <style>
 .v-tab {
   text-transform: none !important;
+}
+
+.unsaved-changes-banner {
+  border-radius: 8px;
+}
+
+.v-theme--light .unsaved-changes-banner {
+  background-color: #f1f4f9 !important;
+}
+
+.v-theme--dark .unsaved-changes-banner {
+  background-color: #2d2d2d !important;
+}
+
+.unsaved-changes-banner-wrap {
+  position: sticky;
+  top: calc(var(--v-layout-top, 64px));
+  z-index: 20;
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 /* 按钮切换样式优化 */
@@ -628,6 +715,21 @@ export default {
 
   .config-panel {
     width: 100%;
+  }
+
+  .config-toolbar {
+    padding-right: 0 !important;
+  }
+
+  .config-toolbar-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .config-select,
+  .config-search-input {
+    width: 100%;
+    min-width: 0 !important;
   }
 }
 

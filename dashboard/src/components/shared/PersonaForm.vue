@@ -1,11 +1,15 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="500px">
-        <v-card>
-            <v-card-title class="text-h2">
+    <v-dialog
+        v-model="showDialog"
+        :max-width="$vuetify.display.smAndDown ? undefined : '760px'"
+        scrollable
+    >
+        <v-card class="persona-form-card" :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }">
+            <v-card-title class="persona-form-title text-h2">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
             </v-card-title>
 
-            <v-card-text>
+            <v-card-text class="persona-form-content">
                 <!-- 创建位置提示 -->
                 <v-alert
                     v-if="!editingPersona"
@@ -51,7 +55,7 @@
                                     </v-radio>
                                 </v-radio-group>
 
-                                <div v-if="toolSelectValue === '1'" class="mt-3 ml-8">
+                                <div v-if="toolSelectValue === '1'" class="mt-3 selected-config-area">
 
                                     <!-- 工具搜索 -->
                                     <v-text-field v-model="toolSearch" :label="tm('form.searchTools')"
@@ -178,7 +182,7 @@
                                     <v-radio :label="tm('form.skillsSelectSpecific')" value="1"></v-radio>
                                 </v-radio-group>
 
-                                <div v-if="skillSelectValue === '1'" class="mt-3 ml-8">
+                                <div v-if="skillSelectValue === '1'" class="mt-3 selected-config-area">
                                     <v-text-field v-model="skillSearch" :label="tm('form.searchSkills')"
                                         prepend-inner-icon="mdi-magnify" variant="outlined" density="compact"
                                         hide-details clearable class="mb-3" />
@@ -288,7 +292,10 @@
                 </v-form>
             </v-card-text>
 
-            <v-card-actions>
+            <v-card-actions class="persona-form-actions">
+                <v-btn v-if="editingPersona" color="error" variant="text" @click="deletePersona">
+                    {{ tm('buttons.delete') }}
+                </v-btn>
                 <v-spacer />
                 <v-btn color="grey" variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
@@ -304,6 +311,10 @@
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
     name: 'PersonaForm',
@@ -325,10 +336,11 @@ export default {
             default: null
         }
     },
-    emits: ['update:modelValue', 'saved', 'error'],
+    emits: ['update:modelValue', 'saved', 'error', 'deleted'],
     setup() {
         const { tm } = useModuleI18n('features/persona');
-        return { tm };
+        const confirmDialog = useConfirmDialog();
+        return { tm, confirmDialog };
     },
     data() {
         return {
@@ -591,6 +603,37 @@ export default {
             this.saving = false;
         },
 
+        async deletePersona() {
+            if (!this.editingPersona) return;
+
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: this.editingPersona.persona_id }),
+                    this.confirmDialog,
+                ))
+            ) {
+                return;
+            }
+
+            this.saving = true;
+            try {
+                const response = await axios.post('/api/persona/delete', {
+                    persona_id: this.editingPersona.persona_id
+                });
+
+                if (response.data.status === 'ok') {
+                    this.$emit('deleted', response.data.message || this.tm('messages.deleteSuccess'));
+                    this.closeDialog();
+                } else {
+                    this.$emit('error', response.data.message || this.tm('messages.deleteError'));
+                }
+            } catch (error) {
+                this.$emit('error', error.response?.data?.message || this.tm('messages.deleteError'));
+            } finally {
+                this.saving = false;
+            }
+        },
+
         addDialogPair() {
             this.personaForm.begin_dialogs.push('', '');
             // 自动展开预设对话面板
@@ -760,6 +803,32 @@ export default {
 </script>
 
 <style scoped>
+.persona-form-card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.persona-form-content {
+    max-height: min(78vh, 760px);
+    overflow-y: auto;
+}
+
+.persona-form-title {
+    line-height: 1.3;
+}
+
+.persona-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: rgb(var(--v-theme-surface));
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.selected-config-area {
+    margin-left: 32px;
+}
+
 .tools-selection {
     max-height: 300px;
     overflow-y: auto;
@@ -772,5 +841,39 @@ export default {
 
 .v-virtual-scroll {
     padding-bottom: 16px;
+}
+
+@media (max-width: 600px) {
+    .persona-form-card-mobile {
+        border-radius: 0;
+    }
+
+    .persona-form-content {
+        max-height: calc(100vh - 128px);
+        padding: 16px !important;
+    }
+
+    .persona-form-title {
+        font-size: 1.15rem !important;
+        padding: 12px 16px !important;
+    }
+
+    .selected-config-area {
+        margin-left: 0;
+    }
+
+    .tools-selection,
+    .skills-selection {
+        max-height: 38vh;
+    }
+
+    .persona-form-actions {
+        padding: 12px 16px !important;
+        gap: 8px;
+    }
+
+    .persona-form-actions .v-btn {
+        min-width: 0;
+    }
 }
 </style>

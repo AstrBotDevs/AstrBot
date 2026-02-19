@@ -25,7 +25,8 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -39,7 +40,7 @@ else:
 
 
 class WecomServer:
-    def __init__(self, event_queue: asyncio.Queue, config: dict):
+    def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
         self.server = quart.Quart(__name__)
         self.port = int(cast(str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
@@ -123,7 +124,7 @@ class WecomServer:
 
         return "success"
 
-    async def start_polling(self):
+    async def start_polling(self) -> None:
         logger.info(
             f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。",
         )
@@ -133,7 +134,7 @@ class WecomServer:
             shutdown_trigger=self.shutdown_trigger,
         )
 
-    async def shutdown_trigger(self):
+    async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
 
 
@@ -165,6 +166,7 @@ class WecomPlatformAdapter(Platform):
             self.api_base_url += "/"
 
         self.server = WecomServer(self._event_queue, self.config)
+        self.agent_id: str | None = None
 
         self.client = WeChatClient(
             self.config["corpid"].strip(),
@@ -182,7 +184,7 @@ class WecomPlatformAdapter(Platform):
 
         self.client.__setattr__("API_BASE_URL", self.api_base_url)
 
-        async def callback(msg: BaseMessage):
+        async def callback(msg: BaseMessage) -> None:
             if msg.type == "unknown" and msg._data["Event"] == "kf_msg_or_event":
 
                 def get_latest_msg_item() -> dict | None:
@@ -214,7 +216,37 @@ class WecomPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
+        # 企业微信客服不支持主动发送
+        if hasattr(self.client, "kf_message"):
+            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
+            await super().send_by_session(session, message_chain)
+            return
+        if not self.agent_id:
+            logger.warning(
+                f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
+            )
+            await super().send_by_session(session, message_chain)
+            return
+
+        message_obj = AstrBotMessage()
+        message_obj.self_id = self.agent_id
+        message_obj.session_id = session.session_id
+        message_obj.type = session.message_type
+        message_obj.sender = MessageMember(session.session_id, session.session_id)
+        message_obj.message = []
+        message_obj.message_str = ""
+        message_obj.message_id = uuid.uuid4().hex
+        message_obj.raw_message = {"_proactive_send": True}
+
+        event = WecomPlatformEvent(
+            message_str=message_obj.message_str,
+            message_obj=message_obj,
+            platform_meta=self.meta(),
+            session_id=message_obj.session_id,
+            client=self.client,
+        )
+        await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
     @override
@@ -228,7 +260,7 @@ class WecomPlatformAdapter(Platform):
         )
 
     @override
-    async def run(self):
+    async def run(self) -> None:
         loop = asyncio.get_event_loop()
         if self.kf_name:
             try:
@@ -312,17 +344,14 @@ class WecomPlatformAdapter(Platform):
                 self.client.media.download,
                 msg.media_id,
             )
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
 
             try:
-                from pydub import AudioSegment
-
                 path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
-                audio = AudioSegment.from_file(path)
-                audio.export(path_wav, format="wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -344,6 +373,7 @@ class WecomPlatformAdapter(Platform):
             logger.warning(f"暂未实现的事件: {msg.type}")
             return
 
+        self.agent_id = abm.self_id
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
@@ -370,7 +400,8 @@ class WecomPlatformAdapter(Platform):
                 self.client.media.download,
                 media_id,
             )
-            path = f"data/temp/wechat_kf_{media_id}.jpg"
+            temp_dir = get_astrbot_temp_path()
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
             with open(path, "wb") as f:
                 f.write(resp.content)
             abm.message = [Image(file=path, url=path)]
@@ -382,17 +413,14 @@ class WecomPlatformAdapter(Platform):
                 media_id,
             )
 
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+            temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
             with open(path, "wb") as f:
                 f.write(resp.content)
 
             try:
-                from pydub import AudioSegment
-
                 path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
-                audio = AudioSegment.from_file(path)
-                audio.export(path_wav, format="wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -404,7 +432,7 @@ class WecomPlatformAdapter(Platform):
             return
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -417,7 +445,7 @@ class WecomPlatformAdapter(Platform):
     def get_client(self) -> WeChatClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         self.server.shutdown_event.set()
         try:
             await self.server.server.shutdown()

@@ -2,11 +2,12 @@ import asyncio
 import base64
 import inspect
 import json
-import os
 import random
 import re
 from collections.abc import AsyncGenerator
+from typing import Any
 
+import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
@@ -22,6 +23,12 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    is_connection_error,
+    log_connection_failure,
+)
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
 
@@ -31,6 +38,133 @@ from ..register import register_provider_adapter
     "OpenAI API Chat Completion 提供商适配器",
 )
 class ProviderOpenAIOfficial(Provider):
+    _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+
+    @classmethod
+    def _truncate_error_text_candidate(cls, text: str) -> str:
+        if len(text) <= cls._ERROR_TEXT_CANDIDATE_MAX_CHARS:
+            return text
+        return text[: cls._ERROR_TEXT_CANDIDATE_MAX_CHARS]
+
+    @staticmethod
+    def _safe_json_dump(value: Any) -> str | None:
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except Exception:
+            return None
+
+    def _get_image_moderation_error_patterns(self) -> list[str]:
+        """Return configured moderation patterns (case-insensitive substring match, not regex)."""
+        configured = self.provider_config.get("image_moderation_error_patterns", [])
+        patterns: list[str] = []
+        if isinstance(configured, str):
+            configured = [configured]
+        if isinstance(configured, list):
+            for pattern in configured:
+                if not isinstance(pattern, str):
+                    continue
+                pattern = pattern.strip()
+                if pattern:
+                    patterns.append(pattern)
+        return patterns
+
+    @staticmethod
+    def _extract_error_text_candidates(error: Exception) -> list[str]:
+        candidates: list[str] = []
+
+        def _append_candidate(candidate: Any):
+            if candidate is None:
+                return
+            text = str(candidate).strip()
+            if not text:
+                return
+            candidates.append(
+                ProviderOpenAIOfficial._truncate_error_text_candidate(text)
+            )
+
+        _append_candidate(str(error))
+
+        body = getattr(error, "body", None)
+        if isinstance(body, dict):
+            err_obj = body.get("error")
+            body_text = ProviderOpenAIOfficial._safe_json_dump(
+                {"error": err_obj} if isinstance(err_obj, dict) else body
+            )
+            _append_candidate(body_text)
+            if isinstance(err_obj, dict):
+                for field in ("message", "type", "code", "param"):
+                    value = err_obj.get(field)
+                    if value is not None:
+                        _append_candidate(value)
+        elif isinstance(body, str):
+            _append_candidate(body)
+
+        response = getattr(error, "response", None)
+        if response is not None:
+            response_text = getattr(response, "text", None)
+            if isinstance(response_text, str):
+                _append_candidate(response_text)
+
+        return normalize_and_dedupe_strings(candidates)
+
+    def _is_content_moderated_upload_error(self, error: Exception) -> bool:
+        patterns = [
+            pattern.lower() for pattern in self._get_image_moderation_error_patterns()
+        ]
+        if not patterns:
+            return False
+        candidates = [
+            candidate.lower()
+            for candidate in self._extract_error_text_candidates(error)
+        ]
+        for pattern in patterns:
+            if any(pattern in candidate for candidate in candidates):
+                return True
+        return False
+
+    @staticmethod
+    def _context_contains_image(contexts: list[dict]) -> bool:
+        for context in contexts:
+            content = context.get("content")
+            if not isinstance(content, list):
+                continue
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "image_url":
+                    return True
+        return False
+
+    async def _fallback_to_text_only_and_retry(
+        self,
+        payloads: dict,
+        context_query: list,
+        chosen_key: str,
+        available_api_keys: list[str],
+        func_tool: ToolSet | None,
+        reason: str,
+        *,
+        image_fallback_used: bool = False,
+    ) -> tuple:
+        logger.warning(
+            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            reason,
+        )
+        new_contexts = await self._remove_image_from_context(context_query)
+        payloads["messages"] = new_contexts
+        return (
+            False,
+            chosen_key,
+            available_api_keys,
+            payloads,
+            new_contexts,
+            func_tool,
+            image_fallback_used,
+        )
+
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """创建带代理的 HTTP 客户端"""
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("OpenAI", proxy)
+
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -55,6 +189,7 @@ class ProviderOpenAIOfficial(Provider):
                 default_headers=self.custom_headers,
                 base_url=provider_config.get("api_base", ""),
                 timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
             )
         else:
             # Using OpenAI Official API
@@ -63,6 +198,7 @@ class ProviderOpenAIOfficial(Provider):
                 base_url=provider_config.get("api_base", None),
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
             )
 
         self.default_params = inspect.signature(
@@ -187,7 +323,8 @@ class ProviderOpenAIOfficial(Provider):
                 llm_response.reasoning_content = reasoning
                 _y = True
             if delta.content:
-                completion_text = delta.content
+                # Don't strip streaming chunks to preserve spaces between words
+                completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
                     chain=[Comp.Plain(completion_text)],
                 )
@@ -235,6 +372,86 @@ class ProviderOpenAIOfficial(Provider):
             output=completion_tokens,
         )
 
+    @staticmethod
+    def _normalize_content(raw_content: Any, strip: bool = True) -> str:
+        """Normalize content from various formats to plain string.
+
+        Some LLM providers return content as list[dict] format
+        like [{'type': 'text', 'text': '...'}] instead of
+        plain string. This method handles both formats.
+
+        Args:
+            raw_content: The raw content from LLM response, can be str, list, or other.
+            strip: Whether to strip whitespace from the result. Set to False for
+                   streaming chunks to preserve spaces between words.
+
+        Returns:
+            Normalized plain text string.
+        """
+        if isinstance(raw_content, list):
+            # Check if this looks like OpenAI content-part format
+            # Only process if at least one item has {'type': 'text', 'text': ...} structure
+            has_content_part = any(
+                isinstance(part, dict) and part.get("type") == "text"
+                for part in raw_content
+            )
+            if has_content_part:
+                text_parts = []
+                for part in raw_content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_val = part.get("text", "")
+                        # Coerce to str in case text is null or non-string
+                        text_parts.append(str(text_val) if text_val is not None else "")
+                return "".join(text_parts)
+            # Not content-part format, return string representation
+            return str(raw_content)
+
+        if isinstance(raw_content, str):
+            content = raw_content.strip() if strip else raw_content
+            # Check if the string is a JSON-encoded list (e.g., "[{'type': 'text', ...}]")
+            # This can happen when streaming concatenates content that was originally list format
+            # Only check if it looks like a complete JSON array (requires strip for check)
+            check_content = raw_content.strip()
+            if (
+                check_content.startswith("[")
+                and check_content.endswith("]")
+                and len(check_content) < 8192
+            ):
+                try:
+                    # First try standard JSON parsing
+                    parsed = json.loads(check_content)
+                except json.JSONDecodeError:
+                    # If that fails, try parsing as Python literal (handles single quotes)
+                    # This is safer than blind replace("'", '"') which corrupts apostrophes
+                    try:
+                        import ast
+
+                        parsed = ast.literal_eval(check_content)
+                    except (ValueError, SyntaxError):
+                        parsed = None
+
+                if isinstance(parsed, list):
+                    # Only convert if it matches OpenAI content-part schema
+                    # i.e., at least one item has {'type': 'text', 'text': ...}
+                    has_content_part = any(
+                        isinstance(part, dict) and part.get("type") == "text"
+                        for part in parsed
+                    )
+                    if has_content_part:
+                        text_parts = []
+                        for part in parsed:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                text_val = part.get("text", "")
+                                # Coerce to str in case text is null or non-string
+                                text_parts.append(
+                                    str(text_val) if text_val is not None else ""
+                                )
+                        if text_parts:
+                            return "".join(text_parts)
+            return content
+
+        return str(raw_content)
+
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
     ) -> LLMResponse:
@@ -247,8 +464,7 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the text completion
         if choice.message.content is not None:
-            # text completion
-            completion_text = str(choice.message.content).strip()
+            completion_text = self._normalize_content(choice.message.content)
             # specially, some providers may set <think> tags around reasoning content in the completion text,
             # we use regex to remove them, and store then in reasoning_content field
             reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
@@ -258,6 +474,8 @@ class ProviderOpenAIOfficial(Provider):
                     [match.strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
+            # Also clean up orphan </think> tags that may leak from some models
+            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
 
         # parse the reasoning content if any
@@ -363,7 +581,7 @@ class ProviderOpenAIOfficial(Provider):
 
         return payloads, context_query
 
-    def _finally_convert_payload(self, payloads: dict):
+    def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
@@ -391,6 +609,7 @@ class ProviderOpenAIOfficial(Provider):
         available_api_keys: list[str],
         retry_cnt: int,
         max_retries: int,
+        image_fallback_used: bool = False,
     ) -> tuple:
         """处理API错误并尝试恢复"""
         if "429" in str(e):
@@ -410,6 +629,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     context_query,
                     func_tool,
+                    image_fallback_used,
                 )
             raise e
         if "maximum context length" in str(e):
@@ -425,20 +645,34 @@ class ProviderOpenAIOfficial(Provider):
                 payloads,
                 context_query,
                 func_tool,
+                image_fallback_used,
             )
         if "The model is not a VLM" in str(e):  # siliconcloud
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
             # 尝试删除所有 image
-            new_contexts = await self._remove_image_from_context(context_query)
-            payloads["messages"] = new_contexts
-            context_query = new_contexts
-            return (
-                False,
-                chosen_key,
-                available_api_keys,
+            return await self._fallback_to_text_only_and_retry(
                 payloads,
                 context_query,
+                chosen_key,
+                available_api_keys,
                 func_tool,
+                "model_not_vlm",
+                image_fallback_used=True,
             )
+        if self._is_content_moderated_upload_error(e):
+            if image_fallback_used or not self._context_contains_image(context_query):
+                raise e
+            return await self._fallback_to_text_only_and_retry(
+                payloads,
+                context_query,
+                chosen_key,
+                available_api_keys,
+                func_tool,
+                "image_content_moderated",
+                image_fallback_used=True,
+            )
+
         if (
             "Function calling is not enabled" in str(e)
             or ("tool" in str(e).lower() and "support" in str(e).lower())
@@ -449,18 +683,23 @@ class ProviderOpenAIOfficial(Provider):
                 f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
             )
             payloads.pop("tools", None)
-            return False, chosen_key, available_api_keys, payloads, context_query, None
+            return (
+                False,
+                chosen_key,
+                available_api_keys,
+                payloads,
+                context_query,
+                None,
+                image_fallback_used,
+            )
         # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
 
         if "tool" in str(e).lower() and "support" in str(e).lower():
             logger.error("疑似该模型不支持函数调用工具调用。请输入 /tool off_all")
 
-        if "Connection error." in str(e):
-            proxy = os.environ.get("http_proxy", None)
-            if proxy:
-                logger.error(
-                    f"可能为代理原因，请检查代理是否正常。当前代理: {proxy}",
-                )
+        if is_connection_error(e):
+            proxy = self.provider_config.get("proxy", "")
+            log_connection_failure("OpenAI", e, proxy)
 
         raise e
 
@@ -492,6 +731,7 @@ class ProviderOpenAIOfficial(Provider):
         max_retries = 10
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
+        image_fallback_used = False
 
         last_exception = None
         retry_cnt = 0
@@ -509,6 +749,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     context_query,
                     func_tool,
+                    image_fallback_used,
                 ) = await self._handle_api_error(
                     e,
                     payloads,
@@ -518,6 +759,7 @@ class ProviderOpenAIOfficial(Provider):
                     available_api_keys,
                     retry_cnt,
                     max_retries,
+                    image_fallback_used=image_fallback_used,
                 )
                 if success:
                     break
@@ -555,6 +797,7 @@ class ProviderOpenAIOfficial(Provider):
         max_retries = 10
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
+        image_fallback_used = False
 
         last_exception = None
         retry_cnt = 0
@@ -573,6 +816,7 @@ class ProviderOpenAIOfficial(Provider):
                     payloads,
                     context_query,
                     func_tool,
+                    image_fallback_used,
                 ) = await self._handle_api_error(
                     e,
                     payloads,
@@ -582,6 +826,7 @@ class ProviderOpenAIOfficial(Provider):
                     available_api_keys,
                     retry_cnt,
                     max_retries,
+                    image_fallback_used=image_fallback_used,
                 )
                 if success:
                     break
@@ -617,7 +862,7 @@ class ProviderOpenAIOfficial(Provider):
     def get_keys(self) -> list[str]:
         return self.api_keys
 
-    def set_key(self, key):
+    def set_key(self, key) -> None:
         self.client.api_key = key
 
     async def assemble_context(
@@ -697,3 +942,7 @@ class ProviderOpenAIOfficial(Provider):
         with open(image_url, "rb") as f:
             image_bs64 = base64.b64encode(f.read()).decode("utf-8")
             return "data:image/jpeg;base64," + image_bs64
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

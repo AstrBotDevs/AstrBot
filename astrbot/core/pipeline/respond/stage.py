@@ -35,7 +35,7 @@ class RespondStage(Stage):
         Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
     }
 
-    async def initialize(self, ctx: PipelineContext):
+    async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         self.config = ctx.astrbot_config
         self.platform_settings: dict = self.config.get("platform_settings", {})
@@ -61,16 +61,17 @@ class RespondStage(Stage):
         self.log_base = float(
             ctx.astrbot_config["platform_settings"]["segmented_reply"]["log_base"],
         )
-        interval_str: str = ctx.astrbot_config["platform_settings"]["segmented_reply"][
-            "interval"
-        ]
-        interval_str_ls = interval_str.replace(" ", "").split(",")
-        try:
-            self.interval = [float(t) for t in interval_str_ls]
-        except BaseException as e:
-            logger.error(f"解析分段回复的间隔时间失败。{e}")
-            self.interval = [1.5, 3.5]
-        logger.info(f"分段回复间隔时间：{self.interval}")
+        self.interval = [1.5, 3.5]
+        if self.enable_seg:
+            interval_str: str = ctx.astrbot_config["platform_settings"][
+                "segmented_reply"
+            ]["interval"]
+            interval_str_ls = interval_str.replace(" ", "").split(",")
+            try:
+                self.interval = [float(t) for t in interval_str_ls]
+            except BaseException as e:
+                logger.error(f"解析分段回复的间隔时间失败。{e}")
+            logger.info(f"分段回复间隔时间：{self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
         """分段回复 统计字数"""
@@ -91,7 +92,7 @@ class RespondStage(Stage):
         # random
         return random.uniform(self.interval[0], self.interval[1])
 
-    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]):
+    async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
 
         Args:

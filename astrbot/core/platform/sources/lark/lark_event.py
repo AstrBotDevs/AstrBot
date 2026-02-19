@@ -21,7 +21,7 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.media_utils import (
     convert_audio_to_opus,
@@ -38,7 +38,7 @@ class LarkMessageEvent(AstrMessageEvent):
         platform_meta,
         session_id,
         bot: lark.Client,
-    ):
+    ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
 
@@ -202,8 +202,11 @@ class LarkMessageEvent(AstrMessageEvent):
                     base64_str = comp.file.removeprefix("base64://")
                     image_data = base64.b64decode(base64_str)
                     # save as temp file
-                    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                    file_path = os.path.join(temp_dir, f"{uuid.uuid4()}_test.jpg")
+                    temp_dir = get_astrbot_temp_path()
+                    file_path = os.path.join(
+                        temp_dir,
+                        f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
+                    )
                     with open(file_path, "wb") as f:
                         f.write(BytesIO(image_data).getvalue())
                 else:
@@ -274,7 +277,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """通用的消息链发送方法
 
         Args:
@@ -342,7 +345,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 media_comp, lark_client, reply_message_id, receive_id, receive_id_type
             )
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息链到飞书，然后交给父类做框架级发送/记录"""
         await LarkMessageEvent.send_message_chain(
             message,
@@ -358,7 +361,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """发送文件消息
 
         Args:
@@ -392,7 +395,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """发送音频消息
 
         Args:
@@ -465,7 +468,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
-    ):
+    ) -> None:
         """发送视频消息
 
         Args:
@@ -531,7 +534,7 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id_type=receive_id_type,
         )
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         if self.bot.im is None:
             logger.error("[Lark] API Client im 模块未初始化，无法发送表情")
             return

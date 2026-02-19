@@ -14,9 +14,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         parameters: dict | None = None,
         tool_description: str | None = None,
         **kwargs,
-    ):
-        self.agent = agent
-
+    ) -> None:
         # Avoid passing duplicate `description` to the FunctionTool dataclass.
         # Some call sites (e.g. SubAgentOrchestrator) pass `description` via kwargs
         # to override what the main agent sees, while we also compute a default
@@ -34,6 +32,8 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         # Optional provider override for this subagent. When set, the handoff
         # execution will use this chat provider id instead of the global/default.
         self.provider_id: str | None = None
+        # Note: Must assign after super().__init__() to prevent parent class from overriding this attribute
+        self.agent = agent
 
     def default_parameters(self) -> dict:
         return {

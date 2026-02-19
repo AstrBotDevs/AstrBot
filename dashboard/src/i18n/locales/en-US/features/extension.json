@@ -38,7 +38,8 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
-    "deleteSource": "Delete Source"
+    "deleteSource": "Delete Source",
+    "reshuffle": "Shuffle Again"
   },
   "status": {
     "enabled": "Enabled",
@@ -103,7 +104,9 @@
     "sourceUpdated": "Source updated successfully",
     "defaultOfficialSource": "Default Official Source",
     "sourceExists": "This source already exists",
-    "installPlugin": "Install Plugin"
+    "installPlugin": "Install Plugin",
+    "randomPlugins": "🎲 Random Plugins",
+    "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
     "default": "Default",

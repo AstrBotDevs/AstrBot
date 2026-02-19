@@ -14,12 +14,12 @@ import certifi
 import psutil
 from PIL import Image
 
-from .astrbot_path import get_astrbot_data_path
+from .astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
 
 
-def on_error(func, path, exc_info):
+def on_error(func, path, exc_info) -> None:
     """A callback of the rmtree function."""
     import stat
 
@@ -37,7 +37,7 @@ def remove_dir(file_path: str) -> bool:
     return True
 
 
-def port_checker(port: int, host: str = "localhost"):
+def port_checker(port: int, host: str = "localhost") -> bool:
     sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sk.settimeout(1)
     try:
@@ -50,21 +50,10 @@ def port_checker(port: int, host: str = "localhost"):
 
 
 def save_temp_img(img: Image.Image | bytes) -> str:
-    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-    # 获得文件创建时间，清除超过 12 小时的
-    try:
-        for f in os.listdir(temp_dir):
-            path = os.path.join(temp_dir, f)
-            if os.path.isfile(path):
-                ctime = os.path.getctime(path)
-                if time.time() - ctime > 3600 * 12:
-                    os.remove(path)
-    except Exception as e:
-        print(f"清除临时文件失败: {e}")
-
+    temp_dir = get_astrbot_temp_path()
     # 获得时间戳
     timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
-    p = os.path.join(temp_dir, f"{timestamp}.jpg")
+    p = os.path.join(temp_dir, f"io_temp_img_{timestamp}.jpg")
 
     if isinstance(img, Image.Image):
         img.save(p)
@@ -134,7 +123,7 @@ async def download_image_by_url(
         raise e
 
 
-async def download_file(url: str, path: str, show_progress: bool = False):
+async def download_file(url: str, path: str, show_progress: bool = False) -> None:
     """从指定 url 下载文件到指定路径 path"""
     try:
         ssl_context = ssl.create_default_context(

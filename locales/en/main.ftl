@@ -1,0 +1,9 @@
+main_python_version_error = Please use Python 3.10+ to run this project.
+main_use_specified_webui = Using specified WebUI directory: { $webui_dir }
+main_webui_not_found = The specified WebUI directory { $webui_dir } does not exist, using default logic.
+main_webui_latest = WebUI version is up to date.
+main_webui_version_mismatch = Detected WebUI version ({ $v }) does not match current AstrBot version (v{ $version }).
+main_downloading_dashboard = Starting to download dashboard files... Peak hours (evening) may result in slower speeds. If downloads fail repeatedly, please go to https://github.com/AstrBotDevs/AstrBot/releases/latest to download dist.zip and extract the dist folder into the data directory.
+main_download_dashboard_failed = Failed to download dashboard files: { $e }.
+main_download_dashboard_success = Dashboard download complete.
+main_argparse_webui_dir_help = Specify the WebUI static file directory path.

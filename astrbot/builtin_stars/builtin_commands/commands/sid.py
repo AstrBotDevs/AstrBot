@@ -7,10 +7,10 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 class SIDCommand:
     """会话ID命令类"""
 
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def sid(self, event: AstrMessageEvent):
+    async def sid(self, event: AstrMessageEvent) -> None:
         """获取消息来源信息"""
         sid = event.unified_msg_origin
         user_id = str(event.get_sender_id())

@@ -42,8 +42,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 export interface Project {
     project_id: string;
@@ -72,6 +73,8 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n('features/chat');
 
+const confirmDialog = useConfirmDialog();
+
 const expanded = ref(props.initialExpanded);
 
 // 从 localStorage 读取项目展开状态
@@ -85,9 +88,9 @@ function toggleExpanded() {
     localStorage.setItem('projectsExpanded', JSON.stringify(expanded.value));
 }
 
-function handleDeleteProject(project: Project) {
+async function handleDeleteProject(project: Project) {
     const message = tm('project.confirmDelete', { title: project.title });
-    if (window.confirm(message)) {
+    if (await askForConfirmation(message, confirmDialog)) {
         emit('deleteProject', project.project_id);
     }
 }

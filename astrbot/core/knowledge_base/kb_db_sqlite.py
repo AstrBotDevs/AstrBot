@@ -253,7 +253,7 @@ class KBSQLiteDatabase:
                 "knowledge_base": row[1],
             }
 
-    async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB):
+    async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB) -> None:
         """删除单个文档及其相关数据"""
         # 在知识库表中删除
         async with self.get_db() as session, session.begin():

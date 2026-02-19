@@ -7,6 +7,7 @@ import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import McpServersSection from "@/components/extension/McpServersSection.vue";
 import SkillsSection from "@/components/extension/SkillsSection.vue";
+import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import axios from "axios";
 import { pinyin } from "pinyin-pro";
@@ -14,7 +15,7 @@ import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 
-import { ref, computed, onMounted, reactive, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 const commonStore = useCommonStore();
@@ -175,6 +176,7 @@ const debouncedMarketSearch = ref("");
 const refreshingMarket = ref(false);
 const sortBy = ref("default"); // default, stars, author, updated
 const sortOrder = ref("desc"); // desc (降序) or asc (升序)
+const randomPluginNames = ref([]);
 
 // 插件市场拼音搜索
 const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -310,8 +312,42 @@ const sortedPlugins = computed(() => {
   return plugins;
 });
 
+const RANDOM_PLUGINS_COUNT = 6;
+
+const randomPlugins = computed(() => {
+  const allPlugins = pluginMarketData.value;
+  if (allPlugins.length === 0) return [];
+
+  const pluginsByName = new Map(allPlugins.map((plugin) => [plugin.name, plugin]));
+  const selected = randomPluginNames.value
+    .map((name) => pluginsByName.get(name))
+    .filter(Boolean);
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  return allPlugins.slice(0, Math.min(RANDOM_PLUGINS_COUNT, allPlugins.length));
+});
+
+const shufflePlugins = (plugins) => {
+  const shuffled = [...plugins];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+const refreshRandomPlugins = () => {
+  const shuffled = shufflePlugins(pluginMarketData.value);
+  randomPluginNames.value = shuffled
+    .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
+    .map((plugin) => plugin.name);
+};
+
 // 分页计算属性
-const displayItemsPerPage = 9; // 固定每页显示6个卡片（2行）
+const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
 
 const totalPages = computed(() => {
   return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
@@ -357,17 +393,53 @@ const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
   setTimeout(resetLoadingDialog, timeToClose);
 };
 
+const failedPluginsDict = ref({});
+
 const getExtensions = async () => {
   loading_.value = true;
   try {
-    const res = await axios.get("/api/plugin/get");
+    const res = await axios.get("/api/plugin/get");   
     Object.assign(extension_data, res.data);
+    
+    const failRes = await axios.get("/api/plugin/source/get-failed-plugins");    
+    failedPluginsDict.value = failRes.data.data || {};
+    
     checkUpdate();
   } catch (err) {
     toast(err, "error");
   } finally {
     loading_.value = false;
   }
+};
+
+const handleReloadAllFailed = async () => {
+    const dirNames = Object.keys(failedPluginsDict.value);
+    if (dirNames.length === 0) {
+        toast("没有需要重载的失败插件", "info");
+        return;
+    }
+
+    loading_.value = true;
+    try {
+        const promises = dirNames.map(dir => 
+            axios.post("/api/plugin/reload-failed", { dir_name: dir })
+        );
+        await Promise.all(promises);
+        
+        toast("已尝试重载所有失败插件", "success");
+        
+        // 清空 message 关闭对话框
+        extension_data.message = "";
+        
+        // 刷新列表
+        await getExtensions();
+        
+    } catch (e) {
+        console.error("重载失败:", e);
+        toast("批量重载过程中出现错误", "error");
+    } finally {
+        loading_.value = false;
+    }
 };
 
 const checkUpdate = () => {
@@ -1001,6 +1073,7 @@ const refreshPluginMarket = async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    refreshRandomPlugins();
     currentPage.value = 1; // 重置到第一页
 
     toast(tm("messages.refreshSuccess"), "success");
@@ -1049,9 +1122,26 @@ onMounted(async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    refreshRandomPlugins();
   } catch (err) {
     toast(tm("messages.getMarketDataFailed") + " " + err, "error");
   }
+});
+
+// 处理语言切换事件，重新加载插件配置以获取插件的 i18n 数据
+const handleLocaleChange = () => {
+  // 如果配置对话框是打开的，重新加载当前插件的配置
+  if (configDialog.value && currentConfigPlugin.value) {
+    openExtensionConfig(currentConfigPlugin.value);
+  }
+};
+
+// 监听语言切换事件
+window.addEventListener("astrbot-locale-changed", handleLocaleChange);
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
 });
 
 // 搜索防抖处理
@@ -1257,6 +1347,15 @@ watch(activeTab, (newTab) => {
                           </p>
                         </v-card-text>
                         <v-card-actions>
+                          <v-btn
+                              
+                              color="error"
+                              variant="tonal"
+                              prepend-icon="mdi-refresh"
+                              @click="handleReloadAllFailed"
+                          >
+                              尝试一键重载修复
+                          </v-btn>
                           <v-spacer></v-spacer>
                           <v-btn
                             color="primary"
@@ -1727,17 +1826,21 @@ watch(activeTab, (newTab) => {
                       </v-list-item>
                     </v-list>
                   </v-menu>
-                </div>
 
-                <!-- 垂直分隔线 -->
-                <div
-                  style="
-                    height: 20px;
-                    width: 1px;
-                    background-color: rgba(var(--v-border-color), 0.15);
-                    margin: 0 8px;
-                  "
-                ></div>
+                  <div
+                    class="d-flex align-center ml-2"
+                    style="
+                      color: grey;
+                      font-size: 12px;
+                      line-height: 1.3;
+                      white-space: normal;
+                      text-align: left;
+                    "
+                  >
+                    <v-icon size="16" class="mr-1">mdi-alert-outline</v-icon>
+                    <span>{{ tm("market.sourceSafetyWarning") }}</span>
+                  </div>
+                </div>
 
                 <!--右侧：操作按钮组-->
                 <div class="d-flex align-center">
@@ -1824,6 +1927,42 @@ watch(activeTab, (newTab) => {
             <div class="mt-4">
               <div
                 class="d-flex align-center mb-2"
+                style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
+              >
+                <h2>
+                  {{ tm("market.randomPlugins") }}
+                </h2>
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  prepend-icon="mdi-shuffle-variant"
+                  :disabled="pluginMarketData.length === 0"
+                  @click="refreshRandomPlugins"
+                >
+                  {{ tm("buttons.reshuffle") }}
+                </v-btn>
+              </div>
+
+              <v-row class="mb-6" dense>
+                <v-col
+                  v-for="plugin in randomPlugins"
+                  :key="`random-${plugin.name}`"
+                  cols="12"
+                  md="6"
+                  lg="4"
+                  class="pb-2"
+                >
+                  <MarketPluginCard
+                    :plugin="plugin"
+                    :default-plugin-icon="defaultPluginIcon"
+                    :show-plugin-full-name="showPluginFullName"
+                    @install="handleInstallPlugin"
+                  />
+                </v-col>
+              </v-row>
+
+              <div
+                class="d-flex align-center mb-2"
                 style="
                   justify-content: space-between;
                   flex-wrap: wrap;
@@ -1858,7 +1997,6 @@ watch(activeTab, (newTab) => {
                     density="comfortable"
                   ></v-pagination>
 
-                  <!-- 排序选择器 -->
                   <v-select
                     v-model="sortBy"
                     :items="[
@@ -1877,7 +2015,6 @@ watch(activeTab, (newTab) => {
                     </template>
                   </v-select>
 
-                  <!-- 排序方向切换按钮 -->
                   <v-btn
                     icon
                     v-if="sortBy !== 'default'"
@@ -1898,272 +2035,27 @@ watch(activeTab, (newTab) => {
                       }}
                     </v-tooltip>
                   </v-btn>
-                  <!-- <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
-                    density="compact" style="margin-left: 12px" /> -->
                 </div>
               </div>
 
-              <v-row style="min-height: 26rem">
+              <v-row style="min-height: 26rem" dense>
                 <v-col
                   v-for="plugin in paginatedPlugins"
                   :key="plugin.name"
                   cols="12"
                   md="6"
                   lg="4"
+                  class="pb-2"
                 >
-                  <v-card
-                    class="rounded-lg d-flex flex-column plugin-card"
-                    elevation="0"
-                    style="height: 12rem; position: relative"
-                  >
-                    <!-- 推荐标记 -->
-                    <v-chip
-                      v-if="plugin?.pinned"
-                      color="warning"
-                      size="x-small"
-                      label
-                      style="
-                        position: absolute;
-                        right: 8px;
-                        top: 8px;
-                        z-index: 10;
-                        height: 20px;
-                        font-weight: bold;
-                      "
-                    >
-                      🥳 推荐
-                    </v-chip>
-
-                    <v-card-text
-                      style="
-                        padding: 12px;
-                        padding-bottom: 8px;
-                        display: flex;
-                        gap: 12px;
-                        width: 100%;
-                        flex: 1;
-                        overflow: hidden;
-                      "
-                    >
-                      <div style="flex-shrink: 0">
-                        <img
-                          :src="plugin?.logo || defaultPluginIcon"
-                          :alt="plugin.name"
-                          style="
-                            height: 75px;
-                            width: 75px;
-                            border-radius: 8px;
-                            object-fit: cover;
-                          "
-                        />
-                      </div>
-
-                      <div
-                        style="
-                          flex: 1;
-                          overflow: hidden;
-                          display: flex;
-                          flex-direction: column;
-                        "
-                      >
-                        <!-- Display Name -->
-                        <div
-                          class="font-weight-bold"
-                          style="
-                            margin-bottom: 4px;
-                            line-height: 1.3;
-                            font-size: 1.2rem;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                          "
-                        >
-                          <span
-                            style="overflow: hidden; text-overflow: ellipsis"
-                          >
-                            {{
-                              plugin.display_name?.length
-                                ? plugin.display_name
-                                : showPluginFullName
-                                ? plugin.name
-                                : plugin.trimmedName
-                            }}
-                          </span>
-                        </div>
-
-                        <!-- Author with link -->
-                        <div
-                          class="d-flex align-center"
-                          style="gap: 4px; margin-bottom: 6px"
-                        >
-                          <v-icon
-                            icon="mdi-account"
-                            size="x-small"
-                            style="color: rgba(var(--v-theme-on-surface), 0.5)"
-                          ></v-icon>
-                          <a
-                            v-if="plugin?.social_link"
-                            :href="plugin.social_link"
-                            target="_blank"
-                            class="text-subtitle-2 font-weight-medium"
-                            style="
-                              text-decoration: none;
-                              color: rgb(var(--v-theme-primary));
-                              white-space: nowrap;
-                              overflow: hidden;
-                              text-overflow: ellipsis;
-                            "
-                          >
-                            {{ plugin.author }}
-                          </a>
-                          <span
-                            v-else
-                            class="text-subtitle-2 font-weight-medium"
-                            style="
-                              color: rgb(var(--v-theme-primary));
-                              white-space: nowrap;
-                              overflow: hidden;
-                              text-overflow: ellipsis;
-                            "
-                          >
-                            {{ plugin.author }}
-                          </span>
-                          <div
-                            class="d-flex align-center text-subtitle-2 ml-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-source-branch"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{ plugin.version }}</span>
-                          </div>
-                        </div>
-
-                        <!-- Description -->
-                        <div class="text-caption plugin-description">
-                          {{ plugin.desc }}
-                        </div>
-
-                        <!-- Stats: Stars & Updated & Version -->
-                        <div
-                          class="d-flex align-center"
-                          style="gap: 8px; margin-top: auto"
-                        >
-                          <div
-                            v-if="plugin.stars !== undefined"
-                            class="d-flex align-center text-subtitle-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-star"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{ plugin.stars }}</span>
-                          </div>
-                          <div
-                            v-if="plugin.updated_at"
-                            class="d-flex align-center text-subtitle-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-clock-outline"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{
-                              new Date(plugin.updated_at).toLocaleString()
-                            }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </v-card-text>
-
-                    <!-- Actions -->
-                    <v-card-actions
-                      style="gap: 6px; padding: 8px 12px; padding-top: 0"
-                    >
-                      <v-chip
-                        v-for="tag in plugin.tags?.slice(0, 2)"
-                        :key="tag"
-                        :color="tag === 'danger' ? 'error' : 'primary'"
-                        label
-                        size="x-small"
-                        style="height: 20px"
-                      >
-                        {{ tag === "danger" ? tm("tags.danger") : tag }}
-                      </v-chip>
-                      <v-menu
-                        v-if="plugin.tags && plugin.tags.length > 2"
-                        open-on-hover
-                        offset-y
-                      >
-                        <template v-slot:activator="{ props: menuProps }">
-                          <v-chip
-                            v-bind="menuProps"
-                            color="grey"
-                            label
-                            size="x-small"
-                            style="height: 20px; cursor: pointer"
-                          >
-                            +{{ plugin.tags.length - 2 }}
-                          </v-chip>
-                        </template>
-                        <v-list density="compact">
-                          <v-list-item
-                            v-for="tag in plugin.tags.slice(2)"
-                            :key="tag"
-                          >
-                            <v-chip
-                              :color="tag === 'danger' ? 'error' : 'primary'"
-                              label
-                              size="small"
-                            >
-                              {{ tag === "danger" ? tm("tags.danger") : tag }}
-                            </v-chip>
-                          </v-list-item>
-                        </v-list>
-                      </v-menu>
-                      <v-spacer></v-spacer>
-                      <v-btn
-                        v-if="plugin?.repo"
-                        color="secondary"
-                        size="x-small"
-                        variant="tonal"
-                        :href="plugin.repo"
-                        target="_blank"
-                        style="height: 24px"
-                      >
-                        <v-icon icon="mdi-github" start size="x-small"></v-icon>
-                        {{ tm("buttons.viewRepo") }}
-                      </v-btn>
-                      <v-btn
-                        v-if="!plugin?.installed"
-                        color="primary"
-                        size="x-small"
-                        @click="handleInstallPlugin(plugin)"
-                        variant="flat"
-                        style="height: 24px"
-                      >
-                        {{ tm("buttons.install") }}
-                      </v-btn>
-                      <v-chip
-                        v-else
-                        color="success"
-                        size="x-small"
-                        label
-                        style="height: 20px"
-                      >
-                        ✓ {{ tm("status.installed") }}
-                      </v-chip>
-                    </v-card-actions>
-                  </v-card>
+                  <MarketPluginCard
+                    :plugin="plugin"
+                    :default-plugin-icon="defaultPluginIcon"
+                    :show-plugin-full-name="showPluginFullName"
+                    @install="handleInstallPlugin"
+                  />
                 </v-col>
               </v-row>
 
-              <!-- 底部分页控件 -->
               <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
                 <v-pagination
                   v-model="currentPage"
@@ -2666,38 +2558,6 @@ watch(activeTab, (newTab) => {
   padding: 5px;
   border-radius: 5px;
   background-color: #f5f5f5;
-}
-
-.plugin-description {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  line-height: 1.3;
-  margin-bottom: 6px;
-  flex: 1;
-  overflow-y: hidden;
-}
-
-.plugin-card:hover .plugin-description {
-  overflow-y: auto;
-}
-
-.plugin-description::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.plugin-description::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.plugin-description::-webkit-scrollbar-thumb {
-  background-color: rgba(var(--v-theme-primary-rgb), 0.4);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-.plugin-description::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(var(--v-theme-primary-rgb), 0.6);
 }
 
 .fab-button {

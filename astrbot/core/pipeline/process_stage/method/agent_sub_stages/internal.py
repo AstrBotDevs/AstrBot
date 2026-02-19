@@ -123,6 +123,7 @@ class InternalAgentSubStage(Stage):
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
     async def process(
@@ -149,6 +150,7 @@ class InternalAgentSubStage(Stage):
 
             logger.debug("ready to request llm provider")
 
+            await event.send_typing()
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -190,6 +192,8 @@ class InternalAgentSubStage(Stage):
                 )
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    if reset_coro:
+                        reset_coro.close()
                     return
 
                 # apply reset
@@ -336,7 +340,7 @@ class InternalAgentSubStage(Stage):
         llm_response: LLMResponse | None,
         all_messages: list[Message],
         runner_stats: AgentStats | None,
-    ):
+    ) -> None:
         if (
             not req
             or not req.conversation
@@ -355,9 +359,7 @@ class InternalAgentSubStage(Stage):
             if message.role == "system" and not skipped_initial_system:
                 skipped_initial_system = True
                 continue
-            if message.role in ["assistant", "user"] and getattr(
-                message, "_no_save", None
-            ):
+            if message.role in ["assistant", "user"] and message._no_save:
                 continue
             message_to_save.append(message.model_dump())
 
