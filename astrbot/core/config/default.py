@@ -885,6 +885,7 @@ CONFIG_METADATA_2 = {
                         "hint": "启用后，机器人回复消息时会引用原消息。实际效果以具体的平台适配器为准。",
                     },
                     "reply_with_quote_scope": {
+                        "description": "引用回复范围",
                         "type": "string",
                         "options": ["all", "group_only", "private_only"],
                         "labels": [
