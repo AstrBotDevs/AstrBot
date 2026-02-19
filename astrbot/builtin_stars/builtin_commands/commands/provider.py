@@ -4,6 +4,7 @@ import re
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import t
 from astrbot.core.provider.entities import ProviderType
 
 
@@ -21,11 +22,17 @@ class ProviderCommands:
         """记录不可达原因到日志。"""
         meta = provider.meta()
         logger.warning(
-            "Provider reachability check failed: id=%s type=%s code=%s reason=%s",
-            meta.id,
-            provider_capability_type.name if provider_capability_type else "unknown",
-            err_code,
-            err_reason,
+            t(
+                "builtin-stars-provider-reachability-failed",
+                provider_id=meta.id,
+                provider_type=(
+                    provider_capability_type.name
+                    if provider_capability_type
+                    else "unknown"
+                ),
+                err_code=err_code,
+                err_reason=err_reason,
+            )
         )
 
     async def _test_provider_capability(self, provider):
@@ -56,7 +63,7 @@ class ProviderCommands:
         reachability_check_enabled = cfg.get("reachability_check", True)
 
         if idx is None:
-            parts = ["## 载入的 LLM 提供商\n"]
+            parts = [t("builtin-stars-provider-list-llm-title")]
 
             # 获取所有类型的提供商
             llms = list(self.context.get_all_providers())
@@ -74,7 +81,7 @@ class ProviderCommands:
                 if all_providers:
                     await event.send(
                         MessageEventResult().message(
-                            "正在进行提供商可达性测试，请稍候..."
+                            t("builtin-stars-provider-reachability-checking")
                         )
                     )
                 check_results = await asyncio.gather(
@@ -118,7 +125,10 @@ class ProviderCommands:
                     mark = " ✅"
                 elif reachable_flag is False:
                     if error_code:
-                        mark = f" ❌(错误码: {error_code})"
+                        mark = t(
+                            "builtin-stars-provider-status-failed-with-code",
+                            error_code=error_code,
+                        )
                     else:
                         mark = " ❌"
                 else:
@@ -143,48 +153,56 @@ class ProviderCommands:
                     provider_using
                     and provider_using.meta().id == d["provider"].meta().id
                 ):
-                    line += " (当前使用)"
+                    line += t("builtin-stars-provider-status-current")
                 parts.append(line + "\n")
 
             # 2. TTS
             tts_data = [d for d in display_data if d["type"] == "tts"]
             if tts_data:
-                parts.append("\n## 载入的 TTS 提供商\n")
+                parts.append(t("builtin-stars-provider-list-tts-title"))
                 for i, d in enumerate(tts_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
                     tts_using = self.context.get_using_tts_provider(umo=umo)
                     if tts_using and tts_using.meta().id == d["provider"].meta().id:
-                        line += " (当前使用)"
+                        line += t("builtin-stars-provider-status-current")
                     parts.append(line + "\n")
 
             # 3. STT
             stt_data = [d for d in display_data if d["type"] == "stt"]
             if stt_data:
-                parts.append("\n## 载入的 STT 提供商\n")
+                parts.append(t("builtin-stars-provider-list-stt-title"))
                 for i, d in enumerate(stt_data):
                     line = f"{i + 1}. {d['info']}{d['mark']}"
                     stt_using = self.context.get_using_stt_provider(umo=umo)
                     if stt_using and stt_using.meta().id == d["provider"].meta().id:
-                        line += " (当前使用)"
+                        line += t("builtin-stars-provider-status-current")
                     parts.append(line + "\n")
 
-            parts.append("\n使用 /provider <序号> 切换 LLM 提供商。")
+            parts.append(t("builtin-stars-provider-list-llm-switch-tip"))
             ret = "".join(parts)
 
             if ttss:
-                ret += "\n使用 /provider tts <序号> 切换 TTS 提供商。"
+                ret += t("builtin-stars-provider-list-tts-switch-tip")
             if stts:
-                ret += "\n使用 /provider stt <序号> 切换 STT 提供商。"
+                ret += t("builtin-stars-provider-list-stt-switch-tip")
             if not reachability_check_enabled:
-                ret += "\n已跳过提供商可达性检测，如需检测请在配置文件中开启。"
+                ret += t("builtin-stars-provider-list-reachability-skipped")
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
             if idx2 is None:
-                event.set_result(MessageEventResult().message("请输入序号。"))
+                event.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-switch-index-required")
+                    )
+                )
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-switch-invalid-index")
+                    )
+                )
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
             id_ = provider.meta().id
@@ -193,13 +211,25 @@ class ProviderCommands:
                 provider_type=ProviderType.TEXT_TO_SPEECH,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-provider-switch-success", provider_id=id_)
+                )
+            )
         elif idx == "stt":
             if idx2 is None:
-                event.set_result(MessageEventResult().message("请输入序号。"))
+                event.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-switch-index-required")
+                    )
+                )
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-switch-invalid-index")
+                    )
+                )
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
             id_ = provider.meta().id
@@ -208,10 +238,18 @@ class ProviderCommands:
                 provider_type=ProviderType.SPEECH_TO_TEXT,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-provider-switch-success", provider_id=id_)
+                )
+            )
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-switch-invalid-index")
+                    )
+                )
                 return
             provider = self.context.get_all_providers()[idx - 1]
             id_ = provider.meta().id
@@ -220,9 +258,17 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-provider-switch-success", provider_id=id_)
+                )
+            )
         else:
-            event.set_result(MessageEventResult().message("无效的参数。"))
+            event.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-provider-switch-invalid-arg")
+                )
+            )
 
     async def model_ls(
         self,
@@ -233,7 +279,9 @@ class ProviderCommands:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(
+                    t("builtin-stars-provider-no-llm-provider")
+                ),
             )
             return
         # 定义正则表达式匹配 API 密钥
@@ -247,19 +295,24 @@ class ProviderCommands:
                 err_msg = api_key_pattern.sub("key=***", str(e))
                 message.set_result(
                     MessageEventResult()
-                    .message("获取模型列表失败: " + err_msg)
+                    .message(
+                        t(
+                            "builtin-stars-provider-model-list-failed",
+                            error=err_msg,
+                        )
+                    )
                     .use_t2i(False),
                 )
                 return
-            parts = ["下面列出了此模型提供商可用模型:"]
+            parts = [t("builtin-stars-provider-model-list-title")]
             for i, model in enumerate(models, 1):
                 parts.append(f"\n{i}. {model}")
 
-            curr_model = prov.get_model() or "无"
-            parts.append(f"\n当前模型: [{curr_model}]")
+            curr_model = prov.get_model() or t("builtin-stars-provider-model-none")
             parts.append(
-                "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
+                t("builtin-stars-provider-model-current", current_model=curr_model)
             )
+            parts.append(t("builtin-stars-provider-model-switch-tip"))
 
             ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
@@ -269,61 +322,103 @@ class ProviderCommands:
                 models = await prov.get_models()
             except BaseException as e:
                 message.set_result(
-                    MessageEventResult().message("获取模型列表失败: " + str(e)),
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-model-list-failed", error=str(e))
+                    ),
                 )
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
-                message.set_result(MessageEventResult().message("模型序号错误。"))
+                message.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-model-invalid-index")
+                    )
+                )
             else:
                 try:
                     new_model = models[idx_or_name - 1]
                     prov.set_model(new_model)
                 except BaseException as e:
                     message.set_result(
-                        MessageEventResult().message("切换模型未知错误: " + str(e)),
+                        MessageEventResult().message(
+                            t(
+                                "builtin-stars-provider-model-switch-unknown-error",
+                                error=str(e),
+                            )
+                        ),
                     )
                 message.set_result(
                     MessageEventResult().message(
-                        f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
+                        t(
+                            "builtin-stars-provider-model-switch-success",
+                            provider_id=prov.meta().id,
+                            current_model=prov.get_model(),
+                        )
                     ),
                 )
         else:
             prov.set_model(idx_or_name)
             message.set_result(
-                MessageEventResult().message(f"切换模型到 {prov.get_model()}。"),
+                MessageEventResult().message(
+                    t(
+                        "builtin-stars-provider-model-switch-to",
+                        current_model=prov.get_model(),
+                    )
+                ),
             )
 
     async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(
+                    t("builtin-stars-provider-no-llm-provider")
+                ),
             )
             return
 
         if index is None:
             keys_data = prov.get_keys()
             curr_key = prov.get_current_key()
-            parts = ["Key:"]
+            parts = [t("builtin-stars-provider-key-list-title")]
             for i, k in enumerate(keys_data, 1):
                 parts.append(f"\n{i}. {k[:8]}")
 
-            parts.append(f"\n当前 Key: {curr_key[:8]}")
-            parts.append("\n当前模型: " + prov.get_model())
-            parts.append("\n使用 /key <idx> 切换 Key。")
+            parts.append(
+                t("builtin-stars-provider-key-current", current_key=curr_key[:8])
+            )
+            parts.append(
+                t(
+                    "builtin-stars-provider-model-current-inline",
+                    current_model=prov.get_model(),
+                )
+            )
+            parts.append(t("builtin-stars-provider-key-switch-tip"))
 
             ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         else:
             keys_data = prov.get_keys()
             if index > len(keys_data) or index < 1:
-                message.set_result(MessageEventResult().message("Key 序号错误。"))
+                message.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-key-invalid-index")
+                    )
+                )
             else:
                 try:
                     new_key = keys_data[index - 1]
                     prov.set_key(new_key)
                 except BaseException as e:
                     message.set_result(
-                        MessageEventResult().message(f"切换 Key 未知错误: {e!s}"),
+                        MessageEventResult().message(
+                            t(
+                                "builtin-stars-provider-key-switch-unknown-error",
+                                error=str(e),
+                            )
+                        ),
                     )
-                message.set_result(MessageEventResult().message("切换 Key 成功。"))
+                message.set_result(
+                    MessageEventResult().message(
+                        t("builtin-stars-provider-key-switch-success")
+                    )
+                )
