@@ -11,10 +11,13 @@ import traceback
 from types import ModuleType
 
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from astrbot.core import logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
@@ -38,6 +41,10 @@ try:
 except ImportError:
     if os.getenv("ASTRBOT_RELOAD", "0") == "1":
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
+
+
+class PluginVersionIncompatibleError(Exception):
+    """Raised when plugin astrbot_version is incompatible with current AstrBot."""
 
 
 class PluginManager:
@@ -268,9 +275,63 @@ class PluginManager:
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
                 display_name=metadata.get("display_name", None),
+                support_platforms=(
+                    [
+                        platform_id
+                        for platform_id in metadata["support_platforms"]
+                        if isinstance(platform_id, str)
+                    ]
+                    if isinstance(metadata.get("support_platforms"), list)
+                    else []
+                ),
+                astrbot_version=(
+                    metadata["astrbot_version"]
+                    if isinstance(metadata.get("astrbot_version"), str)
+                    else None
+                ),
             )
 
         return metadata
+
+    @staticmethod
+    def _validate_astrbot_version_specifier(
+        version_spec: str | None,
+    ) -> tuple[bool, str | None]:
+        if not version_spec:
+            return True, None
+
+        normalized_spec = version_spec.strip()
+        if not normalized_spec:
+            return True, None
+
+        if "v" in normalized_spec.lower():
+            return (
+                False,
+                "astrbot_version 不允许包含 v/V，请使用如 >=4.16,<5 的格式。",
+            )
+
+        try:
+            specifier = SpecifierSet(normalized_spec)
+        except InvalidSpecifier:
+            return (
+                False,
+                "astrbot_version 格式无效，请使用 PEP 440 版本范围格式，例如 >=4.16,<5。",
+            )
+
+        try:
+            current_version = Version(VERSION)
+        except InvalidVersion:
+            return (
+                False,
+                f"AstrBot 当前版本 {VERSION} 无法被解析，无法校验插件版本范围。",
+            )
+
+        if current_version not in specifier:
+            return (
+                False,
+                f"当前 AstrBot 版本为 {VERSION}，不满足插件要求的 astrbot_version: {normalized_spec}",
+            )
+        return True, None
 
     @staticmethod
     def _get_plugin_related_modules(
@@ -408,7 +469,12 @@ class PluginManager:
 
             return result
 
-    async def load(self, specified_module_path=None, specified_dir_name=None):
+    async def load(
+        self,
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check: bool = False,
+    ):
         """载入插件。
         当 specified_module_path 或者 specified_dir_name 不为 None 时，只载入指定的插件。
 
@@ -507,10 +573,25 @@ class PluginManager:
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                             metadata.display_name = metadata_yaml.display_name
+                            metadata.support_platforms = metadata_yaml.support_platforms
+                            metadata.astrbot_version = metadata_yaml.astrbot_version
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
                         )
+
+                    if not ignore_version_check:
+                        is_valid, error_message = (
+                            self._validate_astrbot_version_specifier(
+                                metadata.astrbot_version,
+                            )
+                        )
+                        if not is_valid:
+                            raise PluginVersionIncompatibleError(
+                                error_message
+                                or "The plugin is not compatible with the current AstrBot version."
+                            )
+
                     logger.info(metadata)
                     metadata.config = plugin_config
                     p_name = (metadata.name or "unknown").lower().replace("/", "_")
@@ -621,6 +702,19 @@ class PluginManager:
                     )
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
+
+                    if not ignore_version_check:
+                        is_valid, error_message = (
+                            self._validate_astrbot_version_specifier(
+                                metadata.astrbot_version,
+                            )
+                        )
+                        if not is_valid:
+                            raise PluginVersionIncompatibleError(
+                                error_message
+                                or "The plugin is not compatible with the current AstrBot version."
+                            )
+
                     metadata.star_cls = obj
                     metadata.config = plugin_config
                     metadata.module = module
@@ -754,7 +848,9 @@ class PluginManager:
                     f"清理安装失败插件配置失败: {plugin_config_path}，原因: {e!s}",
                 )
 
-    async def install_plugin(self, repo_url: str, proxy=""):
+    async def install_plugin(
+        self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
+    ):
         """从仓库 URL 安装插件
 
         从指定的仓库 URL 下载并安装插件，然后加载该插件到系统中
@@ -788,7 +884,10 @@ class PluginManager:
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
-                success, error_message = await self.load(specified_dir_name=dir_name)
+                success, error_message = await self.load(
+                    specified_dir_name=dir_name,
+                    ignore_version_check=ignore_version_check,
+                )
                 if not success:
                     raise Exception(
                         error_message
@@ -1092,7 +1191,9 @@ class PluginManager:
 
         await self.reload(plugin_name)
 
-    async def install_plugin_from_file(self, zip_file_path: str):
+    async def install_plugin_from_file(
+        self, zip_file_path: str, ignore_version_check: bool = False
+    ):
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
@@ -1148,7 +1249,10 @@ class PluginManager:
             except BaseException as e:
                 logger.warning(f"删除插件压缩包失败: {e!s}")
             # await self.reload()
-            success, error_message = await self.load(specified_dir_name=dir_name)
+            success, error_message = await self.load(
+                specified_dir_name=dir_name,
+                ignore_version_check=ignore_version_check,
+            )
             if not success:
                 raise Exception(
                     error_message

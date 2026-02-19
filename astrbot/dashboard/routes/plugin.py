@@ -19,7 +19,10 @@ from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
-from astrbot.core.star.star_manager import PluginManager
+from astrbot.core.star.star_manager import (
+    PluginManager,
+    PluginVersionIncompatibleError,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from .route import Response, Route, RouteContext
@@ -46,6 +49,7 @@ class PluginRoute(Route):
         super().__init__(context)
         self.routes = {
             "/plugin/get": ("GET", self.get_plugins),
+            "/plugin/check-compat": ("POST", self.check_plugin_compatibility),
             "/plugin/install": ("POST", self.install_plugin),
             "/plugin/install-upload": ("POST", self.install_plugin_upload),
             "/plugin/update": ("POST", self.update_plugin),
@@ -77,6 +81,27 @@ class PluginRoute(Route):
         }
 
         self._logo_cache = {}
+
+    async def check_plugin_compatibility(self):
+        try:
+            data = await request.get_json()
+            version_spec = data.get("astrbot_version", "")
+            is_valid, message = self.plugin_manager._validate_astrbot_version_specifier(
+                version_spec
+            )
+            return (
+                Response()
+                .ok(
+                    {
+                        "compatible": is_valid,
+                        "message": message,
+                        "astrbot_version": version_spec,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            return Response().error(str(e)).__dict__
 
     async def reload_failed_plugins(self):
         if DEMO_MODE:
@@ -118,7 +143,7 @@ class PluginRoute(Route):
         try:
             success, message = await self.plugin_manager.reload(plugin_name)
             if not success:
-                return Response().error(message).__dict__
+                return Response().error(message or "插件重载失败").__dict__
             return Response().ok(None, "重载成功。").__dict__
         except Exception as e:
             logger.error(f"/api/plugin/reload: {traceback.format_exc()}")
@@ -345,6 +370,8 @@ class PluginRoute(Route):
                 ),
                 "display_name": plugin.display_name,
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
+                "support_platforms": plugin.support_platforms,
+                "astrbot_version": plugin.astrbot_version,
             }
             # 检查是否为全空的幽灵插件
             if not any(
@@ -439,6 +466,7 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
+        ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
         if proxy:
@@ -446,10 +474,23 @@ class PluginRoute(Route):
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            plugin_info = await self.plugin_manager.install_plugin(repo_url, proxy)
+            plugin_info = await self.plugin_manager.install_plugin(
+                repo_url,
+                proxy,
+                ignore_version_check=ignore_version_check,
+            )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
             return Response().ok(plugin_info, "安装成功。").__dict__
+        except PluginVersionIncompatibleError as e:
+            return {
+                "status": "warning",
+                "message": str(e),
+                "data": {
+                    "warning_type": "astrbot_version_incompatible",
+                    "can_ignore": True,
+                },
+            }
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -465,16 +506,32 @@ class PluginRoute(Route):
         try:
             file = await request.files
             file = file["file"]
+            form_data = await request.form
+            ignore_version_check = (
+                str(form_data.get("ignore_version_check", "false")).lower() == "true"
+            )
             logger.info(f"正在安装用户上传的插件 {file.filename}")
             file_path = os.path.join(
                 get_astrbot_temp_path(),
                 f"plugin_upload_{file.filename}",
             )
             await file.save(file_path)
-            plugin_info = await self.plugin_manager.install_plugin_from_file(file_path)
+            plugin_info = await self.plugin_manager.install_plugin_from_file(
+                file_path,
+                ignore_version_check=ignore_version_check,
+            )
             # self.core_lifecycle.restart()
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(plugin_info, "安装成功。").__dict__
+        except PluginVersionIncompatibleError as e:
+            return {
+                "status": "warning",
+                "message": str(e),
+                "data": {
+                    "warning_type": "astrbot_version_incompatible",
+                    "can_ignore": True,
+                },
+            }
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
