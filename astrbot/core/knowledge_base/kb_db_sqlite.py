@@ -13,16 +13,19 @@ from astrbot.core.knowledge_base.models import (
     KBMedia,
     KnowledgeBase,
 )
+from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 
 class KBSQLiteDatabase:
-    def __init__(self, db_path: str = "data/knowledge_base/kb.db") -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         """初始化知识库数据库
 
         Args:
-            db_path: 数据库文件路径, 默认为 data/knowledge_base/kb.db
+            db_path: 数据库文件路径, 默认位于 AstrBot 数据目录下的 knowledge_base/kb.db
 
         """
+        if db_path is None:
+            db_path = str(Path(get_astrbot_knowledge_base_path()) / "kb.db")
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.inited = False

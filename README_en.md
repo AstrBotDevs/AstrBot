@@ -154,9 +154,9 @@ yay -S astrbot-git
 paru -S astrbot-git
 ```
 
-#### Desktop Electron Build
+#### Desktop (Tauri)
 
-For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/README.md`](desktop/README.md).
+Desktop packaging has moved to a standalone Tauri repository: [https://github.com/AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
 
 ## Supported Messaging Platforms
 

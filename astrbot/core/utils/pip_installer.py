@@ -12,7 +12,7 @@ import threading
 from collections import deque
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
-from astrbot.core.utils.runtime_env import is_packaged_electron_runtime
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 logger = logging.getLogger("astrbot")
 
@@ -35,7 +35,7 @@ def _get_pip_main():
                 "pip module is unavailable "
                 f"(sys.executable={sys.executable}, "
                 f"frozen={getattr(sys, 'frozen', False)}, "
-                f"ASTRBOT_ELECTRON_CLIENT={os.environ.get('ASTRBOT_ELECTRON_CLIENT')})"
+                f"ASTRBOT_DESKTOP_CLIENT={os.environ.get('ASTRBOT_DESKTOP_CLIENT')})"
             ) from exc
 
     return pip_main
@@ -556,7 +556,7 @@ class PipInstaller:
         args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
 
         target_site_packages = None
-        if is_packaged_electron_runtime():
+        if is_packaged_desktop_runtime():
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
@@ -582,7 +582,7 @@ class PipInstaller:
 
     def prefer_installed_dependencies(self, requirements_path: str) -> None:
         """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
-        if not is_packaged_electron_runtime():
+        if not is_packaged_desktop_runtime():
             return
 
         target_site_packages = get_astrbot_site_packages_path()

@@ -51,7 +51,8 @@ const isElectronApp = ref(
 const redirectConfirmDialog = ref(false);
 const pendingRedirectUrl = ref('');
 const resolvingReleaseTarget = ref(false);
-const fallbackReleaseUrl = 'https://github.com/AstrBotDevs/AstrBot/releases/latest';
+const desktopReleaseBaseUrl = 'https://github.com/AstrBotDevs/AstrBot-desktop/releases';
+const fallbackReleaseUrl = desktopReleaseBaseUrl;
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
@@ -128,12 +129,15 @@ function confirmExternalRedirect() {
 
 const getReleaseUrlForElectron = () => {
   const firstRelease = (releases.value as any[])?.[0];
-  if (firstRelease?.html_url) return firstRelease.html_url as string;
+  if (firstRelease?.tag_name) {
+    const tag = firstRelease.tag_name as string;
+    return `${desktopReleaseBaseUrl}/tag/${tag}`;
+  }
   if (hasNewVersion.value) return fallbackReleaseUrl;
   const tag = botCurrVersion.value?.startsWith('v') ? botCurrVersion.value : 'latest';
   return tag === 'latest'
     ? fallbackReleaseUrl
-    : `https://github.com/AstrBotDevs/AstrBot/releases/tag/${tag}`;
+    : `${desktopReleaseBaseUrl}/tag/${tag}`;
 };
 
 function handleUpdateClick() {
