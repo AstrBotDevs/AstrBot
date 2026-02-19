@@ -411,4 +411,6 @@ class ResultDecorateStage(Stage):
             if should_quote and not any(
                 isinstance(item, File) for item in result.chain
             ):
-                result.chain.insert(0, Reply(id=event.message_obj.message_id))
+                result.chain.insert(
+                    0, Reply(id=event.message_obj.message_id)
+                )
