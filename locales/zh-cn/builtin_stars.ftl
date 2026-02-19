@@ -76,3 +76,37 @@ builtin-stars-plugin-help-command-line-with-desc = - { $command_name }: { $comma
 builtin-stars-plugin-help-command-tip = {"\u000A"}Tip: 指令触发需要添加唤醒前缀，默认为 /。
 builtin-stars-plugin-help-title = 🧩 插件 { $plugin_name } 帮助信息：{"\u000A"}
 builtin-stars-plugin-help-readme-tip = 更多帮助信息请查看插件仓库 README。
+
+### astrbot/builtin_stars/builtin_commands/commands/provider.py
+builtin-stars-provider-reachability-failed = Provider 可达性检测失败: id={ $provider_id } type={ $provider_type } code={ $err_code } reason={ $err_reason }
+builtin-stars-provider-list-llm-title = ## 载入的 LLM 提供商{"\u000A"}
+builtin-stars-provider-reachability-checking = 正在进行提供商可达性测试，请稍候...
+builtin-stars-provider-status-failed-with-code =  ❌(错误码: { $error_code })
+builtin-stars-provider-status-current =  (当前使用)
+builtin-stars-provider-list-tts-title = {"\u000A"}## 载入的 TTS 提供商{"\u000A"}
+builtin-stars-provider-list-stt-title = {"\u000A"}## 载入的 STT 提供商{"\u000A"}
+builtin-stars-provider-list-llm-switch-tip = {"\u000A"}使用 /provider <序号> 切换 LLM 提供商。
+builtin-stars-provider-list-tts-switch-tip = {"\u000A"}使用 /provider tts <序号> 切换 TTS 提供商。
+builtin-stars-provider-list-stt-switch-tip = {"\u000A"}使用 /provider stt <序号> 切换 STT 提供商。
+builtin-stars-provider-list-reachability-skipped = {"\u000A"}已跳过提供商可达性检测，如需检测请在配置文件中开启。
+builtin-stars-provider-switch-index-required = 请输入序号。
+builtin-stars-provider-switch-invalid-index = 无效的提供商序号。
+builtin-stars-provider-switch-success = 成功切换到 { $provider_id }。
+builtin-stars-provider-switch-invalid-arg = 无效的参数。
+builtin-stars-provider-no-llm-provider = 未找到任何 LLM 提供商。请先配置。
+builtin-stars-provider-model-list-failed = 获取模型列表失败: { $error }
+builtin-stars-provider-model-list-title = 下面列出了此模型提供商可用模型:
+builtin-stars-provider-model-none = 无
+builtin-stars-provider-model-current = {"\u000A"}当前模型: [{ $current_model }]
+builtin-stars-provider-model-switch-tip = {"\u000A"}Tips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。
+builtin-stars-provider-model-invalid-index = 模型序号错误。
+builtin-stars-provider-model-switch-unknown-error = 切换模型未知错误: { $error }
+builtin-stars-provider-model-switch-success = 切换模型成功。当前提供商: [{ $provider_id }] 当前模型: [{ $current_model }]
+builtin-stars-provider-model-switch-to = 切换模型到 { $current_model }。
+builtin-stars-provider-key-list-title = Key:
+builtin-stars-provider-key-current = {"\u000A"}当前 Key: { $current_key }
+builtin-stars-provider-model-current-inline = {"\u000A"}当前模型: { $current_model }
+builtin-stars-provider-key-switch-tip = {"\u000A"}使用 /key <idx> 切换 Key。
+builtin-stars-provider-key-invalid-index = Key 序号错误。
+builtin-stars-provider-key-switch-unknown-error = 切换 Key 未知错误: { $error }
+builtin-stars-provider-key-switch-success = 切换 Key 成功。
