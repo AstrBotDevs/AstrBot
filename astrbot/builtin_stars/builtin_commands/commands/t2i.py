@@ -2,6 +2,7 @@
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import t
 
 
 class T2ICommand:
@@ -16,8 +17,10 @@ class T2ICommand:
         if config["t2i"]:
             config["t2i"] = False
             config.save_config()
-            event.set_result(MessageEventResult().message("已关闭文本转图片模式。"))
+            event.set_result(
+                MessageEventResult().message(t("builtin-stars-t2i-disabled"))
+            )
             return
         config["t2i"] = True
         config.save_config()
-        event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
+        event.set_result(MessageEventResult().message(t("builtin-stars-t2i-enabled")))

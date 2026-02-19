@@ -109,3 +109,7 @@ builtin-stars-provider-key-switch-tip = {"\u000A"}使用 /key <idx> 切换 Key�
 builtin-stars-provider-key-invalid-index = Key 序号错误。
 builtin-stars-provider-key-switch-unknown-error = 切换 Key 未知错误: { $error }
 builtin-stars-provider-key-switch-success = 切换 Key 成功。
+
+### astrbot/builtin_stars/builtin_commands/commands/t2i.py
+builtin-stars-t2i-disabled = 已关闭文本转图片模式。
+builtin-stars-t2i-enabled = 已开启文本转图片模式。
