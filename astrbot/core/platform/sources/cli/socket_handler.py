@@ -8,6 +8,7 @@ import json
 import os
 import re
 import tempfile
+import traceback
 import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -168,6 +169,10 @@ class SocketClientHandler:
 
             if action == "get_logs":
                 response = await self._get_logs(request, request_id)
+            elif action == "list_tools":
+                response = self._list_tools(request_id)
+            elif action == "call_tool":
+                response = await self._call_tool(request, request_id)
             else:
                 message_text = request.get("message", "")
                 response = await self._process_message(message_text, request_id)
@@ -324,6 +329,127 @@ class SocketClientHandler:
         except Exception as e:
             logger.exception("[CLI] Error getting logs")
             return _build_error_response(f"Error getting logs: {e}", request_id)
+
+    # ------------------------------------------------------------------
+    # 函数工具管理（CLI专属）
+    # ------------------------------------------------------------------
+
+    def _list_tools(self, request_id: str) -> str:
+        """列出所有注册的函数工具"""
+        from astrbot.core.provider.func_tool_manager import get_func_tool_manager
+
+        tool_mgr = get_func_tool_manager()
+        if tool_mgr is None:
+            return _build_error_response("FunctionToolManager 未初始化", request_id)
+
+        tools = []
+        for tool in tool_mgr.func_list:
+            # 判断来源
+            origin = "unknown"
+            origin_name = "unknown"
+            try:
+                from astrbot.core.agent.mcp_client import MCPTool
+                from astrbot.core.star.star import star_map
+
+                if isinstance(tool, MCPTool):
+                    origin = "mcp"
+                    origin_name = tool.mcp_server_name
+                elif tool.handler_module_path and star_map.get(
+                    tool.handler_module_path
+                ):
+                    origin = "plugin"
+                    origin_name = star_map[tool.handler_module_path].name
+                else:
+                    origin = "builtin"
+                    origin_name = "builtin"
+            except Exception:
+                pass
+
+            tools.append(
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "active": tool.active,
+                    "origin": origin,
+                    "origin_name": origin_name,
+                }
+            )
+
+        return json.dumps(
+            {
+                "status": "success",
+                "response": json.dumps(tools, ensure_ascii=False, indent=2),
+                "tools": tools,
+                "images": [],
+                "request_id": request_id,
+            },
+            ensure_ascii=False,
+        )
+
+    async def _call_tool(self, request: dict, request_id: str) -> str:
+        """调用指定的函数工具"""
+        from astrbot.core.provider.func_tool_manager import get_func_tool_manager
+
+        tool_mgr = get_func_tool_manager()
+        if tool_mgr is None:
+            return _build_error_response("FunctionToolManager 未初始化", request_id)
+
+        tool_name = request.get("tool_name", "")
+        tool_args = request.get("tool_args", {})
+
+        if not tool_name:
+            return _build_error_response("缺少 tool_name 参数", request_id)
+
+        tool = tool_mgr.get_func(tool_name)
+        if tool is None:
+            return _build_error_response(f"未找到工具: {tool_name}", request_id)
+
+        if not tool.active:
+            return _build_error_response(f"工具 {tool_name} 当前已停用", request_id)
+
+        if tool.handler is None:
+            return _build_error_response(
+                f"工具 {tool_name} 没有可调用的处理函数", request_id
+            )
+
+        try:
+            # 构造一个最小化的 event 用于工具调用
+            from .cli_event import CLIMessageEvent
+
+            response_future = asyncio.Future()
+            message = self.message_converter.convert(
+                f"/tool call {tool_name}",
+                request_id=request_id,
+                use_isolated_session=self.use_isolated_sessions,
+            )
+            event = CLIMessageEvent(
+                message_str=message.message_str,
+                message_obj=message,
+                platform_meta=self.platform_meta,
+                session_id=message.session_id,
+                output_queue=self.output_queue,
+                response_future=response_future,
+            )
+
+            result = await tool.handler(event, **tool_args)
+            result_text = str(result) if result is not None else "(无返回值)"
+
+            return json.dumps(
+                {
+                    "status": "success",
+                    "response": result_text,
+                    "images": [],
+                    "request_id": request_id,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.error(f"[CLI] Tool call error: {tool_name}: {e}")
+            return _build_error_response(
+                f"调用工具 {tool_name} 失败: {e}\n{traceback.format_exc()[-300:]}",
+                request_id,
+            )
 
 
 # ------------------------------------------------------------------

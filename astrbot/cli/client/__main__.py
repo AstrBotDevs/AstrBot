@@ -87,6 +87,12 @@ EPILOG = """
                                     例: astr test plugin probe cpu
                                     → 实际发送 /probe cpu
 
+  [函数工具] astr tool <子命令>
+    astr tool ls                    列出所有注册的函数工具
+    astr tool ls -o plugin          按来源过滤（plugin/mcp/builtin）
+    astr tool info <name>           查看工具详细信息和参数
+    astr tool call <name> [json]    调用工具，例: astr tool call my_func '{"k":"v"}'
+
   [交互模式]
     astr interactive                进入 REPL 模式（支持命令历史）
     astr -i                         同上（快捷方式）

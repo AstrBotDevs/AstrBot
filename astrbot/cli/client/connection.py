@@ -302,3 +302,57 @@ def get_logs(
         return {"status": "error", "error": f"Communication error: {e}"}
     finally:
         client_socket.close()
+
+
+def _send_action_request(
+    action: str,
+    extra_fields: dict | None = None,
+    socket_path: str | None = None,
+    timeout: float = 30.0,
+) -> dict:
+    """发送 action 请求的通用方法"""
+    auth_token = load_auth_token()
+
+    request: dict = {"action": action, "request_id": str(uuid.uuid4())}
+    if auth_token:
+        request["auth_token"] = auth_token
+    if extra_fields:
+        request.update(extra_fields)
+
+    try:
+        client_socket = _get_connected_socket(socket_path, timeout)
+    except (ValueError, ConnectionError) as e:
+        return {"status": "error", "error": str(e)}
+    except Exception as e:
+        return {"status": "error", "error": f"Connection error: {e}"}
+
+    try:
+        request_data = json.dumps(request, ensure_ascii=False).encode("utf-8")
+        client_socket.sendall(request_data)
+        return _receive_json_response(client_socket)
+    except TimeoutError:
+        return {"status": "error", "error": "Request timeout"}
+    except Exception as e:
+        return {"status": "error", "error": f"Communication error: {e}"}
+    finally:
+        client_socket.close()
+
+
+def list_tools(socket_path: str | None = None, timeout: float = 30.0) -> dict:
+    """列出所有注册的函数工具"""
+    return _send_action_request("list_tools", socket_path=socket_path, timeout=timeout)
+
+
+def call_tool(
+    tool_name: str,
+    tool_args: dict | None = None,
+    socket_path: str | None = None,
+    timeout: float = 60.0,
+) -> dict:
+    """调用指定的函数工具"""
+    return _send_action_request(
+        "call_tool",
+        extra_fields={"tool_name": tool_name, "tool_args": tool_args or {}},
+        socket_path=socket_path,
+        timeout=timeout,
+    )

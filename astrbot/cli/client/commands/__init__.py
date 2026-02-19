@@ -9,6 +9,7 @@ from .log import log
 from .plugin import plugin
 from .provider import key, model, provider
 from .send import send
+from .tool import tool
 
 
 def register_commands(group):
@@ -36,6 +37,9 @@ def register_commands(group):
     group.add_command(ping)
     group.add_command(status)
     group.add_command(test)
+
+    # 函数工具管理
+    group.add_command(tool)
 
     # 交互模式
     group.add_command(interactive)
