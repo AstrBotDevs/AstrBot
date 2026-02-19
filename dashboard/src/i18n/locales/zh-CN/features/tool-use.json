@@ -25,7 +25,9 @@
       "noTools": "无可用工具",
       "availableTools": "可用工具",
       "configSummary": "配置: {keys}",
-      "noConfig": "未设置配置"
+      "noConfig": "未设置配置",
+      "scopeSummary": "作用域: {scope}",
+      "scopeAll": "所有 Agent（默认）"
     }
   },
   "functionTools": {
@@ -71,21 +73,29 @@
         "name": "服务器名称",
         "nameRequired": "名称是必填项",
         "enable": "启用服务器",
-        "config": "服务器配置"
+        "config": "服务器配置",
+        "agentScope": "Agent 作用域",
+        "scopeQuickSelect": "快速选择",
+        "onlyEnabledSubagents": "仅显示已启用 SubAgent"
       },
       "errors": {
         "configEmpty": "配置不能为空",
         "jsonFormat": "JSON 格式错误: {error}",
-        "jsonParse": "JSON 解析错误: {error}"
+        "jsonParse": "JSON 解析错误: {error}",
+        "agentScopeInvalid": "作用域格式无效: {value}。请使用 '*' 或类似 'search_agent' 的 Agent 名称。"
       },
       "buttons": {
         "cancel": "取消",
         "save": "保存",
         "testConnection": "测试连接",
-        "sync": "同步"
+        "sync": "同步",
+        "clearScope": "清空"
       },
       "tips": {
-        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置"
+        "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置",
+        "agentScopeHint": "留空表示默认对所有 Agent 可见；使用 * 可显式标记所有 Agent。",
+        "noSubagentHint": "暂未发现 SubAgent 名称。你也可以手动输入自定义名称。",
+        "noEnabledSubagentHint": "未发现已启用的 SubAgent。你可以关闭过滤后查看全部 SubAgent。"
       }
     },
     "serverDetail": {

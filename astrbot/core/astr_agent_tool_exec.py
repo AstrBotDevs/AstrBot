@@ -10,6 +10,7 @@ import mcp
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.mcp_scope import is_mcp_tool_visible_to_agent
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -95,14 +96,23 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # make toolset for the agent
         tools = tool.agent.tools
+        target_agent_name = tool.agent.name or ""
         if tools:
             toolset = ToolSet()
             for t in tools:
                 if isinstance(t, str):
                     _t = llm_tools.get_func(t)
+                    if isinstance(_t, MCPTool) and not is_mcp_tool_visible_to_agent(
+                        _t, target_agent_name
+                    ):
+                        continue
                     if _t:
                         toolset.add_tool(_t)
                 elif isinstance(t, FunctionTool):
+                    if isinstance(t, MCPTool) and not is_mcp_tool_visible_to_agent(
+                        t, target_agent_name
+                    ):
+                        continue
                     toolset.add_tool(t)
         else:
             toolset = None

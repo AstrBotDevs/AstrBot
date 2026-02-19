@@ -5,7 +5,7 @@
       <v-row class="d-flex justify-space-between align-center px-4 py-3 pb-8">
         <div>
           <v-btn color="success" prepend-icon="mdi-plus" class="me-2" variant="tonal"
-            @click="showMcpServerDialog = true" >
+            @click="openAddServerDialog" >
             {{ tm('mcpServers.buttons.add') }}
           </v-btn>
           <v-btn color="success" prepend-icon="mdi-refresh" variant="tonal" @click="showSyncMcpServerDialog = true"
@@ -30,6 +30,12 @@
                 <v-icon size="small" color="grey" class="me-2">mdi-file-code</v-icon>
                 <span class="text-caption text-medium-emphasis text-truncate" :title="getServerConfigSummary(item)">
                   {{ getServerConfigSummary(item) }}
+                </span>
+              </div>
+              <div class="d-flex align-center mb-2">
+                <v-icon size="small" color="grey" class="me-2">mdi-account-switch</v-icon>
+                <span class="text-caption text-medium-emphasis text-truncate" :title="getServerScopeSummary(item)">
+                  {{ tm('mcpServers.status.scopeSummary', { scope: getServerScopeSummary(item) }) }}
                 </span>
               </div>
 
@@ -92,6 +98,83 @@
           <v-form @submit.prevent="saveServer" ref="form">
             <v-text-field v-model="currentServer.name" :label="tm('dialogs.addServer.fields.name')" variant="outlined"
               :rules="[v => !!v || tm('dialogs.addServer.fields.nameRequired')]" required class="mb-3"></v-text-field>
+
+            <v-combobox
+              v-model="currentServer.agent_scope"
+              :items="scopeSelectionItems"
+              :label="tm('dialogs.addServer.fields.agentScope')"
+              multiple
+              chips
+              clearable
+              closable-chips
+              variant="outlined"
+              class="mb-3"
+              :hint="tm('dialogs.addServer.tips.agentScopeHint')"
+              persistent-hint
+              @update:model-value="onScopeInputChange"
+            />
+            <div class="d-flex align-center flex-wrap ga-2 mb-3">
+              <span class="text-caption text-medium-emphasis">
+                {{ tm('dialogs.addServer.fields.scopeQuickSelect') }}
+              </span>
+              <v-switch
+                v-model="scopeShowEnabledOnly"
+                hide-details
+                inset
+                color="primary"
+                density="compact"
+                class="ml-2"
+                :label="tm('dialogs.addServer.fields.onlyEnabledSubagents')"
+                @update:model-value="onScopeEnabledFilterToggle"
+              />
+              <v-chip
+                size="small"
+                :color="isScopeSelected('*') ? 'primary' : 'default'"
+                :variant="isScopeSelected('*') ? 'flat' : 'outlined'"
+                @click="toggleScopeSelection('*')"
+              >
+                *
+              </v-chip>
+              <v-chip
+                size="small"
+                :color="isScopeSelected('main') ? 'primary' : 'default'"
+                :variant="isScopeSelected('main') ? 'flat' : 'outlined'"
+                @click="toggleScopeSelection('main')"
+              >
+                main
+              </v-chip>
+              <v-chip
+                v-for="scopeItem in displaySubagentOptions"
+                :key="scopeItem"
+                size="small"
+                :color="isScopeSelected(scopeItem) ? 'primary' : 'default'"
+                :variant="isScopeSelected(scopeItem) ? 'flat' : 'outlined'"
+                @click="toggleScopeSelection(scopeItem)"
+              >
+                {{ scopeItem }}
+              </v-chip>
+              <v-btn
+                size="x-small"
+                variant="text"
+                color="primary"
+                @click="clearScopeSelection"
+              >
+                {{ tm('dialogs.addServer.buttons.clearScope') }}
+              </v-btn>
+            </div>
+            <div v-if="scopeError" class="mt-n2 mb-2 text-error">
+              <v-icon color="error" size="small" class="me-1">mdi-alert-circle</v-icon>
+              <span>{{ scopeError }}</span>
+            </div>
+            <div v-if="allSubagentOptions.length === 0" class="text-caption text-medium-emphasis mb-3">
+              {{ tm('dialogs.addServer.tips.noSubagentHint') }}
+            </div>
+            <div
+              v-else-if="displaySubagentOptions.length === 0"
+              class="text-caption text-medium-emphasis mb-3"
+            >
+              {{ tm('dialogs.addServer.tips.noEnabledSubagentHint') }}
+            </div>
 
             <div class="mb-2 d-flex align-center">
               <span class="text-subtitle-1">{{ tm('dialogs.addServer.fields.config') }}</span>
@@ -223,6 +306,8 @@ import {
   useConfirmDialog
 } from '@/utils/confirmDialog';
 
+const MCP_SCOPE_ENABLED_ONLY_STORAGE_KEY = 'astrbot:mcp_scope_show_enabled_only';
+
 export default {
   name: 'McpServersSection',
   components: {
@@ -248,12 +333,17 @@ export default {
       loading: false,
       loadingGettingServers: false,
       mcpServerUpdateLoaders: {},
+      allSubagentOptions: [],
+      enabledSubagentOptions: [],
+      scopeShowEnabledOnly: true,
       isEditMode: false,
       serverConfigJson: '',
       jsonError: null,
+      scopeError: '',
       currentServer: {
         name: '',
         active: true,
+        agent_scope: [],
         tools: []
       },
       originalServerName: '',
@@ -264,7 +354,25 @@ export default {
   },
   computed: {
     isServerFormValid() {
-      return !!this.currentServer.name && !this.jsonError;
+      return !!this.currentServer.name && !this.jsonError && !this.scopeError;
+    },
+    displaySubagentOptions() {
+      const source = this.scopeShowEnabledOnly
+        ? this.enabledSubagentOptions
+        : this.allSubagentOptions;
+      return [...(source || [])].sort((a, b) => a.localeCompare(b));
+    },
+    scopeSelectionItems() {
+      const uniq = [];
+      const seen = new Set();
+      const baseItems = ['*', 'main', ...this.displaySubagentOptions];
+      for (const item of baseItems) {
+        const v = String(item || '').trim();
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        uniq.push(v);
+      }
+      return uniq;
     },
     getServerConfigSummary() {
       return (server) => {
@@ -272,7 +380,7 @@ export default {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
         const configKeys = Object.keys(server).filter(key =>
-          !['name', 'active', 'tools'].includes(key)
+          !['name', 'active', 'tools', 'agent_scope', 'scopes'].includes(key)
         );
         if (configKeys.length > 0) {
           return this.tm('mcpServers.status.configSummary', { keys: configKeys.join(', ') });
@@ -282,7 +390,9 @@ export default {
     }
   },
   mounted() {
+    this.scopeShowEnabledOnly = this.getStoredScopeEnabledOnlyPreference();
     this.getServers();
+    this.loadSubagentOptions();
     this.refreshInterval = setInterval(() => {
       this.getServers();
     }, 5000);
@@ -293,6 +403,33 @@ export default {
     }
   },
   methods: {
+    getStoredScopeEnabledOnlyPreference() {
+      try {
+        const rawValue = localStorage.getItem(MCP_SCOPE_ENABLED_ONLY_STORAGE_KEY);
+        if (rawValue === null) {
+          return true;
+        }
+        return rawValue === '1';
+      } catch (error) {
+        return true;
+      }
+    },
+    persistScopeEnabledOnlyPreference(value) {
+      try {
+        localStorage.setItem(MCP_SCOPE_ENABLED_ONLY_STORAGE_KEY, value ? '1' : '0');
+      } catch (error) {
+        // Ignore storage errors and fallback to in-memory state.
+      }
+    },
+    onScopeEnabledFilterToggle(value) {
+      this.scopeShowEnabledOnly = !!value;
+      this.persistScopeEnabledOnlyPreference(this.scopeShowEnabledOnly);
+    },
+    openAddServerDialog() {
+      this.resetForm();
+      this.loadSubagentOptions();
+      this.showMcpServerDialog = true;
+    },
     openurl(url) {
       window.open(url, '_blank');
     },
@@ -312,6 +449,119 @@ export default {
         }).finally(() => {
           this.loadingGettingServers = false;
         });
+    },
+    async loadSubagentOptions() {
+      try {
+        const response = await axios.get('/api/subagent/config');
+        if (response.data.status !== 'ok') {
+          return;
+        }
+        const agents = Array.isArray(response.data.data?.agents)
+          ? response.data.data.agents
+          : [];
+        const allNames = [];
+        const enabledNames = [];
+        for (const agent of agents) {
+          const name = String(agent?.name || '').trim();
+          if (!name) {
+            continue;
+          }
+          allNames.push(name);
+          if (agent?.enabled !== false) {
+            enabledNames.push(name);
+          }
+        }
+        this.allSubagentOptions = [...new Set(allNames)];
+        this.enabledSubagentOptions = [...new Set(enabledNames)];
+      } catch (error) {
+        this.allSubagentOptions = [];
+        this.enabledSubagentOptions = [];
+      }
+    },
+    normalizeAgentScope(scopeList) {
+      if (!Array.isArray(scopeList)) {
+        return [];
+      }
+      const normalized = [];
+      const seen = new Set();
+      for (const item of scopeList) {
+        const rawValue = String(item || '').trim();
+        const value = rawValue.toLowerCase() === 'all' ? '*' : rawValue;
+        if (!value || seen.has(value)) {
+          continue;
+        }
+        seen.add(value);
+        normalized.push(value);
+      }
+      if (normalized.includes('*')) {
+        return ['*'];
+      }
+      return normalized;
+    },
+    validateAgentScope() {
+      const normalized = this.normalizeAgentScope(this.currentServer.agent_scope);
+      const invalidScopes = normalized.filter((scope) => {
+        if (scope === '*') {
+          return false;
+        }
+        return !/^[a-z][a-z0-9_]{0,63}$/.test(scope);
+      });
+      if (invalidScopes.length > 0) {
+        this.scopeError = this.tm('dialogs.addServer.errors.agentScopeInvalid', {
+          value: invalidScopes.join(', ')
+        });
+        return false;
+      }
+      this.scopeError = '';
+      this.currentServer.agent_scope = normalized;
+      return true;
+    },
+    onScopeInputChange(values) {
+      this.currentServer.agent_scope = this.normalizeAgentScope(values);
+      this.validateAgentScope();
+    },
+    isScopeSelected(scope) {
+      return this.normalizeAgentScope(this.currentServer.agent_scope).includes(scope);
+    },
+    toggleScopeSelection(scope) {
+      const normalized = this.normalizeAgentScope(this.currentServer.agent_scope);
+      if (scope === '*') {
+        this.currentServer.agent_scope = normalized.includes('*') ? [] : ['*'];
+        this.validateAgentScope();
+        return;
+      }
+      const next = normalized.filter((item) => item !== '*');
+      if (next.includes(scope)) {
+        this.currentServer.agent_scope = next.filter((item) => item !== scope);
+      } else {
+        this.currentServer.agent_scope = [...next, scope];
+      }
+      this.validateAgentScope();
+    },
+    clearScopeSelection() {
+      this.currentServer.agent_scope = [];
+      this.scopeError = '';
+    },
+    parseAgentScopeFromServer(server) {
+      const rawScope = server?.agent_scope ?? server?.scopes;
+      if (rawScope == null) {
+        return [];
+      }
+      if (Array.isArray(rawScope)) {
+        return this.normalizeAgentScope(rawScope);
+      }
+      const value = String(rawScope).trim();
+      if (!value) {
+        return [];
+      }
+      return this.normalizeAgentScope([value]);
+    },
+    getServerScopeSummary(server) {
+      const scopes = this.parseAgentScopeFromServer(server);
+      if (!scopes.length || scopes.includes('*')) {
+        return this.tm('mcpServers.status.scopeAll');
+      }
+      return scopes.join(', ');
     },
     validateJson() {
       try {
@@ -357,14 +607,23 @@ export default {
       if (!this.validateJson()) {
         return;
       }
+      if (!this.validateAgentScope()) {
+        return;
+      }
       this.loading = true;
       try {
         const configObj = JSON.parse(this.serverConfigJson);
+        delete configObj.scopes;
+        delete configObj.agent_scope;
+        const normalizedScope = this.normalizeAgentScope(this.currentServer.agent_scope);
         const serverData = {
           name: this.currentServer.name,
           active: this.currentServer.active,
           ...configObj
         };
+        if (normalizedScope.length > 0) {
+          serverData.agent_scope = normalizedScope;
+        }
         if (this.isEditMode && this.originalServerName) {
           serverData.oldName = this.originalServerName;
         }
@@ -412,11 +671,16 @@ export default {
       this.currentServer = {
         name: server.name,
         active: server.active,
+        agent_scope: this.parseAgentScopeFromServer(server),
         tools: server.tools || []
       };
+      delete configCopy.agent_scope;
+      delete configCopy.scopes;
       this.originalServerName = server.name;
       this.serverConfigJson = JSON.stringify(configCopy, null, 2);
       this.isEditMode = true;
+      this.loadSubagentOptions();
+      this.validateAgentScope();
       this.showMcpServerDialog = true;
     },
     updateServerStatus(server) {
@@ -438,6 +702,7 @@ export default {
     closeServerDialog() {
       this.showMcpServerDialog = false;
       this.addServerDialogMessage = '';
+      this.scopeError = '';
       this.resetForm();
     },
     testServerConnection() {
@@ -469,10 +734,12 @@ export default {
       this.currentServer = {
         name: '',
         active: true,
+        agent_scope: [],
         tools: []
       };
       this.serverConfigJson = '';
       this.jsonError = null;
+      this.scopeError = '';
       this.isEditMode = false;
       this.originalServerName = '';
     },

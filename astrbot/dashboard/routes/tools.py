@@ -329,15 +329,21 @@ class ToolsRoute(Route):
                 if isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
+                    mcp_server_name = tool.mcp_server_name
+                    mcp_server_scopes = tool.mcp_server_scopes
                 elif tool.handler_module_path and star_map.get(
                     tool.handler_module_path
                 ):
                     star = star_map[tool.handler_module_path]
                     origin = "plugin"
                     origin_name = star.name
+                    mcp_server_name = None
+                    mcp_server_scopes = None
                 else:
                     origin = "unknown"
                     origin_name = "unknown"
+                    mcp_server_name = None
+                    mcp_server_scopes = None
 
                 tool_info = {
                     "name": tool.name,
@@ -346,6 +352,8 @@ class ToolsRoute(Route):
                     "active": tool.active,
                     "origin": origin,
                     "origin_name": origin_name,
+                    "mcp_server_name": mcp_server_name,
+                    "mcp_server_scopes": mcp_server_scopes,
                 }
                 tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__

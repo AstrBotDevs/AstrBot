@@ -12,6 +12,10 @@ import aiohttp
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.mcp_scope import (
+    get_mcp_scopes_from_config,
+    strip_mcp_scope_fields,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -45,6 +49,7 @@ def _prepare_config(config: dict) -> dict:
         first_key = next(iter(config["mcpServers"]))
         config = config["mcpServers"][first_key]
     config.pop("active", None)
+    strip_mcp_scope_fields(config)
     return config
 
 
@@ -250,6 +255,7 @@ class FunctionToolManager:
         # 先清理之前的客户端，如果存在
         if name in self.mcp_client_dict:
             await self._terminate_mcp_client(name)
+        mcp_server_scopes = get_mcp_scopes_from_config(config)
 
         mcp_client = MCPClient()
         mcp_client.name = name
@@ -272,6 +278,7 @@ class FunctionToolManager:
                 mcp_tool=tool,
                 mcp_client=mcp_client,
                 mcp_server_name=name,
+                mcp_server_scopes=mcp_server_scopes,
             )
             self.func_list.append(func_tool)
 

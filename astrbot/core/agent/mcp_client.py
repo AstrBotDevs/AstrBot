@@ -13,6 +13,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.agent.mcp_scope import strip_mcp_scope_fields
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
@@ -42,6 +43,7 @@ def _prepare_config(config: dict) -> dict:
         first_key = next(iter(config["mcpServers"]))
         config = config["mcpServers"][first_key]
     config.pop("active", None)
+    strip_mcp_scope_fields(config)
     return config
 
 
@@ -364,7 +366,12 @@ class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self,
+        mcp_tool: mcp.Tool,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        mcp_server_scopes: tuple[str, ...] | None = None,
+        **kwargs,
     ) -> None:
         super().__init__(
             name=mcp_tool.name,
@@ -374,6 +381,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.mcp_server_scopes = mcp_server_scopes
 
     async def call(
         self, context: ContextWrapper[TContext], **kwargs

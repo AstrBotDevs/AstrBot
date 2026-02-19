@@ -14,6 +14,7 @@ from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.mcp_scope import is_mcp_tool_visible_to_agent
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -392,6 +393,12 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
+                            and (
+                                not isinstance(tool, MCPTool)
+                                or is_mcp_tool_visible_to_agent(
+                                    tool, str(a.get("name", ""))
+                                )
+                            )
                         ]
                     )
                     continue
@@ -400,6 +407,13 @@ async def _ensure_persona_and_skills(
                 for t in tools:
                     name = str(t).strip()
                     if name:
+                        tool = tmgr.get_func(name)
+                        if isinstance(
+                            tool, MCPTool
+                        ) and not is_mcp_tool_visible_to_agent(
+                            tool, str(a.get("name", ""))
+                        ):
+                            continue
                         assigned_tools.add(name)
 
         if req.func_tool is None:
@@ -748,18 +762,39 @@ def _sanitize_context_by_modalities(
     req.contexts = sanitized_contexts
 
 
-def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+def _plugin_tool_fix(
+    event: AstrMessageEvent,
+    req: ProviderRequest,
+    inject_mcp: bool = True,
+    *,
+    agent_name: str = "main",
+) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
     因为它们不属于任何插件，不应被插件过滤逻辑影响。
+
+    Args:
+        event: 消息事件
+        req: 提供者请求
+        inject_mcp: 是否自动注入全局 MCP 工具，默认 True（向后兼容）
     """
+    if req.func_tool:
+        filtered_tool_set = ToolSet()
+        for tool in req.func_tool.tools:
+            if isinstance(tool, MCPTool) and not is_mcp_tool_visible_to_agent(
+                tool, agent_name
+            ):
+                continue
+            filtered_tool_set.add_tool(tool)
+        req.func_tool = filtered_tool_set
+
     if event.plugins_name is not None and req.func_tool:
         new_tool_set = ToolSet()
         for tool in req.func_tool.tools:
             if isinstance(tool, MCPTool):
-                # 保留 MCP 工具
-                new_tool_set.add_tool(tool)
+                if is_mcp_tool_visible_to_agent(tool, agent_name):
+                    new_tool_set.add_tool(tool)
                 continue
             mp = tool.handler_module_path
             if not mp:
@@ -770,14 +805,17 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
-    else:
-        # mcp tools
+    elif inject_mcp:
+        # 仅在配置允许时注入 MCP 工具
         tool_set = req.func_tool
         if not tool_set:
             tool_set = ToolSet()
         for tool in llm_tools.func_list:
-            if isinstance(tool, MCPTool):
+            if isinstance(tool, MCPTool) and is_mcp_tool_visible_to_agent(
+                tool, agent_name
+            ):
                 tool_set.add_tool(tool)
+        req.func_tool = tool_set
 
 
 async def _handle_webchat(
@@ -1074,7 +1112,8 @@ async def build_main_agent(
         req.session_id = event.unified_msg_origin
 
     _modalities_fix(provider, req)
-    _plugin_tool_fix(event, req)
+    inject_mcp = config.subagent_orchestrator.get("inject_global_mcp_tools", True)
+    _plugin_tool_fix(event, req, inject_mcp, agent_name="main")
     _sanitize_context_by_modalities(config, provider, req)
 
     if config.llm_safety_mode:

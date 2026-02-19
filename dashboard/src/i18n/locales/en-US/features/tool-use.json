@@ -25,7 +25,9 @@
       "noTools": "No available tools",
       "availableTools": "Available tools",
       "configSummary": "Config: {keys}",
-      "noConfig": "No configuration set"
+      "noConfig": "No configuration set",
+      "scopeSummary": "Scope: {scope}",
+      "scopeAll": "All agents (default)"
     }
   },
   "functionTools": {
@@ -71,21 +73,29 @@
         "name": "Server Name",
         "nameRequired": "Name is required",
         "enable": "Enable Server",
-        "config": "Server Configuration"
+        "config": "Server Configuration",
+        "agentScope": "Agent Scope",
+        "scopeQuickSelect": "Quick select",
+        "onlyEnabledSubagents": "Only enabled subagents"
       },
       "errors": {
         "configEmpty": "Configuration cannot be empty",
         "jsonFormat": "JSON format error: {error}",
-        "jsonParse": "JSON parse error: {error}"
+        "jsonParse": "JSON parse error: {error}",
+        "agentScopeInvalid": "Invalid scope format: {value}. Use '*' or agent names like 'search_agent'."
       },
       "buttons": {
         "cancel": "Cancel",
         "save": "Save",
         "testConnection": "Test Connection",
-        "sync": "Sync"
+        "sync": "Sync",
+        "clearScope": "Clear"
       },
       "tips": {
-        "timeoutConfig": "Please configure tool call timeout separately in the configuration page"
+        "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
+        "agentScopeHint": "Leave empty for default visibility to all agents; use * to explicitly mark all agents.",
+        "noSubagentHint": "No subagent names found yet. You can still type custom names manually.",
+        "noEnabledSubagentHint": "No enabled subagents found. Turn off the filter to show all subagents."
       }
     },
     "serverDetail": {
