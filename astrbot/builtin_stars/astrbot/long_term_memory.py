@@ -9,6 +9,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import LLMResponse, Provider, ProviderRequest
+from astrbot.core import t
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
 """
@@ -28,7 +29,7 @@ class LongTermMemory:
         try:
             max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
         except BaseException as e:
-            logger.error(e)
+            logger.error(t("builtin-stars-astrbot-ltm-invalid-max-count", error=str(e)))
             max_cnt = 300
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
@@ -74,9 +75,19 @@ class LongTermMemory:
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
-                raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
+                raise Exception(
+                    t(
+                        "builtin-stars-astrbot-ltm-provider-not-found",
+                        provider_id=image_caption_provider_id,
+                    )
+                )
         if not isinstance(provider, Provider):
-            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
+            raise Exception(
+                t(
+                    "builtin-stars-astrbot-ltm-provider-type-invalid",
+                    provider_type=str(type(provider)),
+                )
+            )
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -128,7 +139,9 @@ class LongTermMemory:
                         try:
                             url = comp.url if comp.url else comp.file
                             if not url:
-                                raise Exception("图片 URL 为空")
+                                raise Exception(
+                                    t("builtin-stars-astrbot-ltm-empty-image-url")
+                                )
                             caption = await self.get_image_caption(
                                 url,
                                 cfg["image_caption_provider_id"],
@@ -136,14 +149,25 @@ class LongTermMemory:
                             )
                             parts.append(f" [Image: {caption}]")
                         except Exception as e:
-                            logger.error(f"获取图片描述失败: {e}")
+                            logger.error(
+                                t(
+                                    "builtin-stars-astrbot-ltm-image-caption-failed",
+                                    error=str(e),
+                                )
+                            )
                     else:
                         parts.append(" [Image]")
                 elif isinstance(comp, At):
                     parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
-            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
+            logger.debug(
+                t(
+                    "builtin-stars-astrbot-ltm-recorded-message",
+                    umo=event.unified_msg_origin,
+                    message=final_message,
+                )
+            )
             self.session_chats[event.unified_msg_origin].append(final_message)
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
                 self.session_chats[event.unified_msg_origin].pop(0)
@@ -180,7 +204,11 @@ class LongTermMemory:
         if llm_resp.completion_text:
             final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
             logger.debug(
-                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
+                t(
+                    "builtin-stars-astrbot-ltm-recorded-ai-response",
+                    umo=event.unified_msg_origin,
+                    message=final_message,
+                )
             )
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)

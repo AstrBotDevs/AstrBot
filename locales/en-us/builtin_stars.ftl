@@ -32,3 +32,12 @@ builtin-stars-astrbot-main-no-conversation-active-reply = No active conversation
 builtin-stars-astrbot-main-conversation-not-found-active-reply = Conversation not found, cannot perform active reply.
 builtin-stars-astrbot-main-active-reply-failed = Active reply failed: { $error }
 builtin-stars-astrbot-main-ltm-error = Long-term memory processing failed: { $error }
+
+### astrbot/builtin_stars/astrbot/long_term_memory.py
+builtin-stars-astrbot-ltm-invalid-max-count = Invalid long-term memory config group_message_max_cnt, fallback to default 300: { $error }
+builtin-stars-astrbot-ltm-provider-not-found = Provider with ID { $provider_id } was not found.
+builtin-stars-astrbot-ltm-provider-type-invalid = Invalid provider type ({ $provider_type }); cannot get image caption.
+builtin-stars-astrbot-ltm-empty-image-url = Image URL is empty.
+builtin-stars-astrbot-ltm-image-caption-failed = Failed to get image caption: { $error }
+builtin-stars-astrbot-ltm-recorded-message = ltm | { $umo } | { $message }
+builtin-stars-astrbot-ltm-recorded-ai-response = Recorded AI response: { $umo } | { $message }
