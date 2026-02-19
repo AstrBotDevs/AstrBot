@@ -4,7 +4,7 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.provider import LLMResponse, ProviderRequest
-from astrbot.core import logger
+from astrbot.core import logger, t
 
 from .long_term_memory import LongTermMemory
 
@@ -16,7 +16,9 @@ class Main(star.Star):
         try:
             self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
         except BaseException as e:
-            logger.error(f"聊天增强 err: {e}")
+            logger.error(
+                t("builtin-stars-astrbot-main-chat-enhance-error", error=str(e))
+            )
 
     def ltm_enabled(self, event: AstrMessageEvent):
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[
@@ -44,13 +46,20 @@ class Main(star.Star):
                 try:
                     await self.ltm.handle_message(event)
                 except BaseException as e:
-                    logger.error(e)
+                    logger.error(
+                        t(
+                            "builtin-stars-astrbot-main-record-message-error",
+                            error=str(e),
+                        )
+                    )
 
             if need_active:
                 """主动回复"""
                 provider = self.context.get_using_provider(event.unified_msg_origin)
                 if not provider:
-                    logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
+                    logger.error(
+                        t("builtin-stars-astrbot-main-no-llm-provider-for-active-reply")
+                    )
                     return
                 try:
                     conv = None
@@ -60,7 +69,9 @@ class Main(star.Star):
 
                     if not session_curr_cid:
                         logger.error(
-                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
+                            t(
+                                "builtin-stars-astrbot-main-no-conversation-active-reply"
+                            ),
                         )
                         return
 
@@ -72,7 +83,11 @@ class Main(star.Star):
                     prompt = event.message_str
 
                     if not conv:
-                        logger.error("未找到对话，无法主动回复")
+                        logger.error(
+                            t(
+                                "builtin-stars-astrbot-main-conversation-not-found-active-reply"
+                            )
+                        )
                         return
 
                     yield event.request_llm(
@@ -82,7 +97,12 @@ class Main(star.Star):
                     )
                 except BaseException as e:
                     logger.error(traceback.format_exc())
-                    logger.error(f"主动回复失败: {e}")
+                    logger.error(
+                        t(
+                            "builtin-stars-astrbot-main-active-reply-failed",
+                            error=str(e),
+                        )
+                    )
 
     @filter.on_llm_request()
     async def decorate_llm_req(
@@ -93,7 +113,7 @@ class Main(star.Star):
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
-                logger.error(f"ltm: {e}")
+                logger.error(t("builtin-stars-astrbot-main-ltm-error", error=str(e)))
 
     @filter.on_llm_response()
     async def record_llm_resp_to_ltm(
@@ -104,7 +124,7 @@ class Main(star.Star):
             try:
                 await self.ltm.after_req_llm(event, resp)
             except Exception as e:
-                logger.error(f"ltm: {e}")
+                logger.error(t("builtin-stars-astrbot-main-ltm-error", error=str(e)))
 
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent) -> None:
@@ -115,4 +135,4 @@ class Main(star.Star):
                 if clean_session:
                     await self.ltm.remove_session(event)
             except Exception as e:
-                logger.error(f"ltm: {e}")
+                logger.error(t("builtin-stars-astrbot-main-ltm-error", error=str(e)))
