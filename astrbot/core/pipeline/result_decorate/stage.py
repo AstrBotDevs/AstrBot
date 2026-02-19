@@ -30,7 +30,8 @@ class ResultDecorateStage(Stage):
             "reply_with_quote"
         ]
         self.reply_with_quote_scope = ctx.astrbot_config["platform_settings"].get(
-            "reply_with_quote_scope", "all"
+            "reply_with_quote_scope",
+            "all",
         )
         self.t2i_word_threshold = ctx.astrbot_config["t2i_word_threshold"]
         try:
@@ -411,6 +412,5 @@ class ResultDecorateStage(Stage):
             if should_quote and not any(
                 isinstance(item, File) for item in result.chain
             ):
-                result.chain.insert(
-                    0, Reply(id=event.message_obj.message_id)
-                )
+                result.chain.insert(0, Reply(id=event.message_obj.message_id))
+
