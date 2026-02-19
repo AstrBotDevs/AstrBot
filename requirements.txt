@@ -35,6 +35,7 @@ py-cord>=2.6.1
 pydantic>=2.12.5
 pydub>=0.25.1
 pyjwt>=2.10.1
+jsonschema>=4.25.1
 python-telegram-bot>=22.0
 qq-botpy>=1.2.1
 quart>=0.20.0
