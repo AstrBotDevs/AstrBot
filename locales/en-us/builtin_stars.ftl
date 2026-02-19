@@ -147,3 +147,8 @@ builtin-stars-admin-dwl-success = Removed from whitelist successfully.
 builtin-stars-admin-dwl-not-in-list = This SID is not in the whitelist.
 builtin-stars-admin-update-dashboard-start = Trying to update dashboard...
 builtin-stars-admin-update-dashboard-finished = Dashboard update completed.
+
+### astrbot/builtin_stars/builtin_commands/commands/help.py
+builtin-stars-help-no-enabled-reserved-commands = No enabled built-in commands.
+builtin-stars-help-header = AstrBot v{ $version } (WebUI: { $dashboard_version })
+builtin-stars-help-reserved-command-title = Built-in commands:

@@ -147,3 +147,8 @@ builtin-stars-admin-dwl-success = 删除白名单成功。
 builtin-stars-admin-dwl-not-in-list = 此 SID 不在白名单内。
 builtin-stars-admin-update-dashboard-start = 正在尝试更新管理面板...
 builtin-stars-admin-update-dashboard-finished = 管理面板更新完成。
+
+### astrbot/builtin_stars/builtin_commands/commands/help.py
+builtin-stars-help-no-enabled-reserved-commands = 暂无启用的内置指令
+builtin-stars-help-header = AstrBot v{ $version }(WebUI: { $dashboard_version })
+builtin-stars-help-reserved-command-title = 内置指令:
