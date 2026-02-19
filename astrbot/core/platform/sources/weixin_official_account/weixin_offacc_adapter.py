@@ -1,14 +1,14 @@
 import asyncio
 import os
 import sys
-import uuid
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import quart
 from requests import Response
-from wechatpy import WeChatClient, parse_message, create_reply
+from wechatpy import WeChatClient, create_reply, parse_message
 from wechatpy.crypto import WeChatCrypto
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.messages import BaseMessage, ImageMessage, TextMessage, VoiceMessage
@@ -39,7 +39,12 @@ else:
 
 
 class WeixinOfficialAccountServer:
-    def __init__(self, event_queue: asyncio.Queue, config: dict, user_buffer: dict[Any, dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        event_queue: asyncio.Queue,
+        config: dict,
+        user_buffer: dict[Any, dict[str, Any]],
+    ) -> None:
         self.server = quart.Quart(__name__)
         self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
@@ -102,7 +107,7 @@ class WeixinOfficialAccountServer:
     async def callback_command(self):
         """内部服务器的 POST 回调入口"""
         return await self.handle_callback(quart.request)
-    
+
     def _maybe_encrypt(self, xml: str, nonce: str | None, timestamp: str | None) -> str:
         if xml and "<Encrypt>" not in xml and nonce and timestamp:
             return self.crypto.encrypt_message(xml, nonce, timestamp)
@@ -146,7 +151,7 @@ class WeixinOfficialAccountServer:
 
             if not self.callback:
                 return "success"
-            
+
             # by pass passive reply logic and return active reply directly.
             if self.active_send_mode:
                 result_xml = await self.callback(msg)
@@ -177,7 +182,10 @@ class WeixinOfficialAccountServer:
                         self.user_buffer.pop(from_user, None)
                         return _reply_text(cached_xml)
                     else:
-                        return _reply_text(cached_xml+f"\n【后续消息还在缓冲中，回复任意文字继续获取】")
+                        return _reply_text(
+                            cached_xml
+                            + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                        )
 
                 task: asyncio.Task | None = cast(asyncio.Task | None, state.get("task"))
                 placeholder = (
@@ -187,33 +195,48 @@ class WeixinOfficialAccountServer:
 
                 # same msgid => WeChat retry: wait a little; new msgid => user trigger: just placeholder
                 if task and state.get("msg_id") == msg_id:
-                    done, _ = await asyncio.wait({task}, timeout=self._wx_msg_time_out, return_when=asyncio.FIRST_COMPLETED)
+                    done, _ = await asyncio.wait(
+                        {task},
+                        timeout=self._wx_msg_time_out,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
                     if done:
                         try:
                             cached = state.get("cached_xml")
                             # send one cached each time, if cached is empty after pop, remove the buffer
                             if cached and len(cached) > 0:
-                                logger.info(f"wx buffer hit on retry window: user={from_user}")
+                                logger.info(
+                                    f"wx buffer hit on retry window: user={from_user}"
+                                )
                                 cached_xml = cached.pop(0)
                                 if len(cached) == 0:
                                     self.user_buffer.pop(from_user, None)
-                                    logger.debug(f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} ")
+                                    logger.debug(
+                                        f"wx finished message sending in passive window: user={from_user} msg_id={msg_id} "
+                                    )
                                     return _reply_text(cached_xml)
                                 else:
                                     logger.debug(
                                         f"wx finished message sending in passive window but not final: user={from_user} msg_id={msg_id} "
                                     )
-                                    return _reply_text(cached_xml+f"\n【后续消息还在缓冲中，回复任意文字继续获取】")
+                                    return _reply_text(
+                                        cached_xml
+                                        + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                                    )
                             logger.info(
                                 f"wx finished in window but not final; return placeholder: user={from_user} msg_id={msg_id} "
                             )
                             return _reply_text(placeholder)
                         except Exception:
-                            logger.critical("wx task failed in passive window", exc_info=True)
+                            logger.critical(
+                                "wx task failed in passive window", exc_info=True
+                            )
                             self.user_buffer.pop(from_user, None)
                             return _reply_text("处理消息失败，请稍后再试。")
 
-                    logger.info(f"wx passive window timeout: user={from_user} msg_id={msg_id}")
+                    logger.info(
+                        f"wx passive window timeout: user={from_user} msg_id={msg_id}"
+                    )
                     return _reply_text(placeholder)
 
                 logger.debug(f"wx trigger while thinking: user={from_user}")
@@ -222,20 +245,30 @@ class WeixinOfficialAccountServer:
             # create new trigger when state is empty, and store state in buffer
             logger.debug(f"wx new trigger: user={from_user} msg_id={msg_id}")
             preview = self._preview(msg)
-            placeholder = f"【正在思考'{preview}'中，已思考0s，回复任意文字尝试获取回复】"
-            logger.info(f"wx start task: user={from_user} msg_id={msg_id} preview={preview}")
+            placeholder = (
+                f"【正在思考'{preview}'中，已思考0s，回复任意文字尝试获取回复】"
+            )
+            logger.info(
+                f"wx start task: user={from_user} msg_id={msg_id} preview={preview}"
+            )
 
             self.user_buffer[from_user] = state = {
                 "msg_id": msg_id,
                 "preview": preview,
                 "task": None,  # set later after task created
-                "cached_xml": [], # for passive reply
+                "cached_xml": [],  # for passive reply
                 "started_at": time.monotonic(),
             }
-            self.user_buffer[from_user]["task"] = task = asyncio.create_task(self.callback(msg))
+            self.user_buffer[from_user]["task"] = task = asyncio.create_task(
+                self.callback(msg)
+            )
 
             # immediate return if done
-            done, _ = await asyncio.wait({task}, timeout=self._wx_msg_time_out, return_when=asyncio.FIRST_COMPLETED)
+            done, _ = await asyncio.wait(
+                {task},
+                timeout=self._wx_msg_time_out,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
             if done:
                 try:
                     cached = state.get("cached_xml", None)
@@ -247,7 +280,10 @@ class WeixinOfficialAccountServer:
                             self.user_buffer.pop(from_user, None)
                             return _reply_text(cached_xml)
                         else:
-                            return _reply_text(cached_xml+f"\n【后续消息还在缓冲中，回复任意文字继续获取】")
+                            return _reply_text(
+                                cached_xml
+                                + "\n【后续消息还在缓冲中，回复任意文字继续获取】"
+                            )
                     logger.info(
                         f"wx not finished in first window; return placeholder: user={from_user} msg_id={msg_id} "
                     )
@@ -305,7 +341,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             self.api_base_url += "/"
 
         self.user_buffer: dict[str, dict[str, Any]] = {}  # from_user -> state
-        self.server = WeixinOfficialAccountServer(self._event_queue, self.config, self.user_buffer)
+        self.server = WeixinOfficialAccountServer(
+            self._event_queue, self.config, self.user_buffer
+        )
 
         self.client = WeChatClient(
             self.config["appid"].strip(),
@@ -317,6 +355,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         # 微信公众号必须 5 秒内进行回复，否则会重试 3 次，我们需要对其进行消息排重
         # msgid -> Future
         self.wexin_event_workers: dict[str, asyncio.Future] = {}
+
         async def callback(msg: BaseMessage):
             try:
                 if self.active_send_mode:
@@ -469,9 +508,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
-        buffer=self.user_buffer.get(message.sender.user_id, None)
+        buffer = self.user_buffer.get(message.sender.user_id, None)
         if buffer is None:
-            logger.critical(f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}")
+            logger.critical(
+                f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
+            )
             return
         message_event = WeixinOfficialAccountPlatformEvent(
             message_str=message.message_str,
@@ -479,7 +520,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
-            message_out=buffer
+            message_out=buffer,
         )
         self.commit_event(message_event)
 

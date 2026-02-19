@@ -1,15 +1,16 @@
 import asyncio
 import os
-from typing import cast, Any
+from typing import Any, cast
 
 from wechatpy import WeChatClient
-from wechatpy.replies import ImageReply, TextReply, VoiceReply
+from wechatpy.replies import ImageReply, VoiceReply
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import convert_audio_to_amr
+
 
 class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
     def __init__(
@@ -19,7 +20,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: WeChatClient,
-        message_out: dict[Any, Any]
+        message_out: dict[Any, Any],
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
@@ -92,9 +93,11 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     for chunk in plain_chunks:
                         self.client.message.send_text(message_obj.sender.user_id, chunk)
                 else:
-                    # disable passive sending, just store the chunks in 
-                    logger.debug(f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent.")
-                    self.message_out['cached_xml']=plain_chunks
+                    # disable passive sending, just store the chunks in
+                    logger.debug(
+                        f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
+                    )
+                    self.message_out["cached_xml"] = plain_chunks
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
