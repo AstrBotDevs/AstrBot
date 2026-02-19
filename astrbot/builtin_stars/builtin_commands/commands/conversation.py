@@ -2,6 +2,7 @@ import datetime
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core import t
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -55,8 +56,11 @@ class ConversationCommands:
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
                 MessageEventResult().message(
-                    f"在{scene.name}场景下，reset命令需要管理员权限，"
-                    f"您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。",
+                    t(
+                        "builtin-stars-conversation-reset-permission-denied",
+                        scene_name=scene.name,
+                        sender_id=message.get_sender_id(),
+                    ),
                 ),
             )
             return
@@ -69,12 +73,18 @@ class ConversationCommands:
                 scope_id=umo,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            message.set_result(MessageEventResult().message("重置对话成功。"))
+            message.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-reset-success")
+                )
+            )
             return
 
         if not self.context.get_using_provider(umo):
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-no-llm-provider")
+                ),
             )
             return
 
@@ -83,7 +93,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 切换或者 /new 创建。",
+                    t("builtin-stars-conversation-no-active-conversation"),
                 ),
             )
             return
@@ -96,7 +106,7 @@ class ConversationCommands:
             [],
         )
 
-        ret = "清除聊天历史成功！"
+        ret = t("builtin-stars-conversation-clear-history-success")
 
         message.set_extra("_clean_ltm_session", True)
 
@@ -106,7 +116,9 @@ class ConversationCommands:
         """查看对话记录"""
         if not self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-no-llm-provider")
+                ),
             )
             return
 
@@ -136,11 +148,11 @@ class ConversationCommands:
             parts.append(f"{context}\n")
 
         history = "".join(parts)
-        ret = (
-            f"当前对话历史记录："
-            f"{history or '无历史记录'}\n\n"
-            f"第 {page} 页 | 共 {total_pages} 页\n"
-            f"*输入 /history 2 跳转到第 2 页"
+        ret = t(
+            "builtin-stars-conversation-history-result",
+            history=history or t("builtin-stars-conversation-no-history"),
+            page=page,
+            total_pages=total_pages,
         )
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
@@ -152,7 +164,10 @@ class ConversationCommands:
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             message.set_result(
                 MessageEventResult().message(
-                    f"{THIRD_PARTY_AGENT_RUNNER_STR} 对话列表功能暂不支持。",
+                    t(
+                        "builtin-stars-conversation-convs-not-supported",
+                        runner_types=THIRD_PARTY_AGENT_RUNNER_STR,
+                    ),
                 ),
             )
             return
@@ -171,14 +186,14 @@ class ConversationCommands:
         end_idx = start_idx + size_per_page
         conversations_paged = conversations_all[start_idx:end_idx]
 
-        parts = ["对话列表：\n---\n"]
+        parts = [t("builtin-stars-conversation-list-title")]
         """全局序号从当前页的第一个开始"""
         global_index = start_idx + 1
 
         """生成所有对话的标题字典"""
         _titles = {}
         for conv in conversations_all:
-            title = conv.title if conv.title else "新对话"
+            title = conv.title if conv.title else t("builtin-stars-conversation-new")
             _titles[conv.cid] = title
 
         """遍历分页后的对话生成列表显示"""
@@ -189,33 +204,50 @@ class ConversationCommands:
                     umo=message.unified_msg_origin,
                 )
                 persona_id = persona["name"]
-            title = _titles.get(conv.cid, "新对话")
+            title = _titles.get(conv.cid, t("builtin-stars-conversation-new"))
             parts.append(
-                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+                t(
+                    "builtin-stars-conversation-list-line",
+                    index=global_index,
+                    title=title,
+                    cid=conv.cid[:4],
+                    persona_id=persona_id,
+                    updated_at=datetime.datetime.fromtimestamp(
+                        conv.updated_at
+                    ).strftime("%m-%d %H:%M"),
+                )
             )
             global_index += 1
 
-        parts.append("---\n")
+        parts.append(t("builtin-stars-conversation-list-divider"))
         ret = "".join(parts)
         curr_cid = await self.context.conversation_manager.get_curr_conversation_id(
             message.unified_msg_origin,
         )
         if curr_cid:
             """从所有对话的标题字典中获取标题"""
-            title = _titles.get(curr_cid, "新对话")
-            ret += f"\n当前对话: {title}({curr_cid[:4]})"
+            title = _titles.get(curr_cid, t("builtin-stars-conversation-new"))
+            ret += t(
+                "builtin-stars-conversation-current-with-id",
+                title=title,
+                cid=curr_cid[:4],
+            )
         else:
-            ret += "\n当前对话: 无"
+            ret += t("builtin-stars-conversation-current-none")
 
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         unique_session = cfg["platform_settings"]["unique_session"]
         if unique_session:
-            ret += "\n会话隔离粒度: 个人"
+            ret += t("builtin-stars-conversation-scope-personal")
         else:
-            ret += "\n会话隔离粒度: 群聊"
+            ret += t("builtin-stars-conversation-scope-group")
 
-        ret += f"\n第 {page} 页 | 共 {total_pages} 页"
-        ret += "\n*输入 /ls 2 跳转到第 2 页"
+        ret += t(
+            "builtin-stars-conversation-page-info",
+            page=page,
+            total_pages=total_pages,
+        )
+        ret += t("builtin-stars-conversation-page-jump-tip")
 
         message.set_result(MessageEventResult().message(ret).use_t2i(False))
         return
@@ -231,7 +263,11 @@ class ConversationCommands:
                 scope_id=message.unified_msg_origin,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            message.set_result(MessageEventResult().message("已创建新对话。"))
+            message.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-new-conv-created")
+                )
+            )
             return
 
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
@@ -245,7 +281,9 @@ class ConversationCommands:
         message.set_extra("_clean_ltm_session", True)
 
         message.set_result(
-            MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"),
+            MessageEventResult().message(
+                t("builtin-stars-conversation-switch-to-new", cid=cid[:4])
+            ),
         )
 
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str = "") -> None:
@@ -267,12 +305,18 @@ class ConversationCommands:
             )
             message.set_result(
                 MessageEventResult().message(
-                    f"群聊 {session} 已切换到新对话: 新对话({cid[:4]})。",
+                    t(
+                        "builtin-stars-conversation-group-switch-to-new",
+                        session=session,
+                        cid=cid[:4],
+                    ),
                 ),
             )
         else:
             message.set_result(
-                MessageEventResult().message("请输入群聊 ID。/groupnew 群聊ID。"),
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-groupnew-need-group-id")
+                ),
             )
 
     async def switch_conv(
@@ -283,14 +327,16 @@ class ConversationCommands:
         """通过 /ls 前面的序号切换对话"""
         if not isinstance(index, int):
             message.set_result(
-                MessageEventResult().message("类型错误，请输入数字对话序号。"),
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-switch-type-invalid")
+                ),
             )
             return
 
         if index is None:
             message.set_result(
                 MessageEventResult().message(
-                    "请输入对话序号。/switch 对话序号。/ls 查看对话 /new 新建对话",
+                    t("builtin-stars-conversation-switch-need-index"),
                 ),
             )
             return
@@ -299,31 +345,47 @@ class ConversationCommands:
         )
         if index > len(conversations) or index < 1:
             message.set_result(
-                MessageEventResult().message("对话序号错误，请使用 /ls 查看"),
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-switch-index-invalid")
+                ),
             )
         else:
             conversation = conversations[index - 1]
-            title = conversation.title if conversation.title else "新对话"
+            title = (
+                conversation.title
+                if conversation.title
+                else t("builtin-stars-conversation-new")
+            )
             await self.context.conversation_manager.switch_conversation(
                 message.unified_msg_origin,
                 conversation.cid,
             )
             message.set_result(
                 MessageEventResult().message(
-                    f"切换到对话: {title}({conversation.cid[:4]})。",
+                    t(
+                        "builtin-stars-conversation-switch-success",
+                        title=title,
+                        cid=conversation.cid[:4],
+                    ),
                 ),
             )
 
     async def rename_conv(self, message: AstrMessageEvent, new_name: str = "") -> None:
         """重命名对话"""
         if not new_name:
-            message.set_result(MessageEventResult().message("请输入新的对话名称。"))
+            message.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-rename-need-name")
+                )
+            )
             return
         await self.context.conversation_manager.update_conversation_title(
             message.unified_msg_origin,
             new_name,
         )
-        message.set_result(MessageEventResult().message("重命名对话成功。"))
+        message.set_result(
+            MessageEventResult().message(t("builtin-stars-conversation-rename-success"))
+        )
 
     async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
@@ -334,7 +396,10 @@ class ConversationCommands:
             # 群聊，没开独立会话，发送人不是管理员
             message.set_result(
                 MessageEventResult().message(
-                    f"会话处于群聊，并且未开启独立会话，并且您 (ID {message.get_sender_id()}) 不是管理员，因此没有权限删除当前对话。",
+                    t(
+                        "builtin-stars-conversation-delete-permission-denied",
+                        sender_id=message.get_sender_id(),
+                    ),
                 ),
             )
             return
@@ -347,7 +412,11 @@ class ConversationCommands:
                 scope_id=umo,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            message.set_result(MessageEventResult().message("重置对话成功。"))
+            message.set_result(
+                MessageEventResult().message(
+                    t("builtin-stars-conversation-reset-success")
+                )
+            )
             return
 
         session_curr_cid = (
@@ -357,7 +426,7 @@ class ConversationCommands:
         if not session_curr_cid:
             message.set_result(
                 MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 序号 切换或 /new 创建。",
+                    t("builtin-stars-conversation-no-active-conversation-with-index"),
                 ),
             )
             return
@@ -369,6 +438,6 @@ class ConversationCommands:
             session_curr_cid,
         )
 
-        ret = "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
+        ret = t("builtin-stars-conversation-delete-success")
         message.set_extra("_clean_ltm_session", True)
         message.set_result(MessageEventResult().message(ret))
