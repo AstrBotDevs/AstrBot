@@ -72,14 +72,17 @@
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password",
       "newUsername": "New Username (Optional)",
       "passwordHint": "Password must be at least 8 characters",
+      "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
       "defaultCredentials": "Default username and password are both astrbot"
     },
     "validation": {
       "passwordRequired": "Please enter password",
       "passwordMinLength": "Password must be at least 8 characters",
+      "passwordMatch": "Passwords do not match",
       "usernameMinLength": "Username must be at least 3 characters"
     },
     "actions": {

@@ -14,6 +14,7 @@ import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { getPlatformDisplayName } from "@/utils/platformUtils";
 
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -149,6 +150,18 @@ const currentPage = ref(1);
 // 危险插件确认对话框
 const dangerConfirmDialog = ref(false);
 const selectedDangerPlugin = ref(null);
+const selectedMarketInstallPlugin = ref(null);
+const installCompat = reactive({
+  checked: false,
+  compatible: true,
+  message: "",
+});
+
+// AstrBot 版本范围不兼容警告对话框
+const versionCompatibilityDialog = reactive({
+  show: false,
+  message: "",
+});
 
 // 卸载插件确认对话框（列表模式用）
 const showUninstallDialog = ref(false);
@@ -250,10 +263,16 @@ const filteredPlugins = computed(() => {
 
   const search = pluginSearch.value.toLowerCase();
   return filteredExtensions.value.filter((plugin) => {
+    const supportPlatforms = Array.isArray(plugin.support_platforms)
+      ? plugin.support_platforms.join(" ").toLowerCase()
+      : "";
+    const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
     return (
       plugin.name?.toLowerCase().includes(search) ||
       plugin.desc?.toLowerCase().includes(search) ||
-      plugin.author?.toLowerCase().includes(search)
+      plugin.author?.toLowerCase().includes(search) ||
+      supportPlatforms.includes(search) ||
+      astrbotVersion.includes(search)
     );
   });
 });
@@ -758,6 +777,7 @@ const handleInstallPlugin = async (plugin) => {
     selectedDangerPlugin.value = plugin;
     dangerConfirmDialog.value = true;
   } else {
+    selectedMarketInstallPlugin.value = plugin;
     extension_url.value = plugin.repo;
     dialog.value = true;
     uploadTab.value = "url";
@@ -767,6 +787,7 @@ const handleInstallPlugin = async (plugin) => {
 // 确认安装危险插件
 const confirmDangerInstall = () => {
   if (selectedDangerPlugin.value) {
+    selectedMarketInstallPlugin.value = selectedDangerPlugin.value;
     extension_url.value = selectedDangerPlugin.value.repo;
     dialog.value = true;
     uploadTab.value = "url";
@@ -958,9 +979,33 @@ const checkAlreadyInstalled = () => {
   const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
   const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
   const installedNames = new Set(data.map((ext) => ext.name));
+  const installedByRepo = new Map(
+    data
+      .filter((ext) => ext.repo)
+      .map((ext) => [ext.repo.toLowerCase(), ext]),
+  );
+  const installedByName = new Map(data.map((ext) => [ext.name, ext]));
 
   for (let i = 0; i < pluginMarketData.value.length; i++) {
     const plugin = pluginMarketData.value[i];
+    const matchedInstalled =
+      (plugin.repo && installedByRepo.get(plugin.repo.toLowerCase())) ||
+      installedByName.get(plugin.name);
+
+    // 兜底：市场源未提供字段时，回填本地已安装插件中的元数据，便于在市场页直接展示
+    if (matchedInstalled) {
+      if (
+        (!Array.isArray(plugin.support_platforms) ||
+          plugin.support_platforms.length === 0) &&
+        Array.isArray(matchedInstalled.support_platforms)
+      ) {
+        plugin.support_platforms = matchedInstalled.support_platforms;
+      }
+      if (!plugin.astrbot_version && matchedInstalled.astrbot_version) {
+        plugin.astrbot_version = matchedInstalled.astrbot_version;
+      }
+    }
+
     plugin.installed =
       installedRepos.has(plugin.repo?.toLowerCase()) ||
       installedNames.has(plugin.name);
@@ -978,7 +1023,21 @@ const checkAlreadyInstalled = () => {
   pluginMarketData.value = notInstalled.concat(installed);
 };
 
-const newExtension = async () => {
+const showVersionCompatibilityWarning = (message) => {
+  versionCompatibilityDialog.message = message;
+  versionCompatibilityDialog.show = true;
+};
+
+const continueInstallIgnoringVersionWarning = async () => {
+  versionCompatibilityDialog.show = false;
+  await newExtension(true);
+};
+
+const cancelInstallOnVersionWarning = () => {
+  versionCompatibilityDialog.show = false;
+};
+
+const newExtension = async (ignoreVersionCheck = false) => {
   if (extension_url.value === "" && upload_file.value === null) {
     toast(tm("messages.fillUrlOrFile"), "error");
     return;
@@ -995,6 +1054,7 @@ const newExtension = async () => {
     toast(tm("messages.installing"), "primary");
     const formData = new FormData();
     formData.append("file", upload_file.value);
+    formData.append("ignore_version_check", String(ignoreVersionCheck));
     axios
       .post("/api/plugin/install-upload", formData, {
         headers: {
@@ -1003,6 +1063,14 @@ const newExtension = async () => {
       })
       .then(async (res) => {
         loading_.value = false;
+        if (
+          res.data.status === "warning" &&
+          res.data.data?.warning_type === "astrbot_version_incompatible"
+        ) {
+          onLoadingDialogResult(2, res.data.message, -1);
+          showVersionCompatibilityWarning(res.data.message);
+          return;
+        }
         if (res.data.status === "error") {
           onLoadingDialogResult(2, res.data.message, -1);
           return;
@@ -1032,9 +1100,18 @@ const newExtension = async () => {
       .post("/api/plugin/install", {
         url: extension_url.value,
         proxy: getSelectedGitHubProxy(),
+        ignore_version_check: ignoreVersionCheck,
       })
       .then(async (res) => {
         loading_.value = false;
+        if (
+          res.data.status === "warning" &&
+          res.data.data?.warning_type === "astrbot_version_incompatible"
+        ) {
+          onLoadingDialogResult(2, res.data.message, -1);
+          showVersionCompatibilityWarning(res.data.message);
+          return;
+        }
         toast(res.data.message, res.data.status === "ok" ? "success" : "error");
         if (res.data.status === "error") {
           onLoadingDialogResult(2, res.data.message, -1);
@@ -1057,6 +1134,53 @@ const newExtension = async () => {
         toast(tm("messages.installFailed") + " " + err, "error");
         onLoadingDialogResult(2, err, -1);
       });
+  }
+};
+
+const normalizePlatformList = (platforms) => {
+  if (!Array.isArray(platforms)) return [];
+  return platforms.filter((item) => typeof item === "string");
+};
+
+const getPlatformDisplayList = (platforms) => {
+  return normalizePlatformList(platforms).map((platformId) =>
+    getPlatformDisplayName(platformId),
+  );
+};
+
+const resolveSelectedInstallPlugin = () => {
+  if (
+    selectedMarketInstallPlugin.value &&
+    selectedMarketInstallPlugin.value.repo === extension_url.value
+  ) {
+    return selectedMarketInstallPlugin.value;
+  }
+  return pluginMarketData.value.find((plugin) => plugin.repo === extension_url.value) || null;
+};
+
+const selectedInstallPlugin = computed(() => resolveSelectedInstallPlugin());
+
+const checkInstallCompatibility = async () => {
+  installCompat.checked = false;
+  installCompat.compatible = true;
+  installCompat.message = "";
+
+  const plugin = selectedInstallPlugin.value;
+  if (!plugin?.astrbot_version || uploadTab.value !== "url") {
+    return;
+  }
+
+  try {
+    const res = await axios.post("/api/plugin/check-compat", {
+      astrbot_version: plugin.astrbot_version,
+    });
+    if (res.data.status === "ok") {
+      installCompat.checked = true;
+      installCompat.compatible = !!res.data.data?.compatible;
+      installCompat.message = res.data.data?.message || "";
+    }
+  } catch (err) {
+    console.debug("Failed to check plugin compatibility:", err);
   }
 };
 
@@ -1164,6 +1288,19 @@ watch(isListView, (newVal) => {
     localStorage.setItem("pluginListViewMode", String(newVal));
   }
 });
+
+watch(
+  [() => dialog.value, () => extension_url.value, () => uploadTab.value],
+  async ([dialogOpen, _, currentUploadTab]) => {
+    if (!dialogOpen || currentUploadTab !== "url") {
+      installCompat.checked = false;
+      installCompat.compatible = true;
+      installCompat.message = "";
+      return;
+    }
+    await checkInstallCompatibility();
+  },
+);
 
 watch(
   () => route.fullPath,
@@ -1451,18 +1588,54 @@ watch(activeTab, (newTab) => {
                     </template>
 
                     <template v-slot:item.desc="{ item }">
-                      <div
-                        class="text-body-2 text-medium-emphasis mt-2 mb-2"
-                        style="
-                          display: -webkit-box;
-                          -webkit-line-clamp: 3;
-                          line-clamp: 3;
-                          -webkit-box-orient: vertical;
-                          overflow: hidden;
-                          text-overflow: ellipsis;
-                        "
-                      >
-                        {{ item.desc }}
+                      <div class="py-2">
+                        <div
+                          class="text-body-2 text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 3;
+                            line-clamp: 3;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                          "
+                        >
+                          {{ item.desc }}
+                        </div>
+                        <div
+                          v-if="item.support_platforms?.length"
+                          class="d-flex align-center flex-wrap mt-2"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.supportPlatform") }}:
+                          </span>
+                          <v-chip
+                            v-for="platformId in item.support_platforms"
+                            :key="platformId"
+                            size="x-small"
+                            color="info"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ platformId }}
+                          </v-chip>
+                        </div>
+                        <div
+                          v-if="item.astrbot_version"
+                          class="d-flex align-center flex-wrap mt-1"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.astrbotVersion") }}:
+                          </span>
+                          <v-chip
+                            size="x-small"
+                            color="secondary"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ item.astrbot_version }}
+                          </v-chip>
+                        </div>
                       </div>
                     </template>
 
@@ -2357,6 +2530,31 @@ watch(activeTab, (newTab) => {
     </v-card>
   </v-dialog>
 
+  <!-- 版本不兼容警告对话框 -->
+  <v-dialog v-model="versionCompatibilityDialog.show" width="520" persistent>
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
+        {{ tm("dialogs.versionCompatibility.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="mb-2">{{ tm("dialogs.versionCompatibility.message") }}</div>
+        <div class="text-medium-emphasis">
+          {{ versionCompatibilityDialog.message }}
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" @click="cancelInstallOnVersionWarning">
+          {{ tm("dialogs.versionCompatibility.cancel") }}
+        </v-btn>
+        <v-btn color="warning" @click="continueInstallIgnoringVersionWarning">
+          {{ tm("dialogs.versionCompatibility.confirm") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- 上传插件对话框 -->
   <v-dialog v-model="dialog" width="500">
     <div
@@ -2437,6 +2635,46 @@ watch(activeTab, (newTab) => {
                 class="rounded-lg mb-4"
                 placeholder="https://github.com/username/repo"
               ></v-text-field>
+
+              <div v-if="selectedInstallPlugin" class="mb-3">
+                <v-chip
+                  v-if="selectedInstallPlugin.astrbot_version"
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                  class="mr-2 mb-2"
+                >
+                  {{ tm("card.status.astrbotVersion") }}:
+                  {{ selectedInstallPlugin.astrbot_version }}
+                </v-chip>
+                <v-chip
+                  v-if="normalizePlatformList(selectedInstallPlugin.support_platforms).length"
+                  size="small"
+                  color="info"
+                  variant="outlined"
+                  class="mb-2"
+                >
+                  {{ tm("card.status.supportPlatform") }}:
+                  {{
+                    getPlatformDisplayList(selectedInstallPlugin.support_platforms).join(
+                      ", ",
+                    )
+                  }}
+                </v-chip>
+                <v-alert
+                  v-if="
+                    selectedInstallPlugin.astrbot_version &&
+                    installCompat.checked &&
+                    !installCompat.compatible
+                  "
+                  type="warning"
+                  variant="tonal"
+                  density="comfortable"
+                  class="mt-2"
+                >
+                  {{ installCompat.message }}
+                </v-alert>
+              </div>
 
               <ProxySelector></ProxySelector>
             </div>

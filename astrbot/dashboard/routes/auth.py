@@ -62,7 +62,11 @@ class AuthRoute(Route):
         if not new_pwd and not new_username:
             return Response().error(t("dashboard-auth-empty-fields")).__dict__
 
+        # Verify password confirmation
         if new_pwd:
+            confirm_pwd = post_data.get("confirm_password", None)
+            if confirm_pwd != new_pwd:
+                return Response().error("两次输入的新密码不一致，健忘症患者?").__dict__
             self.config["dashboard"]["password"] = new_pwd
         if new_username:
             self.config["dashboard"]["username"] = new_username
