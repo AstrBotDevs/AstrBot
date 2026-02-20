@@ -62,6 +62,23 @@
     "rootFolder": "全部人格",
     "emptyFolder": "此文件夹为空"
   },
+  "personaQuickPreview": {
+    "title": "快速预览",
+    "loading": "加载中...",
+    "noPersonaSelected": "未选择人格",
+    "personaNotFound": "未找到该人格的详情",
+    "systemPromptLabel": "系统提示词",
+    "toolsLabel": "工具",
+    "skillsLabel": "技能（Skills）",
+    "originLabel": "来源",
+    "originNameLabel": "来源名称",
+    "allTools": "全部工具可用",
+    "allToolsWithCount": "全部工具可用（{count}）",
+    "noTools": "未配置工具",
+    "allSkills": "全部 Skills 可用",
+    "allSkillsWithCount": "全部 Skills 可用（{count}）",
+    "noSkills": "未配置 Skills"
+  },
   "t2iTemplateEditor": {
     "buttonText": "自定义 T2I 模板",
     "dialogTitle": "自定义文转图 HTML 模板",
