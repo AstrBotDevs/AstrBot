@@ -61,9 +61,9 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     (data_dir / "__init__.py").write_text("", encoding="utf-8")
     (plugin_dir / "__init__.py").write_text("", encoding="utf-8")
 
+    # Use monkeypatch for both env var and sys.path to ensure proper cleanup
     monkeypatch.setenv("ASTRBOT_ROOT", str(test_root))
-    if str(test_root) not in sys.path:
-        sys.path.insert(0, str(test_root))
+    monkeypatch.syspath_prepend(str(test_root))
 
     # Create fresh, isolated instances for the context
     event_queue = Queue()

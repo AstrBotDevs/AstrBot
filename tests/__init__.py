@@ -11,9 +11,7 @@ AstrBot 测试包
   ├── agent/              # Agent 相关测试
   ├── fixtures/           # 测试数据和 fixtures
   └── test_*.py           # 根级别测试文件
-"""
 
-__all__ = [
-    "create_mock_llm_response",
-    "create_mock_message_component",
-]
+辅助函数可在 conftest.py 中直接导入使用:
+    from tests.conftest import create_mock_llm_response, create_mock_message_component
+"""
