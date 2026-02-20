@@ -70,11 +70,9 @@ async def check_dashboard_files(webui_dir: str | None = None):
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
-            logger.info(
-                t("main-use-specified-webui", main_use_specified_webui=webui_dir)
-            )
+            logger.info(t("main-use-specified-webui", webui_dir=webui_dir))
             return webui_dir
-        logger.warning(t("main-webui-not-found"), main_webui_not_found=webui_dir)
+        logger.warning(t("main-webui-not-found", webui_dir=webui_dir))
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(data_dist_path):
@@ -85,7 +83,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
                 logger.info(t("main-webui-latest"))
             else:
                 logger.warning(
-                    t("main-webui-version-mismatch", main_webui_version_mismatch=v),
+                    t("main-webui-version-mismatch", v=v, version=VERSION),
                 )
         return data_dist_path
 
@@ -94,9 +92,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
     try:
         await download_dashboard(version=f"v{VERSION}", latest=False)
     except Exception as e:
-        logger.critical(
-            t("main-download-dashboard-failed", main_download_dashboard_failed=e)
-        )
+        logger.critical(t("main-download-dashboard-failed", e=e))
         return None
 
     logger.info(t("main-download-dashboard-success"))
