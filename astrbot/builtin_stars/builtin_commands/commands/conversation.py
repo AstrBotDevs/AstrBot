@@ -5,6 +5,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.pipeline.agent.runner_config import resolve_agent_runner_config
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.active_event_registry import active_event_registry
 
 from ._node_binding import list_nodes_with_config
 from .utils.rst_scene import RstScene
@@ -78,6 +79,7 @@ class ConversationCommands:
 
         agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(umo, exclude=message)
             await sp.remove_async(
                 scope="umo",
                 scope_id=umo,
@@ -101,6 +103,8 @@ class ConversationCommands:
                 ),
             )
             return
+
+        active_event_registry.stop_all(umo, exclude=message)
 
         await self.context.conversation_manager.update_conversation(
             umo,
@@ -241,6 +245,7 @@ class ConversationCommands:
         """创建新对话"""
         agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
             await sp.remove_async(
                 scope="umo",
                 scope_id=message.unified_msg_origin,
@@ -249,6 +254,7 @@ class ConversationCommands:
             message.set_result(MessageEventResult().message("已创建新对话。"))
             return
 
+        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin,
@@ -341,6 +347,7 @@ class ConversationCommands:
 
     async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
+        umo = message.unified_msg_origin
         chain_config_id = (
             message.chain_config.config_id if message.chain_config else None
         )
@@ -357,18 +364,17 @@ class ConversationCommands:
 
         agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(umo, exclude=message)
             await sp.remove_async(
                 scope="umo",
-                scope_id=message.unified_msg_origin,
+                scope_id=umo,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
             message.set_result(MessageEventResult().message("重置对话成功。"))
             return
 
         session_curr_cid = (
-            await self.context.conversation_manager.get_curr_conversation_id(
-                message.unified_msg_origin,
-            )
+            await self.context.conversation_manager.get_curr_conversation_id(umo)
         )
 
         if not session_curr_cid:
@@ -379,8 +385,10 @@ class ConversationCommands:
             )
             return
 
+        active_event_registry.stop_all(umo, exclude=message)
+
         await self.context.conversation_manager.delete_conversation(
-            message.unified_msg_origin,
+            umo,
             session_curr_cid,
         )
 

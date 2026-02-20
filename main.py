@@ -15,6 +15,7 @@ from astrbot.core.initial_loader import InitialLoader  # noqa: E402
 from astrbot.core.utils.astrbot_path import (  # noqa: E402
     get_astrbot_config_path,
     get_astrbot_data_path,
+    get_astrbot_knowledge_base_path,
     get_astrbot_plugin_path,
     get_astrbot_root,
     get_astrbot_site_packages_path,
@@ -55,6 +56,7 @@ def check_env() -> None:
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
     os.makedirs(get_astrbot_plugin_path(), exist_ok=True)
     os.makedirs(get_astrbot_temp_path(), exist_ok=True)
+    os.makedirs(get_astrbot_knowledge_base_path(), exist_ok=True)
     os.makedirs(site_packages_path, exist_ok=True)
 
     # 针对问题 #181 的临时解决方案

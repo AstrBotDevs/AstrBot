@@ -41,6 +41,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.provider.manager import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
@@ -50,6 +51,17 @@ from astrbot.core.tools.cron_tools import (
     LIST_CRON_JOBS_TOOL,
 )
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.quoted_message.settings import (
+    SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
+)
+from astrbot.core.utils.quoted_message.settings import (
+    QuotedMessageParserSettings,
+)
+from astrbot.core.utils.quoted_message_parser import (
+    extract_quoted_message_images,
+    extract_quoted_message_text,
+)
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 @dataclass(slots=True)
@@ -100,6 +112,8 @@ class MainAgentBuildConfig:
     provider_settings: dict = field(default_factory=dict)
     subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
+    max_quoted_fallback_images: int = 20
+    """Maximum number of images injected from quoted-message fallback extraction."""
 
 
 @dataclass(slots=True)
@@ -375,12 +389,30 @@ async def _ensure_img_caption(
         logger.error("处理图片描述失败: %s", exc)
 
 
+def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Image Attachment in quoted message: path {image_path}]")
+    )
+
+
+def _get_quoted_message_parser_settings(
+    provider_settings: dict[str, object] | None,
+) -> QuotedMessageParserSettings:
+    if not isinstance(provider_settings, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS
+    overrides = provider_settings.get("quoted_message_parser")
+    if not isinstance(overrides, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
     cfg: dict,
     img_cap_prov_id: str,
     plugin_context: Context,
+    quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -392,7 +424,15 @@ async def _process_quote_message(
 
     content_parts = []
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
-    message_str = quote.message_str or "[Empty Text]"
+    message_str = (
+        await extract_quoted_message_text(
+            event,
+            quote,
+            settings=quoted_message_settings,
+        )
+        or quote.message_str
+        or "[Empty Text]"
+    )
     content_parts.append(f"{sender_info}{message_str}")
 
     image_seg = None
@@ -574,12 +614,14 @@ async def _decorate_llm_request(
                 img_cap_prov_id,
             )
 
+    quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
         req,
         img_caption_cfg,
         img_cap_prov_id,
         plugin_context,
+        quoted_message_settings,
     )
 
     tz = config.timezone
@@ -711,6 +753,14 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
+    else:
+        # mcp tools
+        tool_set = req.func_tool
+        if not tool_set:
+            tool_set = ToolSet()
+        for tool in llm_tools.func_list:
+            if isinstance(tool, MCPTool):
+                tool_set.add_tool(tool)
 
 
 async def _handle_webchat(
@@ -812,6 +862,41 @@ def _get_compress_provider(
     return provider
 
 
+def _get_fallback_chat_providers(
+    provider: Provider, plugin_context: Context, provider_settings: dict
+) -> list[Provider]:
+    fallback_ids = provider_settings.get("fallback_chat_models", [])
+    if not isinstance(fallback_ids, list):
+        logger.warning(
+            "fallback_chat_models setting is not a list, skip fallback providers."
+        )
+        return []
+
+    provider_id = str(provider.provider_config.get("id", ""))
+    seen_provider_ids: set[str] = {provider_id} if provider_id else set()
+    fallbacks: list[Provider] = []
+
+    for fallback_id in fallback_ids:
+        if not isinstance(fallback_id, str) or not fallback_id:
+            continue
+        if fallback_id in seen_provider_ids:
+            continue
+        fallback_provider = plugin_context.get_provider_by_id(fallback_id)
+        if fallback_provider is None:
+            logger.warning("Fallback chat provider `%s` not found, skip.", fallback_id)
+            continue
+        if not isinstance(fallback_provider, Provider):
+            logger.warning(
+                "Fallback chat provider `%s` is invalid type: %s, skip.",
+                fallback_id,
+                type(fallback_provider),
+            )
+            continue
+        fallbacks.append(fallback_provider)
+        seen_provider_ids.add(fallback_id)
+    return fallbacks
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -850,6 +935,8 @@ async def build_main_agent(
                 return None
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+
+            # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
@@ -865,6 +952,81 @@ async def build_main_agent(
                             text=f"[File Attachment: name {file_name}, path {file_path}]"
                         )
                     )
+            # quoted message attachments
+            reply_comps = [
+                comp for comp in event.message_obj.message if isinstance(comp, Reply)
+            ]
+            quoted_message_settings = _get_quoted_message_parser_settings(
+                config.provider_settings
+            )
+            fallback_quoted_image_count = 0
+            for comp in reply_comps:
+                has_embedded_image = False
+                if comp.chain:
+                    for reply_comp in comp.chain:
+                        if isinstance(reply_comp, Image):
+                            has_embedded_image = True
+                            image_path = await reply_comp.convert_to_file_path()
+                            req.image_urls.append(image_path)
+                            _append_quoted_image_attachment(req, image_path)
+                        elif isinstance(reply_comp, File):
+                            file_path = await reply_comp.get_file()
+                            file_name = reply_comp.name or os.path.basename(file_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=(
+                                        f"[File Attachment in quoted message: "
+                                        f"name {file_name}, path {file_path}]"
+                                    )
+                                )
+                            )
+
+                # Fallback quoted image extraction for reply-id-only payloads, or when
+                # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
+                if not has_embedded_image:
+                    try:
+                        fallback_images = normalize_and_dedupe_strings(
+                            await extract_quoted_message_images(
+                                event,
+                                comp,
+                                settings=quoted_message_settings,
+                            )
+                        )
+                        remaining_limit = max(
+                            config.max_quoted_fallback_images
+                            - fallback_quoted_image_count,
+                            0,
+                        )
+                        if remaining_limit <= 0 and fallback_images:
+                            logger.warning(
+                                "Skip quoted fallback images due to limit=%d for umo=%s",
+                                config.max_quoted_fallback_images,
+                                event.unified_msg_origin,
+                            )
+                            continue
+                        if len(fallback_images) > remaining_limit:
+                            logger.warning(
+                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                                event.unified_msg_origin,
+                                getattr(comp, "id", None),
+                                len(fallback_images),
+                                remaining_limit,
+                            )
+                            fallback_images = fallback_images[:remaining_limit]
+                        for image_ref in fallback_images:
+                            if image_ref in req.image_urls:
+                                continue
+                            req.image_urls.append(image_ref)
+                            fallback_quoted_image_count += 1
+                            _append_quoted_image_attachment(req, image_ref)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
+                            event.unified_msg_origin,
+                            getattr(comp, "id", None),
+                            exc,
+                            exc_info=True,
+                        )
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
@@ -873,6 +1035,7 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
 
     if not req.prompt and not req.image_urls:
         if not event.get_group_id() and req.extra_user_content_parts:
@@ -953,6 +1116,9 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
+        fallback_providers=_get_fallback_chat_providers(
+            provider, plugin_context, config.provider_settings
+        ),
     )
 
     if apply_reset:

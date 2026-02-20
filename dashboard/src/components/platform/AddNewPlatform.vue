@@ -117,7 +117,7 @@
 <script>
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
-import { getPlatformIcon, getTutorialLink } from '@/utils/platformUtils';
+import { getPlatformIcon, getTutorialLink, getPlatformDescription } from '@/utils/platformUtils';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 
 export default {
@@ -215,7 +215,15 @@ export default {
     }
   },
   methods: {
-    getPlatformIcon,
+    getPlatformIcon(platformType) {
+      // Check for plugin-provided logo_token first
+      const template = this.platformTemplates?.[platformType];
+      if (template && template.logo_token) {
+        return `/api/file/${template.logo_token}`;
+      }
+      return getPlatformIcon(platformType);
+    },
+    getPlatformDescription,
     resetForm() {
       this.selectedPlatformType = null;
       this.selectedPlatformConfig = null;

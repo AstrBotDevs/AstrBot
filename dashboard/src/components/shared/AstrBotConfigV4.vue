@@ -19,6 +19,10 @@ const props = defineProps({
   metadataKey: {
     type: String,
     required: true
+  },
+  searchKeyword: {
+    type: String,
+    default: ''
   }
 })
 
@@ -124,16 +128,27 @@ function saveEditedContent() {
 }
 
 function shouldShowItem(itemMeta, itemKey) {
-  if (!itemMeta?.condition) {
-    return true
-  }
-  for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
-    const actualValue = getValueBySelector(props.iterable, conditionKey)
-    if (actualValue !== expectedValue) {
-      return false
+  if (itemMeta?.condition) {
+    for (const [conditionKey, expectedValue] of Object.entries(itemMeta.condition)) {
+      const actualValue = getValueBySelector(props.iterable, conditionKey)
+      if (actualValue !== expectedValue) {
+        return false
+      }
     }
   }
-  return true
+
+  const keyword = String(props.searchKeyword || '').trim().toLowerCase()
+  if (!keyword) {
+    return true
+  }
+
+  const searchableText = [
+    itemKey,
+    translateIfKey(itemMeta?.description || ''),
+    translateIfKey(itemMeta?.hint || '')
+  ].join(' ').toLowerCase()
+
+  return searchableText.includes(keyword)
 }
 
 // 检查最外层的 object 是否应该显示
@@ -148,7 +163,10 @@ function shouldShowSection() {
       return false
     }
   }
-  return true
+
+  const sectionItems = props.metadata?.[props.metadataKey]?.items || {}
+  const hasVisibleItems = Object.entries(sectionItems).some(([itemKey, itemMeta]) => shouldShowItem(itemMeta, itemKey))
+  return hasVisibleItems
 }
 
 function hasVisibleItemsAfter(items, currentIndex) {
@@ -436,9 +454,13 @@ function getSpecialSubtype(value) {
   }
 
   .property-info,
-  .type-indicator,
+  .type-indicator {
+    padding: 4px 8px;
+  }
+
   .config-input {
-    padding: 4px;
+    padding-left: 24px;
+    padding-right: 24px;
   }
 }
 </style>

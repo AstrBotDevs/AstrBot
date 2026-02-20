@@ -28,6 +28,7 @@
   "settings": "Settings",
   "changelog": "Changelog",
   "documentation": "Documentation",
+  "faq": "FAQ",
   "github": "GitHub",
   "drag": "Drag",
   "groups": {
@@ -40,5 +41,9 @@
     "notFound": "Changelog for this version not found",
     "selectVersion": "Select Version",
     "current": "Current"
+  },
+  "configTabs": {
+    "normal": "Normal Config",
+    "system": "System Config"
   }
 }

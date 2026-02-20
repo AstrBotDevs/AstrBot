@@ -310,6 +310,12 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
+    async def send_typing(self) -> None:
+        """发送输入中状态。
+
+        默认实现为空，由具体平台按需重写。
+        """
+
     async def _pre_send(self, message: MessageChain | None = None, **_):
         """发送前钩子（平台可覆写）"""
 

@@ -31,11 +31,15 @@
     },
     "ai": {
       "description": "模型",
-      "hint": "当使用非内置 Agent 执行器时,默认聊天模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
+      "hint": "当使用非内置 Agent 执行器时,默认对话模型和默认图片转述模型可能会无效,但某些插件会依赖此配置项来调用 AI 能力。",
       "provider_settings": {
         "default_provider_id": {
-          "description": "默认聊天模型",
+          "description": "默认对话模型",
           "hint": "留空时使用第一个模型"
+        },
+        "fallback_chat_models": {
+          "description": "回退对话模型列表",
+          "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
         },
         "default_image_caption_provider_id": {
           "description": "默认图片转述模型",
@@ -109,6 +113,10 @@
         "computer_use_runtime": {
           "description": "运行环境",
           "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
+        },
+        "computer_use_require_admin": {
+          "description": "需要 AstrBot 管理员权限",
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
         },
         "sandbox": {
           "booter": {
@@ -211,6 +219,28 @@
         "sanitize_context_by_modalities": {
           "description": "按模型能力清理历史上下文",
           "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"
+        },
+        "max_quoted_fallback_images": {
+          "description": "转发消息中图片获取上限",
+          "hint": "转发消息解析到的图片最多注入数量，超出部分会截断。"
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "转发消息富文本解析深度",
+            "hint": "解析转发消息中的富文本组件链时允许的最大递归深度。"
+          },
+          "max_forward_node_depth": {
+            "description": "转发消息嵌套解析深度",
+            "hint": "解析嵌套转发节点时允许的最大递归深度。"
+          },
+          "max_forward_fetch": {
+            "description": "转发消息递归拉取上限",
+            "hint": "递归调用 get_forward_msg 拉取转发内容的最大次数。"
+          },
+          "warn_on_action_failure": {
+            "description": "转发消息解析失败告警",
+            "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。"
+          }
         },
         "max_agent_step": {
           "description": "工具调用轮数上限"
@@ -779,6 +809,10 @@
         "description": "日志文件大小上限 (MB)",
         "hint": "超过大小后自动轮转，默认 20MB。"
       },
+      "temp_dir_max_size": {
+        "description": "临时目录大小上限 (MB)",
+        "hint": "用于限制 data/temp 目录总大小，单位为 MB。系统每 10 分钟检查一次，超限时按文件修改时间从旧到新删除，释放约 30% 当前体积。"
+      },
       "trace_log_enable": {
         "description": "启用 Trace 文件日志",
         "hint": "将 Trace 事件写入独立文件（不影响控制台输出）。"
@@ -802,6 +836,26 @@
       "callback_api_base": {
         "description": "对外可达的回调接口地址",
         "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
+      },
+      "dashboard": {
+        "ssl": {
+          "enable": {
+            "description": "启用 WebUI HTTPS",
+            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+          },
+          "cert_file": {
+            "description": "SSL 证书文件路径",
+            "hint": "证书文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。"
+          },
+          "key_file": {
+            "description": "SSL 私钥文件路径",
+            "hint": "私钥文件路径（PEM）。支持绝对路径和相对路径（相对于当前工作目录）。"
+          },
+          "ca_certs": {
+            "description": "SSL CA 证书文件路径",
+            "hint": "可选。用于指定 CA 证书文件路径。"
+          }
+        }
       },
       "timezone": {
         "description": "时区",

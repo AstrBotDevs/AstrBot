@@ -28,6 +28,7 @@
   "messages": {
     "configApplied": "Configuration successfully applied. To save, you need to click the save button in the bottom right corner.",
     "configApplyError": "Configuration not applied, JSON format error.",
+    "unsavedChangesNotice": "You have unsaved configuration changes. Click the save button in the bottom-right corner to apply them.",
     "saveSuccess": "Configuration saved successfully",
     "saveError": "Failed to save configuration",
     "loadError": "Failed to load configuration",
@@ -67,6 +68,10 @@
     "selectConfig": "Select Configuration",
     "normalConfig": "Basic",
     "systemConfig": "System"
+  },
+  "search": {
+    "placeholder": "Search config items (key/description/hint)",
+    "noResult": "No matching config items found"
   },
   "configManagement": {
     "title": "Configuration Management",

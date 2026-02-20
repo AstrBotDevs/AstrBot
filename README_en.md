@@ -3,7 +3,6 @@
 <div align="center">
 
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
@@ -52,6 +51,23 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 8. 🌈 Web ChatUI Support with built-in agent sandbox and web search.
 9. 🌐 Internationalization (i18n) Support.
 
+<br>
+
+<table align="center">
+  <tr align="center">
+    <th>💙 Role-playing & Emotional Companionship</th>
+    <th>✨ Proactive Agent</th>
+    <th>🚀 General Agentic Capabilities</th>
+    <th>🧩 900+ Community Plugins</th>
+  </tr>
+  <tr>
+    <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
+    <td align="center"><p align="center"><img width="976" height="1612" alt="c449acd838c41d0915cc08a3824025b1" src="https://github.com/user-attachments/assets/f75368b4-e022-41dc-a9e0-131c3e73e32e" /></p></td>
+    <td align="center"><p align="center"><img width="974" height="1732" alt="image" src="https://github.com/user-attachments/assets/e22a3968-87d7-4708-a7cd-e7f198c7c32e" /></p></td>
+    <td align="center"><p align="center"><img width="976" height="1734" alt="image" src="https://github.com/user-attachments/assets/0952b395-6b4a-432a-8a50-c294b7f89750" /></p></td>
+  </tr>
+</table>
+
 ## Quick Start
 
 #### Docker Deployment (Recommended 🥳)
@@ -63,7 +79,18 @@ Please refer to the official documentation: [Deploy AstrBot with Docker](https:/
 #### uv Deployment
 
 ```bash
-uvx astrbot
+uv tool install astrbot
+astrbot
+```
+
+#### System Package Manager Installation
+
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# or use paru
+paru -S astrbot-git
 ```
 
 #### BT-Panel Deployment
@@ -117,9 +144,19 @@ uv run main.py
 
 Or refer to the official documentation: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html).
 
-#### Desktop Electron Build
+#### System Package Manager Installation 
 
-For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/README.md`](desktop/README.md).
+##### Arch Linux
+
+```bash
+yay -S astrbot-git
+# or use paru
+paru -S astrbot-git
+```
+
+#### Desktop (Tauri)
+
+Desktop packaging has moved to a standalone Tauri repository: [https://github.com/AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
 
 ## Supported Messaging Platforms
 
@@ -135,8 +172,8 @@ For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/REA
 - Discord
 - Satori
 - Misskey
+- LINE
 - WhatsApp (Coming Soon)
-- LINE (Coming Soon)
 
 **Community Maintained**
 
@@ -159,7 +196,7 @@ For desktop build steps (Electron packaging, `pnpm` workflow), see [`desktop/REA
 - [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
 - [302.AI](https://share.302.ai/rr1M3l)
 - [TokenPony](https://www.tokenpony.cn/3YPyf)
-- [SiliconFlow](https://docs.siliconflow.cn/cn/usecases/use-siliconcloud-in-astrbot)
+- [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
 - [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE)
 - ModelScope
 - OneAPI
@@ -249,9 +286,9 @@ Additionally, the birth of this project would not have been possible without the
 
 </div>
 
-</details>
-
 <div align="center">
+
+_Companionship and capability should never be at odds. What we aim to create is a robot that can understand emotions, provide genuine companionship, and reliably accomplish tasks._
 
 _私は、高性能ですから!_
 

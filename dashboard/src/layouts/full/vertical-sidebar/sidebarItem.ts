@@ -36,7 +36,19 @@ const sidebarItem: menu[] = [
   {
     title: 'core.navigation.config',
     icon: 'mdi-cog',
-    to: '/config',
+    to: '/config#normal',
+    children: [
+      {
+        title: 'core.navigation.configTabs.normal',
+        icon: 'mdi-cog',
+        to: '/config#normal'
+      },
+      {
+        title: 'core.navigation.configTabs.system',
+        icon: 'mdi-cog-outline',
+        to: '/config#system'
+      }
+    ]
   },
   {
     title: 'core.navigation.extension',

@@ -106,6 +106,7 @@ class InternalAgentExecutor:
             provider_settings=settings,
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=conf.get("timezone"),
+            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
 
     async def run(
@@ -133,6 +134,7 @@ class InternalAgentExecutor:
 
             logger.debug("ready to request llm provider")
 
+            await event.send_typing()
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -176,6 +178,8 @@ class InternalAgentExecutor:
                 )
 
                 if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    if reset_coro:
+                        reset_coro.close()
                     return outcome
 
                 if reset_coro:

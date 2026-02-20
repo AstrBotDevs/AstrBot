@@ -34,6 +34,8 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/satori.png', import.meta.url).href
   } else if (name === 'misskey') {
     return new URL('@/assets/images/platform_logos/misskey.png', import.meta.url).href
+  } else if (name === 'line') {
+    return new URL('@/assets/images/platform_logos/line.png', import.meta.url).href
   }
 }
 
