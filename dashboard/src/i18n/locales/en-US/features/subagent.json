@@ -19,7 +19,8 @@
     "enabled": "When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools. With deduplication, tools overlapping with SubAgents are removed from the main tool set."
   },
   "section": {
-    "title": "SubAgents"
+    "title": "SubAgents",
+    "globalSettings": "Global Settings"
   },
   "cards": {
     "statusEnabled": "Enabled",
