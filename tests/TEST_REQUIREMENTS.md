@@ -789,7 +789,7 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 - [ ] `migra_3_to_4` 版本迁移
 - [ ] `migra_45_to_46` 版本迁移
 - [ ] `migra_token_usage` Token 使用迁移
-- `migra_webchat_session` Webchat 会话迁移
+- [ ]`migra_webchat_session` Webchat 会话迁移
 - [ ] `shared_preferences_v3` 偏好设置迁移
 
 ### 8.4 VecDB [P1]
