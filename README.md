@@ -146,9 +146,9 @@ yay -S astrbot-git
 paru -S astrbot-git
 ```
 
-#### 桌面端 Electron 打包
+#### 桌面端（Tauri）
 
-桌面端（Electron 打包，`pnpm` 工作流）构建流程请参阅：[`desktop/README.md`](desktop/README.md)。
+桌面端已迁移为独立仓库（Tauri）：[https://github.com/AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
 ## 支持的消息平台
 
