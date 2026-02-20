@@ -20,7 +20,7 @@ class FontManager:
     _font_cache = {}
 
     @classmethod
-    def get_font(cls, size: int) -> ImageFont.FreeTypeFont|ImageFont.ImageFont:
+    def get_font(cls, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """获取指定大小的字体，优先从缓存获取"""
         if size in cls._font_cache:
             return cls._font_cache[size]
@@ -66,7 +66,9 @@ class TextMeasurer:
     """测量文本尺寸的工具类"""
 
     @staticmethod
-    def get_text_size(text: str, font: ImageFont.FreeTypeFont|ImageFont.ImageFont) -> tuple[int, int]:
+    def get_text_size(
+        text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    ) -> tuple[int, int]:
         """获取文本的尺寸"""
 
         # 依赖库Pillow>=11.2.1，不再需要考虑<9.0.0
@@ -75,7 +77,7 @@ class TextMeasurer:
 
     @staticmethod
     def split_text_to_fit_width(
-        text: str, font: ImageFont.FreeTypeFont|ImageFont.ImageFont, max_width: int
+        text: str, font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: int
     ) -> list[str]:
         """将文本拆分为多行，确保每行不超过指定宽度"""
         lines = []
@@ -293,7 +295,10 @@ class ItalicTextElement(MarkdownElement):
                     # 倾斜变换，使用仿射变换实现斜体效果
                     # 变换矩阵: [1, 0.2, 0, 0, 1, 0]
                     italic_img = text_img.transform(
-                        text_img.size, Image.Transform.AFFINE, (1, 0.2, 0, 0, 1, 0), Image.Resampling.BICUBIC
+                        text_img.size,
+                        Image.Transform.AFFINE,
+                        (1, 0.2, 0, 0, 1, 0),
+                        Image.Resampling.BICUBIC,
                     )
 
                     # 粘贴到原图像

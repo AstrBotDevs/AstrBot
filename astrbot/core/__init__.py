@@ -8,7 +8,9 @@ from astrbot.core.utils.pip_installer import PipInstaller
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
+
 from .log import LogBroker, LogManager  # noqa
+from .lang import t
 from .utils.astrbot_path import get_astrbot_data_path
 
 # 初始化数据存储文件夹

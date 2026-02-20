@@ -5,7 +5,7 @@ import jwt
 from quart import request
 
 from astrbot import logger
-from astrbot.core import DEMO_MODE
+from astrbot.core import DEMO_MODE, t
 
 from .route import Response, Route, RouteContext
 
@@ -31,7 +31,7 @@ class AuthRoute(Route):
                 and not DEMO_MODE
             ):
                 change_pwd_hint = True
-                logger.warning("为了保证安全，请尽快修改默认密码。")
+                logger.warning(t("dashboard-auth-default-pwd-tip"))
 
             return (
                 Response()
@@ -45,28 +45,22 @@ class AuthRoute(Route):
                 .__dict__
             )
         await asyncio.sleep(3)
-        return Response().error("用户名或密码错误").__dict__
+        return Response().error(t("dashboard-auth-invalid-creds")).__dict__
 
     async def edit_account(self):
         if DEMO_MODE:
-            return (
-                Response()
-                .error("You are not permitted to do this operation in demo mode")
-                .__dict__
-            )
+            return Response().error(t("dashboard-auth-demo-mode-denied")).__dict__
 
         password = self.config["dashboard"]["password"]
         post_data = await request.json
 
         if post_data["password"] != password:
-            return Response().error("原密码错误").__dict__
+            return Response().error(t("dashboard-auth-wrong-old-pwd")).__dict__
 
         new_pwd = post_data.get("new_password", None)
         new_username = post_data.get("new_username", None)
         if not new_pwd and not new_username:
-            return (
-                Response().error("新用户名和新密码不能同时为空，你改了个寂寞").__dict__
-            )
+            return Response().error(t("dashboard-auth-empty-fields")).__dict__
 
         if new_pwd:
             self.config["dashboard"]["password"] = new_pwd
@@ -75,7 +69,7 @@ class AuthRoute(Route):
 
         self.config.save_config()
 
-        return Response().ok(None, "修改成功").__dict__
+        return Response().ok(None, t("dashboard-auth-edit-success")).__dict__
 
     def generate_jwt(self, username):
         payload = {
@@ -84,6 +78,6 @@ class AuthRoute(Route):
         }
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:
-            raise ValueError("JWT secret is not set in the cmd_config.")
+            raise ValueError(t("dashboard-auth-jwt-secret-not-found"))
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token
