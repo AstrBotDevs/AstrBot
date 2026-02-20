@@ -17,6 +17,15 @@ class ComputerBooter:
     def shell(self) -> ShellComponent: ...
 
     @property
+    def capabilities(self) -> tuple[str, ...] | None:
+        """Sandbox capabilities (e.g. ('python', 'shell', 'filesystem', 'browser')).
+
+        Returns None if the booter doesn't support capability introspection
+        (backward-compatible default).  Subclasses override after boot.
+        """
+        return None
+
+    @property
     def browser(self) -> BrowserComponent | None:
         return None
 

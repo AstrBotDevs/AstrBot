@@ -258,12 +258,13 @@ class ShipyardNeoBooter(ComputerBooter):
     """
 
     AUTO_SENTINEL = "__auto__"
+    DEFAULT_PROFILE = "python-default"
 
     def __init__(
         self,
         endpoint_url: str,
         access_token: str,
-        profile: str = "python-default",
+        profile: str = DEFAULT_PROFILE,
         ttl: int = 3600,
     ) -> None:
         self._endpoint_url = endpoint_url
@@ -285,6 +286,17 @@ class ShipyardNeoBooter(ComputerBooter):
     @property
     def sandbox(self) -> Any:
         return self._sandbox
+
+    @property
+    def capabilities(self) -> tuple[str, ...] | None:
+        """Sandbox capabilities from the Bay profile.
+
+        Returns an immutable tuple after :meth:`boot`; ``None`` before boot.
+        """
+        if self._sandbox is None:
+            return None
+        caps = getattr(self._sandbox, "capabilities", None)
+        return tuple(caps) if caps is not None else None
 
     @property
     def is_auto_mode(self) -> bool:
@@ -333,21 +345,84 @@ class ShipyardNeoBooter(ComputerBooter):
             access_token=self._access_token,
         )
         await self._client.__aenter__()
+
+        # Resolve profile: user-specified > smart selection > default
+        resolved_profile = await self._resolve_profile(self._client)
+
         self._sandbox = await self._client.create_sandbox(
-            profile=self._profile or "python-default",
+            profile=resolved_profile,
             ttl=self._ttl,
         )
 
         self._fs = NeoFileSystemComponent(self._sandbox)
         self._python = NeoPythonComponent(self._sandbox)
         self._shell = NeoShellComponent(self._sandbox)
-        self._browser = NeoBrowserComponent(self._sandbox)
+
+        caps = self.capabilities or ()
+        self._browser = NeoBrowserComponent(self._sandbox) if "browser" in caps else None
+
         logger.info(
-            "Got Shipyard Neo sandbox: %s (profile=%s, auto=%s)",
+            "Got Shipyard Neo sandbox: %s (profile=%s, capabilities=%s, auto=%s)",
             self._sandbox.id,
-            self._profile or "python-default",
+            resolved_profile,
+            list(caps),
             bool(self._bay_manager),
         )
+
+    async def _resolve_profile(self, client: Any) -> str:
+        """Pick the best profile for this session.
+
+        Resolution order:
+        1. User-specified profile (non-empty, non-default) → use as-is.
+        2. Query ``GET /v1/profiles`` and pick the profile with the most
+           capabilities, preferring profiles that include ``"browser"``.
+        3. Fall back to :attr:`DEFAULT_PROFILE`.
+
+        Auth errors (401/403) are re-raised immediately — they indicate a
+        misconfigured token, and silently falling back would just delay the
+        real failure to ``create_sandbox``.
+        """
+        # User explicitly set a profile → honour it
+        if self._profile and self._profile != self.DEFAULT_PROFILE:
+            logger.info("[Computer] Using user-specified profile: %s", self._profile)
+            return self._profile
+
+        # Query Bay for available profiles
+        from shipyard_neo.errors import UnauthorizedError, ForbiddenError
+
+        try:
+            profile_list = await client.list_profiles()
+            profiles = profile_list.items
+        except (UnauthorizedError, ForbiddenError):
+            raise  # auth errors must not be silenced
+        except Exception as exc:
+            logger.warning(
+                "[Computer] Failed to query Bay profiles, falling back to %s: %s",
+                self.DEFAULT_PROFILE,
+                exc,
+            )
+            return self.DEFAULT_PROFILE
+
+        if not profiles:
+            return self.DEFAULT_PROFILE
+
+        def _score(p: Any) -> tuple[int, int]:
+            """(has_browser, capability_count) — higher is better."""
+            caps = getattr(p, "capabilities", []) or []
+            return (1 if "browser" in caps else 0, len(caps))
+
+        best = max(profiles, key=_score)
+        chosen = getattr(best, "id", self.DEFAULT_PROFILE)
+
+        if chosen != self.DEFAULT_PROFILE:
+            caps = getattr(best, "capabilities", [])
+            logger.info(
+                "[Computer] Auto-selected profile %s (capabilities=%s)",
+                chosen,
+                caps,
+            )
+
+        return chosen
 
     async def shutdown(self) -> None:
         if self._client is not None:
