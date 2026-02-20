@@ -250,6 +250,15 @@ class NeoBrowserComponent(BrowserComponent):
 
 
 class ShipyardNeoBooter(ComputerBooter):
+    """Booter backed by Shipyard Neo (Bay).
+
+    If *endpoint_url* is empty or set to ``"__auto__"``, Bay will be
+    started automatically as a Docker container (like Boxlite does for
+    Ship containers).
+    """
+
+    AUTO_SENTINEL = "__auto__"
+
     def __init__(
         self,
         endpoint_url: str,
@@ -263,6 +272,7 @@ class ShipyardNeoBooter(ComputerBooter):
         self._ttl = ttl
         self._client: Any = None
         self._sandbox: Any = None
+        self._bay_manager: Any = None  # BayContainerManager when auto-started
         self._fs: FileSystemComponent | None = None
         self._python: PythonComponent | None = None
         self._shell: ShellComponent | None = None
@@ -276,9 +286,40 @@ class ShipyardNeoBooter(ComputerBooter):
     def sandbox(self) -> Any:
         return self._sandbox
 
+    @property
+    def is_auto_mode(self) -> bool:
+        """True when Bay should be auto-started."""
+        ep = (self._endpoint_url or "").strip()
+        return not ep or ep == self.AUTO_SENTINEL
+
     async def boot(self, session_id: str) -> None:
         _ = session_id
+
+        # --- Auto-start Bay if needed ---
+        if self.is_auto_mode:
+            from .bay_manager import BayContainerManager
+
+            # Clean up previous manager if re-booting
+            if self._bay_manager is not None:
+                await self._bay_manager.close_client()
+
+            logger.info("[Computer] Neo auto-start mode: launching Bay container")
+            self._bay_manager = BayContainerManager()
+            self._endpoint_url = await self._bay_manager.ensure_running()
+            await self._bay_manager.wait_healthy()
+            # Read auto-provisioned credentials
+            if not self._access_token:
+                self._access_token = await self._bay_manager.read_credentials()
+            logger.info(
+                "[Computer] Bay auto-started at %s", self._endpoint_url
+            )
+
         if not self._endpoint_url or not self._access_token:
+            if self._bay_manager is not None:
+                raise ValueError(
+                    "Bay container started but credentials could not be read. "
+                    "Ensure Bay generated credentials.json, or set access_token manually."
+                )
             raise ValueError(
                 "Shipyard Neo sandbox configuration is incomplete. "
                 "Set endpoint (default http://127.0.0.1:8114) and access token, "
@@ -302,9 +343,10 @@ class ShipyardNeoBooter(ComputerBooter):
         self._shell = NeoShellComponent(self._sandbox)
         self._browser = NeoBrowserComponent(self._sandbox)
         logger.info(
-            "Got Shipyard Neo sandbox: %s (profile=%s)",
+            "Got Shipyard Neo sandbox: %s (profile=%s, auto=%s)",
             self._sandbox.id,
             self._profile or "python-default",
+            bool(self._bay_manager),
         )
 
     async def shutdown(self) -> None:
@@ -317,6 +359,12 @@ class ShipyardNeoBooter(ComputerBooter):
             self._client = None
             self._sandbox = None
             logger.info("[Computer] Shipyard Neo sandbox shut down: id=%s", sandbox_id)
+
+        # NOTE: We intentionally do NOT stop the Bay container here.
+        # It stays running for reuse by future sessions.  The user can
+        # stop it manually or via ``BayContainerManager.stop()``.
+        if self._bay_manager is not None:
+            await self._bay_manager.close_client()
 
     @property
     def fs(self) -> FileSystemComponent:
