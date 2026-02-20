@@ -394,7 +394,7 @@ class ProviderOpenAIOfficial(Provider):
                 text_val = raw_content.get("text", "")
                 return str(text_val) if text_val is not None else ""
             # For other dict formats, return empty string and log
-            logger.warning(f"未预期的 dict 格式 content: {raw_content}")
+            logger.warning(f"Unexpected dict format content: {raw_content}")
             return ""
 
         if isinstance(raw_content, list):
