@@ -339,6 +339,24 @@ def register_on_platform_loaded(**kwargs):
     return decorator
 
 
+def register_on_plugin_error(**kwargs):
+    """当插件处理消息异常时触发。
+
+    Hook 参数:
+        event, plugin_name, handler_name, error, traceback_text
+
+    说明:
+        在 hook 中调用 `event.stop_event()` 可屏蔽默认报错回显，
+        并由插件自行决定是否转发到其他会话。
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginErrorEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
 def register_on_waiting_llm_request(**kwargs):
     """当等待调用 LLM 时的通知事件（在获取锁之前）
 

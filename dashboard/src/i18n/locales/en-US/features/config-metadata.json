@@ -149,6 +149,10 @@
           "description": "Computer Use Runtime",
           "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
         },
+        "computer_use_require_admin": {
+          "description": "Require AstrBot Admin Permission",
+          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"
