@@ -29,6 +29,7 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core import t
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -67,7 +68,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     )
                 except Exception as e:  # noqa: BLE001
                     logger.error(
-                        f"Background task {task_id} failed: {e!s}",
+                        t("background-task-failed", task_id=task_id, error=str(e)),
                         exc_info=True,
                     )
 
@@ -233,7 +234,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event=cron_event, plugin_context=ctx, config=config, req=req
         )
         if not result:
-            logger.error("Failed to build main agent for background task job.")
+            logger.error(t("background-task-build-failed"))
             return
 
         runner = result.agent_runner
@@ -258,7 +259,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             summary_note=summary_note,
         )
         if not llm_resp:
-            logger.warning("background task agent got no response")
+            logger.warning(t("background-task-no-response"))
             return
 
     @classmethod
@@ -334,13 +335,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                 )
                             except Exception as e:
                                 logger.error(
-                                    f"Tool 直接发送消息失败: {e}",
+                                    t("tool-send-message-failed", error=str(e), traceback=traceback.format_exc()),
                                     exc_info=True,
                                 )
                     yield None
             except asyncio.TimeoutError:
                 raise Exception(
-                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
+                    t("tool-execution-timeout",tool_name=tool.name,timeout=tool_call_timeout or run_context.tool_call_timeout)
                 )
             except StopAsyncIteration:
                 break
@@ -382,9 +383,9 @@ async def call_local_llm_tool(
         elif method_name == "call":
             ready_to_call = handler(context, *args, **kwargs)
         else:
-            raise ValueError(f"未知的方法名: {method_name}")
+            raise ValueError(t("unknown-method-name", method_name=method_name))
     except ValueError as e:
-        raise Exception(f"Tool execution ValueError: {e}") from e
+        raise Exception(t("tool-execution-value-error", error=str(e))) from e
     except TypeError as e:
         # 获取函数的签名（包括类型），除了第一个 event/context 参数。
         try:
@@ -415,11 +416,13 @@ async def call_local_llm_tool(
             handler_param_str = "(unable to inspect signature)"
 
         raise Exception(
-            f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}"
+            t("tool-parameter-mismatch", handler_param_str=handler_param_str)
         ) from e
     except Exception as e:
         trace_ = traceback.format_exc()
-        raise Exception(f"Tool execution error: {e}. Traceback: {trace_}") from e
+        raise Exception(
+            t("tool-execution-error", error=str(e), traceback=trace_)
+        ) from e
 
     if not ready_to_call:
         return
@@ -443,7 +446,7 @@ async def call_local_llm_tool(
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield
         except Exception as e:
-            logger.error(f"Previous Error: {trace_}")
+            logger.error(t("previous-error", traceback=trace_))
             raise e
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
