@@ -29,7 +29,21 @@ export async function restartAstrBot(
 ): Promise<void> {
   const desktopBridge = window.astrbotDesktop
 
-  if (desktopBridge?.isElectron) {
+  const hasDesktopRestartCapability =
+    !!desktopBridge &&
+    typeof desktopBridge.restartBackend === 'function' &&
+    typeof desktopBridge.isDesktopRuntime === 'function'
+
+  let isDesktopRuntime = false
+  if (hasDesktopRestartCapability) {
+    try {
+      isDesktopRuntime = !!(await desktopBridge.isDesktopRuntime())
+    } catch (_error) {
+      isDesktopRuntime = false
+    }
+  }
+
+  if (hasDesktopRestartCapability && isDesktopRuntime) {
     const authToken = localStorage.getItem('token')
     const initialStartTime = await fetchCurrentStartTime()
     try {

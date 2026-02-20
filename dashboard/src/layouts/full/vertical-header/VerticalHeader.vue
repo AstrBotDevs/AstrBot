@@ -46,8 +46,8 @@ let version = ref('');
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
-const isElectronApp = ref(
-  typeof window !== 'undefined' && !!window.astrbotDesktop?.isElectron
+const isDesktopReleaseMode = ref(
+  typeof window !== 'undefined' && !!window.astrbotDesktop?.isDesktop
 );
 const redirectConfirmDialog = ref(false);
 const pendingRedirectUrl = ref('');
@@ -133,7 +133,7 @@ function confirmExternalRedirect() {
   }
 }
 
-const getReleaseUrlForElectron = () => {
+const getReleaseUrlForDesktop = () => {
   const firstRelease = (releases.value as any[])?.[0];
   if (firstRelease?.tag_name) {
     const tag = firstRelease.tag_name as string;
@@ -147,12 +147,12 @@ const getReleaseUrlForElectron = () => {
 };
 
 function handleUpdateClick() {
-  if (isElectronApp.value) {
+  if (isDesktopReleaseMode.value) {
     requestExternalRedirect('');
     resolvingReleaseTarget.value = true;
     checkUpdate();
     void getReleases().finally(() => {
-      pendingRedirectUrl.value = getReleaseUrlForElectron() || fallbackReleaseUrl;
+      pendingRedirectUrl.value = getReleaseUrlForDesktop() || fallbackReleaseUrl;
       resolvingReleaseTarget.value = false;
     });
     return;
@@ -246,7 +246,7 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message;
       }
-      dashboardHasNewVersion.value = isElectronApp.value
+      dashboardHasNewVersion.value = isDesktopReleaseMode.value
         ? false
         : res.data.data.dashboard_has_new_version;
     })
@@ -389,12 +389,12 @@ const changeLanguage = async (langCode: string) => {
 
 onMounted(async () => {
   try {
-    isElectronApp.value = !!window.astrbotDesktop?.isElectron ||
-      !!(await window.astrbotDesktop?.isElectronRuntime?.());
+    isDesktopReleaseMode.value = !!window.astrbotDesktop?.isDesktop ||
+      !!(await window.astrbotDesktop?.isDesktopRuntime?.());
   } catch {
-    isElectronApp.value = false;
+    isDesktopReleaseMode.value = false;
   }
-  if (isElectronApp.value) {
+  if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
   }
 });
@@ -441,7 +441,7 @@ onMounted(async () => {
       <small v-if="hasNewVersion">
         {{ t('core.header.version.hasNewVersion') }}
       </small>
-      <small v-else-if="dashboardHasNewVersion && !isElectronApp">
+      <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
@@ -524,7 +524,7 @@ onMounted(async () => {
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
         <v-list-item-title>{{ t('core.header.updateDialog.title') }}</v-list-item-title>
-        <template v-slot:append v-if="hasNewVersion || (dashboardHasNewVersion && !isElectronApp)">
+        <template v-slot:append v-if="hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)">
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
         </template>
       </v-list-item>
