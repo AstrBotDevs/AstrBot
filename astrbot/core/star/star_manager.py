@@ -6,6 +6,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import sys
 import traceback
 from types import ModuleType
@@ -303,12 +304,6 @@ class PluginManager:
         normalized_spec = version_spec.strip()
         if not normalized_spec:
             return True, None
-
-        if "v" in normalized_spec.lower():
-            return (
-                False,
-                "astrbot_version 不允许包含 v/V，请使用如 >=4.16,<5 的格式。",
-            )
 
         try:
             specifier = SpecifierSet(normalized_spec)
