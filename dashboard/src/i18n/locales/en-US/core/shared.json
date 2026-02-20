@@ -72,6 +72,8 @@
     "skillsLabel": "Skills",
     "originLabel": "Origin",
     "originNameLabel": "Origin Name",
+    "toolInactive": "Disabled",
+    "toolInactiveTooltip": "This tool is disabled. Re-enable it in Extensions -> Handlers -> Function Tools.",
     "allTools": "All tools available",
     "allToolsWithCount": "All tools available ({count})",
     "noTools": "No tools configured",

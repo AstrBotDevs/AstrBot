@@ -35,12 +35,20 @@
         <div v-for="tool in resolvedTools" v-else :key="tool.name" class="tool-item">
           <v-chip
             size="small"
-            color="primary"
+            :color="tool.active === false ? 'warning' : 'primary'"
             variant="outlined"
             label
           >
             {{ tool.name }}
           </v-chip>
+          <v-tooltip v-if="tool.active === false" location="top">
+            <template v-slot:activator="{ props: tooltipProps }">
+              <small class="text-warning tool-inactive" v-bind="tooltipProps">
+                {{ tm('personaQuickPreview.toolInactive') }}
+              </small>
+            </template>
+            {{ tm('personaQuickPreview.toolInactiveTooltip') }}
+          </v-tooltip>
           <small v-if="tool.origin || tool.origin_name" class="text-grey tool-meta">
             <span v-if="tool.origin">{{ tm('personaQuickPreview.originLabel') }}: {{ tool.origin }}</span>
             <span v-if="tool.origin_name"> | {{ tm('personaQuickPreview.originNameLabel') }}: {{ tool.origin_name }}</span>
@@ -117,7 +125,8 @@ const resolvedTools = computed(() =>
     return {
       name: toolName,
       origin: meta.origin || '',
-      origin_name: meta.origin_name || ''
+      origin_name: meta.origin_name || '',
+      active: meta.active
     }
   })
 )
@@ -134,7 +143,8 @@ async function loadToolsMeta() {
         }
         nextMap[tool.name] = {
           origin: tool.origin || '',
-          origin_name: tool.origin_name || ''
+          origin_name: tool.origin_name || '',
+          active: tool.active
         }
       }
       toolMetaMap.value = nextMap
@@ -276,6 +286,10 @@ onBeforeUnmount(() => {
 }
 
 .tool-meta {
+  font-size: 0.74rem;
+}
+
+.tool-inactive {
   font-size: 0.74rem;
 }
 
