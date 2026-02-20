@@ -18,6 +18,7 @@ import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
 import AboutPage from '@/views/AboutPage.vue';
+import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 
 enableKatex();
 enableMermaid();
@@ -388,12 +389,8 @@ const changeLanguage = async (langCode: string) => {
 };
 
 onMounted(async () => {
-  try {
-    isDesktopReleaseMode.value = !!window.astrbotDesktop?.isDesktop ||
-      !!(await window.astrbotDesktop?.isDesktopRuntime?.());
-  } catch {
-    isDesktopReleaseMode.value = false;
-  }
+  const runtimeInfo = await getDesktopRuntimeInfo();
+  isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
   }
