@@ -1,11 +1,11 @@
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 
 const { tm } = useModuleI18n("features/extension");
 
-defineProps({
+const props = defineProps({
   plugin: {
     type: Object,
     required: true,
@@ -22,17 +22,16 @@ defineProps({
 
 const emit = defineEmits(["install"]);
 
-const normalizePlatformList = (platforms) => {
+const platformDisplayList = computed(() => {
+  const platforms = props.plugin?.support_platforms;
   if (!Array.isArray(platforms)) return [];
-  return platforms.filter((item) => typeof item === "string");
-};
-
-const getPlatformDisplayList = (platforms) => {
-  return normalizePlatformList(platforms).map((platformId) => ({
-    name: getPlatformDisplayName(platformId),
-    icon: getPlatformIcon(platformId),
-  }));
-};
+  return platforms
+    .filter((item) => typeof item === "string")
+    .map((platformId) => ({
+      name: getPlatformDisplayName(platformId),
+      icon: getPlatformIcon(platformId),
+    }));
+});
 
 const handleInstall = (plugin) => {
   emit("install", plugin);
@@ -169,9 +168,9 @@ const showPlatformsMenu = ref(false);
         </div>
 
         <div
-          v-if="plugin.astrbot_version || normalizePlatformList(plugin.support_platforms).length"
+          v-if="plugin.astrbot_version || platformDisplayList.length"
           class="d-flex align-center flex-wrap"
-          style="gap: 4px; margin-top: 4px; margin-bottom: 4px;"
+          style="gap: 4px; margin-top: 4px; margin-bottom: 4px"
         >
           <v-chip
             v-if="plugin.astrbot_version"
@@ -183,7 +182,7 @@ const showPlatformsMenu = ref(false);
             AstrBot: {{ plugin.astrbot_version }}
           </v-chip>
           <v-menu
-            v-if="normalizePlatformList(plugin.support_platforms).length"
+            v-if="platformDisplayList.length"
             v-model="showPlatformsMenu"
             location="top"
             :close-on-content-click="false"
@@ -201,7 +200,7 @@ const showPlatformsMenu = ref(false);
               >
                 {{
                   tm("card.status.supportPlatformsCount", {
-                    count: getPlatformDisplayList(plugin.support_platforms).length,
+                    count: platformDisplayList.length,
                   })
                 }}
                 <v-icon
@@ -212,14 +211,20 @@ const showPlatformsMenu = ref(false);
               </v-chip>
             </template>
             <v-list density="compact" border elevation="8">
-              <v-list-item v-for="platform in getPlatformDisplayList(plugin.support_platforms)" :key="platform.name" min-height="24">
+              <v-list-item
+                v-for="platform in platformDisplayList"
+                :key="platform.name"
+                min-height="24"
+              >
                 <template v-slot:prepend>
                   <v-avatar size="16" class="mr-2" v-if="platform.icon">
                     <v-img :src="platform.icon"></v-img>
                   </v-avatar>
                   <v-icon v-else icon="mdi-platform" size="14" class="mr-2"></v-icon>
                 </template>
-                <v-list-item-title class="text-caption font-weight-bold">{{ platform.name }}</v-list-item-title>
+                <v-list-item-title class="text-caption font-weight-bold">{{
+                  platform.name
+                }}</v-list-item-title>
               </v-list-item>
             </v-list>
           </v-menu>
