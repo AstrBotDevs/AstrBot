@@ -1,5 +1,6 @@
 import os
 import sys
+from collections import namedtuple
 
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -11,23 +12,56 @@ import pytest
 from main import check_dashboard_files, check_env
 
 
-class _version_info:
-    def __init__(self, major, minor):
-        self.major = major
-        self.minor = minor
+def _make_version_info(major: int, minor: int):
+    version_info_cls = namedtuple(
+        "VersionInfo",
+        ["major", "minor", "micro", "releaselevel", "serial"],
+    )
+    return version_info_cls(major, minor, 0, "final", 0)
 
 
 def test_check_env(monkeypatch):
-    version_info_correct = _version_info(3, 10)
-    version_info_wrong = _version_info(3, 9)
-    monkeypatch.setattr(sys, "version_info", version_info_correct)
+    version_info_correct = _make_version_info(3, 10)
+    version_info_wrong = _make_version_info(3, 9)
+    monkeypatch.setattr(sys, "version_info", version_info_correct, raising=False)
+
+    expected_paths = {
+        "root": "/tmp/astrbot-root",
+        "site_packages": "/tmp/astrbot-root/data/plugins/_site",
+        "config": "/tmp/astrbot-root/data/config",
+        "plugins": "/tmp/astrbot-root/data/plugins",
+        "temp": "/tmp/astrbot-root/data/temp",
+        "knowledge_base": "/tmp/astrbot-root/data/knowledge_base",
+    }
+    monkeypatch.setattr("main.get_astrbot_root", lambda: expected_paths["root"])
+    monkeypatch.setattr(
+        "main.get_astrbot_site_packages_path",
+        lambda: expected_paths["site_packages"],
+    )
+    monkeypatch.setattr(
+        "main.get_astrbot_config_path", lambda: expected_paths["config"]
+    )
+    monkeypatch.setattr(
+        "main.get_astrbot_plugin_path", lambda: expected_paths["plugins"]
+    )
+    monkeypatch.setattr("main.get_astrbot_temp_path", lambda: expected_paths["temp"])
+    monkeypatch.setattr(
+        "main.get_astrbot_knowledge_base_path",
+        lambda: expected_paths["knowledge_base"],
+    )
+
     with mock.patch("os.makedirs") as mock_makedirs:
         check_env()
-        mock_makedirs.assert_any_call("data/config", exist_ok=True)
-        mock_makedirs.assert_any_call("data/plugins", exist_ok=True)
-        mock_makedirs.assert_any_call("data/temp", exist_ok=True)
+        for path in (
+            expected_paths["config"],
+            expected_paths["plugins"],
+            expected_paths["temp"],
+            expected_paths["knowledge_base"],
+            expected_paths["site_packages"],
+        ):
+            mock_makedirs.assert_any_call(path, exist_ok=True)
 
-    monkeypatch.setattr(sys, "version_info", version_info_wrong)
+    monkeypatch.setattr(sys, "version_info", version_info_wrong, raising=False)
     with pytest.raises(SystemExit):
         check_env()
 

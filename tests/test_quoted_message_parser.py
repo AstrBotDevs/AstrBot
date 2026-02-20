@@ -1,3 +1,5 @@
+# pyright: reportArgumentType=false, reportOperatorIssue=false
+
 from types import SimpleNamespace
 
 import pytest

@@ -1,5 +1,7 @@
 """Tests for ContextTruncator."""
 
+from typing import Literal
+
 from astrbot.core.agent.context.truncator import ContextTruncator
 from astrbot.core.agent.message import Message
 
@@ -7,7 +9,11 @@ from astrbot.core.agent.message import Message
 class TestContextTruncator:
     """Test suite for ContextTruncator."""
 
-    def create_message(self, role: str, content: str = "test content") -> Message:
+    def create_message(
+        self,
+        role: Literal["system", "user", "assistant", "tool"],
+        content: str = "test content",
+    ) -> Message:
         """Helper to create a simple test message."""
         return Message(role=role, content=content)
 

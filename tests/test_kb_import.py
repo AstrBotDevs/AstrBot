@@ -8,12 +8,11 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.dashboard.server import AstrBotDashboard
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_kb.db"
@@ -24,7 +23,8 @@ async def core_lifecycle_td(tmp_path_factory):
 
     # Mock kb_manager and kb_helper
     kb_manager = MagicMock()
-    kb_helper = AsyncMock(spec=KBHelper)
+    kb_helper = MagicMock()
+    kb_helper.upload_document = AsyncMock()
 
     # Configure get_kb to be an async mock that returns kb_helper
     kb_manager.get_kb = AsyncMock(return_value=kb_helper)
@@ -56,7 +56,7 @@ async def core_lifecycle_td(tmp_path_factory):
             pass
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
     """Creates a Quart app instance for testing."""
     shutdown_event = asyncio.Event()
@@ -64,7 +64,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
@@ -129,11 +129,11 @@ async def test_import_documents(
     assert result["failed_count"] == 0
 
     # Verify kb_helper.upload_document was called correctly
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
-    assert kb_helper.upload_document.call_count == 2
+    kb_helper_mock = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    assert kb_helper_mock.upload_document.call_count == 2
 
     # Check first call arguments
-    call_args_list = kb_helper.upload_document.call_args_list
+    call_args_list = kb_helper_mock.upload_document.call_args_list
 
     # First document
     args1, kwargs1 = call_args_list[0]
