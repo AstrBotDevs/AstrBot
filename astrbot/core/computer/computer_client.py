@@ -183,6 +183,10 @@ def _build_scan_command() -> str:
 
     This stage is read-oriented: it scans SKILL.md metadata and returns the
     historical payload shape consumed by cache update logic.
+
+    The scan resolves the absolute path of the skills root at runtime so
+    that the LLM can reliably ``cat`` skill files regardless of cwd.
+    Only the ``description`` field is extracted from frontmatter.
     """
     script = f"""
 import json
@@ -191,7 +195,12 @@ from pathlib import Path
 root = Path({SANDBOX_SKILLS_ROOT!r})
 managed_file = root / {_MANAGED_SKILLS_FILE!r}
 
+# Resolve absolute path at runtime so prompts always have a reliable path
+root_abs = str(root.resolve())
 
+
+# NOTE: This parser mirrors skill_manager._parse_frontmatter_description.
+# Keep the two implementations in sync when changing parsing logic.
 def parse_description(text: str) -> str:
     if not text.startswith("---"):
         return ""
@@ -253,7 +262,7 @@ def collect_skills() -> list[dict[str, str]]:
             {{
                 "name": skill_dir.name,
                 "description": description,
-                "path": f"{SANDBOX_SKILLS_ROOT}/{{skill_dir.name}}/SKILL.md",
+                "path": f"{{root_abs}}/{{skill_dir.name}}/SKILL.md",
             }}
         )
     return skills
