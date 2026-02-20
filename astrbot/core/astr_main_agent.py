@@ -845,7 +845,6 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 def _apply_sandbox_tools(
     config: MainAgentBuildConfig, req: ProviderRequest, session_id: str
 ) -> None:
-    _ = session_id
     if req.func_tool is None:
         req.func_tool = ToolSet()
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
@@ -864,9 +863,24 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
 
     if booter == "shipyard_neo":
-        req.func_tool.add_tool(BROWSER_EXEC_TOOL)
-        req.func_tool.add_tool(BROWSER_BATCH_EXEC_TOOL)
-        req.func_tool.add_tool(RUN_BROWSER_SKILL_TOOL)
+        # Determine sandbox capabilities from an already-booted session.
+        # If no session exists yet (first request), capabilities is None
+        # and we register all tools conservatively.
+        from astrbot.core.computer.computer_client import session_booter
+
+        sandbox_capabilities: list[str] | None = None
+        existing_booter = session_booter.get(session_id)
+        if existing_booter is not None:
+            sandbox_capabilities = getattr(existing_booter, "capabilities", None)
+
+        # Browser tools: only register if profile supports browser
+        # (or if capabilities are unknown because sandbox hasn't booted yet)
+        if sandbox_capabilities is None or "browser" in sandbox_capabilities:
+            req.func_tool.add_tool(BROWSER_EXEC_TOOL)
+            req.func_tool.add_tool(BROWSER_BATCH_EXEC_TOOL)
+            req.func_tool.add_tool(RUN_BROWSER_SKILL_TOOL)
+
+        # Neo-specific tools (always available for shipyard_neo)
         req.func_tool.add_tool(GET_EXECUTION_HISTORY_TOOL)
         req.func_tool.add_tool(ANNOTATE_EXECUTION_TOOL)
         req.func_tool.add_tool(CREATE_SKILL_PAYLOAD_TOOL)
