@@ -1042,6 +1042,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "OpenRouter": {
+                        "id": "openrouter",
+                        "provider": "openrouter",
+                        "type": "openrouter_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://openrouter.ai/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "NVIDIA": {
                         "id": "nvidia",
                         "provider": "nvidia",
