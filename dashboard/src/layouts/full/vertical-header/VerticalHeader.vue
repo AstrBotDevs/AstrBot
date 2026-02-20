@@ -33,6 +33,7 @@ let aboutDialog = ref(false);
 const username = localStorage.getItem('user');
 let password = ref('');
 let newPassword = ref('');
+let confirmPassword = ref('');
 let newUsername = ref('');
 let status = ref('');
 let updateStatus = ref('')
@@ -89,6 +90,10 @@ const passwordRules = computed(() => [
   (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
   (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
 ]);
+const confirmPasswordRules = computed(() => [
+  (v: string) => !newPassword.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => !newPassword.value || v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
+]);
 const usernameRules = computed(() => [
   (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
 ]);
@@ -96,6 +101,7 @@ const usernameRules = computed(() => [
 // 显示密码相关
 const showPassword = ref(false);
 const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
 
 // 账户修改状态
 const accountEditStatus = ref({
@@ -169,17 +175,14 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  // md5加密
-  // @ts-ignore
-  if (password.value != '') {
-    password.value = md5(password.value);
-  }
-  if (newPassword.value != '') {
-    newPassword.value = md5(newPassword.value);
-  }
+  const passwordHash = password.value ? md5(password.value) : '';
+  const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
+  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : '';
+
   axios.post('/api/auth/account/edit', {
-    password: password.value,
-    new_password: newPassword.value,
+    password: passwordHash,
+    new_password: newPasswordHash,
+    confirm_password: confirmPasswordHash,
     new_username: newUsername.value ? newUsername.value : username
   })
     .then((res) => {
@@ -188,6 +191,7 @@ function accountEdit() {
         accountEditStatus.value.message = res.data.message;
         password.value = '';
         newPassword.value = '';
+        confirmPassword.value = '';
         return;
       }
       accountEditStatus.value.success = true;
@@ -204,6 +208,7 @@ function accountEdit() {
       accountEditStatus.value.message = typeof err === 'string' ? err : t('core.header.accountDialog.messages.updateFailed');
       password.value = '';
       newPassword.value = '';
+      confirmPassword.value = '';
     })
     .finally(() => {
       accountEditStatus.value.loading = false;
@@ -734,9 +739,15 @@ onMounted(async () => {
 
             <v-text-field v-model="newPassword" :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showNewPassword ? 'text' : 'password'" :rules="passwordRules"
-              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" required clearable
+              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" clearable
               @click:append-inner="showNewPassword = !showNewPassword" prepend-inner-icon="mdi-lock-plus-outline"
               :hint="t('core.header.accountDialog.form.passwordHint')" persistent-hint class="mb-4"></v-text-field>
+
+            <v-text-field v-model="confirmPassword" :append-inner-icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              :type="showConfirmPassword ? 'text' : 'password'" :rules="confirmPasswordRules"
+              :label="t('core.header.accountDialog.form.confirmPassword')" variant="outlined" clearable
+              @click:append-inner="showConfirmPassword = !showConfirmPassword" prepend-inner-icon="mdi-lock-check-outline"
+              :hint="t('core.header.accountDialog.form.confirmPasswordHint')" persistent-hint class="mb-4"></v-text-field>
 
             <v-text-field v-model="newUsername" :rules="usernameRules"
               :label="t('core.header.accountDialog.form.newUsername')" variant="outlined" clearable

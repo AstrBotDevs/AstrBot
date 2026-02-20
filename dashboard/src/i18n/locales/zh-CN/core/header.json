@@ -72,14 +72,17 @@
     "form": {
       "currentPassword": "当前密码",
       "newPassword": "新密码",
+      "confirmPassword": "确认新密码",
       "newUsername": "新用户名 (可选)",
       "passwordHint": "密码长度至少 8 位",
+      "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
       "defaultCredentials": "默认用户名和密码均为 astrbot"
     },
     "validation": {
       "passwordRequired": "请输入密码",
       "passwordMinLength": "密码长度至少 8 位",
+      "passwordMatch": "两次输入的密码不一致",
       "usernameMinLength": "用户名长度至少3位"
     },
     "actions": {
@@ -90,4 +93,4 @@
       "updateFailed": "修改失败，请重试"
     }
   }
-} 
+}
