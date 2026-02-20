@@ -9,7 +9,7 @@
 ```
 tests/
 ├── conftest.py              # 共享 fixtures 和配置
-├── pytest.ini               # pytest 配置
+├── （使用 pyproject.toml 中的 [tool.pytest.ini_options]）
 ├── TEST_REQUIREMENTS.md     # 测试需求清单（本文档）
 ├── __init__.py              # 包初始化
 │
@@ -45,36 +45,36 @@ tests/
 # 运行所有测试
 make test
 # 或
-uv run pytest -c tests/pytest.ini tests/ -v
+uv run pytest tests/ -v
 
 # 运行单元测试
 make test-unit
 # 或
-uv run pytest -c tests/pytest.ini tests/ -v -m "unit and not integration"
+uv run pytest tests/ -v -m "unit and not integration"
 
 # 运行集成测试
 make test-integration
 # 或
-uv run pytest -c tests/pytest.ini tests/integration/ -v -m integration
+uv run pytest tests/integration/ -v -m integration
 
 # 运行测试并生成覆盖率报告
 make test-cov
 # 或
-uv run pytest -c tests/pytest.ini tests/ --cov=astrbot --cov-report=term-missing --cov-report=html -v
+uv run pytest tests/ --cov=astrbot --cov-report=term-missing --cov-report=html -v
 
 # 快速测试（跳过慢速测试）
 make test-quick
 # 或
-uv run pytest -c tests/pytest.ini tests/ -v -m "not slow and not integration" --tb=short
+uv run pytest tests/ -v -m "not slow and not integration" --tb=short
 
 # 运行特定测试文件
-uv run pytest -c tests/pytest.ini tests/test_main.py -v
+uv run pytest tests/test_main.py -v
 
 # 运行特定测试类
-uv run pytest -c tests/pytest.ini tests/test_main.py::TestCheckEnv -v
+uv run pytest tests/test_main.py::TestCheckEnv -v
 
 # 运行特定测试方法
-uv run pytest -c tests/pytest.ini tests/test_main.py::TestCheckEnv::test_check_env -v
+uv run pytest tests/test_main.py::TestCheckEnv::test_check_env -v
 ```
 
 ### 测试标记
@@ -1102,7 +1102,7 @@ async def test_async_function():
 
 口径说明:
 - 下表统计的是“需求条目完成度”，不是 pytest 已有用例数量。
-- 当前 pytest 测试基线（`uv run pytest -c tests/pytest.ini tests/ --collect-only`）：`201` 条已收集用例。
+- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`204` 条已收集用例。
 
 | 模块 | 总计 | 已完成 | 进度 |
 |------|------|--------|------|
