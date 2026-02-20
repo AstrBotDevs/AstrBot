@@ -99,7 +99,7 @@ uv run pytest tests/test_main.py::TestCheckEnv::test_check_env -v
 
 | Fixture | 说明 | 作用域 |
 |---------|------|--------|
-| `event_loop` | 会话级事件循环 | session |
+| `event_loop` | 会话级事件循环 | session |TODO:需要补上
 | `temp_dir` | 临时目录 | function |
 | `temp_data_dir` | 模拟 data 目录结构 | function |
 | `temp_config_file` | 临时配置文件 | function |
