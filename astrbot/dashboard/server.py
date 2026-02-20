@@ -13,7 +13,7 @@ from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 
-from astrbot.core import logger
+from astrbot.core import logger, t
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
@@ -28,6 +28,7 @@ from .routes.route import Response, RouteContext
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
+from .routes.lang_route import LangRoute
 
 
 class _AddrWithPort(Protocol):
@@ -107,6 +108,7 @@ class AstrBotDashboard:
         self.platform_route = PlatformRoute(self.context, core_lifecycle)
         self.backup_route = BackupRoute(self.context, db, core_lifecycle)
         self.live_chat_route = LiveChatRoute(self.context, db, core_lifecycle)
+        self.lang_route = LangRoute(self.context)
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
@@ -125,7 +127,7 @@ class AstrBotDashboard:
             route, view_handler, methods, _ = api
             if route == f"/{subpath}" and request.method in methods:
                 return await view_handler(*args, **kwargs)
-        return jsonify(Response().error("未找到该路由").__dict__)
+        return jsonify(Response().error(t("dashboard-server-route-not-found")).__dict__)
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
@@ -142,7 +144,7 @@ class AstrBotDashboard:
         # 声明 JWT
         token = request.headers.get("Authorization")
         if not token:
-            r = jsonify(Response().error("未授权").__dict__)
+            r = jsonify(Response().error(t("dashboard-server-unauthorized")).__dict__)
             r.status_code = 401
             return r
         token = token.removeprefix("Bearer ")
@@ -150,11 +152,11 @@ class AstrBotDashboard:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]
         except jwt.ExpiredSignatureError:
-            r = jsonify(Response().error("Token 过期").__dict__)
+            r = jsonify(Response().error(t("dashboard-server-token-expired")).__dict__)
             r.status_code = 401
             return r
         except jwt.InvalidTokenError:
-            r = jsonify(Response().error("Token 无效").__dict__)
+            r = jsonify(Response().error(t("dashboard-server-token-invalid")).__dict__)
             r.status_code = 401
             return r
 
@@ -171,7 +173,7 @@ class AstrBotDashboard:
             # result 为 0 表示端口被占用
             return result == 0
         except Exception as e:
-            logger.warning(f"检查端口 {port} 时发生错误: {e!s}")
+            logger.warning(t("dashboard-server-port-check-error", port=port, e=e))
             # 如果出现异常，保守起见认为端口可能被占用
             return True
 
@@ -184,18 +186,21 @@ class AstrBotDashboard:
                         process = psutil.Process(conn.pid)
                         # 获取详细信息
                         proc_info = [
-                            f"进程名: {process.name()}",
-                            f"PID: {process.pid}",
-                            f"执行路径: {process.exe()}",
-                            f"工作目录: {process.cwd()}",
-                            f"启动命令: {' '.join(process.cmdline())}",
+                            t("dashboard-server-proc-name", name=process.name()),
+                            t("dashboard-server-pid", pid=process.pid),
+                            t("dashboard-server-exec-path", exe=process.exe()),
+                            t("dashboard-server-work-dir", cwd=process.cwd()),
+                            t(
+                                "dashboard-server-cmd-line",
+                                cmd=" ".join(process.cmdline()),
+                            ),
                         ]
                         return "\n           ".join(proc_info)
                     except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                        return f"无法获取进程详细信息(可能需要管理员权限): {e!s}"
-            return "未找到占用进程"
+                        return t("dashboard-server-access-denied", e=e)
+            return t("dashboard-server-proc-not-found")
         except Exception as e:
-            return f"获取进程信息失败: {e!s}"
+            return t("dashboard-server-get-proc-failed", e=e)
 
     def _init_jwt_secret(self) -> None:
         if not self.config.get("dashboard", {}).get("jwt_secret", None):
@@ -231,14 +236,12 @@ class AstrBotDashboard:
         scheme = "https" if ssl_enable else "http"
 
         if not enable:
-            logger.info("WebUI 已被禁用")
+            logger.info(t("dashboard-server-webui-disabled"))
             return None
 
-        logger.info(f"正在启动 WebUI, 监听地址: {scheme}://{host}:{port}")
+        logger.info(t("dashboard-server-starting", url=f"{scheme}://{host}:{port}"))
         if host == "0.0.0.0":
-            logger.info(
-                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
-            )
+            logger.info(t("dashboard-server-security-tip"))
 
         if host not in ["localhost", "127.0.0.1"]:
             try:
@@ -251,27 +254,24 @@ class AstrBotDashboard:
         if self.check_port_in_use(port):
             process_info = self.get_process_using_port(port)
             logger.error(
-                f"错误：端口 {port} 已被占用\n"
-                f"占用信息: \n           {process_info}\n"
-                f"请确保：\n"
-                f"1. 没有其他 AstrBot 实例正在运行\n"
-                f"2. 端口 {port} 没有被其他程序占用\n"
-                f"3. 如需使用其他端口，请修改配置文件",
+                t("dashboard-server-port-in-use", port=port, info=process_info)
             )
 
             raise Exception(f"端口 {port} 已被占用")
 
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
-        parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
+        parts = [t("dashboard-server-started-banner", version=VERSION)]
+        parts.append(
+            t("dashboard-server-local-url", url=f"{scheme}://localhost:{port}")
+        )
         for ip in ip_addr:
-            parts.append(f"   ➜  网络: {scheme}://{ip}:{port}\n")
-        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+            parts.append(
+                t("dashboard-server-network-url", url=f"{scheme}://{ip}:{port}")
+            )
+        parts.append(t("dashboard-server-default-creds"))
         display = "".join(parts)
 
         if not ip_addr:
-            display += (
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
-            )
+            display += t("dashboard-server-remote-access-tip")
 
         logger.info(display)
 
@@ -298,13 +298,13 @@ class AstrBotDashboard:
             cert_path = Path(cert_file).expanduser()
             key_path = Path(key_file).expanduser()
             if not cert_file or not key_file:
-                raise ValueError(
-                    "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
-                )
+                raise ValueError(t("dashboard-server-ssl-config-required"))
             if not cert_path.is_file():
-                raise ValueError(f"SSL 证书文件不存在: {cert_path}")
+                raise ValueError(
+                    t("dashboard-server-ssl-cert-not-found", path=cert_path)
+                )
             if not key_path.is_file():
-                raise ValueError(f"SSL 私钥文件不存在: {key_path}")
+                raise ValueError(t("dashboard-server-ssl-key-not-found", path=key_path))
 
             config.certfile = str(cert_path.resolve())
             config.keyfile = str(key_path.resolve())
@@ -312,7 +312,9 @@ class AstrBotDashboard:
             if ca_certs:
                 ca_path = Path(ca_certs).expanduser()
                 if not ca_path.is_file():
-                    raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
+                    raise ValueError(
+                        t("dashboard-server-ssl-ca-not-found", path=ca_path)
+                    )
                 config.ca_certs = str(ca_path.resolve())
 
         # 根据配置决定是否禁用访问日志
@@ -328,4 +330,4 @@ class AstrBotDashboard:
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
-        logger.info("AstrBot WebUI 已经被优雅地关闭")
+        logger.info(t("dashboard-server-shutdown"))
