@@ -24,7 +24,7 @@
     "presetDialogsHelp": "添加一些预设的对话来帮助机器人更好地理解角色设定。",
     "userMessage": "用户消息",
     "assistantMessage": "AI 回答",
-    "tools": "工具选择",
+    "tools": "工具 / MCP 工具选择",
     "toolsHelp": "为这个人格选择可用的外部工具。外部工具给了 AI 接触外部环境的能力，如搜索、计算、获取信息等。",
     "toolsSelection": "工具选择操作",
     "selectAllTools": "选择所有工具",

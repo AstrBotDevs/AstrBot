@@ -42,7 +42,6 @@ from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.provider.manager import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
@@ -770,14 +769,6 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
-    else:
-        # mcp tools
-        tool_set = req.func_tool
-        if not tool_set:
-            tool_set = ToolSet()
-        for tool in llm_tools.func_list:
-            if isinstance(tool, MCPTool):
-                tool_set.add_tool(tool)
 
 
 async def _handle_webchat(
