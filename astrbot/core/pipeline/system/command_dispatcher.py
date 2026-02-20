@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.core import logger
 from astrbot.core.message.message_event_result import MessageChain, MessageEventResult
+from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.pipeline.system.star_yield import StarHandlerAdapter, StarYieldDriver
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import (
@@ -118,7 +119,18 @@ class CommandDispatcher:
                 )
 
                 if result.error:
-                    # handler 执行出错
+                    # handler 执行出错，触发插件错误钩子
+                    traceback_text = result.error
+                    await call_event_hook(
+                        event,
+                        EventType.OnPluginErrorEvent,
+                        plugin_meta.name,
+                        handler.handler_name,
+                        result.error,
+                        traceback_text,
+                    )
+                    if event.is_stopped():
+                        return True
                     if event.is_at_or_wake_command:
                         error_msg = (
                             f":(\n\n调用插件 {plugin_meta.name} 的 "

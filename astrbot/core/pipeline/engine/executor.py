@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from astrbot.core import logger
 from astrbot.core.message.components import At, AtAll, Reply
 from astrbot.core.pipeline.agent import AgentExecutor
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.pipeline.engine.chain_executor import ChainExecutor
 from astrbot.core.pipeline.system.access_control import AccessController
 from astrbot.core.pipeline.system.command_dispatcher import CommandDispatcher
@@ -78,6 +79,7 @@ class PipelineExecutor:
 
     async def execute(self, event: AstrMessageEvent) -> None:
         """执行 Pipeline"""
+        active_event_registry.register(event)
         try:
             # 预处理
             should_continue = await self.preprocessor.preprocess(event)
@@ -185,6 +187,7 @@ class PipelineExecutor:
             logger.error(f"Pipeline execution error: {e}")
             logger.error(traceback.format_exc())
         finally:
+            active_event_registry.unregister(event)
             await self._handle_special_platforms(event)
             logger.debug("Pipeline 执行完毕。")
 

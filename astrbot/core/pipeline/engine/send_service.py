@@ -52,6 +52,16 @@ class SendService:
         Comp.Nodes: lambda comp: bool(comp.nodes),
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
         Comp.WechatEmoji: lambda comp: comp.md5 is not None,
+        Comp.Json: lambda comp: bool(comp.data),
+        Comp.Share: lambda comp: bool(comp.url),
+        Comp.Music: lambda comp: bool(comp.url or comp.audio or comp.id),
+        Comp.Forward: lambda comp: bool(comp.id),
+        Comp.Location: lambda comp: comp.lat is not None and comp.lon is not None,
+        Comp.Contact: lambda comp: comp.id is not None and comp.id != 0,
+        Comp.Shake: lambda _: True,
+        Comp.Dice: lambda _: True,
+        Comp.RPS: lambda _: True,
+        Comp.Unknown: lambda comp: bool(comp.text),
     }
 
     def __init__(self, ctx: PipelineContext):
