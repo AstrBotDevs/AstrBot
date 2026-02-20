@@ -1,6 +1,7 @@
 <script setup>
+import { ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { getPlatformDisplayName } from "@/utils/platformUtils";
+import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 
 const { tm } = useModuleI18n("features/extension");
 
@@ -27,14 +28,17 @@ const normalizePlatformList = (platforms) => {
 };
 
 const getPlatformDisplayList = (platforms) => {
-  return normalizePlatformList(platforms).map((platformId) =>
-    getPlatformDisplayName(platformId),
-  );
+  return normalizePlatformList(platforms).map((platformId) => ({
+    name: getPlatformDisplayName(platformId),
+    icon: getPlatformIcon(platformId),
+  }));
 };
 
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
+
+const showPlatformsMenu = ref(false);
 </script>
 
 <template>
@@ -178,26 +182,47 @@ const handleInstall = (plugin) => {
           >
             AstrBot: {{ plugin.astrbot_version }}
           </v-chip>
-          <v-chip
+          <v-menu
             v-if="normalizePlatformList(plugin.support_platforms).length"
-            size="x-small"
-            color="info"
-            variant="outlined"
-            style="height: 20px"
+            v-model="showPlatformsMenu"
+            location="top"
+            :close-on-content-click="false"
+            transition="scale-transition"
+            open-on-hover
           >
-            <v-tooltip location="top">
-              <template v-slot:activator="{ props: tooltipProps }">
-                <span v-bind="tooltipProps">
-                  {{
-                    tm("card.status.supportPlatformsCount", {
-                      count: getPlatformDisplayList(plugin.support_platforms).length,
-                    })
-                  }}
-                </span>
-              </template>
-              <span>{{ getPlatformDisplayList(plugin.support_platforms).join(", ") }}</span>
-            </v-tooltip>
-          </v-chip>
+            <template v-slot:activator="{ props: menuProps }">
+              <v-chip
+                v-bind="menuProps"
+                size="x-small"
+                color="info"
+                variant="outlined"
+                style="height: 20px; cursor: pointer"
+                @click.stop="showPlatformsMenu = !showPlatformsMenu"
+              >
+                {{
+                  tm("card.status.supportPlatformsCount", {
+                    count: getPlatformDisplayList(plugin.support_platforms).length,
+                  })
+                }}
+                <v-icon
+                  :icon="showPlatformsMenu ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                  size="16"
+                  class="ml-0"
+                ></v-icon>
+              </v-chip>
+            </template>
+            <v-list density="compact" border elevation="8">
+              <v-list-item v-for="platform in getPlatformDisplayList(plugin.support_platforms)" :key="platform.name" min-height="24">
+                <template v-slot:prepend>
+                  <v-avatar size="16" class="mr-2" v-if="platform.icon">
+                    <v-img :src="platform.icon"></v-img>
+                  </v-avatar>
+                  <v-icon v-else icon="mdi-platform" size="14" class="mr-2"></v-icon>
+                </template>
+                <v-list-item-title class="text-caption font-weight-bold">{{ platform.name }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
         </div>
 
         <div class="d-flex align-center" style="gap: 8px; margin-top: auto">

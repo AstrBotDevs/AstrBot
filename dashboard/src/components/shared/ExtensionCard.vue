@@ -2,7 +2,7 @@
 import { ref, computed, inject } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
-import { getPlatformDisplayName } from "@/utils/platformUtils";
+import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 
 const props = defineProps({
@@ -35,6 +35,7 @@ const emit = defineEmits([
 
 const reveal = ref(false);
 const showUninstallDialog = ref(false);
+const showPlatformsMenu = ref(false);
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
@@ -47,8 +48,11 @@ const supportPlatforms = computed(() => {
   return platforms.filter((item) => typeof item === "string");
 });
 
-const supportPlatformDisplayNames = computed(() =>
-  supportPlatforms.value.map((platformId) => getPlatformDisplayName(platformId)),
+const supportPlatformDetails = computed(() =>
+  supportPlatforms.value.map((platformId) => ({
+    name: getPlatformDisplayName(platformId),
+    icon: getPlatformIcon(platformId),
+  })),
 );
 
 const astrbotVersionRequirement = computed(() => {
@@ -336,27 +340,49 @@ const viewChangelog = () => {
             >
               {{ tag === "danger" ? tm("tags.danger") : tag }}
             </v-chip>
-            <v-chip
+            <v-menu
               v-if="supportPlatforms.length"
-              color="info"
-              variant="outlined"
-              label
-              size="small"
-              class="ml-2"
+              v-model="showPlatformsMenu"
+              location="top"
+              :close-on-content-click="false"
+              transition="scale-transition"
+              open-on-hover
             >
-              <v-tooltip location="top">
-                <template v-slot:activator="{ props: tooltipProps }">
-                  <span v-bind="tooltipProps">
-                    {{
-                      tm("card.status.supportPlatformsCount", {
-                        count: supportPlatformDisplayNames.length,
-                      })
-                    }}
-                  </span>
-                </template>
-                <span>{{ supportPlatformDisplayNames.join(", ") }}</span>
-              </v-tooltip>
-            </v-chip>
+              <template v-slot:activator="{ props: menuProps }">
+                <v-chip
+                  v-bind="menuProps"
+                  color="info"
+                  variant="outlined"
+                  label
+                  size="small"
+                  class="ml-2"
+                  style="cursor: pointer"
+                  @click.stop="showPlatformsMenu = !showPlatformsMenu"
+                >
+                  {{
+                    tm("card.status.supportPlatformsCount", {
+                      count: supportPlatformDetails.length,
+                    })
+                  }}
+                  <v-icon
+                    :icon="showPlatformsMenu ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                    size="18"
+                    class="ml-0"
+                  ></v-icon>
+                </v-chip>
+              </template>
+              <v-list density="compact" border elevation="8">
+                <v-list-item v-for="platform in supportPlatformDetails" :key="platform.name" min-height="32">
+                  <template v-slot:prepend>
+                    <v-avatar size="20" class="mr-2" v-if="platform.icon">
+                      <v-img :src="platform.icon"></v-img>
+                    </v-avatar>
+                    <v-icon v-else icon="mdi-platform" size="18" class="mr-2"></v-icon>
+                  </template>
+                  <v-list-item-title class="text-caption font-weight-bold">{{ platform.name }}</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
             <v-chip
               v-if="astrbotVersionRequirement"
               color="secondary"
