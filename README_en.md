@@ -268,7 +268,7 @@ pre-commit install
 Special thanks to all Contributors and plugin developers for their contributions to AstrBot ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=200&columns=14" />
 </a>
 
 Additionally, the birth of this project would not have been possible without the help of the following open-source projects:
