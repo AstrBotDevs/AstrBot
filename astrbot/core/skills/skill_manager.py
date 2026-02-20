@@ -19,7 +19,6 @@ from astrbot.core.utils.astrbot_path import (
 SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
-# SANDBOX_SKILLS_ROOT = "/home/shared/skills"
 SANDBOX_SKILLS_ROOT = "skills"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
@@ -35,6 +34,16 @@ class SkillInfo:
 
 
 def _parse_frontmatter_description(text: str) -> str:
+    """Extract the ``description`` value from YAML frontmatter.
+
+    Expects the standard SKILL.md format used by OpenAI Codex CLI and
+    Anthropic Claude Skills::
+
+        ---
+        name: my-skill
+        description: What this skill does and when to use it.
+        ---
+    """
     if not text.startswith("---"):
         return ""
     lines = text.splitlines()
@@ -56,38 +65,66 @@ def _parse_frontmatter_description(text: str) -> str:
     return ""
 
 
+# Regex for sanitizing paths used in prompt examples — only allow
+# safe path characters to prevent prompt injection via crafted skill paths.
+_SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_./ -]")
+
+
 def build_skills_prompt(skills: list[SkillInfo]) -> str:
-    skills_lines = []
+    """Build the skills section of the system prompt.
+
+    Generates a markdown-formatted skill inventory for the LLM.  Only
+    ``name`` and ``description`` are shown upfront; the LLM must read
+    the full ``SKILL.md`` before execution (progressive disclosure).
+    """
+    skills_lines: list[str] = []
+    example_path = ""
     for skill in skills:
         description = skill.description or "No description"
-        skills_lines.append(f"- {skill.name}: {description} (file: {skill.path})")
+        skills_lines.append(
+            f"- **{skill.name}**: {description}\n"
+            f"  File: `{skill.path}`"
+        )
+        if not example_path:
+            example_path = skill.path
     skills_block = "\n".join(skills_lines)
-    # Based on openai/codex
+    # Sanitize example_path — it may originate from sandbox cache (untrusted)
+    example_path = _SAFE_PATH_RE.sub("", example_path) if example_path else ""
+    example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
+
     return (
-        "## Skills\n"
-        "You have many useful skills that can help you accomplish various tasks.\n"
-        "A skill is a set of local instructions stored in a `SKILL.md` file.\n"
-        "### Available skills\n"
-        f"{skills_block}\n"
-        "### Skill Rules\n"
-        "\n"
-        "- Discovery: The list above shows all skills available in this session. Full instructions live in the referenced `SKILL.md`.\n"
-        "- Trigger rules: Use a skill if the user names it or the task matches its description. Do not carry skills across turns unless re-mentioned\n"
-        "### How to use a skill (progressive disclosure):\n"
-        "  0) Mandatory grounding: Before using any skill, you MUST inspect its `SKILL.md` using shell tools"
-        " (e.g., `cat`, `head`, `sed`, `awk`, `grep`). Do not rely on assumptions or memory.\n"
-        "  1) Load only directly referenced files, DO NOT bulk-load everything.\n"
-        "  2) If `scripts/` exist, prefer running or patching them instead of retyping large blocks of code.\n"
-        "  3) If `assets/` or templates exist, reuse them rather than recreating everything from scratch.\n"
-        "- Coordination:\n"
-        "  - If multiple skills apply, choose the minimal set that covers the request and state the order in which you will use them.\n"
-        "  - Announce which skill(s) you are using and why (one short line). If you skip an obvious skill, explain why.\n"
-        "  - Prefer to use `astrbot_*` tools to perform skills that need to run scripts.\n"
-        "- Context hygiene:\n"
-        "  - Avoid deep reference chasing: unless blocked, open only files that are directly linked from `SKILL.md`.\n"
-        "- Failure handling: If a skill cannot be applied, state the issue and continue with the best alternative.\n"
-        "### Example\n"
-        "When you decided to use a skill, use shell tool to read its `SKILL.md`, e.g., `head -40 skills/code_formatter/SKILL.md`, and you can increase or decrease the number of lines as needed.\n"
+        "## Skills\n\n"
+        "You have specialized skills — reusable instruction bundles stored "
+        "in `SKILL.md` files. Each skill has a **name** and a **description** "
+        "that tells you what it does and when to use it.\n\n"
+        "### Available skills\n\n"
+        f"{skills_block}\n\n"
+        "### Skill rules\n\n"
+        "1. **Discovery** — The list above is the complete skill inventory "
+        "for this session. Full instructions are in the referenced "
+        "`SKILL.md` file.\n"
+        "2. **When to trigger** — Use a skill if the user names it "
+        "explicitly, or if the task clearly matches the skill's description. "
+        "*Never silently skip a matching skill* — either use it or briefly "
+        "explain why you chose not to.\n"
+        "3. **Mandatory grounding** — Before executing any skill you MUST "
+        "first read its `SKILL.md` by running a shell command with the "
+        f"**absolute path** shown above (e.g. `cat {example_path}`). "
+        "Never rely on memory or assumptions about a skill's content.\n"
+        "4. **Progressive disclosure** — Load only what is directly "
+        "referenced from `SKILL.md`:\n"
+        "   - If `scripts/` exist, prefer running or patching them over "
+        "rewriting code from scratch.\n"
+        "   - If `assets/` or templates exist, reuse them.\n"
+        "   - Do NOT bulk-load every file in the skill directory.\n"
+        "5. **Coordination** — When multiple skills apply, pick the minimal "
+        "set needed. Announce which skill(s) you are using and why "
+        "(one short line). Prefer `astrbot_*` tools when running skill "
+        "scripts.\n"
+        "6. **Context hygiene** — Avoid deep reference chasing; open only "
+        "files that are directly linked from `SKILL.md`.\n"
+        "7. **Failure handling** — If a skill cannot be applied, state the "
+        "issue clearly and continue with the best alternative.\n"
     )
 
 
@@ -279,7 +316,7 @@ class SkillManager:
             top_dirs = {
                 PurePosixPath(name).parts[0] for name in file_names if name.strip()
             }
-            print(top_dirs)
+
             if len(top_dirs) != 1:
                 raise ValueError("Zip archive must contain a single top-level folder.")
             skill_name = next(iter(top_dirs))
