@@ -249,3 +249,34 @@ class MessageEventResult(MessageChain):
 
 # 为了兼容旧版代码，保留 CommandResult 的别名
 CommandResult = MessageEventResult
+
+
+async def collect_streaming_result(
+    result: MessageEventResult,
+    *,
+    warn: bool = False,
+    logger=None,
+) -> MessageEventResult:
+    """Collect streaming content into a non-streaming MessageEventResult."""
+    if result.result_content_type != ResultContentType.STREAMING_RESULT:
+        return result
+    if result.async_stream is None:
+        return result
+
+    if warn and logger is not None:
+        logger.warning(
+            "Streaming result detected during node merge; collecting before merge."
+        )
+
+    parts: list[str] = []
+    async for chunk in result.async_stream:
+        if hasattr(chunk, "chain") and chunk.chain:
+            for comp in chunk.chain:
+                if isinstance(comp, Plain):
+                    parts.append(comp.text)
+
+    collected_text = "".join(parts)
+    result.chain = [Plain(collected_text)] if collected_text else []
+    result.result_content_type = ResultContentType.LLM_RESULT
+    result.async_stream = None
+    return result

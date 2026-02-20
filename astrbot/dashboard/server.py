@@ -25,8 +25,6 @@ from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
 from .routes.route import Response, RouteContext
-from .routes.session_management import SessionManagementRoute
-from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
 
@@ -95,7 +93,7 @@ class AstrBotDashboard:
         self.skills_route = SkillsRoute(self.context, core_lifecycle)
         self.conversation_route = ConversationRoute(self.context, db, core_lifecycle)
         self.file_route = FileRoute(self.context)
-        self.session_management_route = SessionManagementRoute(
+        self.chain_management_route = ChainManagementRoute(
             self.context,
             db,
             core_lifecycle,

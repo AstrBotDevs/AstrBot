@@ -60,9 +60,9 @@ const MainRoutes = {
       component: () => import('@/views/ConversationPage.vue')
     },
     {
-      name: 'SessionManagement',
-      path: '/session-management',
-      component: () => import('@/views/SessionManagementPage.vue')
+      name: 'ChainManagement',
+      path: '/chain-management',
+      component: () => import('@/views/ChainManagementPage.vue')
     },
     {
       name: 'Persona',

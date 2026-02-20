@@ -1,0 +1,4 @@
+name: agent
+desc: Builtin agent pipeline node
+author: AstrBot
+version: 1.0.0

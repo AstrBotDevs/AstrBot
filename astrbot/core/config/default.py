@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
             "strategy": "stall",  # stall, discard
         },
         "reply_prefix": "",
+        "forward_wrapper": False,
         "forward_threshold": 1500,
         "enable_id_white_list": True,
         "id_whitelist": [],
@@ -71,6 +72,8 @@ DEFAULT_CONFIG = {
         "fallback_chat_models": [],
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
+        "default_stt_provider_id": "",
+        "default_tts_provider_id": "",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
         "wake_prefix": "",
         "web_search": False,
@@ -119,11 +122,6 @@ DEFAULT_CONFIG = {
         "tool_schema_mode": "full",
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
-        "file_extract": {
-            "enable": False,
-            "provider": "moonshotai",
-            "moonshotai_api_key": "",
-        },
         "proactive_capability": {
             "add_cron_tools": True,
         },
@@ -152,17 +150,6 @@ DEFAULT_CONFIG = {
         ),
         "agents": [],
     },
-    "provider_stt_settings": {
-        "enable": False,
-        "provider_id": "",
-    },
-    "provider_tts_settings": {
-        "enable": False,
-        "provider_id": "",
-        "dual_output": False,
-        "use_file_service": False,
-        "trigger_probability": 1.0,
-    },
     "provider_ltm_settings": {
         "group_icl_enable": False,
         "group_message_max_cnt": 300,
@@ -175,17 +162,8 @@ DEFAULT_CONFIG = {
             "whitelist": [],
         },
     },
-    "content_safety": {
-        "also_use_in_response": False,
-        "internal_keywords": {"enable": True, "extra_keywords": []},
-        "baidu_aip": {"enable": False, "app_id": "", "api_key": "", "secret_key": ""},
-    },
     "admins_id": ["astrbot"],
-    "t2i": False,
-    "t2i_word_threshold": 150,
-    "t2i_strategy": "remote",
     "t2i_endpoint": "",
-    "t2i_use_file_service": False,
     "t2i_active_template": "base",
     "http_proxy": "",
     "no_proxy": ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*"],
@@ -853,6 +831,10 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "机器人回复消息时带有的前缀。",
                     },
+                    "forward_wrapper": {
+                        "type": "bool",
+                        "hint": "启用后，超过转发阈值的消息会以合并转发形式发送（仅 QQ 平台适用）。",
+                    },
                     "forward_threshold": {
                         "type": "int",
                         "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。",
@@ -887,42 +869,6 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "此功能解决由于文件系统不一致导致路径不存在的问题。格式为 <原路径>:<映射路径>。如 `/app/.config/QQ:/var/lib/docker/volumes/xxxx/_data`。这样，当消息平台下发的事件中图片和语音路径以 `/app/.config/QQ` 开头时，开头被替换为 `/var/lib/docker/volumes/xxxx/_data`。这在 AstrBot 或者平台协议端使用 Docker 部署时特别有用。",
-                    },
-                },
-            },
-            "content_safety": {
-                "type": "object",
-                "items": {
-                    "also_use_in_response": {
-                        "type": "bool",
-                        "hint": "启用后，大模型的响应也会通过内容安全审核。",
-                    },
-                    "baidu_aip": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                                "hint": "启用此功能前，您需要手动在设备中安装 baidu-aip 库。一般来说，安装指令如下: `pip3 install baidu-aip`",
-                            },
-                            "app_id": {"description": "APP ID", "type": "string"},
-                            "api_key": {"description": "API Key", "type": "string"},
-                            "secret_key": {
-                                "type": "string",
-                            },
-                        },
-                    },
-                    "internal_keywords": {
-                        "type": "object",
-                        "items": {
-                            "enable": {
-                                "type": "bool",
-                            },
-                            "extra_keywords": {
-                                "type": "list",
-                                "items": {"type": "string"},
-                                "hint": "额外的屏蔽关键词列表，支持正则表达式。",
-                            },
-                        },
                     },
                 },
             },
@@ -2239,6 +2185,12 @@ CONFIG_METADATA_2 = {
                     "default_provider_id": {
                         "type": "string",
                     },
+                    "default_image_caption_provider_id": {
+                        "type": "string",
+                    },
+                    "image_caption_prompt": {
+                        "type": "string",
+                    },
                     "fallback_chat_models": {
                         "type": "list",
                         "items": {"type": "string"},
@@ -2285,18 +2237,6 @@ CONFIG_METADATA_2 = {
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
-                    "agent_runner_type": {
-                        "type": "string",
-                    },
-                    "dify_agent_runner_provider_id": {
-                        "type": "string",
-                    },
-                    "coze_agent_runner_provider_id": {
-                        "type": "string",
-                    },
-                    "dashscope_agent_runner_provider_id": {
-                        "type": "string",
-                    },
                     "max_agent_step": {
                         "type": "int",
                     },
@@ -2306,16 +2246,13 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
-                    "file_extract": {
+                    "skills": {
                         "type": "object",
                         "items": {
                             "enable": {
                                 "type": "bool",
                             },
-                            "provider": {
-                                "type": "string",
-                            },
-                            "moonshotai_api_key": {
+                            "runtime": {
                                 "type": "string",
                             },
                         },
@@ -2327,37 +2264,6 @@ CONFIG_METADATA_2 = {
                                 "type": "bool",
                             },
                         },
-                    },
-                },
-            },
-            "provider_stt_settings": {
-                "type": "object",
-                "items": {
-                    "enable": {
-                        "type": "bool",
-                    },
-                    "provider_id": {
-                        "type": "string",
-                    },
-                },
-            },
-            "provider_tts_settings": {
-                "type": "object",
-                "items": {
-                    "enable": {
-                        "type": "bool",
-                    },
-                    "provider_id": {
-                        "type": "string",
-                    },
-                    "dual_output": {
-                        "type": "bool",
-                    },
-                    "use_file_service": {
-                        "type": "bool",
-                    },
-                    "trigger_probability": {
-                        "type": "float",
                     },
                 },
             },
@@ -2407,12 +2313,6 @@ CONFIG_METADATA_2 = {
             "wake_prefix": {
                 "type": "list",
                 "items": {"type": "string"},
-            },
-            "t2i": {
-                "type": "bool",
-            },
-            "t2i_word_threshold": {
-                "type": "int",
             },
             "admins_id": {
                 "type": "list",
@@ -2470,9 +2370,6 @@ CONFIG_METADATA_2 = {
             "t2i_endpoint": {
                 "type": "string",
             },
-            "t2i_use_file_service": {
-                "type": "bool",
-            },
             "pip_install_arg": {
                 "type": "string",
             },
@@ -2503,54 +2400,6 @@ CONFIG_METADATA_3 = {
     "ai_group": {
         "name": "AI 配置",
         "metadata": {
-            "agent_runner": {
-                "description": "Agent 执行方式",
-                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器，不需要修改此节。",
-                "type": "object",
-                "items": {
-                    "provider_settings.enable": {
-                        "description": "启用",
-                        "type": "bool",
-                        "hint": "AI 对话总开关",
-                    },
-                    "provider_settings.agent_runner_type": {
-                        "description": "执行器",
-                        "type": "string",
-                        "options": ["local", "dify", "coze", "dashscope"],
-                        "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"],
-                        "condition": {
-                            "provider_settings.enable": True,
-                        },
-                    },
-                    "provider_settings.coze_agent_runner_provider_id": {
-                        "description": "Coze Agent 执行器提供商 ID",
-                        "type": "string",
-                        "_special": "select_agent_runner_provider:coze",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "coze",
-                            "provider_settings.enable": True,
-                        },
-                    },
-                    "provider_settings.dify_agent_runner_provider_id": {
-                        "description": "Dify Agent 执行器提供商 ID",
-                        "type": "string",
-                        "_special": "select_agent_runner_provider:dify",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "dify",
-                            "provider_settings.enable": True,
-                        },
-                    },
-                    "provider_settings.dashscope_agent_runner_provider_id": {
-                        "description": "阿里云百炼应用 Agent 执行器提供商 ID",
-                        "type": "string",
-                        "_special": "select_agent_runner_provider:dashscope",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "dashscope",
-                            "provider_settings.enable": True,
-                        },
-                    },
-                },
-            },
             "ai": {
                 "description": "模型",
                 "hint": "当使用非内置 Agent 执行器时，默认对话模型和默认图片转述模型可能会无效，但某些插件会依赖此配置项来调用 AI 能力。",
@@ -2575,49 +2424,12 @@ CONFIG_METADATA_3 = {
                         "_special": "select_provider",
                         "hint": "留空代表不使用，可用于非多模态模型",
                     },
-                    "provider_stt_settings.enable": {
-                        "description": "启用语音转文本",
-                        "type": "bool",
-                        "hint": "STT 总开关",
-                    },
-                    "provider_stt_settings.provider_id": {
-                        "description": "默认语音转文本模型",
-                        "type": "string",
-                        "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。",
-                        "_special": "select_provider_stt",
-                        "condition": {
-                            "provider_stt_settings.enable": True,
-                        },
-                    },
-                    "provider_tts_settings.enable": {
-                        "description": "启用文本转语音",
-                        "type": "bool",
-                        "hint": "TTS 总开关",
-                    },
-                    "provider_tts_settings.provider_id": {
-                        "description": "默认文本转语音模型",
-                        "type": "string",
-                        "_special": "select_provider_tts",
-                        "condition": {
-                            "provider_tts_settings.enable": True,
-                        },
-                    },
-                    "provider_tts_settings.trigger_probability": {
-                        "description": "TTS 触发概率",
-                        "type": "float",
-                        "slider": {"min": 0, "max": 1, "step": 0.05},
-                        "condition": {
-                            "provider_tts_settings.enable": True,
-                        },
-                    },
                     "provider_settings.image_caption_prompt": {
                         "description": "图片转述提示词",
                         "type": "text",
                     },
                 },
-                "condition": {
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "persona": {
                 "description": "人格",
@@ -2630,10 +2442,7 @@ CONFIG_METADATA_3 = {
                         "_special": "select_persona",
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "knowledgebase": {
                 "description": "知识库",
@@ -2663,10 +2472,7 @@ CONFIG_METADATA_3 = {
                         "hint": "启用后，知识库检索将作为 LLM Tool，由模型自主决定何时调用知识库进行查询。需要模型支持函数调用能力。",
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "websearch": {
                 "description": "网页搜索",
@@ -2721,10 +2527,7 @@ CONFIG_METADATA_3 = {
                         },
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "agent_computer_use": {
                 "description": "Agent Computer Use",
@@ -2790,41 +2593,8 @@ CONFIG_METADATA_3 = {
                         },
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
-            # "file_extract": {
-            #     "description": "文档解析能力 [beta]",
-            #     "type": "object",
-            #     "items": {
-            #         "provider_settings.file_extract.enable": {
-            #             "description": "启用文档解析能力",
-            #             "type": "bool",
-            #         },
-            #         "provider_settings.file_extract.provider": {
-            #             "description": "文档解析提供商",
-            #             "type": "string",
-            #             "options": ["moonshotai"],
-            #             "condition": {
-            #                 "provider_settings.file_extract.enable": True,
-            #             },
-            #         },
-            #         "provider_settings.file_extract.moonshotai_api_key": {
-            #             "description": "Moonshot AI API Key",
-            #             "type": "string",
-            #             "condition": {
-            #                 "provider_settings.file_extract.provider": "moonshotai",
-            #                 "provider_settings.file_extract.enable": True,
-            #             },
-            #         },
-            #     },
-            #     "condition": {
-            #         "provider_settings.agent_runner_type": "local",
-            #         "provider_settings.enable": True,
-            #     },
-            # },
             "proactive_capability": {
                 "description": "主动型 Agent",
                 "hint": "https://docs.astrbot.app/use/proactive-agent.html",
@@ -2836,10 +2606,7 @@ CONFIG_METADATA_3 = {
                         "hint": "启用后，将会传递给 Agent 相关工具来实现主动型 Agent。你可以告诉 AstrBot 未来某个时间要做的事情，它将被定时触发然后执行任务。",
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "truncate_and_compress": {
                 "hint": "",
@@ -2850,26 +2617,20 @@ CONFIG_METADATA_3 = {
                         "description": "最多携带对话轮数",
                         "type": "int",
                         "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.dequeue_context_length": {
                         "description": "丢弃对话轮数",
                         "type": "int",
                         "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.context_limit_reached_strategy": {
                         "description": "超出模型上下文窗口时的处理方式",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                         "hint": "",
                     },
                     "provider_settings.llm_compress_instruction": {
@@ -2878,7 +2639,6 @@ CONFIG_METADATA_3 = {
                         "hint": "如果为空则使用默认提示词。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.llm_compress_keep_recent": {
@@ -2887,7 +2647,6 @@ CONFIG_METADATA_3 = {
                         "hint": "始终保留的最近 N 轮对话。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.llm_compress_provider_id": {
@@ -2897,14 +2656,10 @@ CONFIG_METADATA_3 = {
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                 },
-                "condition": {
-                    "provider_settings.agent_runner_type": "local",
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
             "others": {
                 "description": "其他配置",
@@ -2913,9 +2668,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.display_reasoning_text": {
                         "description": "显示思考内容",
                         "type": "bool",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.streaming_response": {
                         "description": "流式输出",
@@ -2959,24 +2712,18 @@ CONFIG_METADATA_3 = {
                         "description": "现实世界时间感知",
                         "type": "bool",
                         "hint": "启用后，会在系统提示词中附带当前时间信息。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.show_tool_use_status": {
                         "description": "输出函数调用状态",
                         "type": "bool",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.sanitize_context_by_modalities": {
                         "description": "按模型能力清理历史上下文",
                         "type": "bool",
                         "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.max_quoted_fallback_images": {
                         "description": "引用图片回退解析上限",
@@ -3021,16 +2768,12 @@ CONFIG_METADATA_3 = {
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.tool_call_timeout": {
                         "description": "工具调用超时时间（秒）",
                         "type": "int",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.tool_schema_mode": {
                         "description": "工具调用模式",
@@ -3038,9 +2781,7 @@ CONFIG_METADATA_3 = {
                         "options": ["skills_like", "full"],
                         "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
+                        "condition": {},
                     },
                     "provider_settings.wake_prefix": {
                         "description": "LLM 聊天额外唤醒前缀 ",
@@ -3052,19 +2793,13 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "hint": "可使用 {{prompt}} 作为用户输入的占位符。如果不输入占位符则代表添加在用户输入的前面。",
                     },
-                    "provider_tts_settings.dual_output": {
-                        "description": "开启 TTS 时同时输出语音和文字内容",
-                        "type": "bool",
-                    },
                     "provider_settings.reachability_check": {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
                     },
                 },
-                "condition": {
-                    "provider_settings.enable": True,
-                },
+                "condition": {},
             },
         },
     },
@@ -3104,6 +2839,10 @@ CONFIG_METADATA_3 = {
                     },
                     "platform_settings.reply_with_quote": {
                         "description": "回复时引用发送人消息",
+                        "type": "bool",
+                    },
+                    "platform_settings.forward_wrapper": {
+                        "description": "启用合并转发",
                         "type": "bool",
                     },
                     "platform_settings.forward_threshold": {
@@ -3167,66 +2906,6 @@ CONFIG_METADATA_3 = {
                         "description": "速率限制策略",
                         "type": "string",
                         "options": ["stall", "discard"],
-                    },
-                },
-            },
-            "content_safety": {
-                "description": "内容安全",
-                "type": "object",
-                "items": {
-                    "content_safety.also_use_in_response": {
-                        "description": "同时检查模型的响应内容",
-                        "type": "bool",
-                    },
-                    "content_safety.baidu_aip.enable": {
-                        "description": "使用百度内容安全审核",
-                        "type": "bool",
-                        "hint": "您需要手动安装 baidu-aip 库。",
-                    },
-                    "content_safety.baidu_aip.app_id": {
-                        "description": "App ID",
-                        "type": "string",
-                        "condition": {
-                            "content_safety.baidu_aip.enable": True,
-                        },
-                    },
-                    "content_safety.baidu_aip.api_key": {
-                        "description": "API Key",
-                        "type": "string",
-                        "condition": {
-                            "content_safety.baidu_aip.enable": True,
-                        },
-                    },
-                    "content_safety.baidu_aip.secret_key": {
-                        "description": "Secret Key",
-                        "type": "string",
-                        "condition": {
-                            "content_safety.baidu_aip.enable": True,
-                        },
-                    },
-                    "content_safety.internal_keywords.enable": {
-                        "description": "关键词检查",
-                        "type": "bool",
-                    },
-                    "content_safety.internal_keywords.extra_keywords": {
-                        "description": "额外关键词",
-                        "type": "list",
-                        "items": {"type": "string"},
-                        "hint": "额外的屏蔽关键词列表，支持正则表达式。",
-                    },
-                },
-            },
-            "t2i": {
-                "description": "文本转图像",
-                "type": "object",
-                "items": {
-                    "t2i": {
-                        "description": "文本转图像输出",
-                        "type": "bool",
-                    },
-                    "t2i_word_threshold": {
-                        "description": "文本转图像字数阈值",
-                        "type": "int",
                     },
                 },
             },
@@ -3434,27 +3113,15 @@ CONFIG_METADATA_3_SYSTEM = {
                 "description": "系统配置",
                 "type": "object",
                 "items": {
-                    "t2i_strategy": {
-                        "description": "文本转图像策略",
-                        "type": "string",
-                        "hint": "文本转图像策略。`remote` 为使用远程基于 HTML 的渲染服务，`local` 为使用 PIL 本地渲染。当使用 local 时，将 ttf 字体命名为 'font.ttf' 放在 data/ 目录下可自定义字体。",
-                        "options": ["remote", "local"],
-                    },
                     "t2i_endpoint": {
                         "description": "文本转图像服务 API 地址",
                         "type": "string",
                         "hint": "为空时使用 AstrBot API 服务",
-                        "condition": {
-                            "t2i_strategy": "remote",
-                        },
                     },
                     "t2i_template": {
                         "description": "文本转图像自定义模版",
                         "type": "bool",
                         "hint": "启用后可自定义 HTML 模板用于文转图渲染。",
-                        "condition": {
-                            "t2i_strategy": "remote",
-                        },
                         "_special": "t2i_template",
                     },
                     "t2i_active_template": {

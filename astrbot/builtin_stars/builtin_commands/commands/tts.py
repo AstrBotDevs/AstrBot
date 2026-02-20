@@ -1,36 +1,38 @@
-"""文本转语音命令"""
+"""Text-to-speech command."""
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
-from astrbot.core.star.session_llm_manager import SessionServiceManager
+from astrbot.core.pipeline.engine.chain_runtime_flags import (
+    FEATURE_TTS,
+    toggle_chain_runtime_flag,
+)
+
+from ._node_binding import get_chain_nodes
 
 
 class TTSCommand:
-    """文本转语音命令类"""
+    """Toggle text-to-speech for the current routed chain."""
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def tts(self, event: AstrMessageEvent) -> None:
-        """开关文本转语音（会话级别）"""
-        umo = event.unified_msg_origin
-        ses_tts = await SessionServiceManager.is_tts_enabled_for_session(umo)
-        cfg = self.context.get_config(umo=umo)
-        tts_enable = cfg["provider_tts_settings"]["enable"]
+    async def tts(self, event: AstrMessageEvent):
+        chain_config = event.chain_config
+        if not chain_config:
+            event.set_result(MessageEventResult().message("未找到已路由的 Chain。"))
+            return
 
-        # 切换状态
-        new_status = not ses_tts
-        await SessionServiceManager.set_tts_status_for_session(umo, new_status)
-
-        status_text = "已开启" if new_status else "已关闭"
-
-        if new_status and not tts_enable:
+        nodes = get_chain_nodes(event, "tts")
+        if not nodes:
             event.set_result(
-                MessageEventResult().message(
-                    f"{status_text}当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。",
-                ),
+                MessageEventResult().message("当前 Chain 中没有 TTS 节点。")
             )
-        else:
-            event.set_result(
-                MessageEventResult().message(f"{status_text}当前会话的文本转语音。"),
+            return
+
+        enabled = await toggle_chain_runtime_flag(chain_config.chain_id, FEATURE_TTS)
+        status = "开启" if enabled else "关闭"
+        event.set_result(
+            MessageEventResult().message(
+                f"Chain `{chain_config.chain_id}` 的 TTS 功能已{status}（共 {len(nodes)} 个节点）。"
             )
+        )

@@ -4,6 +4,8 @@ import os
 import traceback
 from typing import Protocol, runtime_checkable
 
+from deprecated import deprecated
+
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
@@ -41,8 +43,6 @@ class ProviderManager:
         self.providers_config: list = config["provider"]
         self.provider_sources_config: list = config.get("provider_sources", [])
         self.provider_settings: dict = config["provider_settings"]
-        self.provider_stt_settings: dict = config.get("provider_stt_settings", {})
-        self.provider_tts_settings: dict = config.get("provider_tts_settings", {})
 
         # 人格相关属性，v4.0.0 版本后被废弃，推荐使用 PersonaManager
         self.default_persona_name = persona_mgr.default_persona
@@ -87,6 +87,13 @@ class ProviderManager:
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
 
+    @deprecated(
+        version="5.0",
+        reason=(
+            "Legacy session/global provider switching is not Node-aware and may not "
+            "work as expected in multi-node chains."
+        ),
+    )
     async def set_provider(
         self,
         provider_id: str,
@@ -103,6 +110,11 @@ class ProviderManager:
         Version 4.0.0: 这个版本下已经默认隔离提供商
 
         """
+        logger.warning(
+            "ProviderManager.set_provider is deprecated and may not work as expected "
+            "in multi-node architecture. Use node-level provider binding instead."
+        )
+
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
         if umo:
@@ -153,6 +165,13 @@ class ProviderManager:
         """根据提供商 ID 获取提供商实例"""
         return self.inst_map.get(provider_id)
 
+    @deprecated(
+        version="5.0",
+        reason=(
+            "Legacy session/global provider resolution is not Node-aware and may not "
+            "work as expected in multi-node chains."
+        ),
+    )
     def get_using_provider(
         self, provider_type: ProviderType, umo=None
     ) -> Providers | None:
@@ -166,6 +185,11 @@ class ProviderManager:
             Provider: 正在使用的提供商实例。
 
         """
+        logger.warning(
+            "ProviderManager.get_using_provider is deprecated and may not work as "
+            "expected in multi-node architecture. Use node-aware resolver instead."
+        )
+
         provider = None
         provider_id = None
         if umo:
@@ -186,19 +210,29 @@ class ProviderManager:
                 if not provider:
                     provider = self.provider_insts[0] if self.provider_insts else None
             elif provider_type == ProviderType.SPEECH_TO_TEXT:
-                provider_id = config["provider_stt_settings"].get("provider_id")
-                if not provider_id:
-                    return None
-                provider = self.inst_map.get(provider_id)
+                global_stt_provider_id = sp.get(
+                    "curr_provider_stt",
+                    None,
+                    scope="global",
+                    scope_id="global",
+                )
+                if isinstance(global_stt_provider_id, str) and global_stt_provider_id:
+                    provider = self.inst_map.get(global_stt_provider_id)
+                    provider_id = global_stt_provider_id
                 if not provider:
                     provider = (
                         self.stt_provider_insts[0] if self.stt_provider_insts else None
                     )
             elif provider_type == ProviderType.TEXT_TO_SPEECH:
-                provider_id = config["provider_tts_settings"].get("provider_id")
-                if not provider_id:
-                    return None
-                provider = self.inst_map.get(provider_id)
+                global_tts_provider_id = sp.get(
+                    "curr_provider_tts",
+                    None,
+                    scope="global",
+                    scope_id="global",
+                )
+                if isinstance(global_tts_provider_id, str) and global_tts_provider_id:
+                    provider = self.inst_map.get(global_tts_provider_id)
+                    provider_id = global_tts_provider_id
                 if not provider:
                     provider = (
                         self.tts_provider_insts[0] if self.tts_provider_insts else None
@@ -230,13 +264,13 @@ class ProviderManager:
         )
         selected_stt_provider_id = await sp.get_async(
             key="curr_provider_stt",
-            default=self.provider_stt_settings.get("provider_id"),
+            default=None,
             scope="global",
             scope_id="global",
         )
         selected_tts_provider_id = await sp.get_async(
             key="curr_provider_tts",
-            default=self.provider_tts_settings.get("provider_id"),
+            default=None,
             scope="global",
             scope_id="global",
         )
@@ -503,14 +537,6 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.stt_provider_insts.append(inst)
-                    if (
-                        self.provider_stt_settings.get("provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_stt_provider_inst = inst
-                        logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
-                        )
                     if not self.curr_stt_provider_inst:
                         self.curr_stt_provider_inst = inst
 
@@ -526,14 +552,6 @@ class ProviderManager:
                         await inst.initialize()
 
                     self.tts_provider_insts.append(inst)
-                    if (
-                        self.provider_settings.get("provider_id")
-                        == provider_config["id"]
-                    ):
-                        self.curr_tts_provider_inst = inst
-                        logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
-                        )
                     if not self.curr_tts_provider_inst:
                         self.curr_tts_provider_inst = inst
 

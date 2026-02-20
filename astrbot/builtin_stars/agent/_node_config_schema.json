@@ -1,0 +1,59 @@
+{
+  "agent_runner_type": {
+    "type": "string",
+    "default": "local",
+    "description": "此节点使用的 Agent 运行器类型",
+    "options": ["local", "dify", "coze", "dashscope"],
+    "labels": ["内置 Agent", "Dify", "Coze", "DashScope"]
+  },
+  "coze_agent_runner_provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "Coze Agent 运行器的提供商 ID",
+    "_special": "select_agent_runner_provider:coze",
+    "condition": {
+      "agent_runner_type": "coze"
+    }
+  },
+  "dify_agent_runner_provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "Dify Agent 运行器的提供商 ID",
+    "_special": "select_agent_runner_provider:dify",
+    "condition": {
+      "agent_runner_type": "dify"
+    }
+  },
+  "dashscope_agent_runner_provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "DashScope Agent 运行器的提供商 ID",
+    "_special": "select_agent_runner_provider:dashscope",
+    "condition": {
+      "agent_runner_type": "dashscope"
+    }
+  },
+  "provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "覆盖此节点的对话模型提供商 ID",
+    "_special": "select_provider"
+  },
+  "image_caption_provider_id": {
+    "type": "string",
+    "default": "",
+    "description": "覆盖此节点的图像描述模型提供商 ID",
+    "_special": "select_provider"
+  },
+  "image_caption_prompt": {
+    "type": "string",
+    "default": "",
+    "description": "覆盖此节点的图像描述提示词"
+  },
+  "persona_id": {
+    "type": "string",
+    "default": "",
+    "description": "覆盖此节点使用的人格 ID",
+    "_special": "select_persona"
+  }
+}

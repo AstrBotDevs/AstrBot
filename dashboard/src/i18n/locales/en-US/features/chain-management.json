@@ -1,0 +1,120 @@
+{
+  "title": "Chain Routing",
+  "chainsCount": "chains",
+  "defaultTag": "Default",
+  "defaultHint": "The default chain matches all messages when enabled. You can only edit nodes, overrides, and the enabled state.",
+  "search": {
+    "placeholder": "Search by rule"
+  },
+  "buttons": {
+    "create": "Create Chain",
+    "refresh": "Refresh",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "add": "Add",
+    "addNode": "Add Node",
+    "sort": "Sort"
+  },
+  "table": {
+    "matchRule": "Match Rule",
+    "services": "Services",
+    "nodes": "Nodes",
+    "providers": "Providers",
+    "actions": "Actions"
+  },
+  "sections": {
+    "providers": "Provider Overrides",
+    "nodes": "Node Configs",
+    "pluginFilter": "Plugin Filter"
+  },
+  "fields": {
+    "config": "Config File",
+    "enabled": "Enabled",
+    "sttProvider": "STT Provider",
+    "ttsProvider": "TTS Provider",
+    "selectNode": "Select Node",
+    "pluginFilterMode": "Filter Mode",
+    "pluginList": "Plugin List"
+  },
+  "providers": {
+    "tts": "TTS",
+    "stt": "STT",
+    "followDefault": "Follow default"
+  },
+  "chips": {
+    "session": "Session",
+    "llm": "LLM"
+  },
+  "dialogs": {
+    "createTitle": "Create Chain",
+    "editTitle": "Edit Chain",
+    "deleteTitle": "Delete Chain",
+    "deleteConfirm": "This will delete the chain configuration.",
+    "addNodeTitle": "Add Node",
+    "nodeConfigTitle": "Node Configuration",
+    "sortTitle": "Sort Chains",
+    "sortHint": "Drag to reorder. Higher items match first.",
+    "sortDefaultHint": "Default chain stays last"
+  },
+  "messages": {
+    "loadError": "Failed to load chains",
+    "optionsError": "Failed to load options",
+    "saveSuccess": "Saved",
+    "saveError": "Save failed",
+    "deleteSuccess": "Deleted",
+    "deleteError": "Delete failed",
+    "nodeConfigEmpty": "This node has no configurable options.",
+    "nodeConfigNeedSave": "Save the chain before editing node config.",
+    "nodeConfigLoadError": "Failed to load node config",
+    "nodeConfigSaveError": "Failed to save node config",
+    "nodeConfigJsonError": "Invalid JSON format",
+    "nodeConfigRawHint": "No schema provided. Node config is unavailable.",
+    "nodeConfigNoSchema": "No schema provided. Node config is unavailable.",
+    "sortSuccess": "Order updated",
+    "sortError": "Failed to update order",
+    "sortLoadError": "Failed to load chain order"
+  },
+  "warnings": {
+    "modalityMismatch": "Modality mismatch",
+    "outputs": "outputs",
+    "accepts": "accepts"
+  },
+  "empty": {
+    "title": "No chain routes",
+    "subtitle": "Create a chain to start routing messages",
+    "nodes": "No nodes",
+    "providers": "No providers"
+  },
+  "ruleEditor": {
+    "label": "Match Rule",
+    "addGroup": "Add Group",
+    "empty": "No rule (matches all messages)",
+    "addCondition": "Add Condition",
+    "addSubGroup": "Add Sub-group",
+    "changeType": "Change Type",
+    "umoPlaceholder": "e.g. aiocqhttp:group_message:*",
+    "regexPlaceholder": "e.g. .*hello.*",
+    "types": {
+      "umo": "UMO Match",
+      "modality": "Modality",
+      "textRegex": "Text Regex"
+    },
+    "operators": {
+      "include": "Include",
+      "exclude": "Exclude"
+    }
+  },
+  "pluginConfig": {
+    "inherit": "Follow global",
+    "blacklist": "Blacklist",
+    "whitelist": "Whitelist",
+    "noRestriction": "Enable all plugins",
+    "disableAll": "Disable all plugins",
+    "inheritHint": "Follow global plugin restrictions",
+    "blacklistHint": "Selected plugins will not be executed",
+    "whitelistHint": "Only selected plugins will be executed",
+    "noRestrictionHint": "This chain allows any plugin to be executed",
+    "disableAllHint": "No plugins will be executed for this chain"
+  }
+}

@@ -48,28 +48,6 @@
         "image_caption_prompt": {
           "description": "图片转述提示词"
         }
-      },
-      "provider_stt_settings": {
-        "enable": {
-          "description": "启用语音转文本",
-          "hint": "STT 总开关"
-        },
-        "provider_id": {
-          "description": "默认语音转文本模型",
-          "hint": "用户也可使用 /provider 指令单独选择会话的 STT 模型。"
-        }
-      },
-      "provider_tts_settings": {
-        "enable": {
-          "description": "启用文本转语音",
-          "hint": "TTS 总开关"
-        },
-        "provider_id": {
-          "description": "默认文本转语音模型"
-        },
-        "trigger_probability": {
-          "description": "TTS 触发概率"
-        }
       }
     },
     "persona": {
@@ -125,22 +103,6 @@
         },
         "web_search_link": {
           "description": "显示来源引用"
-        }
-      }
-    },
-    "file_extract": {
-      "description": "文档解析能力",
-      "provider_settings": {
-        "file_extract": {
-          "enable": {
-            "description": "启用文档解析能力"
-          },
-          "provider": {
-            "description": "文档解析提供商"
-          },
-          "moonshotai_api_key": {
-            "description": "Moonshot AI API Key"
-          }
         }
       }
     },
@@ -316,11 +278,6 @@
         "reachability_check": {
           "description": "提供商可达性检测",
           "hint": "/provider 命令列出模型时并发检测连通性。开启后会主动调用模型测试连通性,可能产生额外 token 消耗。"
-        }
-      },
-      "provider_tts_settings": {
-        "dual_output": {
-          "description": "开启 TTS 时同时输出语音和文字内容"
         }
       }
     }

@@ -48,7 +48,9 @@ class AdminCommands:
                 ),
             )
             return
-        cfg = self.context.get_config(umo=event.unified_msg_origin)
+        cfg = self.context.get_config_by_id(
+            event.chain_config.config_id if event.chain_config else None,
+        )
         cfg["platform_settings"]["id_whitelist"].append(str(sid))
         cfg.save_config()
         event.set_result(MessageEventResult().message("添加白名单成功。"))
@@ -63,7 +65,9 @@ class AdminCommands:
             )
             return
         try:
-            cfg = self.context.get_config(umo=event.unified_msg_origin)
+            cfg = self.context.get_config_by_id(
+                event.chain_config.config_id if event.chain_config else None,
+            )
             cfg["platform_settings"]["id_whitelist"].remove(str(sid))
             cfg.save_config()
             event.set_result(MessageEventResult().message("删除白名单成功。"))

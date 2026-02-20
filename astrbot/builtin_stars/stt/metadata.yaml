@@ -1,0 +1,4 @@
+name: stt
+desc: Builtin speech-to-text pipeline node
+author: AstrBot
+version: 1.0.0

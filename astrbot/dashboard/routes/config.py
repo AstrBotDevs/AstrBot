@@ -244,17 +244,12 @@ class ConfigRoute(Route):
         self.config: AstrBotConfig = core_lifecycle.astrbot_config
         self._logo_token_cache = {}  # 缓存logo token，避免重复注册
         self.acm = core_lifecycle.astrbot_config_mgr
-        self.ucr = core_lifecycle.umop_config_router
         self.routes = {
             "/config/abconf/new": ("POST", self.create_abconf),
             "/config/abconf": ("GET", self.get_abconf),
             "/config/abconfs": ("GET", self.get_abconf_list),
             "/config/abconf/delete": ("POST", self.delete_abconf),
             "/config/abconf/update": ("POST", self.update_abconf),
-            "/config/umo_abconf_routes": ("GET", self.get_uc_table),
-            "/config/umo_abconf_route/update_all": ("POST", self.update_ucr_all),
-            "/config/umo_abconf_route/update": ("POST", self.update_ucr),
-            "/config/umo_abconf_route/delete": ("POST", self.delete_ucr),
             "/config/get": ("GET", self.get_configs),
             "/config/default": ("GET", self.get_default_config),
             "/config/astrbot/update": ("POST", self.post_astrbot_configs),
@@ -431,67 +426,6 @@ class ConfigRoute(Route):
         }
         return Response().ok(data=data).__dict__
 
-    async def get_uc_table(self):
-        """获取 UMOP 配置路由表"""
-        return Response().ok({"routing": self.ucr.umop_to_conf_id}).__dict__
-
-    async def update_ucr_all(self):
-        """更新 UMOP 配置路由表的全部内容"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        new_routing = post_data.get("routing", None)
-
-        if not new_routing or not isinstance(new_routing, dict):
-            return Response().error("缺少或错误的路由表数据").__dict__
-
-        try:
-            await self.ucr.update_routing_data(new_routing)
-            return Response().ok(message="更新成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {e!s}").__dict__
-
-    async def update_ucr(self):
-        """更新 UMOP 配置路由表"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        umo = post_data.get("umo", None)
-        conf_id = post_data.get("conf_id", None)
-
-        if not umo or not conf_id:
-            return Response().error("缺少 UMO 或配置文件 ID").__dict__
-
-        try:
-            await self.ucr.update_route(umo, conf_id)
-            return Response().ok(message="更新成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {e!s}").__dict__
-
-    async def delete_ucr(self):
-        """删除 UMOP 配置路由表中的一项"""
-        post_data = await request.json
-        if not post_data:
-            return Response().error("缺少配置数据").__dict__
-
-        umo = post_data.get("umo", None)
-
-        if not umo:
-            return Response().error("缺少 UMO").__dict__
-
-        try:
-            if umo in self.ucr.umop_to_conf_id:
-                del self.ucr.umop_to_conf_id[umo]
-                await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
-            return Response().ok(message="删除成功").__dict__
-        except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除路由表项失败: {e!s}").__dict__
-
     async def get_default_config(self):
         """获取默认配置文件"""
         metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
@@ -511,8 +445,12 @@ class ConfigRoute(Route):
         config = post_data.get("config", DEFAULT_CONFIG)
 
         try:
-            conf_id = self.acm.create_conf(name=name, config=config)
-            return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
+            config_id = self.acm.create_conf(name=name, config=config)
+            return (
+                Response()
+                .ok(message="创建成功", data={"config_id": config_id})
+                .__dict__
+            )
         except ValueError as e:
             return Response().error(str(e)).__dict__
 
@@ -544,12 +482,12 @@ class ConfigRoute(Route):
         if not post_data:
             return Response().error("缺少配置数据").__dict__
 
-        conf_id = post_data.get("id")
-        if not conf_id:
+        config_id = post_data.get("config_id") or post_data.get("id")
+        if not config_id:
             return Response().error("缺少配置文件 ID").__dict__
 
         try:
-            success = self.acm.delete_conf(conf_id)
+            success = self.acm.delete_conf(config_id)
             if success:
                 return Response().ok(message="删除成功").__dict__
             return Response().error("删除失败").__dict__
@@ -565,14 +503,14 @@ class ConfigRoute(Route):
         if not post_data:
             return Response().error("缺少配置数据").__dict__
 
-        conf_id = post_data.get("id")
-        if not conf_id:
+        config_id = post_data.get("config_id") or post_data.get("id")
+        if not config_id:
             return Response().error("缺少配置文件 ID").__dict__
 
         name = post_data.get("name")
 
         try:
-            success = self.acm.update_conf_info(conf_id, name=name)
+            success = self.acm.update_conf_info(config_id, name=name)
             if success:
                 return Response().ok(message="更新成功").__dict__
             return Response().error("更新失败").__dict__
@@ -900,18 +838,18 @@ class ConfigRoute(Route):
     async def post_astrbot_configs(self):
         data = await request.json
         config = data.get("config", None)
-        conf_id = data.get("conf_id", None)
+        config_id = data.get("config_id")
 
         try:
             # 不更新 provider_sources, provider, platform
             # 这些配置有单独的接口进行更新
-            if conf_id == "default":
+            if config_id == "default":
                 no_update_keys = ["provider_sources", "provider", "platform"]
                 for key in no_update_keys:
                     config[key] = self.acm.default_conf[key]
 
-            await self._save_astrbot_configs(config, conf_id)
-            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+            await self._save_astrbot_configs(config, config_id)
+            await self.core_lifecycle.reload_pipeline_executor(config_id)
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -1398,12 +1336,12 @@ class ConfigRoute(Route):
         return ret
 
     async def _save_astrbot_configs(
-        self, post_configs: dict, conf_id: str | None = None
-    ) -> None:
+        self, post_configs: dict, config_id: str | None = None
+    ):
         try:
-            if conf_id not in self.acm.confs:
-                raise ValueError(f"配置文件 {conf_id} 不存在")
-            astrbot_config = self.acm.confs[conf_id]
+            if config_id not in self.acm.confs:
+                raise ValueError(f"配置文件 {config_id} 不存在")
+            astrbot_config = self.acm.confs[config_id]
 
             # 保留服务端的 t2i_active_template 值
             if "t2i_active_template" in astrbot_config:

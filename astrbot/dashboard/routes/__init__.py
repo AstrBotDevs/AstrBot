@@ -1,5 +1,6 @@
 from .auth import AuthRoute
 from .backup import BackupRoute
+from .chain_management import ChainManagementRoute
 from .chat import ChatRoute
 from .chatui_project import ChatUIProjectRoute
 from .command import CommandRoute
@@ -12,7 +13,6 @@ from .log import LogRoute
 from .persona import PersonaRoute
 from .platform import PlatformRoute
 from .plugin import PluginRoute
-from .session_management import SessionManagementRoute
 from .skills import SkillsRoute
 from .stat import StatRoute
 from .static_file import StaticFileRoute
@@ -24,6 +24,7 @@ __all__ = [
     "AuthRoute",
     "BackupRoute",
     "ChatRoute",
+    "ChainManagementRoute",
     "ChatUIProjectRoute",
     "CommandRoute",
     "ConfigRoute",
@@ -35,7 +36,6 @@ __all__ = [
     "PersonaRoute",
     "PlatformRoute",
     "PluginRoute",
-    "SessionManagementRoute",
     "StatRoute",
     "StaticFileRoute",
     "SubAgentRoute",

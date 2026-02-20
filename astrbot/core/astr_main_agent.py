@@ -10,7 +10,6 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
@@ -35,10 +34,10 @@ from astrbot.core.astr_main_agent_resources import (
     SEND_MESSAGE_TO_USER_TOOL,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
-    retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
@@ -51,7 +50,6 @@ from astrbot.core.tools.cron_tools import (
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
 )
-from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
@@ -89,12 +87,6 @@ class MainAgentBuildConfig:
     kb_agentic_mode: bool = False
     """Whether to use agentic mode for knowledge base retrieval.
     This will inject the knowledge base query tool into the main agent's toolset to allow dynamic querying."""
-    file_extract_enabled: bool = False
-    """Whether to enable file content extraction for uploaded files."""
-    file_extract_prov: str = "moonshotai"
-    """The file extraction provider."""
-    file_extract_msh_api_key: str = ""
-    """The API key for Moonshot AI file extraction provider."""
     context_limit_reached_strategy: str = "truncate_by_turns"
     """The strategy to handle context length limit reached."""
     llm_compress_instruction: str = ""
@@ -136,22 +128,7 @@ def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
     """Select chat provider for the event."""
-    sel_provider = event.get_extra("selected_provider")
-    if sel_provider and isinstance(sel_provider, str):
-        provider = plugin_context.get_provider_by_id(sel_provider)
-        if not provider:
-            logger.error("未找到指定的提供商: %s。", sel_provider)
-        if not isinstance(provider, Provider):
-            logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
-            )
-            return None
-        return provider
-    try:
-        return plugin_context.get_using_provider(umo=event.unified_msg_origin)
-    except ValueError as exc:
-        logger.error("Error occurred while selecting provider: %s", exc)
-        return None
+    return plugin_context.get_chat_provider_for_event(event)
 
 
 async def _get_session_conv(
@@ -171,82 +148,17 @@ async def _get_session_conv(
     return conversation
 
 
-async def _apply_kb(
+def _apply_kb(
     event: AstrMessageEvent,
     req: ProviderRequest,
-    plugin_context: Context,
     config: MainAgentBuildConfig,
 ) -> None:
-    if not config.kb_agentic_mode:
-        if req.prompt is None:
-            return
-        try:
-            kb_result = await retrieve_knowledge_base(
-                query=req.prompt,
-                umo=event.unified_msg_origin,
-                context=plugin_context,
-            )
-            if not kb_result:
-                return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while retrieving knowledge base: %s", exc)
-    else:
+    if config.kb_agentic_mode:
+        # Agentic mode: add knowledge base query tool
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
-
-
-async def _apply_file_extract(
-    event: AstrMessageEvent,
-    req: ProviderRequest,
-    config: MainAgentBuildConfig,
-) -> None:
-    file_paths = []
-    file_names = []
-    for comp in event.message_obj.message:
-        if isinstance(comp, File):
-            file_paths.append(await comp.get_file())
-            file_names.append(comp.name)
-        elif isinstance(comp, Reply) and comp.chain:
-            for reply_comp in comp.chain:
-                if isinstance(reply_comp, File):
-                    file_paths.append(await reply_comp.get_file())
-                    file_names.append(reply_comp.name)
-    if not file_paths:
-        return
-    if not req.prompt:
-        req.prompt = "总结一下文件里面讲了什么？"
-    if config.file_extract_prov == "moonshotai":
-        if not config.file_extract_msh_api_key:
-            logger.error("Moonshot AI API key for file extract is not set")
-            return
-        file_contents = await asyncio.gather(
-            *[
-                extract_file_moonshotai(
-                    file_path,
-                    config.file_extract_msh_api_key,
-                )
-                for file_path in file_paths
-            ]
-        )
-    else:
-        logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
-        return
-
-    for file_content, file_name in zip(file_contents, file_names):
-        req.contexts.append(
-            {
-                "role": "system",
-                "content": (
-                    "File Extract Results of user uploaded files:\n"
-                    f"{file_content}\nFile Name: {file_name or 'Unknown'}"
-                ),
-            },
-        )
+    # Non-agentic mode: KB context is injected via _inject_pipeline_context()
 
 
 def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
@@ -271,6 +183,7 @@ async def _ensure_persona_and_skills(
     cfg: dict,
     plugin_context: Context,
     event: AstrMessageEvent,
+    subagent_orchestrator_cfg: dict | None = None,
 ) -> None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
@@ -278,15 +191,11 @@ async def _ensure_persona_and_skills(
 
     # get persona ID
 
-    # 1. from session service config - highest priority
-    persona_id = (
-        await sp.get_async(
-            scope="umo",
-            scope_id=event.unified_msg_origin,
-            key="session_service_config",
-            default={},
-        )
-    ).get("persona_id")
+    # 1. from node config - highest priority
+    node_config = event.node_config or {}
+    persona_id = ""
+    if isinstance(node_config, dict):
+        persona_id = str(node_config.get("persona_id") or "").strip()
 
     if not persona_id:
         # 2. from conversation setting - second priority
@@ -359,7 +268,7 @@ async def _ensure_persona_and_skills(
         req.func_tool.merge(persona_toolset)
 
     # sub agents integration
-    orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
+    orch_cfg = subagent_orchestrator_cfg or {}
     so = plugin_context.subagent_orchestrator
     if orch_cfg.get("main_enable", False) and so:
         remove_dup = bool(orch_cfg.get("remove_main_duplicate_tools", False))
@@ -417,11 +326,7 @@ async def _ensure_persona_and_skills(
                     continue
                 req.func_tool.remove_tool(tool_name)
 
-        router_prompt = (
-            plugin_context.get_config()
-            .get("subagent_orchestrator", {})
-            .get("router_system_prompt", "")
-        ).strip()
+        router_prompt = str(orch_cfg.get("router_system_prompt", "") or "").strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
     try:
@@ -504,6 +409,7 @@ def _get_quoted_message_parser_settings(
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
+    cfg: dict,
     img_cap_prov_id: str,
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
@@ -538,23 +444,34 @@ async def _process_quote_message(
 
     if image_seg:
         try:
-            prov = None
-            if img_cap_prov_id:
-                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+            image_path = await image_seg.convert_to_file_path()
+            caption_text = ""
 
-            if prov and isinstance(prov, Provider):
-                llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
-                    image_urls=[await image_seg.convert_to_file_path()],
+            if img_cap_prov_id:
+                caption_text = await _request_img_caption(
+                    img_cap_prov_id,
+                    cfg,
+                    [image_path],
+                    plugin_context,
                 )
-                if llm_resp.completion_text:
-                    content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
-                    )
             else:
-                logger.warning("No provider found for image captioning in quote.")
+                prov = plugin_context.get_chat_provider_for_event(event)
+                if prov and isinstance(prov, Provider):
+                    llm_resp = await prov.text_chat(
+                        prompt=cfg.get(
+                            "image_caption_prompt",
+                            "Please describe the image.",
+                        ),
+                        image_urls=[image_path],
+                    )
+                    caption_text = llm_resp.completion_text
+                else:
+                    logger.warning("No provider found for image captioning in quote.")
+
+            if caption_text:
+                content_parts.append(
+                    f"[Image Caption in quoted message]: {caption_text}"
+                )
         except BaseException as exc:
             logger.error("处理引用图片失败: %s", exc)
 
@@ -607,35 +524,101 @@ def _append_system_reminders(
         req.extra_user_content_parts.append(TextPart(text=system_content))
 
 
+def _inject_pipeline_context(event: AstrMessageEvent, req: ProviderRequest) -> None:
+    """Inject upstream node output into LLM request.
+
+    When Agent nodes are chained (e.g., [Agent A] -> [Agent B]), this ensures
+    Agent B receives Agent A's output as additional context.
+    """
+    ctx = event.node_context
+    if ctx is None or ctx.input is None:
+        return
+
+    input_data = ctx.input.data
+
+    if isinstance(input_data, MessageChain):
+        # It's message content - extract text content
+        from astrbot.core.message.components import Plain
+
+        parts = []
+        for comp in input_data.chain or []:
+            if isinstance(comp, Plain):
+                parts.append(comp.text)
+        if parts:
+            upstream_text = "\n".join(parts)
+        else:
+            return  # No text content to inject
+    elif isinstance(input_data, str):
+        upstream_text = input_data
+    else:
+        # Try to convert to string
+        upstream_text = str(input_data)
+
+    if not upstream_text or not upstream_text.strip():
+        return
+
+    # Inject as pipeline context
+    pipeline_context = (
+        f"<pipeline_context>\n"
+        f"The following is output from a previous node in the processing pipeline:\n"
+        f"{upstream_text}\n"
+        f"</pipeline_context>"
+    )
+    req.extra_user_content_parts.append(TextPart(text=pipeline_context))
+
+
 async def _decorate_llm_request(
     event: AstrMessageEvent,
     req: ProviderRequest,
     plugin_context: Context,
     config: MainAgentBuildConfig,
 ) -> None:
-    cfg = config.provider_settings or plugin_context.get_config(
-        umo=event.unified_msg_origin
-    ).get("provider_settings", {})
+    chain_config_id = event.chain_config.config_id if event.chain_config else None
+    runtime_config = plugin_context.get_config_by_id(chain_config_id)
+    cfg = config.provider_settings or runtime_config.get("provider_settings", {})
+    node_config = event.node_config if isinstance(event.node_config, dict) else {}
+
+    img_caption_cfg = dict(cfg)
+    node_image_caption_prompt = str(
+        node_config.get("image_caption_prompt") or ""
+    ).strip()
+    if node_image_caption_prompt:
+        img_caption_cfg["image_caption_prompt"] = node_image_caption_prompt
+
+    node_img_cap_prov_id = str(
+        node_config.get("image_caption_provider_id") or ""
+    ).strip()
+    default_img_cap_prov_id = str(
+        cfg.get("default_image_caption_provider_id")
+        or runtime_config.get("default_image_caption_provider_id")
+        or ""
+    ).strip()
+    img_cap_prov_id = node_img_cap_prov_id or default_img_cap_prov_id
 
     _apply_prompt_prefix(req, cfg)
 
     if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+        await _ensure_persona_and_skills(
+            req,
+            cfg,
+            plugin_context,
+            event,
+            subagent_orchestrator_cfg=config.subagent_orchestrator,
+        )
 
-        img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls:
             await _ensure_img_caption(
                 req,
-                cfg,
+                img_caption_cfg,
                 plugin_context,
                 img_cap_prov_id,
             )
 
-    img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
     quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
         req,
+        img_caption_cfg,
         img_cap_prov_id,
         plugin_context,
         quoted_message_settings,
@@ -643,7 +626,7 @@ async def _decorate_llm_request(
 
     tz = config.timezone
     if tz is None:
-        tz = plugin_context.get_config().get("timezone")
+        tz = runtime_config.get("timezone")
     _append_system_reminders(event, req, cfg, tz)
 
 
@@ -1054,12 +1037,6 @@ async def build_main_agent(
         req.contexts = json.loads(req.contexts)
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
 
-    if config.file_extract_enabled:
-        try:
-            await _apply_file_extract(event, req, config)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while applying file extract: %s", exc)
-
     if not req.prompt and not req.image_urls:
         if not event.get_group_id() and req.extra_user_content_parts:
             req.prompt = "<attachment>"
@@ -1068,7 +1045,9 @@ async def build_main_agent(
 
     await _decorate_llm_request(event, req, plugin_context, config)
 
-    await _apply_kb(event, req, plugin_context, config)
+    _inject_pipeline_context(event, req)
+
+    _apply_kb(event, req, config)
 
     if not req.session_id:
         req.session_id = event.unified_msg_origin

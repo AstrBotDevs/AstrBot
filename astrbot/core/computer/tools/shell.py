@@ -70,6 +70,9 @@ class ExecuteShellTool(FunctionTool):
             sb = await get_booter(
                 context.context.context,
                 context.context.event.unified_msg_origin,
+                context.context.event.chain_config.config_id
+                if context.context.event.chain_config
+                else None,
             )
         try:
             result = await sb.shell.exec(command, background=background, env=env)

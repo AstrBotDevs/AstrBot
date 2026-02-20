@@ -183,7 +183,7 @@
       </v-card-text>
 
       <!-- Add new key-value pair section -->
-      <v-card-text class="pa-4">
+      <v-card-text v-if="allowCustomKeys" class="pa-4">
         <div class="d-flex align-center ga-2">
           <v-text-field
             v-model="newKey"
@@ -264,6 +264,10 @@ const templateSchema = computed(() => {
   return props.itemMeta?.template_schema || {}
 })
 
+const allowCustomKeys = computed(() => {
+  return !props.itemMeta?.lock_template_keys
+})
+
 const hasTemplateSchema = computed(() => {
   return Object.keys(templateSchema.value).length > 0
 })
@@ -275,6 +279,9 @@ const displayKeys = computed(() => {
 
 // 分离模板字段和普通字段
 const nonTemplatePairs = computed(() => {
+  if (!allowCustomKeys.value) {
+    return []
+  }
   return localKeyValuePairs.value.filter(pair => !templateSchema.value[pair.key])
 })
 
@@ -286,9 +293,28 @@ watch(() => props.modelValue, (newValue) => {
 
 function initializeLocalKeyValuePairs() {
   localKeyValuePairs.value = []
+  if (hasTemplateSchema.value && !allowCustomKeys.value) {
+    for (const [key, template] of Object.entries(templateSchema.value)) {
+      const rawValue = props.modelValue[key]
+      let _type = template.type || (typeof rawValue === 'object' ? 'json' : typeof rawValue)
+      let _value = _type === 'json' ? JSON.stringify(rawValue) : rawValue
+      if (_value === undefined || _value === null) {
+        _value = template.default !== undefined ? template.default : getDefaultValueForType(_type)
+      }
+      localKeyValuePairs.value.push({
+        key,
+        value: _value,
+        type: _type,
+        slider: template?.slider,
+        template
+      })
+    }
+    return
+  }
+
   for (const [key, value] of Object.entries(props.modelValue)) {
-    let _type = (typeof value) === 'object' ? 'json':(typeof value)
-    let _value = _type === 'json'?JSON.stringify(value):value
+    let _type = (typeof value) === 'object' ? 'json' : (typeof value)
+    let _value = _type === 'json' ? JSON.stringify(value) : value
     
     // Check if this key has a template schema
     const template = templateSchema.value[key]
@@ -320,6 +346,9 @@ function openDialog() {
 }
 
 function addKeyValuePair() {
+  if (!allowCustomKeys.value) {
+    return
+  }
   const key = newKey.value.trim()
   if (key !== '') {
     const isKeyExists = localKeyValuePairs.value.some(pair => pair.key === key)
@@ -370,6 +399,9 @@ function removeKeyValuePairByKey(key) {
 }
 
 function updateKey(index, newKey) {
+  if (!allowCustomKeys.value) {
+    return
+  }
   const originalKey = localKeyValuePairs.value[index].key
   // 如果键名没有改变，则不执行任何操作
   if (originalKey === newKey) return

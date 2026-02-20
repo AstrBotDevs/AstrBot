@@ -1,0 +1,4 @@
+name: file_extract
+desc: Builtin file extraction node for pipeline chains
+author: AstrBot
+version: 1.0.0

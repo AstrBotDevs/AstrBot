@@ -2,10 +2,12 @@ import datetime
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.pipeline.agent.runner_config import resolve_agent_runner_config
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
 
+from ._node_binding import list_nodes_with_config
 from .utils.rst_scene import RstScene
 
 THIRD_PARTY_AGENT_RUNNER_KEY = {
@@ -19,6 +21,17 @@ THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
 class ConversationCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
+
+    def _resolve_agent_runner_type(self, message: AstrMessageEvent) -> str:
+        agent_node_config: dict = {}
+        targets = list_nodes_with_config(self.context, message, "agent")
+        if targets:
+            target = targets[0]
+            if isinstance(target.config, dict):
+                agent_node_config = dict(target.config)
+
+        runner_type, _ = resolve_agent_runner_config(agent_node_config)
+        return runner_type
 
     async def _get_current_persona_id(self, session_id):
         curr = await self.context.conversation_manager.get_curr_conversation_id(
@@ -37,7 +50,10 @@ class ConversationCommands:
     async def reset(self, message: AstrMessageEvent) -> None:
         """重置 LLM 会话"""
         umo = message.unified_msg_origin
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        chain_config_id = (
+            message.chain_config.config_id if message.chain_config else None
+        )
+        cfg = self.context.get_config_by_id(chain_config_id)
         is_unique_session = cfg["platform_settings"]["unique_session"]
         is_group = bool(message.get_group_id())
 
@@ -61,7 +77,7 @@ class ConversationCommands:
             )
             return
 
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(umo, exclude=message)
             await sp.remove_async(
@@ -72,7 +88,7 @@ class ConversationCommands:
             message.set_result(MessageEventResult().message("重置对话成功。"))
             return
 
-        if not self.context.get_using_provider(umo):
+        if not self.context.get_chat_provider_for_event(message):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )
@@ -104,7 +120,7 @@ class ConversationCommands:
 
     async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
-        if not self.context.get_using_provider(message.unified_msg_origin):
+        if not self.context.get_chat_provider_for_event(message):
             message.set_result(
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )
@@ -147,8 +163,11 @@ class ConversationCommands:
 
     async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        chain_config_id = (
+            message.chain_config.config_id if message.chain_config else None
+        )
+        cfg = self.context.get_config_by_id(chain_config_id)
+        agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             message.set_result(
                 MessageEventResult().message(
@@ -185,8 +204,11 @@ class ConversationCommands:
         for conv in conversations_paged:
             persona_id = conv.persona_id
             if not persona_id or persona_id == "[%None]":
+                chain_config_id = (
+                    message.chain_config.config_id if message.chain_config else None
+                )
                 persona = await self.context.persona_manager.get_default_persona_v3(
-                    umo=message.unified_msg_origin,
+                    config_id=chain_config_id,
                 )
                 persona_id = persona["name"]
             title = _titles.get(conv.cid, "新对话")
@@ -207,7 +229,6 @@ class ConversationCommands:
         else:
             ret += "\n当前对话: 无"
 
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
         unique_session = cfg["platform_settings"]["unique_session"]
         if unique_session:
             ret += "\n会话隔离粒度: 个人"
@@ -222,8 +243,7 @@ class ConversationCommands:
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
             await sp.remove_async(
@@ -328,7 +348,10 @@ class ConversationCommands:
     async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
         umo = message.unified_msg_origin
-        cfg = self.context.get_config(umo=umo)
+        chain_config_id = (
+            message.chain_config.config_id if message.chain_config else None
+        )
+        cfg = self.context.get_config_by_id(chain_config_id)
         is_unique_session = cfg["platform_settings"]["unique_session"]
         if message.get_group_id() and not is_unique_session and message.role != "admin":
             # 群聊，没开独立会话，发送人不是管理员
@@ -339,7 +362,7 @@ class ConversationCommands:
             )
             return
 
-        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        agent_runner_type = self._resolve_agent_runner_type(message)
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             active_event_registry.stop_all(umo, exclude=message)
             await sp.remove_async(

@@ -212,9 +212,9 @@ class WebChatAdapter(Platform):
         _, _, payload = message.raw_message  # type: ignore
         message_event.set_extra("selected_provider", payload.get("selected_provider"))
         message_event.set_extra("selected_model", payload.get("selected_model"))
-        message_event.set_extra(
-            "enable_streaming", payload.get("enable_streaming", True)
-        )
+        # 只有当 payload 明确提供 enable_streaming 时才设置，否则使用全局配置
+        if "enable_streaming" in payload:
+            message_event.set_extra("enable_streaming", payload.get("enable_streaming"))
         message_event.set_extra("action_type", payload.get("action_type"))
 
         self.commit_event(message_event)

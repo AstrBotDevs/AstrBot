@@ -102,9 +102,9 @@ const sidebarItem: menu[] = [
         to: '/conversation'
       },
       {
-        title: 'core.navigation.sessionManagement',
-        icon: 'mdi-pencil-ruler',
-        to: '/session-management'
+        title: 'core.navigation.chainManagement',
+        icon: 'mdi-shuffle-variant',
+        to: '/chain-management'
       },
       {
         title: 'core.navigation.cron',

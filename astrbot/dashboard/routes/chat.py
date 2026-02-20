@@ -59,7 +59,6 @@ class ChatRoute(Route):
         self.conv_mgr = core_lifecycle.conversation_manager
         self.platform_history_mgr = core_lifecycle.platform_message_history_manager
         self.db = db
-        self.umop_config_router = core_lifecycle.umop_config_router
 
         self.running_convs: dict[str, bool] = {}
 
@@ -618,16 +617,6 @@ class ChatRoute(Route):
             user_id=session_id,
             offset_sec=99999999,
         )
-
-        # 删除与会话关联的配置路由
-        try:
-            await self.umop_config_router.delete_route(unified_msg_origin)
-        except ValueError as exc:
-            logger.warning(
-                "Failed to delete UMO route %s during session cleanup: %s",
-                unified_msg_origin,
-                exc,
-            )
 
         # 清理队列（仅对 webchat）
         if session.platform_id == "webchat":
