@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -26,7 +27,7 @@ os.environ.setdefault("ASTRBOT_TEST_MODE", "true")
 # ============================================================
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def integration_context(tmp_path: Path):
     """创建用于集成测试的完整 Context。"""
     from asyncio import Queue
@@ -173,7 +174,7 @@ def mock_pipeline_context():
 # ============================================================
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def populated_test_db(tmp_path: Path):
     """创建包含测试数据的数据库。"""
     from astrbot.core.db.sqlite import SQLiteDatabase

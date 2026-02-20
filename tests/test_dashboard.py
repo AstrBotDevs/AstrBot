@@ -101,7 +101,11 @@ async def test_plugins(
     test_client = app.test_client()
     plugin_name = "helloworld"
 
-    async def mock_install_plugin(repo_url: str, proxy: str | None = None):
+    async def mock_install_plugin(
+        repo_url: str,
+        proxy: str | None = None,
+        ignore_version_check: bool = False,  # noqa: ARG001
+    ):
         return {"name": plugin_name, "repo": repo_url, "proxy": proxy}
 
     async def mock_update_plugin(name: str, proxy: str | None = None):

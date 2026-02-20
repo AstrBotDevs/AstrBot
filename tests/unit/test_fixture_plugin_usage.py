@@ -42,6 +42,14 @@ def test_fixture_plugin_can_be_imported_in_isolated_process():
         check=False,
     )
 
-    assert result.returncode == 0, (
-        f"Fixture plugin import failed.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-    )
+    if result.returncode != 0:
+        stderr_text = (result.stderr or "").strip()
+        if stderr_text:
+            raise AssertionError(
+                "Fixture plugin import failed with stderr output.\n"
+                f"stderr:\n{stderr_text}\n\nstdout:\n{result.stdout}"
+            )
+        raise AssertionError(
+            "Fixture plugin import failed with non-zero return code "
+            f"{result.returncode}, but stderr is empty.\nstdout:\n{result.stdout}"
+        )

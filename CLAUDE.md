@@ -100,8 +100,8 @@ Use `pathlib.Path` and utilities from `astrbot.core.utils.astrbot_path`:
 mkdir -p data/plugins data/config data/temp
 export TESTING=true
 
-# Run tests
-pytest --cov=. -v
+# Run tests with coverage (aligned with make test-cov)
+uv run pytest tests/ --cov=astrbot --cov-report=term-missing --cov-report=html -v
 ```
 
 ## Branch Naming Conventions

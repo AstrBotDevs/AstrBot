@@ -13,6 +13,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 # 将项目根目录添加到 sys.path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -228,7 +229,7 @@ def main_agent_build_config():
 # ============================================================
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def temp_db(temp_db_file: Path):
     """创建临时数据库实例。"""
     from astrbot.core.db.sqlite import SQLiteDatabase
@@ -247,8 +248,8 @@ async def temp_db(temp_db_file: Path):
 # ============================================================
 
 
-@pytest.fixture
-def mock_context(
+@pytest_asyncio.fixture
+async def mock_context(
     astrbot_config,
     temp_db,
     mock_provider,

@@ -4,7 +4,7 @@ AstrBot 测试包
 测试目录结构:
 - tests/
   ├── conftest.py         # 共享 fixtures 和配置
-  ├── pytest.ini          # pytest 配置
+  ├── pyproject.toml      # pytest 配置（tool.pytest.ini_options）
   ├── TEST_REQUIREMENTS.md # 测试需求清单
   ├── unit/               # 单元测试
   ├── integration/        # 集成测试

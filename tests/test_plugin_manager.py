@@ -1,9 +1,9 @@
-import sys
 from asyncio import Queue
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db.sqlite import SQLiteDatabase
@@ -46,8 +46,8 @@ def _write_local_test_plugin(plugin_dir: Path, repo_url: str) -> None:
     )
 
 
-@pytest.fixture
-def plugin_manager_pm(tmp_path, monkeypatch):
+@pytest_asyncio.fixture
+async def plugin_manager_pm(tmp_path, monkeypatch):
     """Provides a fully isolated PluginManager instance for testing."""
     test_root = tmp_path / "astrbot_root"
     data_dir = test_root / "data"
@@ -97,7 +97,10 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     )
 
     manager = PluginManager(star_context, config)
-    return manager
+    try:
+        yield manager
+    finally:
+        await db.engine.dispose()
 
 
 @pytest.fixture
@@ -122,7 +125,8 @@ def local_updator(plugin_manager_pm: PluginManager, monkeypatch):
     return plugin_path
 
 
-def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
+@pytest.mark.asyncio
+async def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
     assert plugin_manager_pm is not None
     assert plugin_manager_pm.context is not None
     assert plugin_manager_pm.config is not None
