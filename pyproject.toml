@@ -62,6 +62,7 @@ dependencies = [
   "tenacity>=9.1.2",
   "shipyard-python-sdk>=0.2.4",
   "python-socks>=2.8.0",
+  "packaging>=24.2",
 ]
 
 [dependency-groups]

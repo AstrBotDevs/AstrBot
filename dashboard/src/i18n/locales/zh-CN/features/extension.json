@@ -143,13 +143,20 @@
     "install": {
       "title": "安装插件",
       "fromFile": "从文件安装",
-      "fromUrl": "从链接安装"
+      "fromUrl": "从链接安装",
+      "supportPlatformsCount": "支持 {count} 个平台"
     },
     "danger_warning": {
       "title": "警告",
       "message": "该插件可能包含不安全的代码或功能，可能导致系统异常或数据损失等。请确认是否继续安装？",
       "confirm": "继续",
       "cancel": "取消"
+    },
+    "versionCompatibility": {
+      "title": "版本兼容性警告",
+      "message": "该插件声明的 AstrBot 版本范围与当前版本不匹配。你可以无视警告继续安装，但可能无法正常运行。",
+      "confirm": "无视警告，继续安装",
+      "cancel": "取消安装"
     },
     "forceUpdate": {
       "title": "未检测到新版本",
@@ -230,7 +237,10 @@
     "status": {
       "hasUpdate": "有新版本可用",
       "disabled": "该插件已经被禁用",
-      "handlersCount": "个行为"
+      "handlersCount": "个行为",
+      "supportPlatform": "支持平台",
+      "supportPlatformsCount": "支持 {count} 个平台",
+      "astrbotVersion": "AstrBot 版本要求"
     },
     "alt": {
       "logo": "logo",

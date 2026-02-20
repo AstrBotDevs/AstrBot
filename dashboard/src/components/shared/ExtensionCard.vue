@@ -2,6 +2,7 @@
 import { ref, computed, inject } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
+import { getPlatformDisplayName } from "@/utils/platformUtils";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
 
 const props = defineProps({
@@ -37,6 +38,25 @@ const showUninstallDialog = ref(false);
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
+
+const supportPlatforms = computed(() => {
+  const platforms = props.extension?.support_platforms;
+  if (!Array.isArray(platforms)) {
+    return [];
+  }
+  return platforms.filter((item) => typeof item === "string");
+});
+
+const supportPlatformDisplayNames = computed(() =>
+  supportPlatforms.value.map((platformId) => getPlatformDisplayName(platformId)),
+);
+
+const astrbotVersionRequirement = computed(() => {
+  const versionSpec = props.extension?.astrbot_version;
+  return typeof versionSpec === "string" && versionSpec.trim().length
+    ? versionSpec.trim()
+    : "";
+});
 
 // 操作函数
 const configure = () => {
@@ -315,6 +335,37 @@ const viewChangelog = () => {
               class="ml-2"
             >
               {{ tag === "danger" ? tm("tags.danger") : tag }}
+            </v-chip>
+            <v-chip
+              v-if="supportPlatforms.length"
+              color="info"
+              variant="outlined"
+              label
+              size="small"
+              class="ml-2"
+            >
+              <v-tooltip location="top">
+                <template v-slot:activator="{ props: tooltipProps }">
+                  <span v-bind="tooltipProps">
+                    {{
+                      tm("card.status.supportPlatformsCount", {
+                        count: supportPlatformDisplayNames.length,
+                      })
+                    }}
+                  </span>
+                </template>
+                <span>{{ supportPlatformDisplayNames.join(", ") }}</span>
+              </v-tooltip>
+            </v-chip>
+            <v-chip
+              v-if="astrbotVersionRequirement"
+              color="secondary"
+              variant="outlined"
+              label
+              size="small"
+              class="ml-2"
+            >
+              AstrBot: {{ astrbotVersionRequirement }}
             </v-chip>
           </div>
 

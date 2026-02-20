@@ -143,13 +143,20 @@
     "install": {
       "title": "Install Extension",
       "fromFile": "Install from File",
-      "fromUrl": "Install from URL"
+      "fromUrl": "Install from URL",
+      "supportPlatformsCount": "Supports {count} Platforms"
     },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",
       "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. Do you wish to proceed with the installation?",
       "confirm": "Continue",
       "cancel": "Cancel"
+    },
+    "versionCompatibility": {
+      "title": "Version Compatibility Warning",
+      "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
+      "confirm": "Ignore Warning and Install",
+      "cancel": "Cancel Installation"
     },
     "forceUpdate": {
       "title": "No New Version Detected",
@@ -230,7 +237,10 @@
     "status": {
       "hasUpdate": "New version available",
       "disabled": "This extension is disabled",
-      "handlersCount": " handlers"
+      "handlersCount": " handlers",
+      "supportPlatform": "Supported Platform",
+      "supportPlatformsCount": "Supports {count} Platforms",
+      "astrbotVersion": "AstrBot Version Requirement"
     },
     "alt": {
       "logo": "logo",
