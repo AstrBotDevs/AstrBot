@@ -3,8 +3,8 @@ export {};
 declare global {
   interface Window {
     astrbotDesktop?: {
-      isElectron: boolean;
-      isElectronRuntime: () => Promise<boolean>;
+      isDesktop: boolean;
+      isDesktopRuntime: () => Promise<boolean>;
       getBackendState: () => Promise<{
         running: boolean;
         spawning: boolean;
