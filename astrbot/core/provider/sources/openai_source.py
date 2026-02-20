@@ -381,13 +381,22 @@ class ProviderOpenAIOfficial(Provider):
         plain string. This method handles both formats.
 
         Args:
-            raw_content: The raw content from LLM response, can be str, list, or other.
+            raw_content: The raw content from LLM response, can be str, list, dict, or other.
             strip: Whether to strip whitespace from the result. Set to False for
                    streaming chunks to preserve spaces between words.
 
         Returns:
             Normalized plain text string.
         """
+        # Handle dict format (e.g., {"type": "text", "text": "..."})
+        if isinstance(raw_content, dict):
+            if "text" in raw_content:
+                text_val = raw_content.get("text", "")
+                return str(text_val) if text_val is not None else ""
+            # For other dict formats, return empty string and log
+            logger.warning(f"Unexpected dict format content: {raw_content}")
+            return ""
+
         if isinstance(raw_content, list):
             # Check if this looks like OpenAI content-part format
             # Only process if at least one item has {'type': 'text', 'text': ...} structure
@@ -450,7 +459,8 @@ class ProviderOpenAIOfficial(Provider):
                             return "".join(text_parts)
             return content
 
-        return str(raw_content)
+        # Fallback for other types (int, float, etc.)
+        return str(raw_content) if raw_content is not None else ""
 
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
