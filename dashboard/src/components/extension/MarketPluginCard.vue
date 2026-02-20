@@ -1,5 +1,6 @@
 <script setup>
 import { useModuleI18n } from "@/i18n/composables";
+import { getPlatformDisplayName } from "@/utils/platformUtils";
 
 const { tm } = useModuleI18n("features/extension");
 
@@ -20,6 +21,17 @@ defineProps({
 
 const emit = defineEmits(["install"]);
 
+const normalizePlatformList = (platforms) => {
+  if (!Array.isArray(platforms)) return [];
+  return platforms.filter((item) => typeof item === "string");
+};
+
+const getPlatformDisplayList = (platforms) => {
+  return normalizePlatformList(platforms).map((platformId) =>
+    getPlatformDisplayName(platformId),
+  );
+};
+
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
@@ -29,7 +41,7 @@ const handleInstall = (plugin) => {
   <v-card
     class="rounded-lg d-flex flex-column plugin-card"
     elevation="0"
-    style="height: 12rem; position: relative"
+    style="height: 13rem; position: relative"
   >
     <v-chip
       v-if="plugin?.pinned"
@@ -150,6 +162,42 @@ const handleInstall = (plugin) => {
 
         <div class="text-caption plugin-description">
           {{ plugin.desc }}
+        </div>
+
+        <div
+          v-if="plugin.astrbot_version || normalizePlatformList(plugin.support_platforms).length"
+          class="d-flex align-center flex-wrap"
+          style="gap: 4px; margin-top: 4px; margin-bottom: 4px;"
+        >
+          <v-chip
+            v-if="plugin.astrbot_version"
+            size="x-small"
+            color="secondary"
+            variant="outlined"
+            style="height: 20px"
+          >
+            AstrBot: {{ plugin.astrbot_version }}
+          </v-chip>
+          <v-chip
+            v-if="normalizePlatformList(plugin.support_platforms).length"
+            size="x-small"
+            color="info"
+            variant="outlined"
+            style="height: 20px"
+          >
+            <v-tooltip location="top">
+              <template v-slot:activator="{ props: tooltipProps }">
+                <span v-bind="tooltipProps">
+                  {{
+                    tm("card.status.supportPlatformsCount", {
+                      count: getPlatformDisplayList(plugin.support_platforms).length,
+                    })
+                  }}
+                </span>
+              </template>
+              <span>{{ getPlatformDisplayList(plugin.support_platforms).join(", ") }}</span>
+            </v-tooltip>
+          </v-chip>
         </div>
 
         <div class="d-flex align-center" style="gap: 8px; margin-top: auto">

@@ -112,5 +112,18 @@
     "addToConfig": "已加入配置",
     "fileCount": "文件：{count}",
     "done": "完成"
+    },
+  "unsavedChangesWarning": {
+    "dialogTitle": "未保存的更改",
+    "leavePage": "当前配置有未保存的更改，切换前是否保存？",
+    "switchConfig": "切换配置文件会丢失当前未保存的更改，是否先保存？",
+    "options": {
+      "save": "保存",
+      "saveAndSwitch": "保存并切换",
+      "discardAndSwitch": "放弃更改并切换",
+      "closeCard": "关闭弹窗",
+      "confirm": "确定",
+      "cancel": "取消"
+    }
   }
 }

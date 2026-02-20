@@ -34,6 +34,7 @@ export function getProviderIcon(type) {
     'vllm': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/vllm.svg',
     'groq': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/groq.svg',
     'aihubmix': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/aihubmix-color.svg',
+    'openrouter': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openrouter.svg',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
     "compshare": "https://compshare.cn/favicon.ico"
   };

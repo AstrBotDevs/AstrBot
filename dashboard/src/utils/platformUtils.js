@@ -80,3 +80,29 @@ export function getPlatformDescription(template, name) {
   }
   return '';
 }
+
+/**
+ * 获取平台展示名（用于插件支持平台显示）
+ * @param {string} platformId - 平台适配器 ID
+ * @returns {string}
+ */
+export function getPlatformDisplayName(platformId) {
+  const displayNameMap = {
+    aiocqhttp: 'aiocqhttp (OneBot v11)',
+    qq_official: 'qq_official (QQ 官方机器人平台)',
+    weixin_official_account: 'weixin_official_account (微信公众号)',
+    wecom: 'wecom (企业微信应用)',
+    wecom_ai_bot: 'wecom_ai_bot (企业微信智能机器人)',
+    lark: 'lark (飞书)',
+    dingtalk: 'dingtalk (钉钉)',
+    telegram: 'telegram (Telegram)',
+    discord: 'discord (Discord)',
+    misskey: 'misskey (Misskey)',
+    slack: 'slack (Slack)',
+    kook: 'kook (KOOK)',
+    vocechat: 'vocechat (VoceChat)',
+    satori: 'satori (Satori)',
+    line: 'line (LINE)',
+  };
+  return displayNameMap[platformId] || platformId;
+}

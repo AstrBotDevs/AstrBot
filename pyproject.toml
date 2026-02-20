@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.17.5"
+version = "4.17.6"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -62,6 +62,7 @@ dependencies = [
   "tenacity>=9.1.2",
   "shipyard-python-sdk>=0.2.4",
   "python-socks>=2.8.0",
+  "packaging>=24.2",
 ]
 
 [dependency-groups]
