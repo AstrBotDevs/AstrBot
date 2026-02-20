@@ -1,9 +1,6 @@
 name: I18n Usage Check
 
 on:
-  push:
-    paths:
-      - '**.py'
   pull_request:
     paths:
       - '**.py'
