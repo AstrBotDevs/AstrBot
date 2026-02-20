@@ -16,6 +16,7 @@ from astrbot.core.message.message_event_result import (
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
+from astrbot.core import t
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -33,9 +34,7 @@ async def run_agent(
         step_idx += 1
 
         if step_idx == max_step + 1:
-            logger.warning(
-                f"Agent reached max steps ({max_step}), forcing a final response."
-            )
+            logger.warning(t("agent-max-steps-reached", max_step=max_step))
             if not agent_runner.done():
                 # 拔掉所有工具
                 if agent_runner.req:
@@ -90,9 +89,9 @@ async def run_agent(
                         await astr_event.send(resp.data["chain"])
                     elif show_tool_use:
                         if tool_info:
-                            m = f"🔨 调用工具: {tool_info.get('name', 'unknown')}"
+                            m = t("agent-tool-call",tool_name = tool_info.get('name', 'unknown'))
                         else:
-                            m = "🔨 调用工具..."
+                            m = t("agent-tool-call-unknown")
                         chain = MessageChain(type="tool_call").message(m)
                         await astr_event.send(chain)
                     continue
@@ -135,7 +134,9 @@ async def run_agent(
         except Exception as e:
             logger.error(traceback.format_exc())
 
-            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+            err_msg = t("agent-request-failed",
+                        error_type=type(e).__name__,
+                        error_message=str(e))
 
             error_llm_response = LLMResponse(
                 role="err",
@@ -146,7 +147,7 @@ async def run_agent(
                     agent_runner.run_context, error_llm_response
                 )
             except Exception:
-                logger.exception("Error in on_agent_done hook")
+                logger.exception(t("agent-error-in-hook"))
 
             if agent_runner.streaming:
                 yield MessageChain().message(err_msg)
@@ -188,12 +189,9 @@ async def run_live_agent(
 
     support_stream = tts_provider.support_stream()
     if support_stream:
-        logger.info("[Live Agent] 使用流式 TTS（原生支持 get_audio_stream）")
+        logger.info(t("live-agent-stream-tts"))
     else:
-        logger.info(
-            f"[Live Agent] 使用 TTS（{tts_provider.meta().type} "
-            "使用 get_audio，将按句子分块生成音频）"
-        )
+        logger.info(t("live-agent-tts-info", provider_type=tts_provider.meta().type))
 
     # 统计数据初始化
     tts_start_time = time.time()
@@ -252,7 +250,7 @@ async def run_live_agent(
             yield chain
 
     except Exception as e:
-        logger.error(f"[Live Agent] 运行时发生错误: {e}", exc_info=True)
+        logger.error(t("live-agent-runtime-error", error=str(e)), exc_info=True)
     finally:
         # 清理任务
         if not feeder_task.done():
@@ -286,7 +284,7 @@ async def run_live_agent(
                 )
             )
     except Exception as e:
-        logger.error(f"发送 TTS 统计信息失败: {e}")
+        logger.error(t("tts-stats-send-failed", error=str(e)))
 
 
 async def _run_agent_feeder(
@@ -330,7 +328,7 @@ async def _run_agent_feeder(
 
                         if len(temp_buffer) >= 10:
                             if temp_buffer.strip():
-                                logger.info(f"[Live Agent Feeder] 分句: {temp_buffer}")
+                                logger.info(t("live-agent-feeder-sentence", sentence=temp_buffer))
                                 await text_queue.put(temp_buffer)
                             temp_buffer = ""
 
@@ -342,7 +340,7 @@ async def _run_agent_feeder(
             await text_queue.put(buffer)
 
     except Exception as e:
-        logger.error(f"[Live Agent Feeder] Error: {e}", exc_info=True)
+        logger.error(t("live-agent-feeder-error", error=str(e)), exc_info=True)
     finally:
         # 发送结束信号
         await text_queue.put(None)
@@ -357,7 +355,7 @@ async def _safe_tts_stream_wrapper(
     try:
         await tts_provider.get_audio_stream(text_queue, audio_queue)
     except Exception as e:
-        logger.error(f"[Live TTS Stream] Error: {e}", exc_info=True)
+        logger.error(t("live-tts-stream-error", error=str(e)), exc_info=True)
     finally:
         await audio_queue.put(None)
 
@@ -382,12 +380,12 @@ async def _simulated_stream_tts(
                         audio_data = f.read()
                     await audio_queue.put((text, audio_data))
             except Exception as e:
-                logger.error(
-                    f"[Live TTS Simulated] Error processing text '{text[:20]}...': {e}"
-                )
+                logger.error(t("live-tts-simulated-error",
+                               text_preview=text[:20],
+                               error=str(e)))
                 # 继续处理下一句
 
     except Exception as e:
-        logger.error(f"[Live TTS Simulated] Critical Error: {e}", exc_info=True)
+        logger.error(t("live-tts-simulated-critical", error=str(e)), exc_info=True)
     finally:
         await audio_queue.put(None)
