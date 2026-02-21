@@ -140,6 +140,7 @@
     "revoke": "Revoke",
     "delete": "Delete",
     "copy": "Copy",
+    "docsLink": "Open docs",
     "plaintextHint": "Save this key now. The plaintext will not be shown again.",
     "empty": "No API keys",
     "status": {

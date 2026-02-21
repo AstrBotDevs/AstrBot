@@ -65,7 +65,30 @@
 
             <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
 
-            <v-list-item :subtitle="tm('apiKey.subtitle')" :title="tm('apiKey.manageTitle')">
+            <v-list-item :subtitle="tm('apiKey.subtitle')">
+                <template #title>
+                    <div class="d-flex align-center">
+                        <span>{{ tm('apiKey.manageTitle') }}</span>
+                        <v-tooltip location="top">
+                            <template #activator="{ props }">
+                                <v-btn
+                                    v-bind="props"
+                                    icon
+                                    size="x-small"
+                                    variant="text"
+                                    class="ml-2"
+                                    :aria-label="tm('apiKey.docsLink')"
+                                    href="https://docs.astrbot.app/dev/openapi.html"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <v-icon size="18">mdi-help-circle-outline</v-icon>
+                                </v-btn>
+                            </template>
+                            <span>{{ tm('apiKey.docsLink') }}</span>
+                        </v-tooltip>
+                    </div>
+                </template>
                 <v-row class="mt-2" dense>
                     <v-col cols="12" md="4">
                         <v-text-field

@@ -140,6 +140,7 @@
     "revoke": "吊销",
     "delete": "删除",
     "copy": "复制",
+    "docsLink": "查看文档",
     "plaintextHint": "请立即保存该 Key，关闭后将无法再次查看明文。",
     "empty": "暂无 API Key",
     "status": {
