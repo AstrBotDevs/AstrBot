@@ -90,37 +90,138 @@ const previewImageUrl = ref('');
 const currSessionId = ref('');
 const getCurrentSession = computed(() => null); // 独立测试模式不需要会话信息
 
-function buildWebchatUmo(sessionId: string): string {
+function buildWebchatUmo(sessionId: string): {
+    umo: string;
+    username: string | null;
+    sessionKey: string;
+    exactUmo: string | null;
+    wildcardUmo: string;
+} {
     const platformId = 'webchat';
     const messageType = 'FriendMessage';
-    const username = localStorage.getItem('user') || 'guest';
-    const sessionKey = `${platformId}!${username}!${sessionId}`;
-    return `${platformId}:${messageType}:${sessionKey}`;
+    const username = (localStorage.getItem('user') || '').trim();
+    const exactSessionKey = username ? `${platformId}!${username}!${sessionId}` : null;
+    const wildcardSessionKey = `${platformId}!*!${sessionId}`;
+    const selectedSessionKey = exactSessionKey || wildcardSessionKey;
+
+    const selectedUmo = `${platformId}:${messageType}:${selectedSessionKey}`;
+    return {
+        umo: selectedUmo,
+        username: username || null,
+        sessionKey: selectedSessionKey,
+        exactUmo: exactSessionKey ? `${platformId}:${messageType}:${exactSessionKey}` : null,
+        wildcardUmo: `${platformId}:${messageType}:${wildcardSessionKey}`
+    };
 }
 
 async function bindConfigToSession(sessionId: string) {
     const confId = (props.configId || '').trim();
     if (!confId || confId === 'default') {
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] Skip binding config to session', {
+            sessionId,
+            confId,
+            reason: !confId ? 'empty_configId' : 'default_configId'
+        });
         return;
     }
 
-    await axios.post('/api/config/umo_abconf_route/update', {
-        umo: buildWebchatUmo(sessionId),
-        conf_id: confId
+    const umoDetails = buildWebchatUmo(sessionId);
+
+    // TODO: Remove debug log
+    console.info('[StandaloneChat] Binding config to session', {
+        sessionId,
+        confId,
+        localStorageUser: localStorage.getItem('user'),
+        selectedUmo: umoDetails.umo,
+        exactUmo: umoDetails.exactUmo,
+        wildcardUmo: umoDetails.wildcardUmo
     });
+
+    const updatePayload = {
+        conf_id: confId
+    };
+
+    const targetUmos = [umoDetails.exactUmo, umoDetails.wildcardUmo].filter(Boolean) as string[];
+    for (const umo of targetUmos) {
+        const payload = { ...updatePayload, umo };
+
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] POST /api/config/umo_abconf_route/update', payload);
+
+        const updateRes = await axios.post('/api/config/umo_abconf_route/update', payload);
+
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] Route update response', {
+            umo,
+            status: updateRes.status,
+            data: updateRes.data
+        });
+    }
+
+    try {
+        const routesRes = await axios.get('/api/config/umo_abconf_routes');
+        const routing = routesRes.data?.data?.routing || {};
+        const boundConfId = routing[umoDetails.umo];
+        const related = Object.entries(routing)
+            .filter(([umo]) => typeof umo === 'string' && umo.includes(sessionId))
+            .map(([umo, id]) => ({ umo, confId: id }));
+
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] Routing table after update', {
+            totalEntries: Object.keys(routing).length,
+            selectedUmo: umoDetails.umo,
+            boundConfId,
+            relatedEntries: related
+        });
+    } catch (err) {
+        const axiosErr = err as any;
+        // TODO: Remove debug log
+        console.warn('[StandaloneChat] Failed to fetch routing table after update', {
+            message: axiosErr?.message,
+            status: axiosErr?.response?.status,
+            data: axiosErr?.response?.data
+        });
+    }
 }
 
 async function newSession() {
     try {
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] Creating new session', { configId: props.configId });
+
         const response = await axios.get('/api/chat/new_session');
         const sessionId = response.data.data.session_id;
 
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] New session created', {
+            sessionId,
+            platformId: response.data.data.platform_id
+        });
+
         // Bind the config before activating the session in the UI.
-        await bindConfigToSession(sessionId);
+        try {
+            await bindConfigToSession(sessionId);
+        } catch (err) {
+            const axiosErr = err as any;
+            // TODO: Remove debug log
+            console.error('[StandaloneChat] Failed to bind config to session', {
+                sessionId,
+                configId: props.configId,
+                message: axiosErr?.message,
+                status: axiosErr?.response?.status,
+                data: axiosErr?.response?.data
+            });
+        }
 
         currSessionId.value = sessionId;
+
+        // TODO: Remove debug log
+        console.info('[StandaloneChat] Session activated in UI', { sessionId });
+
         return sessionId;
     } catch (err) {
+        // TODO: Remove debug log
         console.error(err);
         throw err;
     }
