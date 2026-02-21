@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 import socket
@@ -21,6 +22,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
+from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
@@ -53,6 +55,7 @@ class AstrBotDashboard:
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
+        self.db = db
 
         # 参数指定webui目录
         if webui_dir and os.path.exists(webui_dir):
@@ -88,7 +91,14 @@ class AstrBotDashboard:
         self.lr = LogRoute(self.context, core_lifecycle.log_broker)
         self.sfr = StaticFileRoute(self.context)
         self.ar = AuthRoute(self.context)
+        self.api_key_route = ApiKeyRoute(self.context, db)
         self.chat_route = ChatRoute(self.context, db, core_lifecycle)
+        self.open_api_route = OpenApiRoute(
+            self.context,
+            db,
+            core_lifecycle,
+            self.chat_route,
+        )
         self.chatui_project_route = ChatUIProjectRoute(self.context, db)
         self.tools_root = ToolsRoute(self.context, core_lifecycle)
         self.subagent_route = SubAgentRoute(self.context, core_lifecycle)
@@ -130,6 +140,35 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
+        if request.path.startswith("/api/open"):
+            raw_key = self._extract_raw_api_key()
+            if not raw_key:
+                r = jsonify(Response().error("Missing API key").__dict__)
+                r.status_code = 401
+                return r
+            key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+            api_key = await self.db.get_active_api_key_by_hash(key_hash)
+            if not api_key:
+                r = jsonify(Response().error("Invalid API key").__dict__)
+                r.status_code = 401
+                return r
+
+            if isinstance(api_key.scopes, list):
+                scopes = api_key.scopes
+            else:
+                scopes = list(ALL_OPEN_API_SCOPES)
+            required_scope = self._get_required_open_api_scope(request.path)
+            if required_scope and "*" not in scopes and required_scope not in scopes:
+                r = jsonify(Response().error("Insufficient API key scope").__dict__)
+                r.status_code = 403
+                return r
+
+            g.api_key_id = api_key.key_id
+            g.api_key_scopes = scopes
+            g.username = f"api_key:{api_key.key_id}"
+            await self.db.touch_api_key(api_key.key_id)
+            return None
+
         allowed_endpoints = [
             "/api/auth/login",
             "/api/file",
@@ -157,6 +196,29 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    @staticmethod
+    def _extract_raw_api_key() -> str | None:
+        if key := request.headers.get("X-API-Key"):
+            return key.strip()
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            return auth_header.removeprefix("Bearer ").strip()
+        if auth_header.startswith("ApiKey "):
+            return auth_header.removeprefix("ApiKey ").strip()
+        return None
+
+    @staticmethod
+    def _get_required_open_api_scope(path: str) -> str | None:
+        scope_map = {
+            "/api/open/v1/chat/send": "chat",
+            "/api/open/v1/chat/sessions": "chat",
+            "/api/open/v1/configs": "chat",
+            "/api/open/v1/file/upload": "file",
+            "/api/open/v1/message/send": "send_message",
+            "/api/open/v1/bots": "bot",
+        }
+        return scope_map.get(path)
 
     def check_port_in_use(self, port: int) -> bool:
         """跨平台检测端口是否被占用"""

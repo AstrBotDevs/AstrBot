@@ -128,5 +128,44 @@
       "renameFailed": "重命名失败",
       "ftpHint": "对于较大的备份文件，也可以通过 FTP/SFTP 等方式直接上传到 data/backups 目录"
     }
+  },
+  "apiKey": {
+    "title": "API Key",
+    "manageTitle": "开发者访问密钥",
+    "subtitle": "为外部开发者创建 API Key，用于调用开放 HTTP API。",
+    "name": "Key 名称",
+    "expiresInDays": "有效期(天，留空为永久)",
+    "scopes": "权限范围",
+    "create": "创建 API Key",
+    "revoke": "吊销",
+    "delete": "删除",
+    "copy": "复制",
+    "plaintextHint": "请立即保存该 Key，关闭后将无法再次查看明文。",
+    "empty": "暂无 API Key",
+    "status": {
+      "active": "有效",
+      "inactive": "无效"
+    },
+    "table": {
+      "name": "名称",
+      "prefix": "前缀",
+      "scopes": "权限",
+      "status": "状态",
+      "lastUsed": "最近使用",
+      "createdAt": "创建时间",
+      "actions": "操作"
+    },
+    "messages": {
+      "loadFailed": "加载 API Key 失败",
+      "scopeRequired": "请至少选择一个权限",
+      "createSuccess": "API Key 创建成功",
+      "createFailed": "创建 API Key 失败",
+      "revokeSuccess": "API Key 已吊销",
+      "revokeFailed": "吊销 API Key 失败",
+      "deleteSuccess": "API Key 已删除",
+      "deleteFailed": "删除 API Key 失败",
+      "copySuccess": "已复制 API Key",
+      "copyFailed": "复制 API Key 失败"
+    }
   }
 }

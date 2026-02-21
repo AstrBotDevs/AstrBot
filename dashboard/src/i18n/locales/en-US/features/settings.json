@@ -128,5 +128,44 @@
       "renameFailed": "Rename failed",
       "ftpHint": "For large backup files, you can also upload directly to the data/backups directory via FTP/SFTP"
     }
+  },
+  "apiKey": {
+    "title": "API Keys",
+    "manageTitle": "Developer Access Keys",
+    "subtitle": "Create API keys for external developers to call open HTTP APIs.",
+    "name": "Key Name",
+    "expiresInDays": "Expires In Days (empty means never)",
+    "scopes": "Scopes",
+    "create": "Create API Key",
+    "revoke": "Revoke",
+    "delete": "Delete",
+    "copy": "Copy",
+    "plaintextHint": "Save this key now. The plaintext will not be shown again.",
+    "empty": "No API keys",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "table": {
+      "name": "Name",
+      "prefix": "Prefix",
+      "scopes": "Scopes",
+      "status": "Status",
+      "lastUsed": "Last Used",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "messages": {
+      "loadFailed": "Failed to load API keys",
+      "scopeRequired": "Please select at least one scope",
+      "createSuccess": "API key created",
+      "createFailed": "Failed to create API key",
+      "revokeSuccess": "API key revoked",
+      "revokeFailed": "Failed to revoke API key",
+      "deleteSuccess": "API key deleted",
+      "deleteFailed": "Failed to delete API key",
+      "copySuccess": "API key copied",
+      "copyFailed": "Failed to copy API key"
+    }
   }
 }

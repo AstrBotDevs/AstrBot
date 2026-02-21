@@ -8,6 +8,7 @@ from deprecated import deprecated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
@@ -245,6 +246,55 @@ class BaseDatabase(abc.ABC):
         """Delete multiple attachments by their IDs.
 
         Returns the number of attachments deleted.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def create_api_key(
+        self,
+        name: str,
+        key_hash: str,
+        key_prefix: str,
+        scopes: list[str] | None,
+        created_by: str,
+        expires_at: datetime.datetime | None = None,
+    ) -> ApiKey:
+        """Create a new API key record."""
+        ...
+
+    @abc.abstractmethod
+    async def list_api_keys(self) -> list[ApiKey]:
+        """List all API keys."""
+        ...
+
+    @abc.abstractmethod
+    async def get_api_key_by_id(self, key_id: str) -> ApiKey | None:
+        """Get an API key by key_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_active_api_key_by_hash(self, key_hash: str) -> ApiKey | None:
+        """Get an active API key by hash (not revoked, not expired)."""
+        ...
+
+    @abc.abstractmethod
+    async def touch_api_key(self, key_id: str) -> None:
+        """Update last_used_at of an API key."""
+        ...
+
+    @abc.abstractmethod
+    async def revoke_api_key(self, key_id: str) -> bool:
+        """Revoke an API key.
+
+        Returns True when the key exists and is updated.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def delete_api_key(self, key_id: str) -> bool:
+        """Delete an API key.
+
+        Returns True when the key exists and is deleted.
         """
         ...
 

@@ -52,7 +52,7 @@ class ChatRoute(Route):
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-        self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        self.imgs_dir = os.path.join(get_astrbot_data_path(), "attachments")
         os.makedirs(self.imgs_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
@@ -317,10 +317,13 @@ class ChatRoute(Route):
         )
         return record
 
-    async def chat(self):
+    async def chat(self, post_data: dict | None = None):
         username = g.get("username", "guest")
 
-        post_data = await request.json
+        if post_data is None:
+            post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
         if "message" not in post_data and "files" not in post_data:
             return Response().error("Missing key: message or files").__dict__
 

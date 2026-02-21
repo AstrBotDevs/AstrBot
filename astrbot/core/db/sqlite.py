@@ -10,6 +10,7 @@ from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
@@ -572,6 +573,100 @@ class SQLiteDatabase(BaseDatabase):
                 )
                 result = T.cast(CursorResult, await session.execute(query))
                 return result.rowcount
+
+    async def create_api_key(
+        self,
+        name: str,
+        key_hash: str,
+        key_prefix: str,
+        scopes: list[str] | None,
+        created_by: str,
+        expires_at: datetime | None = None,
+    ) -> ApiKey:
+        """Create a new API key record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                api_key = ApiKey(
+                    name=name,
+                    key_hash=key_hash,
+                    key_prefix=key_prefix,
+                    scopes=scopes,
+                    created_by=created_by,
+                    expires_at=expires_at,
+                )
+                session.add(api_key)
+                await session.flush()
+                await session.refresh(api_key)
+                return api_key
+
+    async def list_api_keys(self) -> list[ApiKey]:
+        """List all API keys."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(ApiKey).order_by(desc(ApiKey.created_at))
+            )
+            return list(result.scalars().all())
+
+    async def get_api_key_by_id(self, key_id: str) -> ApiKey | None:
+        """Get an API key by key_id."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(ApiKey).where(ApiKey.key_id == key_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_active_api_key_by_hash(self, key_hash: str) -> ApiKey | None:
+        """Get an active API key by hash (not revoked, not expired)."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            now = datetime.now(timezone.utc)
+            query = select(ApiKey).where(
+                ApiKey.key_hash == key_hash,
+                col(ApiKey.revoked_at).is_(None),
+                or_(col(ApiKey.expires_at).is_(None), ApiKey.expires_at > now),
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def touch_api_key(self, key_id: str) -> None:
+        """Update last_used_at of an API key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(ApiKey)
+                    .where(ApiKey.key_id == key_id)
+                    .values(last_used_at=datetime.now(timezone.utc)),
+                )
+
+    async def revoke_api_key(self, key_id: str) -> bool:
+        """Revoke an API key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = (
+                    update(ApiKey)
+                    .where(ApiKey.key_id == key_id)
+                    .values(revoked_at=datetime.now(timezone.utc))
+                )
+                result = T.cast(CursorResult, await session.execute(query))
+                return result.rowcount > 0
+
+    async def delete_api_key(self, key_id: str) -> bool:
+        """Delete an API key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = T.cast(
+                    CursorResult,
+                    await session.execute(
+                        delete(ApiKey).where(ApiKey.key_id == key_id)
+                    ),
+                )
+                return result.rowcount > 0
 
     async def insert_persona(
         self,
