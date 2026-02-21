@@ -52,8 +52,9 @@ class ChatRoute(Route):
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-        self.imgs_dir = os.path.join(get_astrbot_data_path(), "attachments")
-        os.makedirs(self.imgs_dir, exist_ok=True)
+        self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
+        self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        os.makedirs(self.attachments_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
@@ -69,9 +70,18 @@ class ChatRoute(Route):
             return Response().error("Missing key: filename").__dict__
 
         try:
-            file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+            file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
             real_file_path = os.path.realpath(file_path)
-            real_imgs_dir = os.path.realpath(self.imgs_dir)
+            real_imgs_dir = os.path.realpath(self.attachments_dir)
+
+            if not os.path.exists(real_file_path):
+                # try legacy
+                file_path = os.path.join(
+                    self.legacy_img_dir, os.path.basename(filename)
+                )
+                if os.path.exists(file_path):
+                    real_file_path = os.path.realpath(file_path)
+                    real_imgs_dir = os.path.realpath(self.legacy_img_dir)
 
             if not real_file_path.startswith(real_imgs_dir):
                 return Response().error("Invalid file path").__dict__
@@ -125,7 +135,7 @@ class ChatRoute(Route):
         else:
             attach_type = "file"
 
-        path = os.path.join(self.imgs_dir, filename)
+        path = os.path.join(self.attachments_dir, filename)
         await file.save(path)
 
         # 创建 attachment 记录
@@ -202,7 +212,7 @@ class ChatRoute(Route):
             filename: 存储的文件名
             attach_type: 附件类型 (image, record, file, video)
         """
-        file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+        file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
         if not os.path.exists(file_path):
             return None
 
