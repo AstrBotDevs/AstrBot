@@ -2,8 +2,9 @@
 import { ref, computed, inject } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
-import { getPlatformDisplayName } from "@/utils/platformUtils";
+import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+import PluginPlatformChip from "./PluginPlatformChip.vue";
 
 const props = defineProps({
   extension: {
@@ -336,27 +337,10 @@ const viewChangelog = () => {
             >
               {{ tag === "danger" ? tm("tags.danger") : tag }}
             </v-chip>
-            <v-chip
-              v-if="supportPlatforms.length"
-              color="info"
-              variant="outlined"
-              label
-              size="small"
+            <PluginPlatformChip
+              :platforms="supportPlatforms"
               class="ml-2"
-            >
-              <v-tooltip location="top">
-                <template v-slot:activator="{ props: tooltipProps }">
-                  <span v-bind="tooltipProps">
-                    {{
-                      tm("card.status.supportPlatformsCount", {
-                        count: supportPlatformDisplayNames.length,
-                      })
-                    }}
-                  </span>
-                </template>
-                <span>{{ supportPlatformDisplayNames.join(", ") }}</span>
-              </v-tooltip>
-            </v-chip>
+            />
             <v-chip
               v-if="astrbotVersionRequirement"
               color="secondary"

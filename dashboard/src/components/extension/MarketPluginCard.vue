@@ -1,10 +1,11 @@
 <script setup>
+import { ref, computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { getPlatformDisplayName } from "@/utils/platformUtils";
+import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 
 const { tm } = useModuleI18n("features/extension");
 
-defineProps({
+const props = defineProps({
   plugin: {
     type: Object,
     required: true,
@@ -24,12 +25,6 @@ const emit = defineEmits(["install"]);
 const normalizePlatformList = (platforms) => {
   if (!Array.isArray(platforms)) return [];
   return platforms.filter((item) => typeof item === "string");
-};
-
-const getPlatformDisplayList = (platforms) => {
-  return normalizePlatformList(platforms).map((platformId) =>
-    getPlatformDisplayName(platformId),
-  );
 };
 
 const handleInstall = (plugin) => {
@@ -165,9 +160,9 @@ const handleInstall = (plugin) => {
         </div>
 
         <div
-          v-if="plugin.astrbot_version || normalizePlatformList(plugin.support_platforms).length"
+          v-if="plugin.astrbot_version || platformDisplayList.length"
           class="d-flex align-center flex-wrap"
-          style="gap: 4px; margin-top: 4px; margin-bottom: 4px;"
+          style="gap: 4px; margin-top: 4px; margin-bottom: 4px"
         >
           <v-chip
             v-if="plugin.astrbot_version"
@@ -178,26 +173,11 @@ const handleInstall = (plugin) => {
           >
             AstrBot: {{ plugin.astrbot_version }}
           </v-chip>
-          <v-chip
-            v-if="normalizePlatformList(plugin.support_platforms).length"
+          <PluginPlatformChip
+            :platforms="plugin.support_platforms"
             size="x-small"
-            color="info"
-            variant="outlined"
-            style="height: 20px"
-          >
-            <v-tooltip location="top">
-              <template v-slot:activator="{ props: tooltipProps }">
-                <span v-bind="tooltipProps">
-                  {{
-                    tm("card.status.supportPlatformsCount", {
-                      count: getPlatformDisplayList(plugin.support_platforms).length,
-                    })
-                  }}
-                </span>
-              </template>
-              <span>{{ getPlatformDisplayList(plugin.support_platforms).join(", ") }}</span>
-            </v-tooltip>
-          </v-chip>
+            :chip-style="{ height: '20px' }"
+          />
         </div>
 
         <div class="d-flex align-center" style="gap: 8px; margin-top: auto">
