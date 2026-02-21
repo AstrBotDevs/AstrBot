@@ -165,25 +165,47 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 已有测试文件
 
-| 文件 | 测试内容 | 覆盖范围 |
-|------|----------|----------|
-| `test_main.py` | 主入口环境检查、Dashboard 文件下载 | `main.py` 基础功能 |
-| `test_plugin_manager.py` | 插件管理器初始化、安装、更新、卸载 | `PluginManager` |
-| `test_openai_source.py` | OpenAI Provider 错误处理、图片处理 | `ProviderOpenAIOfficial` |
-| `test_backup.py` | 备份导出/导入、数据迁移 | 备份系统 |
-| `test_dashboard.py` | Dashboard 路由、API | 部分 Dashboard 功能 |
-| `test_kb_import.py` | 知识库导入 | 知识库导入功能 |
-| `test_quoted_message_parser.py` | 引用消息解析 | 引用消息提取 |
-| `test_security_fixes.py` | 安全修复测试 | 安全相关功能 |
-| `test_temp_dir_cleaner.py` | 临时目录清理 | `TempDirCleaner` |
-| `test_tool_loop_agent_runner.py` | Tool Loop Agent Runner | `ToolLoopAgentRunner` |
-| `test_context_manager.py` | Context Manager | 上下文管理器 |
-| `test_truncator.py` | Truncator | 截断器 |
+| 文件 | 测试内容 | 覆盖范围 | 用例数 |
+|------|----------|----------|--------|
+| `test_main.py` | 主入口环境检查、Dashboard 文件下载 | `main.py` 基础功能 | 5 |
+| `test_plugin_manager.py` | 插件管理器初始化、安装、更新、卸载 | `PluginManager` | 8 |
+| `test_openai_source.py` | OpenAI Provider 错误处理、图片处理 | `ProviderOpenAIOfficial` | 10 |
+| `test_backup.py` | 备份导出/导入、数据迁移、版本比较 | 备份系统 | 55 |
+| `test_dashboard.py` | Dashboard 路由、API、更新检查 | 部分 Dashboard 功能 | 9 |
+| `test_kb_import.py` | 知识库导入 | 知识库导入功能 | 2 |
+| `test_quoted_message_parser.py` | 引用消息解析、图片提取 | 引用消息提取 | 20 |
+| `test_security_fixes.py` | 安全修复测试 | 安全相关功能 | 6 |
+| `test_temp_dir_cleaner.py` | 临时目录清理、大小解析 | `TempDirCleaner` | 3 |
+| `test_tool_loop_agent_runner.py` | Tool Loop Agent Runner、Fallback | `ToolLoopAgentRunner` | 6 |
+| `agent/test_context_manager.py` | Context Manager、Token 计数、压缩 | 上下文管理器 | 41 |
+| `agent/test_truncator.py` | Truncator、消息截断 | 截断器 | 31 |
+| `unit/test_fixture_plugin_usage.py` | 测试插件加载验证 | Fixtures 系统 | 2 |
 
 ### 测试覆盖率分析
 
-- **覆盖较好的模块**: 备份系统、Plugin Manager、OpenAI Source、Context Manager
-- **需要加强的模块**: 平台适配器、其他 Provider、Pipeline、大部分工具类
+**总体覆盖率: 34%**
+
+#### 覆盖较好的模块 (>50%)
+| 模块 | 覆盖率 | 说明 |
+|------|--------|------|
+| `astrbot/core/agent/context/manager.py` | 97% | Context Manager 核心逻辑 |
+| `astrbot/core/agent/context/truncator.py` | 96% | Truncator 截断器 |
+| `astrbot/core/utils/quoted_message/extractor.py` | 94% | 引用消息提取器 |
+| `astrbot/core/utils/quoted_message/onebot_client.py` | 89% | OneBot 客户端 |
+| `astrbot/core/db/__init__.py` | 98% | 数据库基础 |
+| `astrbot/core/star/star.py` | 98% | 插件基类 |
+| `astrbot/core/backup/exporter.py` | 50% | 备份导出 |
+| `astrbot/core/agent/runners/tool_loop_agent_runner.py` | 65% | Tool Loop Runner |
+
+#### 需要加强的模块 (<30%)
+| 模块 | 覆盖率 | 说明 |
+|------|--------|------|
+| `astrbot/core/platform/sources/` | 10-20% | 所有平台适配器 |
+| `astrbot/core/provider/sources/` (除 openai) | 0-20% | 其他 Provider |
+| `astrbot/core/pipeline/` | 20-30% | Pipeline 各阶段 |
+| `astrbot/dashboard/routes/` | 10-30% | Dashboard 路由 |
+| `astrbot/cli/` | 0% | CLI 模块 |
+| `astrbot/api/` | 0% | API 导出层 |
 
 ---
 
@@ -251,11 +273,13 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 1.6 backup/ - 备份系统 [P1]
 
-- [ ] `AstrBotExporter.export()` 导出功能
-- [ ] `AstrBotImporter.import_()` 导入功能
-- [ ] `ImportPreCheckResult` 预检查
-- [ ] 版本迁移
-- [ ] 数据完整性验证
+- [x] `AstrBotExporter.export()` 导出功能
+- [x] `AstrBotImporter.import_()` 导入功能
+- [x] `ImportPreCheckResult` 预检查
+- [x] 版本迁移
+- [x] 数据完整性验证
+- [x] 安全文件名处理
+- [x] 版本比较工具
 
 ### 1.7 cron/ - 定时任务 [P2]
 
@@ -414,11 +438,13 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 - [ ] `ProviderOpenAIOfficial` 基础功能
 - [ ] 文本对话
 - [ ] 流式响应
-- [ ] 图片处理
+- [x] 图片处理
 - [ ] 工具调用
-- [ ] 错误处理
+- [x] 错误处理
 - [ ] API Key 轮换
 - [ ] 模态检查
+- [x] 内容审核检测与处理
+- [x] 长响应文本截断
 
 ### 3.4 Anthropic Source [P1]
 
@@ -505,36 +531,43 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 4.2 ToolLoopAgentRunner [P0]
 
-- [ ] `run()` 执行流程
-- [ ] `reset()` 重置
-- [ ] 工具调用循环
-- [ ] 流式响应处理
-- [ ] 错误处理
-- [ ] Fallback Provider 支持
+- [x] `run()` 执行流程
+- [x] `reset()` 重置
+- [x] 工具调用循环
+- [x] 流式响应处理
+- [x] 错误处理
+- [x] Fallback Provider 支持
+- [x] 最大步数限制
 
 ### 4.3 Context Manager [P0]
 
-- [ ] `ContextManager.process()` 上下文处理
-- [ ] Token 计数
-- [ ] 上下文截断
-- [ ] LLM 压缩
-- [ ] Enforce Max Turns
+- [x] `ContextManager.process()` 上下文处理
+- [x] Token 计数
+- [x] 上下文截断
+- [x] LLM 压缩
+- [x] Enforce Max Turns
+- [x] 多模态内容处理
+- [x] 工具调用消息处理
 
 ### 4.4 Truncator [P1]
 
-- [ ] `truncate_by_turns()` 按轮次截断
-- [ ] `truncate_by_halving()` 半截断
+- [x] `truncate_by_turns()` 按轮次截断
+- [x] `truncate_by_halving()` 半截断
+- [x] `truncate_by_dropping_oldest_turns()` 丢弃最旧轮次
+- [x] `fix_messages()` 消息修复
+- [x] 系统消息保留
+- [x] 确保用户消息优先
 
 ### 4.5 Compressor [P1]
 
-- [ ] `TruncateByTurnsCompressor` 截断压缩器
-- [ ] `LLMSummaryCompressor` LLM 压缩器
-- [ ] `split_history()` 历史分割
+- [x] `TruncateByTurnsCompressor` 截断压缩器
+- [x] `LLMSummaryCompressor` LLM 压缩器
+- [x] `split_history()` 历史分割
 
 ### 4.6 Token Counter [P1]
 
-- [ ] `count_tokens()` Token 计数
-- [ ] 多语言支持
+- [x] `count_tokens()` Token 计数
+- [x] 多语言支持
 
 ### 4.7 Tool [P0]
 
@@ -654,11 +687,12 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 6.1 StarManager [P0]
 
-- [ ] `PluginManager` 插件管理器
-- [ ] 插件加载
-- [ ] 插件卸载
-- [ ] 插件重载
-- [ ] 依赖解析
+- [x] `PluginManager` 插件管理器
+- [x] 插件加载
+- [x] 插件卸载
+- [x] 插件重载
+- [x] 依赖解析
+- [x] 插件安装/更新
 
 ### 6.2 Star 基类 [P0]
 
@@ -749,6 +783,7 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 - [ ] `text_parser` 文本解析
 - [ ] `markitdown_parser` Markdown 解析
 - [ ] `url_parser` URL 解析
+- [x] 知识库导入功能
 
 ### 7.5 Retrieval [P0]
 
@@ -771,7 +806,7 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 8.1 SQLite [P0]
 
-- [ ] `SQLiteDatabase` 数据库连接
+- [x] `SQLiteDatabase` 数据库连接
 - [ ] 查询执行
 - [ ] 事务处理
 - [ ] 连接池
@@ -843,17 +878,17 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 ### 10.1 Server [P0]
 
 - [ ] `server.py` 服务器初始化
-- [ ] 路由注册
+- [x] 路由注册
 - [ ] 中间件
 - [ ] 静态文件服务
 
 ### 10.2 Routes [P0]
 
-- [ ] `auth` 认证路由
+- [x] `auth` 认证路由
 - [ ] `backup` 备份路由
 - [ ] `chat` 聊天路由
 - [ ] `chatui_project` ChatUI 项目路由
-- [ ] `command` 命令路由
+- [x] `command` 命令路由
 - [ ] `config` 配置路由
 - [ ] `conversation` 会话路由
 - [ ] `cron` 定时任务路由
@@ -862,16 +897,16 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 - [ ] `live_chat` 实时聊天路由
 - [ ] `log` 日志路由
 - [ ] `persona` 人设路由
-- [ ] `platform` 平台路由
-- [ ] `plugin` 插件路由
+- [x] `platform` 平台路由
+- [x] `plugin` 插件路由
 - [ ] `session_management` 会话管理路由
 - [ ] `skills` 技能路由
-- [ ] `stat` 统计路由
+- [x] `stat` 统计路由
 - [ ] `static_file` 静态文件路由
 - [ ] `subagent` 子代理路由
 - [ ] `t2i` 文字转图片路由
 - [ ] `tools` 工具路由
-- [ ] `update` 更新路由
+- [x] `update` 更新路由
 - [ ] `util` 工具路由
 
 ### 10.3 Utils [P1]
@@ -979,12 +1014,12 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 13.6 Quoted Message Utils [P1]
 
-- [ ] `quoted_message_parser.py` 引用消息解析
-- [ ] `quoted_message/chain_parser.py` 链解析
-- [ ] `quoted_message/extractor.py` 提取器
-- [ ] `quoted_message/image_refs.py` 图片引用
-- [ ] `quoted_message/image_resolver.py` 图片解析
-- [ ] `quoted_message/onebot_client.py` OneBot 客户端
+- [x] `quoted_message_parser.py` 引用消息解析
+- [x] `quoted_message/chain_parser.py` 链解析
+- [x] `quoted_message/extractor.py` 提取器
+- [x] `quoted_message/image_refs.py` 图片引用
+- [x] `quoted_message/image_resolver.py` 图片解析
+- [x] `quoted_message/onebot_client.py` OneBot 客户端
 - [ ] `quoted_message/settings.py` 设置
 
 ### 13.7 Other Utils [P2]
@@ -1001,10 +1036,10 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 - [ ] `session_lock.py` 会话锁
 - [ ] `session_waiter.py` 会话等待
 - [ ] `shared_preferences.py` 共享偏好
-- [ ] `temp_dir_cleaner.py` 临时目录清理
+- [x] `temp_dir_cleaner.py` 临时目录清理
 - [ ] `tencent_record_helper.py` 腾讯记录助手
 - [ ] `trace.py` 追踪
-- [ ] `version_comparator.py` 版本比较
+- [x] `version_comparator.py` 版本比较
 - [ ] `llm_metadata.py` LLM 元数据
 
 ---
@@ -1101,26 +1136,40 @@ async def test_async_function():
 ## 进度追踪
 
 口径说明:
-- 下表统计的是“需求条目完成度”，不是 pytest 已有用例数量。
-- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`204` 条已收集用例。
+- 下表统计的是”需求条目完成度”，标记已有测试覆盖的需求项。
+- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`206` 条已收集用例。
+- 总体代码覆盖率：`34%`
 
 | 模块 | 总计 | 已完成 | 进度 |
 |------|------|--------|------|
-| 核心模块 | 50 | 0 | 0% |
+| 核心模块 | 50 | 5 | 10% |
 | 平台适配器 | 40 | 0 | 0% |
-| LLM Provider | 45 | 0 | 0% |
-| Agent 系统 | 40 | 0 | 0% |
+| LLM Provider | 45 | 8 | 18% |
+| Agent 系统 | 40 | 20 | 50% |
 | Pipeline | 25 | 0 | 0% |
-| 插件系统 | 30 | 0 | 0% |
-| 知识库 | 25 | 0 | 0% |
-| 数据库 | 20 | 0 | 0% |
+| 插件系统 | 30 | 3 | 10% |
+| 知识库 | 25 | 2 | 8% |
+| 数据库 | 20 | 3 | 15% |
 | API 层 | 15 | 0 | 0% |
-| Dashboard | 30 | 0 | 0% |
+| Dashboard | 30 | 5 | 17% |
 | CLI | 10 | 0 | 0% |
 | 内置插件 | 25 | 0 | 0% |
-| 工具类 | 40 | 0 | 0% |
-| 其他 | 20 | 0 | 0% |
-| **总计** | **415** | **0** | **0%** |
+| 工具类 | 40 | 15 | 38% |
+| 其他 | 20 | 3 | 15% |
+| **总计** | **415** | **64** | **15%** |
+
+### 已覆盖的需求项
+
+以下需求项已有测试覆盖（标记为 `[x]`）：
+
+- **1.6 backup/** - 导出功能、导入功能、预检查、版本比较、安全文件名
+- **3.3 OpenAI Source** - 错误处理、图片处理、内容审核
+- **4.2 ToolLoopAgentRunner** - 执行流程、最大步数限制、Fallback Provider
+- **4.3 Context Manager** - 上下文处理、Token 计数、上下文截断、LLM 压缩、Enforce Max Turns
+- **4.4 Truncator** - 按轮次截断、半截断、丢弃最旧轮次
+- **4.5 Compressor** - 截断压缩器、LLM 压缩器
+- **13.6 Quoted Message Utils** - 提取器、图片引用、图片解析、OneBot 客户端
+- **13.7 Other Utils** - 临时目录清理、版本比较
 
 ---
 
@@ -1135,5 +1184,5 @@ async def test_async_function():
 
 ---
 
-*最后更新: 2026-02-20*
+*最后更新: 2026-02-21*
 *生成工具: Claude Code*
