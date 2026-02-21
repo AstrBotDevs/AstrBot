@@ -66,6 +66,7 @@ class WebChatAdapter(Platform):
             support_proactive_message=False,
         )
         self._shutdown_event = asyncio.Event()
+        self.stop_event = self._shutdown_event
         self._webchat_queue_mgr = webchat_queue_mgr
 
     async def send_by_session(

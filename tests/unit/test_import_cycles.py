@@ -65,3 +65,35 @@ def test_builtin_stage_bootstrap_is_idempotent() -> None:
 
     ensure_builtin_stages_registered()
     assert len(registered_stages) == before_count
+
+
+def test_pipeline_import_is_stable_with_mocked_apscheduler() -> None:
+    """Regression: importing pipeline should not require cron/apscheduler modules."""
+    repo_root = Path(__file__).resolve().parents[2]
+    code = (
+        "import sys;"
+        "from unittest.mock import MagicMock;"
+        "mock_apscheduler = MagicMock();"
+        "mock_apscheduler.schedulers = MagicMock();"
+        "mock_apscheduler.schedulers.asyncio = MagicMock();"
+        "mock_apscheduler.schedulers.background = MagicMock();"
+        "sys.modules['apscheduler'] = mock_apscheduler;"
+        "sys.modules['apscheduler.schedulers'] = mock_apscheduler.schedulers;"
+        "sys.modules['apscheduler.schedulers.asyncio'] = mock_apscheduler.schedulers.asyncio;"
+        "sys.modules['apscheduler.schedulers.background'] = mock_apscheduler.schedulers.background;"
+        "import astrbot.core.pipeline as pipeline;"
+        "assert pipeline.ProcessStage is not None;"
+        "assert pipeline.RespondStage is not None"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, (
+        "Pipeline import should not depend on real apscheduler package.\n"
+        f"stdout:\n{proc.stdout}\n"
+        f"stderr:\n{proc.stderr}\n"
+    )

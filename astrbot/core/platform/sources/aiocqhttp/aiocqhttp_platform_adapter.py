@@ -6,23 +6,31 @@ import uuid
 from collections.abc import Awaitable
 from typing import Any, cast
 
-from aiocqhttp import CQHttp, Event
+import aiocqhttp
 from aiocqhttp.exceptions import ActionFailed
 
-from astrbot.api import logger
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import *
-from astrbot.api.platform import (
+from astrbot import logger
+from astrbot.core.message.components import (
+    At,
+    ComponentTypes,
+    File,
+    Image,
+    Plain,
+    Poke,
+    Reply,
+)
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 
-from ...register import register_platform_adapter
-from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 
@@ -51,7 +59,7 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = CQHttp(
+        self.bot = aiocqhttp.CQHttp(
             use_ws_reverse=True,
             import_name="aiocqhttp",
             api_timeout_sec=180,
@@ -61,7 +69,7 @@ class AiocqhttpAdapter(Platform):
         )
 
         @self.bot.on_request()
-        async def request(event: Event) -> None:
+        async def request(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if not abm:
@@ -72,7 +80,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_notice()
-        async def notice(event: Event) -> None:
+        async def notice(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -82,7 +90,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_message("group")
-        async def group(event: Event) -> None:
+        async def group(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -92,7 +100,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_message("private")
-        async def private(event: Event) -> None:
+        async def private(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -124,7 +132,7 @@ class AiocqhttpAdapter(Platform):
         )
         await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, event: Event) -> AstrBotMessage | None:
+    async def convert_message(self, event: aiocqhttp.Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
@@ -139,7 +147,9 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
-    async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
+    async def _convert_handle_request_event(
+        self, event: aiocqhttp.Event
+    ) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
@@ -164,7 +174,9 @@ class AiocqhttpAdapter(Platform):
         abm.raw_message = event
         return abm
 
-    async def _convert_handle_notice_event(self, event: Event) -> AstrBotMessage:
+    async def _convert_handle_notice_event(
+        self, event: aiocqhttp.Event
+    ) -> AstrBotMessage:
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
@@ -196,7 +208,7 @@ class AiocqhttpAdapter(Platform):
 
     async def _convert_handle_message_event(
         self,
-        event: Event,
+        event: aiocqhttp.Event,
         get_reply=True,
     ) -> AstrBotMessage:
         """OneBot V11 消息类事件
@@ -309,7 +321,7 @@ class AiocqhttpAdapter(Platform):
                             )
                             # 添加必要的 post_type 字段，防止 Event.from_payload 报错
                             reply_event_data["post_type"] = "message"
-                            new_event = Event.from_payload(reply_event_data)
+                            new_event = aiocqhttp.Event.from_payload(reply_event_data)
                             if not new_event:
                                 logger.error(
                                     f"无法从回复消息数据构造 Event 对象: {reply_event_data}",
@@ -401,6 +413,14 @@ class AiocqhttpAdapter(Platform):
                                 f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
                             )
                             continue
+                        if (
+                            t == "image"
+                            and not m["data"].get("file")
+                            and m["data"].get("url")
+                        ):
+                            a = Image(file=m["data"]["url"], url=m["data"]["url"])
+                            abm.message.append(a)
+                            continue
                         a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     except Exception as e:
@@ -456,5 +476,5 @@ class AiocqhttpAdapter(Platform):
 
         self.commit_event(message_event)
 
-    def get_client(self) -> CQHttp:
+    def get_client(self) -> aiocqhttp.CQHttp:
         return self.bot

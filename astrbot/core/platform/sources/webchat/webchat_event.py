@@ -4,9 +4,10 @@ import os
 import shutil
 import uuid
 
-from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Json, Plain, Record
+from astrbot import logger
+from astrbot.core.message.components import File, Image, Json, Plain, Record
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .webchat_queue_mgr import webchat_queue_mgr

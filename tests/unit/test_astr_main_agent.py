@@ -1,5 +1,6 @@
 """Tests for astr_main_agent module."""
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1045,3 +1046,490 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider_request == existing_req
+
+
+class TestHandleWebchat:
+    """Tests for _handle_webchat function."""
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_generates_title(self, mock_event):
+        """Test generating title for webchat session without display name."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="What is machine learning?")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = "Machine Learning Introduction"
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.get_platform_session_by_id.assert_called_once_with(
+            "webchat-session-123"
+        )
+        mock_db.update_platform_session.assert_called_once_with(
+            session_id="webchat-session-123",
+            display_name="Machine Learning Introduction",
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_no_user_prompt(self, mock_event):
+        """Test that title generation is skipped when no user prompt."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt=None)
+        prov = MagicMock(spec=Provider)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            await module._handle_webchat(mock_event, req, prov)
+
+        prov.text_chat.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_empty_user_prompt(self, mock_event):
+        """Test that title generation is skipped when user prompt is empty."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="")
+        prov = MagicMock(spec=Provider)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            await module._handle_webchat(mock_event, req, prov)
+
+        prov.text_chat.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_session_already_has_display_name(self, mock_event):
+        """Test that title generation is skipped when session already has display name."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="What is AI?")
+        prov = MagicMock(spec=Provider)
+
+        mock_session = MagicMock()
+        mock_session.display_name = "Existing Title"
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        prov.text_chat.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_no_session_found(self, mock_event):
+        """Test that title generation is skipped when session is not found."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="What is AI?")
+        prov = MagicMock(spec=Provider)
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=None)
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        prov.text_chat.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_llm_returns_none_title(self, mock_event):
+        """Test that title is not updated when LLM returns <None>."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="hi")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = "<None>"
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.update_platform_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_llm_returns_empty_title(self, mock_event):
+        """Test that title is not updated when LLM returns empty string."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="hello")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = "   "
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.update_platform_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_llm_returns_none_response(self, mock_event):
+        """Test handling when LLM returns None response."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="test question")
+        prov = MagicMock(spec=Provider)
+        prov.text_chat = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.update_platform_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_llm_returns_no_completion_text(self, mock_event):
+        """Test handling when LLM response has no completion_text."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="test question")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = None
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.update_platform_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_strips_title_whitespace(self, mock_event):
+        """Test that generated title has whitespace stripped."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="What is Python?")
+        prov = MagicMock(spec=Provider)
+        llm_response = MagicMock()
+        llm_response.completion_text = "  Python Programming Guide  "
+        prov.text_chat = AsyncMock(return_value=llm_response)
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with patch("astrbot.core.db_helper") as mock_db:
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_db.update_platform_session.assert_called_once_with(
+            session_id="webchat-session-123",
+            display_name="Python Programming Guide",
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_webchat_provider_exception_is_handled(self, mock_event):
+        """Test that provider exception during title generation is handled."""
+        module = ama
+        mock_event.session_id = "platform!webchat-session-123"
+
+        req = ProviderRequest(prompt="What is Python?")
+        prov = MagicMock(spec=Provider)
+        prov.text_chat = AsyncMock(side_effect=RuntimeError("provider failed"))
+
+        mock_session = MagicMock()
+        mock_session.display_name = None
+
+        with (
+            patch("astrbot.core.db_helper") as mock_db,
+            patch("astrbot.core.astr_main_agent.logger") as mock_logger,
+        ):
+            mock_db.get_platform_session_by_id = AsyncMock(return_value=mock_session)
+            mock_db.update_platform_session = AsyncMock()
+
+            await module._handle_webchat(mock_event, req, prov)
+
+        mock_logger.exception.assert_called_once()
+        mock_db.update_platform_session.assert_not_called()
+
+
+class TestApplyLlmSafetyMode:
+    """Tests for _apply_llm_safety_mode function."""
+
+    def test_apply_llm_safety_mode_system_prompt_strategy(self):
+        """Test applying safety mode with system_prompt strategy."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            llm_safety_mode=True,
+            safety_mode_strategy="system_prompt",
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_llm_safety_mode(config, req)
+
+        assert "You are running in Safe Mode" in req.system_prompt
+        assert "Original prompt" in req.system_prompt
+
+    def test_apply_llm_safety_mode_prepends_safety_prompt(self):
+        """Test that safety prompt is prepended before original system prompt."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            safety_mode_strategy="system_prompt",
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="My custom prompt")
+
+        module._apply_llm_safety_mode(config, req)
+
+        assert req.system_prompt.startswith("You are running in Safe Mode")
+        assert "My custom prompt" in req.system_prompt
+
+    def test_apply_llm_safety_mode_with_none_system_prompt(self):
+        """Test applying safety mode when original system_prompt is None."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            safety_mode_strategy="system_prompt",
+        )
+        req = ProviderRequest(prompt="Test", system_prompt=None)
+
+        module._apply_llm_safety_mode(config, req)
+
+        assert "You are running in Safe Mode" in req.system_prompt
+
+    def test_apply_llm_safety_mode_unsupported_strategy(self):
+        """Test that unsupported strategy logs warning and does nothing."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            safety_mode_strategy="unsupported_strategy",
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original")
+
+        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+            module._apply_llm_safety_mode(config, req)
+
+        mock_logger.warning.assert_called_once()
+        assert (
+            "Unsupported llm_safety_mode strategy"
+            in mock_logger.warning.call_args[0][0]
+        )
+        assert req.system_prompt == "Original"
+
+    def test_apply_llm_safety_mode_empty_system_prompt(self):
+        """Test applying safety mode when original system_prompt is empty."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            safety_mode_strategy="system_prompt",
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="")
+
+        module._apply_llm_safety_mode(config, req)
+
+        assert "You are running in Safe Mode" in req.system_prompt
+
+
+class TestApplySandboxTools:
+    """Tests for _apply_sandbox_tools function."""
+
+    def test_apply_sandbox_tools_creates_toolset_if_none(self):
+        """Test that ToolSet is created when func_tool is None."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.func_tool is not None
+        assert isinstance(req.func_tool, ToolSet)
+
+    def test_apply_sandbox_tools_adds_required_tools(self):
+        """Test that all required sandbox tools are added."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        tool_names = req.func_tool.names()
+        assert "astrbot_execute_shell" in tool_names
+        assert "astrbot_execute_ipython" in tool_names
+        assert "astrbot_upload_file" in tool_names
+        assert "astrbot_download_file" in tool_names
+
+    def test_apply_sandbox_tools_adds_sandbox_prompt(self):
+        """Test that sandbox mode prompt is added to system_prompt."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert "sandboxed environment" in req.system_prompt
+
+    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch):
+        """Test sandbox tools with shipyard booter configuration."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={
+                "booter": "shipyard",
+                "shipyard_endpoint": "https://shipyard.example.com",
+                "shipyard_access_token": "test-token",
+            },
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
+        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
+        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
+
+    def test_apply_sandbox_tools_shipyard_missing_endpoint(self):
+        """Test that shipyard config is skipped when endpoint is missing."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={
+                "booter": "shipyard",
+                "shipyard_endpoint": "",
+                "shipyard_access_token": "test-token",
+            },
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+            module._apply_sandbox_tools(config, req, "session-123")
+
+        mock_logger.error.assert_called_once()
+        assert (
+            "Shipyard sandbox configuration is incomplete"
+            in mock_logger.error.call_args[0][0]
+        )
+
+    def test_apply_sandbox_tools_shipyard_missing_access_token(self):
+        """Test that shipyard config is skipped when access token is missing."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={
+                "booter": "shipyard",
+                "shipyard_endpoint": "https://shipyard.example.com",
+                "shipyard_access_token": "",
+            },
+        )
+        req = ProviderRequest(prompt="Test", func_tool=None)
+
+        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+            module._apply_sandbox_tools(config, req, "session-123")
+
+        mock_logger.error.assert_called_once()
+
+    def test_apply_sandbox_tools_preserves_existing_toolset(self):
+        """Test that existing tools are preserved when adding sandbox tools."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        existing_toolset = ToolSet()
+        existing_tool = MagicMock()
+        existing_tool.name = "existing_tool"
+        existing_toolset.add_tool(existing_tool)
+        req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert "existing_tool" in req.func_tool.names()
+        assert "astrbot_execute_shell" in req.func_tool.names()
+
+    def test_apply_sandbox_tools_appends_to_existing_system_prompt(self):
+        """Test that sandbox prompt is appended to existing system prompt."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert req.system_prompt.startswith("Base prompt")
+        assert "sandboxed environment" in req.system_prompt
+
+    def test_apply_sandbox_tools_with_none_system_prompt(self):
+        """Test that sandbox prompt is applied when system_prompt is None."""
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt=None)
+
+        module._apply_sandbox_tools(config, req, "session-123")
+
+        assert isinstance(req.system_prompt, str)
+        assert "sandboxed environment" in req.system_prompt

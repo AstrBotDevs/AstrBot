@@ -2,31 +2,37 @@ import asyncio
 import re
 import sys
 import uuid
+from typing import Any
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import apscheduler.schedulers.asyncio as _apscheduler_asyncio_import
+import telegram.ext as _telegram_ext_import
 from telegram import BotCommand, Update
 from telegram.constants import ChatType
-from telegram.ext import ApplicationBuilder, ContextTypes, ExtBot, filters
-from telegram.ext import MessageHandler as TelegramMessageHandler
 
-import astrbot.api.message_components as Comp
-from astrbot.api import logger
-from astrbot.api.event import MessageChain
-from astrbot.api.platform import (
+import astrbot.core.message.components as Comp
+from astrbot import logger
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import (
     AstrBotMessage,
     MessageMember,
     MessageType,
     Platform,
     PlatformMetadata,
-    register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
 
 from .tg_event import TelegramPlatformEvent
+
+telegram_ext = sys.modules.get("telegram.ext", _telegram_ext_import)
+apscheduler_asyncio = sys.modules.get(
+    "apscheduler.schedulers.asyncio",
+    _apscheduler_asyncio_import,
+)
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -73,21 +79,21 @@ class TelegramPlatformAdapter(Platform):
         self.last_command_hash = None
 
         self.application = (
-            ApplicationBuilder()
+            telegram_ext.ApplicationBuilder()
             .token(self.config["telegram_token"])
             .base_url(base_url)
             .base_file_url(file_base_url)
             .build()
         )
-        message_handler = TelegramMessageHandler(
-            filters=filters.ALL,  # receive all messages
+        message_handler = telegram_ext.MessageHandler(
+            filters=telegram_ext.filters.ALL,  # receive all messages
             callback=self.message_handler,
         )
         self.application.add_handler(message_handler)
         self.client = self.application.bot
         logger.debug(f"Telegram base url: {self.client.base_url}")
 
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = apscheduler_asyncio.AsyncIOScheduler()
 
         # Media group handling
         # Cache structure: {media_group_id: {"created_at": datetime, "items": [(update, context), ...]}}
@@ -149,14 +155,14 @@ class TelegramPlatformAdapter(Platform):
         try:
             commands = self.collect_commands()
 
+            current_hash = hash(
+                tuple((cmd.command, cmd.description) for cmd in commands),
+            )
+            if current_hash == self.last_command_hash:
+                return
+            self.last_command_hash = current_hash
+            await self.client.delete_my_commands()
             if commands:
-                current_hash = hash(
-                    tuple((cmd.command, cmd.description) for cmd in commands),
-                )
-                if current_hash == self.last_command_hash:
-                    return
-                self.last_command_hash = current_hash
-                await self.client.delete_my_commands()
                 await self.client.set_my_commands(commands)
 
         except Exception as e:
@@ -169,7 +175,8 @@ class TelegramPlatformAdapter(Platform):
 
         for handler_md in star_handlers_registry:
             handler_metadata = handler_md
-            if not star_map[handler_metadata.handler_module_path].activated:
+            star = star_map.get(handler_metadata.handler_module_path)
+            if not star or not star.activated:
                 continue
             if not handler_metadata.enabled:
                 continue
@@ -178,6 +185,8 @@ class TelegramPlatformAdapter(Platform):
                     event_filter,
                     handler_metadata,
                     skip_commands,
+                    CommandFilter,
+                    CommandGroupFilter,
                 )
                 if cmd_info:
                     cmd_name, description = cmd_info
@@ -191,18 +200,26 @@ class TelegramPlatformAdapter(Platform):
         event_filter,
         handler_metadata,
         skip_commands: set,
+        command_filter_cls,
+        command_group_filter_cls,
     ) -> tuple[str, str] | None:
         """从事件过滤器中提取指令信息"""
         cmd_name = None
         is_group = False
-        if isinstance(event_filter, CommandFilter) and event_filter.command_name:
+        if (
+            command_filter_cls
+            and isinstance(event_filter, command_filter_cls)
+            and event_filter.command_name
+        ):
             if (
                 event_filter.parent_command_names
                 and event_filter.parent_command_names != [""]
             ):
                 return None
             cmd_name = event_filter.command_name
-        elif isinstance(event_filter, CommandGroupFilter):
+        elif command_group_filter_cls and isinstance(
+            event_filter, command_group_filter_cls
+        ):
             if event_filter.parent_group:
                 return None
             cmd_name = event_filter.group_name
@@ -222,7 +239,7 @@ class TelegramPlatformAdapter(Platform):
             description = description[:30] + "..."
         return cmd_name, description
 
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def start(self, update: Update, context: Any) -> None:
         if not update.effective_chat:
             logger.warning(
                 "Received a start command without an effective chat, skipping /start reply.",
@@ -233,9 +250,7 @@ class TelegramPlatformAdapter(Platform):
             text=self.config["start_message"],
         )
 
-    async def message_handler(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def message_handler(self, update: Update, context: Any) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
         # Handle media group messages
@@ -251,7 +266,7 @@ class TelegramPlatformAdapter(Platform):
     async def convert_message(
         self,
         update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
+        context: Any,
         get_reply=True,
     ) -> AstrBotMessage | None:
         """转换 Telegram 的消息对象为 AstrBotMessage 对象。
@@ -418,9 +433,7 @@ class TelegramPlatformAdapter(Platform):
 
         return message
 
-    async def handle_media_group_message(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def handle_media_group_message(self, update: Update, context: Any):
         """Handle messages that are part of a media group (album).
 
         Caches incoming messages and schedules delayed processing to collect all
@@ -535,7 +548,7 @@ class TelegramPlatformAdapter(Platform):
         )
         self.commit_event(message_event)
 
-    def get_client(self) -> ExtBot:
+    def get_client(self):
         return self.client
 
     async def terminate(self) -> None:
