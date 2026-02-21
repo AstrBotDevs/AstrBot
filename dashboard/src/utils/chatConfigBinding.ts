@@ -10,12 +10,39 @@ export interface WebchatUmoDetails {
   umo: string;
 }
 
+function getFromLocalStorage(key: string, fallback: string): string {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return fallback;
+    }
+    const value = localStorage.getItem(key);
+    return value == null ? fallback : value;
+  } catch {
+    return fallback;
+  }
+}
+
+function setToLocalStorage(key: string, value: string): void {
+  try {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage errors (e.g. private mode / restricted storage).
+  }
+}
+
 export function getStoredDashboardUsername(): string {
-  return (localStorage.getItem('user') || '').trim() || 'guest';
+  return getFromLocalStorage('user', '').trim() || 'guest';
 }
 
 export function getStoredSelectedChatConfigId(): string {
-  return (localStorage.getItem(CHAT_SELECTED_CONFIG_STORAGE_KEY) || '').trim() || 'default';
+  return getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, '').trim() || 'default';
+}
+
+export function setStoredSelectedChatConfigId(configId: string): void {
+  setToLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, configId);
 }
 
 export function buildWebchatUmoDetails(sessionId: string, isGroup = false): WebchatUmoDetails {
@@ -31,4 +58,3 @@ export function buildWebchatUmoDetails(sessionId: string, isGroup = false): Webc
     umo: `${platformId}:${messageType}:${sessionKey}`
   };
 }
-

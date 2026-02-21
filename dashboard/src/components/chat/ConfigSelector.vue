@@ -77,7 +77,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
 import { useToast } from '@/utils/toast';
 import { useModuleI18n } from '@/i18n/composables';
-import { CHAT_SELECTED_CONFIG_STORAGE_KEY } from '@/utils/chatConfigBinding';
+import {
+    getStoredDashboardUsername,
+    getStoredSelectedChatConfigId,
+    setStoredSelectedChatConfigId
+} from '@/utils/chatConfigBinding';
 
 interface ConfigInfo {
     id: string;
@@ -88,8 +92,6 @@ interface ConfigChangedPayload {
     configId: string;
     agentRunnerType: string;
 }
-
-const STORAGE_KEY = CHAT_SELECTED_CONFIG_STORAGE_KEY;
 
 const props = withDefaults(defineProps<{
     sessionId?: string | null;
@@ -129,7 +131,7 @@ const hasActiveSession = computed(() => !!normalizedSessionId.value);
 
 const messageType = computed(() => (props.isGroup ? 'GroupMessage' : 'FriendMessage'));
 
-const username = computed(() => localStorage.getItem('user') || 'guest');
+const username = computed(() => getStoredDashboardUsername());
 
 const sessionKey = computed(() => {
     if (!normalizedSessionId.value) {
@@ -266,10 +268,10 @@ async function confirmSelection() {
     }
     const previousId = selectedConfigId.value;
     await setSelection(tempSelectedConfig.value);
-    localStorage.setItem(STORAGE_KEY, tempSelectedConfig.value);
+    setStoredSelectedChatConfigId(tempSelectedConfig.value);
     const applied = await applySelectionToBackend(tempSelectedConfig.value);
     if (!applied) {
-        localStorage.setItem(STORAGE_KEY, previousId);
+        setStoredSelectedChatConfigId(previousId);
         await setSelection(previousId);
     }
     dialog.value = false;
@@ -288,7 +290,7 @@ async function syncSelectionForSession() {
     await fetchRoutingEntries();
     const resolved = resolveConfigId(targetUmo.value);
     await setSelection(resolved);
-    localStorage.setItem(STORAGE_KEY, resolved);
+    setStoredSelectedChatConfigId(resolved);
 }
 
 watch(
@@ -300,7 +302,7 @@ watch(
 
 onMounted(async () => {
     await fetchConfigList();
-    const stored = props.initialConfigId || localStorage.getItem(STORAGE_KEY) || 'default';
+    const stored = props.initialConfigId || getStoredSelectedChatConfigId();
     selectedConfigId.value = stored;
     await setSelection(stored);
     await syncSelectionForSession();
