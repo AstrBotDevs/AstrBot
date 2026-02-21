@@ -200,6 +200,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case botpy.message.Message():
                 if image_path:
                     payload["file_image"] = image_path
+                # Guild text-channel send API (/channels/{channel_id}/messages) does not use v2 msg_type.
+                payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_message(
                         channel_id=source.channel_id,
@@ -212,6 +214,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case botpy.message.DirectMessage():
                 if image_path:
                     payload["file_image"] = image_path
+                # Guild DM send API (/dms/{guild_id}/messages) does not use v2 msg_type.
+                payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_dms(
                         guild_id=source.guild_id,
