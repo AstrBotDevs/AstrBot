@@ -48,7 +48,13 @@ class TestAstrBotCoreLifecycleInit:
         assert lifecycle.cron_manager is None
         assert lifecycle.temp_dir_cleaner is None
 
-    def test_init_with_proxy(self, mock_log_broker, mock_db, mock_astrbot_config):
+    def test_init_with_proxy(
+        self,
+        mock_log_broker,
+        mock_db,
+        mock_astrbot_config,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """Test initialization with proxy settings."""
         mock_astrbot_config.get = MagicMock(
             side_effect=lambda key, default="": {
@@ -56,6 +62,9 @@ class TestAstrBotCoreLifecycleInit:
                 "no_proxy": ["localhost", "127.0.0.1"],
             }.get(key, default)
         )
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("no_proxy", raising=False)
 
         with patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config):
             lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
@@ -68,17 +77,18 @@ class TestAstrBotCoreLifecycleInit:
             assert "localhost" in os.environ.get("no_proxy", "")
             assert "127.0.0.1" in os.environ.get("no_proxy", "")
 
-            # Clean up environment variables
-            del os.environ["http_proxy"]
-            del os.environ["https_proxy"]
-            del os.environ["no_proxy"]
-
-    def test_init_clears_proxy(self, mock_log_broker, mock_db, mock_astrbot_config):
+    def test_init_clears_proxy(
+        self,
+        mock_log_broker,
+        mock_db,
+        mock_astrbot_config,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         """Test initialization clears proxy settings when configured."""
         mock_astrbot_config.get = MagicMock(return_value="")
         # Set proxy in environment to test clearing
-        os.environ["http_proxy"] = "http://old-proxy:8080"
-        os.environ["https_proxy"] = "http://old-proxy:8080"
+        monkeypatch.setenv("http_proxy", "http://old-proxy:8080")
+        monkeypatch.setenv("https_proxy", "http://old-proxy:8080")
 
         with patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config):
             lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
