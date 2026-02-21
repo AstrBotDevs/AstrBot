@@ -180,6 +180,10 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 | `agent/test_context_manager.py` | Context Manager、Token 计数、压缩 | 上下文管理器 | 41 |
 | `agent/test_truncator.py` | Truncator、消息截断 | 截断器 | 31 |
 | `unit/test_fixture_plugin_usage.py` | 测试插件加载验证 | Fixtures 系统 | 2 |
+| `unit/test_conversation_mgr.py` | 会话管理、对话 CRUD、消息历史 | `ConversationManager` | 21 |
+| `unit/test_event_bus.py` | 事件分发、事件队列处理 | `EventBus` | 6 |
+| `unit/test_persona_mgr.py` | 人设管理、文件夹管理、树形结构 | `PersonaManager` | 31 |
+| `unit/test_cron_manager.py` | 定时任务调度、持久化、时区支持 | `CronJobManager` | 32 |
 
 ### 测试覆盖率分析
 
@@ -249,27 +253,29 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 1.3 conversation_mgr.py - 会话管理 [P0]
 
-- [ ] `ConversationManager.new_conversation()` 新建会话
-- [ ] `ConversationManager.get_conversation()` 获取会话
-- [ ] `ConversationManager.get_curr_conversation_id()` 获取当前会话 ID
-- [ ] `ConversationManager.delete_conversation()` 删除会话
-- [ ] `ConversationManager.update_conversation()` 更新会话
-- [ ] 会话历史管理
+- [x] `ConversationManager.new_conversation()` 新建会话
+- [x] `ConversationManager.get_conversation()` 获取会话
+- [x] `ConversationManager.get_curr_conversation_id()` 获取当前会话 ID
+- [x] `ConversationManager.delete_conversation()` 删除会话
+- [x] `ConversationManager.update_conversation()` 更新会话
+- [x] 会话历史管理
 - [ ] 并发访问处理
 
 ### 1.4 persona_mgr.py - 人设管理 [P1]
 
-- [ ] `PersonaManager.load_personas()` 加载人设
-- [ ] `PersonaManager.get_persona()` 获取人设
-- [ ] 人设验证
-- [ ] 人设热重载
+- [x] `PersonaManager.load_personas()` 加载人设
+- [x] `PersonaManager.get_persona()` 获取人设
+- [x] 人设验证
+- [x] 人设热重载
+- [x] 人设文件夹管理
+- [x] 人设树形结构
 
 ### 1.5 event_bus.py - 事件总线 [P1]
 
-- [ ] 事件发布
-- [ ] 事件订阅
-- [ ] 事件过滤
-- [ ] 异步事件处理
+- [x] 事件发布
+- [x] 事件订阅
+- [x] 事件过滤
+- [x] 异步事件处理
 
 ### 1.6 backup/ - 备份系统 [P1]
 
@@ -283,11 +289,13 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 
 ### 1.7 cron/ - 定时任务 [P2]
 
-- [ ] `CronManager.add_job()` 添加任务
-- [ ] `CronManager.remove_job()` 删除任务
-- [ ] `CronManager.list_jobs()` 列出任务
-- [ ] 任务执行
-- [ ] 任务持久化
+- [x] `CronManager.add_job()` 添加任务
+- [x] `CronManager.remove_job()` 删除任务
+- [x] `CronManager.list_jobs()` 列出任务
+- [x] 任务执行
+- [x] 任务持久化
+- [x] 定时任务调度
+- [x] 时区支持
 
 ### 1.8 config/ - 配置管理 [P0]
 
@@ -1137,12 +1145,12 @@ async def test_async_function():
 
 口径说明:
 - 下表统计的是”需求条目完成度”，标记已有测试覆盖的需求项。
-- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`206` 条已收集用例。
+- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`294` 条已收集用例。
 - 总体代码覆盖率：`34%`
 
 | 模块 | 总计 | 已完成 | 进度 |
 |------|------|--------|------|
-| 核心模块 | 50 | 5 | 10% |
+| 核心模块 | 50 | 22 | 44% |
 | 平台适配器 | 40 | 0 | 0% |
 | LLM Provider | 45 | 8 | 18% |
 | Agent 系统 | 40 | 20 | 50% |
@@ -1156,13 +1164,16 @@ async def test_async_function():
 | 内置插件 | 25 | 0 | 0% |
 | 工具类 | 40 | 15 | 38% |
 | 其他 | 20 | 3 | 15% |
-| **总计** | **415** | **64** | **15%** |
+| **总计** | **415** | **81** | **20%** |
 
 ### 已覆盖的需求项
 
 以下需求项已有测试覆盖（标记为 `[x]`）：
-
+- **1.3 ConversationManager** - 新建会话、获取会话、删除会话、更新会话、会话历史管理
+- **1.4 PersonaManager** - 加载人设、获取人设、人设验证、文件夹管理、树形结构
+- **1.5 EventBus** - 事件发布、事件订阅、事件过滤、异步事件处理
 - **1.6 backup/** - 导出功能、导入功能、预检查、版本比较、安全文件名
+- **1.7 cron/** - 添加任务、删除任务、列出任务、任务执行、任务持久化、时区支持
 - **3.3 OpenAI Source** - 错误处理、图片处理、内容审核
 - **4.2 ToolLoopAgentRunner** - 执行流程、最大步数限制、Fallback Provider
 - **4.3 Context Manager** - 上下文处理、Token 计数、上下文截断、LLM 压缩、Enforce Max Turns
@@ -1170,7 +1181,6 @@ async def test_async_function():
 - **4.5 Compressor** - 截断压缩器、LLM 压缩器
 - **13.6 Quoted Message Utils** - 提取器、图片引用、图片解析、OneBot 客户端
 - **13.7 Other Utils** - 临时目录清理、版本比较
-
 ---
 
 ## 注意事项
