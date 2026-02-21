@@ -4,7 +4,6 @@ AstrBot 测试配置
 提供共享的 pytest fixtures 和测试工具。
 """
 
-import asyncio
 import json
 import os
 import sys
@@ -50,14 +49,6 @@ def pytest_collection_modifyitems(session, config, items):  # noqa: ARG001
 
     # 单元测试 -> 集成测试
     items[:] = unit_tests + integration_tests
-
-    # 为没有标记的异步测试添加 asyncio 标记
-    for item in items:
-        test_func = getattr(item, "function", None)
-        if test_func and asyncio.iscoroutinefunction(test_func):
-            if item.get_closest_marker("asyncio") is not None:
-                continue
-            item.add_marker(pytest.mark.asyncio)
 
 
 def pytest_configure(config):

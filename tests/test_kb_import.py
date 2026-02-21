@@ -8,11 +8,12 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.dashboard.server import AstrBotDashboard
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_kb.db"
@@ -23,7 +24,7 @@ async def core_lifecycle_td(tmp_path_factory):
 
     # Mock kb_manager and kb_helper
     kb_manager = MagicMock()
-    kb_helper = MagicMock()
+    kb_helper = MagicMock(spec=KBHelper)
     kb_helper.upload_document = AsyncMock()
 
     # Configure get_kb to be an async mock that returns kb_helper
@@ -56,7 +57,7 @@ async def core_lifecycle_td(tmp_path_factory):
             pass
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
     """Creates a Quart app instance for testing."""
     shutdown_event = asyncio.Event()
@@ -64,7 +65,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()

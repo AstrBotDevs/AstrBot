@@ -18,7 +18,7 @@ RUN_ONLINE_UPDATE_CHECK = os.environ.get("ASTRBOT_RUN_ONLINE_UPDATE_CHECK", "").
 }
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_v3.db"
@@ -39,7 +39,7 @@ async def core_lifecycle_td(tmp_path_factory):
             pass
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
     """Creates a Quart app instance for testing."""
     shutdown_event = asyncio.Event()
@@ -48,7 +48,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()

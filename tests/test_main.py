@@ -1,6 +1,6 @@
 import os
 import sys
-from collections import namedtuple
+from types import SimpleNamespace
 
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -12,18 +12,26 @@ import pytest
 from main import check_dashboard_files, check_env
 
 
-def _make_version_info(major: int, minor: int):
-    version_info_cls = namedtuple(
-        "VersionInfo",
-        ["major", "minor", "micro", "releaselevel", "serial"],
+def _make_version_info(
+    major: int,
+    minor: int,
+    micro: int = 0,
+    releaselevel: str = "final",
+    serial: int = 0,
+):
+    return SimpleNamespace(
+        major=major,
+        minor=minor,
+        micro=micro,
+        releaselevel=releaselevel,
+        serial=serial,
     )
-    return version_info_cls(major, minor, 0, "final", 0)
 
 
 def test_check_env(monkeypatch):
     version_info_correct = _make_version_info(3, 10)
     version_info_wrong = _make_version_info(3, 9)
-    monkeypatch.setattr(sys, "version_info", version_info_correct, raising=False)
+    monkeypatch.setattr(sys, "version_info", version_info_correct)
 
     expected_paths = {
         "root": "/tmp/astrbot-root",
@@ -61,7 +69,7 @@ def test_check_env(monkeypatch):
         ):
             mock_makedirs.assert_any_call(path, exist_ok=True)
 
-    monkeypatch.setattr(sys, "version_info", version_info_wrong, raising=False)
+    monkeypatch.setattr(sys, "version_info", version_info_wrong)
     with pytest.raises(SystemExit):
         check_env()
 
