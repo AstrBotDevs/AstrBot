@@ -108,8 +108,9 @@ const viewChangelog = () => {
 
 <template>
   <v-card
-    class="mx-auto d-flex flex-column"
+    class="mx-auto d-flex flex-column h-100"
     elevation="0"
+    height="100%"
     :style="{
       position: 'relative',
       backgroundColor:
