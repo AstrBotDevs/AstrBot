@@ -981,18 +981,6 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
-                    "Anthropic (Claude Code OAuth)": {
-                        "id": "anthropic_claude_code_oauth",
-                        "provider": "anthropic",
-                        "type": "anthropic_oauth",
-                        "provider_type": "chat_completion",
-                        "enable": True,
-                        "api_base": "https://api.anthropic.com",
-                        "timeout": 120,
-                        "proxy": "",
-                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
-                        "key": [],
-                    },
                     "Moonshot": {
                         "id": "moonshot",
                         "provider": "moonshot",
