@@ -1,7 +1,5 @@
 from astrbot import logger
-from astrbot.core.pipeline.context_utils import call_event_hook
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.star_handler import EventType
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -109,6 +107,9 @@ class ContextManager:
         # Trigger before compression hook
         if event:
             try:
+                from astrbot.core.pipeline.context_utils import call_event_hook
+                from astrbot.core.star.star_handler import EventType
+
                 await call_event_hook(
                     event,
                     EventType.OnBeforeContextCompressionEvent,
@@ -147,6 +148,9 @@ class ContextManager:
         # Trigger after compression hook
         if event:
             try:
+                from astrbot.core.pipeline.context_utils import call_event_hook
+                from astrbot.core.star.star_handler import EventType
+
                 await call_event_hook(
                     event,
                     EventType.OnAfterContextCompressionEvent,
