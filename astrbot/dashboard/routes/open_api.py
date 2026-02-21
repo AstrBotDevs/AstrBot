@@ -280,12 +280,8 @@ class OpenApiRoute(Route):
                 resolved_type = attachment.type
                 if not filename:
                     filename = file_path.name
-            elif part.get("path"):
-                file_path = Path(str(part["path"]))
-                if not filename:
-                    filename = file_path.name
             else:
-                raise ValueError(f"{part_type} part missing attachment_id or path")
+                raise ValueError(f"{part_type} part missing attachment_id")
 
             if not file_path.exists():
                 raise ValueError(f"file not found: {file_path!s}")
