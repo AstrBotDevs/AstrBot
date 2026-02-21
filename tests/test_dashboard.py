@@ -8,7 +8,14 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.zip_updator import ReleaseInfo
 from astrbot.dashboard.server import AstrBotDashboard
+
+RUN_ONLINE_UPDATE_CHECK = os.environ.get("ASTRBOT_RUN_ONLINE_UPDATE_CHECK", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 
 @pytest_asyncio.fixture
@@ -203,12 +210,141 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_check_update(app: Quart, authenticated_header: dict):
+async def test_check_update_success_no_new_version(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        return None
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
     test_client = app.test_client()
     response = await test_client.get("/api/update/check", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "success"
+    assert {
+        "version",
+        "has_new_version",
+        "dashboard_version",
+        "dashboard_has_new_version",
+    }.issubset(data["data"])
+    assert data["data"]["has_new_version"] is False
+    assert data["data"]["dashboard_version"] == "v-test-dashboard"
+
+
+@pytest.mark.asyncio
+async def test_check_update_success_has_new_version(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        return ReleaseInfo(
+            version="v999.0.0",
+            published_at="2026-01-01",
+            body="test release",
+        )
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "success"
+    assert {
+        "version",
+        "has_new_version",
+        "dashboard_version",
+        "dashboard_has_new_version",
+    }.issubset(data["data"])
+    assert data["data"]["has_new_version"] is True
+    assert data["data"]["dashboard_version"] == "v-test-dashboard"
+
+
+@pytest.mark.asyncio
+async def test_check_update_error_when_updator_raises(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        raise RuntimeError("mock update check failure")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert isinstance(data["message"], str)
+    assert data["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not RUN_ONLINE_UPDATE_CHECK,
+    reason="Set ASTRBOT_RUN_ONLINE_UPDATE_CHECK=1 to run online update check test.",
+)
+async def test_check_update_online_optional(app: Quart, authenticated_header: dict):
+    """Optional online smoke test for the real update-check request path."""
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] in {"success", "error"}
+    assert "message" in data
+    assert "data" in data
+
+    if data["status"] == "success":
+        assert {
+            "version",
+            "has_new_version",
+            "dashboard_version",
+            "dashboard_has_new_version",
+        }.issubset(data["data"])
 
 
 @pytest.mark.asyncio

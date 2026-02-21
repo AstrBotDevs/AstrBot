@@ -2,6 +2,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.fixtures import get_fixture_path
 
 
@@ -13,6 +15,7 @@ def test_fixture_plugin_files_exist():
     assert metadata_file.exists()
 
 
+@pytest.mark.slow
 def test_fixture_plugin_can_be_imported_in_isolated_process():
     plugin_file = get_fixture_path("plugins/fixture_plugin.py")
     repo_root = Path(__file__).resolve().parents[2]
