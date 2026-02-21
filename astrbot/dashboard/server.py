@@ -146,7 +146,12 @@ class AstrBotDashboard:
                 r = jsonify(Response().error("Missing API key").__dict__)
                 r.status_code = 401
                 return r
-            key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+            key_hash = hashlib.pbkdf2_hmac(
+                "sha256",
+                raw_key.encode("utf-8"),
+                b"astrbot_api_key",
+                100_000,
+            ).hex()
             api_key = await self.db.get_active_api_key_by_hash(key_hash)
             if not api_key:
                 r = jsonify(Response().error("Invalid API key").__dict__)
