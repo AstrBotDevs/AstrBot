@@ -134,7 +134,15 @@
     "manageTitle": "Developer Access Keys",
     "subtitle": "Create API keys for external developers to call open HTTP APIs.",
     "name": "Key Name",
-    "expiresInDays": "Expires In Days (empty means never)",
+    "expiresInDays": "Expiration",
+    "expiryOptions": {
+      "day1": "1 day",
+      "day7": "7 days",
+      "day30": "30 days",
+      "day90": "90 days",
+      "permanent": "Permanent"
+    },
+    "permanentWarning": "Permanent API keys are high risk. Store them securely and use only when necessary.",
     "scopes": "Scopes",
     "create": "Create API Key",
     "revoke": "Revoke",

@@ -100,15 +100,19 @@
                         />
                     </v-col>
                     <v-col cols="12" md="3">
-                        <v-text-field
+                        <v-select
                             v-model="newApiKeyExpiresInDays"
-                            type="number"
-                            min="1"
+                            :items="apiKeyExpiryOptions"
                             :label="tm('apiKey.expiresInDays')"
                             variant="outlined"
                             density="compact"
                             hide-details
                         />
+                    </v-col>
+                    <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
+                        <v-alert type="warning" variant="tonal" density="comfortable">
+                            {{ tm('apiKey.permanentWarning') }}
+                        </v-alert>
                     </v-col>
                     <v-col cols="12" md="5" class="d-flex align-center">
                         <v-btn color="primary" :loading="apiKeyCreating" @click="createApiKey">
@@ -119,13 +123,13 @@
 
                     <v-col cols="12">
                         <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
-                        <v-chip-group multiple>
+                        <v-chip-group v-model="newApiKeyScopes" multiple>
                             <v-chip
                                 v-for="scope in availableScopes"
                                 :key="scope.value"
+                                :value="scope.value"
                                 :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
                                 :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
-                                @click="toggleScope(scope.value)"
                             >
                                 {{ scope.label }}
                             </v-chip>
@@ -219,7 +223,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
@@ -283,9 +287,16 @@ const backupDialog = ref(null);
 const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
-const newApiKeyExpiresInDays = ref('');
+const newApiKeyExpiresInDays = ref(30);
 const newApiKeyScopes = ref(['chat', 'config', 'file', 'im']);
 const createdApiKeyPlaintext = ref('');
+const apiKeyExpiryOptions = computed(() => [
+    { title: tm('apiKey.expiryOptions.day1'), value: 1 },
+    { title: tm('apiKey.expiryOptions.day7'), value: 7 },
+    { title: tm('apiKey.expiryOptions.day30'), value: 30 },
+    { title: tm('apiKey.expiryOptions.day90'), value: 90 },
+    { title: tm('apiKey.expiryOptions.permanent'), value: 'permanent' }
+]);
 
 const availableScopes = [
     { value: 'chat', label: 'chat' },
@@ -307,14 +318,6 @@ const formatDate = (value) => {
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return '-';
     return dt.toLocaleString();
-};
-
-const toggleScope = (scope) => {
-    if (newApiKeyScopes.value.includes(scope)) {
-        newApiKeyScopes.value = newApiKeyScopes.value.filter((s) => s !== scope);
-        return;
-    }
-    newApiKeyScopes.value = [...newApiKeyScopes.value, scope];
 };
 
 const loadApiKeys = async () => {
@@ -341,7 +344,11 @@ const copyCreatedApiKey = async () => {
 };
 
 const createApiKey = async () => {
-    if (newApiKeyScopes.value.length === 0) {
+    const selectedScopes = availableScopes
+        .map((scope) => scope.value)
+        .filter((scope) => newApiKeyScopes.value.includes(scope));
+
+    if (selectedScopes.length === 0) {
         showToast(tm('apiKey.messages.scopeRequired'), 'warning');
         return;
     }
@@ -349,9 +356,9 @@ const createApiKey = async () => {
     try {
         const payload = {
             name: newApiKeyName.value,
-            scopes: newApiKeyScopes.value
+            scopes: selectedScopes
         };
-        if (newApiKeyExpiresInDays.value) {
+        if (newApiKeyExpiresInDays.value !== 'permanent') {
             payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
         }
         const res = await axios.post('/api/apikey/create', payload);
@@ -361,7 +368,7 @@ const createApiKey = async () => {
         }
         createdApiKeyPlaintext.value = res.data.data?.api_key || '';
         newApiKeyName.value = '';
-        newApiKeyExpiresInDays.value = '';
+        newApiKeyExpiresInDays.value = 30;
         showToast(tm('apiKey.messages.createSuccess'), 'success');
         await loadApiKeys();
     } catch (e) {
