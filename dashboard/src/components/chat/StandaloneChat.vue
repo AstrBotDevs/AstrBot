@@ -90,10 +90,34 @@ const previewImageUrl = ref('');
 const currSessionId = ref('');
 const getCurrentSession = computed(() => null); // 独立测试模式不需要会话信息
 
+function buildWebchatUmo(sessionId: string): string {
+    const platformId = 'webchat';
+    const messageType = 'FriendMessage';
+    const username = localStorage.getItem('user') || 'guest';
+    const sessionKey = `${platformId}!${username}!${sessionId}`;
+    return `${platformId}:${messageType}:${sessionKey}`;
+}
+
+async function bindConfigToSession(sessionId: string) {
+    const confId = (props.configId || '').trim();
+    if (!confId || confId === 'default') {
+        return;
+    }
+
+    await axios.post('/api/config/umo_abconf_route/update', {
+        umo: buildWebchatUmo(sessionId),
+        conf_id: confId
+    });
+}
+
 async function newSession() {
     try {
         const response = await axios.get('/api/chat/new_session');
         const sessionId = response.data.data.session_id;
+
+        // Bind the config before activating the session in the UI.
+        await bindConfigToSession(sessionId);
+
         currSessionId.value = sessionId;
         return sessionId;
     } catch (err) {
