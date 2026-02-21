@@ -115,6 +115,7 @@
     "hints": {
       "id": "提供商源唯一 ID（不是提供商 ID）",
       "key": "API 密钥",
+      "oauthToken": "在终端运行 `claude setup-token` 获取长期有效的 OAuth Token，然后粘贴到此处。Token 有效期为 1 年。",
       "apiBase": "自定义 API 端点 URL",
       "proxy": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
     },

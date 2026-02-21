@@ -114,6 +114,7 @@
     "hints": {
       "id": "Provider source ID (not provider ID)",
       "key": "API key for authentication",
+      "oauthToken": "Run `claude setup-token` in your terminal to get a long-lived OAuth token, then paste it here. Token is valid for 1 year.",
       "apiBase": "Custom API endpoint URL",
       "proxy": "HTTP/HTTPS proxy address, e.g. http://127.0.0.1:7890. Only affects this provider's API requests, doesn't interfere with Docker internal networking."
     },

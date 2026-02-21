@@ -241,7 +241,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     // 为 provider source 的 id 字段添加自定义 hint
     if (customSchema.provider?.items?.id) {
       customSchema.provider.items.id.hint = tm('providerSources.hints.id')
-      customSchema.provider.items.key.hint = tm('providerSources.hints.key')
+      customSchema.provider.items.key.hint = editableProviderSource.value?.type === 'anthropic_oauth'
+        ? tm('providerSources.hints.oauthToken')
+        : tm('providerSources.hints.key')
       customSchema.provider.items.api_base.hint = tm('providerSources.hints.apiBase')
     }
     // 为 proxy 字段添加描述和提示
