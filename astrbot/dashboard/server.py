@@ -218,10 +218,10 @@ class AstrBotDashboard:
         scope_map = {
             "/api/v1/chat": "chat",
             "/api/v1/chat/sessions": "chat",
-            "/api/v1/configs": "chat",
+            "/api/v1/configs": "config",
             "/api/v1/file": "file",
-            "/api/v1/im/message": "send_message",
-            "/api/v1/im/bots": "bot",
+            "/api/v1/im/message": "im",
+            "/api/v1/im/bots": "im",
         }
         return scope_map.get(path)
 

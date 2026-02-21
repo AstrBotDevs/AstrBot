@@ -284,14 +284,14 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref('');
-const newApiKeyScopes = ref(['chat', 'file', 'send_message', 'bot']);
+const newApiKeyScopes = ref(['chat', 'config', 'file', 'im']);
 const createdApiKeyPlaintext = ref('');
 
 const availableScopes = [
     { value: 'chat', label: 'chat' },
+    { value: 'config', label: 'config' },
     { value: 'file', label: 'file' },
-    { value: 'send_message', label: 'send_message' },
-    { value: 'bot', label: 'bot' }
+    { value: 'im', label: 'im' }
 ];
 
 const showToast = (message, color = 'success') => {

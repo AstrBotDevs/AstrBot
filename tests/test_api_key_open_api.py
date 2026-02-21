@@ -58,7 +58,7 @@ async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
 
     create_res = await test_client.post(
         "/api/apikey/create",
-        json={"name": "bot-scope-key", "scopes": ["bot"]},
+        json={"name": "im-scope-key", "scopes": ["im"]},
         headers=authenticated_header,
     )
     assert create_res.status_code == 200
@@ -89,8 +89,8 @@ async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
     assert denied_chat_configs_res.status_code == 403
 
     denied_res = await test_client.post(
-        "/api/v1/im/message",
-        json={},
+        "/api/v1/file",
+        data={},
         headers={"X-API-Key": raw_key},
     )
     assert denied_res.status_code == 403
@@ -117,7 +117,7 @@ async def test_open_send_message_with_api_key(app: Quart, authenticated_header: 
 
     create_res = await test_client.post(
         "/api/apikey/create",
-        json={"name": "send-message-key", "scopes": ["send_message"]},
+        json={"name": "send-message-key", "scopes": ["im"]},
         headers=authenticated_header,
     )
     create_data = await create_res.get_json()
@@ -286,7 +286,7 @@ async def test_open_chat_configs_list(
 
     create_res = await test_client.post(
         "/api/apikey/create",
-        json={"name": "chat-config-key", "scopes": ["chat"]},
+        json={"name": "chat-config-key", "scopes": ["config"]},
         headers=authenticated_header,
     )
     create_data = await create_res.get_json()

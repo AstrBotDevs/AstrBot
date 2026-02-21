@@ -8,7 +8,7 @@ from astrbot.core.db import BaseDatabase
 
 from .route import Response, Route, RouteContext
 
-ALL_OPEN_API_SCOPES = ("chat", "file", "send_message", "bot")
+ALL_OPEN_API_SCOPES = ("chat", "config", "file", "im")
 
 
 class ApiKeyRoute(Route):
@@ -25,7 +25,12 @@ class ApiKeyRoute(Route):
 
     @staticmethod
     def _hash_key(raw_key: str) -> str:
-        return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        return hashlib.pbkdf2_hmac(
+            "sha256",
+            raw_key.encode("utf-8"),
+            b"astrbot_api_key",
+            100_000,
+        ).hex()
 
     @staticmethod
     def _serialize_api_key(key) -> dict:
