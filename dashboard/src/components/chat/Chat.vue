@@ -228,6 +228,9 @@ const props = withDefaults(defineProps<Props>(), {
     chatboxMode: false
 });
 
+// TODO: Remove debug log
+console.warn('[Chat] component loaded', { chatboxMode: props.chatboxMode });
+
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
@@ -583,6 +586,11 @@ async function handleSendMessage() {
     const currentProjectId = selectedProjectId.value; // 保存当前项目ID
 
     if (isCreatingNewSession) {
+        // TODO: Remove debug log
+        console.warn('[Chat] No active session; calling newSession() before send', {
+            selectedProjectId: currentProjectId,
+            currSessionId: currSessionId.value
+        });
         await newSession();
 
         // 如果在项目视图中创建新会话，立即退出项目视图
@@ -675,6 +683,8 @@ watch(sessions, (newSessions) => {
 });
 
 onMounted(() => {
+    // TODO: Remove debug log
+    console.warn('[Chat] mounted');
     checkMobile();
     window.addEventListener('resize', checkMobile);
     getSessions();

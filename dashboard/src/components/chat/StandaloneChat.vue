@@ -70,6 +70,7 @@ import { useMessages } from '@/composables/useMessages';
 import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
 import { useToast } from '@/utils/toast';
+import { buildWebchatUmoDetails } from '@/utils/chatConfigBinding';
 
 interface Props {
     configId?: string | null;
@@ -82,6 +83,9 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useI18n();
 const { error: showError } = useToast();
 
+// TODO: Remove debug log
+console.warn('[StandaloneChat] component loaded', { configId: props.configId });
+
 // UI 状态
 const imagePreviewDialog = ref(false);
 const previewImageUrl = ref('');
@@ -90,35 +94,11 @@ const previewImageUrl = ref('');
 const currSessionId = ref('');
 const getCurrentSession = computed(() => null); // 独立测试模式不需要会话信息
 
-function buildWebchatUmo(sessionId: string): {
-    umo: string;
-    username: string | null;
-    sessionKey: string;
-    exactUmo: string | null;
-    wildcardUmo: string;
-} {
-    const platformId = 'webchat';
-    const messageType = 'FriendMessage';
-    const username = (localStorage.getItem('user') || '').trim();
-    const exactSessionKey = username ? `${platformId}!${username}!${sessionId}` : null;
-    const wildcardSessionKey = `${platformId}!*!${sessionId}`;
-    const selectedSessionKey = exactSessionKey || wildcardSessionKey;
-
-    const selectedUmo = `${platformId}:${messageType}:${selectedSessionKey}`;
-    return {
-        umo: selectedUmo,
-        username: username || null,
-        sessionKey: selectedSessionKey,
-        exactUmo: exactSessionKey ? `${platformId}:${messageType}:${exactSessionKey}` : null,
-        wildcardUmo: `${platformId}:${messageType}:${wildcardSessionKey}`
-    };
-}
-
 async function bindConfigToSession(sessionId: string) {
     const confId = (props.configId || '').trim();
     if (!confId || confId === 'default') {
         // TODO: Remove debug log
-        console.info('[StandaloneChat] Skip binding config to session', {
+        console.warn('[StandaloneChat] Skip binding config to session', {
             sessionId,
             confId,
             reason: !confId ? 'empty_configId' : 'default_configId'
@@ -126,38 +106,34 @@ async function bindConfigToSession(sessionId: string) {
         return;
     }
 
-    const umoDetails = buildWebchatUmo(sessionId);
+    const umoDetails = buildWebchatUmoDetails(sessionId, false);
 
     // TODO: Remove debug log
-    console.info('[StandaloneChat] Binding config to session', {
+    console.warn('[StandaloneChat] Binding config to session', {
         sessionId,
         confId,
         localStorageUser: localStorage.getItem('user'),
-        selectedUmo: umoDetails.umo,
-        exactUmo: umoDetails.exactUmo,
-        wildcardUmo: umoDetails.wildcardUmo
+        umo: umoDetails.umo,
+        username: umoDetails.username,
+        sessionKey: umoDetails.sessionKey
     });
 
-    const updatePayload = {
+    const payload = {
+        umo: umoDetails.umo,
         conf_id: confId
     };
 
-    const targetUmos = [umoDetails.exactUmo, umoDetails.wildcardUmo].filter(Boolean) as string[];
-    for (const umo of targetUmos) {
-        const payload = { ...updatePayload, umo };
+    // TODO: Remove debug log
+    console.warn('[StandaloneChat] POST /api/config/umo_abconf_route/update', payload);
 
-        // TODO: Remove debug log
-        console.info('[StandaloneChat] POST /api/config/umo_abconf_route/update', payload);
+    const updateRes = await axios.post('/api/config/umo_abconf_route/update', payload);
 
-        const updateRes = await axios.post('/api/config/umo_abconf_route/update', payload);
-
-        // TODO: Remove debug log
-        console.info('[StandaloneChat] Route update response', {
-            umo,
-            status: updateRes.status,
-            data: updateRes.data
-        });
-    }
+    // TODO: Remove debug log
+    console.warn('[StandaloneChat] Route update response', {
+        umo: payload.umo,
+        status: updateRes.status,
+        data: updateRes.data
+    });
 
     try {
         const routesRes = await axios.get('/api/config/umo_abconf_routes');
@@ -168,7 +144,7 @@ async function bindConfigToSession(sessionId: string) {
             .map(([umo, id]) => ({ umo, confId: id }));
 
         // TODO: Remove debug log
-        console.info('[StandaloneChat] Routing table after update', {
+        console.warn('[StandaloneChat] Routing table after update', {
             totalEntries: Object.keys(routing).length,
             selectedUmo: umoDetails.umo,
             boundConfId,
@@ -188,13 +164,13 @@ async function bindConfigToSession(sessionId: string) {
 async function newSession() {
     try {
         // TODO: Remove debug log
-        console.info('[StandaloneChat] Creating new session', { configId: props.configId });
+        console.warn('[StandaloneChat] Creating new session', { configId: props.configId });
 
         const response = await axios.get('/api/chat/new_session');
         const sessionId = response.data.data.session_id;
 
         // TODO: Remove debug log
-        console.info('[StandaloneChat] New session created', {
+        console.warn('[StandaloneChat] New session created', {
             sessionId,
             platformId: response.data.data.platform_id
         });
@@ -217,7 +193,7 @@ async function newSession() {
         currSessionId.value = sessionId;
 
         // TODO: Remove debug log
-        console.info('[StandaloneChat] Session activated in UI', { sessionId });
+        console.warn('[StandaloneChat] Session activated in UI', { sessionId });
 
         return sessionId;
     } catch (err) {
@@ -338,6 +314,8 @@ async function handleSendMessage() {
 }
 
 onMounted(async () => {
+    // TODO: Remove debug log
+    console.warn('[StandaloneChat] mounted');
     // 独立模式在挂载时创建新会话
     try {
         await newSession();

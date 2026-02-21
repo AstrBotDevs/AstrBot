@@ -77,6 +77,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
 import { useToast } from '@/utils/toast';
 import { useModuleI18n } from '@/i18n/composables';
+import { CHAT_SELECTED_CONFIG_STORAGE_KEY } from '@/utils/chatConfigBinding';
 
 interface ConfigInfo {
     id: string;
@@ -88,7 +89,7 @@ interface ConfigChangedPayload {
     agentRunnerType: string;
 }
 
-const STORAGE_KEY = 'chat.selectedConfigId';
+const STORAGE_KEY = CHAT_SELECTED_CONFIG_STORAGE_KEY;
 
 const props = withDefaults(defineProps<{
     sessionId?: string | null;
