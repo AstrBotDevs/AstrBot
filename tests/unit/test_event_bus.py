@@ -1,8 +1,10 @@
 """Tests for EventBus."""
 
 import asyncio
-import pytest
+from contextlib import suppress
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from astrbot.core.event_bus import EventBus
 
@@ -63,6 +65,13 @@ class TestEventBusDispatch:
         self, event_bus, event_queue, mock_pipeline_scheduler, mock_config_manager
     ):
         """Test that dispatch processes an event from the queue."""
+        processed = asyncio.Event()
+
+        async def execute_and_signal(event):  # noqa: ARG001
+            processed.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_and_signal
+
         # Create a mock event
         mock_event = MagicMock()
         mock_event.unified_msg_origin = "test-platform:group:123"
@@ -77,16 +86,12 @@ class TestEventBusDispatch:
 
         # Start dispatch in background and cancel after processing
         task = asyncio.create_task(event_bus.dispatch())
-
-        # Wait for the event to be processed
-        await asyncio.sleep(0.1)
-
-        # Cancel the dispatch loop
-        task.cancel()
         try:
-            await task
-        except asyncio.CancelledError:
-            pass
+            await asyncio.wait_for(processed.wait(), timeout=1.0)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
         # Verify scheduler was called
         mock_pipeline_scheduler.execute.assert_called_once_with(mock_event)
@@ -94,9 +99,18 @@ class TestEventBusDispatch:
 
     @pytest.mark.asyncio
     async def test_dispatch_handles_missing_scheduler(
-        self, event_bus, event_queue, mock_config_manager
+        self,
+        event_bus,
+        event_queue,
+        mock_config_manager,
+        mock_pipeline_scheduler,
     ):
         """Test that dispatch handles missing scheduler gracefully."""
+        logged = asyncio.Event()
+
+        def error_and_signal(*args, **kwargs):  # noqa: ARG001
+            logged.set()
+
         # Configure to return a config ID that has no scheduler
         mock_config_manager.get_conf_info.return_value = {
             "id": "missing-scheduler",
@@ -113,19 +127,37 @@ class TestEventBusDispatch:
 
         await event_queue.put(mock_event)
 
-        task = asyncio.create_task(event_bus.dispatch())
-        await asyncio.sleep(0.1)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        with patch("astrbot.core.event_bus.logger") as mock_logger:
+            mock_logger.error.side_effect = error_and_signal
+            task = asyncio.create_task(event_bus.dispatch())
+            try:
+                await asyncio.wait_for(logged.wait(), timeout=1.0)
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
+            mock_logger.error.assert_called_once()
+            assert "missing-scheduler" in mock_logger.error.call_args[0][0]
+
+        mock_pipeline_scheduler.execute.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_dispatch_multiple_events(
         self, event_bus, event_queue, mock_pipeline_scheduler, mock_config_manager
     ):
         """Test that dispatch processes multiple events."""
+        processed_all = asyncio.Event()
+        processed_count = 0
+
+        async def execute_and_count(event):  # noqa: ARG001
+            nonlocal processed_count
+            processed_count += 1
+            if processed_count == 3:
+                processed_all.set()
+
+        mock_pipeline_scheduler.execute.side_effect = execute_and_count
+
         events = []
         for i in range(3):
             mock_event = MagicMock()
@@ -139,12 +171,12 @@ class TestEventBusDispatch:
             await event_queue.put(mock_event)
 
         task = asyncio.create_task(event_bus.dispatch())
-        await asyncio.sleep(0.2)
-        task.cancel()
         try:
-            await task
-        except asyncio.CancelledError:
-            pass
+            await asyncio.wait_for(processed_all.wait(), timeout=1.0)
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
         assert mock_pipeline_scheduler.execute.call_count == 3
 

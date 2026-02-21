@@ -182,7 +182,7 @@ config_path = get_fixture_path("configs/test_cmd_config.json")
 | `unit/test_fixture_plugin_usage.py` | 测试插件加载验证 | Fixtures 系统 | 2 |
 | `unit/test_conversation_mgr.py` | 会话管理、对话 CRUD、消息历史 | `ConversationManager` | 21 |
 | `unit/test_event_bus.py` | 事件分发、事件队列处理 | `EventBus` | 6 |
-| `unit/test_persona_mgr.py` | 人设管理、文件夹管理、树形结构 | `PersonaManager` | 31 |
+| `unit/test_persona_mgr.py` | 人设管理、文件夹管理、树形结构 | `PersonaManager` | 30 |
 | `unit/test_cron_manager.py` | 定时任务调度、持久化、时区支持 | `CronJobManager` | 32 |
 
 ### 测试覆盖率分析

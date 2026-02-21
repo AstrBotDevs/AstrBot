@@ -1,10 +1,11 @@
 """Tests for PersonaManager."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from astrbot.core.persona_mgr import PersonaManager, DEFAULT_PERSONALITY
+import pytest
+
 from astrbot.core.db.po import Persona, PersonaFolder
+from astrbot.core.persona_mgr import DEFAULT_PERSONALITY, PersonaManager
 
 
 @pytest.fixture
@@ -314,14 +315,23 @@ class TestMovePersonaToFolder:
     @pytest.mark.asyncio
     async def test_move_persona_to_folder(self, persona_manager, mock_db, sample_persona):
         """Test moving persona to a folder."""
-        updated_persona = MagicMock()
-        updated_persona.persona_id = "test-persona"
+        updated_persona = Persona(
+            persona_id="test-persona",
+            system_prompt="You are a helpful assistant.",
+            begin_dialogs=["Hello!", "Hi there!"],
+            tools=["tool1"],
+            skills=["skill1"],
+            folder_id="folder-1",
+            sort_order=0,
+        )
         mock_db.move_persona_to_folder.return_value = updated_persona
         persona_manager.personas = [sample_persona]
 
         result = await persona_manager.move_persona_to_folder("test-persona", "folder-1")
 
         mock_db.move_persona_to_folder.assert_called_once_with("test-persona", "folder-1")
+        assert result == updated_persona
+        assert persona_manager.personas[0] == updated_persona
 
 
 class TestFolderManagement:
@@ -338,7 +348,13 @@ class TestFolderManagement:
             description="A test folder",
         )
 
-        mock_db.insert_persona_folder.assert_called_once()
+        mock_db.insert_persona_folder.assert_called_once_with(
+            name="Test Folder",
+            parent_id=None,
+            description="A test folder",
+            sort_order=0,
+        )
+        assert result == sample_folder
 
     @pytest.mark.asyncio
     async def test_get_folder(self, persona_manager, mock_db, sample_folder):
@@ -348,6 +364,7 @@ class TestFolderManagement:
         result = await persona_manager.get_folder("test-folder")
 
         mock_db.get_persona_folder_by_id.assert_called_once_with("test-folder")
+        assert result == sample_folder
 
     @pytest.mark.asyncio
     async def test_get_folders(self, persona_manager, mock_db):
@@ -377,7 +394,14 @@ class TestFolderManagement:
             name="Updated Name",
         )
 
-        mock_db.update_persona_folder.assert_called_once()
+        mock_db.update_persona_folder.assert_called_once_with(
+            folder_id="test-folder",
+            name="Updated Name",
+            parent_id=None,
+            description=None,
+            sort_order=None,
+        )
+        assert result == sample_folder
 
     @pytest.mark.asyncio
     async def test_delete_folder(self, persona_manager, mock_db):

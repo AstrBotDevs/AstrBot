@@ -1,7 +1,8 @@
 """Tests for ConversationManager."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.po import ConversationV2
@@ -157,6 +158,8 @@ class TestDeleteConversation:
             )
 
         mock_db.delete_conversation.assert_called_once_with(cid="conv-to-delete")
+        mock_sp.session_remove.assert_called_once_with("test:group:123", "sel_conv_id")
+        assert "test:group:123" not in conversation_manager.session_conversations
 
     @pytest.mark.asyncio
     async def test_delete_current_conversation(self, conversation_manager, mock_db):
@@ -174,6 +177,8 @@ class TestDeleteConversation:
             )
 
         mock_db.delete_conversation.assert_called_once_with(cid="current-conv")
+        mock_sp.session_remove.assert_called_once_with("test:group:123", "sel_conv_id")
+        assert "test:group:123" not in conversation_manager.session_conversations
 
     @pytest.mark.asyncio
     async def test_delete_conversations_by_user_id(self, conversation_manager, mock_db):
@@ -299,7 +304,13 @@ class TestUpdateConversation:
             persona_id="new-persona"
         )
 
-        mock_db.update_conversation.assert_called_once()
+        mock_db.update_conversation.assert_called_once_with(
+            cid="conv-id",
+            title="New Title",
+            persona_id="new-persona",
+            content=None,
+            token_usage=None,
+        )
 
     @pytest.mark.asyncio
     async def test_update_conversation_without_id(self, conversation_manager, mock_db):
@@ -313,7 +324,16 @@ class TestUpdateConversation:
             history=[{"role": "user", "content": "Hello"}]
         )
 
-        mock_db.update_conversation.assert_called_once()
+        conversation_manager.get_curr_conversation_id.assert_called_once_with(
+            "test:group:123"
+        )
+        mock_db.update_conversation.assert_called_once_with(
+            cid="current-conv-id",
+            title=None,
+            persona_id=None,
+            content=[{"role": "user", "content": "Hello"}],
+            token_usage=None,
+        )
 
     @pytest.mark.asyncio
     async def test_update_conversation_no_current_id(self, conversation_manager, mock_db):

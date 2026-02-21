@@ -1,9 +1,9 @@
 """Tests for CronJobManager."""
 
-import asyncio
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db.po import CronJob
@@ -274,6 +274,7 @@ class TestListJobs:
 
         result = await cron_manager.list_jobs(job_type="basic")
 
+        assert len(result) == 1
         mock_db.list_cron_jobs.assert_called_once_with("basic")
 
 
@@ -295,9 +296,11 @@ class TestSyncFromDb:
         sample_cron_job.enabled = False
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
 
-        await cron_manager.sync_from_db()
+        with patch.object(cron_manager, "_schedule_job") as mock_schedule:
+            await cron_manager.sync_from_db()
 
-        # Job should not be scheduled (no error raised)
+        mock_db.list_cron_jobs.assert_called_once()
+        mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_sync_from_db_skips_non_persistent(self, cron_manager, mock_db, sample_cron_job):
@@ -305,7 +308,11 @@ class TestSyncFromDb:
         sample_cron_job.persistent = False
         mock_db.list_cron_jobs.return_value = [sample_cron_job]
 
-        await cron_manager.sync_from_db()
+        with patch.object(cron_manager, "_schedule_job") as mock_schedule:
+            await cron_manager.sync_from_db()
+
+        mock_db.list_cron_jobs.assert_called_once()
+        mock_schedule.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_sync_from_db_basic_without_handler(
