@@ -68,7 +68,7 @@ async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
     key_id = create_data["data"]["key_id"]
 
     open_bot_res = await test_client.get(
-        "/api/open/v1/bots",
+        "/api/v1/im/bots",
         headers={"X-API-Key": raw_key},
     )
     assert open_bot_res.status_code == 200
@@ -77,19 +77,19 @@ async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
     assert isinstance(open_bot_data["data"]["bot_ids"], list)
 
     denied_chat_sessions_res = await test_client.get(
-        "/api/open/v1/chat/sessions?page=1&page_size=10",
+        "/api/v1/chat/sessions?page=1&page_size=10",
         headers={"X-API-Key": raw_key},
     )
     assert denied_chat_sessions_res.status_code == 403
 
     denied_chat_configs_res = await test_client.get(
-        "/api/open/v1/configs",
+        "/api/v1/configs",
         headers={"X-API-Key": raw_key},
     )
     assert denied_chat_configs_res.status_code == 403
 
     denied_res = await test_client.post(
-        "/api/open/v1/message/send",
+        "/api/v1/im/message",
         json={},
         headers={"X-API-Key": raw_key},
     )
@@ -105,7 +105,7 @@ async def test_api_key_scope_and_revoke(app: Quart, authenticated_header: dict):
     assert revoke_data["status"] == "ok"
 
     revoked_access_res = await test_client.get(
-        "/api/open/v1/bots",
+        "/api/v1/im/bots",
         headers={"X-API-Key": raw_key},
     )
     assert revoked_access_res.status_code == 401
@@ -125,7 +125,7 @@ async def test_open_send_message_with_api_key(app: Quart, authenticated_header: 
     raw_key = create_data["data"]["api_key"]
 
     send_res = await test_client.post(
-        "/api/open/v1/message/send",
+        "/api/v1/im/message",
         json={
             "umo": "webchat:FriendMessage:open_api_test_session",
             "message": "hello",
@@ -157,7 +157,7 @@ async def test_open_chat_send_auto_session_id_and_username(
         (
             item
             for item in app.url_map.iter_rules()
-            if item.rule == "/api/open/v1/chat/send" and "POST" in item.methods
+            if item.rule == "/api/v1/chat" and "POST" in item.methods
         ),
         None,
     )
@@ -182,7 +182,7 @@ async def test_open_chat_send_auto_session_id_and_username(
     open_api_route.chat_route.chat = fake_chat
     try:
         send_res = await test_client.post(
-            "/api/open/v1/chat/send",
+            "/api/v1/chat",
             json={
                 "message": "hello",
                 "username": "alice",
@@ -202,7 +202,7 @@ async def test_open_chat_send_auto_session_id_and_username(
     assert send_data["data"]["creator"] == "alice"
 
     missing_username_res = await test_client.post(
-        "/api/open/v1/chat/send",
+        "/api/v1/chat",
         json={"message": "hello"},
         headers={"X-API-Key": raw_key},
     )
@@ -246,7 +246,7 @@ async def test_open_chat_sessions_pagination(
     )
 
     page_1_res = await test_client.get(
-        "/api/open/v1/chat/sessions?page=1&page_size=2&username=alice",
+        "/api/v1/chat/sessions?page=1&page_size=2&username=alice",
         headers={"X-API-Key": raw_key},
     )
     assert page_1_res.status_code == 200
@@ -259,7 +259,7 @@ async def test_open_chat_sessions_pagination(
     assert all(item["creator"] == "alice" for item in page_1_data["data"]["sessions"])
 
     page_2_res = await test_client.get(
-        "/api/open/v1/chat/sessions?page=2&page_size=2&username=alice",
+        "/api/v1/chat/sessions?page=2&page_size=2&username=alice",
         headers={"X-API-Key": raw_key},
     )
     assert page_2_res.status_code == 200
@@ -269,7 +269,7 @@ async def test_open_chat_sessions_pagination(
     assert len(page_2_data["data"]["sessions"]) == 1
 
     missing_username_res = await test_client.get(
-        "/api/open/v1/chat/sessions?page=1&page_size=2",
+        "/api/v1/chat/sessions?page=1&page_size=2",
         headers={"X-API-Key": raw_key},
     )
     missing_username_data = await missing_username_res.get_json()
@@ -294,7 +294,7 @@ async def test_open_chat_configs_list(
     raw_key = create_data["data"]["api_key"]
 
     configs_res = await test_client.get(
-        "/api/open/v1/configs",
+        "/api/v1/configs",
         headers={"X-API-Key": raw_key},
     )
     assert configs_res.status_code == 200

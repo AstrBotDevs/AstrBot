@@ -29,12 +29,12 @@ class OpenApiRoute(Route):
         self.chat_route = chat_route
 
         self.routes = {
-            "/open/v1/chat/send": ("POST", self.chat_send),
-            "/open/v1/chat/sessions": ("GET", self.get_chat_sessions),
-            "/open/v1/configs": ("GET", self.get_chat_configs),
-            "/open/v1/file/upload": ("POST", self.upload_file),
-            "/open/v1/message/send": ("POST", self.send_message),
-            "/open/v1/bots": ("GET", self.get_bots),
+            "/v1/chat": ("POST", self.chat_send),
+            "/v1/chat/sessions": ("GET", self.get_chat_sessions),
+            "/v1/configs": ("GET", self.get_chat_configs),
+            "/v1/file": ("POST", self.upload_file),
+            "/v1/im/message": ("POST", self.send_message),
+            "/v1/im/bots": ("GET", self.get_bots),
         }
         self.register_routes()
 

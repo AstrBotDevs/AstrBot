@@ -140,7 +140,7 @@ class AstrBotDashboard:
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
             return None
-        if request.path.startswith("/api/open"):
+        if request.path.startswith("/api/v1"):
             raw_key = self._extract_raw_api_key()
             if not raw_key:
                 r = jsonify(Response().error("Missing API key").__dict__)
@@ -216,12 +216,12 @@ class AstrBotDashboard:
     @staticmethod
     def _get_required_open_api_scope(path: str) -> str | None:
         scope_map = {
-            "/api/open/v1/chat/send": "chat",
-            "/api/open/v1/chat/sessions": "chat",
-            "/api/open/v1/configs": "chat",
-            "/api/open/v1/file/upload": "file",
-            "/api/open/v1/message/send": "send_message",
-            "/api/open/v1/bots": "bot",
+            "/api/v1/chat": "chat",
+            "/api/v1/chat/sessions": "chat",
+            "/api/v1/configs": "chat",
+            "/api/v1/file": "file",
+            "/api/v1/im/message": "send_message",
+            "/api/v1/im/bots": "bot",
         }
         return scope_map.get(path)
 
