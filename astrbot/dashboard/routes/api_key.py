@@ -62,9 +62,7 @@ class ApiKeyRoute(Route):
             "expires_at": ApiKeyRoute._serialize_datetime(key.expires_at),
             "revoked_at": ApiKeyRoute._serialize_datetime(key.revoked_at),
             "is_revoked": key.revoked_at is not None,
-            "is_expired": bool(
-                expires_at and expires_at < datetime.now(timezone.utc)
-            ),
+            "is_expired": bool(expires_at and expires_at < datetime.now(timezone.utc)),
         }
 
     async def list_api_keys(self):

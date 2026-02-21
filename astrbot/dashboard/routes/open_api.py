@@ -98,6 +98,34 @@ class OpenApiRoute(Route):
 
         return matched[0]["id"], None
 
+    async def _ensure_chat_session(
+        self,
+        username: str,
+        session_id: str,
+    ) -> str | None:
+        session = await self.db.get_platform_session_by_id(session_id)
+        if session:
+            if session.creator != username:
+                return "session_id belongs to another username"
+            return None
+
+        try:
+            await self.db.create_platform_session(
+                creator=username,
+                platform_id="webchat",
+                session_id=session_id,
+                is_group=0,
+            )
+        except Exception as e:
+            # Handle rare race when same session_id is created concurrently.
+            existing = await self.db.get_platform_session_by_id(session_id)
+            if existing and existing.creator == username:
+                return None
+            logger.error("Failed to create chat session %s: %s", session_id, e)
+            return f"Failed to create session: {e}"
+
+        return None
+
     async def chat_send(self):
         post_data = await request.get_json(silent=True) or {}
         effective_username, username_err = self._resolve_open_username(
@@ -105,12 +133,20 @@ class OpenApiRoute(Route):
         )
         if username_err:
             return Response().error(username_err).__dict__
+        if not effective_username:
+            return Response().error("Invalid username").__dict__
 
         raw_session_id = post_data.get("session_id", post_data.get("conversation_id"))
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
         if not session_id:
             session_id = str(uuid4())
             post_data["session_id"] = session_id
+        ensure_session_err = await self._ensure_chat_session(
+            effective_username,
+            session_id,
+        )
+        if ensure_session_err:
+            return Response().error(ensure_session_err).__dict__
 
         config_id, resolve_err = self._resolve_chat_config_id(post_data)
         if resolve_err:

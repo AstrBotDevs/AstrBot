@@ -386,6 +386,14 @@ class ChatRoute(Route):
             agent_stats = {}
             refs = {}
             try:
+                # Emit session_id first so clients can bind the stream immediately.
+                session_info = {
+                    "type": "session_id",
+                    "data": None,
+                    "session_id": webchat_conv_id,
+                }
+                yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         try:

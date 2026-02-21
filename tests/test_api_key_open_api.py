@@ -141,6 +141,7 @@ async def test_open_send_message_with_api_key(app: Quart, authenticated_header: 
 async def test_open_chat_send_auto_session_id_and_username(
     app: Quart,
     authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     test_client = app.test_client()
 
@@ -200,6 +201,35 @@ async def test_open_chat_send_auto_session_id_and_username(
     assert isinstance(created_session_id, str)
     uuid.UUID(created_session_id)
     assert send_data["data"]["creator"] == "alice"
+    created_session = await core_lifecycle_td.db.get_platform_session_by_id(
+        created_session_id
+    )
+    assert created_session is not None
+    assert created_session.creator == "alice"
+    assert created_session.platform_id == "webchat"
+
+    await core_lifecycle_td.db.create_platform_session(
+        creator="bob",
+        platform_id="webchat",
+        session_id="open_api_existing_bob_session",
+        is_group=0,
+    )
+    another_user_session_res = await test_client.post(
+        "/api/v1/chat",
+        json={
+            "message": "hello",
+            "username": "alice",
+            "session_id": "open_api_existing_bob_session",
+            "enable_streaming": False,
+        },
+        headers={"X-API-Key": raw_key},
+    )
+    another_user_session_data = await another_user_session_res.get_json()
+    assert another_user_session_data["status"] == "error"
+    assert (
+        another_user_session_data["message"]
+        == "session_id belongs to another username"
+    )
 
     missing_username_res = await test_client.post(
         "/api/v1/chat",
