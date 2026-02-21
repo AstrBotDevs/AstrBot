@@ -1145,12 +1145,12 @@ async def test_async_function():
 
 口径说明:
 - 下表统计的是”需求条目完成度”，标记已有测试覆盖的需求项。
-- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`294` 条已收集用例。
+- 当前 pytest 测试基线（`uv run pytest tests/ --collect-only`）：`295` 条已收集用例。
 - 总体代码覆盖率：`34%`
 
 | 模块 | 总计 | 已完成 | 进度 |
 |------|------|--------|------|
-| 核心模块 | 50 | 22 | 44% |
+| 核心模块 | 50 | 30 | 60% |
 | 平台适配器 | 40 | 0 | 0% |
 | LLM Provider | 45 | 8 | 18% |
 | Agent 系统 | 40 | 20 | 50% |
@@ -1164,21 +1164,29 @@ async def test_async_function():
 | 内置插件 | 25 | 0 | 0% |
 | 工具类 | 40 | 15 | 38% |
 | 其他 | 20 | 3 | 15% |
-| **总计** | **415** | **81** | **20%** |
+| **总计** | **415** | **89** | **21%** |
 
 ### 已覆盖的需求项
 
 以下需求项已有测试覆盖（标记为 `[x]`）：
+
+**核心模块 (astrbot/core)**
 - **1.3 ConversationManager** - 新建会话、获取会话、删除会话、更新会话、会话历史管理
 - **1.4 PersonaManager** - 加载人设、获取人设、人设验证、文件夹管理、树形结构
 - **1.5 EventBus** - 事件发布、事件订阅、事件过滤、异步事件处理
 - **1.6 backup/** - 导出功能、导入功能、预检查、版本比较、安全文件名
 - **1.7 cron/** - 添加任务、删除任务、列出任务、任务执行、任务持久化、时区支持
-- **3.3 OpenAI Source** - 错误处理、图片处理、内容审核
+
+**Agent 系统 (astrbot/core/agent)**
 - **4.2 ToolLoopAgentRunner** - 执行流程、最大步数限制、Fallback Provider
 - **4.3 Context Manager** - 上下文处理、Token 计数、上下文截断、LLM 压缩、Enforce Max Turns
 - **4.4 Truncator** - 按轮次截断、半截断、丢弃最旧轮次
 - **4.5 Compressor** - 截断压缩器、LLM 压缩器
+
+**LLM Provider (astrbot/core/provider)**
+- **3.3 OpenAI Source** - 错误处理、图片处理、内容审核
+
+**工具类 (astrbot/core/utils)**
 - **13.6 Quoted Message Utils** - 提取器、图片引用、图片解析、OneBot 客户端
 - **13.7 Other Utils** - 临时目录清理、版本比较
 ---
