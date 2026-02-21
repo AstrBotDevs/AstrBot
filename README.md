@@ -83,7 +83,7 @@ astrbot
 
 #### 桌面应用部署（Tauri）
 
-桌面应用仓库：[AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+桌面应用仓库 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
 支持多系统架构，安装包直接安装，开箱即用，最适合新手和懒人的一键桌面部署方案，不推荐服务器场景。
 
