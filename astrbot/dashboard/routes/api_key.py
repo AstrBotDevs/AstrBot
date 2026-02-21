@@ -24,6 +24,21 @@ class ApiKeyRoute(Route):
         self.register_routes()
 
     @staticmethod
+    def _normalize_utc(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    @classmethod
+    def _serialize_datetime(cls, dt: datetime | None) -> str | None:
+        normalized = cls._normalize_utc(dt)
+        if normalized is None:
+            return None
+        return normalized.astimezone().isoformat()
+
+    @staticmethod
     def _hash_key(raw_key: str) -> str:
         return hashlib.pbkdf2_hmac(
             "sha256",
@@ -34,26 +49,21 @@ class ApiKeyRoute(Route):
 
     @staticmethod
     def _serialize_api_key(key) -> dict:
+        expires_at = ApiKeyRoute._normalize_utc(key.expires_at)
         return {
             "key_id": key.key_id,
             "name": key.name,
             "key_prefix": key.key_prefix,
             "scopes": key.scopes or [],
             "created_by": key.created_by,
-            "created_at": key.created_at.astimezone().isoformat(),
-            "updated_at": key.updated_at.astimezone().isoformat(),
-            "last_used_at": key.last_used_at.astimezone().isoformat()
-            if key.last_used_at
-            else None,
-            "expires_at": key.expires_at.astimezone().isoformat()
-            if key.expires_at
-            else None,
-            "revoked_at": key.revoked_at.astimezone().isoformat()
-            if key.revoked_at
-            else None,
+            "created_at": ApiKeyRoute._serialize_datetime(key.created_at),
+            "updated_at": ApiKeyRoute._serialize_datetime(key.updated_at),
+            "last_used_at": ApiKeyRoute._serialize_datetime(key.last_used_at),
+            "expires_at": ApiKeyRoute._serialize_datetime(key.expires_at),
+            "revoked_at": ApiKeyRoute._serialize_datetime(key.revoked_at),
             "is_revoked": key.revoked_at is not None,
             "is_expired": bool(
-                key.expires_at and key.expires_at < datetime.now(timezone.utc)
+                expires_at and expires_at < datetime.now(timezone.utc)
             ),
         }
 
