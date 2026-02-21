@@ -296,11 +296,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # do truncate and compress
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]")
-        event = (
-            self.run_context.context.event
-            if hasattr(self.run_context.context, "event")
-            else None
-        )
+        event = getattr(self.run_context.context, "event", None)
         self.run_context.messages = await self.context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage, event=event
         )

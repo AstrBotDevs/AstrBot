@@ -108,12 +108,15 @@ class ContextManager:
 
         # Trigger before compression hook
         if event:
-            await call_event_hook(
-                event,
-                EventType.OnBeforeContextCompressionEvent,
-                messages,
-                prev_tokens,
-            )
+            try:
+                await call_event_hook(
+                    event,
+                    EventType.OnBeforeContextCompressionEvent,
+                    messages,
+                    prev_tokens,
+                )
+            except Exception as e:
+                logger.warning(f"Hook OnBeforeContextCompressionEvent failed: {e}")
 
         messages = await self.compressor(messages)
 
@@ -138,13 +141,19 @@ class ContextManager:
             # still need compress, truncate by half
             messages = self.truncator.truncate_by_halving(messages)
 
+        # Recalculate token count after all truncation steps
+        final_tokens = self.token_counter.count_tokens(messages)
+
         # Trigger after compression hook
         if event:
-            await call_event_hook(
-                event,
-                EventType.OnAfterContextCompressionEvent,
-                messages,
-                tokens_after_summary,
-            )
+            try:
+                await call_event_hook(
+                    event,
+                    EventType.OnAfterContextCompressionEvent,
+                    messages,
+                    final_tokens,
+                )
+            except Exception as e:
+                logger.warning(f"Hook OnAfterContextCompressionEvent failed: {e}")
 
         return messages
