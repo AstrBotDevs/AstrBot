@@ -708,23 +708,18 @@ class ChatRoute(Route):
         # 获取可选的 platform_id 参数
         platform_id = request.args.get("platform_id")
 
-        sessions = await self.db.get_platform_sessions_by_creator(
+        sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
             creator=username,
             platform_id=platform_id,
             page=1,
             page_size=100,  # 暂时返回前100个
+            exclude_project_sessions=True,
         )
 
-        # 转换为字典格式，并添加项目信息
-        # get_platform_sessions_by_creator 现在返回 list[dict] 包含 session 和项目字段
+        # 转换为字典格式
         sessions_data = []
         for item in sessions:
             session = item["session"]
-            project_id = item["project_id"]
-
-            # 跳过属于项目的会话（在侧边栏对话列表中不显示）
-            if project_id is not None:
-                continue
 
             sessions_data.append(
                 {

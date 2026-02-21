@@ -172,23 +172,16 @@ class OpenApiRoute(Route):
 
         platform_id = request.args.get("platform_id")
 
-        all_sessions = await self.db.get_platform_sessions_by_creator(
+        (
+            paginated_sessions,
+            total,
+        ) = await self.db.get_platform_sessions_by_creator_paginated(
             creator=username,
             platform_id=platform_id,
-            page=1,
-            page_size=100000,
+            page=page,
+            page_size=page_size,
+            exclude_project_sessions=True,
         )
-
-        # Keep behavior aligned with ChatRoute.get_sessions:
-        # sessions that belong to project should be hidden.
-        filtered_sessions = [
-            item for item in all_sessions if item["project_id"] is None
-        ]
-        total = len(filtered_sessions)
-
-        start = (page - 1) * page_size
-        end = start + page_size
-        paginated_sessions = filtered_sessions[start:end]
 
         sessions_data = []
         for item in paginated_sessions:

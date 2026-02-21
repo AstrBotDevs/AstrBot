@@ -659,6 +659,22 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_platform_sessions_by_creator_paginated(
+        self,
+        creator: str,
+        platform_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        exclude_project_sessions: bool = False,
+    ) -> tuple[list[dict], int]:
+        """Get paginated platform sessions and total count for a creator.
+
+        Returns:
+            tuple[list[dict], int]: (sessions_with_project_info, total_count)
+        """
+        ...
+
+    @abc.abstractmethod
     async def update_platform_session(
         self,
         session_id: str,
