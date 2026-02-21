@@ -388,6 +388,10 @@ export function useMessages(
                             continue;
                         }
 
+                        if (chunk_json.type === 'session_id') {
+                            continue;
+                        }
+
                         const lastMsg = messages.value[messages.value.length - 1];
                         if (lastMsg?.content?.isLoading) {
                             messages.value.pop();
