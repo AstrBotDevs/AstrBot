@@ -20,9 +20,6 @@ export function useSessions(chatboxMode: boolean = false) {
     const currSessionId = ref('');
     const pendingSessionId = ref<string | null>(null);
 
-    // TODO: Remove debug log
-    console.warn('[useSessions] composable initialized', { chatboxMode });
-
     // 编辑标题相关
     const editTitleDialog = ref(false);
     const editingTitle = ref('');
@@ -66,79 +63,23 @@ export function useSessions(chatboxMode: boolean = false) {
 
     async function newSession() {
         try {
-            // TODO: Remove debug log
-            console.warn('[useSessions] newSession() entered', { chatboxMode });
-
             const selectedConfigId = getStoredSelectedChatConfigId();
-            // TODO: Remove debug log
-            console.warn('[useSessions] Stored chat selected config', { selectedConfigId });
             const response = await axios.get('/api/chat/new_session');
             const sessionId = response.data.data.session_id;
             const platformId = response.data.data.platform_id;
 
-            // TODO: Remove debug log
-            console.warn('[useSessions] New session created', { sessionId, platformId });
             currSessionId.value = sessionId;
 
             if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat') {
-                const umoDetails = buildWebchatUmoDetails(sessionId, false);
-
-                // TODO: Remove debug log
-                console.warn('[useSessions] Binding config to new session', {
-                    sessionId,
-                    selectedConfigId,
-                    umo: umoDetails.umo,
-                    username: umoDetails.username
-                });
-
                 try {
-                    const updateRes = await axios.post('/api/config/umo_abconf_route/update', {
+                    const umoDetails = buildWebchatUmoDetails(sessionId, false);
+                    await axios.post('/api/config/umo_abconf_route/update', {
                         umo: umoDetails.umo,
                         conf_id: selectedConfigId
                     });
-
-                    // TODO: Remove debug log
-                    console.warn('[useSessions] Route update response', {
-                        status: updateRes.status,
-                        data: updateRes.data
-                    });
-
-                    try {
-                        const routesRes = await axios.get('/api/config/umo_abconf_routes');
-                        const routing = routesRes.data?.data?.routing || {};
-                        // TODO: Remove debug log
-                        console.warn('[useSessions] Routing table check', {
-                            umo: umoDetails.umo,
-                            boundConfId: routing[umoDetails.umo],
-                            totalEntries: Object.keys(routing).length
-                        });
-                    } catch (err) {
-                        const axiosErr = err as any;
-                        // TODO: Remove debug log
-                        console.warn('[useSessions] Failed to fetch routing table after update', {
-                            message: axiosErr?.message,
-                            status: axiosErr?.response?.status,
-                            data: axiosErr?.response?.data
-                        });
-                    }
                 } catch (err) {
-                    const axiosErr = err as any;
-                    // TODO: Remove debug log
-                    console.error('[useSessions] Failed to bind config to session', {
-                        sessionId,
-                        selectedConfigId,
-                        message: axiosErr?.message,
-                        status: axiosErr?.response?.status,
-                        data: axiosErr?.response?.data
-                    });
+                    console.error('Failed to bind config to session', err);
                 }
-            } else {
-                // TODO: Remove debug log
-                console.warn('[useSessions] Skip binding config to new session', {
-                    sessionId,
-                    selectedConfigId,
-                    platformId
-                });
             }
 
             // 更新 URL

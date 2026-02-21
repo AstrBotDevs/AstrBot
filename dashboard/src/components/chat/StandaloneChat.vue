@@ -83,8 +83,6 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useI18n();
 const { error: showError } = useToast();
 
-// TODO: Remove debug log
-console.warn('[StandaloneChat] component loaded', { configId: props.configId });
 
 // UI 状态
 const imagePreviewDialog = ref(false);
@@ -97,107 +95,32 @@ const getCurrentSession = computed(() => null); // 独立测试模式不需要�
 async function bindConfigToSession(sessionId: string) {
     const confId = (props.configId || '').trim();
     if (!confId || confId === 'default') {
-        // TODO: Remove debug log
-        console.warn('[StandaloneChat] Skip binding config to session', {
-            sessionId,
-            confId,
-            reason: !confId ? 'empty_configId' : 'default_configId'
-        });
         return;
     }
 
     const umoDetails = buildWebchatUmoDetails(sessionId, false);
 
-    // TODO: Remove debug log
-    console.warn('[StandaloneChat] Binding config to session', {
-        sessionId,
-        confId,
-        localStorageUser: localStorage.getItem('user'),
-        umo: umoDetails.umo,
-        username: umoDetails.username,
-        sessionKey: umoDetails.sessionKey
-    });
-
-    const payload = {
+    await axios.post('/api/config/umo_abconf_route/update', {
         umo: umoDetails.umo,
         conf_id: confId
-    };
-
-    // TODO: Remove debug log
-    console.warn('[StandaloneChat] POST /api/config/umo_abconf_route/update', payload);
-
-    const updateRes = await axios.post('/api/config/umo_abconf_route/update', payload);
-
-    // TODO: Remove debug log
-    console.warn('[StandaloneChat] Route update response', {
-        umo: payload.umo,
-        status: updateRes.status,
-        data: updateRes.data
     });
-
-    try {
-        const routesRes = await axios.get('/api/config/umo_abconf_routes');
-        const routing = routesRes.data?.data?.routing || {};
-        const boundConfId = routing[umoDetails.umo];
-        const related = Object.entries(routing)
-            .filter(([umo]) => typeof umo === 'string' && umo.includes(sessionId))
-            .map(([umo, id]) => ({ umo, confId: id }));
-
-        // TODO: Remove debug log
-        console.warn('[StandaloneChat] Routing table after update', {
-            totalEntries: Object.keys(routing).length,
-            selectedUmo: umoDetails.umo,
-            boundConfId,
-            relatedEntries: related
-        });
-    } catch (err) {
-        const axiosErr = err as any;
-        // TODO: Remove debug log
-        console.warn('[StandaloneChat] Failed to fetch routing table after update', {
-            message: axiosErr?.message,
-            status: axiosErr?.response?.status,
-            data: axiosErr?.response?.data
-        });
-    }
 }
 
 async function newSession() {
     try {
-        // TODO: Remove debug log
-        console.warn('[StandaloneChat] Creating new session', { configId: props.configId });
-
         const response = await axios.get('/api/chat/new_session');
         const sessionId = response.data.data.session_id;
 
-        // TODO: Remove debug log
-        console.warn('[StandaloneChat] New session created', {
-            sessionId,
-            platformId: response.data.data.platform_id
-        });
-
-        // Bind the config before activating the session in the UI.
         try {
             await bindConfigToSession(sessionId);
         } catch (err) {
-            const axiosErr = err as any;
-            // TODO: Remove debug log
-            console.error('[StandaloneChat] Failed to bind config to session', {
-                sessionId,
-                configId: props.configId,
-                message: axiosErr?.message,
-                status: axiosErr?.response?.status,
-                data: axiosErr?.response?.data
-            });
+            console.error('Failed to bind config to session', err);
         }
 
         currSessionId.value = sessionId;
 
-        // TODO: Remove debug log
-        console.warn('[StandaloneChat] Session activated in UI', { sessionId });
-
         return sessionId;
     } catch (err) {
-        // TODO: Remove debug log
         console.error(err);
         throw err;
     }
@@ -314,8 +237,6 @@ async function handleSendMessage() {
 }
 
 onMounted(async () => {
-    // TODO: Remove debug log
-    console.warn('[StandaloneChat] mounted');
     // 独立模式在挂载时创建新会话
     try {
         await newSession();
