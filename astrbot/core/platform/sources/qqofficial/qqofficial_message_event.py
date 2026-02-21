@@ -256,7 +256,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             fallback_payload = payload.copy()
             fallback_payload["markdown"] = None
             fallback_payload["content"] = plain_text
-            if "msg_type" in fallback_payload and fallback_payload.get("msg_type") == 2:
+            if fallback_payload.get("msg_type") == 2:
                 fallback_payload["msg_type"] = 0
             return await send_func(fallback_payload)
 
