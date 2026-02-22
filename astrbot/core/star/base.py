@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from astrbot.core import html_renderer
 from astrbot.core.utils.command_parser import CommandParserMixin
@@ -15,8 +15,20 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
     author: str
     name: str
 
-    def __init__(self, context: Any, config: dict | None = None) -> None:
+    class _ContextLike(Protocol):
+        def get_config(self, umo: str | None = None) -> Any: ...
+
+    def __init__(self, context: _ContextLike, config: dict | None = None) -> None:
         self.context = context
+
+    def _get_context_config(self) -> Any:
+        get_config = getattr(self.context, "get_config", None)
+        if callable(get_config):
+            try:
+                return get_config()
+            except Exception:
+                return None
+        return getattr(self.context, "_config", None)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -33,10 +45,17 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
     async def text_to_image(self, text: str, return_url=True) -> str:
         """将文本转换为图片"""
+        config_obj = self._get_context_config()
+        template_name = None
+        if hasattr(config_obj, "get"):
+            try:
+                template_name = config_obj.get("t2i_active_template")
+            except Exception:
+                template_name = None
         return await html_renderer.render_t2i(
             text,
             return_url=return_url,
-            template_name=self.context._config.get("t2i_active_template"),
+            template_name=template_name,
         )
 
     async def html_render(

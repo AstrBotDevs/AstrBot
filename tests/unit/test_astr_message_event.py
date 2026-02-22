@@ -208,6 +208,18 @@ class TestGetMessageInfo:
         )
         assert event.get_sender_name() == ""
 
+    def test_get_sender_name_coerces_non_string(self, platform_meta, astrbot_message):
+        """Test get_sender_name stringifies non-string nickname values."""
+        astrbot_message.sender = MessageMember(user_id="user123", nickname=None)
+        astrbot_message.sender.nickname = 12345
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.get_sender_name() == "12345"
+
 
 class TestGetMessageOutline:
     """Tests for get_message_outline method."""

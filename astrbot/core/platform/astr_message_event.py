@@ -200,9 +200,14 @@ class AstrMessageEvent(abc.ABC):
     def get_sender_name(self) -> str:
         """获取消息发送者的名称。(可能会返回空字符串)"""
         sender = getattr(self.message_obj, "sender", None)
-        if sender and isinstance(getattr(sender, "nickname", None), str):
-            return sender.nickname
-        return ""
+        if not sender:
+            return ""
+        nickname = getattr(sender, "nickname", None)
+        if nickname is None:
+            return ""
+        if isinstance(nickname, str):
+            return nickname
+        return str(nickname)
 
     def set_extra(self, key, value) -> None:
         """设置额外的信息。"""

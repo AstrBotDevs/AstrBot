@@ -196,8 +196,9 @@ class TelegramPlatformAdapter(Platform):
                 for cmd_name, description in cmd_info_list:
                     if cmd_name in command_dict:
                         logger.warning(
-                            f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
-                            f"'{command_dict[cmd_name]}'"
+                            "[Telegram] Duplicate command name '%s' will use first registered definition: '%s'",
+                            cmd_name,
+                            command_dict[cmd_name],
                         )
                     command_dict.setdefault(cmd_name, description)
 

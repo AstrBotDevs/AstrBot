@@ -484,15 +484,14 @@ class DiscordPlatformAdapter(Platform):
     def _extract_command_info(
         event_filter: Any,
         handler_metadata: StarHandlerMetadata,
-    ) -> tuple[str, str, CommandFilter | None] | None:
+    ) -> tuple[str, str] | None:
         infos = DiscordPlatformAdapter._extract_command_infos(
             event_filter,
             handler_metadata,
         )
         if not infos:
             return None
-        cmd_name, description = infos[0]
-        return cmd_name, description, None
+        return infos[0]
 
     @staticmethod
     def _extract_command_infos(
@@ -530,10 +529,10 @@ class DiscordPlatformAdapter(Platform):
             if not cmd_name or cmd_name in seen:
                 continue
             seen.add(cmd_name)
-            # Discord slash command names must contain only lowercase letters, numbers, and underscores
-            if not re.match(r"^[a-z0-9_]{1,32}$", cmd_name):
+            # Discord slash command names allow lowercase letters, numbers, underscores and hyphens.
+            if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
                 logger.warning(
-                    f"[Discord] Skipped invalid command name (hyphens not allowed): {cmd_name}"
+                    f"[Discord] Skipped invalid command name (must match ^[a-z0-9_-]{{1,32}}$): {cmd_name}"
                 )
                 continue
             results.append((cmd_name, description))

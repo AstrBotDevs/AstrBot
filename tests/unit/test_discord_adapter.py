@@ -882,6 +882,21 @@ class TestDiscordAdapterCommandRegistration:
 
         assert sorted(name for name, _ in infos) == ["p", "ping"]
 
+    def test_extract_command_infos_allows_hyphenated_names(self):
+        """Test Discord slash command names may include hyphens."""
+        from astrbot.core.platform.sources.discord.discord_platform_adapter import (
+            DiscordPlatformAdapter,
+        )
+        from astrbot.core.star.filter.command import CommandFilter
+
+        handler_md = SimpleNamespace(desc="hyphen command")
+        infos = DiscordPlatformAdapter._extract_command_infos(
+            CommandFilter("user-info"),
+            handler_md,
+        )
+
+        assert infos == [("user-info", "hyphen command")]
+
     @pytest.mark.asyncio
     async def test_collect_commands_warns_on_duplicates(
         self,

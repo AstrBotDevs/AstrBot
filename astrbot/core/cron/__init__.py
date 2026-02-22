@@ -12,7 +12,7 @@ except ModuleNotFoundError as exc:
 
     _IMPORT_ERROR = exc
 
-    class CronJobManager:  # type: ignore[no-redef]
+    class CronJobManager:
         def __init__(self, *args, **kwargs) -> None:
             raise ModuleNotFoundError(
                 "CronJobManager requires a complete `apscheduler` installation."
