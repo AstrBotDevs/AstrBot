@@ -143,8 +143,8 @@
                                 </v-card>
                             </v-menu>
                             <v-btn :icon="getCopyIcon(index)" size="x-small" variant="text" class="copy-message-btn"
-                                :class="{ 'copy-success': isCopySuccess(index) }"
-                                @click="copyBotMessage(msg.content.message, index)" :title="t('core.common.copy')" />
+                                :class="{ 'copy-success': isCopySuccess(index), 'copy-failed': isCopyFailure(index) }"
+                                @click="copyBotMessage(msg.content.message, index)" :title="getCopyTitle(index)" />
                             <v-btn icon="mdi-reply-outline" size="x-small" variant="text" class="reply-message-btn"
                                 @click="$emit('replyMessage', msg, index)" :title="tm('actions.reply')" />
                             
@@ -185,6 +185,7 @@ import 'markstream-vue/index.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css';
 import axios from 'axios';
+import { useToast } from '@/utils/toast'
 import ReasoningBlock from './message_list_comps/ReasoningBlock.vue';
 import MessagePartsRenderer from './message_list_comps/MessagePartsRenderer.vue';
 import RefNode from './message_list_comps/RefNode.vue';
@@ -226,10 +227,12 @@ export default {
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/chat');
+        const toast = useToast()
 
         return {
             t,
-            tm
+            tm,
+            toast
         };
     },
     provide() {
@@ -241,6 +244,7 @@ export default {
     data() {
         return {
             copiedMessages: new Set(),
+            copyFailedMessages: new Set(),
             isUserNearBottom: true,
             scrollThreshold: 1,
             scrollTimer: null,
@@ -496,96 +500,150 @@ export default {
         },
 
         // 复制代码到剪贴板
-        copyCodeToClipboard(code) {
-            navigator.clipboard.writeText(code).then(() => {
-                console.log('代码已复制到剪贴板');
-            }).catch(err => {
-                console.error('复制失败:', err);
-                // 如果现代API失败，使用传统方法
+        tryExecCommandCopy(text) {
+            try {
                 const textArea = document.createElement('textarea');
-                textArea.value = code;
+                textArea.value = text;
                 document.body.appendChild(textArea);
+                textArea.focus();
                 textArea.select();
-                try {
-                    document.execCommand('copy');
-                    console.log('代码已复制到剪贴板 (fallback)');
-                } catch (fallbackErr) {
-                    console.error('复制失败 (fallback):', fallbackErr);
-                }
+                const ok = document.execCommand('copy');
                 document.body.removeChild(textArea);
-            });
+                return ok;
+            } catch (_) {
+                return false;
+            }
+        },
+
+        async copyTextToClipboard(text) {
+            // 优先使用同步复制，尽量保留用户手势上下文；
+            // 在非安全来源（例如通过局域网 IP + vite --host）时成功率更高。
+            if (this.tryExecCommandCopy(text)) {
+                return true;
+            }
+
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            return false;
+        },
+
+        buildCopyTextFromParts(messageParts) {
+            if (typeof messageParts === 'string') {
+                return messageParts.trim();
+            }
+            if (!Array.isArray(messageParts)) {
+                return '';
+            }
+
+            const textContents = messageParts
+                .filter(part => part && typeof part === 'object' && part.type === 'plain' && part.text)
+                .map(part => part.text);
+
+            let textToCopy = textContents.join('\n');
+
+            const imageCount = messageParts.filter(part => part?.type === 'image' && part.embedded_url).length;
+            if (imageCount > 0) {
+                if (textToCopy) textToCopy += '\n\n';
+                textToCopy += `[包含 ${imageCount} 张图片]`;
+            }
+
+            const hasAudio = messageParts.some(part => part?.type === 'record' && part.embedded_url);
+            if (hasAudio) {
+                if (textToCopy) textToCopy += '\n\n';
+                textToCopy += '[包含音频内容]';
+            }
+
+            return String(textToCopy || '').trim();
+        },
+
+        async copyCodeToClipboard(code) {
+            const text = String(code ?? '');
+            if (!text) return false;
+
+            const ok = await this.copyTextToClipboard(text);
+            if (ok) {
+                this.toast?.success?.(this.t('core.common.copied'));
+            } else {
+                this.toast?.error?.(this.t('core.common.copyFailed'));
+            }
+            return ok;
         },
 
         // 复制bot消息到剪贴板
-        copyBotMessage(messageParts, messageIndex) {
-            let textToCopy = '';
+        async copyBotMessage(messageParts, messageIndex) {
+            let textToCopy = this.buildCopyTextFromParts(messageParts);
+            if (!textToCopy) textToCopy = '[媒体内容]';
 
-            if (Array.isArray(messageParts)) {
-                // 提取所有文本内容
-                const textContents = messageParts
-                    .filter(part => part.type === 'plain' && part.text)
-                    .map(part => part.text);
-                textToCopy = textContents.join('\n');
-
-                // 检查是否有图片
-                const imageCount = messageParts.filter(part => part.type === 'image' && part.embedded_url).length;
-                if (imageCount > 0) {
-                    if (textToCopy) textToCopy += '\n\n';
-                    textToCopy += `[包含 ${imageCount} 张图片]`;
-                }
-
-                // 检查是否有音频
-                const hasAudio = messageParts.some(part => part.type === 'record' && part.embedded_url);
-                if (hasAudio) {
-                    if (textToCopy) textToCopy += '\n\n';
-                    textToCopy += '[包含音频内容]';
-                }
-            }
-
-            // 如果没有任何内容，使用默认文本
-            if (!textToCopy.trim()) {
-                textToCopy = '[媒体内容]';
-            }
-
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                console.log('消息已复制到剪贴板');
+            const ok = await this.copyTextToClipboard(textToCopy);
+            if (ok) {
                 this.showCopySuccess(messageIndex);
-            }).catch(err => {
-                console.error('复制失败:', err);
-                // 如果现代API失败，使用传统方法
-                const textArea = document.createElement('textarea');
-                textArea.value = textToCopy;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    console.log('消息已复制到剪贴板 (fallback)');
-                    this.showCopySuccess(messageIndex);
-                } catch (fallbackErr) {
-                    console.error('复制失败 (fallback):', fallbackErr);
-                }
-                document.body.removeChild(textArea);
-            });
+                this.toast?.success?.(this.t('core.common.copied'));
+            } else {
+                this.showCopyFailure(messageIndex);
+                this.toast?.error?.(this.t('core.common.copyFailed'));
+            }
         },
 
         // 显示复制成功提示
         showCopySuccess(messageIndex) {
+            if (this.copyFailedMessages.has(messageIndex)) {
+                this.copyFailedMessages.delete(messageIndex);
+                this.copyFailedMessages = new Set(this.copyFailedMessages);
+            }
             this.copiedMessages.add(messageIndex);
+            this.copiedMessages = new Set(this.copiedMessages);
 
             // 2秒后移除成功状态
             setTimeout(() => {
                 this.copiedMessages.delete(messageIndex);
+                this.copiedMessages = new Set(this.copiedMessages);
+            }, 2000);
+        },
+
+        // 显示复制失败提示
+        showCopyFailure(messageIndex) {
+            if (this.copiedMessages.has(messageIndex)) {
+                this.copiedMessages.delete(messageIndex);
+                this.copiedMessages = new Set(this.copiedMessages);
+            }
+            this.copyFailedMessages.add(messageIndex);
+            this.copyFailedMessages = new Set(this.copyFailedMessages);
+
+            setTimeout(() => {
+                this.copyFailedMessages.delete(messageIndex);
+                this.copyFailedMessages = new Set(this.copyFailedMessages);
             }, 2000);
         },
 
         // 获取复制按钮图标
         getCopyIcon(messageIndex) {
-            return this.copiedMessages.has(messageIndex) ? 'mdi-check' : 'mdi-content-copy';
+            if (this.copiedMessages.has(messageIndex)) return 'mdi-check';
+            if (this.copyFailedMessages.has(messageIndex)) return 'mdi-alert-circle-outline';
+            return 'mdi-content-copy';
         },
 
         // 检查是否为复制成功状态
         isCopySuccess(messageIndex) {
             return this.copiedMessages.has(messageIndex);
+        },
+
+        // 检查是否为复制失败状态
+        isCopyFailure(messageIndex) {
+            return this.copyFailedMessages.has(messageIndex);
+        },
+
+        // 获取复制按钮提示文本
+        getCopyTitle(messageIndex) {
+            if (this.isCopySuccess(messageIndex)) return this.t('core.common.copied');
+            if (this.isCopyFailure(messageIndex)) return this.t('core.common.copyFailed');
+            return this.t('core.common.copy');
         },
 
         // 获取复制图标SVG
@@ -598,6 +656,11 @@ export default {
             return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>';
         },
 
+        // 获取失败图标SVG
+        getErrorIconSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="13"></line><circle cx="12" cy="16.5" r="1"></circle></svg>';
+        },
+
         // 初始化代码块复制按钮
         initCodeCopyButtons() {
             this.$nextTick(() => {
@@ -608,15 +671,16 @@ export default {
                         const button = document.createElement('button');
                         button.className = 'copy-code-btn';
                         button.innerHTML = this.getCopyIconSvg();
-                        button.title = '复制代码';
-                        button.addEventListener('click', () => {
-                            this.copyCodeToClipboard(codeBlock.textContent);
-                            // 显示复制成功提示
-                            button.innerHTML = this.getSuccessIconSvg();
-                            button.style.color = '#4caf50';
+                        button.title = this.t('core.common.copy');
+                        button.addEventListener('click', async () => {
+                            const ok = await this.copyCodeToClipboard(codeBlock.textContent || '');
+                            button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
+                            button.style.color = ok ? '#4caf50' : '#f44336';
+                            button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
                             setTimeout(() => {
                                 button.innerHTML = this.getCopyIconSvg();
                                 button.style.color = '';
+                                button.setAttribute("title", this.t('core.common.copy'));
                             }, 2000);
                         });
                         pre.style.position = 'relative';
@@ -1084,6 +1148,16 @@ export default {
 .copy-message-btn.copy-success:hover {
     color: #4caf50;
     background-color: rgba(76, 175, 80, 0.1);
+}
+
+.copy-message-btn.copy-failed {
+    color: #f44336;
+    opacity: 1;
+}
+
+.copy-message-btn.copy-failed:hover {
+    color: #f44336;
+    background-color: rgba(244, 67, 54, 0.1);
 }
 
 .reply-message-btn {
