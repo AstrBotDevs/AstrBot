@@ -501,17 +501,23 @@ export default {
 
         // 复制代码到剪贴板
         tryExecCommandCopy(text) {
+            let textArea = null;
             try {
-                const textArea = document.createElement('textarea');
+                textArea = document.createElement('textarea');
                 textArea.value = text;
                 document.body.appendChild(textArea);
                 textArea.focus();
                 textArea.select();
                 const ok = document.execCommand('copy');
-                document.body.removeChild(textArea);
                 return ok;
             } catch (_) {
                 return false;
+            } finally {
+                try {
+                    textArea?.remove?.();
+                } catch (_) {
+                    // ignore cleanup errors
+                }
             }
         },
 
@@ -519,19 +525,37 @@ export default {
             // 优先使用同步复制，尽量保留用户手势上下文；
             // 在非安全来源（例如通过局域网 IP + vite --host）时成功率更高。
             if (this.tryExecCommandCopy(text)) {
-                return true;
+                return { ok: true, method: 'execCommand' };
             }
 
             if (navigator.clipboard?.writeText) {
                 try {
                     await navigator.clipboard.writeText(text);
-                    return true;
-                } catch (_) {
-                    return false;
+                    return { ok: true, method: 'clipboard' };
+                } catch (error) {
+                    return { ok: false, method: 'clipboard', error };
                 }
             }
 
-            return false;
+            return { ok: false, method: 'unavailable' };
+        },
+
+        async copyWithFeedback(text, messageIndex = null) {
+            const result = await this.copyTextToClipboard(text);
+            const ok = !!result?.ok;
+
+            if (messageIndex !== null && messageIndex !== undefined) {
+                if (ok) this.showCopySuccess(messageIndex);
+                else this.showCopyFailure(messageIndex);
+            }
+
+            if (ok) {
+                this.toast?.success?.(this.t('core.common.copied'));
+            } else {
+                this.toast?.error?.(this.t('core.common.copyFailed'));
+            }
+
+            return result;
         },
 
         buildCopyTextFromParts(messageParts) {
@@ -565,30 +589,15 @@ export default {
 
         async copyCodeToClipboard(code) {
             const text = String(code ?? '');
-            if (!text) return false;
-
-            const ok = await this.copyTextToClipboard(text);
-            if (ok) {
-                this.toast?.success?.(this.t('core.common.copied'));
-            } else {
-                this.toast?.error?.(this.t('core.common.copyFailed'));
-            }
-            return ok;
+            if (!text) return { ok: false, method: 'empty' };
+            return await this.copyWithFeedback(text, null);
         },
 
         // 复制bot消息到剪贴板
         async copyBotMessage(messageParts, messageIndex) {
             let textToCopy = this.buildCopyTextFromParts(messageParts);
             if (!textToCopy) textToCopy = '[媒体内容]';
-
-            const ok = await this.copyTextToClipboard(textToCopy);
-            if (ok) {
-                this.showCopySuccess(messageIndex);
-                this.toast?.success?.(this.t('core.common.copied'));
-            } else {
-                this.showCopyFailure(messageIndex);
-                this.toast?.error?.(this.t('core.common.copyFailed'));
-            }
+            await this.copyWithFeedback(textToCopy, messageIndex);
         },
 
         // 显示复制成功提示
@@ -673,7 +682,8 @@ export default {
                         button.innerHTML = this.getCopyIconSvg();
                         button.title = this.t('core.common.copy');
                         button.addEventListener('click', async () => {
-                            const ok = await this.copyCodeToClipboard(codeBlock.textContent || '');
+                            const res = await this.copyCodeToClipboard(codeBlock.textContent || '');
+                            const ok = !!res?.ok;
                             button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
                             button.style.color = ok ? '#4caf50' : '#f44336';
                             button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
