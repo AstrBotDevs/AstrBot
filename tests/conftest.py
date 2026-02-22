@@ -7,6 +7,7 @@ AstrBot 测试配置
 import json
 import os
 import sys
+from asyncio import Queue
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -33,6 +34,10 @@ def pytest_collection_modifyitems(session, config, items):  # noqa: ARG001
     """重新排序测试：单元测试优先，集成测试在后。"""
     unit_tests = []
     integration_tests = []
+    deselected = []
+    profile = config.getoption("--test-profile") or os.environ.get(
+        "ASTRBOT_TEST_PROFILE", "all"
+    )
 
     for item in items:
         item_path = Path(str(item.path))
@@ -41,14 +46,44 @@ def pytest_collection_modifyitems(session, config, items):  # noqa: ARG001
         if is_integration:
             if item.get_closest_marker("integration") is None:
                 item.add_marker(pytest.mark.integration)
+            item.add_marker(pytest.mark.tier_d)
             integration_tests.append(item)
         else:
             if item.get_closest_marker("unit") is None:
                 item.add_marker(pytest.mark.unit)
+            if any(
+                item.get_closest_marker(marker) is not None
+                for marker in ("platform", "provider", "slow")
+            ):
+                item.add_marker(pytest.mark.tier_c)
             unit_tests.append(item)
 
     # 单元测试 -> 集成测试
-    items[:] = unit_tests + integration_tests
+    ordered_items = unit_tests + integration_tests
+    if profile == "blocking":
+        selected_items = []
+        for item in ordered_items:
+            if item.get_closest_marker("tier_c") or item.get_closest_marker("tier_d"):
+                deselected.append(item)
+            else:
+                selected_items.append(item)
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+        items[:] = selected_items
+        return
+
+    items[:] = ordered_items
+
+
+def pytest_addoption(parser):
+    """增加测试执行档位选择。"""
+    parser.addoption(
+        "--test-profile",
+        action="store",
+        default=None,
+        choices=["all", "blocking"],
+        help="Select test profile. 'blocking' excludes auto-classified tier_c/tier_d tests.",
+    )
 
 
 def pytest_configure(config):
@@ -59,6 +94,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "platform: 平台适配器测试")
     config.addinivalue_line("markers", "provider: LLM Provider 测试")
     config.addinivalue_line("markers", "db: 数据库相关测试")
+    config.addinivalue_line("markers", "tier_c: C-tier tests (optional / non-blocking)")
+    config.addinivalue_line("markers", "tier_d: D-tier tests (extended / integration)")
 
 
 # ============================================================
@@ -70,6 +107,18 @@ def pytest_configure(config):
 def temp_dir(tmp_path: Path) -> Path:
     """创建临时目录用于测试。"""
     return tmp_path
+
+
+@pytest.fixture
+def event_queue() -> Queue:
+    """Create a shared asyncio queue fixture for tests."""
+    return Queue()
+
+
+@pytest.fixture
+def platform_settings() -> dict:
+    """Create a shared empty platform settings fixture for adapter tests."""
+    return {}
 
 
 @pytest.fixture

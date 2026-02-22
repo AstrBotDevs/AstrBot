@@ -11,8 +11,6 @@ Tests cover:
 Note: Uses unittest.mock to simulate external dependencies.
 """
 
-import asyncio
-
 import pytest
 
 # ============================================================================
@@ -31,16 +29,6 @@ class TestQQOfficialAdapter:
             "appid": "test_appid",
             "secret": "test_secret",
         }
-
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
 
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that QQ Official adapter can be imported."""
@@ -75,16 +63,6 @@ class TestQQOfficialWebhookAdapter:
             "appid": "test_appid",
             "secret": "test_secret",
         }
-
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
 
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that QQ Official Webhook adapter can be imported."""
@@ -121,16 +99,6 @@ class TestWeChatOfficialAccountAdapter:
             "encoding_aes_key": "test_encoding_aes_key",
         }
 
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
-
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that WeChat Official Account adapter can be imported."""
         try:
@@ -163,16 +131,6 @@ class TestSatoriAdapter:
             "host": "127.0.0.1",
             "port": 5140,
         }
-
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
 
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that Satori adapter can be imported."""
@@ -207,20 +165,12 @@ class TestLineAdapter:
             "channel_secret": "test_secret",
         }
 
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
-
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that Line adapter can be imported."""
         try:
-            from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
+            from astrbot.core.platform.sources.line.line_adapter import (
+                LinePlatformAdapter,
+            )
 
             import_success = True
         except ImportError as e:
@@ -247,16 +197,6 @@ class TestMisskeyAdapter:
             "instance_url": "https://misskey.io",
             "access_token": "test_token",
         }
-
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
 
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that Misskey adapter can be imported."""
@@ -291,16 +231,6 @@ class TestWecomAIBotAdapter:
             "secret": "test_secret",
         }
 
-    @pytest.fixture
-    def event_queue(self):
-        """Create an event queue for testing."""
-        return asyncio.Queue()
-
-    @pytest.fixture
-    def platform_settings(self):
-        """Create platform settings for testing."""
-        return {}
-
     def test_adapter_import(self, platform_config, event_queue, platform_settings):
         """Test that Wecom AI Bot adapter can be imported."""
         try:
@@ -328,7 +258,9 @@ class TestP2PlatformMetadata:
     def test_line_metadata(self):
         """Test Line adapter metadata."""
         try:
-            from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
+            from astrbot.core.platform.sources.line.line_adapter import (
+                LinePlatformAdapter,
+            )
 
             # Check if LineAdapter has meta method
             assert hasattr(LinePlatformAdapter, "meta")

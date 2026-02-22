@@ -1,9 +1,10 @@
 import asyncio
+import importlib
 import itertools
 import logging
 import time
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import aiocqhttp
@@ -45,6 +46,7 @@ class AiocqhttpAdapter(Platform):
         platform_config: dict,
         platform_settings: dict,
         event_queue: asyncio.Queue,
+        bot_factory: Callable[..., Any] | None = None,
     ) -> None:
         super().__init__(platform_config, event_queue)
 
@@ -59,14 +61,7 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = aiocqhttp.CQHttp(
-            use_ws_reverse=True,
-            import_name="aiocqhttp",
-            api_timeout_sec=180,
-            access_token=platform_config.get(
-                "ws_reverse_token",
-            ),  # 以防旧版本配置不存在
-        )
+        self.bot = self._create_bot(platform_config, bot_factory=bot_factory)
 
         @self.bot.on_request()
         async def request(event: aiocqhttp.Event) -> None:
@@ -112,6 +107,29 @@ class AiocqhttpAdapter(Platform):
         @self.bot.on_websocket_connection
         def on_websocket_connection(_) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
+
+    @staticmethod
+    def _create_bot(
+        platform_config: dict,
+        bot_factory: Callable[..., Any] | None = None,
+    ) -> aiocqhttp.CQHttp:
+        if bot_factory is None:
+            # Resolve aiocqhttp at runtime so tests that swap sys.modules later
+            # still affect bot creation even if this module was imported earlier.
+            aiocqhttp_module = importlib.import_module("aiocqhttp")
+            bot_factory = aiocqhttp_module.CQHttp
+
+        return cast(
+            aiocqhttp.CQHttp,
+            bot_factory(
+                use_ws_reverse=True,
+                import_name="aiocqhttp",
+                api_timeout_sec=180,
+                access_token=platform_config.get(
+                    "ws_reverse_token",
+                ),  # 以防旧版本配置不存在
+            ),
+        )
 
     async def send_by_session(
         self,
