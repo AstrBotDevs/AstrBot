@@ -685,7 +685,9 @@ export default {
                             const res = await this.copyCodeToClipboard(codeBlock.textContent || '');
                             const ok = !!res?.ok;
                             button.innerHTML = ok ? this.getSuccessIconSvg() : this.getErrorIconSvg();
-                            button.style.color = ok ? '#4caf50' : '#f44336';
+                            button.style.color = ok
+                                ? 'rgb(var(--v-theme-success))'
+                                : 'rgb(var(--v-theme-error))';
                             button.setAttribute("title", this.t(`core.common.${ok ? "copied" : "copyFailed"}`));
                             setTimeout(() => {
                                 button.innerHTML = this.getCopyIconSvg();
@@ -1151,23 +1153,23 @@ export default {
 }
 
 .copy-message-btn.copy-success {
-    color: #4caf50;
+    color: rgb(var(--v-theme-success));
     opacity: 1;
 }
 
 .copy-message-btn.copy-success:hover {
-    color: #4caf50;
-    background-color: rgba(76, 175, 80, 0.1);
+    color: rgb(var(--v-theme-success));
+    background-color: rgba(var(--v-theme-success), 0.1);
 }
 
 .copy-message-btn.copy-failed {
-    color: #f44336;
+    color: rgb(var(--v-theme-error));
     opacity: 1;
 }
 
 .copy-message-btn.copy-failed:hover {
-    color: #f44336;
-    background-color: rgba(244, 67, 54, 0.1);
+    color: rgb(var(--v-theme-error));
+    background-color: rgba(var(--v-theme-error), 0.1);
 }
 
 .reply-message-btn {
