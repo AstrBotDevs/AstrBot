@@ -529,8 +529,17 @@ class PluginManager:
                         requirements_path=requirements_path,
                     )
                 except Exception as e:
-                    logger.error(traceback.format_exc())
+                    error_trace = traceback.format_exc()
+                    logger.error(error_trace)
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
+                    fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                    self.failed_plugin_dict[root_dir_name] = {
+                        "error": str(e),
+                        "traceback": error_trace,
+                    }
+                    if path in star_map:
+                        logger.info("失败插件依旧在插件列表中")
+                        star_map.pop(path)
                     continue
 
                 # 检查 _conf_schema.json
