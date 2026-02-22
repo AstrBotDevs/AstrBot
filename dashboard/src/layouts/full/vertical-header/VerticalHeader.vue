@@ -53,8 +53,22 @@ const isDesktopReleaseMode = ref(
 const redirectConfirmDialog = ref(false);
 const pendingRedirectUrl = ref('');
 const resolvingReleaseTarget = ref(false);
-const desktopReleaseBaseUrl = 'https://github.com/AstrBotDevs/AstrBot-desktop/releases';
-const fallbackReleaseUrl = desktopReleaseBaseUrl;
+const DEFAULT_ASTRBOT_RELEASE_BASE_URL = 'https://github.com/AstrBotDevs/AstrBot/releases';
+const resolveReleaseBaseUrl = () => {
+  const raw = import.meta.env.VITE_ASTRBOT_RELEASE_BASE_URL;
+  // Keep upstream default on AstrBot releases; desktop distributors can override via env injection.
+  const normalized = raw?.trim()?.replace(/\/+$/, '') || '';
+  const withoutLatestSuffix = normalized.replace(/\/latest$/i, '');
+  return withoutLatestSuffix || DEFAULT_ASTRBOT_RELEASE_BASE_URL;
+};
+const releaseBaseUrl = resolveReleaseBaseUrl();
+const getReleaseUrlByTag = (tag: string | null | undefined) => {
+  const normalizedTag = (tag || '').trim();
+  if (!normalizedTag || normalizedTag.toLowerCase() === 'latest') {
+    return `${releaseBaseUrl}/latest`;
+  }
+  return `${releaseBaseUrl}/tag/${normalizedTag}`;
+};
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
@@ -137,14 +151,11 @@ function confirmExternalRedirect() {
 const getReleaseUrlForDesktop = () => {
   const firstRelease = (releases.value as any[])?.[0];
   if (firstRelease?.tag_name) {
-    const tag = firstRelease.tag_name as string;
-    return `${desktopReleaseBaseUrl}/tag/${tag}`;
+    return getReleaseUrlByTag(firstRelease.tag_name as string);
   }
-  if (hasNewVersion.value) return fallbackReleaseUrl;
+  if (hasNewVersion.value) return getReleaseUrlByTag('latest');
   const tag = botCurrVersion.value?.startsWith('v') ? botCurrVersion.value : 'latest';
-  return tag === 'latest'
-    ? fallbackReleaseUrl
-    : `${desktopReleaseBaseUrl}/tag/${tag}`;
+  return getReleaseUrlByTag(tag);
 };
 
 function handleUpdateClick() {
@@ -153,7 +164,7 @@ function handleUpdateClick() {
     resolvingReleaseTarget.value = true;
     checkUpdate();
     void getReleases().finally(() => {
-      pendingRedirectUrl.value = getReleaseUrlForDesktop() || fallbackReleaseUrl;
+      pendingRedirectUrl.value = getReleaseUrlForDesktop() || getReleaseUrlByTag('latest');
       resolvingReleaseTarget.value = false;
     });
     return;
