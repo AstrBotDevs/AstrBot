@@ -70,7 +70,7 @@ class Main(star.Star):
         header = HEADERS
         header.update({"User-Agent": random.choice(USER_AGENTS)})
         async with aiohttp.ClientSession(trust_env=True) as session:
-            async with session.get(url, headers=header, timeout=6) as response:
+            async with session.get(url, headers=header) as response:
                 html = await response.text(encoding="utf-8")
                 doc = Document(html)
                 ret = doc.summary(html_partial=True)
@@ -151,7 +151,6 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=6,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -183,7 +182,6 @@ class Main(star.Star):
                 url,
                 json=payload,
                 headers=header,
-                timeout=6,
             ) as response:
                 if response.status != 200:
                     reason = await response.text()
@@ -265,7 +263,7 @@ class Main(star.Star):
                 "transport": "sse",
                 "url": f"http://appbuilder.baidu.com/v2/ai_search/mcp/sse?api_key={key}",
                 "headers": {},
-                "timeout": 30,
+                "timeout": 600,
             },
         )
         self.baidu_initialized = True
