@@ -33,7 +33,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
-from .star_handler import star_handlers_registry
+from .star_handler import star_handlers_registry, EventType
 from .updator import PluginUpdator
 
 try:
@@ -772,6 +772,19 @@ class PluginManager:
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
                     await metadata.star_cls.initialize()
 
+                # 触发插件加载事件
+                handlers = star_handlers_registry.get_handlers_by_event_type(
+                    EventType.OnPluginLoadedEvent,
+                )
+                for handler in handlers:
+                    try:
+                        logger.info(
+                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                        )
+                        await handler.handler(metadata)
+                    except Exception:
+                        logger.error(traceback.format_exc())
+
             except BaseException as e:
                 logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
                 errors = traceback.format_exc()
@@ -1158,6 +1171,19 @@ class PluginManager:
             )
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
+
+        # 触发插件卸载事件
+        handlers = star_handlers_registry.get_handlers_by_event_type(
+            EventType.OnPluginUnloadedEvent,
+        )
+        for handler in handlers:
+            try:
+                logger.info(
+                    f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                )
+                await handler.handler(star_metadata)
+            except Exception:
+                logger.error(traceback.format_exc())
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
