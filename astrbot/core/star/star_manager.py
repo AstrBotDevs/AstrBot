@@ -538,8 +538,10 @@ class PluginManager:
                         "traceback": error_trace,
                     }
                     if path in star_map:
-                        logger.info("失败插件依旧在插件列表中")
-                        star_map.pop(path)
+                        logger.info("失败插件依旧在插件列表中，正在清理...")
+                        metadata = star_map.pop(path)
+                        if metadata in star_registry:
+                            star_registry.remove(metadata)
                     continue
 
                 # 检查 _conf_schema.json
@@ -793,6 +795,11 @@ class PluginManager:
                     "traceback": errors,
                 }
                 # 记录注册失败的插件名称，以便后续重载插件
+                if path in star_map:
+                    logger.info("失败插件依旧在插件列表中，正在清理...")
+                    metadata = star_map.pop(path)
+                    if metadata in star_registry:
+                        star_registry.remove(metadata)
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
