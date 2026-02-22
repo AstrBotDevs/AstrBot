@@ -44,6 +44,14 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                     "type": "string",
                     "description": "The input to be handed off to another agent. This should be a clear and concise request or task.",
                 },
+                "background_task": {
+                    "type": "boolean",
+                    "description": (
+                        "Defaults to false. "
+                        "Set to true if the task may take noticeable time, involves external tools, or the user does not need to wait. "
+                        "Use false only for quick, immediate tasks."
+                    ),
+                },
             },
         }
 

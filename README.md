@@ -81,9 +81,15 @@ uv tool install astrbot
 astrbot
 ```
 
+#### 桌面应用部署（Tauri）
+
+桌面应用仓库 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+
+支持多系统架构，安装包直接安装，开箱即用，最适合新手和懒人的一键桌面部署方案，不推荐服务器场景。
+
 #### 启动器一键部署（AstrBot Launcher）
 
-进入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 仓库，在 Releases 页最新版本下找到对应的系统安装包安装即可。
+快速部署和多开方案，实现环境隔离，进入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 仓库，在 Releases 页最新版本下找到对应的系统安装包安装即可。
 
 #### 宝塔面板部署
 
@@ -145,10 +151,6 @@ yay -S astrbot-git
 # 或者使用 paru
 paru -S astrbot-git
 ```
-
-#### 桌面端（Tauri）
-
-桌面端已迁移为独立仓库（Tauri）：[https://github.com/AstrBotDevs/AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
 ## 支持的消息平台
 

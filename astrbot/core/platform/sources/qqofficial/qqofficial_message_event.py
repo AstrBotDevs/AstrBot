@@ -25,6 +25,26 @@ from astrbot.core.utils.io import download_image_by_url, file_to_base64
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 
+def _patch_qq_botpy_formdata() -> None:
+    """Patch qq-botpy for aiohttp>=3.12 compatibility.
+
+    qq-botpy 1.2.1 defines botpy.http._FormData._gen_form_data() and expects
+    aiohttp.FormData to have a private flag named _is_processed, which is no
+    longer present in newer aiohttp versions.
+    """
+
+    try:
+        from botpy.http import _FormData  # type: ignore
+
+        if not hasattr(_FormData, "_is_processed"):
+            setattr(_FormData, "_is_processed", False)
+    except Exception:
+        logger.debug("[QQOfficial] Skip botpy FormData patch.")
+
+
+_patch_qq_botpy_formdata()
+
+
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
 
@@ -200,6 +220,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case botpy.message.Message():
                 if image_path:
                     payload["file_image"] = image_path
+                # Guild text-channel send API (/channels/{channel_id}/messages) does not use v2 msg_type.
+                payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_message(
                         channel_id=source.channel_id,
@@ -212,6 +234,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             case botpy.message.DirectMessage():
                 if image_path:
                     payload["file_image"] = image_path
+                # Guild DM send API (/dms/{guild_id}/messages) does not use v2 msg_type.
+                payload.pop("msg_type", None)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_dms(
                         guild_id=source.guild_id,

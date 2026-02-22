@@ -52,8 +52,9 @@ class ChatRoute(Route):
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-        self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
-        os.makedirs(self.imgs_dir, exist_ok=True)
+        self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
+        self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        os.makedirs(self.attachments_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
@@ -69,9 +70,18 @@ class ChatRoute(Route):
             return Response().error("Missing key: filename").__dict__
 
         try:
-            file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+            file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
             real_file_path = os.path.realpath(file_path)
-            real_imgs_dir = os.path.realpath(self.imgs_dir)
+            real_imgs_dir = os.path.realpath(self.attachments_dir)
+
+            if not os.path.exists(real_file_path):
+                # try legacy
+                file_path = os.path.join(
+                    self.legacy_img_dir, os.path.basename(filename)
+                )
+                if os.path.exists(file_path):
+                    real_file_path = os.path.realpath(file_path)
+                    real_imgs_dir = os.path.realpath(self.legacy_img_dir)
 
             if not real_file_path.startswith(real_imgs_dir):
                 return Response().error("Invalid file path").__dict__
@@ -125,7 +135,7 @@ class ChatRoute(Route):
         else:
             attach_type = "file"
 
-        path = os.path.join(self.imgs_dir, filename)
+        path = os.path.join(self.attachments_dir, filename)
         await file.save(path)
 
         # 创建 attachment 记录
@@ -202,7 +212,7 @@ class ChatRoute(Route):
             filename: 存储的文件名
             attach_type: 附件类型 (image, record, file, video)
         """
-        file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+        file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
         if not os.path.exists(file_path):
             return None
 
@@ -317,10 +327,13 @@ class ChatRoute(Route):
         )
         return record
 
-    async def chat(self):
+    async def chat(self, post_data: dict | None = None):
         username = g.get("username", "guest")
 
-        post_data = await request.json
+        if post_data is None:
+            post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
         if "message" not in post_data and "files" not in post_data:
             return Response().error("Missing key: message or files").__dict__
 
@@ -373,6 +386,14 @@ class ChatRoute(Route):
             agent_stats = {}
             refs = {}
             try:
+                # Emit session_id first so clients can bind the stream immediately.
+                session_info = {
+                    "type": "session_id",
+                    "data": None,
+                    "session_id": webchat_conv_id,
+                }
+                yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         try:
@@ -705,23 +726,18 @@ class ChatRoute(Route):
         # 获取可选的 platform_id 参数
         platform_id = request.args.get("platform_id")
 
-        sessions = await self.db.get_platform_sessions_by_creator(
+        sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
             creator=username,
             platform_id=platform_id,
             page=1,
             page_size=100,  # 暂时返回前100个
+            exclude_project_sessions=True,
         )
 
-        # 转换为字典格式，并添加项目信息
-        # get_platform_sessions_by_creator 现在返回 list[dict] 包含 session 和项目字段
+        # 转换为字典格式
         sessions_data = []
         for item in sessions:
             session = item["session"]
-            project_id = item["project_id"]
-
-            # 跳过属于项目的会话（在侧边栏对话列表中不显示）
-            if project_id is not None:
-                continue
 
             sessions_data.append(
                 {

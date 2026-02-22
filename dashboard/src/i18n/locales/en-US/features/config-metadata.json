@@ -1178,9 +1178,17 @@
       },
       "anth_thinking_config": {
         "description": "Thinking Config",
+        "type": {
+          "description": "Thinking Type",
+          "hint": "Set 'adaptive' for Opus 4.6+ / Sonnet 4.6+ (recommended). Leave empty to use manual budget mode. See: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
         "budget": {
           "description": "Thinking Budget",
-          "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. Only used when type is empty. Deprecated on Opus 4.6 / Sonnet 4.6. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "Effort Level",
+          "hint": "Controls thinking depth when type is 'adaptive'. 'high' is the default. 'max' is Opus 4.6 only. See: https://platform.claude.com/docs/en/build-with-claude/effort"
         }
       },
       "minimax-group-id": {
