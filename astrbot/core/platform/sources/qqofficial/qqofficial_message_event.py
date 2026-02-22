@@ -44,6 +44,7 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
+
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
 
