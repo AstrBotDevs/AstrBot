@@ -530,9 +530,11 @@ class DiscordPlatformAdapter(Platform):
             if not cmd_name or cmd_name in seen:
                 continue
             seen.add(cmd_name)
-            # Discord 斜杠指令名称规范
-            if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
-                logger.debug(f"[Discord] 跳过不符合规范的指令: {cmd_name}")
+            # Discord slash command names must contain only lowercase letters, numbers, and underscores
+            if not re.match(r"^[a-z0-9_]{1,32}$", cmd_name):
+                logger.warning(
+                    f"[Discord] Skipped invalid command name (hyphens not allowed): {cmd_name}"
+                )
                 continue
             results.append((cmd_name, description))
         return results

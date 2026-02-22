@@ -10,7 +10,6 @@ from astrbot.core.message.message_event_result import (
     CommandResult,
     EventResultType,
 )
-from astrbot.core.platform import AstrMessageEvent
 
 # star register
 from astrbot.core.star.register import (

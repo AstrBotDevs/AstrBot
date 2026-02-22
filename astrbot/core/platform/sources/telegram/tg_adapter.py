@@ -232,7 +232,11 @@ class TelegramPlatformAdapter(Platform):
         for cmd_name in cmd_names:
             if not cmd_name or cmd_name in skip_commands:
                 continue
-            if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+            # Telegram command names must start with a letter and contain only lowercase letters, numbers, and underscores
+            if not re.match(r"^[a-z][a-z0-9_]{0,31}$", cmd_name):
+                logger.warning(
+                    f"[Telegram] Skipped invalid command name (must start with letter): {cmd_name}"
+                )
                 continue
             description = handler_metadata.desc or (
                 f"指令组: {cmd_name} (包含多个子指令)"
