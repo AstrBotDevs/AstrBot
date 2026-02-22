@@ -161,9 +161,14 @@ class TelegramPlatformAdapter(Platform):
             if current_hash == self.last_command_hash:
                 return
             self.last_command_hash = current_hash
+            if not commands:
+                logger.info(
+                    "[Telegram] No commands collected. Keep existing Telegram commands unchanged."
+                )
+                return
+
             await self.client.delete_my_commands()
-            if commands:
-                await self.client.set_my_commands(commands)
+            await self.client.set_my_commands(commands)
 
         except Exception as e:
             logger.error(f"向 Telegram 注册指令时发生错误: {e!s}")

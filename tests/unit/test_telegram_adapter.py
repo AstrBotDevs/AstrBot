@@ -1199,11 +1199,56 @@ class TestTelegramAdapterCommandRegistration:
                 platform_config, platform_settings, event_queue
             )
             adapter.client = mock_bot
+            adapter.collect_commands = MagicMock(
+                return_value=[
+                    SimpleNamespace(command="help", description="help command"),
+                ]
+            )
 
             await adapter.register_commands()
 
             mock_bot.delete_my_commands.assert_called_once()
-            # set_my_commands may or may not be called depending on available commands
+            mock_bot.set_my_commands.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_register_commands_empty_does_not_clear_existing(
+        self,
+        event_queue,
+        platform_config,
+        platform_settings,
+        mock_application,
+        mock_scheduler,
+        mock_bot,
+    ):
+        """Test empty command list keeps existing Telegram commands."""
+        with (
+            patch("telegram.ext.ApplicationBuilder") as mock_builder_class,
+            patch(
+                "apscheduler.schedulers.asyncio.AsyncIOScheduler"
+            ) as mock_scheduler_class,
+        ):
+            mock_builder = MagicMock()
+            mock_builder.token.return_value = mock_builder
+            mock_builder.base_url.return_value = mock_builder
+            mock_builder.base_file_url.return_value = mock_builder
+            mock_builder.build.return_value = mock_application
+            mock_builder_class.return_value = mock_builder
+            mock_scheduler_class.return_value = mock_scheduler
+
+            from astrbot.core.platform.sources.telegram.tg_adapter import (
+                TelegramPlatformAdapter,
+            )
+
+            adapter = TelegramPlatformAdapter(
+                platform_config, platform_settings, event_queue
+            )
+            adapter.client = mock_bot
+            adapter.collect_commands = MagicMock(return_value=[])
+
+            await adapter.register_commands()
+
+            mock_bot.delete_my_commands.assert_not_called()
+            mock_bot.set_my_commands.assert_not_called()
 
     def test_collect_commands_empty(
         self,
