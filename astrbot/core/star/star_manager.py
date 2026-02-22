@@ -1179,7 +1179,7 @@ class PluginManager:
         for handler in handlers:
             try:
                 logger.info(
-                    f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler(star_metadata)
             except Exception:
