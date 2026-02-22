@@ -366,6 +366,7 @@ class DiscordPlatformAdapter(Platform):
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
         registered_commands = []
+        registered_command_names: set[str] = set()
 
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
@@ -373,35 +374,40 @@ class DiscordPlatformAdapter(Platform):
             if not handler_md.enabled:
                 continue
             for event_filter in handler_md.event_filters:
-                cmd_info = self._extract_command_info(event_filter, handler_md)
-                if not cmd_info:
-                    continue
+                cmd_infos = self._extract_command_infos(event_filter, handler_md)
+                for cmd_name, description in cmd_infos:
+                    if cmd_name in registered_command_names:
+                        logger.warning(
+                            "[Discord] Duplicate slash command '%s' from %s ignored.",
+                            cmd_name,
+                            handler_md.handler_module_path,
+                        )
+                        continue
 
-                cmd_name, description, cmd_filter_instance = cmd_info
+                    # 创建动态回调
+                    callback = self._create_dynamic_callback(cmd_name)
 
-                # 创建动态回调
-                callback = self._create_dynamic_callback(cmd_name)
+                    # 创建一个通用的参数选项来接收所有文本输入
+                    options = [
+                        discord.Option(
+                            name="params",
+                            description="指令的所有参数",
+                            type=discord.SlashCommandOptionType.string,
+                            required=False,
+                        ),
+                    ]
 
-                # 创建一个通用的参数选项来接收所有文本输入
-                options = [
-                    discord.Option(
-                        name="params",
-                        description="指令的所有参数",
-                        type=discord.SlashCommandOptionType.string,
-                        required=False,
-                    ),
-                ]
-
-                # 创建SlashCommand
-                slash_command = discord.SlashCommand(
-                    name=cmd_name,
-                    description=description,
-                    func=callback,
-                    options=options,
-                    guild_ids=[self.guild_id] if self.guild_id else None,
-                )
-                self.client.add_application_command(slash_command)
-                registered_commands.append(cmd_name)
+                    # 创建SlashCommand
+                    slash_command = discord.SlashCommand(
+                        name=cmd_name,
+                        description=description,
+                        func=callback,
+                        options=options,
+                        guild_ids=[self.guild_id] if self.guild_id else None,
+                    )
+                    self.client.add_application_command(slash_command)
+                    registered_command_names.add(cmd_name)
+                    registered_commands.append(cmd_name)
 
         if registered_commands:
             logger.info(
@@ -479,10 +485,23 @@ class DiscordPlatformAdapter(Platform):
         event_filter: Any,
         handler_metadata: StarHandlerMetadata,
     ) -> tuple[str, str, CommandFilter | None] | None:
+        infos = DiscordPlatformAdapter._extract_command_infos(
+            event_filter,
+            handler_metadata,
+        )
+        if not infos:
+            return None
+        cmd_name, description = infos[0]
+        return cmd_name, description, None
+
+    @staticmethod
+    def _extract_command_infos(
+        event_filter: Any,
+        handler_metadata: StarHandlerMetadata,
+    ) -> list[tuple[str, str]]:
         """从事件过滤器中提取指令信息"""
-        cmd_name = None
-        # is_group = False
-        cmd_filter_instance = None
+        primary_name = None
+        alias_names: list[str] = []
 
         if isinstance(event_filter, CommandFilter):
             # 暂不支持子指令注册为斜杠指令
@@ -490,24 +509,30 @@ class DiscordPlatformAdapter(Platform):
                 event_filter.parent_command_names
                 and event_filter.parent_command_names != [""]
             ):
-                return None
-            cmd_name = event_filter.command_name
-            cmd_filter_instance = event_filter
+                return []
+            primary_name = event_filter.command_name
+            alias_names = sorted(getattr(event_filter, "alias", set()) or set())
 
         elif isinstance(event_filter, CommandGroupFilter):
             # 暂不支持指令组直接注册为斜杠指令，因为它们没有 handle 方法
-            return None
+            return []
 
-        if not cmd_name:
-            return None
+        if not primary_name:
+            return []
 
-        # Discord 斜杠指令名称规范
-        if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
-            logger.debug(f"[Discord] 跳过不符合规范的指令: {cmd_name}")
-            return None
-
-        description = handler_metadata.desc or f"指令: {cmd_name}"
+        description = handler_metadata.desc or f"指令: {primary_name}"
         if len(description) > 100:
             description = f"{description[:97]}..."
 
-        return cmd_name, description, cmd_filter_instance
+        results: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for cmd_name in [primary_name, *alias_names]:
+            if not cmd_name or cmd_name in seen:
+                continue
+            seen.add(cmd_name)
+            # Discord 斜杠指令名称规范
+            if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+                logger.debug(f"[Discord] 跳过不符合规范的指令: {cmd_name}")
+                continue
+            results.append((cmd_name, description))
+        return results

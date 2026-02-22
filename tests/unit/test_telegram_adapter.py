@@ -12,6 +12,7 @@ Note: Uses unittest.mock to simulate python-telegram-bot dependencies.
 
 import asyncio
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1242,6 +1243,142 @@ class TestTelegramAdapterCommandRegistration:
             commands = adapter.collect_commands()
 
             assert commands == []
+
+    def test_collect_commands_includes_aliases(
+        self,
+        event_queue,
+        platform_config,
+        platform_settings,
+        mock_application,
+        mock_scheduler,
+    ):
+        """Test collecting commands includes command/group aliases."""
+        with (
+            patch("telegram.ext.ApplicationBuilder") as mock_builder_class,
+            patch(
+                "apscheduler.schedulers.asyncio.AsyncIOScheduler"
+            ) as mock_scheduler_class,
+            patch(
+                "astrbot.core.platform.sources.telegram.tg_adapter.BotCommand",
+                side_effect=lambda cmd, desc: SimpleNamespace(
+                    command=cmd,
+                    description=desc,
+                ),
+            ),
+        ):
+            from astrbot.core.platform.sources.telegram.tg_adapter import (
+                TelegramPlatformAdapter,
+            )
+            from astrbot.core.star.filter.command import CommandFilter
+            from astrbot.core.star.filter.command_group import CommandGroupFilter
+
+            handler = SimpleNamespace(
+                handler_module_path="plugin.telegram.alias",
+                enabled=True,
+                desc="alias command",
+                event_filters=[
+                    CommandFilter("help", alias={"h"}),
+                    CommandGroupFilter("admin", alias={"adm"}),
+                ],
+            )
+
+            mock_builder = MagicMock()
+            mock_builder.token.return_value = mock_builder
+            mock_builder.base_url.return_value = mock_builder
+            mock_builder.base_file_url.return_value = mock_builder
+            mock_builder.build.return_value = mock_application
+            mock_builder_class.return_value = mock_builder
+            mock_scheduler_class.return_value = mock_scheduler
+
+            with (
+                patch(
+                    "astrbot.core.platform.sources.telegram.tg_adapter.star_handlers_registry",
+                    [handler],
+                ),
+                patch(
+                    "astrbot.core.platform.sources.telegram.tg_adapter.star_map",
+                    {"plugin.telegram.alias": SimpleNamespace(activated=True)},
+                ),
+            ):
+                adapter = TelegramPlatformAdapter(
+                    platform_config, platform_settings, event_queue
+                )
+                commands = adapter.collect_commands()
+
+            names = sorted(cmd.command for cmd in commands)
+            assert names == ["admin", "h", "help"]
+
+    def test_collect_commands_warns_on_duplicates(
+        self,
+        event_queue,
+        platform_config,
+        platform_settings,
+        mock_application,
+        mock_scheduler,
+    ):
+        """Test duplicate command names log warning and keep first one."""
+        with (
+            patch("telegram.ext.ApplicationBuilder") as mock_builder_class,
+            patch(
+                "apscheduler.schedulers.asyncio.AsyncIOScheduler"
+            ) as mock_scheduler_class,
+            patch(
+                "astrbot.core.platform.sources.telegram.tg_adapter.BotCommand",
+                side_effect=lambda cmd, desc: SimpleNamespace(
+                    command=cmd,
+                    description=desc,
+                ),
+            ),
+            patch(
+                "astrbot.core.platform.sources.telegram.tg_adapter.logger"
+            ) as mock_logger,
+        ):
+            from astrbot.core.platform.sources.telegram.tg_adapter import (
+                TelegramPlatformAdapter,
+            )
+            from astrbot.core.star.filter.command import CommandFilter
+
+            handler_a = SimpleNamespace(
+                handler_module_path="plugin.telegram.a",
+                enabled=True,
+                desc="first",
+                event_filters=[CommandFilter("help")],
+            )
+            handler_b = SimpleNamespace(
+                handler_module_path="plugin.telegram.b",
+                enabled=True,
+                desc="second",
+                event_filters=[CommandFilter("help")],
+            )
+
+            mock_builder = MagicMock()
+            mock_builder.token.return_value = mock_builder
+            mock_builder.base_url.return_value = mock_builder
+            mock_builder.base_file_url.return_value = mock_builder
+            mock_builder.build.return_value = mock_application
+            mock_builder_class.return_value = mock_builder
+            mock_scheduler_class.return_value = mock_scheduler
+
+            with (
+                patch(
+                    "astrbot.core.platform.sources.telegram.tg_adapter.star_handlers_registry",
+                    [handler_a, handler_b],
+                ),
+                patch(
+                    "astrbot.core.platform.sources.telegram.tg_adapter.star_map",
+                    {
+                        "plugin.telegram.a": SimpleNamespace(activated=True),
+                        "plugin.telegram.b": SimpleNamespace(activated=True),
+                    },
+                ),
+            ):
+                adapter = TelegramPlatformAdapter(
+                    platform_config, platform_settings, event_queue
+                )
+                commands = adapter.collect_commands()
+
+            assert [cmd.command for cmd in commands] == ["help"]
+            mock_logger.warning.assert_called_once()
 
 
 # ============================================================================

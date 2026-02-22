@@ -13,7 +13,8 @@ Note: Uses unittest.mock to simulate py-cord/discord dependencies.
 
 import asyncio
 import sys
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -856,6 +857,134 @@ class TestDiscordAdapterHandleMessage:
 
         # Event should be committed with is_wake=True for slash commands
         assert not event_queue.empty()
+
+
+# ============================================================================
+# DiscordPlatformAdapter Command Registration Tests
+# ============================================================================
+
+
+class TestDiscordAdapterCommandRegistration:
+    """Tests for slash command collection and registration."""
+
+    def test_extract_command_infos_includes_aliases(self):
+        """Test _extract_command_infos expands command aliases."""
+        from astrbot.core.platform.sources.discord.discord_platform_adapter import (
+            DiscordPlatformAdapter,
+        )
+        from astrbot.core.star.filter.command import CommandFilter
+
+        handler_md = SimpleNamespace(desc="test command")
+        infos = DiscordPlatformAdapter._extract_command_infos(
+            CommandFilter("ping", alias={"p"}),
+            handler_md,
+        )
+
+        assert sorted(name for name, _ in infos) == ["p", "ping"]
+
+    @pytest.mark.asyncio
+    async def test_collect_commands_warns_on_duplicates(
+        self,
+        event_queue,
+        platform_config,
+        platform_settings,
+        mock_discord_client,
+    ):
+        """Test duplicate slash commands are warned and ignored."""
+        from astrbot.core.platform.sources.discord.discord_platform_adapter import (
+            DiscordPlatformAdapter,
+        )
+        from astrbot.core.star.filter.command import CommandFilter
+
+        adapter = DiscordPlatformAdapter(
+            platform_config, platform_settings, event_queue
+        )
+        adapter.client = mock_discord_client
+
+        handler_a = SimpleNamespace(
+            handler_module_path="plugin.discord.a",
+            enabled=True,
+            desc="first",
+            event_filters=[CommandFilter("ping")],
+        )
+        handler_b = SimpleNamespace(
+            handler_module_path="plugin.discord.b",
+            enabled=True,
+            desc="second",
+            event_filters=[CommandFilter("ping")],
+        )
+
+        with (
+            pytest.MonkeyPatch.context() as monkeypatch,
+            patch(
+                "astrbot.core.platform.sources.discord.discord_platform_adapter.logger"
+            ) as mock_logger,
+        ):
+            monkeypatch.setattr(
+                "astrbot.core.platform.sources.discord.discord_platform_adapter.star_handlers_registry",
+                [handler_a, handler_b],
+            )
+            monkeypatch.setattr(
+                "astrbot.core.platform.sources.discord.discord_platform_adapter.star_map",
+                {
+                    "plugin.discord.a": SimpleNamespace(activated=True),
+                    "plugin.discord.b": SimpleNamespace(activated=True),
+                },
+            )
+            await adapter._collect_and_register_commands()
+
+        assert mock_discord_client.add_application_command.call_count == 1
+        mock_logger.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_collect_commands_registers_aliases(
+        self,
+        event_queue,
+        platform_config,
+        platform_settings,
+        mock_discord_client,
+    ):
+        """Test slash command aliases are also registered."""
+        from astrbot.core.platform.sources.discord.discord_platform_adapter import (
+            DiscordPlatformAdapter,
+        )
+        from astrbot.core.star.filter.command import CommandFilter
+
+        adapter = DiscordPlatformAdapter(
+            platform_config, platform_settings, event_queue
+        )
+        adapter.client = mock_discord_client
+
+        handler = SimpleNamespace(
+            handler_module_path="plugin.discord.alias",
+            enabled=True,
+            desc="alias command",
+            event_filters=[CommandFilter("hello", alias={"hi"})],
+        )
+
+        with (
+            pytest.MonkeyPatch.context() as monkeypatch,
+            patch(
+                "astrbot.core.platform.sources.discord.discord_platform_adapter.discord.SlashCommand",
+                side_effect=lambda **kwargs: SimpleNamespace(name=kwargs["name"]),
+            ),
+        ):
+            monkeypatch.setattr(
+                "astrbot.core.platform.sources.discord.discord_platform_adapter.star_handlers_registry",
+                [handler],
+            )
+            monkeypatch.setattr(
+                "astrbot.core.platform.sources.discord.discord_platform_adapter.star_map",
+                {"plugin.discord.alias": SimpleNamespace(activated=True)},
+            )
+            await adapter._collect_and_register_commands()
+
+        assert mock_discord_client.add_application_command.call_count == 2
+        called_names = sorted(
+            call.args[0].name
+            for call in mock_discord_client.add_application_command.call_args_list
+        )
+        assert called_names == ["hello", "hi"]
 
 
 # ============================================================================

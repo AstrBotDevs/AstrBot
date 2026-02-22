@@ -175,21 +175,25 @@ class TelegramPlatformAdapter(Platform):
 
         for handler_md in star_handlers_registry:
             handler_metadata = handler_md
-            star = star_map.get(handler_metadata.handler_module_path)
-            if not star or not star.activated:
+            if not star_map[handler_metadata.handler_module_path].activated:
                 continue
             if not handler_metadata.enabled:
                 continue
             for event_filter in handler_metadata.event_filters:
-                cmd_info = self._extract_command_info(
+                cmd_info_list = self._extract_command_info(
                     event_filter,
                     handler_metadata,
                     skip_commands,
-                    CommandFilter,
-                    CommandGroupFilter,
                 )
-                if cmd_info:
-                    cmd_name, description = cmd_info
+                if not cmd_info_list:
+                    continue
+
+                for cmd_name, description in cmd_info_list:
+                    if cmd_name in command_dict:
+                        logger.warning(
+                            f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                            f"'{command_dict[cmd_name]}'"
+                        )
                     command_dict.setdefault(cmd_name, description)
 
         commands_a = sorted(command_dict.keys())
@@ -200,44 +204,41 @@ class TelegramPlatformAdapter(Platform):
         event_filter,
         handler_metadata,
         skip_commands: set,
-        command_filter_cls,
-        command_group_filter_cls,
-    ) -> tuple[str, str] | None:
+    ) -> list[tuple[str, str]] | None:
         """从事件过滤器中提取指令信息"""
-        cmd_name = None
+        cmd_names: list[str] = []
         is_group = False
-        if (
-            command_filter_cls
-            and isinstance(event_filter, command_filter_cls)
-            and event_filter.command_name
-        ):
+        if isinstance(event_filter, CommandFilter) and event_filter.command_name:
             if (
                 event_filter.parent_command_names
                 and event_filter.parent_command_names != [""]
             ):
                 return None
-            cmd_name = event_filter.command_name
-        elif command_group_filter_cls and isinstance(
-            event_filter, command_group_filter_cls
-        ):
+            cmd_names = [event_filter.command_name]
+            if getattr(event_filter, "alias", None):
+                cmd_names.extend(event_filter.alias)
+        elif isinstance(event_filter, CommandGroupFilter):
             if event_filter.parent_group:
                 return None
-            cmd_name = event_filter.group_name
+            cmd_names = [event_filter.group_name]
             is_group = True
 
-        if not cmd_name or cmd_name in skip_commands:
-            return None
+        result: list[tuple[str, str]] = []
+        for cmd_name in cmd_names:
+            if not cmd_name or cmd_name in skip_commands:
+                continue
+            if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
+                continue
+            description = handler_metadata.desc or (
+                f"指令组: {cmd_name} (包含多个子指令)"
+                if is_group
+                else f"指令: {cmd_name}"
+            )
+            if len(description) > 30:
+                description = description[:30] + "..."
+            result.append((cmd_name, description))
 
-        if not re.match(r"^[a-z0-9_]+$", cmd_name) or len(cmd_name) > 32:
-            return None
-
-        # Build description.
-        description = handler_metadata.desc or (
-            f"指令组: {cmd_name} (包含多个子指令)" if is_group else f"指令: {cmd_name}"
-        )
-        if len(description) > 30:
-            description = description[:30] + "..."
-        return cmd_name, description
+        return result if result else None
 
     async def start(self, update: Update, context: Any) -> None:
         if not update.effective_chat:
