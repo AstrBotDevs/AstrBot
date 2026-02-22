@@ -138,14 +138,13 @@
             </div>
 
             <!-- Controls (stop propagation on clicks) -->
-            <div class="d-flex align-center gap-2" @click.stop>
+            <div class="d-flex align-center gap-2 flex-shrink-0" @click.stop>
               <v-switch
                 v-model="agent.enabled"
                 color="success"
                 hide-details
                 inset
                 density="compact"
-                class="mr-2"
               />
               <v-btn
                 icon="mdi-delete-outline"
