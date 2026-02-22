@@ -56,7 +56,8 @@ const resolvingReleaseTarget = ref(false);
 const DEFAULT_ASTRBOT_RELEASE_BASE_URL = 'https://github.com/AstrBotDevs/AstrBot/releases';
 const resolveReleaseBaseUrl = () => {
   const raw = import.meta.env.VITE_ASTRBOT_RELEASE_BASE_URL;
-  const normalized = raw?.trim().replace(/\/+$/, '');
+  // Keep upstream default on AstrBot releases; desktop distributors can override via env injection.
+  const normalized = raw?.trim()?.replace(/\/+$/, '') || '';
   return normalized || DEFAULT_ASTRBOT_RELEASE_BASE_URL;
 };
 const desktopReleaseBaseUrl = resolveReleaseBaseUrl();
