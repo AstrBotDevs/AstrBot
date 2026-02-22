@@ -99,6 +99,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args,
     ):
         input_ = tool_args.get("input")
+        image_urls = tool_args.get("image_urls")
 
         # make toolset for the agent
         tools = tool.agent.tools
@@ -143,6 +144,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event=event,
             chat_provider_id=prov_id,
             prompt=input_,
+            image_urls=image_urls,
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
