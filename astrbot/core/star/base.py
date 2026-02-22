@@ -62,4 +62,3 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
     def __del__(self) -> None:
         """[Deprecated] 当插件被禁用、重载插件时会调用这个方法"""
-
