@@ -148,6 +148,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             contexts=contexts,
             max_steps=30,
             run_hooks=tool.agent.run_hooks,
+            stream=ctx.get_config().get("provider_settings", {}).get("stream", False),
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
@@ -314,7 +315,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
-        config = MainAgentBuildConfig(tool_call_timeout=3600)
+        config = MainAgentBuildConfig(tool_call_timeout=3600, streaming_response=ctx.get_config().get("provider_settings", {}).get("stream", False))
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
