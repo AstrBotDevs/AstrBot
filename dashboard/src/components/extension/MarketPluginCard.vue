@@ -27,6 +27,10 @@ const normalizePlatformList = (platforms) => {
   return platforms.filter((item) => typeof item === "string");
 };
 
+const platformDisplayList = computed(() =>
+  normalizePlatformList(props.plugin?.support_platforms),
+);
+
 const handleInstall = (plugin) => {
   emit("install", plugin);
 };
