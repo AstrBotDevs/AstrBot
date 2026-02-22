@@ -53,13 +53,13 @@ const isDesktopReleaseMode = ref(
 const redirectConfirmDialog = ref(false);
 const pendingRedirectUrl = ref('');
 const resolvingReleaseTarget = ref(false);
-const DEFAULT_DESKTOP_RELEASE_BASE_URL = 'https://github.com/AstrBotDevs/AstrBot-desktop/releases';
-const resolveDesktopReleaseBaseUrl = () => {
-  const raw = import.meta.env.VITE_ASTRBOT_DESKTOP_RELEASE_BASE_URL;
+const DEFAULT_ASTRBOT_RELEASE_BASE_URL = 'https://github.com/AstrBotDevs/AstrBot/releases';
+const resolveReleaseBaseUrl = () => {
+  const raw = import.meta.env.VITE_ASTRBOT_RELEASE_BASE_URL;
   const normalized = raw?.trim().replace(/\/+$/, '');
-  return normalized || DEFAULT_DESKTOP_RELEASE_BASE_URL;
+  return normalized || DEFAULT_ASTRBOT_RELEASE_BASE_URL;
 };
-const desktopReleaseBaseUrl = resolveDesktopReleaseBaseUrl();
+const desktopReleaseBaseUrl = resolveReleaseBaseUrl();
 const fallbackReleaseUrl = `${desktopReleaseBaseUrl}/latest`;
 
 const getSelectedGitHubProxy = () => {
