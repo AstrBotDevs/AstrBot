@@ -1,4 +1,5 @@
 from astrbot import logger
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
@@ -42,12 +43,17 @@ class ContextManager:
             )
 
     async def process(
-        self, messages: list[Message], trusted_token_usage: int = 0
+        self,
+        messages: list[Message],
+        trusted_token_usage: int = 0,
+        event: AstrMessageEvent | None = None,
     ) -> list[Message]:
         """Process the messages.
 
         Args:
             messages: The original message list.
+            trusted_token_usage: Trusted token usage from conversation.
+            event: Optional event for triggering hooks.
 
         Returns:
             The processed message list.
@@ -72,7 +78,7 @@ class ContextManager:
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
-                    result = await self._run_compression(result, total_tokens)
+                    result = await self._run_compression(result, total_tokens, event)
 
             return result
         except Exception as e:
@@ -80,7 +86,10 @@ class ContextManager:
             return messages
 
     async def _run_compression(
-        self, messages: list[Message], prev_tokens: int
+        self,
+        messages: list[Message],
+        prev_tokens: int,
+        event: AstrMessageEvent | None = None,
     ) -> list[Message]:
         """
         Compress/truncate the messages.
@@ -88,11 +97,27 @@ class ContextManager:
         Args:
             messages: The original message list.
             prev_tokens: The token count before compression.
+            event: Optional event for triggering hooks.
 
         Returns:
             The compressed/truncated message list.
         """
         logger.debug("Compress triggered, starting compression...")
+
+        # Trigger before compression hook
+        if event:
+            try:
+                from astrbot.core.pipeline.context_utils import call_event_hook
+                from astrbot.core.star.star_handler import EventType
+
+                await call_event_hook(
+                    event,
+                    EventType.OnBeforeContextCompressionEvent,
+                    messages,
+                    prev_tokens,
+                )
+            except Exception as e:
+                logger.warning(f"Hook OnBeforeContextCompressionEvent failed: {e}")
 
         messages = await self.compressor(messages)
 
@@ -116,5 +141,23 @@ class ContextManager:
             )
             # still need compress, truncate by half
             messages = self.truncator.truncate_by_halving(messages)
+
+        # Recalculate token count after all truncation steps
+        final_tokens = self.token_counter.count_tokens(messages)
+
+        # Trigger after compression hook
+        if event:
+            try:
+                from astrbot.core.pipeline.context_utils import call_event_hook
+                from astrbot.core.star.star_handler import EventType
+
+                await call_event_hook(
+                    event,
+                    EventType.OnAfterContextCompressionEvent,
+                    messages,
+                    final_tokens,
+                )
+            except Exception as e:
+                logger.warning(f"Hook OnAfterContextCompressionEvent failed: {e}")
 
         return messages

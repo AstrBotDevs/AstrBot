@@ -201,6 +201,8 @@ class EventType(enum.Enum):
     OnLLMToolRespondEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
     OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
+    OnBeforeContextCompressionEvent = enum.auto()  # 上下文压缩前事件
+    OnAfterContextCompressionEvent = enum.auto()  # 上下文压缩后事件
 
 
 H = TypeVar("H", bound=Callable[..., Any])
