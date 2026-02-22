@@ -17,7 +17,6 @@ ENV/
 .conda/
 dashboard/
 data/
-changelogs/
 tests/
 .ruff_cache/
 .astrbot
