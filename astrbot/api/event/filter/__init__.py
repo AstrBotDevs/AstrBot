@@ -25,6 +25,8 @@ from astrbot.core.star.register import (
 )
 from astrbot.core.star.register import register_on_platform_loaded as on_platform_loaded
 from astrbot.core.star.register import register_on_plugin_error as on_plugin_error
+from astrbot.core.star.register import register_on_plugin_loaded as on_plugin_loaded
+from astrbot.core.star.register import register_on_plugin_unloaded as on_plugin_unloaded
 from astrbot.core.star.register import register_on_using_llm_tool as on_using_llm_tool
 from astrbot.core.star.register import (
     register_on_waiting_llm_request as on_waiting_llm_request,
@@ -34,9 +36,6 @@ from astrbot.core.star.register import (
     register_platform_adapter_type as platform_adapter_type,
 )
 from astrbot.core.star.register import register_regex as regex
-
-from astrbot.core.star.register import register_on_plugin_loaded as on_plugin_loaded
-from astrbot.core.star.register import register_on_plugin_unloaded as on_plugin_unloaded
 
 __all__ = [
     "CustomFilter",

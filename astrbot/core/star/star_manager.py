@@ -33,7 +33,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
-from .star_handler import star_handlers_registry, EventType
+from .star_handler import EventType, star_handlers_registry
 from .updator import PluginUpdator
 
 try:
