@@ -722,8 +722,19 @@ class File(BaseMessageComponent):
 
         if self.file_:
             path = self.file_
-            if path.startswith("file:///"):
-                path = path[8:]
+            if path.startswith("file://"):
+                # 处理 file:// (2 slashes) 或 file:/// (3 slashes)
+                # pathlib.as_uri() 通常生成 file:///
+                path = path[7:]
+                # 兼容 Windows: file:///C:/path -> /C:/path -> C:/path
+                if (
+                    os.name == "nt"
+                    and len(path) > 2
+                    and path[0] == "/"
+                    and path[2] == ":"
+                ):
+                    path = path[1:]
+
             if os.path.exists(path):
                 return os.path.abspath(path)
 
@@ -731,8 +742,15 @@ class File(BaseMessageComponent):
             await self._download_file()
             if self.file_:
                 path = self.file_
-                if path.startswith("file:///"):
-                    path = path[8:]
+                if path.startswith("file://"):
+                    path = path[7:]
+                    if (
+                        os.name == "nt"
+                        and len(path) > 2
+                        and path[0] == "/"
+                        and path[2] == ":"
+                    ):
+                        path = path[1:]
                 return os.path.abspath(path)
 
         return ""
