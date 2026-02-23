@@ -28,6 +28,12 @@ Runs on `http://localhost:3000` by default.
 5. Use English for all new comments.
 6. For path handling, use `pathlib.Path` instead of string paths, and use `astrbot.core.utils.path_utils` to get the AstrBot data and temp directory.
 
+## Testing
+
+When you modify functionality, add or update a corresponding test and run it locally (e.g. `uv run pytest tests/path/to/test_xxx.py --cov=astrbot.xxx`).
+Use `--cov-report term-missing` or similar to generate coverage information.
+
+
 ## PR instructions
 
 1. Title format: use conventional commit messages
