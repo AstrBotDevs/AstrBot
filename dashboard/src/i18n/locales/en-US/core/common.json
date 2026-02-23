@@ -123,5 +123,29 @@
     "placeholderHex": "#RRGGBB",
     "placeholderRgb": "rgb(255, 255, 255)",
     "placeholderHsv": "hsv(0, 0%, 100%)"
+  },
+  "objectEditor": {
+    "dialogTitle": "Edit Key-Value Pairs",
+    "noItems": "No items",
+    "noParams": "No parameters",
+    "presets": "Presets",
+    "newKeyLabel": "New key",
+    "valueTypeLabel": "Value type",
+    "keyExists": "Key already exists",
+    "invalidJson": "Invalid JSON format",
+    "placeholders": {
+      "keyName": "Key",
+      "stringValue": "String value",
+      "numberValue": "Numeric value",
+      "jsonValue": "JSON"
+    }
+  },
+  "firstNotice": {
+    "title": "First Notice",
+    "loading": "Loading first notice...",
+    "empty": {
+      "title": "No first notice content available",
+      "subtitle": "FIRST_NOTICE.md was not found or is empty."
+    }
   }
 }
