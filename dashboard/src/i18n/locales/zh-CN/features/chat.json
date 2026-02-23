@@ -9,7 +9,8 @@
     "voice": "语音输入",
     "recordingPrompt": "录音中，请说话...",
     "chatPrompt": "聊天吧!",
-    "dropToUpload": "松开鼠标上传文件"
+    "dropToUpload": "松开鼠标上传文件",
+    "stopGenerating": "停止生成"
   },
   "message": {
     "user": "用户",

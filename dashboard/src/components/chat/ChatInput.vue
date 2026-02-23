@@ -94,8 +94,29 @@
                             {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn @click="$emit('send')" icon="mdi-send" variant="text" color="deep-purple"
-                        :disabled="!canSend" class="send-btn" size="small" />
+                    <v-btn
+                        v-if="isRunning"
+                        @click="$emit('stop')"
+                        icon="mdi-stop"
+                        variant="text"
+                        color="error"
+                        class="send-btn"
+                        size="small"
+                    >
+                        <v-tooltip activator="parent" location="top">
+                            {{ tm('input.stopGenerating') }}
+                        </v-tooltip>
+                    </v-btn>
+                    <v-btn
+                        v-else
+                        @click="$emit('send')"
+                        icon="mdi-send"
+                        variant="text"
+                        color="deep-purple"
+                        :disabled="!canSend"
+                        class="send-btn"
+                        size="small"
+                    />
                 </div>
             </div>
         </div>
@@ -160,6 +181,7 @@ interface Props {
     disabled: boolean;
     enableStreaming: boolean;
     isRecording: boolean;
+    isRunning: boolean;
     sessionId?: string | null;
     currentSession?: Session | null;
     configId?: string | null;
@@ -177,6 +199,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     'update:prompt': [value: string];
     send: [];
+    stop: [];
     toggleStreaming: [];
     removeImage: [index: number];
     removeAudio: [];

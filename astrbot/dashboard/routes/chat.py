@@ -13,7 +13,9 @@ from quart import g, make_response, request, send_file
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .route import Response, Route, RouteContext
@@ -41,6 +43,7 @@ class ChatRoute(Route):
             "/chat/new_session": ("GET", self.new_session),
             "/chat/sessions": ("GET", self.get_sessions),
             "/chat/get_session": ("GET", self.get_session),
+            "/chat/stop": ("POST", self.stop_session),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
             "/chat/update_session_display_name": (
                 "POST",
@@ -602,6 +605,36 @@ class ChatRoute(Route):
         )
         response.timeout = None  # fix SSE auto disconnect issue
         return response
+
+    async def stop_session(self):
+        """Stop active agent runs for a session."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        message_type = (
+            MessageType.GROUP_MESSAGE.value
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE.value
+        )
+        umo = (
+            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}!{username}!{session_id}"
+        )
+        stopped_count = active_event_registry.request_agent_stop_all(umo)
+
+        return Response().ok(data={"stopped_count": stopped_count}).__dict__
 
     async def delete_webchat_session(self):
         """Delete a Platform session and all its related data."""
