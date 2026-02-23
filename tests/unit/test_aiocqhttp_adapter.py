@@ -6,8 +6,7 @@ Tests cover:
 - Message conversion for different event types
 - Group and private message processing
 
-Note: Due to the structure of the aiocqhttp module (no __init__.py),
-we use importlib.util to directly load the module files for testing.
+Note: Uses shared mock fixtures from tests/fixtures/mocks/
 """
 
 import asyncio
@@ -18,28 +17,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Mock aiocqhttp before importing any astrbot modules
-mock_aiocqhttp = MagicMock()
-mock_aiocqhttp.CQHttp = MagicMock
-mock_aiocqhttp.Event = MagicMock
-mock_aiocqhttp.exceptions = MagicMock()
-mock_aiocqhttp.exceptions.ActionFailed = Exception
+# 导入共享的辅助函数
+from tests.fixtures.helpers import NoopAwaitable, make_platform_config
 
-
-class _NoopAwaitable:
-    def __await__(self):
-        if False:
-            yield
-        return None
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _mock_aiocqhttp_modules():
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setitem(sys.modules, "aiocqhttp", mock_aiocqhttp)
-    monkeypatch.setitem(sys.modules, "aiocqhttp.exceptions", mock_aiocqhttp.exceptions)
-    yield
-    monkeypatch.undo()
+# 导入共享的 mock fixture
+from tests.fixtures.mocks import mock_aiocqhttp_modules  # noqa: F401
 
 
 def load_module_from_file(module_name: str, file_path: Path):
@@ -62,27 +44,15 @@ AIOCQHTTP_DIR = (
 )
 
 
-@pytest.fixture
-def event_queue():
-    """Create an event queue for testing."""
-    return asyncio.Queue()
+# ============================================================================
+# Fixtures (使用 conftest.py 中的 event_queue 和 platform_settings)
+# ============================================================================
 
 
 @pytest.fixture
 def platform_config():
     """Create a platform configuration for testing."""
-    return {
-        "id": "test_aiocqhttp",
-        "ws_reverse_host": "0.0.0.0",
-        "ws_reverse_port": 6199,
-        "ws_reverse_token": "test_token",
-    }
-
-
-@pytest.fixture
-def platform_settings():
-    """Create platform settings for testing."""
-    return {}
+    return make_platform_config("aiocqhttp")
 
 
 @pytest.fixture
@@ -95,7 +65,7 @@ def mock_bot():
     bot.on_notice = MagicMock()
     bot.on_message = MagicMock()
     bot.on_websocket_connection = MagicMock()
-    bot.run_task = MagicMock(return_value=_NoopAwaitable())
+    bot.run_task = MagicMock(return_value=NoopAwaitable())
     return bot
 
 
@@ -444,7 +414,7 @@ class TestAiocqhttpAdapterRun:
     def test_run_with_config(self, event_queue, platform_config, platform_settings):
         """Test run method with configured host and port."""
         mock_bot_instance = MagicMock()
-        mock_bot_instance.run_task = MagicMock(return_value=_NoopAwaitable())
+        mock_bot_instance.run_task = MagicMock(return_value=NoopAwaitable())
 
         with patch("aiocqhttp.CQHttp", return_value=mock_bot_instance):
             from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
@@ -461,7 +431,7 @@ class TestAiocqhttpAdapterRun:
     def test_run_with_default_values(self, event_queue, platform_settings):
         """Test run method uses default values when not configured."""
         mock_bot_instance = MagicMock()
-        mock_bot_instance.run_task = MagicMock(return_value=_NoopAwaitable())
+        mock_bot_instance.run_task = MagicMock(return_value=NoopAwaitable())
 
         with patch("aiocqhttp.CQHttp", return_value=mock_bot_instance):
             from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (

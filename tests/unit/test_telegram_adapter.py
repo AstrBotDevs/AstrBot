@@ -7,119 +7,35 @@ Tests cover:
 - Media group message handling
 - Command registration
 
-Note: Uses unittest.mock to simulate python-telegram-bot dependencies.
+Note: Uses shared mock fixtures from tests/fixtures/mocks/
 """
 
 import asyncio
-import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Mock telegram modules before importing any astrbot modules
-mock_telegram = MagicMock()
-mock_telegram.BotCommand = MagicMock
-mock_telegram.Update = MagicMock
-mock_telegram.constants = MagicMock()
-mock_telegram.constants.ChatType = MagicMock()
-mock_telegram.constants.ChatType.PRIVATE = "private"
-mock_telegram.constants.ChatAction = MagicMock()
-mock_telegram.constants.ChatAction.TYPING = "typing"
-mock_telegram.constants.ChatAction.UPLOAD_VOICE = "upload_voice"
-mock_telegram.constants.ChatAction.UPLOAD_DOCUMENT = "upload_document"
-mock_telegram.constants.ChatAction.UPLOAD_PHOTO = "upload_photo"
-mock_telegram.error = MagicMock()
-mock_telegram.error.BadRequest = Exception
-mock_telegram.ReactionTypeCustomEmoji = MagicMock
-mock_telegram.ReactionTypeEmoji = MagicMock
+# 导入共享的辅助函数
+from tests.fixtures.helpers import (
+    NoopAwaitable,
+    create_mock_file,
+    create_mock_update,
+    make_platform_config,
+)
 
-mock_telegram_ext = MagicMock()
-mock_telegram_ext.ApplicationBuilder = MagicMock
-mock_telegram_ext.ContextTypes = MagicMock
-mock_telegram_ext.ExtBot = MagicMock
-mock_telegram_ext.filters = MagicMock()
-mock_telegram_ext.filters.ALL = MagicMock()
-mock_telegram_ext.MessageHandler = MagicMock
-
-# Mock telegramify_markdown
-mock_telegramify = MagicMock()
-mock_telegramify.markdownify = lambda text, **kwargs: text
-
-# Mock apscheduler
-mock_apscheduler = MagicMock()
-mock_apscheduler.schedulers = MagicMock()
-mock_apscheduler.schedulers.asyncio = MagicMock()
-mock_apscheduler.schedulers.asyncio.AsyncIOScheduler = MagicMock
-mock_apscheduler.schedulers.background = MagicMock()
-mock_apscheduler.schedulers.background.BackgroundScheduler = MagicMock
-
-
-class _NoopAwaitable:
-    def __await__(self):
-        if False:
-            yield
-        return None
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _mock_telegram_modules():
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setitem(sys.modules, "telegram", mock_telegram)
-    monkeypatch.setitem(sys.modules, "telegram.constants", mock_telegram.constants)
-    monkeypatch.setitem(sys.modules, "telegram.error", mock_telegram.error)
-    monkeypatch.setitem(sys.modules, "telegram.ext", mock_telegram_ext)
-    monkeypatch.setitem(sys.modules, "telegramify_markdown", mock_telegramify)
-    monkeypatch.setitem(sys.modules, "apscheduler", mock_apscheduler)
-    monkeypatch.setitem(
-        sys.modules, "apscheduler.schedulers", mock_apscheduler.schedulers
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "apscheduler.schedulers.asyncio",
-        mock_apscheduler.schedulers.asyncio,
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "apscheduler.schedulers.background",
-        mock_apscheduler.schedulers.background,
-    )
-    yield
-    monkeypatch.undo()
-
+# 导入共享的 mock fixture
+from tests.fixtures.mocks import mock_telegram_modules  # noqa: F401
 
 # ============================================================================
-# Fixtures
+# Fixtures (使用 conftest.py 中的 event_queue 和 platform_settings)
 # ============================================================================
-
-
-@pytest.fixture
-def event_queue():
-    """Create an event queue for testing."""
-    return asyncio.Queue()
 
 
 @pytest.fixture
 def platform_config():
     """Create a platform configuration for testing."""
-    return {
-        "id": "test_telegram",
-        "telegram_token": "test_token_123",
-        "telegram_api_base_url": "https://api.telegram.org/bot",
-        "telegram_file_base_url": "https://api.telegram.org/file/bot",
-        "telegram_command_register": True,
-        "telegram_command_auto_refresh": True,
-        "telegram_command_register_interval": 300,
-        "telegram_media_group_timeout": 2.5,
-        "telegram_media_group_max_wait": 10.0,
-        "start_message": "Welcome to AstrBot!",
-    }
-
-
-@pytest.fixture
-def platform_settings():
-    """Create platform settings for testing."""
-    return {}
+    return make_platform_config("telegram")
 
 
 @pytest.fixture
@@ -153,7 +69,7 @@ def mock_application():
     app.stop = AsyncMock()
     app.add_handler = MagicMock()
     app.updater = MagicMock()
-    app.updater.start_polling = MagicMock(return_value=_NoopAwaitable())
+    app.updater.start_polling = MagicMock(return_value=NoopAwaitable())
     app.updater.stop = AsyncMock()
     return app
 
@@ -167,72 +83,6 @@ def mock_scheduler():
     scheduler.running = True
     scheduler.shutdown = MagicMock()
     return scheduler
-
-
-def create_mock_update(
-    message_text: str | None = "Hello World",
-    chat_type: str = "private",
-    chat_id: int = 123456789,
-    user_id: int = 987654321,
-    username: str = "test_user",
-    message_id: int = 1,
-    media_group_id: str | None = None,
-    photo: list | None = None,
-    video: MagicMock | None = None,
-    document: MagicMock | None = None,
-    voice: MagicMock | None = None,
-    sticker: MagicMock | None = None,
-    reply_to_message: MagicMock | None = None,
-    caption: str | None = None,
-    entities: list | None = None,
-    caption_entities: list | None = None,
-    message_thread_id: int | None = None,
-    is_topic_message: bool = False,
-):
-    """Create a mock Telegram Update object with configurable properties."""
-    update = MagicMock()
-    update.update_id = 1
-
-    # Create message mock
-    message = MagicMock()
-    message.message_id = message_id
-    message.chat = MagicMock()
-    message.chat.id = chat_id
-    message.chat.type = chat_type
-    message.message_thread_id = message_thread_id
-    message.is_topic_message = is_topic_message
-
-    # Create user mock
-    from_user = MagicMock()
-    from_user.id = user_id
-    from_user.username = username
-    message.from_user = from_user
-
-    # Set message content
-    message.text = message_text
-    message.media_group_id = media_group_id
-    message.photo = photo
-    message.video = video
-    message.document = document
-    message.voice = voice
-    message.sticker = sticker
-    message.reply_to_message = reply_to_message
-    message.caption = caption
-    message.entities = entities
-    message.caption_entities = caption_entities
-
-    update.message = message
-    update.effective_chat = message.chat
-
-    return update
-
-
-def create_mock_file(file_path: str = "https://api.telegram.org/file/test.jpg"):
-    """Create a mock Telegram File object."""
-    file = MagicMock()
-    file.file_path = file_path
-    file.get_file = AsyncMock(return_value=file)
-    return file
 
 
 # ============================================================================
