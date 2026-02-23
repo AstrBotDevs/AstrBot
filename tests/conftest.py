@@ -15,6 +15,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 
+# 使用 tests/fixtures/helpers.py 中的共享工具函数，避免重复定义
+from tests.fixtures.helpers import create_mock_llm_response, create_mock_message_component
+
 # 将项目根目录添加到 sys.path
 PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -351,53 +354,6 @@ def provider_request():
         contexts=[],
         system_prompt="You are a helpful assistant.",
     )
-
-
-# ============================================================
-# 工具函数
-# ============================================================
-
-
-def create_mock_llm_response(
-    completion_text: str = "Hello! How can I help you?",
-    role: str = "assistant",
-    tools_call_name: list[str] | None = None,
-    tools_call_args: list[dict] | None = None,
-    tools_call_ids: list[str] | None = None,
-):
-    """创建模拟的 LLM 响应。"""
-    from astrbot.core.provider.entities import LLMResponse, TokenUsage
-
-    return LLMResponse(
-        role=role,
-        completion_text=completion_text,
-        tools_call_name=tools_call_name or [],
-        tools_call_args=tools_call_args or [],
-        tools_call_ids=tools_call_ids or [],
-        usage=TokenUsage(input_other=10, output=5),
-    )
-
-
-def create_mock_message_component(
-    component_type: str,
-    **kwargs: Any,
-) -> MagicMock:
-    """创建模拟的消息组件。"""
-    from astrbot.core.message import components as Comp
-
-    component_map = {
-        "plain": Comp.Plain,
-        "image": Comp.Image,
-        "at": Comp.At,
-        "reply": Comp.Reply,
-        "file": Comp.File,
-    }
-
-    component_class = component_map.get(component_type.lower())
-    if not component_class:
-        raise ValueError(f"Unknown component type: {component_type}")
-
-    return component_class(**kwargs)
 
 
 # ============================================================

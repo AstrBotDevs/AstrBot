@@ -6,6 +6,8 @@
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+from astrbot.core.message.components import BaseMessageComponent
+
 
 class NoopAwaitable:
     """可等待的空操作对象。
@@ -272,7 +274,7 @@ def create_mock_discord_channel(
 def create_mock_message_component(
     component_type: str,
     **kwargs: Any,
-) -> MagicMock:
+) -> BaseMessageComponent:
     """创建模拟的消息组件。
 
     Args:
@@ -280,7 +282,7 @@ def create_mock_message_component(
         **kwargs: 组件参数
 
     Returns:
-        MagicMock: 模拟的消息组件
+        BaseMessageComponent: 消息组件实例
     """
     from astrbot.core.message import components as Comp
 
