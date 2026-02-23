@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol
 
 from astrbot.core import html_renderer
+
+logger = logging.getLogger("astrbot")
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
@@ -26,7 +29,8 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
         if callable(get_config):
             try:
                 return get_config()
-            except Exception:
+            except Exception as e:
+                logger.debug(f"get_config() failed: {e}")
                 return None
         return getattr(self.context, "_config", None)
 
