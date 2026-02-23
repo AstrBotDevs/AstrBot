@@ -47,7 +47,7 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                 "image_urls": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Optional: List of public image URLs for multi-modal tasks (e.g. video generation reference images).",
+                    "description": "Optional: An array of image sources (public HTTP URLs or local file paths) used as references in multimodal tasks such as video generation.",
                 },
                 "background_task": {
                     "type": "boolean",
