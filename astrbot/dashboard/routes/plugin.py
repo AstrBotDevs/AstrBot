@@ -698,10 +698,16 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name or "",
-        )
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name,
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name,
+            )
 
         if not os.path.isdir(plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
@@ -750,10 +756,20 @@ class PluginRoute(Route):
         if not plugin_obj.root_dir_name:
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name,
-        )
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name,
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name,
+            )
+
+        if not os.path.isdir(plugin_dir):
+            logger.warning(f"无法找到插件目录: {plugin_dir}")
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         # 尝试多种可能的文件名
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
