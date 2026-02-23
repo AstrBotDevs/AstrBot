@@ -215,8 +215,13 @@ class ChatRoute(Route):
             filename: 存储的文件名
             attach_type: 附件类型 (image, record, file, video)
         """
-        file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
-        if not os.path.exists(file_path):
+        basename = os.path.basename(filename)
+        candidate_paths = [
+            os.path.join(self.attachments_dir, basename),
+            os.path.join(self.legacy_img_dir, basename),
+        ]
+        file_path = next((p for p in candidate_paths if os.path.exists(p)), None)
+        if not file_path:
             return None
 
         # guess mime type
