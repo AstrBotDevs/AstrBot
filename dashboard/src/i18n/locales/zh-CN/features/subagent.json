@@ -2,7 +2,7 @@
   "page": {
     "title": "SubAgent 编排",
     "beta": "实验性",
-    "subtitle": "主 LLM 只负责聊天与分派（handoff），工具挂载在各个 SubAgent 上。"
+    "subtitle": "主 LLM 可直接使用自身工具，也可通过 handoff 分派给各个 SubAgent。"
   },
   "actions": {
     "refresh": "刷新",
@@ -19,7 +19,8 @@
     "enabled": "启动：主 LLM 会保留自身工具并挂载 transfer_to_* 委派工具。若开启“去重重复工具”，与 SubAgent 指定的工具重叠部分会从主 LLM 工具集中移除。"
   },
   "section": {
-    "title": "SubAgents"
+    "title": "SubAgents 配置",
+    "globalSettings": "全局设置"
   },
   "cards": {
     "statusEnabled": "启用",
@@ -28,7 +29,8 @@
     "transferPrefix": "transfer_to_{name}",
     "switchLabel": "启用",
     "previewTitle": "预览：主 LLM 将看到的 handoff 工具",
-    "personaChip": "Persona: {id}"
+    "personaChip": "Persona: {id}",
+    "noDescription": "暂无描述"
   },
   "form": {
     "nameLabel": "Agent 名称（用于 transfer_to_{name}）",

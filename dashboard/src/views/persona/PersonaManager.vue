@@ -117,7 +117,18 @@
             <v-card v-if="viewingPersona">
                 <v-card-title class="d-flex justify-space-between align-center">
                     <span class="text-h5">{{ viewingPersona.persona_id }}</span>
-                    <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+                    <div class="d-flex align-center ga-1">
+                        <v-btn
+                            color="primary"
+                            variant="tonal"
+                            size="small"
+                            prepend-icon="mdi-pencil"
+                            @click="openEditFromViewDialog"
+                        >
+                            {{ tm('buttons.edit') }}
+                        </v-btn>
+                        <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+                    </div>
                 </v-card-title>
 
                 <v-card-text>
@@ -260,6 +271,10 @@ import PersonaCard from './PersonaCard.vue';
 import PersonaForm from '@/components/shared/PersonaForm.vue';
 import CreateFolderDialog from './CreateFolderDialog.vue';
 import MoveToFolderDialog from './MoveToFolderDialog.vue';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
@@ -294,7 +309,8 @@ export default defineComponent({
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/persona');
-        return { t, tm };
+        const confirmDialog = useConfirmDialog();
+        return { t, tm, confirmDialog };
     },
     data() {
         return {
@@ -409,6 +425,13 @@ export default defineComponent({
             this.showViewDialog = true;
         },
 
+        openEditFromViewDialog() {
+            if (!this.viewingPersona) return;
+            this.editingPersona = this.viewingPersona;
+            this.showViewDialog = false;
+            this.showPersonaDialog = true;
+        },
+
         handlePersonaSaved(message: string) {
             this.showSuccess(message);
             this.refreshCurrentFolder();
@@ -420,7 +443,12 @@ export default defineComponent({
         },
 
         async confirmDeletePersona(persona: Persona) {
-            if (!confirm(this.tm('messages.deleteConfirm', { id: persona.persona_id }))) {
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: persona.persona_id }),
+                    this.confirmDialog,
+                ))
+            ) {
                 return;
             }
 

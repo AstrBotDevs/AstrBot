@@ -12,12 +12,13 @@ from httpx import AsyncClient, Timeout
 
 from astrbot import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
 from ..register import register_provider_adapter
 
-TEMP_DIR = Path("data/temp/azure_tts")
+TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 

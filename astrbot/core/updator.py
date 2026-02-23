@@ -44,6 +44,73 @@ class AstrBotUpdator(RepoZipUpdator):
         except psutil.NoSuchProcess:
             pass
 
+    @staticmethod
+    def _is_option_arg(arg: str) -> bool:
+        return arg.startswith("-")
+
+    @classmethod
+    def _collect_flag_values(cls, argv: list[str], flag: str) -> str | None:
+        try:
+            idx = argv.index(flag)
+        except ValueError:
+            return None
+
+        if idx + 1 >= len(argv):
+            return None
+
+        value_parts: list[str] = []
+        for arg in argv[idx + 1 :]:
+            if cls._is_option_arg(arg):
+                break
+            if arg:
+                value_parts.append(arg)
+
+        if not value_parts:
+            return None
+
+        return " ".join(value_parts).strip() or None
+
+    @classmethod
+    def _resolve_webui_dir_arg(cls, argv: list[str]) -> str | None:
+        return cls._collect_flag_values(argv, "--webui-dir")
+
+    def _build_frozen_reboot_args(self) -> list[str]:
+        argv = list(sys.argv[1:])
+        webui_dir = self._resolve_webui_dir_arg(argv)
+        if not webui_dir:
+            webui_dir = os.environ.get("ASTRBOT_WEBUI_DIR")
+
+        if webui_dir:
+            return ["--webui-dir", webui_dir]
+        return []
+
+    @staticmethod
+    def _reset_pyinstaller_environment() -> None:
+        if not getattr(sys, "frozen", False):
+            return
+        os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        for key in list(os.environ.keys()):
+            if key.startswith("_PYI_"):
+                os.environ.pop(key, None)
+
+    def _build_reboot_argv(self, executable: str) -> list[str]:
+        if os.environ.get("ASTRBOT_CLI") == "1":
+            args = sys.argv[1:]
+            return [executable, "-m", "astrbot.cli.__main__", *args]
+        if getattr(sys, "frozen", False):
+            args = self._build_frozen_reboot_args()
+            return [executable, *args]
+        return [executable, *sys.argv]
+
+    @staticmethod
+    def _exec_reboot(executable: str, argv: list[str]) -> None:
+        if os.name == "nt" and getattr(sys, "frozen", False):
+            quoted_executable = f'"{executable}"' if " " in executable else executable
+            quoted_args = [f'"{arg}"' if " " in arg else arg for arg in argv[1:]]
+            os.execl(executable, quoted_executable, *quoted_args)
+            return
+        os.execv(executable, argv)
+
     def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
         在指定的延迟后，终止所有子进程并重新启动程序
@@ -51,28 +118,14 @@ class AstrBotUpdator(RepoZipUpdator):
         """
         time.sleep(delay)
         self.terminate_child_processes()
-        if os.name == "nt":
-            py = f'"{sys.executable}"'
-        else:
-            py = sys.executable
+        executable = sys.executable
 
         try:
-            # 仅 CLI 模式走 `python -m astrbot.cli.__main__`，
-            # 打包后的后端可执行文件需要直接 exec 自身。
-            if os.environ.get("ASTRBOT_CLI") == "1":
-                if os.name == "nt":
-                    args = [f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:]]
-                else:
-                    args = sys.argv[1:]
-                os.execl(sys.executable, py, "-m", "astrbot.cli.__main__", *args)
-            else:
-                if getattr(sys, "frozen", False):
-                    # Frozen executable should not receive argv[0] as a positional argument.
-                    os.execl(sys.executable, py, *sys.argv[1:])
-                else:
-                    os.execl(sys.executable, py, *sys.argv)
+            self._reset_pyinstaller_environment()
+            reboot_argv = self._build_reboot_argv(executable)
+            self._exec_reboot(executable, reboot_argv)
         except Exception as e:
-            logger.error(f"重启失败（{py}, {e}），请尝试手动重启。")
+            logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
             raise e
 
     async def check_update(
@@ -95,8 +148,8 @@ class AstrBotUpdator(RepoZipUpdator):
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 
-        if os.environ.get("ASTRBOT_CLI"):
-            raise Exception("不支持更新CLI启动的AstrBot")  # 避免版本管理混乱
+        if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
+            raise Exception("不支持更新此方式启动的AstrBot")  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]

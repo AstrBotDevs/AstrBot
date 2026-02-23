@@ -5,6 +5,8 @@ from typing import Any, cast
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
+from telegram.constants import ChatAction
+from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -29,6 +31,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
         "line": re.compile(r"\n"),
         "sentence": re.compile(r"[.!?。！？]"),
         "word": re.compile(r"\s"),
+    }
+
+    # 消息类型到 chat action 的映射，用于优先级判断
+    ACTION_BY_TYPE: dict[type, str] = {
+        Record: ChatAction.UPLOAD_VOICE,
+        File: ChatAction.UPLOAD_DOCUMENT,
+        Image: ChatAction.UPLOAD_PHOTO,
+        Plain: ChatAction.TYPING,
     }
 
     def __init__(
@@ -68,6 +78,130 @@ class TelegramPlatformEvent(AstrMessageEvent):
         return chunks
 
     @classmethod
+    async def _send_chat_action(
+        cls,
+        client: ExtBot,
+        chat_id: str,
+        action: ChatAction | str,
+        message_thread_id: str | None = None,
+    ) -> None:
+        """发送聊天状态动作"""
+        try:
+            payload: dict[str, Any] = {"chat_id": chat_id, "action": action}
+            if message_thread_id:
+                payload["message_thread_id"] = message_thread_id
+            await client.send_chat_action(**payload)
+        except Exception as e:
+            logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
+
+    @classmethod
+    def _get_chat_action_for_chain(cls, chain: list[Any]) -> ChatAction | str:
+        """根据消息链中的组件类型确定合适的 chat action（按优先级）"""
+        for seg_type, action in cls.ACTION_BY_TYPE.items():
+            if any(isinstance(seg, seg_type) for seg in chain):
+                return action
+        return ChatAction.TYPING
+
+    @classmethod
+    async def _send_media_with_action(
+        cls,
+        client: ExtBot,
+        upload_action: ChatAction | str,
+        send_coro,
+        *,
+        user_name: str,
+        message_thread_id: str | None = None,
+        **payload: Any,
+    ) -> None:
+        """发送媒体时显示 upload action，发送完成后恢复 typing"""
+        await cls._send_chat_action(client, user_name, upload_action, message_thread_id)
+        await send_coro(**payload)
+        await cls._send_chat_action(
+            client, user_name, ChatAction.TYPING, message_thread_id
+        )
+
+    @classmethod
+    async def _send_voice_with_fallback(
+        cls,
+        client: ExtBot,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        caption: str | None = None,
+        user_name: str = "",
+        message_thread_id: str | None = None,
+        use_media_action: bool = False,
+    ) -> None:
+        """Send a voice message, falling back to a document if the user's
+        privacy settings forbid voice messages (``BadRequest`` with
+        ``Voice_messages_forbidden``).
+
+        When *use_media_action* is ``True`` the helper wraps the send calls
+        with ``_send_media_with_action`` (used by the streaming path).
+        """
+        try:
+            if use_media_action:
+                await cls._send_media_with_action(
+                    client,
+                    ChatAction.UPLOAD_VOICE,
+                    client.send_voice,
+                    user_name=user_name,
+                    message_thread_id=message_thread_id,
+                    voice=path,
+                    **cast(Any, payload),
+                )
+            else:
+                await client.send_voice(voice=path, **cast(Any, payload))
+        except BadRequest as e:
+            # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
+            # distinguish the voice-privacy case via the API error message.
+            if "Voice_messages_forbidden" not in e.message:
+                raise
+            logger.warning(
+                "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
+                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+            )
+            if use_media_action:
+                await cls._send_media_with_action(
+                    client,
+                    ChatAction.UPLOAD_DOCUMENT,
+                    client.send_document,
+                    user_name=user_name,
+                    message_thread_id=message_thread_id,
+                    document=path,
+                    caption=caption,
+                    **cast(Any, payload),
+                )
+            else:
+                await client.send_document(
+                    document=path,
+                    caption=caption,
+                    **cast(Any, payload),
+                )
+
+    async def _ensure_typing(
+        self,
+        user_name: str,
+        message_thread_id: str | None = None,
+    ) -> None:
+        """确保显示 typing 状态"""
+        await self._send_chat_action(
+            self.client, user_name, ChatAction.TYPING, message_thread_id
+        )
+
+    async def send_typing(self) -> None:
+        message_thread_id = None
+        if self.get_message_type() == MessageType.GROUP_MESSAGE:
+            user_name = self.message_obj.group_id
+        else:
+            user_name = self.get_sender_id()
+
+        if "#" in user_name:
+            user_name, message_thread_id = user_name.split("#")
+
+        await self._ensure_typing(user_name, message_thread_id)
+
+    @classmethod
     async def send_with_client(
         cls,
         client: ExtBot,
@@ -91,6 +225,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
         if "#" in user_name:
             # it's a supergroup chat with message_thread_id
             user_name, message_thread_id = user_name.split("#")
+
+        # 根据消息链确定合适的 chat action 并发送
+        action = cls._get_chat_action_for_chain(message.chain)
+        await cls._send_chat_action(client, user_name, action, message_thread_id)
+
         for i in message.chain:
             payload = {
                 "chat_id": user_name,
@@ -132,7 +271,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
-                await client.send_voice(voice=path, **cast(Any, payload))
+                await cls._send_voice_with_fallback(
+                    client,
+                    path,
+                    payload,
+                    caption=i.text or None,
+                    use_media_action=False,
+                )
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -195,6 +340,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         message_id = None
         last_edit_time = 0  # 上次编辑消息的时间
         throttle_interval = 0.6  # 编辑消息的间隔时间 (秒)
+        last_chat_action_time = 0  # 上次发送 chat action 的时间
+        chat_action_interval = 0.5  # chat action 的节流间隔 (秒)
+
+        # 发送初始 typing 状态
+        await self._ensure_typing(user_name, message_thread_id)
+        last_chat_action_time = asyncio.get_event_loop().time()
 
         async for chain in generator:
             if isinstance(chain, MessageChain):
@@ -219,15 +370,25 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         delta += i.text
                     elif isinstance(i, Image):
                         image_path = await i.convert_to_file_path()
-                        await self.client.send_photo(
-                            photo=image_path, **cast(Any, payload)
+                        await self._send_media_with_action(
+                            self.client,
+                            ChatAction.UPLOAD_PHOTO,
+                            self.client.send_photo,
+                            user_name=user_name,
+                            message_thread_id=message_thread_id,
+                            photo=image_path,
+                            **cast(Any, payload),
                         )
                         continue
                     elif isinstance(i, File):
                         path = await i.get_file()
                         name = i.name or os.path.basename(path)
-
-                        await self.client.send_document(
+                        await self._send_media_with_action(
+                            self.client,
+                            ChatAction.UPLOAD_DOCUMENT,
+                            self.client.send_document,
+                            user_name=user_name,
+                            message_thread_id=message_thread_id,
                             document=path,
                             filename=name,
                             **cast(Any, payload),
@@ -235,7 +396,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, Record):
                         path = await i.convert_to_file_path()
-                        await self.client.send_voice(voice=path, **cast(Any, payload))
+                        await self._send_voice_with_fallback(
+                            self.client,
+                            path,
+                            payload,
+                            caption=i.text or delta or None,
+                            user_name=user_name,
+                            message_thread_id=message_thread_id,
+                            use_media_action=True,
+                        )
                         continue
                     else:
                         logger.warning(f"不支持的消息类型: {type(i)}")
@@ -248,6 +417,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
                     # 如果距离上次编辑的时间 >= 设定的间隔，等待一段时间
                     if time_since_last_edit >= throttle_interval:
+                        # 发送 typing 状态（带节流）
+                        current_time = asyncio.get_event_loop().time()
+                        if current_time - last_chat_action_time >= chat_action_interval:
+                            await self._ensure_typing(user_name, message_thread_id)
+                            last_chat_action_time = current_time
                         # 编辑消息
                         try:
                             await self.client.edit_message_text(
@@ -263,6 +437,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )  # 更新上次编辑的时间
                 else:
                     # delta 长度一般不会大于 4096，因此这里直接发送
+                    # 发送 typing 状态（带节流）
+                    current_time = asyncio.get_event_loop().time()
+                    if current_time - last_chat_action_time >= chat_action_interval:
+                        await self._ensure_typing(user_name, message_thread_id)
+                        last_chat_action_time = current_time
                     try:
                         msg = await self.client.send_message(
                             text=delta, **cast(Any, payload)

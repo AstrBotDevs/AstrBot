@@ -37,6 +37,7 @@ from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
+from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
 
 from . import astrbot_config, html_renderer
 from .event_bus import EventBus
@@ -57,6 +58,7 @@ class AstrBotCoreLifecycle:
 
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
+        self.temp_dir_cleaner: TempDirCleaner | None = None
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
@@ -124,6 +126,12 @@ class AstrBotCoreLifecycle:
             default_config=self.astrbot_config,
             ucr=self.umop_config_router,
             sp=sp,
+        )
+        self.temp_dir_cleaner = TempDirCleaner(
+            max_size_getter=lambda: self.astrbot_config_mgr.default_conf.get(
+                TempDirCleaner.CONFIG_KEY,
+                TempDirCleaner.DEFAULT_MAX_SIZE,
+            ),
         )
 
         # apply migration
@@ -238,6 +246,12 @@ class AstrBotCoreLifecycle:
                 self.cron_manager.start(self.star_context),
                 name="cron_manager",
             )
+        temp_dir_cleaner_task = None
+        if self.temp_dir_cleaner:
+            temp_dir_cleaner_task = asyncio.create_task(
+                self.temp_dir_cleaner.run(),
+                name="temp_dir_cleaner",
+            )
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
@@ -247,6 +261,8 @@ class AstrBotCoreLifecycle:
         tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
         if cron_task:
             tasks_.append(cron_task)
+        if temp_dir_cleaner_task:
+            tasks_.append(temp_dir_cleaner_task)
         for task in tasks_:
             self.curr_tasks.append(
                 asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
@@ -298,6 +314,9 @@ class AstrBotCoreLifecycle:
 
     async def stop(self) -> None:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
+        if self.temp_dir_cleaner:
+            await self.temp_dir_cleaner.stop()
+
         # 请求停止所有正在运行的异步任务
         for task in self.curr_tasks:
             task.cancel()

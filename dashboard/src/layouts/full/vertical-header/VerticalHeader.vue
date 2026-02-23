@@ -18,6 +18,7 @@ import StyledMenu from '@/components/shared/StyledMenu.vue';
 import { useLanguageSwitcher } from '@/i18n/composables';
 import type { Locale } from '@/i18n/types';
 import AboutPage from '@/views/AboutPage.vue';
+import { getDesktopRuntimeInfo } from '@/utils/desktopRuntime';
 
 enableKatex();
 enableMermaid();
@@ -33,6 +34,7 @@ let aboutDialog = ref(false);
 const username = localStorage.getItem('user');
 let password = ref('');
 let newPassword = ref('');
+let confirmPassword = ref('');
 let newUsername = ref('');
 let status = ref('');
 let updateStatus = ref('')
@@ -45,11 +47,28 @@ let version = ref('');
 let releases = ref([]);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
-const isElectronApp = ref(false);
+const isDesktopReleaseMode = ref(
+  typeof window !== 'undefined' && !!window.astrbotDesktop?.isDesktop
+);
 const redirectConfirmDialog = ref(false);
 const pendingRedirectUrl = ref('');
 const resolvingReleaseTarget = ref(false);
-const fallbackReleaseUrl = 'https://github.com/AstrBotDevs/AstrBot/releases/latest';
+const DEFAULT_ASTRBOT_RELEASE_BASE_URL = 'https://github.com/AstrBotDevs/AstrBot/releases';
+const resolveReleaseBaseUrl = () => {
+  const raw = import.meta.env.VITE_ASTRBOT_RELEASE_BASE_URL;
+  // Keep upstream default on AstrBot releases; desktop distributors can override via env injection.
+  const normalized = raw?.trim()?.replace(/\/+$/, '') || '';
+  const withoutLatestSuffix = normalized.replace(/\/latest$/i, '');
+  return withoutLatestSuffix || DEFAULT_ASTRBOT_RELEASE_BASE_URL;
+};
+const releaseBaseUrl = resolveReleaseBaseUrl();
+const getReleaseUrlByTag = (tag: string | null | undefined) => {
+  const normalizedTag = (tag || '').trim();
+  if (!normalizedTag || normalizedTag.toLowerCase() === 'latest') {
+    return `${releaseBaseUrl}/latest`;
+  }
+  return `${releaseBaseUrl}/tag/${normalizedTag}`;
+};
 
 const getSelectedGitHubProxy = () => {
   if (typeof window === "undefined" || !window.localStorage) return "";
@@ -86,6 +105,10 @@ const passwordRules = computed(() => [
   (v: string) => !!v || t('core.header.accountDialog.validation.passwordRequired'),
   (v: string) => v.length >= 8 || t('core.header.accountDialog.validation.passwordMinLength')
 ]);
+const confirmPasswordRules = computed(() => [
+  (v: string) => !newPassword.value || !!v || t('core.header.accountDialog.validation.passwordRequired'),
+  (v: string) => !newPassword.value || v === newPassword.value || t('core.header.accountDialog.validation.passwordMatch')
+]);
 const usernameRules = computed(() => [
   (v: string) => !v || v.length >= 3 || t('core.header.accountDialog.validation.usernameMinLength')
 ]);
@@ -93,6 +116,7 @@ const usernameRules = computed(() => [
 // 显示密码相关
 const showPassword = ref(false);
 const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
 
 // 账户修改状态
 const accountEditStatus = ref({
@@ -124,23 +148,23 @@ function confirmExternalRedirect() {
   }
 }
 
-const getReleaseUrlForElectron = () => {
+const getReleaseUrlForDesktop = () => {
   const firstRelease = (releases.value as any[])?.[0];
-  if (firstRelease?.html_url) return firstRelease.html_url as string;
-  if (hasNewVersion.value) return fallbackReleaseUrl;
+  if (firstRelease?.tag_name) {
+    return getReleaseUrlByTag(firstRelease.tag_name as string);
+  }
+  if (hasNewVersion.value) return getReleaseUrlByTag('latest');
   const tag = botCurrVersion.value?.startsWith('v') ? botCurrVersion.value : 'latest';
-  return tag === 'latest'
-    ? fallbackReleaseUrl
-    : `https://github.com/AstrBotDevs/AstrBot/releases/tag/${tag}`;
+  return getReleaseUrlByTag(tag);
 };
 
 function handleUpdateClick() {
-  if (isElectronApp.value) {
+  if (isDesktopReleaseMode.value) {
     requestExternalRedirect('');
     resolvingReleaseTarget.value = true;
     checkUpdate();
     void getReleases().finally(() => {
-      pendingRedirectUrl.value = getReleaseUrlForElectron() || fallbackReleaseUrl;
+      pendingRedirectUrl.value = getReleaseUrlForDesktop() || getReleaseUrlByTag('latest');
       resolvingReleaseTarget.value = false;
     });
     return;
@@ -163,17 +187,14 @@ function accountEdit() {
   accountEditStatus.value.error = false;
   accountEditStatus.value.success = false;
 
-  // md5加密
-  // @ts-ignore
-  if (password.value != '') {
-    password.value = md5(password.value);
-  }
-  if (newPassword.value != '') {
-    newPassword.value = md5(newPassword.value);
-  }
+  const passwordHash = password.value ? md5(password.value) : '';
+  const newPasswordHash = newPassword.value ? md5(newPassword.value) : '';
+  const confirmPasswordHash = confirmPassword.value ? md5(confirmPassword.value) : '';
+
   axios.post('/api/auth/account/edit', {
-    password: password.value,
-    new_password: newPassword.value,
+    password: passwordHash,
+    new_password: newPasswordHash,
+    confirm_password: confirmPasswordHash,
     new_username: newUsername.value ? newUsername.value : username
   })
     .then((res) => {
@@ -182,6 +203,7 @@ function accountEdit() {
         accountEditStatus.value.message = res.data.message;
         password.value = '';
         newPassword.value = '';
+        confirmPassword.value = '';
         return;
       }
       accountEditStatus.value.success = true;
@@ -198,6 +220,7 @@ function accountEdit() {
       accountEditStatus.value.message = typeof err === 'string' ? err : t('core.header.accountDialog.messages.updateFailed');
       password.value = '';
       newPassword.value = '';
+      confirmPassword.value = '';
     })
     .finally(() => {
       accountEditStatus.value.loading = false;
@@ -235,7 +258,9 @@ function checkUpdate() {
       } else {
         updateStatus.value = res.data.message;
       }
-      dashboardHasNewVersion.value = res.data.data.dashboard_has_new_version;
+      dashboardHasNewVersion.value = isDesktopReleaseMode.value
+        ? false
+        : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
       if (err.response && err.response.status == 401) {
@@ -375,13 +400,11 @@ const changeLanguage = async (langCode: string) => {
 };
 
 onMounted(async () => {
-  try {
-    isElectronApp.value = !!window.astrbotDesktop?.isElectron ||
-      !!(await window.astrbotDesktop?.isElectronRuntime?.());
-  } catch {
-    isElectronApp.value = false;
+  const runtimeInfo = await getDesktopRuntimeInfo();
+  isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
+  if (isDesktopReleaseMode.value) {
+    dashboardHasNewVersion.value = false;
   }
-  isElectronApp.value = true
 });
 
 </script>
@@ -426,7 +449,7 @@ onMounted(async () => {
       <small v-if="hasNewVersion">
         {{ t('core.header.version.hasNewVersion') }}
       </small>
-      <small v-else-if="dashboardHasNewVersion">
+      <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t('core.header.version.dashboardHasNewVersion') }}
       </small>
     </div>
@@ -509,7 +532,7 @@ onMounted(async () => {
           <v-icon>mdi-arrow-up-circle</v-icon>
         </template>
         <v-list-item-title>{{ t('core.header.updateDialog.title') }}</v-list-item-title>
-        <template v-slot:append v-if="hasNewVersion || dashboardHasNewVersion">
+        <template v-slot:append v-if="hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)">
           <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
         </template>
       </v-list-item>
@@ -724,9 +747,15 @@ onMounted(async () => {
 
             <v-text-field v-model="newPassword" :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showNewPassword ? 'text' : 'password'" :rules="passwordRules"
-              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" required clearable
+              :label="t('core.header.accountDialog.form.newPassword')" variant="outlined" clearable
               @click:append-inner="showNewPassword = !showNewPassword" prepend-inner-icon="mdi-lock-plus-outline"
               :hint="t('core.header.accountDialog.form.passwordHint')" persistent-hint class="mb-4"></v-text-field>
+
+            <v-text-field v-model="confirmPassword" :append-inner-icon="showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              :type="showConfirmPassword ? 'text' : 'password'" :rules="confirmPasswordRules"
+              :label="t('core.header.accountDialog.form.confirmPassword')" variant="outlined" clearable
+              @click:append-inner="showConfirmPassword = !showConfirmPassword" prepend-inner-icon="mdi-lock-check-outline"
+              :hint="t('core.header.accountDialog.form.confirmPasswordHint')" persistent-hint class="mb-4"></v-text-field>
 
             <v-text-field v-model="newUsername" :rules="usernameRules"
               :label="t('core.header.accountDialog.form.newUsername')" variant="outlined" clearable

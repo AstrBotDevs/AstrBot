@@ -61,6 +61,12 @@ class StarMetadata:
     logo_path: str | None = None
     """插件 Logo 的路径"""
 
+    support_platforms: list[str] = field(default_factory=list)
+    """插件声明支持的平台适配器 ID 列表（对应 ADAPTER_NAME_2_TYPE 的 key）"""
+
+    astrbot_version: str | None = None
+    """插件要求的 AstrBot 版本范围（PEP 440 specifier，如 >=4.13.0,<4.17.0）"""
+
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
 

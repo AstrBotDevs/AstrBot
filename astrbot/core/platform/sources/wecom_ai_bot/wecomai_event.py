@@ -2,13 +2,11 @@
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import (
-    Image,
-    Plain,
-)
+from astrbot.api.message_components import At, Image, Plain
 
 from .wecomai_api import WecomAIBotAPIClient
 from .wecomai_queue_mgr import WecomAIQueueMgr
+from .wecomai_webhook import WecomAIBotWebhookClient
 
 
 class WecomAIBotMessageEvent(AstrMessageEvent):
@@ -22,6 +20,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         session_id: str,
         api_client: WecomAIBotAPIClient,
         queue_mgr: WecomAIQueueMgr,
+        webhook_client: WecomAIBotWebhookClient | None = None,
+        only_use_webhook_url_to_send: bool = False,
     ) -> None:
         """初始化消息事件
 
@@ -36,6 +36,19 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.api_client = api_client
         self.queue_mgr = queue_mgr
+        self.webhook_client = webhook_client
+        self.only_use_webhook_url_to_send = only_use_webhook_url_to_send
+
+    async def _mark_stream_complete(self, stream_id: str) -> None:
+        back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
+        await back_queue.put(
+            {
+                "type": "complete",
+                "data": "",
+                "streaming": False,
+                "session_id": stream_id,
+            },
+        )
 
     @staticmethod
     async def _send(
@@ -43,6 +56,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         stream_id: str,
         queue_mgr: WecomAIQueueMgr,
         streaming: bool = False,
+        suppress_unsupported_log: bool = False,
     ):
         back_queue = queue_mgr.get_or_create_back_queue(stream_id)
 
@@ -58,7 +72,17 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         data = ""
         for comp in message_chain.chain:
-            if isinstance(comp, Plain):
+            if isinstance(comp, At):
+                data = f"@{comp.name} "
+                await back_queue.put(
+                    {
+                        "type": "plain",
+                        "data": data,
+                        "streaming": streaming,
+                        "session_id": stream_id,
+                    },
+                )
+            elif isinstance(comp, Plain):
                 data = comp.text
                 await back_queue.put(
                     {
@@ -86,7 +110,10 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.error("处理图片消息失败: %s", e)
             else:
-                logger.warning(f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过")
+                if not suppress_unsupported_log:
+                    logger.warning(
+                        f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过"
+                    )
 
         return data
 
@@ -97,7 +124,24 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             "wecom_ai_bot platform event raw_message should be a dict"
         )
         stream_id = raw.get("stream_id", self.session_id)
-        await WecomAIBotMessageEvent._send(message, stream_id, self.queue_mgr)
+        if self.only_use_webhook_url_to_send and self.webhook_client and message:
+            await self.webhook_client.send_message_chain(message)
+            await self._mark_stream_complete(stream_id)
+            await super().send(MessageChain([]))
+            return
+
+        if self.webhook_client and message:
+            await self.webhook_client.send_message_chain(
+                message,
+                unsupported_only=True,
+            )
+
+        await WecomAIBotMessageEvent._send(
+            message,
+            stream_id,
+            self.queue_mgr,
+            suppress_unsupported_log=self.webhook_client is not None,
+        )
         await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback=False) -> None:
@@ -110,9 +154,23 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         stream_id = raw.get("stream_id", self.session_id)
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
 
+        if self.only_use_webhook_url_to_send and self.webhook_client:
+            merged_chain = MessageChain([])
+            async for chain in generator:
+                merged_chain.chain.extend(chain.chain)
+            merged_chain.squash_plain()
+            await self.webhook_client.send_message_chain(merged_chain)
+            await self._mark_stream_complete(stream_id)
+            await super().send_streaming(generator, use_fallback)
+            return
+
         # 企业微信智能机器人不支持增量发送，因此我们需要在这里将增量内容累积起来，积累发送
         increment_plain = ""
         async for chain in generator:
+            if self.webhook_client:
+                await self.webhook_client.send_message_chain(
+                    chain, unsupported_only=True
+                )
             # 累积增量内容，并改写 Plain 段
             chain.squash_plain()
             for comp in chain.chain:
@@ -128,7 +186,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         "type": "break",  # break means a segment end
                         "data": final_data,
                         "streaming": True,
-                        "session_id": self.session_id,
+                        "session_id": stream_id,
                     },
                 )
                 final_data = ""
@@ -139,6 +197,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 stream_id=stream_id,
                 queue_mgr=self.queue_mgr,
                 streaming=True,
+                suppress_unsupported_log=self.webhook_client is not None,
             )
 
         await back_queue.put(
@@ -146,7 +205,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 "type": "complete",  # complete means we return the final result
                 "data": final_data,
                 "streaming": True,
-                "session_id": self.session_id,
+                "session_id": stream_id,
             },
         )
         await super().send_streaming(generator, use_fallback)

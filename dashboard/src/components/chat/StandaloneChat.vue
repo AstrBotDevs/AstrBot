@@ -70,6 +70,7 @@ import { useMessages } from '@/composables/useMessages';
 import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useRecording } from '@/composables/useRecording';
 import { useToast } from '@/utils/toast';
+import { buildWebchatUmoDetails } from '@/utils/chatConfigBinding';
 
 interface Props {
     configId?: string | null;
@@ -82,6 +83,7 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useI18n();
 const { error: showError } = useToast();
 
+
 // UI 状态
 const imagePreviewDialog = ref(false);
 const previewImageUrl = ref('');
@@ -90,11 +92,33 @@ const previewImageUrl = ref('');
 const currSessionId = ref('');
 const getCurrentSession = computed(() => null); // 独立测试模式不需要会话信息
 
+async function bindConfigToSession(sessionId: string) {
+    const confId = (props.configId || '').trim();
+    if (!confId || confId === 'default') {
+        return;
+    }
+
+    const umoDetails = buildWebchatUmoDetails(sessionId, false);
+
+    await axios.post('/api/config/umo_abconf_route/update', {
+        umo: umoDetails.umo,
+        conf_id: confId
+    });
+}
+
 async function newSession() {
     try {
         const response = await axios.get('/api/chat/new_session');
         const sessionId = response.data.data.session_id;
+
+        try {
+            await bindConfigToSession(sessionId);
+        } catch (err) {
+            console.error('Failed to bind config to session', err);
+        }
+
         currSessionId.value = sessionId;
+
         return sessionId;
     } catch (err) {
         console.error(err);

@@ -522,7 +522,14 @@ export default {
     }
   },
   methods: {
-    getPlatformIcon,
+    getPlatformIcon(platformType) {
+      // Check for plugin-provided logo_token first
+      const template = this.platformTemplates?.[platformType];
+      if (template && template.logo_token) {
+        return `/api/file/${template.logo_token}`;
+      }
+      return getPlatformIcon(platformType);
+    },
     getPlatformDescription,
     resetForm() {
       this.selectedPlatformType = null;

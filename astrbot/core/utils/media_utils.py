@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 async def get_media_duration(file_path: str) -> int | None:
@@ -77,9 +77,9 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
     # 生成输出文件路径
     if output_path is None:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        output_path = os.path.join(temp_dir, f"{uuid.uuid4()}.opus")
+        output_path = os.path.join(temp_dir, f"media_audio_{uuid.uuid4().hex}.opus")
 
     try:
         # 使用ffmpeg转换为opus格式
@@ -156,9 +156,12 @@ async def convert_video_format(
 
     # 生成输出文件路径
     if output_path is None:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
-        output_path = os.path.join(temp_dir, f"{uuid.uuid4()}.{output_format}")
+        output_path = os.path.join(
+            temp_dir,
+            f"media_video_{uuid.uuid4().hex}.{output_format}",
+        )
 
     try:
         # 使用ffmpeg转换视频格式
@@ -227,9 +230,9 @@ async def convert_audio_format(
         return audio_path
 
     if output_path is None:
-        temp_dir = Path(get_astrbot_data_path()) / "temp"
+        temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        output_path = str(temp_dir / f"{uuid.uuid4()}.{output_format}")
+        output_path = str(temp_dir / f"media_audio_{uuid.uuid4().hex}.{output_format}")
 
     args = ["ffmpeg", "-y", "-i", audio_path]
     if output_format == "amr":
@@ -259,15 +262,33 @@ async def convert_audio_format(
         raise Exception("ffmpeg not found")
 
 
+async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
+    """将音频转换为amr格式。"""
+    return await convert_audio_format(
+        audio_path=audio_path,
+        output_format="amr",
+        output_path=output_path,
+    )
+
+
+async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
+    """将音频转换为wav格式。"""
+    return await convert_audio_format(
+        audio_path=audio_path,
+        output_format="wav",
+        output_path=output_path,
+    )
+
+
 async def extract_video_cover(
     video_path: str,
     output_path: str | None = None,
 ) -> str:
     """从视频中提取封面图（JPG）。"""
     if output_path is None:
-        temp_dir = Path(get_astrbot_data_path()) / "temp"
+        temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
-        output_path = str(temp_dir / f"{uuid.uuid4()}.jpg")
+        output_path = str(temp_dir / f"media_cover_{uuid.uuid4().hex}.jpg")
 
     try:
         process = await asyncio.create_subprocess_exec(

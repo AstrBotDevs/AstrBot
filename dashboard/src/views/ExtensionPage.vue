@@ -7,14 +7,16 @@ import ProxySelector from "@/components/shared/ProxySelector.vue";
 import UninstallConfirmDialog from "@/components/shared/UninstallConfirmDialog.vue";
 import McpServersSection from "@/components/extension/McpServersSection.vue";
 import SkillsSection from "@/components/extension/SkillsSection.vue";
+import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import ComponentPanel from "@/components/extension/componentPanel/index.vue";
 import axios from "axios";
 import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { getPlatformDisplayName } from "@/utils/platformUtils";
 
-import { ref, computed, onMounted, reactive, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 const commonStore = useCommonStore();
@@ -148,6 +150,18 @@ const currentPage = ref(1);
 // 危险插件确认对话框
 const dangerConfirmDialog = ref(false);
 const selectedDangerPlugin = ref(null);
+const selectedMarketInstallPlugin = ref(null);
+const installCompat = reactive({
+  checked: false,
+  compatible: true,
+  message: "",
+});
+
+// AstrBot 版本范围不兼容警告对话框
+const versionCompatibilityDialog = reactive({
+  show: false,
+  message: "",
+});
 
 // 卸载插件确认对话框（列表模式用）
 const showUninstallDialog = ref(false);
@@ -175,6 +189,7 @@ const debouncedMarketSearch = ref("");
 const refreshingMarket = ref(false);
 const sortBy = ref("default"); // default, stars, author, updated
 const sortOrder = ref("desc"); // desc (降序) or asc (升序)
+const randomPluginNames = ref([]);
 
 // 插件市场拼音搜索
 const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -248,10 +263,16 @@ const filteredPlugins = computed(() => {
 
   const search = pluginSearch.value.toLowerCase();
   return filteredExtensions.value.filter((plugin) => {
+    const supportPlatforms = Array.isArray(plugin.support_platforms)
+      ? plugin.support_platforms.join(" ").toLowerCase()
+      : "";
+    const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
     return (
       plugin.name?.toLowerCase().includes(search) ||
       plugin.desc?.toLowerCase().includes(search) ||
-      plugin.author?.toLowerCase().includes(search)
+      plugin.author?.toLowerCase().includes(search) ||
+      supportPlatforms.includes(search) ||
+      astrbotVersion.includes(search)
     );
   });
 });
@@ -310,8 +331,42 @@ const sortedPlugins = computed(() => {
   return plugins;
 });
 
+const RANDOM_PLUGINS_COUNT = 6;
+
+const randomPlugins = computed(() => {
+  const allPlugins = pluginMarketData.value;
+  if (allPlugins.length === 0) return [];
+
+  const pluginsByName = new Map(allPlugins.map((plugin) => [plugin.name, plugin]));
+  const selected = randomPluginNames.value
+    .map((name) => pluginsByName.get(name))
+    .filter(Boolean);
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  return allPlugins.slice(0, Math.min(RANDOM_PLUGINS_COUNT, allPlugins.length));
+});
+
+const shufflePlugins = (plugins) => {
+  const shuffled = [...plugins];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+const refreshRandomPlugins = () => {
+  const shuffled = shufflePlugins(pluginMarketData.value);
+  randomPluginNames.value = shuffled
+    .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
+    .map((plugin) => plugin.name);
+};
+
 // 分页计算属性
-const displayItemsPerPage = 9; // 固定每页显示6个卡片（2行）
+const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
 
 const totalPages = computed(() => {
   return Math.ceil(sortedPlugins.value.length / displayItemsPerPage);
@@ -357,17 +412,53 @@ const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
   setTimeout(resetLoadingDialog, timeToClose);
 };
 
+const failedPluginsDict = ref({});
+
 const getExtensions = async () => {
   loading_.value = true;
   try {
-    const res = await axios.get("/api/plugin/get");
+    const res = await axios.get("/api/plugin/get");   
     Object.assign(extension_data, res.data);
+    
+    const failRes = await axios.get("/api/plugin/source/get-failed-plugins");    
+    failedPluginsDict.value = failRes.data.data || {};
+    
     checkUpdate();
   } catch (err) {
     toast(err, "error");
   } finally {
     loading_.value = false;
   }
+};
+
+const handleReloadAllFailed = async () => {
+    const dirNames = Object.keys(failedPluginsDict.value);
+    if (dirNames.length === 0) {
+        toast("没有需要重载的失败插件", "info");
+        return;
+    }
+
+    loading_.value = true;
+    try {
+        const promises = dirNames.map(dir => 
+            axios.post("/api/plugin/reload-failed", { dir_name: dir })
+        );
+        await Promise.all(promises);
+        
+        toast("已尝试重载所有失败插件", "success");
+        
+        // 清空 message 关闭对话框
+        extension_data.message = "";
+        
+        // 刷新列表
+        await getExtensions();
+        
+    } catch (e) {
+        console.error("重载失败:", e);
+        toast("批量重载过程中出现错误", "error");
+    } finally {
+        loading_.value = false;
+    }
 };
 
 const checkUpdate = () => {
@@ -686,6 +777,7 @@ const handleInstallPlugin = async (plugin) => {
     selectedDangerPlugin.value = plugin;
     dangerConfirmDialog.value = true;
   } else {
+    selectedMarketInstallPlugin.value = plugin;
     extension_url.value = plugin.repo;
     dialog.value = true;
     uploadTab.value = "url";
@@ -695,6 +787,7 @@ const handleInstallPlugin = async (plugin) => {
 // 确认安装危险插件
 const confirmDangerInstall = () => {
   if (selectedDangerPlugin.value) {
+    selectedMarketInstallPlugin.value = selectedDangerPlugin.value;
     extension_url.value = selectedDangerPlugin.value.repo;
     dialog.value = true;
     uploadTab.value = "url";
@@ -886,9 +979,33 @@ const checkAlreadyInstalled = () => {
   const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
   const installedRepos = new Set(data.map((ext) => ext.repo?.toLowerCase()));
   const installedNames = new Set(data.map((ext) => ext.name));
+  const installedByRepo = new Map(
+    data
+      .filter((ext) => ext.repo)
+      .map((ext) => [ext.repo.toLowerCase(), ext]),
+  );
+  const installedByName = new Map(data.map((ext) => [ext.name, ext]));
 
   for (let i = 0; i < pluginMarketData.value.length; i++) {
     const plugin = pluginMarketData.value[i];
+    const matchedInstalled =
+      (plugin.repo && installedByRepo.get(plugin.repo.toLowerCase())) ||
+      installedByName.get(plugin.name);
+
+    // 兜底：市场源未提供字段时，回填本地已安装插件中的元数据，便于在市场页直接展示
+    if (matchedInstalled) {
+      if (
+        (!Array.isArray(plugin.support_platforms) ||
+          plugin.support_platforms.length === 0) &&
+        Array.isArray(matchedInstalled.support_platforms)
+      ) {
+        plugin.support_platforms = matchedInstalled.support_platforms;
+      }
+      if (!plugin.astrbot_version && matchedInstalled.astrbot_version) {
+        plugin.astrbot_version = matchedInstalled.astrbot_version;
+      }
+    }
+
     plugin.installed =
       installedRepos.has(plugin.repo?.toLowerCase()) ||
       installedNames.has(plugin.name);
@@ -906,7 +1023,21 @@ const checkAlreadyInstalled = () => {
   pluginMarketData.value = notInstalled.concat(installed);
 };
 
-const newExtension = async () => {
+const showVersionCompatibilityWarning = (message) => {
+  versionCompatibilityDialog.message = message;
+  versionCompatibilityDialog.show = true;
+};
+
+const continueInstallIgnoringVersionWarning = async () => {
+  versionCompatibilityDialog.show = false;
+  await newExtension(true);
+};
+
+const cancelInstallOnVersionWarning = () => {
+  versionCompatibilityDialog.show = false;
+};
+
+const newExtension = async (ignoreVersionCheck = false) => {
   if (extension_url.value === "" && upload_file.value === null) {
     toast(tm("messages.fillUrlOrFile"), "error");
     return;
@@ -923,6 +1054,7 @@ const newExtension = async () => {
     toast(tm("messages.installing"), "primary");
     const formData = new FormData();
     formData.append("file", upload_file.value);
+    formData.append("ignore_version_check", String(ignoreVersionCheck));
     axios
       .post("/api/plugin/install-upload", formData, {
         headers: {
@@ -931,6 +1063,14 @@ const newExtension = async () => {
       })
       .then(async (res) => {
         loading_.value = false;
+        if (
+          res.data.status === "warning" &&
+          res.data.data?.warning_type === "astrbot_version_incompatible"
+        ) {
+          onLoadingDialogResult(2, res.data.message, -1);
+          showVersionCompatibilityWarning(res.data.message);
+          return;
+        }
         if (res.data.status === "error") {
           onLoadingDialogResult(2, res.data.message, -1);
           return;
@@ -960,9 +1100,18 @@ const newExtension = async () => {
       .post("/api/plugin/install", {
         url: extension_url.value,
         proxy: getSelectedGitHubProxy(),
+        ignore_version_check: ignoreVersionCheck,
       })
       .then(async (res) => {
         loading_.value = false;
+        if (
+          res.data.status === "warning" &&
+          res.data.data?.warning_type === "astrbot_version_incompatible"
+        ) {
+          onLoadingDialogResult(2, res.data.message, -1);
+          showVersionCompatibilityWarning(res.data.message);
+          return;
+        }
         toast(res.data.message, res.data.status === "ok" ? "success" : "error");
         if (res.data.status === "error") {
           onLoadingDialogResult(2, res.data.message, -1);
@@ -988,6 +1137,53 @@ const newExtension = async () => {
   }
 };
 
+const normalizePlatformList = (platforms) => {
+  if (!Array.isArray(platforms)) return [];
+  return platforms.filter((item) => typeof item === "string");
+};
+
+const getPlatformDisplayList = (platforms) => {
+  return normalizePlatformList(platforms).map((platformId) =>
+    getPlatformDisplayName(platformId),
+  );
+};
+
+const resolveSelectedInstallPlugin = () => {
+  if (
+    selectedMarketInstallPlugin.value &&
+    selectedMarketInstallPlugin.value.repo === extension_url.value
+  ) {
+    return selectedMarketInstallPlugin.value;
+  }
+  return pluginMarketData.value.find((plugin) => plugin.repo === extension_url.value) || null;
+};
+
+const selectedInstallPlugin = computed(() => resolveSelectedInstallPlugin());
+
+const checkInstallCompatibility = async () => {
+  installCompat.checked = false;
+  installCompat.compatible = true;
+  installCompat.message = "";
+
+  const plugin = selectedInstallPlugin.value;
+  if (!plugin?.astrbot_version || uploadTab.value !== "url") {
+    return;
+  }
+
+  try {
+    const res = await axios.post("/api/plugin/check-compat", {
+      astrbot_version: plugin.astrbot_version,
+    });
+    if (res.data.status === "ok") {
+      installCompat.checked = true;
+      installCompat.compatible = !!res.data.data?.compatible;
+      installCompat.message = res.data.data?.message || "";
+    }
+  } catch (err) {
+    console.debug("Failed to check plugin compatibility:", err);
+  }
+};
+
 // 刷新插件市场数据
 const refreshPluginMarket = async () => {
   refreshingMarket.value = true;
@@ -1001,6 +1197,7 @@ const refreshPluginMarket = async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    refreshRandomPlugins();
     currentPage.value = 1; // 重置到第一页
 
     toast(tm("messages.refreshSuccess"), "success");
@@ -1049,9 +1246,26 @@ onMounted(async () => {
     trimExtensionName();
     checkAlreadyInstalled();
     checkUpdate();
+    refreshRandomPlugins();
   } catch (err) {
     toast(tm("messages.getMarketDataFailed") + " " + err, "error");
   }
+});
+
+// 处理语言切换事件，重新加载插件配置以获取插件的 i18n 数据
+const handleLocaleChange = () => {
+  // 如果配置对话框是打开的，重新加载当前插件的配置
+  if (configDialog.value && currentConfigPlugin.value) {
+    openExtensionConfig(currentConfigPlugin.value);
+  }
+};
+
+// 监听语言切换事件
+window.addEventListener("astrbot-locale-changed", handleLocaleChange);
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
 });
 
 // 搜索防抖处理
@@ -1074,6 +1288,19 @@ watch(isListView, (newVal) => {
     localStorage.setItem("pluginListViewMode", String(newVal));
   }
 });
+
+watch(
+  [() => dialog.value, () => extension_url.value, () => uploadTab.value],
+  async ([dialogOpen, _, currentUploadTab]) => {
+    if (!dialogOpen || currentUploadTab !== "url") {
+      installCompat.checked = false;
+      installCompat.compatible = true;
+      installCompat.message = "";
+      return;
+    }
+    await checkInstallCompatibility();
+  },
+);
 
 watch(
   () => route.fullPath,
@@ -1257,6 +1484,15 @@ watch(activeTab, (newTab) => {
                           </p>
                         </v-card-text>
                         <v-card-actions>
+                          <v-btn
+                              
+                              color="error"
+                              variant="tonal"
+                              prepend-icon="mdi-refresh"
+                              @click="handleReloadAllFailed"
+                          >
+                              尝试一键重载修复
+                          </v-btn>
                           <v-spacer></v-spacer>
                           <v-btn
                             color="primary"
@@ -1352,18 +1588,54 @@ watch(activeTab, (newTab) => {
                     </template>
 
                     <template v-slot:item.desc="{ item }">
-                      <div
-                        class="text-body-2 text-medium-emphasis mt-2 mb-2"
-                        style="
-                          display: -webkit-box;
-                          -webkit-line-clamp: 3;
-                          line-clamp: 3;
-                          -webkit-box-orient: vertical;
-                          overflow: hidden;
-                          text-overflow: ellipsis;
-                        "
-                      >
-                        {{ item.desc }}
+                      <div class="py-2">
+                        <div
+                          class="text-body-2 text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 3;
+                            line-clamp: 3;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                          "
+                        >
+                          {{ item.desc }}
+                        </div>
+                        <div
+                          v-if="item.support_platforms?.length"
+                          class="d-flex align-center flex-wrap mt-2"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.supportPlatform") }}:
+                          </span>
+                          <v-chip
+                            v-for="platformId in item.support_platforms"
+                            :key="platformId"
+                            size="x-small"
+                            color="info"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ platformId }}
+                          </v-chip>
+                        </div>
+                        <div
+                          v-if="item.astrbot_version"
+                          class="d-flex align-center flex-wrap mt-1"
+                        >
+                          <span class="text-caption text-medium-emphasis mr-2">
+                            {{ tm("card.status.astrbotVersion") }}:
+                          </span>
+                          <v-chip
+                            size="x-small"
+                            color="secondary"
+                            variant="outlined"
+                            class="mr-1 mb-1"
+                          >
+                            {{ item.astrbot_version }}
+                          </v-chip>
+                        </div>
                       </div>
                     </template>
 
@@ -1727,17 +1999,21 @@ watch(activeTab, (newTab) => {
                       </v-list-item>
                     </v-list>
                   </v-menu>
-                </div>
 
-                <!-- 垂直分隔线 -->
-                <div
-                  style="
-                    height: 20px;
-                    width: 1px;
-                    background-color: rgba(var(--v-border-color), 0.15);
-                    margin: 0 8px;
-                  "
-                ></div>
+                  <div
+                    class="d-flex align-center ml-2"
+                    style="
+                      color: grey;
+                      font-size: 12px;
+                      line-height: 1.3;
+                      white-space: normal;
+                      text-align: left;
+                    "
+                  >
+                    <v-icon size="16" class="mr-1">mdi-alert-outline</v-icon>
+                    <span>{{ tm("market.sourceSafetyWarning") }}</span>
+                  </div>
+                </div>
 
                 <!--右侧：操作按钮组-->
                 <div class="d-flex align-center">
@@ -1824,6 +2100,42 @@ watch(activeTab, (newTab) => {
             <div class="mt-4">
               <div
                 class="d-flex align-center mb-2"
+                style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
+              >
+                <h2>
+                  {{ tm("market.randomPlugins") }}
+                </h2>
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  prepend-icon="mdi-shuffle-variant"
+                  :disabled="pluginMarketData.length === 0"
+                  @click="refreshRandomPlugins"
+                >
+                  {{ tm("buttons.reshuffle") }}
+                </v-btn>
+              </div>
+
+              <v-row class="mb-6" dense>
+                <v-col
+                  v-for="plugin in randomPlugins"
+                  :key="`random-${plugin.name}`"
+                  cols="12"
+                  md="6"
+                  lg="4"
+                  class="pb-2"
+                >
+                  <MarketPluginCard
+                    :plugin="plugin"
+                    :default-plugin-icon="defaultPluginIcon"
+                    :show-plugin-full-name="showPluginFullName"
+                    @install="handleInstallPlugin"
+                  />
+                </v-col>
+              </v-row>
+
+              <div
+                class="d-flex align-center mb-2"
                 style="
                   justify-content: space-between;
                   flex-wrap: wrap;
@@ -1858,7 +2170,6 @@ watch(activeTab, (newTab) => {
                     density="comfortable"
                   ></v-pagination>
 
-                  <!-- 排序选择器 -->
                   <v-select
                     v-model="sortBy"
                     :items="[
@@ -1877,7 +2188,6 @@ watch(activeTab, (newTab) => {
                     </template>
                   </v-select>
 
-                  <!-- 排序方向切换按钮 -->
                   <v-btn
                     icon
                     v-if="sortBy !== 'default'"
@@ -1898,272 +2208,27 @@ watch(activeTab, (newTab) => {
                       }}
                     </v-tooltip>
                   </v-btn>
-                  <!-- <v-switch v-model="showPluginFullName" :label="tm('market.showFullName')" hide-details
-                    density="compact" style="margin-left: 12px" /> -->
                 </div>
               </div>
 
-              <v-row style="min-height: 26rem">
+              <v-row style="min-height: 26rem" dense>
                 <v-col
                   v-for="plugin in paginatedPlugins"
                   :key="plugin.name"
                   cols="12"
                   md="6"
                   lg="4"
+                  class="pb-2"
                 >
-                  <v-card
-                    class="rounded-lg d-flex flex-column plugin-card"
-                    elevation="0"
-                    style="height: 12rem; position: relative"
-                  >
-                    <!-- 推荐标记 -->
-                    <v-chip
-                      v-if="plugin?.pinned"
-                      color="warning"
-                      size="x-small"
-                      label
-                      style="
-                        position: absolute;
-                        right: 8px;
-                        top: 8px;
-                        z-index: 10;
-                        height: 20px;
-                        font-weight: bold;
-                      "
-                    >
-                      🥳 推荐
-                    </v-chip>
-
-                    <v-card-text
-                      style="
-                        padding: 12px;
-                        padding-bottom: 8px;
-                        display: flex;
-                        gap: 12px;
-                        width: 100%;
-                        flex: 1;
-                        overflow: hidden;
-                      "
-                    >
-                      <div style="flex-shrink: 0">
-                        <img
-                          :src="plugin?.logo || defaultPluginIcon"
-                          :alt="plugin.name"
-                          style="
-                            height: 75px;
-                            width: 75px;
-                            border-radius: 8px;
-                            object-fit: cover;
-                          "
-                        />
-                      </div>
-
-                      <div
-                        style="
-                          flex: 1;
-                          overflow: hidden;
-                          display: flex;
-                          flex-direction: column;
-                        "
-                      >
-                        <!-- Display Name -->
-                        <div
-                          class="font-weight-bold"
-                          style="
-                            margin-bottom: 4px;
-                            line-height: 1.3;
-                            font-size: 1.2rem;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                          "
-                        >
-                          <span
-                            style="overflow: hidden; text-overflow: ellipsis"
-                          >
-                            {{
-                              plugin.display_name?.length
-                                ? plugin.display_name
-                                : showPluginFullName
-                                ? plugin.name
-                                : plugin.trimmedName
-                            }}
-                          </span>
-                        </div>
-
-                        <!-- Author with link -->
-                        <div
-                          class="d-flex align-center"
-                          style="gap: 4px; margin-bottom: 6px"
-                        >
-                          <v-icon
-                            icon="mdi-account"
-                            size="x-small"
-                            style="color: rgba(var(--v-theme-on-surface), 0.5)"
-                          ></v-icon>
-                          <a
-                            v-if="plugin?.social_link"
-                            :href="plugin.social_link"
-                            target="_blank"
-                            class="text-subtitle-2 font-weight-medium"
-                            style="
-                              text-decoration: none;
-                              color: rgb(var(--v-theme-primary));
-                              white-space: nowrap;
-                              overflow: hidden;
-                              text-overflow: ellipsis;
-                            "
-                          >
-                            {{ plugin.author }}
-                          </a>
-                          <span
-                            v-else
-                            class="text-subtitle-2 font-weight-medium"
-                            style="
-                              color: rgb(var(--v-theme-primary));
-                              white-space: nowrap;
-                              overflow: hidden;
-                              text-overflow: ellipsis;
-                            "
-                          >
-                            {{ plugin.author }}
-                          </span>
-                          <div
-                            class="d-flex align-center text-subtitle-2 ml-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-source-branch"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{ plugin.version }}</span>
-                          </div>
-                        </div>
-
-                        <!-- Description -->
-                        <div class="text-caption plugin-description">
-                          {{ plugin.desc }}
-                        </div>
-
-                        <!-- Stats: Stars & Updated & Version -->
-                        <div
-                          class="d-flex align-center"
-                          style="gap: 8px; margin-top: auto"
-                        >
-                          <div
-                            v-if="plugin.stars !== undefined"
-                            class="d-flex align-center text-subtitle-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-star"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{ plugin.stars }}</span>
-                          </div>
-                          <div
-                            v-if="plugin.updated_at"
-                            class="d-flex align-center text-subtitle-2"
-                            style="color: rgba(var(--v-theme-on-surface), 0.7)"
-                          >
-                            <v-icon
-                              icon="mdi-clock-outline"
-                              size="x-small"
-                              style="margin-right: 2px"
-                            ></v-icon>
-                            <span>{{
-                              new Date(plugin.updated_at).toLocaleString()
-                            }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </v-card-text>
-
-                    <!-- Actions -->
-                    <v-card-actions
-                      style="gap: 6px; padding: 8px 12px; padding-top: 0"
-                    >
-                      <v-chip
-                        v-for="tag in plugin.tags?.slice(0, 2)"
-                        :key="tag"
-                        :color="tag === 'danger' ? 'error' : 'primary'"
-                        label
-                        size="x-small"
-                        style="height: 20px"
-                      >
-                        {{ tag === "danger" ? tm("tags.danger") : tag }}
-                      </v-chip>
-                      <v-menu
-                        v-if="plugin.tags && plugin.tags.length > 2"
-                        open-on-hover
-                        offset-y
-                      >
-                        <template v-slot:activator="{ props: menuProps }">
-                          <v-chip
-                            v-bind="menuProps"
-                            color="grey"
-                            label
-                            size="x-small"
-                            style="height: 20px; cursor: pointer"
-                          >
-                            +{{ plugin.tags.length - 2 }}
-                          </v-chip>
-                        </template>
-                        <v-list density="compact">
-                          <v-list-item
-                            v-for="tag in plugin.tags.slice(2)"
-                            :key="tag"
-                          >
-                            <v-chip
-                              :color="tag === 'danger' ? 'error' : 'primary'"
-                              label
-                              size="small"
-                            >
-                              {{ tag === "danger" ? tm("tags.danger") : tag }}
-                            </v-chip>
-                          </v-list-item>
-                        </v-list>
-                      </v-menu>
-                      <v-spacer></v-spacer>
-                      <v-btn
-                        v-if="plugin?.repo"
-                        color="secondary"
-                        size="x-small"
-                        variant="tonal"
-                        :href="plugin.repo"
-                        target="_blank"
-                        style="height: 24px"
-                      >
-                        <v-icon icon="mdi-github" start size="x-small"></v-icon>
-                        {{ tm("buttons.viewRepo") }}
-                      </v-btn>
-                      <v-btn
-                        v-if="!plugin?.installed"
-                        color="primary"
-                        size="x-small"
-                        @click="handleInstallPlugin(plugin)"
-                        variant="flat"
-                        style="height: 24px"
-                      >
-                        {{ tm("buttons.install") }}
-                      </v-btn>
-                      <v-chip
-                        v-else
-                        color="success"
-                        size="x-small"
-                        label
-                        style="height: 20px"
-                      >
-                        ✓ {{ tm("status.installed") }}
-                      </v-chip>
-                    </v-card-actions>
-                  </v-card>
+                  <MarketPluginCard
+                    :plugin="plugin"
+                    :default-plugin-icon="defaultPluginIcon"
+                    :show-plugin-full-name="showPluginFullName"
+                    @install="handleInstallPlugin"
+                  />
                 </v-col>
               </v-row>
 
-              <!-- 底部分页控件 -->
               <div class="d-flex justify-center mt-4" v-if="totalPages > 1">
                 <v-pagination
                   v-model="currentPage"
@@ -2465,6 +2530,31 @@ watch(activeTab, (newTab) => {
     </v-card>
   </v-dialog>
 
+  <!-- 版本不兼容警告对话框 -->
+  <v-dialog v-model="versionCompatibilityDialog.show" width="520" persistent>
+    <v-card>
+      <v-card-title class="text-h5 d-flex align-center">
+        <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
+        {{ tm("dialogs.versionCompatibility.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="mb-2">{{ tm("dialogs.versionCompatibility.message") }}</div>
+        <div class="text-medium-emphasis">
+          {{ versionCompatibilityDialog.message }}
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer></v-spacer>
+        <v-btn color="grey" @click="cancelInstallOnVersionWarning">
+          {{ tm("dialogs.versionCompatibility.cancel") }}
+        </v-btn>
+        <v-btn color="warning" @click="continueInstallIgnoringVersionWarning">
+          {{ tm("dialogs.versionCompatibility.confirm") }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- 上传插件对话框 -->
   <v-dialog v-model="dialog" width="500">
     <div
@@ -2545,6 +2635,46 @@ watch(activeTab, (newTab) => {
                 class="rounded-lg mb-4"
                 placeholder="https://github.com/username/repo"
               ></v-text-field>
+
+              <div v-if="selectedInstallPlugin" class="mb-3">
+                <v-chip
+                  v-if="selectedInstallPlugin.astrbot_version"
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                  class="mr-2 mb-2"
+                >
+                  {{ tm("card.status.astrbotVersion") }}:
+                  {{ selectedInstallPlugin.astrbot_version }}
+                </v-chip>
+                <v-chip
+                  v-if="normalizePlatformList(selectedInstallPlugin.support_platforms).length"
+                  size="small"
+                  color="info"
+                  variant="outlined"
+                  class="mb-2"
+                >
+                  {{ tm("card.status.supportPlatform") }}:
+                  {{
+                    getPlatformDisplayList(selectedInstallPlugin.support_platforms).join(
+                      ", ",
+                    )
+                  }}
+                </v-chip>
+                <v-alert
+                  v-if="
+                    selectedInstallPlugin.astrbot_version &&
+                    installCompat.checked &&
+                    !installCompat.compatible
+                  "
+                  type="warning"
+                  variant="tonal"
+                  density="comfortable"
+                  class="mt-2"
+                >
+                  {{ installCompat.message }}
+                </v-alert>
+              </div>
 
               <ProxySelector></ProxySelector>
             </div>
@@ -2666,38 +2796,6 @@ watch(activeTab, (newTab) => {
   padding: 5px;
   border-radius: 5px;
   background-color: #f5f5f5;
-}
-
-.plugin-description {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  line-height: 1.3;
-  margin-bottom: 6px;
-  flex: 1;
-  overflow-y: hidden;
-}
-
-.plugin-card:hover .plugin-description {
-  overflow-y: auto;
-}
-
-.plugin-description::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.plugin-description::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.plugin-description::-webkit-scrollbar-thumb {
-  background-color: rgba(var(--v-theme-primary-rgb), 0.4);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-.plugin-description::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(var(--v-theme-primary-rgb), 0.6);
 }
 
 .fab-button {
