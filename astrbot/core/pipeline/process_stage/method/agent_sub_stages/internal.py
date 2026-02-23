@@ -19,6 +19,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -30,7 +31,6 @@ from astrbot.core.utils.session_lock import session_lock_manager
 
 from .....astr_agent_run_util import run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
-from ...stage import Stage
 
 
 class InternalAgentSubStage(Stage):
