@@ -1,4 +1,4 @@
-.PHONY: worktree worktree-add worktree-rm
+.PHONY: worktree worktree-add worktree-rm test test-unit test-integration test-cov test-quick
 
 WORKTREE_DIR ?= ../astrbot_worktree
 BRANCH ?= $(word 2,$(MAKECMDGOALS))
@@ -30,3 +30,32 @@ endif
 # Swallow extra args (branch/base) so make doesn't treat them as targets
 %:
 	@true
+
+# ============================================================
+# 测试命令
+# ============================================================
+
+# 运行所有测试
+test:
+	uv run pytest tests/ -v
+
+# 运行单元测试
+test-unit:
+	uv run pytest tests/ -v -m "unit and not integration"
+
+# 运行集成测试
+test-integration:
+	uv run pytest tests/integration/ -v -m integration
+
+# 运行测试并生成覆盖率报告
+test-cov:
+	uv run pytest tests/ --cov=astrbot --cov-report=term-missing --cov-report=html -v
+
+# 快速测试（跳过慢速测试和集成测试）
+test-quick:
+	uv run pytest tests/ -v -m "not slow and not integration" --tb=short
+
+# 运行特定测试文件
+test-file:
+	@echo "Usage: uv run pytest tests/path/to/test_file.py -v"
+	@echo "Example: uv run pytest tests/test_main.py -v"

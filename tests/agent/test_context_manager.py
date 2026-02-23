@@ -559,8 +559,9 @@ class TestContextManager:
         config = ContextConfig(max_context_tokens=100)
         manager = ContextManager(config)
 
-        # Verify the default threshold is 0.82
-        assert manager.compressor.compression_threshold == 0.82
+        # Verify default threshold behavior: <=82% no compress, >82% compress
+        assert not manager.compressor.should_compress([], 82, 100)
+        assert manager.compressor.should_compress([], 83, 100)
 
         # Test threshold logic
         messages = [self.create_message("user", "x" * 81)]  # ~24 tokens

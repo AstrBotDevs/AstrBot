@@ -1,28 +1,37 @@
 import asyncio
+import importlib
 import itertools
 import logging
 import time
 import uuid
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from aiocqhttp import CQHttp, Event
+import aiocqhttp
 from aiocqhttp.exceptions import ActionFailed
 
-from astrbot.api import logger
-from astrbot.api.event import MessageChain
-from astrbot.api.message_components import *
-from astrbot.api.platform import (
+from astrbot import logger
+from astrbot.core.message.components import (
+    At,
+    ComponentTypes,
+    File,
+    Image,
+    Plain,
+    Poke,
+    Reply,
+)
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import (
     AstrBotMessage,
+    Group,
     MessageMember,
     MessageType,
     Platform,
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 
-from ...register import register_platform_adapter
-from .aiocqhttp_message_event import *
 from .aiocqhttp_message_event import AiocqhttpMessageEvent
 
 
@@ -37,6 +46,7 @@ class AiocqhttpAdapter(Platform):
         platform_config: dict,
         platform_settings: dict,
         event_queue: asyncio.Queue,
+        bot_factory: Callable[..., Any] | None = None,
     ) -> None:
         super().__init__(platform_config, event_queue)
 
@@ -51,17 +61,10 @@ class AiocqhttpAdapter(Platform):
             support_streaming_message=False,
         )
 
-        self.bot = CQHttp(
-            use_ws_reverse=True,
-            import_name="aiocqhttp",
-            api_timeout_sec=180,
-            access_token=platform_config.get(
-                "ws_reverse_token",
-            ),  # 以防旧版本配置不存在
-        )
+        self.bot = self._create_bot(platform_config, bot_factory=bot_factory)
 
         @self.bot.on_request()
-        async def request(event: Event) -> None:
+        async def request(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if not abm:
@@ -72,7 +75,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_notice()
-        async def notice(event: Event) -> None:
+        async def notice(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -82,7 +85,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_message("group")
-        async def group(event: Event) -> None:
+        async def group(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -92,7 +95,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_message("private")
-        async def private(event: Event) -> None:
+        async def private(event: aiocqhttp.Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -104,6 +107,29 @@ class AiocqhttpAdapter(Platform):
         @self.bot.on_websocket_connection
         def on_websocket_connection(_) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
+
+    @staticmethod
+    def _create_bot(
+        platform_config: dict,
+        bot_factory: Callable[..., Any] | None = None,
+    ) -> aiocqhttp.CQHttp:
+        if bot_factory is None:
+            # Resolve aiocqhttp at runtime so tests that swap sys.modules later
+            # still affect bot creation even if this module was imported earlier.
+            aiocqhttp_module = importlib.import_module("aiocqhttp")
+            bot_factory = aiocqhttp_module.CQHttp
+
+        return cast(
+            aiocqhttp.CQHttp,
+            bot_factory(
+                use_ws_reverse=True,
+                import_name="aiocqhttp",
+                api_timeout_sec=180,
+                access_token=platform_config.get(
+                    "ws_reverse_token",
+                ),  # 以防旧版本配置不存在
+            ),
+        )
 
     async def send_by_session(
         self,
@@ -124,7 +150,7 @@ class AiocqhttpAdapter(Platform):
         )
         await super().send_by_session(session, message_chain)
 
-    async def convert_message(self, event: Event) -> AstrBotMessage | None:
+    async def convert_message(self, event: aiocqhttp.Event) -> AstrBotMessage | None:
         logger.debug(f"[aiocqhttp] RawMessage {event}")
 
         if event["post_type"] == "message":
@@ -139,7 +165,9 @@ class AiocqhttpAdapter(Platform):
 
         return abm
 
-    async def _convert_handle_request_event(self, event: Event) -> AstrBotMessage:
+    async def _convert_handle_request_event(
+        self, event: aiocqhttp.Event
+    ) -> AstrBotMessage:
         """OneBot V11 请求类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
@@ -164,7 +192,9 @@ class AiocqhttpAdapter(Platform):
         abm.raw_message = event
         return abm
 
-    async def _convert_handle_notice_event(self, event: Event) -> AstrBotMessage:
+    async def _convert_handle_notice_event(
+        self, event: aiocqhttp.Event
+    ) -> AstrBotMessage:
         """OneBot V11 通知类事件"""
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
@@ -196,7 +226,7 @@ class AiocqhttpAdapter(Platform):
 
     async def _convert_handle_message_event(
         self,
-        event: Event,
+        event: aiocqhttp.Event,
         get_reply=True,
     ) -> AstrBotMessage:
         """OneBot V11 消息类事件
@@ -309,7 +339,7 @@ class AiocqhttpAdapter(Platform):
                             )
                             # 添加必要的 post_type 字段，防止 Event.from_payload 报错
                             reply_event_data["post_type"] = "message"
-                            new_event = Event.from_payload(reply_event_data)
+                            new_event = aiocqhttp.Event.from_payload(reply_event_data)
                             if not new_event:
                                 logger.error(
                                     f"无法从回复消息数据构造 Event 对象: {reply_event_data}",
@@ -401,6 +431,14 @@ class AiocqhttpAdapter(Platform):
                                 f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
                             )
                             continue
+                        if (
+                            t == "image"
+                            and not m["data"].get("file")
+                            and m["data"].get("url")
+                        ):
+                            a = Image(file=m["data"]["url"], url=m["data"]["url"])
+                            abm.message.append(a)
+                            continue
                         a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     except Exception as e:
@@ -456,5 +494,5 @@ class AiocqhttpAdapter(Platform):
 
         self.commit_event(message_event)
 
-    def get_client(self) -> CQHttp:
+    def get_client(self) -> aiocqhttp.CQHttp:
         return self.bot
