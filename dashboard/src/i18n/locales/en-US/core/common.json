@@ -105,7 +105,6 @@
     "copy": "Copy",
     "noData": "No data available"
   },
-  "clear": "Clear",
   "palette": {
     "clickToSelect": "Click to select color",
     "placeholder": "#RRGGBB or color name",
