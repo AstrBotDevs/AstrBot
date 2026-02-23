@@ -99,6 +99,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args,
     ):
         input_ = tool_args.get("input")
+        image_urls = tool_args.get("image_urls")
 
         # make toolset for the agent
         tools = tool.agent.tools
@@ -143,11 +144,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event=event,
             chat_provider_id=prov_id,
             prompt=input_,
+            image_urls=image_urls,
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
             max_steps=30,
             run_hooks=tool.agent.run_hooks,
+            stream=ctx.get_config().get("provider_settings", {}).get("stream", False),
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
@@ -314,7 +317,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
-        config = MainAgentBuildConfig(tool_call_timeout=3600)
+        config = MainAgentBuildConfig(
+            tool_call_timeout=3600,
+            streaming_response=ctx.get_config()
+            .get("provider_settings", {})
+            .get("stream", False),
+        )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
