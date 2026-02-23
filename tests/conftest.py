@@ -364,17 +364,16 @@ def provider_request():
 def pytest_runtest_setup(item):
     """在测试运行前检查跳过条件。"""
     # 跳过需要 API Key 但未设置的 Provider 测试
-    if "provider" in [m.name for m in item.iter_markers()]:
+    if item.get_closest_marker("provider"):
         if not os.environ.get("TEST_PROVIDER_API_KEY"):
             pytest.skip("TEST_PROVIDER_API_KEY not set")
 
     # 跳过需要特定平台的测试
-    if "platform" in [m.name for m in item.iter_markers()]:
+    if item.get_closest_marker("platform"):
         required_platform = None
-        for marker in item.iter_markers(name="platform"):
-            if marker.args:
-                required_platform = marker.args[0]
-                break
+        marker = item.get_closest_marker("platform")
+        if marker and marker.args:
+            required_platform = marker.args[0]
 
         if required_platform and not os.environ.get(
             f"TEST_{required_platform.upper()}_ENABLED"
