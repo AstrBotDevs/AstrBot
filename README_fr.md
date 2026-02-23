@@ -87,7 +87,7 @@ astrbot
 
 Dépôt de l'application de bureau : [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
 
-Prend en charge plusieurs architectures système, installation directe, prête à l'emploi. La solution de déploiement de bureau en un clic la plus adaptée aux débutants. Non recommandé pour les serveurs.
+Prend en charge plusieurs architectures système, installation directe, prête à l'emploi. La solution de déploiement de bureau en un clic la plus adaptée aux débutants. Non recommandée pour les serveurs.
 
 #### Déploiement en un clic avec le lanceur (AstrBot Launcher)
 
