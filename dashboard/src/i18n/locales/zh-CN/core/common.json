@@ -123,5 +123,29 @@
     "placeholderHex": "#RRGGBB",
     "placeholderRgb": "rgb(255, 255, 255)",
     "placeholderHsv": "hsv(0, 0%, 100%)"
+  },
+  "objectEditor": {
+    "dialogTitle": "修改键值对",
+    "noItems": "暂无项目",
+    "noParams": "暂无参数",
+    "presets": "预设",
+    "newKeyLabel": "新键名",
+    "valueTypeLabel": "值类型",
+    "keyExists": "键名已存在",
+    "invalidJson": "JSON 格式错误",
+    "placeholders": {
+      "keyName": "键名",
+      "stringValue": "字符串值",
+      "numberValue": "数值",
+      "jsonValue": "JSON"
+    }
+  },
+  "firstNotice": {
+    "title": "首次提示",
+    "loading": "正在加载首次提示...",
+    "empty": {
+      "title": "暂无首次提示内容",
+      "subtitle": "未找到 FIRST_NOTICE.md 或文件为空。"
+    }
   }
 }
