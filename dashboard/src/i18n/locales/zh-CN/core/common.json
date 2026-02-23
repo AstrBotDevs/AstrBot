@@ -105,7 +105,6 @@
     "copy": "复制",
     "noData": "暂无数据"
   },
-  "clear": "清除",
   "palette": {
     "clickToSelect": "点击选择颜色",
     "placeholder": "#RRGGBB 或颜色名称",
