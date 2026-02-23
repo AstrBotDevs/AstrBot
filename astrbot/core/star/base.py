@@ -4,12 +4,12 @@ import logging
 from typing import Any, Protocol
 
 from astrbot.core import html_renderer
-
-logger = logging.getLogger("astrbot")
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
 from .star import StarMetadata, star_map, star_registry
+
+logger = logging.getLogger("astrbot")
 
 
 class Star(CommandParserMixin, PluginKVStoreMixin):
