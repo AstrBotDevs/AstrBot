@@ -469,13 +469,13 @@ class ChatRoute(Route):
                                 if tc_id in tool_calls:
                                     tool_calls[tc_id]["result"] = tcr.get("result")
                                     tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                accumulated_parts.append(
-                                    {
-                                        "type": "tool_call",
-                                        "tool_calls": [tool_calls[tc_id]],
-                                    }
-                                )
-                                tool_calls.pop(tc_id, None)
+                                    accumulated_parts.append(
+                                        {
+                                            "type": "tool_call",
+                                            "tool_calls": [tool_calls[tc_id]],
+                                        }
+                                    )
+                                    tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
                                 accumulated_reasoning += result_text
                             elif streaming:
