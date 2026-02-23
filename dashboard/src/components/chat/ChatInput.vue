@@ -95,14 +95,14 @@
                         </v-tooltip>
                     </v-btn>
                     <v-btn
+                        icon
                         v-if="isRunning"
                         @click="$emit('stop')"
-                        icon="mdi-stop"
                         variant="text"
-                        color="error"
                         class="send-btn"
                         size="small"
                     >
+                        <v-icon icon="mdi-stop" variant="text" plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ tm('input.stopGenerating') }}
                         </v-tooltip>
