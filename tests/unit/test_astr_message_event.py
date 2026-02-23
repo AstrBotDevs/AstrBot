@@ -685,3 +685,97 @@ class TestGetGroup:
         # Default implementation returns None
         result = await astr_message_event.get_group(group_id="group123")
         assert result is None
+
+
+class TestMessageTypeHandling:
+    """Tests for message type handling edge cases."""
+
+    def test_message_type_from_valid_string(self, platform_meta):
+        """Valid MessageType string should be converted correctly."""
+        message = AstrBotMessage()
+        message.type = "FRIEND_MESSAGE"
+        message.message = []
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.session.message_type == MessageType.FRIEND_MESSAGE
+        assert event.get_message_type() == MessageType.FRIEND_MESSAGE
+
+    def test_message_type_from_invalid_string_defaults_to_friend(self, platform_meta):
+        """Invalid message type should default to FRIEND_MESSAGE."""
+        message = AstrBotMessage()
+        message.type = "InvalidMessageType"
+        message.message = []
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.session.message_type == MessageType.FRIEND_MESSAGE
+        assert event.get_message_type() == MessageType.FRIEND_MESSAGE
+
+    def test_message_type_from_none_defaults_to_friend(self, platform_meta):
+        """None message type should default to FRIEND_MESSAGE."""
+        message = AstrBotMessage()
+        message.type = None
+        message.message = []
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.session.message_type == MessageType.FRIEND_MESSAGE
+        assert event.get_message_type() == MessageType.FRIEND_MESSAGE
+
+    def test_message_type_from_integer_defaults_to_friend(self, platform_meta):
+        """Integer message type should default to FRIEND_MESSAGE."""
+        message = AstrBotMessage()
+        message.type = 123
+        message.message = []
+        event = ConcreteAstrMessageEvent(
+            message_str="test",
+            message_obj=message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        assert event.session.message_type == MessageType.FRIEND_MESSAGE
+        assert event.get_message_type() == MessageType.FRIEND_MESSAGE
+
+
+class TestDefensiveGetattr:
+    """Tests for defensive getattr behavior in AstrMessageEvent."""
+
+    def test_get_messages_without_message_attr(self, astr_message_event):
+        """get_messages should handle message_obj without 'message' attribute."""
+        astr_message_event.message_obj = type("DummyMessage", (), {})()
+        messages = astr_message_event.get_messages()
+        assert isinstance(messages, list)
+
+    def test_get_message_type_without_type_attr(self, astr_message_event):
+        """get_message_type should handle message_obj without 'type' attribute."""
+        astr_message_event.message_obj = type("DummyMessage", (), {})()
+        message_type = astr_message_event.get_message_type()
+        assert isinstance(message_type, MessageType)
+
+    def test_get_sender_fields_without_sender_attr(self, astr_message_event):
+        """get_sender_id and get_sender_name should handle missing 'sender'."""
+        astr_message_event.message_obj = type("DummyMessage", (), {})()
+        sender_id = astr_message_event.get_sender_id()
+        sender_name = astr_message_event.get_sender_name()
+        assert isinstance(sender_id, str)
+        assert isinstance(sender_name, str)
+
+    def test_get_message_type_with_non_enum_type(self, astr_message_event):
+        """get_message_type should handle message_obj.type that is not a MessageType."""
+        class DummyMessage:
+            def __init__(self):
+                self.type = "not_an_enum"
+                self.message = []
+        astr_message_event.message_obj = DummyMessage()
+        message_type = astr_message_event.get_message_type()
+        assert isinstance(message_type, MessageType)

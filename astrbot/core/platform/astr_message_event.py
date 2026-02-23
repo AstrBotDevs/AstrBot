@@ -56,7 +56,11 @@ class AstrMessageEvent(abc.ABC):
         if not isinstance(message_type, MessageType):
             try:
                 message_type = MessageType(str(message_type))
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
+                logger.warning(
+                    f"Failed to convert message type {message_obj.type!r} to MessageType. "
+                    f"Falling back to FRIEND_MESSAGE."
+                )
                 message_type = MessageType.FRIEND_MESSAGE
         self.session = MessageSession(
             platform_name=platform_meta.id,
