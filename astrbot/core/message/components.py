@@ -720,13 +720,20 @@ class File(BaseMessageComponent):
         if allow_return_url and self.url:
             return self.url
 
-        if self.file_ and os.path.exists(self.file_):
-            return os.path.abspath(self.file_)
+        if self.file_:
+            path = self.file_
+            if path.startswith("file:///"):
+                path = path[8:]
+            if os.path.exists(path):
+                return os.path.abspath(path)
 
         if self.url:
             await self._download_file()
             if self.file_:
-                return os.path.abspath(self.file_)
+                path = self.file_
+                if path.startswith("file:///"):
+                    path = path[8:]
+                return os.path.abspath(path)
 
         return ""
 

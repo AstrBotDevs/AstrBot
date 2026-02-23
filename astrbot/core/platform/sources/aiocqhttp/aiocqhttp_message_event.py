@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from collections.abc import AsyncGenerator
 
@@ -45,6 +46,16 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if isinstance(segment, File):
             # For File segments, we need to handle the file differently
             d = await segment.to_dict()
+            file_val = d.get("data", {}).get("file", "")
+            if (
+                file_val
+                and os.path.isabs(file_val)
+                and not file_val.startswith(("http", "base64", "file://"))
+            ):
+                if file_val.startswith("/"):
+                    d["data"]["file"] = f"file://{file_val}"
+                else:
+                    d["data"]["file"] = f"file:///{file_val}"
             return d
         if isinstance(segment, Video):
             d = await segment.to_dict()
