@@ -100,6 +100,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
+        "show_tool_call_result": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
         "quoted_message_parser": {
@@ -2306,6 +2307,9 @@ CONFIG_METADATA_2 = {
                     "show_tool_use_status": {
                         "type": "bool",
                     },
+                    "show_tool_call_result": {
+                        "type": "bool",
+                    },
                     "unsupported_streaming_strategy": {
                         "type": "string",
                     },
@@ -2992,6 +2996,15 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.show_tool_call_result": {
+                        "description": "输出函数调用返回结果",
+                        "type": "bool",
+                        "hint": "仅在输出函数调用状态启用时生效，展示结果前 70 个字符。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.show_tool_use_status": True,
                         },
                     },
                     "provider_settings.sanitize_context_by_modalities": {
