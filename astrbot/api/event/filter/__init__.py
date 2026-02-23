@@ -37,6 +37,7 @@ from astrbot.core.star.register import register_regex as regex
 
 from astrbot.core.star.register import register_on_plugin_loaded as on_plugin_loaded
 from astrbot.core.star.register import register_on_plugin_unloaded as on_plugin_unloaded
+
 __all__ = [
     "CustomFilter",
     "EventMessageType",

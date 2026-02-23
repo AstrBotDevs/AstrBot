@@ -203,7 +203,7 @@ class EventType(enum.Enum):
     OnLLMToolRespondEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
     OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
-    OnPluginLoadedEvent = enum.auto() # 插件加载完成
+    OnPluginLoadedEvent = enum.auto()  # 插件加载完成
     OnPluginUnloadedEvent = enum.auto()  # 插件卸载完成
 
 

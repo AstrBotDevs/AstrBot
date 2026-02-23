@@ -391,7 +391,6 @@ def register_on_plugin_unloaded(**kwargs):
     return decorator
 
 
-
 def register_on_waiting_llm_request(**kwargs):
     """当等待调用 LLM 时的通知事件（在获取锁之前）
 
