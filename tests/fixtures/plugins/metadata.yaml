@@ -1,0 +1,5 @@
+name: test_plugin
+description: 测试插件 - 用于插件系统测试
+version: 1.0.0
+author: AstrBot Team
+repo: https://github.com/test/test_plugin
