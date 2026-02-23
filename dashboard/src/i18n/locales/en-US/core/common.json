@@ -4,6 +4,7 @@
   "close": "Close",
   "copy": "Copy",
   "copied": "Copied",
+  "copyFailed": "Copy failed",
   "delete": "Delete",
   "edit": "Edit",
   "add": "Add",
