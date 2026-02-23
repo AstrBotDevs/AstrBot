@@ -38,11 +38,25 @@ class EventBus:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            self._print_event(event, conf_info["name"])
-            scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
+            if not isinstance(conf_info, dict):
+                logger.error(
+                    f"Invalid conf_info for origin {event.unified_msg_origin}: {conf_info}"
+                )
+                continue
+
+            conf_id = conf_info.get("id")
+            if not conf_id:
+                logger.error(
+                    f"Incomplete conf_info for origin {event.unified_msg_origin}: {conf_info}"
+                )
+                continue
+
+            conf_name = conf_info.get("name") or str(conf_id)
+            self._print_event(event, conf_name)
+            scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
                 logger.error(
-                    f"PipelineScheduler not found for id: {conf_info['id']}, event ignored."
+                    f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
             asyncio.create_task(scheduler.execute(event))
