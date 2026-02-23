@@ -20,6 +20,10 @@ from astrbot.core.provider.provider import TTSProvider
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
+def _should_stop_agent(astr_event) -> bool:
+    return astr_event.is_stopped() or bool(astr_event.get_extra("agent_stop_requested"))
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
@@ -48,10 +52,28 @@ async def run_agent(
                     )
                 )
 
+        stop_watcher = asyncio.create_task(
+            _watch_agent_stop_signal(agent_runner, astr_event),
+        )
         try:
             async for resp in agent_runner.step():
-                if astr_event.is_stopped():
+                if _should_stop_agent(astr_event):
+                    agent_runner.request_stop()
+
+                if resp.type == "aborted":
+                    if not stop_watcher.done():
+                        stop_watcher.cancel()
+                        try:
+                            await stop_watcher
+                        except asyncio.CancelledError:
+                            pass
+                    astr_event.set_extra("agent_user_aborted", True)
+                    astr_event.set_extra("agent_stop_requested", False)
                     return
+
+                if _should_stop_agent(astr_event):
+                    continue
+
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
 
@@ -120,6 +142,12 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+            if not stop_watcher.done():
+                stop_watcher.cancel()
+                try:
+                    await stop_watcher
+                except asyncio.CancelledError:
+                    pass
             if agent_runner.done():
                 # send agent stats to webchat
                 if astr_event.get_platform_name() == "webchat":
@@ -133,6 +161,12 @@ async def run_agent(
                 break
 
         except Exception as e:
+            if "stop_watcher" in locals() and not stop_watcher.done():
+                stop_watcher.cancel()
+                try:
+                    await stop_watcher
+                except asyncio.CancelledError:
+                    pass
             logger.error(traceback.format_exc())
 
             err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
@@ -153,6 +187,14 @@ async def run_agent(
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
             return
+
+
+async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> None:
+    while not agent_runner.done():
+        if _should_stop_agent(astr_event):
+            agent_runner.request_stop()
+            return
+        await asyncio.sleep(0.5)
 
 
 async def run_live_agent(

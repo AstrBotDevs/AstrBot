@@ -23,12 +23,14 @@
                         :stagedImagesUrl="stagedImagesUrl"
                         :stagedAudioUrl="stagedAudioUrl"
                         :disabled="isStreaming"
+                        :is-running="isStreaming || isConvRunning"
                         :enableStreaming="enableStreaming"
                         :isRecording="isRecording"
                         :session-id="currSessionId || null"
                         :current-session="getCurrentSession"
                         :config-id="configId"
                         @send="handleSendMessage"
+                        @stop="handleStopMessage"
                         @toggleStreaming="toggleStreaming"
                         @removeImage="removeImage"
                         @removeAudio="removeAudio"
@@ -156,6 +158,7 @@ const {
     enableStreaming,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
+    stopMessage: stopMsg,
     toggleStreaming
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
 
@@ -234,6 +237,10 @@ async function handleSendMessage() {
         // 恢复输入内容，让用户可以重试
         // 注意：附件已经上传到服务器，所以不恢复附件
     }
+}
+
+async function handleStopMessage() {
+    await stopMsg();
 }
 
 onMounted(async () => {
