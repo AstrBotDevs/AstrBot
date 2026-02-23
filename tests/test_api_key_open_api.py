@@ -12,7 +12,7 @@ from astrbot.dashboard.routes.route import Response
 from astrbot.dashboard.server import AstrBotDashboard
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_api_key.db"
     db = SQLiteDatabase(str(tmp_db_path))
@@ -37,7 +37,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     test_client = app.test_client()
     response = await test_client.post(
@@ -258,7 +258,7 @@ async def test_open_chat_sessions_pagination(
     assert create_data["status"] == "ok"
     raw_key = create_data["data"]["api_key"]
 
-    creator = "alice"
+    creator = f"alice_{uuid.uuid4().hex[:8]}"
     for idx in range(3):
         await core_lifecycle_td.db.create_platform_session(
             creator=creator,
@@ -276,7 +276,8 @@ async def test_open_chat_sessions_pagination(
     )
 
     page_1_res = await test_client.get(
-        "/api/v1/chat/sessions?page=1&page_size=2&username=alice",
+        "/api/v1/chat/sessions?page=1&page_size=2&username="
+        f"{creator}",
         headers={"X-API-Key": raw_key},
     )
     assert page_1_res.status_code == 200
@@ -286,10 +287,11 @@ async def test_open_chat_sessions_pagination(
     assert page_1_data["data"]["page_size"] == 2
     assert page_1_data["data"]["total"] == 3
     assert len(page_1_data["data"]["sessions"]) == 2
-    assert all(item["creator"] == "alice" for item in page_1_data["data"]["sessions"])
+    assert all(item["creator"] == creator for item in page_1_data["data"]["sessions"])
 
     page_2_res = await test_client.get(
-        "/api/v1/chat/sessions?page=2&page_size=2&username=alice",
+        "/api/v1/chat/sessions?page=2&page_size=2&username="
+        f"{creator}",
         headers={"X-API-Key": raw_key},
     )
     assert page_2_res.status_code == 200

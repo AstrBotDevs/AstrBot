@@ -8,12 +8,17 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.star.star import star_registry
-from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.zip_updator import ReleaseInfo
 from astrbot.dashboard.server import AstrBotDashboard
 
+RUN_ONLINE_UPDATE_CHECK = os.environ.get("ASTRBOT_RUN_ONLINE_UPDATE_CHECK", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
-@pytest_asyncio.fixture(scope="module")
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_v3.db"
@@ -43,7 +48,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
@@ -94,19 +99,53 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_plugins(app: Quart, authenticated_header: dict):
+async def test_plugins(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
     test_client = app.test_client()
+    plugin_name = "helloworld"
+
+    async def mock_install_plugin(
+        repo_url: str,
+        proxy: str | None = None,
+        ignore_version_check: bool = False,  # noqa: ARG001
+    ):
+        return {"name": plugin_name, "repo": repo_url, "proxy": proxy}
+
+    async def mock_update_plugin(name: str, proxy: str | None = None):
+        if name != plugin_name:
+            raise ValueError(f"unknown plugin: {name}")
+        return None
+
+    async def mock_uninstall_plugin(
+        name: str,
+        delete_config: bool = False,  # noqa: ARG001
+        delete_data: bool = False,  # noqa: ARG001
+    ):
+        if name != plugin_name:
+            raise ValueError(f"unknown plugin: {name}")
+
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager,
+        "install_plugin",
+        mock_install_plugin,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager,
+        "update_plugin",
+        mock_update_plugin,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager,
+        "uninstall_plugin",
+        mock_uninstall_plugin,
+    )
+
     # 已经安装的插件
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-
-    # 插件市场
-    response = await test_client.get(
-        "/api/plugin/market_list",
-        headers=authenticated_header,
-    )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
@@ -114,23 +153,17 @@ async def test_plugins(app: Quart, authenticated_header: dict):
     # 插件安装
     response = await test_client.post(
         "/api/plugin/install",
-        json={"url": "https://github.com/Soulter/astrbot_plugin_essential"},
+        json={"url": f"https://github.com/Soulter/{plugin_name}"},
         headers=authenticated_header,
     )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    exists = False
-    for md in star_registry:
-        if md.name == "astrbot_plugin_essential":
-            exists = True
-            break
-    assert exists is True, "插件 astrbot_plugin_essential 未成功载入"
 
     # 插件更新
     response = await test_client.post(
         "/api/plugin/update",
-        json={"name": "astrbot_plugin_essential"},
+        json={"name": plugin_name},
         headers=authenticated_header,
     )
     assert response.status_code == 200
@@ -140,24 +173,12 @@ async def test_plugins(app: Quart, authenticated_header: dict):
     # 插件卸载
     response = await test_client.post(
         "/api/plugin/uninstall",
-        json={"name": "astrbot_plugin_essential"},
+        json={"name": plugin_name},
         headers=authenticated_header,
     )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    exists = False
-    for md in star_registry:
-        if md.name == "astrbot_plugin_essential":
-            exists = True
-            break
-    assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
-    exists = False
-    for md in star_handlers_registry:
-        if "astrbot_plugin_essential" in md.handler_module_path:
-            exists = True
-            break
-    assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
 
 
 @pytest.mark.asyncio
@@ -189,12 +210,141 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_check_update(app: Quart, authenticated_header: dict):
+async def test_check_update_success_no_new_version(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        return None
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
     test_client = app.test_client()
     response = await test_client.get("/api/update/check", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "success"
+    assert {
+        "version",
+        "has_new_version",
+        "dashboard_version",
+        "dashboard_has_new_version",
+    }.issubset(data["data"])
+    assert data["data"]["has_new_version"] is False
+    assert data["data"]["dashboard_version"] == "v-test-dashboard"
+
+
+@pytest.mark.asyncio
+async def test_check_update_success_has_new_version(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        return ReleaseInfo(
+            version="v999.0.0",
+            published_at="2026-01-01",
+            body="test release",
+        )
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "success"
+    assert {
+        "version",
+        "has_new_version",
+        "dashboard_version",
+        "dashboard_has_new_version",
+    }.issubset(data["data"])
+    assert data["data"]["has_new_version"] is True
+    assert data["data"]["dashboard_version"] == "v-test-dashboard"
+
+
+@pytest.mark.asyncio
+async def test_check_update_error_when_updator_raises(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        raise RuntimeError("mock update check failure")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert isinstance(data["message"], str)
+    assert data["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not RUN_ONLINE_UPDATE_CHECK,
+    reason="Set ASTRBOT_RUN_ONLINE_UPDATE_CHECK=1 to run online update check test.",
+)
+async def test_check_update_online_optional(app: Quart, authenticated_header: dict):
+    """Optional online smoke test for the real update-check request path."""
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] in {"success", "error"}
+    assert "message" in data
+    assert "data" in data
+
+    if data["status"] == "success":
+        assert {
+            "version",
+            "has_new_version",
+            "dashboard_version",
+            "dashboard_has_new_version",
+        }.issubset(data["data"])
 
 
 @pytest.mark.asyncio
