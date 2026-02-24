@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# Module is pre-imported in conftest.py to avoid circular imports
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.tool import FunctionTool, ToolSet

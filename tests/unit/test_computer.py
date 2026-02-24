@@ -753,45 +753,36 @@ class TestComputerClient:
         }.get(key, default)
         mock_context.get_config = MagicMock(return_value=mock_config)
 
-        mock_booter1 = MagicMock()
-        mock_booter1.boot = AsyncMock()
-        mock_booter1.available = AsyncMock(return_value=False)  # Not available
+        mock_unavailable_booter = MagicMock(spec=ShipyardBooter)
+        mock_unavailable_booter.available = AsyncMock(return_value=False)
 
-        mock_booter2 = MagicMock()
-        mock_booter2.boot = AsyncMock()
-        mock_booter2.available = AsyncMock(return_value=True)
-        mock_booter2.shell = MagicMock()
-        mock_booter2.upload_file = AsyncMock(return_value={"success": True})
-
-        call_count = 0
-
-        def create_booter(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return mock_booter1
-            return mock_booter2
+        mock_new_booter = MagicMock(spec=ShipyardBooter)
+        mock_new_booter.boot = AsyncMock()
 
         with (
             patch(
-                "astrbot.core.computer.booters.shipyard.ShipyardClient",
-            ),
+                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
+                return_value=mock_new_booter,
+            ) as mock_booter_cls,
             patch(
                 "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
                 AsyncMock(),
             ),
         ):
+            session_id = "test-session-rebuild"
             # Pre-set the unavailable booter
-            computer_client.session_booter["test-session-rebuild"] = mock_booter1
+            computer_client.session_booter[session_id] = mock_unavailable_booter
 
-            # Now when we call get_booter, it should detect the booter is unavailable
-            # and create a new one
-            with patch.object(ShipyardBooter, "boot", new=AsyncMock()):
-                await computer_client.get_booter(
-                    mock_context, "test-session-rebuild"
-                )
-                # The new booter should be used after the old one is unavailable
-                # Since we mocked boot but not available(), the new booter should be set
+            # get_booter should detect the booter is unavailable and create a new one
+            new_booter_instance = await computer_client.get_booter(
+                mock_context, session_id
+            )
+
+            # Assert that a new booter was created and is now in the session
+            mock_booter_cls.assert_called_once()
+            mock_new_booter.boot.assert_awaited_once()
+            assert new_booter_instance is mock_new_booter
+            assert computer_client.session_booter[session_id] is mock_new_booter
 
         # Cleanup
         computer_client.session_booter.clear()
