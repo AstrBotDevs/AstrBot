@@ -8,6 +8,7 @@ from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
+from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -17,6 +18,7 @@ from astrbot.core.message.message_event_result import (
 
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
+from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
     ProviderRequest,
@@ -25,9 +27,7 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
-from .....astr_agent_hooks import MAIN_AGENT_HOOKS
 from ....context import PipelineContext, call_event_hook
-from ...stage import Stage
 
 AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
