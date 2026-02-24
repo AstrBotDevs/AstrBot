@@ -132,6 +132,11 @@ class Main(star.Star):
         """重置 LLM 会话"""
         await self.conversation_c.reset(message)
 
+    @filter.command("stop")
+    async def stop(self, message: AstrMessageEvent) -> None:
+        """停止当前会话中正在运行的 Agent"""
+        await self.conversation_c.stop(message)
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
     async def model_ls(

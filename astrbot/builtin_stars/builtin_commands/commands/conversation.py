@@ -102,6 +102,30 @@ class ConversationCommands:
 
         message.set_result(MessageEventResult().message(ret))
 
+    async def stop(self, message: AstrMessageEvent) -> None:
+        """停止当前会话正在运行的 Agent"""
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        umo = message.unified_msg_origin
+
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            stopped_count = active_event_registry.stop_all(umo, exclude=message)
+        else:
+            stopped_count = active_event_registry.request_agent_stop_all(
+                umo,
+                exclude=message,
+            )
+
+        if stopped_count > 0:
+            message.set_result(
+                MessageEventResult().message(
+                    f"已请求停止 {stopped_count} 个运行中的任务。"
+                )
+            )
+            return
+
+        message.set_result(MessageEventResult().message("当前会话没有运行中的任务。"))
+
     async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
         if not self.context.get_using_provider(message.unified_msg_origin):
