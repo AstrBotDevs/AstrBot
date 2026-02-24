@@ -49,10 +49,13 @@ class PluginVersionIncompatibleError(Exception):
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
+        from .star_tools import StarTools
+
         self.updator = PluginUpdator()
 
         self.context = context
         self.context._star_manager = self  # type: ignore
+        StarTools.initialize(context)
 
         self.config = config
         self.plugin_store_path = get_astrbot_plugin_path()
