@@ -1,8 +1,8 @@
 import asyncio
+import os
 import re
 import sys
 import uuid
-import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
@@ -22,13 +22,13 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import convert_audio_to_wav
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
-from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.media_utils import convert_audio_to_wav
 
 from .tg_event import TelegramPlatformEvent
 
