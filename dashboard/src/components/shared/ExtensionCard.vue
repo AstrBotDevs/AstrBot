@@ -32,6 +32,7 @@ const emit = defineEmits([
   "view-handlers",
   "view-readme",
   "view-changelog",
+  "view-extension-page",
 ]);
 
 const reveal = ref(false);
@@ -103,6 +104,10 @@ const viewReadme = () => {
 
 const viewChangelog = () => {
   emit("view-changelog", props.extension);
+};
+
+const viewExtensionPage = () => {
+  emit("view-extension-page", props.extension);
 };
 </script>
 
@@ -371,6 +376,15 @@ const viewChangelog = () => {
       </v-btn>
       <v-btn v-if="!marketMode" color="primary" size="small" @click="configure">
         {{ tm("card.actions.pluginConfig") }}
+      </v-btn>
+      <v-btn
+        v-if="!marketMode && extension.extension_page"
+        color="secondary"
+        size="small"
+        prepend-icon="mdi-web"
+        @click="viewExtensionPage"
+      >
+        {{ tm("card.actions.extensionPage") }}
       </v-btn>
     </v-card-actions>
   </v-card>
