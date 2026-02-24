@@ -422,6 +422,183 @@ class TestConvertConversation:
         assert result.token_usage == 100
 
 
+class TestGetFilteredConversations:
+    """Tests for get_filtered_conversations method."""
+
+    @pytest.mark.asyncio
+    async def test_get_filtered_conversations_basic(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting filtered conversations."""
+        mock_conv_v2 = MagicMock(spec=ConversationV2)
+        mock_conv_v2.conversation_id = "conv-1"
+        mock_conv_v2.platform_id = "test_platform"
+        mock_conv_v2.user_id = "test:group:123"
+        mock_conv_v2.content = []
+        mock_conv_v2.title = "Test"
+        mock_conv_v2.persona_id = None
+        mock_conv_v2.created_at = MagicMock()
+        mock_conv_v2.created_at.timestamp.return_value = 1234567890
+        mock_conv_v2.updated_at = MagicMock()
+        mock_conv_v2.updated_at.timestamp.return_value = 1234567890
+        mock_conv_v2.token_usage = 0
+
+        mock_db.get_filtered_conversations.return_value = ([mock_conv_v2], 1)
+
+        result, count = await conversation_manager.get_filtered_conversations(
+            page=1, page_size=20
+        )
+
+        assert len(result) == 1
+        assert count == 1
+        mock_db.get_filtered_conversations.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_filtered_conversations_with_platform_filter(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting filtered conversations with platform filter."""
+        mock_db.get_filtered_conversations.return_value = ([], 0)
+
+        result, count = await conversation_manager.get_filtered_conversations(
+            page=1, page_size=20, platform_ids=["platform1", "platform2"]
+        )
+
+        assert len(result) == 0
+        assert count == 0
+        mock_db.get_filtered_conversations.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_filtered_conversations_with_search(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting filtered conversations with search query."""
+        mock_db.get_filtered_conversations.return_value = ([], 0)
+
+        result, count = await conversation_manager.get_filtered_conversations(
+            page=1, page_size=20, search_query="test query"
+        )
+
+        assert len(result) == 0
+        assert count == 0
+        mock_db.get_filtered_conversations.assert_called_once()
+
+
+class TestGetHumanReadableContext:
+    """Tests for get_human_readable_context method."""
+
+    @pytest.mark.asyncio
+    async def test_get_human_readable_context_basic(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting human readable context."""
+        mock_conv_v2 = MagicMock(spec=ConversationV2)
+        mock_conv_v2.conversation_id = "conv-1"
+        mock_conv_v2.platform_id = "test_platform"
+        mock_conv_v2.user_id = "test:group:123"
+        mock_conv_v2.content = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+        mock_conv_v2.title = "Test"
+        mock_conv_v2.persona_id = None
+        mock_conv_v2.created_at = MagicMock()
+        mock_conv_v2.created_at.timestamp.return_value = 1234567890
+        mock_conv_v2.updated_at = MagicMock()
+        mock_conv_v2.updated_at.timestamp.return_value = 1234567890
+        mock_conv_v2.token_usage = 0
+        mock_db.get_conversation_by_id.return_value = mock_conv_v2
+
+        result, total_pages = await conversation_manager.get_human_readable_context(
+            unified_msg_origin="test:group:123", conversation_id="conv-1"
+        )
+
+        assert len(result) == 2
+        assert "User: Hello" in result
+        assert "Assistant: Hi there!" in result
+
+    @pytest.mark.asyncio
+    async def test_get_human_readable_context_not_found(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting context when conversation not found."""
+        mock_db.get_conversation_by_id.return_value = None
+
+        result, total_pages = await conversation_manager.get_human_readable_context(
+            unified_msg_origin="test:group:123", conversation_id="non-existent"
+        )
+
+        assert result == []
+        assert total_pages == 0
+
+    @pytest.mark.asyncio
+    async def test_get_human_readable_context_with_tool_calls(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting context with tool calls."""
+        mock_conv_v2 = MagicMock(spec=ConversationV2)
+        mock_conv_v2.conversation_id = "conv-1"
+        mock_conv_v2.platform_id = "test_platform"
+        mock_conv_v2.user_id = "test:group:123"
+        mock_conv_v2.content = [
+            {"role": "user", "content": "What time is it?"},
+            {
+                "role": "assistant",
+                "tool_calls": [{"name": "get_time", "args": {}}],
+            },
+        ]
+        mock_conv_v2.title = "Test"
+        mock_conv_v2.persona_id = None
+        mock_conv_v2.created_at = MagicMock()
+        mock_conv_v2.created_at.timestamp.return_value = 1234567890
+        mock_conv_v2.updated_at = MagicMock()
+        mock_conv_v2.updated_at.timestamp.return_value = 1234567890
+        mock_conv_v2.token_usage = 0
+        mock_db.get_conversation_by_id.return_value = mock_conv_v2
+
+        result, total_pages = await conversation_manager.get_human_readable_context(
+            unified_msg_origin="test:group:123", conversation_id="conv-1"
+        )
+
+        assert len(result) == 2
+        assert "[函数调用]" in result[1]
+
+    @pytest.mark.asyncio
+    async def test_get_human_readable_context_pagination(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting context with pagination."""
+        mock_conv_v2 = MagicMock(spec=ConversationV2)
+        mock_conv_v2.conversation_id = "conv-1"
+        mock_conv_v2.platform_id = "test_platform"
+        mock_conv_v2.user_id = "test:group:123"
+        # Create 30 message pairs (60 messages total)
+        history = []
+        for i in range(30):
+            history.append({"role": "user", "content": f"Question {i}"})
+            history.append({"role": "assistant", "content": f"Answer {i}"})
+        mock_conv_v2.content = history
+        mock_conv_v2.title = "Test"
+        mock_conv_v2.persona_id = None
+        mock_conv_v2.created_at = MagicMock()
+        mock_conv_v2.created_at.timestamp.return_value = 1234567890
+        mock_conv_v2.updated_at = MagicMock()
+        mock_conv_v2.updated_at.timestamp.return_value = 1234567890
+        mock_conv_v2.token_usage = 0
+        mock_db.get_conversation_by_id.return_value = mock_conv_v2
+
+        result, total_pages = await conversation_manager.get_human_readable_context(
+            unified_msg_origin="test:group:123",
+            conversation_id="conv-1",
+            page=1,
+            page_size=10,
+        )
+
+        # Each pair generates 2 entries
+        assert len(result) == 10
+        assert total_pages == 6
+
+
 class TestConcurrentAccess:
     """Tests for concurrent access to conversations."""
 
@@ -528,9 +705,7 @@ class TestConcurrentAccess:
 
         # All creations should complete successfully
         assert len(results) == 10
-        assert all(
-            isinstance(r, str) for r in results if not isinstance(r, Exception)
-        )
+        assert all(isinstance(r, str) for r in results if not isinstance(r, Exception))
         # Database should be called 10 times
         assert mock_db.create_conversation.call_count == 10
 
@@ -670,7 +845,9 @@ class TestConcurrentAccess:
         assert len(exceptions) == 0
 
     @pytest.mark.asyncio
-    async def test_concurrent_get_conversations_list(self, conversation_manager, mock_db):
+    async def test_concurrent_get_conversations_list(
+        self, conversation_manager, mock_db
+    ):
         """Test concurrent access to get_conversations method."""
         mock_conv_v2 = MagicMock(spec=ConversationV2)
         mock_conv_v2.conversation_id = "conv-id"
@@ -715,7 +892,10 @@ class TestConcurrentAccess:
             await conversation_manager.add_message_pair(
                 cid="conv-id",
                 user_message={"role": "user", "content": f"User {index}"},
-                assistant_message={"role": "assistant", "content": f"Assistant {index}"},
+                assistant_message={
+                    "role": "assistant",
+                    "content": f"Assistant {index}",
+                },
             )
             return index
 
