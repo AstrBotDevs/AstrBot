@@ -254,6 +254,10 @@
         "show_tool_use_status": {
           "description": "输出函数调用状态"
         },
+        "show_tool_call_result": {
+          "description": "输出函数调用返回结果",
+          "hint": "仅在启用“输出函数调用状态”时生效，且最多展示 70 个字符。"
+        },
         "sanitize_context_by_modalities": {
           "description": "按模型能力清理历史上下文",
           "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"

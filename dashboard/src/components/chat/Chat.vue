@@ -77,12 +77,14 @@
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
                                 :disabled="isStreaming"
+                                :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
                                 @send="handleSendMessage"
+                                @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
                                 @removeImage="removeImage"
                                 @removeAudio="removeAudio"
@@ -106,12 +108,14 @@
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
                                 :disabled="isStreaming"
+                                :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
                                 @send="handleSendMessage"
+                                @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
                                 @removeImage="removeImage"
                                 @removeAudio="removeAudio"
@@ -134,12 +138,14 @@
                             :stagedAudioUrl="stagedAudioUrl"
                             :stagedFiles="stagedNonImageFiles"
                             :disabled="isStreaming"
+                            :is-running="isStreaming || isConvRunning"
                             :enableStreaming="enableStreaming"
                             :isRecording="isRecording"
                             :session-id="currSessionId || null"
                             :current-session="getCurrentSession"
                             :replyTo="replyTo"
                             @send="handleSendMessage"
+                            @stop="handleStopMessage"
                             @toggleStreaming="toggleStreaming"
                             @removeImage="removeImage"
                             @removeAudio="removeAudio"
@@ -298,6 +304,7 @@ const {
     currentSessionProject,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
+    stopMessage: stopMsg,
     toggleStreaming
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
 
@@ -629,6 +636,10 @@ async function handleSendMessage() {
         // 重新获取会话消息以更新项目信息（用于面包屑显示）
         await getSessionMsg(currSessionId.value);
     }
+}
+
+async function handleStopMessage() {
+    await stopMsg();
 }
 
 // 路由变化监听
