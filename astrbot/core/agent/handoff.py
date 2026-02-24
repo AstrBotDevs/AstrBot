@@ -44,6 +44,11 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                     "type": "string",
                     "description": "The input to be handed off to another agent. This should be a clear and concise request or task.",
                 },
+                "image_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: An array of image sources (public HTTP URLs or local file paths) used as references in multimodal tasks such as video generation.",
+                },
                 "background_task": {
                     "type": "boolean",
                     "description": (

@@ -137,6 +137,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self._stop_requested = False
+        self._aborted = False
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -328,6 +330,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
+                if self._stop_requested:
+                    llm_resp_result = LLMResponse(
+                        role="assistant",
+                        completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                        reasoning_content=llm_response.reasoning_content,
+                        reasoning_signature=llm_response.reasoning_signature,
+                    )
+                    break
                 continue
             llm_resp_result = llm_response
 
@@ -339,6 +349,48 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if not llm_resp_result:
+            if self._stop_requested:
+                llm_resp_result = LLMResponse(role="assistant", completion_text="")
+            else:
+                return
+
+        if self._stop_requested:
+            logger.info("Agent execution was requested to stop by user.")
+            llm_resp = llm_resp_result
+            if llm_resp.role != "assistant":
+                llm_resp = LLMResponse(
+                    role="assistant",
+                    completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                )
+            self.final_llm_resp = llm_resp
+            self._aborted = True
+            self._transition_state(AgentState.DONE)
+            self.stats.end_time = time.time()
+
+            parts = []
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content,
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
+            if parts:
+                self.run_context.messages.append(
+                    Message(role="assistant", content=parts)
+                )
+
+            try:
+                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
+            yield AgentResponse(
+                type="aborted",
+                data=AgentResponseData(chain=MessageChain(type="aborted")),
+            )
             return
 
         # 处理 LLM 响应
@@ -847,6 +899,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def done(self) -> bool:
         """检查 Agent 是否已完成工作"""
         return self._state in (AgentState.DONE, AgentState.ERROR)
+
+    def request_stop(self) -> None:
+        self._stop_requested = True
+
+    def was_aborted(self) -> bool:
+        return self._aborted
 
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
