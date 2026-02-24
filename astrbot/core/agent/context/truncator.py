@@ -24,44 +24,39 @@ class ContextTruncator:
         if not messages:
             return messages
 
-        # First pass: identify which assistant(tool_calls) have valid tool responses
-        # Build a set of indices for assistant messages that have valid tool responses
-        valid_tool_call_indices: set[int] = set()
-        i = 0
-        while i < len(messages):
-            msg = messages[i]
-            if self._has_tool_calls(msg):
-                # Check if next message(s) are tool responses
-                j = i + 1
-                has_tool_response = False
-                while j < len(messages) and messages[j].role == "tool":
-                    has_tool_response = True
-                    j += 1
-                if has_tool_response:
-                    valid_tool_call_indices.add(i)
-            i += 1
-
-        # Second pass: build fixed message list
         fixed_messages: list[Message] = []
-        in_valid_tool_chain = False  # 是否处于有效的 tool call 链中
+        pending_assistant: Message | None = None
+        pending_tools: list[Message] = []
 
-        for i, msg in enumerate(messages):
+        def flush_pending_if_valid() -> None:
+            nonlocal pending_assistant, pending_tools
+            if pending_assistant is not None and pending_tools:
+                fixed_messages.append(pending_assistant)
+                fixed_messages.extend(pending_tools)
+            pending_assistant = None
+            pending_tools = []
+
+        for msg in messages:
             if msg.role == "tool":
-                # tool 消息：只有在有效的 tool call 链中才保留
-                if in_valid_tool_chain:
-                    fixed_messages.append(msg)
-                # else: 孤立的 tool 消息，跳过
-            elif self._has_tool_calls(msg):
-                # assistant(tool_calls)：只保留有效的（后面有 tool response 的）
-                if i in valid_tool_call_indices:
-                    fixed_messages.append(msg)
-                    in_valid_tool_chain = True  # 进入有效的 tool call 链
-                else:
-                    in_valid_tool_chain = False  # 孤立的 tool_calls，跳过并重置状态
-            else:
-                # system, user, 或不含 tool_calls 的 assistant
-                fixed_messages.append(msg)
-                in_valid_tool_chain = False  # 退出 tool call 链
+                # 只有在有挂起的 assistant(tool_calls) 时才记录 tool 响应
+                if pending_assistant is not None:
+                    pending_tools.append(msg)
+                # else: 孤立的 tool 消息，直接忽略
+                continue
+
+            if self._has_tool_calls(msg):
+                # 遇到新的 assistant(tool_calls) 前，先处理旧的 pending 链
+                flush_pending_if_valid()
+                pending_assistant = msg
+                continue
+
+            # 非 tool，且不含 tool_calls 的消息
+            # 先结束任何 pending 链，再正常追加
+            flush_pending_if_valid()
+            fixed_messages.append(msg)
+
+        # 结束时处理最后一个 pending 链
+        flush_pending_if_valid()
 
         return fixed_messages
 
