@@ -356,6 +356,40 @@ def register_on_plugin_error(**kwargs):
     return decorator
 
 
+def register_on_plugin_loaded(**kwargs):
+    """当有插件加载完成时
+
+    Hook 参数:
+        metadata
+
+    说明:
+        当有插件加载完成时，触发该事件并获取到该插件的元数据
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginLoadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_plugin_unloaded(**kwargs):
+    """当有插件卸载完成时
+
+    Hook 参数:
+        metadata
+
+    说明:
+        当有插件卸载完成时，触发该事件并获取到该插件的元数据
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginUnloadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
 def register_on_waiting_llm_request(**kwargs):
     """当等待调用 LLM 时的通知事件（在获取锁之前）
 
