@@ -747,12 +747,13 @@ const showPluginInfo = (plugin) => {
 const reloadPlugin = async (plugin_name) => {
   try {
     const res = await axios.post("/api/plugin/reload", { name: plugin_name });
+    await getExtensions();
     if (res.data.status === "error") {
       toast(res.data.message, "error");
       return;
     }
     toast(tm("messages.reloadSuccess"), "success");
-    getExtensions();
+    //getExtensions();
   } catch (err) {
     toast(err, "error");
   }
