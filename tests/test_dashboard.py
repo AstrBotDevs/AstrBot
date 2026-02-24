@@ -1,7 +1,6 @@
 import asyncio
 import os
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -13,10 +12,12 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.dashboard.server import AstrBotDashboard
-
-
-# 测试用插件名称
-TEST_PLUGIN_NAME = "test_mock_plugin"
+from tests.fixtures.helpers import (
+    MockPluginBuilder,
+    MockPluginConfig,
+    create_mock_updater_install,
+    create_mock_updater_update,
+)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -99,43 +100,12 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok" and "platform" in data["data"]
 
 
-def _create_mock_plugin_metadata(plugin_dir: Path, plugin_name: str, repo_url: str) -> None:
-    """创建模拟的插件目录结构和元数据文件。"""
-    plugin_dir.mkdir(parents=True, exist_ok=True)
-    (plugin_dir / "metadata.yaml").write_text(
-        "\n".join(
-            [
-                f"name: {plugin_name}",
-                "author: Test Author",
-                "desc: Test plugin for unit tests",
-                "version: 1.0.0",
-                f"repo: {repo_url}",
-            ],
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (plugin_dir / "main.py").write_text(
-        "\n".join(
-            [
-                "from astrbot.api import star",
-                "",
-                "class Main(star.Star):",
-                "    pass",
-                "",
-            ],
-        ),
-        encoding="utf-8",
-    )
-
-
 @pytest.mark.asyncio
 async def test_plugins(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
-    tmp_path,
 ):
     """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
@@ -155,78 +125,79 @@ async def test_plugins(
     data = await response.get_json()
     assert data["status"] == "ok"
 
-    # Mock 插件安装、更新、卸载操作
-    # 使用真实的 plugin_store_path 而不是 tmp_path
+    # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
-    mock_plugin_dir = Path(plugin_store_path) / TEST_PLUGIN_NAME
-    test_repo_url = f"https://github.com/test/{TEST_PLUGIN_NAME}"
+    builder = MockPluginBuilder(plugin_store_path)
 
-    async def mock_updater_install(repo_url: str, proxy: str = "") -> str:
-        """Mock updator.install - 返回插件目录路径字符串。"""
-        if repo_url != test_repo_url:
-            raise Exception(f"Unknown repo: {repo_url}")
-        _create_mock_plugin_metadata(mock_plugin_dir, TEST_PLUGIN_NAME, repo_url)
-        return str(mock_plugin_dir)
+    # 定义测试插件
+    test_plugin_name = "test_mock_plugin"
+    test_repo_url = f"https://github.com/test/{test_plugin_name}"
 
-    async def mock_updater_update(plugin, proxy: str = ""):
-        """Mock updator.update。"""
-        if plugin.name != TEST_PLUGIN_NAME:
-            raise Exception(f"Unknown plugin: {plugin.name}")
-        (mock_plugin_dir / ".updated").write_text("ok", encoding="utf-8")
+    # 创建 Mock 函数
+    mock_install = create_mock_updater_install(
+        builder,
+        repo_to_plugin={test_repo_url: test_plugin_name},
+    )
+    mock_update = create_mock_updater_update(builder)
 
-    # 设置 Mock - updator.install 必须返回字符串路径
+    # 设置 Mock
     monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "install", mock_updater_install
+        core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
     monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_updater_update
+        core_lifecycle_td.plugin_manager.updator, "update", mock_update
     )
 
-    # 插件安装 - 使用测试 URL
-    response = await test_client.post(
-        "/api/plugin/install",
-        json={"url": test_repo_url},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
-    # 返回的数据结构可能是 None（如果插件元数据未找到）或不包含 repo 字段
-    # 只要 status 为 ok 就表示安装成功
-    # data["data"] 可能是 None 或者是一个不包含预期字段的字典
+    try:
+        # 插件安装
+        response = await test_client.post(
+            "/api/plugin/install",
+            json={"url": test_repo_url},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
 
-    # 验证插件已注册
-    exists = any(md.name == TEST_PLUGIN_NAME for md in star_registry)
-    assert exists is True, f"插件 {TEST_PLUGIN_NAME} 未成功载入"
+        # 验证插件已注册
+        exists = any(md.name == test_plugin_name for md in star_registry)
+        assert exists is True, f"插件 {test_plugin_name} 未成功载入"
 
-    # 插件更新
-    response = await test_client.post(
-        "/api/plugin/update",
-        json={"name": TEST_PLUGIN_NAME},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert (mock_plugin_dir / ".updated").exists()
+        # 插件更新
+        response = await test_client.post(
+            "/api/plugin/update",
+            json={"name": test_plugin_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
 
-    # 插件卸载
-    response = await test_client.post(
-        "/api/plugin/uninstall",
-        json={"name": TEST_PLUGIN_NAME},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
+        # 验证更新标记文件
+        plugin_dir = builder.get_plugin_path(test_plugin_name)
+        assert (plugin_dir / ".updated").exists()
 
-    # 验证插件已卸载
-    exists = any(md.name == TEST_PLUGIN_NAME for md in star_registry)
-    assert exists is False, f"插件 {TEST_PLUGIN_NAME} 未成功卸载"
-    exists = any(
-        TEST_PLUGIN_NAME in md.handler_module_path for md in star_handlers_registry
-    )
-    assert exists is False, f"插件 {TEST_PLUGIN_NAME} handler 未成功清理"
+        # 插件卸载
+        response = await test_client.post(
+            "/api/plugin/uninstall",
+            json={"name": test_plugin_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        # 验证插件已卸载
+        exists = any(md.name == test_plugin_name for md in star_registry)
+        assert exists is False, f"插件 {test_plugin_name} 未成功卸载"
+        exists = any(
+            test_plugin_name in md.handler_module_path for md in star_handlers_registry
+        )
+        assert exists is False, f"插件 {test_plugin_name} handler 未成功清理"
+
+    finally:
+        # 清理测试插件
+        builder.cleanup(test_plugin_name)
 
 
 @pytest.mark.asyncio
