@@ -11,7 +11,6 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
@@ -357,6 +356,40 @@ def register_on_plugin_error(**kwargs):
     return decorator
 
 
+def register_on_plugin_loaded(**kwargs):
+    """当有插件加载完成时
+
+    Hook 参数:
+        metadata
+
+    说明:
+        当有插件加载完成时，触发该事件并获取到该插件的元数据
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginLoadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_plugin_unloaded(**kwargs):
+    """当有插件卸载完成时
+
+    Hook 参数:
+        metadata
+
+    说明:
+        当有插件卸载完成时，触发该事件并获取到该插件的元数据
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginUnloadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
 def register_on_waiting_llm_request(**kwargs):
     """当等待调用 LLM 时的通知事件（在获取锁之前）
 
@@ -583,7 +616,7 @@ class RegisteringAgent:
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
-    def __init__(self, agent: Agent[AstrAgentContext]) -> None:
+    def __init__(self, agent: Agent[Any]) -> None:
         self._agent = agent
 
 
@@ -591,7 +624,7 @@ def register_agent(
     name: str,
     instruction: str,
     tools: list[str | FunctionTool] | None = None,
-    run_hooks: BaseAgentRunHooks[AstrAgentContext] | None = None,
+    run_hooks: BaseAgentRunHooks[Any] | None = None,
 ):
     """注册一个 Agent
 
@@ -605,12 +638,12 @@ def register_agent(
     tools_ = tools or []
 
     def decorator(awaitable: Callable[..., Awaitable[Any]]):
-        AstrAgent = Agent[AstrAgentContext]
+        AstrAgent = Agent[Any]
         agent = AstrAgent(
             name=name,
             instructions=instruction,
             tools=tools_,
-            run_hooks=run_hooks or BaseAgentRunHooks[AstrAgentContext](),
+            run_hooks=run_hooks or BaseAgentRunHooks[Any](),
         )
         handoff_tool = HandoffTool(agent=agent)
         handoff_tool.handler = awaitable

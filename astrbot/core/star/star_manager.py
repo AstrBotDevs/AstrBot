@@ -33,7 +33,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
-from .star_handler import star_handlers_registry
+from .star_handler import EventType, star_handlers_registry
 from .updator import PluginUpdator
 
 try:
@@ -49,10 +49,13 @@ class PluginVersionIncompatibleError(Exception):
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
+        from .star_tools import StarTools
+
         self.updator = PluginUpdator()
 
         self.context = context
         self.context._star_manager = self  # type: ignore
+        StarTools.initialize(context)
 
         self.config = config
         self.plugin_store_path = get_astrbot_plugin_path()
@@ -529,8 +532,19 @@ class PluginManager:
                         requirements_path=requirements_path,
                     )
                 except Exception as e:
-                    logger.error(traceback.format_exc())
+                    error_trace = traceback.format_exc()
+                    logger.error(error_trace)
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
+                    fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                    self.failed_plugin_dict[root_dir_name] = {
+                        "error": str(e),
+                        "traceback": error_trace,
+                    }
+                    if path in star_map:
+                        logger.info("失败插件依旧在插件列表中，正在清理...")
+                        metadata = star_map.pop(path)
+                        if metadata in star_registry:
+                            star_registry.remove(metadata)
                     continue
 
                 # 检查 _conf_schema.json
@@ -772,6 +786,19 @@ class PluginManager:
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
                     await metadata.star_cls.initialize()
 
+                # 触发插件加载事件
+                handlers = star_handlers_registry.get_handlers_by_event_type(
+                    EventType.OnPluginLoadedEvent,
+                )
+                for handler in handlers:
+                    try:
+                        logger.info(
+                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                        )
+                        await handler.handler(metadata)
+                    except Exception:
+                        logger.error(traceback.format_exc())
+
             except BaseException as e:
                 logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
                 errors = traceback.format_exc()
@@ -784,6 +811,11 @@ class PluginManager:
                     "traceback": errors,
                 }
                 # 记录注册失败的插件名称，以便后续重载插件
+                if path in star_map:
+                    logger.info("失败插件依旧在插件列表中，正在清理...")
+                    metadata = star_map.pop(path)
+                    if metadata in star_registry:
+                        star_registry.remove(metadata)
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -1158,6 +1190,19 @@ class PluginManager:
             )
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
+
+        # 触发插件卸载事件
+        handlers = star_handlers_registry.get_handlers_by_event_type(
+            EventType.OnPluginUnloadedEvent,
+        )
+        for handler in handlers:
+            try:
+                logger.info(
+                    f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                )
+                await handler.handler(star_metadata)
+            except Exception:
+                logger.error(traceback.format_exc())
 
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
