@@ -920,52 +920,52 @@
   "provider_group": {
     "provider": {
       "gemini_tts_api_key": {
-      "description": "Google Gemini TTS API 密钥",
-      "hint": "请在 Google Cloud Console 获取 Gemini TTS API 密钥，用于身份验证和服务调用。"
+        "description": "Google Gemini TTS API 密钥",
+        "hint": "请在 Google Cloud Console 获取 Gemini TTS API 密钥，用于身份验证和服务调用。"
       },
       "gemini_tts_api_base": {
-      "description": "Google Gemini TTS API 基础地址",
-      "hint": "Gemini TTS 服务的 API 接口地址，一般使用默认值即可，特殊网络环境可能需要修改。"
+        "description": "Google Gemini TTS API 基础地址",
+        "hint": "Gemini TTS 服务的 API 接口地址，一般使用默认值即可，特殊网络环境可能需要修改。"
       },
       "gemini_tts_timeout": {
-      "description": "Google Gemini TTS 超时时间",
-      "hint": "设置 API 请求超时时间（秒），建议 20 秒，网络较差时可适当增加。"
+        "description": "Google Gemini TTS 超时时间",
+        "hint": "设置 API 请求超时时间（秒），建议 20 秒，网络较差时可适当增加。"
       },
       "gemini_tts_model": {
-      "description": "Google Gemini TTS 模型选择",
-      "hint": "选择使用的 TTS 模型，默认为 gemini-2.5-flash-preview-tts，不同模型支持的特性可能不同。"
+        "description": "Google Gemini TTS 模型选择",
+        "hint": "选择使用的 TTS 模型，默认为 gemini-2.5-flash-preview-tts，不同模型支持的特性可能不同。"
       },
       "gemini_tts_prefix": {
-      "description": "Google Gemini TTS 前缀设置",
-      "hint": "可选参数，用于在合成语音前添加特定前缀文本。"
+        "description": "Google Gemini TTS 前缀设置",
+        "hint": "可选参数，用于在合成语音前添加特定前缀文本。"
       },
       "gemini_tts_voice_name": {
-      "description": "Google Gemini TTS 音色选择",
-      "hint": "选择合成语音的音色，默认为 Leda，不同音色效果可参考官方文档。"
+        "description": "Google Gemini TTS 音色选择",
+        "hint": "选择合成语音的音色，默认为 Leda，不同音色效果可参考官方文档。"
       },
       "character": {
-      "description": "GPT-SoVITS 角色选择",
-      "hint": "选择要使用的语音角色，需要提前在 GPT-SoVITS 服务中配置好对应的角色模型。"
+        "description": "GPT-SoVITS 角色选择",
+        "hint": "选择要使用的语音角色，需要提前在 GPT-SoVITS 服务中配置好对应的角色模型。"
       },
       "emotion": {
-      "description": "GPT-SoVITS 情感选择",
-      "hint": "选择合成语音的情感风格，默认为 default，具体可选情感取决于角色模型的支持。"
+        "description": "GPT-SoVITS 情感选择",
+        "hint": "选择合成语音的情感风格，默认为 default，具体可选情感取决于角色模型的支持。"
       },
       "edge-tts-voice": {
-      "description": "Edge TTS 音色选择",
-      "hint": "选择微软 Edge TTS 的语音角色，默认为 zh-CN-XiaoxiaoNeural，可参考微软官方文档获取完整列表。"
+        "description": "Edge TTS 音色选择",
+        "hint": "选择微软 Edge TTS 的语音角色，默认为 zh-CN-XiaoxiaoNeural，可参考微软官方文档获取完整列表。"
       },
       "rate": {
-      "description": "Edge TTS 语速调节",
-      "hint": "调整语音语速，格式如 +0% 表示正常语速，可增减百分比进行调整。"
+        "description": "Edge TTS 语速调节",
+        "hint": "调整语音语速，格式如 +0% 表示正常语速，可增减百分比进行调整。"
       },
       "volume": {
-      "description": "Edge TTS 音量调节",
-      "hint": "调整语音音量，格式如 +0% 表示正常音量，可增减百分比进行调整。"
+        "description": "Edge TTS 音量调节",
+        "hint": "调整语音音量，格式如 +0% 表示正常音量，可增减百分比进行调整。"
       },
       "pitch": {
-      "description": "Edge TTS 音调调节",
-      "hint": "调整语音音调，格式如 +0Hz 表示正常音调，可增减 Hz 值进行调整。"
+        "description": "Edge TTS 音调调节",
+        "hint": "调整语音音调，格式如 +0Hz 表示正常音调，可增减 Hz 值进行调整。"
       },
       "genie_onnx_model_dir": {
         "description": "ONNX 模型目录",
