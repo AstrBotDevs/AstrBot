@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import itertools
 import logging
 import time
@@ -436,7 +437,42 @@ class AiocqhttpAdapter(Platform):
         return coro
 
     async def terminate(self) -> None:
-        self.shutdown_event.set()
+        if hasattr(self, "shutdown_event"):
+            self.shutdown_event.set()
+        await self._close_reverse_ws_connections()
+
+    async def _close_reverse_ws_connections(self) -> None:
+        api_clients = getattr(self.bot, "_wsr_api_clients", None)
+        event_clients = getattr(self.bot, "_wsr_event_clients", None)
+
+        ws_clients: set[Any] = set()
+        if isinstance(api_clients, dict):
+            ws_clients.update(api_clients.values())
+        if isinstance(event_clients, set):
+            ws_clients.update(event_clients)
+
+        close_tasks: list[Awaitable[Any]] = []
+        for ws in ws_clients:
+            close_func = getattr(ws, "close", None)
+            if not callable(close_func):
+                continue
+            try:
+                close_result = close_func(code=1000, reason="Adapter shutdown")
+            except TypeError:
+                close_result = close_func()
+            except Exception:
+                continue
+
+            if inspect.isawaitable(close_result):
+                close_tasks.append(close_result)
+
+        if close_tasks:
+            await asyncio.gather(*close_tasks, return_exceptions=True)
+
+        if isinstance(api_clients, dict):
+            api_clients.clear()
+        if isinstance(event_clients, set):
+            event_clients.clear()
 
     async def shutdown_trigger_placeholder(self) -> None:
         await self.shutdown_event.wait()
