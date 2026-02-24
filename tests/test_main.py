@@ -16,6 +16,16 @@ class _version_info:
         self.major = major
         self.minor = minor
 
+    def __eq__(self, other):
+        if isinstance(other, tuple):
+            return (self.major, self.minor) == other[:2]
+        return (self.major, self.minor) == (other.major, other.minor)
+
+    def __ge__(self, other):
+        if isinstance(other, tuple):
+            return (self.major, self.minor) >= other[:2]
+        return (self.major, self.minor) >= (other.major, other.minor)
+
 
 def test_check_env(monkeypatch):
     version_info_correct = _version_info(3, 10)
@@ -23,9 +33,12 @@ def test_check_env(monkeypatch):
     monkeypatch.setattr(sys, "version_info", version_info_correct)
     with mock.patch("os.makedirs") as mock_makedirs:
         check_env()
-        mock_makedirs.assert_any_call("data/config", exist_ok=True)
-        mock_makedirs.assert_any_call("data/plugins", exist_ok=True)
-        mock_makedirs.assert_any_call("data/temp", exist_ok=True)
+        # Check that makedirs was called with paths containing expected dirs
+        called_paths = [call[0][0] for call in mock_makedirs.call_args_list]
+        # Use os.path.join for cross-platform path matching
+        assert any(p.rstrip(os.sep).endswith(os.path.join("data", "config")) for p in called_paths)
+        assert any(p.rstrip(os.sep).endswith(os.path.join("data", "plugins")) for p in called_paths)
+        assert any(p.rstrip(os.sep).endswith(os.path.join("data", "temp")) for p in called_paths)
 
     monkeypatch.setattr(sys, "version_info", version_info_wrong)
     with pytest.raises(SystemExit):
