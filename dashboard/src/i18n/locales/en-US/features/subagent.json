@@ -8,11 +8,14 @@
     "refresh": "Refresh",
     "save": "Save",
     "add": "Add SubAgent",
-    "delete": "Delete"
+    "delete": "Delete",
+    "close": "Close"
   },
   "switches": {
     "enable": "Enable SubAgent orchestration",
-    "dedupe": "Deduplicate main LLM tools (hide tools duplicated by SubAgents)"
+    "enableHint": "Enable sub-agent functionality",
+    "dedupe": "Deduplicate main LLM tools (hide tools duplicated by SubAgents)",
+    "dedupeHint": "Remove duplicate tools from main agent"
   },
   "description": {
     "disabled": "When off: SubAgent is disabled; the main LLM mounts tools via persona rules (all by default) and calls them directly.",
@@ -29,7 +32,8 @@
     "transferPrefix": "transfer_to_{name}",
     "switchLabel": "Enable",
     "previewTitle": "Preview: handoff tool shown to the main LLM",
-    "personaChip": "Persona: {id}"
+    "personaChip": "Persona: {id}",
+    "personaPreview": "PERSONA PREVIEW"
   },
   "form": {
     "nameLabel": "Agent name (used for transfer_to_{name})",
@@ -49,6 +53,13 @@
     "nameDuplicate": "Duplicate SubAgent name: {name}",
     "personaMissing": "SubAgent {name} has no persona selected",
     "saveSuccess": "Saved successfully",
-    "saveFailed": "Failed to save"
+    "saveFailed": "Failed to save",
+    "nameRequired": "Name is required",
+    "namePattern": "Lowercase letters, numbers, underscore only"
+  },
+  "empty": {
+    "title": "No Agents Configured",
+    "subtitle": "Add a new sub-agent to get started",
+    "action": "Create First Agent"
   }
 }
