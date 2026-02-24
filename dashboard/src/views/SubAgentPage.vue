@@ -241,7 +241,7 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
       {{ snackbar.message }}
       <template #actions>
-        <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') || 'Close' }}</v-btn>
+         <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
       </template>
     </v-snackbar>
   </div>
