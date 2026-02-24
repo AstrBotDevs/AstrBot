@@ -698,10 +698,16 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name or "",
-        )
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name,
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name,
+            )
 
         if not os.path.isdir(plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
@@ -735,6 +741,7 @@ class PluginRoute(Route):
         logger.debug(f"正在获取插件 {plugin_name} 的更新日志")
 
         if not plugin_name:
+            logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
 
         # 查找插件
@@ -745,15 +752,27 @@ class PluginRoute(Route):
                 break
 
         if not plugin_obj:
+            logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
 
         if not plugin_obj.root_dir_name:
+            logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        plugin_dir = os.path.join(
-            self.plugin_manager.plugin_store_path,
-            plugin_obj.root_dir_name,
-        )
+        if plugin_obj.reserved:
+            plugin_dir = os.path.join(
+                self.plugin_manager.reserved_plugin_path,
+                plugin_obj.root_dir_name,
+            )
+        else:
+            plugin_dir = os.path.join(
+                self.plugin_manager.plugin_store_path,
+                plugin_obj.root_dir_name,
+            )
+
+        if not os.path.isdir(plugin_dir):
+            logger.warning(f"无法找到插件目录: {plugin_dir}")
+            return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         # 尝试多种可能的文件名
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
@@ -773,6 +792,7 @@ class PluginRoute(Route):
                     return Response().error(f"读取更新日志失败: {e!s}").__dict__
 
         # 没有找到 changelog 文件，返回 ok 但 content 为 null
+        logger.warning(f"插件 {plugin_name} 没有更新日志文件")
         return Response().ok({"content": None}, "该插件没有更新日志文件").__dict__
 
     async def get_custom_source(self):
