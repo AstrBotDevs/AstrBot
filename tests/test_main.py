@@ -45,6 +45,39 @@ def test_check_env(monkeypatch):
         check_env()
 
 
+def test_version_info_comparisons():
+    """Test _version_info comparison operators with tuples and other instances."""
+    v3_10 = _version_info(3, 10)
+    v3_9 = _version_info(3, 9)
+    v3_11 = _version_info(3, 11)
+
+    # Test __eq__ with tuples
+    assert v3_10 == (3, 10)
+    assert v3_10 != (3, 9)
+    assert v3_9 == (3, 9)
+
+    # Test __ge__ with tuples
+    assert v3_10 >= (3, 10)
+    assert v3_10 >= (3, 9)
+    assert not (v3_9 >= (3, 10))
+    assert v3_11 >= (3, 10)
+
+    # Test __eq__ with other _version_info instances
+    assert v3_10 == _version_info(3, 10)
+    assert v3_10 != v3_9
+    assert v3_10 == v3_10  # Same instance
+
+    assert v3_10 != v3_11
+
+    # Test __ge__ with other _version_info instances
+    assert v3_10 >= v3_10
+    assert v3_10 >= v3_9
+    assert not (v3_9 >= v3_10)
+    assert v3_11 >= v3_10
+
+    assert v3_11 >= v3_11  # Same instance
+
+
 @pytest.mark.asyncio
 async def test_check_dashboard_files_not_exists(monkeypatch):
     """Tests dashboard download when files do not exist."""
