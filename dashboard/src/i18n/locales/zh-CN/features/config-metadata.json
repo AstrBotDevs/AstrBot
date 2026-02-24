@@ -490,11 +490,11 @@
         "hint": "Slack 的连接模式。`webhook` 使用 Webhook 服务器，`socket` 使用 Slack 的 Socket 模式。"
       },
       "slack_webhook_host": {
-        "description": "Slack Webhook 主机",
+        "description": "Slack Webhook host",
         "hint": "仅在 Slack 连接模式为 `webhook` 时有效。"
       },
       "slack_webhook_path": {
-        "description": "Slack Webhook 路径",
+        "description": "Slack Webhook Path",
         "hint": "仅在 Slack 连接模式为 `webhook` 时有效。"
       },
       "slack_webhook_port": {
@@ -920,7 +920,7 @@
   "provider_group": {
     "provider": {
       "gemini_tts_api_key": {
-        "description": "Google Gemini TTS API 密钥",
+        "description": "Google Gemini TTS API Key",
         "hint": "请在 Google Cloud Console 获取 Gemini TTS API 密钥，用于身份验证和服务调用。"
       },
       "gemini_tts_api_base": {
