@@ -1,6 +1,6 @@
 """Tests for CronJobManager."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -195,7 +195,7 @@ class TestAddActiveJob:
         sample_cron_job.run_once = True
         mock_db.create_cron_job.return_value = sample_cron_job
 
-        run_at = datetime(2025, 12, 31, 12, 0, 0, tzinfo=timezone.utc)
+        run_at = datetime.now(timezone.utc) + timedelta(days=30)
 
         result = await cron_manager.add_active_job(
             name="Test Run Once Job",
@@ -207,7 +207,7 @@ class TestAddActiveJob:
 
         assert result == sample_cron_job
         call_kwargs = mock_db.create_cron_job.call_args.kwargs
-        assert "run_at" in call_kwargs["payload"] or call_kwargs["run_once"] is True
+        assert call_kwargs["run_once"] is True
 
 
 class TestUpdateJob:
@@ -403,6 +403,7 @@ class TestScheduleJob:
     @pytest.mark.asyncio
     async def test_schedule_job_run_once(self, cron_manager, mock_context):
         """Test scheduling a run-once job."""
+        future_date = datetime.now(timezone.utc) + timedelta(days=30)
         job = CronJob(
             job_id="run-once-job",
             name="Run Once",
@@ -410,7 +411,7 @@ class TestScheduleJob:
             cron_expression=None,
             enabled=True,
             run_once=True,
-            payload={"run_at": "2025-12-31T12:00:00+00:00"},
+            payload={"run_at": future_date.isoformat()},
         )
         mock_db = cron_manager.db
         mock_db.list_cron_jobs = AsyncMock(return_value=[])
