@@ -82,7 +82,11 @@ class PlatformRoute(Route):
         """
         for platform in self.platform_manager.platform_insts:
             config = platform.config
-            uuid_val = config.get("webhook_uuid") if isinstance(config, dict) else getattr(config, "webhook_uuid", None)
+            uuid_val = (
+                config.get("webhook_uuid")
+                if isinstance(config, dict)
+                else getattr(config, "webhook_uuid", None)
+            )
             if uuid_val == webhook_uuid:
                 if platform.unified_webhook():
                     return platform
