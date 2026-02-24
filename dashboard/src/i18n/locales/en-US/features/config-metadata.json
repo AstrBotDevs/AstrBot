@@ -1130,6 +1130,10 @@
         "description": "Service subscription key",
         "hint": "Azure TTS subscription key (not a token)."
       },
+      "proxy": {
+        "description": "Proxy Address",
+        "hint": "HTTP/HTTPS proxy address, format: http://127.0.0.1:7890. Only takes effect for API requests to this provider and does not affect Docker internal network communication."
+      },
       "dashscope_tts_voice": {
         "description": "Voice"
       },
