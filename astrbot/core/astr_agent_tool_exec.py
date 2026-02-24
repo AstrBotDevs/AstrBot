@@ -17,6 +17,12 @@ from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    EXECUTE_SHELL_TOOL,
+    FILE_DOWNLOAD_TOOL,
+    FILE_UPLOAD_TOOL,
+    LOCAL_EXECUTE_SHELL_TOOL,
+    LOCAL_PYTHON_TOOL,
+    PYTHON_TOOL,
     SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
@@ -92,6 +98,65 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
     @classmethod
+    def _get_runtime_computer_tools(cls, runtime: str) -> dict[str, FunctionTool]:
+        if runtime == "sandbox":
+            return {
+                EXECUTE_SHELL_TOOL.name: EXECUTE_SHELL_TOOL,
+                PYTHON_TOOL.name: PYTHON_TOOL,
+                FILE_UPLOAD_TOOL.name: FILE_UPLOAD_TOOL,
+                FILE_DOWNLOAD_TOOL.name: FILE_DOWNLOAD_TOOL,
+            }
+        if runtime == "local":
+            return {
+                LOCAL_EXECUTE_SHELL_TOOL.name: LOCAL_EXECUTE_SHELL_TOOL,
+                LOCAL_PYTHON_TOOL.name: LOCAL_PYTHON_TOOL,
+            }
+        return {}
+
+    @classmethod
+    def _build_handoff_toolset(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        tools: list[str | FunctionTool] | None,
+    ) -> ToolSet | None:
+        ctx = run_context.context.context
+        event = run_context.context.event
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = cfg.get("provider_settings", {})
+        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
+
+        # Keep persona semantics aligned with the main agent: tools=None means
+        # "all tools", including runtime computer-use tools.
+        if tools is None:
+            toolset = ToolSet()
+            for registered_tool in llm_tools.func_list:
+                if isinstance(registered_tool, HandoffTool):
+                    continue
+                if registered_tool.active:
+                    toolset.add_tool(registered_tool)
+            for runtime_tool in runtime_computer_tools.values():
+                toolset.add_tool(runtime_tool)
+            return None if toolset.empty() else toolset
+
+        if not tools:
+            return None
+
+        toolset = ToolSet()
+        for tool_name_or_obj in tools:
+            if isinstance(tool_name_or_obj, str):
+                registered_tool = llm_tools.get_func(tool_name_or_obj)
+                if registered_tool and registered_tool.active:
+                    toolset.add_tool(registered_tool)
+                    continue
+                runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
+                if runtime_tool:
+                    toolset.add_tool(runtime_tool)
+            elif isinstance(tool_name_or_obj, FunctionTool):
+                toolset.add_tool(tool_name_or_obj)
+        return None if toolset.empty() else toolset
+
+    @classmethod
     async def _execute_handoff(
         cls,
         tool: HandoffTool,
@@ -101,19 +166,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         input_ = tool_args.get("input")
         image_urls = tool_args.get("image_urls")
 
-        # make toolset for the agent
-        tools = tool.agent.tools
-        if tools:
-            toolset = ToolSet()
-            for t in tools:
-                if isinstance(t, str):
-                    _t = llm_tools.get_func(t)
-                    if _t:
-                        toolset.add_tool(_t)
-                elif isinstance(t, FunctionTool):
-                    toolset.add_tool(t)
-        else:
-            toolset = None
+        # Build handoff toolset from registered tools plus runtime computer tools.
+        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
 
         ctx = run_context.context.context
         event = run_context.context.event
