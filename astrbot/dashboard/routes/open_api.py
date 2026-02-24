@@ -1,4 +1,3 @@
-from pathlib import Path
 from uuid import uuid4
 
 from quart import g, request
@@ -6,9 +5,10 @@ from quart import g, request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
-from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSesion
+from astrbot.core.platform.sources.webchat.message_parts_helper import (
+    build_message_chain_from_payload,
+)
 
 from .chat import ChatRoute
 from .route import Response, Route, RouteContext
@@ -254,83 +254,12 @@ class OpenApiRoute(Route):
     async def _build_message_chain_from_payload(
         self,
         message_payload: str | list,
-    ) -> MessageChain:
-        if isinstance(message_payload, str):
-            text = message_payload.strip()
-            if not text:
-                raise ValueError("Message is empty")
-            return MessageChain(chain=[Plain(text=text)])
-
-        if not isinstance(message_payload, list):
-            raise ValueError("message must be a string or list")
-
-        components = []
-        has_content = False
-
-        for part in message_payload:
-            if not isinstance(part, dict):
-                raise ValueError("message part must be an object")
-
-            part_type = str(part.get("type", "")).strip()
-            if part_type == "plain":
-                text = str(part.get("text", ""))
-                if text:
-                    has_content = True
-                    components.append(Plain(text=text))
-                continue
-
-            if part_type == "reply":
-                message_id = part.get("message_id")
-                if message_id is None:
-                    raise ValueError("reply part missing message_id")
-                components.append(
-                    Reply(
-                        id=str(message_id),
-                        message_str=str(part.get("selected_text", "")),
-                        chain=[],
-                    )
-                )
-                continue
-
-            if part_type not in {"image", "record", "file", "video"}:
-                raise ValueError(f"unsupported message part type: {part_type}")
-
-            has_content = True
-            file_path: Path | None = None
-            resolved_type = part_type
-            filename = str(part.get("filename", "")).strip()
-
-            attachment_id = part.get("attachment_id")
-            if attachment_id:
-                attachment = await self.db.get_attachment_by_id(str(attachment_id))
-                if not attachment:
-                    raise ValueError(f"attachment not found: {attachment_id}")
-                file_path = Path(attachment.path)
-                resolved_type = attachment.type
-                if not filename:
-                    filename = file_path.name
-            else:
-                raise ValueError(f"{part_type} part missing attachment_id")
-
-            if not file_path.exists():
-                raise ValueError(f"file not found: {file_path!s}")
-
-            file_path_str = str(file_path.resolve())
-            if resolved_type == "image":
-                components.append(Image.fromFileSystem(file_path_str))
-            elif resolved_type == "record":
-                components.append(Record.fromFileSystem(file_path_str))
-            elif resolved_type == "video":
-                components.append(Video.fromFileSystem(file_path_str))
-            else:
-                components.append(
-                    File(name=filename or file_path.name, file=file_path_str)
-                )
-
-        if not components or not has_content:
-            raise ValueError("Message content is empty (reply only is not allowed)")
-
-        return MessageChain(chain=components)
+    ):
+        return await build_message_chain_from_payload(
+            message_payload,
+            get_attachment_by_id=self.db.get_attachment_by_id,
+            strict=True,
+        )
 
     async def send_message(self):
         post_data = await request.json or {}

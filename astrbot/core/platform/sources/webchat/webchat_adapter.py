@@ -3,12 +3,20 @@ import os
 import time
 import uuid
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 from typing import Any
 
 from astrbot import logger
 from astrbot.core import db_helper
 from astrbot.core.db.po import PlatformMessageHistory
-from astrbot.core.message.components import File, Image, Plain, Record, Reply, Video
+from astrbot.core.message.components import (
+    File,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform import (
     AstrBotMessage,
@@ -21,8 +29,18 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ...register import register_platform_adapter
+from .message_parts_helper import message_chain_to_storage_message_parts
 from .webchat_event import WebChatMessageEvent
 from .webchat_queue_mgr import WebChatQueueMgr, webchat_queue_mgr
+
+
+def _extract_conversation_id(session_id: str) -> str:
+    """Extract raw webchat conversation id from event/session id."""
+    if session_id.startswith("webchat!"):
+        parts = session_id.split("!", 2)
+        if len(parts) == 3:
+            return parts[2]
+    return session_id
 
 
 class QueueListener:
@@ -57,13 +75,15 @@ class WebChatAdapter(Platform):
 
         self.settings = platform_settings
         self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        self.attachments_dir = Path(get_astrbot_data_path()) / "attachments"
         os.makedirs(self.imgs_dir, exist_ok=True)
+        self.attachments_dir.mkdir(parents=True, exist_ok=True)
 
         self.metadata = PlatformMetadata(
             name="webchat",
             description="webchat",
             id="webchat",
-            support_proactive_message=False,
+            support_proactive_message=True,
         )
         self._shutdown_event = asyncio.Event()
         self._webchat_queue_mgr = webchat_queue_mgr
@@ -73,9 +93,66 @@ class WebChatAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        message_id = f"active_{str(uuid.uuid4())}"
-        await WebChatMessageEvent._send(message_id, message_chain, session.session_id)
+        conversation_id = _extract_conversation_id(session.session_id)
+        active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
+            conversation_id
+        )
+        subscription_request_ids = [
+            req_id for req_id in active_request_ids if req_id.startswith("ws_sub_")
+        ]
+        target_request_ids = subscription_request_ids or active_request_ids
+
+        if target_request_ids:
+            for request_id in target_request_ids:
+                await WebChatMessageEvent._send(
+                    request_id,
+                    message_chain,
+                    session.session_id,
+                )
+        else:
+            message_id = f"active_{uuid.uuid4()!s}"
+            await WebChatMessageEvent._send(
+                message_id,
+                message_chain,
+                session.session_id,
+            )
+
+        should_persist = (
+            bool(subscription_request_ids)
+            or not active_request_ids
+            or all(req_id.startswith("active_") for req_id in active_request_ids)
+        )
+        if should_persist:
+            try:
+                await self._save_proactive_message(conversation_id, message_chain)
+            except Exception as e:
+                logger.error(
+                    f"[WebChatAdapter] Failed to save proactive message: {e}",
+                    exc_info=True,
+                )
+
         await super().send_by_session(session, message_chain)
+
+    async def _save_proactive_message(
+        self,
+        conversation_id: str,
+        message_chain: MessageChain,
+    ) -> None:
+        message_parts = await message_chain_to_storage_message_parts(
+            message_chain,
+            insert_attachment=db_helper.insert_attachment,
+            attachments_dir=self.attachments_dir,
+        )
+        if not message_parts:
+            return
+
+        await db_helper.insert_platform_message_history(
+            platform_id="webchat",
+            user_id=conversation_id,
+            content={"type": "bot", "message": message_parts},
+            sender_id="bot",
+            sender_name="bot",
+        )
 
     async def _get_message_history(
         self, message_id: int

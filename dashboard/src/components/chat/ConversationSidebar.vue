@@ -117,6 +117,27 @@
                     <v-list-item-title>{{ isDark ? tm('modes.lightMode') : tm('modes.darkMode') }}</v-list-item-title>
                 </v-list-item>
 
+                <!-- 通信传输模式 -->
+                <v-list-item class="styled-menu-item">
+                    <template v-slot:prepend>
+                        <v-icon>mdi-lan-connect</v-icon>
+                    </template>
+                    <v-list-item-title>{{ tm('transport.title') }}</v-list-item-title>
+                    <template v-slot:append>
+                        <v-select
+                            :model-value="transportMode"
+                            :items="transportOptions"
+                            item-title="label"
+                            item-value="value"
+                            density="compact"
+                            variant="underlined"
+                            hide-details
+                            class="transport-mode-select"
+                            @update:model-value="handleTransportModeChange"
+                        />
+                    </template>
+                </v-list-item>
+
                 <!-- 全屏/退出全屏 -->
                 <v-list-item class="styled-menu-item" @click="$emit('toggleFullscreen')">
                     <template v-slot:prepend>
@@ -156,6 +177,7 @@ interface Props {
     selectedSessions: string[];
     currSessionId: string;
     selectedProjectId?: string | null;
+    transportMode: 'sse' | 'websocket';
     isDark: boolean;
     chatboxMode: boolean;
     isMobile: boolean;
@@ -179,6 +201,7 @@ const emit = defineEmits<{
     createProject: [];
     editProject: [project: Project];
     deleteProject: [projectId: string];
+    updateTransportMode: [mode: 'sse' | 'websocket'];
 }>();
 
 const { t } = useI18n();
@@ -188,6 +211,10 @@ const confirmDialog = useConfirmDialog();
 
 const sidebarCollapsed = ref(true);
 const showProviderConfigDialog = ref(false);
+const transportOptions = [
+    { label: tm('transport.sse'), value: 'sse' as const },
+    { label: tm('transport.websocket'), value: 'websocket' as const }
+];
 
 // 从 localStorage 读取侧边栏折叠状态
 const savedCollapsedState = localStorage.getItem('sidebarCollapsed');
@@ -207,6 +234,12 @@ async function handleDeleteConversation(session: Session) {
     const message = tm('conversation.confirmDelete', { name: sessionTitle });
     if (await askForConfirmation(message, confirmDialog)) {
         emit('deleteConversation', session.session_id);
+    }
+}
+
+function handleTransportModeChange(mode: string | null) {
+    if (mode === 'sse' || mode === 'websocket') {
+        emit('updateTransportMode', mode);
     }
 }
 </script>
@@ -360,5 +393,9 @@ async function handleDeleteConversation(session: Session) {
     width: 100%;
     display: flex;
     justify-content: center;
+}
+
+.transport-mode-select {
+    min-width: 120px;
 }
 </style>
