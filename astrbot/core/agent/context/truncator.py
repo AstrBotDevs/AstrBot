@@ -4,19 +4,65 @@ from ..message import Message
 class ContextTruncator:
     """Context truncator."""
 
+    def _has_tool_calls(self, message: Message) -> bool:
+        """Check if a message contains tool calls."""
+        return (
+            message.role == "assistant"
+            and message.tool_calls is not None
+            and len(message.tool_calls) > 0
+        )
+
     def fix_messages(self, messages: list[Message]) -> list[Message]:
-        fixed_messages = []
-        for message in messages:
-            if message.role == "tool":
-                # tool block 前面必须要有 user 和 assistant block
-                if len(fixed_messages) < 2:
-                    # 这种情况可能是上下文被截断导致的
-                    # 我们直接将之前的上下文都清空
-                    fixed_messages = []
+        """修复消息列表，确保 tool call 和 tool response 的配对关系有效。
+
+        此方法确保：
+        1. 每个 `tool` 消息前面都有一个包含 tool_calls 的 `assistant` 消息
+        2. 每个包含 tool_calls 的 `assistant` 消息后面都有对应的 `tool` 响应
+
+        这是 OpenAI Chat Completions API 规范的要求（Gemini 对此执行严格检查）。
+        """
+        if not messages:
+            return messages
+
+        # First pass: identify which assistant(tool_calls) have valid tool responses
+        # Build a set of indices for assistant messages that have valid tool responses
+        valid_tool_call_indices: set[int] = set()
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            if self._has_tool_calls(msg):
+                # Check if next message(s) are tool responses
+                j = i + 1
+                has_tool_response = False
+                while j < len(messages) and messages[j].role == "tool":
+                    has_tool_response = True
+                    j += 1
+                if has_tool_response:
+                    valid_tool_call_indices.add(i)
+            i += 1
+
+        # Second pass: build fixed message list
+        fixed_messages: list[Message] = []
+        in_valid_tool_chain = False  # 是否处于有效的 tool call 链中
+
+        for i, msg in enumerate(messages):
+            if msg.role == "tool":
+                # tool 消息：只有在有效的 tool call 链中才保留
+                if in_valid_tool_chain:
+                    fixed_messages.append(msg)
+                # else: 孤立的 tool 消息，跳过
+            elif self._has_tool_calls(msg):
+                # assistant(tool_calls)：只保留有效的（后面有 tool response 的）
+                if i in valid_tool_call_indices:
+                    fixed_messages.append(msg)
+                    in_valid_tool_chain = True  # 进入有效的 tool call 链
                 else:
-                    fixed_messages.append(message)
+                    in_valid_tool_chain = False  # 孤立的 tool_calls，跳过并重置状态
             else:
-                fixed_messages.append(message)
+                # system, user, 或不含 tool_calls 的 assistant
+                fixed_messages.append(msg)
+                in_valid_tool_chain = False  # 退出 tool call 链
+
         return fixed_messages
 
     def truncate_by_turns(
