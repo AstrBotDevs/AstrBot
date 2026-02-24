@@ -8,11 +8,14 @@
     "refresh": "刷新",
     "save": "保存",
     "add": "新增 SubAgent",
-    "delete": "删除"
+    "delete": "删除",
+    "close": "关闭"
   },
   "switches": {
     "enable": "启用 SubAgent 编排",
-    "dedupe": "主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）"
+    "enableHint": "启用子代理功能",
+    "dedupe": "主 LLM 去重重复工具（与 SubAgent 重叠的工具将被隐藏）",
+    "dedupeHint": "从主代理中移除重复工具"
   },
   "description": {
     "disabled": "不启动：SubAgent 关闭；主 LLM 按 persona 规则挂载工具（默认全部），并直接调用。",
@@ -39,6 +42,7 @@
     "providerHint": "留空表示跟随全局默认 provider。",
     "personaLabel": "选择人格设定",
     "personaHint": "SubAgent 将直接继承所选 Persona 的系统设定与工具。在人格设定页管理和新建人格。",
+    "personaPreview": "人格预览",
     "descriptionLabel": "对主 LLM 的描述（用于决定是否 handoff）",
     "descriptionHint": "这段会作为 transfer_to_* 工具的描述给主 LLM 看，建议简短明确。"
   },
@@ -50,6 +54,13 @@
     "nameDuplicate": "SubAgent 名称重复：{name}",
     "personaMissing": "SubAgent {name} 未选择 Persona",
     "saveSuccess": "保存成功",
-    "saveFailed": "保存失败"
+    "saveFailed": "保存失败",
+    "nameRequired": "名称必填",
+    "namePattern": "仅支持小写字母、数字和下划线"
+  },
+  "empty": {
+    "title": "未配置 SubAgent",
+    "subtitle": "添加一个新的子代理以开始",
+    "action": "创建第一个 Agent"
   }
 }
