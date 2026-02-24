@@ -916,6 +916,54 @@
   },
   "provider_group": {
     "provider": {
+      "gemini_tts_api_key": {
+      "description": "Google Gemini TTS API Key",
+      "hint": "Please obtain the Gemini TTS API key from Google Cloud Console for authentication and service calls."
+      },
+      "gemini_tts_api_base": {
+      "description": "Google Gemini TTS API Base URL",
+      "hint": "The API endpoint URL for Gemini TTS service. Default value is usually sufficient, modify only for special network environments."
+      },
+      "gemini_tts_timeout": {
+      "description": "Google Gemini TTS Timeout",
+      "hint": "Set API request timeout in seconds. 20 seconds is recommended, increase if network is poor."
+      },
+      "gemini_tts_model": {
+      "description": "Google Gemini TTS Model Selection",
+      "hint": "Select the TTS model to use. Default is gemini-2.5-flash-preview-tts, different models may support different features."
+      },
+      "gemini_tts_prefix": {
+      "description": "Google Gemini TTS Prefix Setting",
+      "hint": "Optional parameter to add specific prefix text before speech synthesis."
+      },
+      "gemini_tts_voice_name": {
+      "description": "Google Gemini TTS Voice Selection",
+      "hint": "Select the voice for speech synthesis. Default is Leda, refer to official documentation for different voice effects."
+      },
+      "character": {
+      "description": "GPT-SoVITS Character Selection",
+      "hint": "Select the voice character to use. The corresponding character model needs to be configured in GPT-SoVITS service in advance."
+      },
+      "emotion": {
+      "description": "GPT-SoVITS Emotion Selection",
+      "hint": "Select the emotional style for speech synthesis. Default is default, available emotions depend on character model support."
+      },
+      "edge-tts-voice": {
+      "description": "Edge TTS Voice Selection",
+      "hint": "Select the voice character for Microsoft Edge TTS. Default is zh-CN-XiaoxiaoNeural, refer to Microsoft official documentation for complete list."
+      },
+      "rate": {
+      "description": "Edge TTS Speech Rate Adjustment",
+      "hint": "Adjust speech rate. Format like +0% means normal rate, can increase or decrease percentage."
+      },
+      "volume": {
+      "description": "Edge TTS Volume Adjustment",
+      "hint": "Adjust speech volume. Format like +0% means normal volume, can increase or decrease percentage."
+      },
+      "pitch": {
+      "description": "Edge TTS Pitch Adjustment",
+      "hint": "Adjust speech pitch. Format like +0Hz means normal pitch, can increase or decrease Hz value."
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"
