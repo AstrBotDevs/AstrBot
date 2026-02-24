@@ -922,7 +922,7 @@
       },
       "gemini_tts_api_base": {
         "description": "Google Gemini TTS API Base URL",
-      "hint": "The API endpoint URL for Gemini TTS service. Default value is usually sufficient, modify only for special network environments."
+        "hint": "The API endpoint URL for Gemini TTS service. Default value is usually sufficient, modify only for special network environments."
       },
       "gemini_tts_timeout": {
         "description": "Google Gemini TTS Timeout",
