@@ -44,6 +44,7 @@ class InternalAgentSubStage(Stage):
         ]
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        self.tool_call_approval: dict = settings.get("tool_call_approval", {})
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
@@ -124,6 +125,7 @@ class InternalAgentSubStage(Stage):
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
+            tool_call_approval=self.tool_call_approval,
         )
 
     async def process(
