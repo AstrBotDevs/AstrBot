@@ -163,7 +163,7 @@ async function openDesktopUpdateDialog() {
       ? t('core.header.updateDialog.desktopApp.hasNewVersion')
       : t('core.header.updateDialog.desktopApp.isLatest');
   } catch (error) {
-    console.log(error);
+    console.error(error);
     desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.checkFailed');
   } finally {
     desktopUpdateChecking.value = false;
@@ -193,7 +193,7 @@ async function confirmDesktopUpdate() {
     desktopUpdateStatus.value =
       result?.reason || t('core.header.updateDialog.desktopApp.installFailed');
   } catch (error) {
-    console.log(error);
+    console.error(error);
     desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.installFailed');
   } finally {
     desktopUpdateInstalling.value = false;
