@@ -1771,6 +1771,7 @@ CONFIG_METADATA_2 = {
                     "embedding_api_base": {
                         "description": "API Base URL",
                         "type": "string",
+                        "hint": "provider_group.provider.embedding_api_base.hint",
                     },
                     "volcengine_cluster": {
                         "type": "string",
