@@ -56,7 +56,7 @@ class DingtalkPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, platform_settings, event_queue)
+        super().__init__(platform_config, event_queue)
 
         self.client_id = platform_config["client_id"]
         self.client_secret = platform_config["client_secret"]

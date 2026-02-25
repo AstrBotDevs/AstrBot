@@ -44,7 +44,7 @@ class DiscordPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, platform_settings, event_queue)
+        super().__init__(platform_config, event_queue)
         self.settings = platform_settings
         self.client_self_id: str | None = None
         self.registered_handlers = []

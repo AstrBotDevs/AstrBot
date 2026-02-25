@@ -44,7 +44,7 @@ class LarkPlatformAdapter(Platform):
         platform_settings: dict,
         event_queue: asyncio.Queue,
     ) -> None:
-        super().__init__(platform_config, platform_settings, event_queue)
+        super().__init__(platform_config, event_queue)
 
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
