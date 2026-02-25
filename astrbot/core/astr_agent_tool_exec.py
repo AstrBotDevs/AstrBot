@@ -13,7 +13,7 @@ from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
-from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
@@ -39,7 +39,12 @@ from astrbot.core.utils.history_saver import persist_agent_history
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
-    async def execute(cls, tool, run_context, **tool_args):
+    async def execute(
+        cls,
+        tool: HandoffTool | MCPTool | FunctionTool[AstrAgentContext],
+        run_context: ContextWrapper[AstrAgentContext],
+        **tool_args: object,
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
         """执行函数调用。
 
         Args:
@@ -93,7 +98,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
             return
         else:
-            async for r in cls._execute_local(tool, run_context, **tool_args):
+            async for r in cls._execute_local(
+                tool, run_context, tool_call_timeout=None, **tool_args
+            ):
                 yield r
             return
 
@@ -161,9 +168,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
-        input_ = tool_args.get("input")
+        **tool_args: object,
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
+        # 将输入统一转换/缩窄为 str | None，满足下游调用的签名
+        val = tool_args.get("input")
+        if val is None:
+            input_: str | None = None
+        elif isinstance(val, str):
+            input_ = val
+        else:
+            input_ = str(val)
         image_urls = tool_args.get("image_urls")
 
         # Build handoff toolset from registered tools plus runtime computer tools.
@@ -442,12 +456,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def _execute_local(
         cls,
-        tool: FunctionTool,
+        tool: FunctionTool[AstrAgentContext],
         run_context: ContextWrapper[AstrAgentContext],
         *,
         tool_call_timeout: int | None = None,
-        **tool_args,
-    ):
+        **tool_args: object,
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
         event = run_context.context.event
         if not event:
             raise ValueError("Event must be provided for local function tools.")
@@ -526,10 +540,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     @classmethod
     async def _execute_mcp(
         cls,
-        tool: FunctionTool,
+        tool: FunctionTool[AstrAgentContext],
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
-    ):
+        **tool_args: object,
+    ) -> T.AsyncGenerator[ToolExecResult, None]:
         res = await tool.call(run_context, **tool_args)
         if not res:
             return
@@ -544,9 +558,9 @@ async def call_local_llm_tool(
         | T.AsyncGenerator[MessageEventResult | CommandResult | str | None, None],
     ],
     method_name: str,
-    *args,
-    **kwargs,
-) -> T.AsyncGenerator[T.Any, None]:
+    *args: object,
+    **kwargs: object,
+) -> T.AsyncGenerator[ToolExecResult, None]:
     """执行本地 LLM 工具的处理函数并处理其返回结果"""
     ready_to_call = None  # 一个协程或者异步生成器
 

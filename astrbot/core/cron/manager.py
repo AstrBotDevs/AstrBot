@@ -184,7 +184,7 @@ class CronJobManager:
         except Exception as e:
             logger.error(f"Failed to schedule cron job {job.job_id}: {e!s}")
 
-    def _get_next_run_time(self, job_id: str):
+    def _get_next_run_time(self, job_id: str) -> datetime | None:
         aps_job = self.scheduler.get_job(job_id)
         return aps_job.next_run_time if aps_job else None
 

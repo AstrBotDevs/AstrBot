@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+from collections.abc import AsyncGenerator
 from typing import Any, cast
 
 import telegramify_markdown
@@ -318,7 +319,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"[Telegram] 添加反应失败: {e}")
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         message_thread_id = None
 
         if self.get_message_type() == MessageType.GROUP_MESSAGE:

@@ -1,7 +1,7 @@
 import abc
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message
@@ -104,7 +104,7 @@ class Provider(AbstractProvider):
         tool_calls_result: ToolCallsResult | list[ToolCallsResult] | None = None,
         model: str | None = None,
         extra_user_content_parts: list[ContentPart] | None = None,
-        **kwargs,
+        **kwargs: object,
     ) -> LLMResponse:
         """获得 LLM 的文本对话结果。会使用当前的模型进行对话。
 
@@ -314,7 +314,7 @@ class EmbeddingProvider(AbstractProvider):
         batch_size: int = 16,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[int, int], Awaitable[None]] | None = None,
     ) -> list[list[float]]:
         """批量获取文本的向量，分批处理以节省内存
 

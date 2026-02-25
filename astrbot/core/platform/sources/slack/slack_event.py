@@ -174,7 +174,7 @@ class SlackMessageEvent(AstrMessageEvent):
 
     async def send_streaming(
         self,
-        generator: AsyncGenerator,
+        generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
     ):
         if not use_fallback:

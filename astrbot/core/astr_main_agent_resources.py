@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import uuid
+from typing import cast
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -162,7 +163,7 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
         if not query:
             return "error: Query parameter is empty."
         result = await retrieve_knowledge_base(
-            query=kwargs.get("query", ""),
+            query=cast(str, kwargs.get("query", "")),
             umo=context.context.event.unified_msg_origin,
             context=context.context.context,
         )
@@ -256,7 +257,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        session = (
+            cast(str | None, kwargs.get("session"))
+            or context.context.event.unified_msg_origin
+        )
         messages = kwargs.get("messages")
 
         if not isinstance(messages, list) or not messages:

@@ -35,7 +35,6 @@ class AstrBotConfig(dict):
         schema: dict | None = None,
     ) -> None:
         super().__init__()
-
         # 调用父类的 __setattr__ 方法，防止保存配置时将此属性写入配置文件
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
@@ -92,7 +91,9 @@ class AstrBotConfig(dict):
 
         return conf
 
-    def check_config_integrity(self, refer_conf: dict, conf: dict, path=""):
+    def check_config_integrity(
+        self, refer_conf: dict, conf: dict, path: str = ""
+    ) -> bool:
         """检查配置完整性，如果有新的配置项或顺序不一致则返回 True"""
         has_new = False
 
@@ -161,20 +162,20 @@ class AstrBotConfig(dict):
         with open(self.config_path, "w", encoding="utf-8-sig") as f:
             json.dump(self, f, indent=2, ensure_ascii=False)
 
-    def __getattr__(self, item):
+    def __getattr__(self, item: str) -> object:
         try:
             return self[item]
         except KeyError:
             return None
 
-    def __delattr__(self, key) -> None:
+    def __delattr__(self, key: str) -> None:
         try:
             del self[key]
             self.save_config()
         except KeyError:
             raise AttributeError(f"没有找到 Key: '{key}'")
 
-    def __setattr__(self, key, value) -> None:
+    def __setattr__(self, key: str, value: object) -> None:
         self[key] = value
 
     def check_exist(self) -> bool:

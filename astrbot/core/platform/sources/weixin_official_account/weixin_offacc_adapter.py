@@ -417,7 +417,9 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         else:
             await self.server.start_polling()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(
+        self, request: quart.Request
+    ) -> quart.ResponseReturnValue:
         """统一 Webhook 回调入口"""
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":

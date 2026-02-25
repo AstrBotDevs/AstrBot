@@ -1,3 +1,5 @@
+from quart import ResponseReturnValue
+
 from .route import Route, RouteContext
 
 
@@ -30,8 +32,8 @@ class StaticFileRoute(Route):
             self.app.add_url_rule(i, view_func=self.index)
 
         @self.app.errorhandler(404)
-        async def page_not_found(e) -> str:
+        async def page_not_found(e: object) -> ResponseReturnValue:
             return "404 Not found。如果你初次使用打开面板发现 404, 请参考文档: https://astrbot.app/faq.html。如果你正在测试回调地址可达性，显示这段文字说明测试成功了。"
 
-    async def index(self):
+    async def index(self) -> ResponseReturnValue:
         return await self.app.send_static_file("index.html")

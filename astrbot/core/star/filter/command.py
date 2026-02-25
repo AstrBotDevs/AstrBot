@@ -16,7 +16,7 @@ class GreedyStr(str):
     """标记指令完成其他参数接收后的所有剩余文本。"""
 
 
-def unwrap_optional(annotation) -> tuple:
+def unwrap_optional(annotation: object) -> tuple:
     """去掉 Optional[T] / Union[T, None] / T|None，返回 T"""
     args = typing.get_args(annotation)
     non_none_args = [a for a in args if a is not type(None)]
@@ -51,7 +51,7 @@ class CommandFilter(HandlerFilter):
         # Cache for complete command names list
         self._cmpl_cmd_names: list | None = None
 
-    def print_types(self):
+    def print_types(self) -> str:
         parts = []
         for k, v in self.handler_params.items():
             if isinstance(v, type):
@@ -172,7 +172,7 @@ class CommandFilter(HandlerFilter):
                     )
         return result
 
-    def get_complete_command_names(self):
+    def get_complete_command_names(self) -> list[str]:
         if self._cmpl_cmd_names is not None:
             return self._cmpl_cmd_names
         self._cmpl_cmd_names = [

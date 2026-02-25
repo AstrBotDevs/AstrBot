@@ -4,6 +4,7 @@ from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
 
+from mcp.types import CallToolResult
 from tenacity import (
     before_sleep_log,
     retry,
@@ -322,7 +323,7 @@ class MCPClient:
             before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
-        async def _call_with_retry():
+        async def _call_with_retry() -> CallToolResult:
             if not self.session:
                 raise ValueError("MCP session is not available for MCP function tools.")
 
@@ -364,7 +365,11 @@ class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self,
+        mcp_tool: mcp.Tool,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        **kwargs: object,
     ) -> None:
         super().__init__(
             name=mcp_tool.name,
@@ -376,7 +381,9 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self.mcp_server_name = mcp_server_name
 
     async def call(
-        self, context: ContextWrapper[TContext], **kwargs
+        self,
+        context: ContextWrapper[TContext],
+        **kwargs: object,
     ) -> mcp.types.CallToolResult:
         return await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,

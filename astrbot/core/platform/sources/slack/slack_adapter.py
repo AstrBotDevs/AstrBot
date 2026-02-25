@@ -3,9 +3,10 @@ import base64
 import re
 import time
 import uuid
-from typing import Any, cast
+from typing import cast
 
 import aiohttp
+from quart import Request, ResponseReturnValue
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -394,7 +395,7 @@ class SlackAdapter(Platform):
             if abm:
                 await self.handle_msg(abm)
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if self.connection_mode != "webhook" or not self.webhook_client:
             return {"error": "Slack adapter is not in webhook mode"}, 400

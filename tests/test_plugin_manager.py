@@ -59,21 +59,21 @@ def plugin_manager_pm(tmp_path):
     return manager
 
 
-def test_plugin_manager_initialization(plugin_manager_pm: PluginManager):
+def test_plugin_manager_initialization(plugin_manager_pm: PluginManager) -> None:
     assert plugin_manager_pm is not None
     assert plugin_manager_pm.context is not None
     assert plugin_manager_pm.config is not None
 
 
 @pytest.mark.asyncio
-async def test_plugin_manager_reload(plugin_manager_pm: PluginManager):
+async def test_plugin_manager_reload(plugin_manager_pm: PluginManager) -> None:
     success, err_message = await plugin_manager_pm.reload()
     assert success is True
     assert err_message is None
 
 
 @pytest.mark.asyncio
-async def test_install_plugin(plugin_manager_pm: PluginManager):
+async def test_install_plugin(plugin_manager_pm: PluginManager) -> None:
     """Tests successful plugin installation in an isolated environment."""
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
     plugin_info = await plugin_manager_pm.install_plugin(test_repo)
@@ -90,7 +90,7 @@ async def test_install_plugin(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager):
+async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager) -> None:
     """Tests that installing a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
         await plugin_manager_pm.install_plugin(
@@ -99,7 +99,7 @@ async def test_install_nonexistent_plugin(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_update_plugin(plugin_manager_pm: PluginManager):
+async def test_update_plugin(plugin_manager_pm: PluginManager) -> None:
     """Tests updating an existing plugin in an isolated environment."""
     # First, install the plugin
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
@@ -110,14 +110,14 @@ async def test_update_plugin(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_update_nonexistent_plugin(plugin_manager_pm: PluginManager):
+async def test_update_nonexistent_plugin(plugin_manager_pm: PluginManager) -> None:
     """Tests that updating a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
         await plugin_manager_pm.update_plugin("non_existent_plugin")
 
 
 @pytest.mark.asyncio
-async def test_uninstall_plugin(plugin_manager_pm: PluginManager):
+async def test_uninstall_plugin(plugin_manager_pm: PluginManager) -> None:
     """Tests successful plugin uninstallation in an isolated environment."""
     # First, install the plugin
     test_repo = "https://github.com/Soulter/astrbot_plugin_essential"
@@ -144,7 +144,7 @@ async def test_uninstall_plugin(plugin_manager_pm: PluginManager):
 
 
 @pytest.mark.asyncio
-async def test_uninstall_nonexistent_plugin(plugin_manager_pm: PluginManager):
+async def test_uninstall_nonexistent_plugin(plugin_manager_pm: PluginManager) -> None:
     """Tests that uninstalling a non-existent plugin raises an exception."""
     with pytest.raises(Exception):
         await plugin_manager_pm.uninstall_plugin("non_existent_plugin")

@@ -289,7 +289,7 @@ class PlatformManager:
         self._inst_map.clear()
         self._platform_tasks.clear()
 
-    def get_insts(self):
+    def get_insts(self) -> list:
         return self.platform_insts
 
     def get_all_stats(self) -> dict:

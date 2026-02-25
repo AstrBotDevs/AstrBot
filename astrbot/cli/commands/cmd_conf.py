@@ -104,7 +104,7 @@ def _save_config(config: dict[str, Any]) -> None:
     )
 
 
-def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
+def _set_nested_item(obj: dict[str, Any], path: str, value: object) -> None:
     """设置嵌套字典中的值"""
     parts = path.split(".")
     for part in parts[:-1]:
@@ -118,7 +118,7 @@ def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
     obj[parts[-1]] = value
 
 
-def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
+def _get_nested_item(obj: dict[str, Any], path: str) -> object:
     """获取嵌套字典中的值"""
     parts = path.split(".")
     for part in parts:

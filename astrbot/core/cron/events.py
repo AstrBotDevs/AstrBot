@@ -1,5 +1,6 @@
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from astrbot.core.message.components import Plain
@@ -9,6 +10,7 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.star.context import Context
 
 
 class CronMessageEvent(AstrMessageEvent):
@@ -17,7 +19,7 @@ class CronMessageEvent(AstrMessageEvent):
     def __init__(
         self,
         *,
-        context,
+        context: Context,
         session: MessageSession,
         message: str,
         sender_id: str = "astrbot",
@@ -59,7 +61,9 @@ class CronMessageEvent(AstrMessageEvent):
         await self.context_obj.send_message(self.session, message)
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ) -> None:
         async for chain in generator:
             await self.send(chain)
 

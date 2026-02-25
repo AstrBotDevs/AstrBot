@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import uuid
+from collections.abc import AsyncGenerator
 from io import BytesIO
 
 import lark_oapi as lark
@@ -555,7 +556,9 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"发送飞书表情回应失败({response.code}): {response.msg}")
             return
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         buffer = None
         async for chain in generator:
             if not buffer:

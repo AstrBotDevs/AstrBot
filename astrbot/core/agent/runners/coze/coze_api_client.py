@@ -15,7 +15,7 @@ class CozeAPIClient:
         self.api_base = api_base
         self.session = None
 
-    async def _ensure_session(self):
+    async def _ensure_session(self) -> aiohttp.ClientSession:
         """确保HTTP session存在"""
         if self.session is None:
             connector = aiohttp.TCPConnector(
@@ -208,7 +208,7 @@ class CozeAPIClient:
         except Exception as e:
             raise Exception(f"Coze API 流式请求失败: {e!s}")
 
-    async def clear_context(self, conversation_id: str):
+    async def clear_context(self, conversation_id: str) -> dict:
         """清空会话上下文
 
         Args:
@@ -247,7 +247,7 @@ class CozeAPIClient:
         order: str = "desc",
         limit: int = 10,
         offset: int = 0,
-    ):
+    ) -> dict:
         """获取消息列表
 
         Args:

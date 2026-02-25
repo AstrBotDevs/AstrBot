@@ -5,6 +5,7 @@ from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import Provider
 
 
 class ProviderCommands:
@@ -13,7 +14,7 @@ class ProviderCommands:
 
     def _log_reachability_failure(
         self,
-        provider,
+        provider: Provider,
         provider_capability_type: ProviderType | None,
         err_code: str,
         err_reason: str,
@@ -28,7 +29,9 @@ class ProviderCommands:
             err_reason,
         )
 
-    async def _test_provider_capability(self, provider):
+    async def _test_provider_capability(
+        self, provider: Provider
+    ) -> tuple[bool, str | None, str | None]:
         """测试单个 provider 的可用性"""
         meta = provider.meta()
         provider_capability_type = meta.provider_type

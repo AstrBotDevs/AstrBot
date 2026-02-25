@@ -13,6 +13,7 @@ from lark_oapi.api.im.v1 import (
     GetMessageResourceRequest,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
+from quart import Request, ResponseReturnValue
 
 import astrbot.api.message_components as Comp
 from astrbot import logger
@@ -636,7 +637,7 @@ class LarkPlatformAdapter(Platform):
             # 长连接模式
             await self.client._connect()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if not self.webhook_server:
             return {"error": "Webhook server not initialized"}, 500

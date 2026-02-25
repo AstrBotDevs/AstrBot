@@ -20,7 +20,7 @@ class ConversationCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def _get_current_persona_id(self, session_id):
+    async def _get_current_persona_id(self, session_id: str) -> str | None:
         curr = await self.context.conversation_manager.get_curr_conversation_id(
             session_id,
         )

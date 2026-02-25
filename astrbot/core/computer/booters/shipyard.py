@@ -49,7 +49,7 @@ class ShipyardBooter(ComputerBooter):
         """Upload file to sandbox"""
         return await self._ship.upload_file(path, file_name)
 
-    async def download_file(self, remote_path: str, local_path: str):
+    async def download_file(self, remote_path: str, local_path: str) -> None:
         """Download file from sandbox."""
         return await self._ship.download_file(remote_path, local_path)
 

@@ -11,6 +11,8 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from quart import Request, ResponseReturnValue
+
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Image, Plain
@@ -477,7 +479,7 @@ class WecomAIBotAdapter(Platform):
 
         return run_both()
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":

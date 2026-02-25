@@ -29,7 +29,7 @@ class CommandRoute(Route):
         }
         self.register_routes()
 
-    async def get_commands(self):
+    async def get_commands(self) -> dict:
         commands = await list_commands()
         summary = {
             "total": len(commands),
@@ -38,11 +38,11 @@ class CommandRoute(Route):
         }
         return Response().ok({"items": commands, "summary": summary}).__dict__
 
-    async def get_conflicts(self):
+    async def get_conflicts(self) -> dict:
         conflicts = await list_command_conflicts()
         return Response().ok(conflicts).__dict__
 
-    async def toggle_command(self):
+    async def toggle_command(self) -> dict:
         data = await request.get_json()
         handler_full_name = data.get("handler_full_name")
         enabled = data.get("enabled")
@@ -61,7 +61,7 @@ class CommandRoute(Route):
         payload = await _get_command_payload(handler_full_name)
         return Response().ok(payload).__dict__
 
-    async def rename_command(self):
+    async def rename_command(self) -> dict:
         data = await request.get_json()
         handler_full_name = data.get("handler_full_name")
         new_name = data.get("new_name")
@@ -97,7 +97,7 @@ class CommandRoute(Route):
         return Response().ok(payload).__dict__
 
 
-async def _get_command_payload(handler_full_name: str):
+async def _get_command_payload(handler_full_name: str) -> dict:
     commands = await list_commands()
     for cmd in commands:
         if cmd["handler_full_name"] == handler_full_name:

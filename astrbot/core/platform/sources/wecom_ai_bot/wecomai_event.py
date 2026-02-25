@@ -1,5 +1,7 @@
 """企业微信智能机器人事件处理模块，处理消息事件的发送和接收"""
 
+from collections.abc import AsyncGenerator
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, Image, Plain
@@ -144,7 +146,9 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         )
         await super().send(MessageChain([]))
 
-    async def send_streaming(self, generator, use_fallback=False) -> None:
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback=False
+    ) -> None:
         """流式发送消息，参考webchat的send_streaming设计"""
         final_data = ""
         raw = self.message_obj.raw_message

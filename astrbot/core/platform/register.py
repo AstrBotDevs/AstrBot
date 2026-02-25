@@ -1,10 +1,16 @@
+from collections.abc import Callable
+from typing import TypeVar
+
 from astrbot.core import logger
 
+from .platform import Platform
 from .platform_metadata import PlatformMetadata
+
+T = TypeVar("T", bound=Platform)
 
 platform_registry: list[PlatformMetadata] = []
 """维护了通过装饰器注册的平台适配器"""
-platform_cls_map: dict[str, type] = {}
+platform_cls_map: dict[str, type[Platform]] = {}
 """维护了平台适配器名称和适配器类的映射"""
 
 
@@ -17,7 +23,7 @@ def register_platform_adapter(
     support_streaming_message: bool = True,
     i18n_resources: dict[str, dict] | None = None,
     config_metadata: dict | None = None,
-):
+) -> Callable[[type[T]], type[T]]:
     """用于注册平台适配器的带参装饰器。
 
     default_config_tmpl 指定了平台适配器的默认配置模板。用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类。
@@ -25,7 +31,7 @@ def register_platform_adapter(
     config_metadata 指定了配置项的元数据，用于 WebUI 生成表单。如果不指定，WebUI 将会把配置项渲染为原始的键值对编辑框。
     """
 
-    def decorator(cls):
+    def decorator(cls: type[T]) -> type[T]:
         if adapter_name in platform_cls_map:
             raise ValueError(
                 f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",

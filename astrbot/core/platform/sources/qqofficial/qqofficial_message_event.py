@@ -3,6 +3,7 @@ import base64
 import os
 import random
 import uuid
+from collections.abc import AsyncGenerator
 from typing import cast
 
 import aiofiles
@@ -64,7 +65,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         self.send_buffer = message
         await self._post_send()
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         """流式输出仅支持消息列表私聊"""
         stream_payload = {"state": 1, "id": None, "index": 0, "reset": False}
         last_edit_time = 0  # 上次编辑消息的时间

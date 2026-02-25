@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import uuid
+from collections.abc import AsyncGenerator
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -125,7 +126,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
         await super().send(MessageChain([]))
 
-    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ) -> None:
         final_data = ""
         reasoning_content = ""
         message_id = self.message_obj.message_id

@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from astrbot import logger
@@ -28,7 +29,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
         )
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False):
+    async def send_streaming(
+        self, generator: AsyncGenerator[MessageChain, None], use_fallback: bool = False
+    ):
         # 钉钉统一回退为缓冲发送：最终发送仍使用新的 HTTP 消息接口。
         buffer = None
         async for chain in generator:

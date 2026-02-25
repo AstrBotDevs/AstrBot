@@ -10,10 +10,10 @@ from astrbot.core.config import VERSION
 
 
 class Metric:
-    _iid_cache = None
+    _iid_cache: str | None = None
 
     @staticmethod
-    def get_installation_id():
+    def get_installation_id() -> str:
         """获取或创建一个唯一的安装ID"""
         if Metric._iid_cache is not None:
             return Metric._iid_cache

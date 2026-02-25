@@ -34,7 +34,7 @@ class PersonaManager:
         self.get_v3_persona_data()
         logger.info(f"已加载 {len(self.personas)} 个人格。")
 
-    async def get_persona(self, persona_id: str):
+    async def get_persona(self, persona_id: str) -> Persona:
         """获取指定 persona 的信息"""
         persona = await self.db.get_persona_by_id(persona_id)
         if not persona:
@@ -73,7 +73,7 @@ class PersonaManager:
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
-    ):
+    ) -> Persona | None:
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:

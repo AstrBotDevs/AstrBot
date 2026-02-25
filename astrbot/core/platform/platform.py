@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from quart import Request, ResponseReturnValue
+
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
 
@@ -147,7 +149,7 @@ class Platform(abc.ABC):
     def get_client(self) -> object:
         """获取平台的客户端对象。"""
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口。
 
         支持统一 Webhook 模式的平台需要实现此方法。

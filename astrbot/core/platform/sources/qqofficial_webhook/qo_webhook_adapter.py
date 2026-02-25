@@ -7,6 +7,7 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
+from quart import Request, ResponseReturnValue
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -260,7 +261,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
     def get_client(self) -> botClient:
         return self.client
 
-    async def webhook_callback(self, request: Any) -> Any:
+    async def webhook_callback(self, request: Request) -> ResponseReturnValue:
         """统一 Webhook 回调入口"""
         if not self.webhook_helper:
             return {"error": "Webhook helper not initialized"}, 500

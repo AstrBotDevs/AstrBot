@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.db.po import Personality
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
@@ -83,7 +84,7 @@ class ProviderManager:
         return self.persona_mgr.personas_v3
 
     @property
-    def selected_default_persona(self):
+    def selected_default_persona(self) -> Personality | None:
         """动态获取最新的默认选中 persona。已弃用，请使用 context.persona_mgr.get_default_persona_v3()"""
         return self.persona_mgr.selected_default_persona_v3
 
@@ -154,7 +155,7 @@ class ProviderManager:
         return self.inst_map.get(provider_id)
 
     def get_using_provider(
-        self, provider_type: ProviderType, umo=None
+        self, provider_type: ProviderType, umo: str | None = None
     ) -> Providers | None:
         """获取正在使用的提供商实例。
 
@@ -644,7 +645,7 @@ class ProviderManager:
                     f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
                 )
 
-    def get_insts(self):
+    def get_insts(self) -> list[Provider]:
         return self.provider_insts
 
     async def terminate_provider(self, provider_id: str) -> None:

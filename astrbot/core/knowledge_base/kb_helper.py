@@ -3,7 +3,9 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from types import TracebackType
 
 import aiofiles
 
@@ -36,9 +38,9 @@ class RateLimiter:
         self.interval = 60.0 / max_rpm if max_rpm > 0 else 0
         self.last_call_time = 0
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "RateLimiter":
         if self.interval == 0:
-            return
+            return self
 
         now = time.monotonic()
         elapsed = now - self.last_call_time
@@ -47,8 +49,14 @@ class RateLimiter:
             await asyncio.sleep(self.interval - elapsed)
 
         self.last_call_time = time.monotonic()
+        return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass
 
 
@@ -196,7 +204,7 @@ class KBHelper:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         pre_chunked_text: list[str] | None = None,
     ) -> KBDocument:
         """上传并处理文档（带原子性保证和失败清理）
@@ -293,7 +301,7 @@ class KBHelper:
                 await progress_callback("chunking", 100, 100)
 
             # 阶段3: 生成向量（带进度回调）
-            async def embedding_progress_callback(current, total) -> None:
+            async def embedding_progress_callback(current: int, total: int) -> None:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
@@ -475,7 +483,7 @@ class KBHelper:
         batch_size: int = 32,
         tasks_limit: int = 3,
         max_retries: int = 3,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
     ) -> KBDocument:
@@ -562,7 +570,7 @@ class KBHelper:
         self,
         content: str,
         url: str,
-        progress_callback=None,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
         enable_cleaning: bool = False,
         cleaning_provider_id: str | None = None,
         repair_max_rpm: int = 60,

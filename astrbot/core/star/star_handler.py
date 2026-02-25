@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import enum
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, TypeVar, overload
 
@@ -33,7 +33,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnAstrBotLoadedEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
 
@@ -41,7 +41,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnPlatformLoadedEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
 
@@ -49,7 +49,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.AdapterMessageEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[
         StarHandlerMetadata[Callable[..., Awaitable[Any] | AsyncGenerator[Any]]]
@@ -59,7 +59,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnLLMRequestEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
 
@@ -67,7 +67,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnLLMResponseEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
 
@@ -75,7 +75,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnDecoratingResultEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
 
@@ -83,7 +83,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnCallingFuncToolEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[
         StarHandlerMetadata[Callable[..., Awaitable[Any] | AsyncGenerator[Any]]]
@@ -93,7 +93,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: Literal[EventType.OnAfterMessageSentEvent],
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
 
@@ -109,7 +109,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: EventType,
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[
         StarHandlerMetadata[Callable[..., Awaitable[Any] | AsyncGenerator[Any]]]
@@ -118,7 +118,7 @@ class StarHandlerRegistry(Generic[T]):
     def get_handlers_by_event_type(
         self,
         event_type: EventType,
-        only_activated=True,
+        only_activated: bool = True,
         plugins_name: list[str] | None = None,
     ) -> list[StarHandlerMetadata]:
         handlers = []
@@ -174,7 +174,7 @@ class StarHandlerRegistry(Generic[T]):
         self.star_handlers_map.pop(handler.handler_full_name, None)
         self._handlers = [h for h in self._handlers if h != handler]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return iter(self._handlers)
 
     def __len__(self) -> int:
@@ -240,7 +240,7 @@ class StarHandlerMetadata(Generic[H]):
 
     enabled: bool = True
 
-    def __lt__(self, other: StarHandlerMetadata):
+    def __lt__(self, other: StarHandlerMetadata) -> bool:
         """定义小于运算符以支持优先队列"""
         return self.extras_configs.get("priority", 0) < other.extras_configs.get(
             "priority",

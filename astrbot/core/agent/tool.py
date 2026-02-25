@@ -1,5 +1,5 @@
 import copy
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from typing import Any, Generic
 
 import jsonschema
@@ -67,7 +67,9 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
-    async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
+    async def call(
+        self, context: ContextWrapper[TContext], **kwargs: object
+    ) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
             "FunctionTool.call() must be implemented by subclasses or set a handler."
@@ -313,15 +315,17 @@ class ToolSet:
         return declarations
 
     @deprecated(reason="Use openai_schema() instead", version="4.0.0")
-    def get_func_desc_openai_style(self, omit_empty_parameter_field: bool = False):
+    def get_func_desc_openai_style(
+        self, omit_empty_parameter_field: bool = False
+    ) -> list[dict]:
         return self.openai_schema(omit_empty_parameter_field)
 
     @deprecated(reason="Use anthropic_schema() instead", version="4.0.0")
-    def get_func_desc_anthropic_style(self):
+    def get_func_desc_anthropic_style(self) -> list[dict]:
         return self.anthropic_schema()
 
     @deprecated(reason="Use google_schema() instead", version="4.0.0")
-    def get_func_desc_google_genai_style(self):
+    def get_func_desc_google_genai_style(self) -> dict:
         return self.google_schema()
 
     def names(self) -> list[str]:
@@ -339,7 +343,7 @@ class ToolSet:
     def __bool__(self) -> bool:
         return len(self.tools) > 0
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         return iter(self.tools)
 
     def __repr__(self) -> str:

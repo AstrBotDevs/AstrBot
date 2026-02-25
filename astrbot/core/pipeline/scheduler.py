@@ -32,7 +32,9 @@ class PipelineScheduler:
             await stage_instance.initialize(self.ctx)
             self.stages.append(stage_instance)
 
-    async def _process_stages(self, event: AstrMessageEvent, from_stage=0) -> None:
+    async def _process_stages(
+        self, event: AstrMessageEvent, from_stage: int = 0
+    ) -> None:
         """依次执行各个阶段
 
         Args:

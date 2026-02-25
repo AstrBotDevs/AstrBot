@@ -7,19 +7,19 @@ from . import HandlerFilter
 
 
 class CustomFilterMeta(ABCMeta):
-    def __and__(cls, other):
+    def __and__(cls, other: type) -> "CustomFilter":
         if not issubclass(other, CustomFilter):
             raise TypeError("Operands must be subclasses of CustomFilter.")
         return CustomFilterAnd(cls(), other())
 
-    def __or__(cls, other):
+    def __or__(cls, other: type) -> "CustomFilter":
         if not issubclass(other, CustomFilter):
             raise TypeError("Operands must be subclasses of CustomFilter.")
         return CustomFilterOr(cls(), other())
 
 
 class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
-    def __init__(self, raise_error: bool = True, **kwargs) -> None:
+    def __init__(self, raise_error: bool = True, **kwargs: object) -> None:
         self.raise_error = raise_error
 
     @abstractmethod
@@ -27,10 +27,10 @@ class CustomFilter(HandlerFilter, metaclass=CustomFilterMeta):
         """一个用于重写的自定义Filter"""
         raise NotImplementedError
 
-    def __or__(self, other):
+    def __or__(self, other: "CustomFilter") -> "CustomFilter":
         return CustomFilterOr(self, other)
 
-    def __and__(self, other):
+    def __and__(self, other: "CustomFilter") -> "CustomFilter":
         return CustomFilterAnd(self, other)
 
 

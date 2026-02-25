@@ -278,7 +278,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         logger.debug(f"{tag} RunCtx.messages -> [{len(roles)}] {','.join(roles)}")
 
     @override
-    async def step(self):
+    async def step(self) -> T.AsyncGenerator[AgentResponse, None]:
         """Process a single step of the agent.
         This method should return the result of the step.
         """

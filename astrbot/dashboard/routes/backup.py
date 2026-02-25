@@ -9,11 +9,13 @@ import time
 import traceback
 import uuid
 import zipfile
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
 
 import jwt
-from quart import request, send_file
+import quart
+from quart import ResponseReturnValue, request, send_file
 
 from astrbot.core import logger
 from astrbot.core.backup.exporter import AstrBotExporter
@@ -180,7 +182,9 @@ class BackupRoute(Route):
         if message is not None:
             p["message"] = message
 
-    def _make_progress_callback(self, task_id: str):
+    def _make_progress_callback(
+        self, task_id: str
+    ) -> Callable[[str, int, int, str], Awaitable[None]]:
         """创建进度回调函数"""
 
         async def _callback(
@@ -268,7 +272,7 @@ class BackupRoute(Route):
             logger.debug(f"读取备份 manifest 失败: {e}")
         return None  # 无法读取，不是有效备份
 
-    async def list_backups(self):
+    async def list_backups(self) -> dict:
         # 确保后台清理任务已启动
         self._ensure_cleanup_task_started()
 
@@ -342,7 +346,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取备份列表失败: {e!s}").__dict__
 
-    async def export_backup(self):
+    async def export_backup(self) -> dict:
         """创建备份
 
         返回:
@@ -411,7 +415,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
-    async def upload_backup(self):
+    async def upload_backup(self) -> dict:
         """上传备份文件
 
         将备份文件上传到服务器，返回保存的文件名。
@@ -461,7 +465,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"上传备份文件失败: {e!s}").__dict__
 
-    async def upload_init(self):
+    async def upload_init(self) -> dict:
         """初始化分片上传
 
         创建一个上传会话，返回 upload_id 供后续分片上传使用。
@@ -540,7 +544,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"初始化分片上传失败: {e!s}").__dict__
 
-    async def upload_chunk(self):
+    async def upload_chunk(self) -> dict:
         """上传分片
 
         上传单个分片数据。
@@ -644,7 +648,7 @@ class BackupRoute(Route):
         except Exception as e:
             logger.warning(f"标记备份来源失败: {e}")
 
-    async def upload_complete(self):
+    async def upload_complete(self) -> dict:
         """完成分片上传
 
         合并所有分片为完整文件。
@@ -734,7 +738,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"完成分片上传失败: {e!s}").__dict__
 
-    async def upload_abort(self):
+    async def upload_abort(self) -> dict:
         """取消分片上传
 
         取消上传并清理已上传的分片。
@@ -764,7 +768,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"取消上传失败: {e!s}").__dict__
 
-    async def check_backup(self):
+    async def check_backup(self) -> dict:
         """预检查备份文件
 
         检查备份文件的版本兼容性，返回确认信息。
@@ -808,7 +812,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"预检查备份文件失败: {e!s}").__dict__
 
-    async def import_backup(self):
+    async def import_backup(self) -> dict:
         """执行备份导入
 
         在用户确认后执行实际的导入操作。
@@ -910,7 +914,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
-    async def get_progress(self):
+    async def get_progress(self) -> dict:
         """获取任务进度
 
         Query 参数:
@@ -951,7 +955,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"获取任务进度失败: {e!s}").__dict__
 
-    async def download_backup(self):
+    async def download_backup(self) -> dict | quart.Response:
         """下载备份文件
 
         Query 参数:
@@ -1002,7 +1006,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"下载备份失败: {e!s}").__dict__
 
-    async def delete_backup(self):
+    async def delete_backup(self) -> ResponseReturnValue:
         """删除备份文件
 
         Body:
@@ -1029,7 +1033,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"删除备份失败: {e!s}").__dict__
 
-    async def rename_backup(self):
+    async def rename_backup(self) -> dict:
         """重命名备份文件
 
         Body:

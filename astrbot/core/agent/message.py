@@ -1,16 +1,20 @@
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
+import builtins
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import (
     BaseModel,
     GetCoreSchemaHandler,
     PrivateAttr,
+    SerializerFunctionWrapHandler,
     model_serializer,
     model_validator,
 )
+from pydantic.config import ConfigDict
 from pydantic_core import core_schema
+from typing_extensions import Unpack
 
 
 class ContentPart(BaseModel):
@@ -20,7 +24,7 @@ class ContentPart(BaseModel):
 
     type: Literal["text", "think", "image_url", "audio_url"]
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, **kwargs: Unpack[ConfigDict]) -> None:
         super().__init_subclass__(**kwargs)
 
         invalid_subclass_error_msg = f"ContentPart subclass {cls.__name__} must have a `type` field of type `str`"
@@ -33,15 +37,15 @@ class ContentPart(BaseModel):
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, source_type: builtins.type[BaseModel], handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
         # If we're dealing with the base ContentPart class, use custom validation
         if cls.__name__ == "ContentPart":
 
-            def validate_content_part(value: Any) -> Any:
+            def validate_content_part(value: object) -> "ContentPart":
                 # if it's already an instance of a ContentPart subclass, return it
                 if hasattr(value, "__class__") and issubclass(value.__class__, cls):
-                    return value
+                    return cast("ContentPart", value)
 
                 # if it's a dict with a type field, dispatch to the appropriate subclass
                 if isinstance(value, dict) and "type" in value:
@@ -80,7 +84,7 @@ class ThinkPart(ContentPart):
     encrypted: str | None = None
     """Encrypted thinking content, or signature."""
 
-    def merge_in_place(self, other: Any) -> bool:
+    def merge_in_place(self, other: object) -> bool:
         if not isinstance(other, ThinkPart):
             return False
         if self.encrypted:
@@ -151,7 +155,7 @@ class ToolCall(BaseModel):
     """Extra metadata for the tool call."""
 
     @model_serializer(mode="wrap")
-    def serialize(self, handler):
+    def serialize(self, handler: SerializerFunctionWrapHandler) -> dict:
         data = handler(self)
         if self.extra_content is None:
             data.pop("extra_content", None)
@@ -187,7 +191,7 @@ class Message(BaseModel):
     _no_save: bool = PrivateAttr(default=False)
 
     @model_validator(mode="after")
-    def check_content_required(self):
+    def check_content_required(self) -> "Message":
         # assistant + tool_calls is not None: allow content to be None
         if self.role == "assistant" and self.tool_calls is not None:
             return self
@@ -200,7 +204,7 @@ class Message(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def serialize(self, handler):
+    def serialize(self, handler: SerializerFunctionWrapHandler) -> dict:
         data = handler(self)
         if self.tool_calls is None:
             data.pop("tool_calls", None)

@@ -1,4 +1,4 @@
-from quart import request
+from quart import ResponseReturnValue, request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, select
 
@@ -117,7 +117,7 @@ class SessionManagementRoute(Route):
 
         return paginated_rules, total
 
-    async def list_session_rule(self):
+    async def list_session_rule(self) -> ResponseReturnValue:
         """获取所有自定义的规则（支持分页和搜索）
 
         返回已配置规则的 umo 列表及其规则内容，以及可用的 personas 和 providers
@@ -248,7 +248,7 @@ class SessionManagementRoute(Route):
             logger.error(f"获取规则列表失败: {e!s}")
             return Response().error(f"获取规则列表失败: {e!s}").__dict__
 
-    async def update_session_rule(self):
+    async def update_session_rule(self) -> ResponseReturnValue:
         """更新某个 umo 的自定义规则
 
         请求体:
@@ -288,7 +288,7 @@ class SessionManagementRoute(Route):
             logger.error(f"更新会话规则失败: {e!s}")
             return Response().error(f"更新会话规则失败: {e!s}").__dict__
 
-    async def delete_session_rule(self):
+    async def delete_session_rule(self) -> ResponseReturnValue:
         """删除某个 umo 的自定义规则
 
         请求体:
@@ -323,7 +323,7 @@ class SessionManagementRoute(Route):
             logger.error(f"删除会话规则失败: {e!s}")
             return Response().error(f"删除会话规则失败: {e!s}").__dict__
 
-    async def batch_delete_session_rule(self):
+    async def batch_delete_session_rule(self) -> ResponseReturnValue:
         """批量删除多个 umo 的自定义规则
 
         请求体:
@@ -379,7 +379,7 @@ class SessionManagementRoute(Route):
             logger.error(f"批量删除会话规则失败: {e!s}")
             return Response().error(f"批量删除会话规则失败: {e!s}").__dict__
 
-    async def list_umos(self):
+    async def list_umos(self) -> ResponseReturnValue:
         """列出所有有对话记录的 umo，从 Conversations 表中找
 
         仅返回 umo 字符串列表，用于用户在创建规则时选择 umo

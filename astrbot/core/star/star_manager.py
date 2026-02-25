@@ -13,6 +13,7 @@ from types import ModuleType
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
+from watchfiles.main import FileChange
 
 from astrbot.core import logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
@@ -96,7 +97,7 @@ class PluginManager:
             logger.error(f"插件热重载监视任务异常: {e!s}")
             logger.error(traceback.format_exc())
 
-    async def _handle_file_changes(self, changes) -> None:
+    async def _handle_file_changes(self, changes: set[FileChange]) -> None:
         """处理文件变化"""
         logger.info(f"检测到文件变化: {changes}")
         plugins_to_check = []
@@ -132,7 +133,7 @@ class PluginManager:
                     break
 
     @staticmethod
-    def _get_classes(arg: ModuleType):
+    def _get_classes(arg: ModuleType) -> list[str]:
         """获取指定模块（可以理解为一个 python 文件）下所有的类"""
         classes = []
         clsmembers = inspect.getmembers(arg, inspect.isclass)
@@ -143,7 +144,7 @@ class PluginManager:
         return classes
 
     @staticmethod
-    def _get_modules(path):
+    def _get_modules(path: str) -> list:
         modules = []
 
         dirs = os.listdir(path)
@@ -238,7 +239,9 @@ class PluginManager:
             return __import__(path, fromlist=[module_str])
 
     @staticmethod
-    def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
+    def _load_plugin_metadata(
+        plugin_path: str, plugin_obj: object | None = None
+    ) -> StarMetadata | None:
         """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
 
         Notes: 旧版本 AstrBot 插件可能使用的是 info() 函数来获取元数据。
@@ -256,7 +259,7 @@ class PluginManager:
                 metadata = yaml.safe_load(f)
         elif plugin_obj and hasattr(plugin_obj, "info"):
             # 使用 info() 函数
-            metadata = plugin_obj.info()
+            metadata = getattr(plugin_obj, "info")()
 
         if isinstance(metadata, dict):
             if "desc" not in metadata and "description" in metadata:
@@ -410,7 +413,9 @@ class PluginManager:
                     return False, error
             return False, "插件不存在于失败列表中"
 
-    async def reload(self, specified_plugin_name=None):
+    async def reload(
+        self, specified_plugin_name: str | None = None
+    ) -> tuple[bool, str]:
         """重新加载插件
 
         Args:
@@ -468,10 +473,10 @@ class PluginManager:
 
     async def load(
         self,
-        specified_module_path=None,
-        specified_dir_name=None,
+        specified_module_path: str | None = None,
+        specified_dir_name: str | None = None,
         ignore_version_check: bool = False,
-    ):
+    ) -> tuple[bool, str]:
         """载入插件。
         当 specified_module_path 或者 specified_dir_name 不为 None 时，只载入指定的插件。
 
@@ -827,7 +832,7 @@ class PluginManager:
             logger.error(traceback.format_exc())
 
         if not fail_rec:
-            return True, None
+            return True, ""
         self.failed_plugin_info = fail_rec
         return False, fail_rec
 
@@ -876,7 +881,7 @@ class PluginManager:
 
     async def install_plugin(
         self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
-    ):
+    ) -> dict | None:
         """从仓库 URL 安装插件
 
         从指定的仓库 URL 下载并安装插件，然后加载该插件到系统中
@@ -1118,7 +1123,7 @@ class PluginManager:
             is_reserved=plugin.reserved,
         )
 
-    async def update_plugin(self, plugin_name: str, proxy="") -> None:
+    async def update_plugin(self, plugin_name: str, proxy: str = "") -> None:
         """升级一个插件"""
         plugin = self.context.get_registered_star(plugin_name)
         if not plugin:
@@ -1232,7 +1237,7 @@ class PluginManager:
 
     async def install_plugin_from_file(
         self, zip_file_path: str, ignore_version_check: bool = False
-    ):
+    ) -> dict | None:
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)

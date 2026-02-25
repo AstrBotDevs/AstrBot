@@ -132,7 +132,7 @@ class ProviderRequest:
             self.tool_calls_result = [self.tool_calls_result]
         self.tool_calls_result.append(tool_calls_result)
 
-    def _print_friendly_context(self):
+    def _print_friendly_context(self) -> list[str] | str:
         """打印友好的消息上下文。将 image_url 的值替换为 <Image>"""
         if not self.contexts:
             return f"prompt: {self.prompt}, image_count: {len(self.image_urls or [])}"
@@ -333,7 +333,7 @@ class LLMResponse:
             tools_call_extra_content = {}
 
         self.role = role
-        self.completion_text = completion_text
+        self.completion_text = completion_text or ""
         self.result_chain = result_chain
         self.tools_call_args = tools_call_args
         self.tools_call_name = tools_call_name
@@ -350,13 +350,13 @@ class LLMResponse:
             self.usage = usage
 
     @property
-    def completion_text(self):
+    def completion_text(self) -> str:
         if self.result_chain:
             return self.result_chain.get_plain_text()
         return self._completion_text
 
     @completion_text.setter
-    def completion_text(self, value) -> None:
+    def completion_text(self, value: str) -> None:
         if self.result_chain:
             self.result_chain.chain = [
                 comp

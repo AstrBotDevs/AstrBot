@@ -26,6 +26,16 @@ from astrbot.core.db.po import (
 )
 
 
+class NotGivenType:
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "NOT_GIVEN"
+
+
+NOT_GIVEN = NotGivenType()
+
+
 @dataclass
 class BaseDatabase(abc.ABC):
     """数据库基类"""
@@ -110,7 +120,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_conversation_by_id(self, cid: str) -> ConversationV2:
+    async def get_conversation_by_id(self, cid: str) -> ConversationV2 | None:
         """Get a specific conversation by its ID."""
         ...
 
@@ -130,7 +140,7 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        **kwargs,
+        **kwargs: object,
     ) -> tuple[list[ConversationV2], int]:
         """Get conversations filtered by platform IDs and search query."""
         ...
@@ -158,7 +168,7 @@ class BaseDatabase(abc.ABC):
         persona_id: str | None = None,
         content: list[dict] | None = None,
         token_usage: int | None = None,
-    ) -> None:
+    ) -> ConversationV2 | None:
         """Update a conversation's history."""
         ...
 
@@ -219,12 +229,12 @@ class BaseDatabase(abc.ABC):
         path: str,
         type: str,
         mime_type: str,
-    ):
+    ) -> Attachment:
         """Insert a new attachment record."""
         ...
 
     @abc.abstractmethod
-    async def get_attachment_by_id(self, attachment_id: str) -> Attachment:
+    async def get_attachment_by_id(self, attachment_id: str) -> Attachment | None:
         """Get an attachment by its ID."""
         ...
 
@@ -323,7 +333,7 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_persona_by_id(self, persona_id: str) -> Persona:
+    async def get_persona_by_id(self, persona_id: str) -> Persona | None:
         """Get a persona by its ID."""
         ...
 
@@ -338,8 +348,8 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
+        tools: list[str] | None | NotGivenType = NOT_GIVEN,
+        skills: list[str] | None | NotGivenType = NOT_GIVEN,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         ...
@@ -386,8 +396,8 @@ class BaseDatabase(abc.ABC):
         self,
         folder_id: str,
         name: str | None = None,
-        parent_id: T.Any = None,
-        description: T.Any = None,
+        parent_id: str | None | NotGivenType = NOT_GIVEN,
+        description: str | None | NotGivenType = NOT_GIVEN,
         sort_order: int | None = None,
     ) -> PersonaFolder | None:
         """Update a persona folder."""
@@ -439,7 +449,9 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
-    async def get_preference(self, scope: str, scope_id: str, key: str) -> Preference:
+    async def get_preference(
+        self, scope: str, scope_id: str, key: str
+    ) -> Preference | None:
         """Get a preference by scope ID and key."""
         ...
 

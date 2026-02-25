@@ -11,7 +11,7 @@ class HelpCommand:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def _query_astrbot_notice(self):
+    async def _query_astrbot_notice(self) -> str:
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
                 async with session.get(

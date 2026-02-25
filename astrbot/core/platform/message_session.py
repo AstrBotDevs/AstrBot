@@ -18,11 +18,11 @@ class MessageSession:
     def __str__(self) -> str:
         return f"{self.platform_id}:{self.message_type.value}:{self.session_id}"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.platform_id = self.platform_name
 
     @staticmethod
-    def from_str(session_str: str):
+    def from_str(session_str: str) -> "MessageSesion":
         platform_id, message_type, session_id = session_str.split(":", 2)
         return MessageSession(platform_id, MessageType(message_type), session_id)
 
