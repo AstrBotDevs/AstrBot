@@ -51,7 +51,7 @@ class OneBotClient:
         last_params: dict[str, Any] | None = None
         for params in params_list:
             try:
-                result = await self._call_action(action, **params)
+                result = self._call_action(action, **params)
                 if isinstance(result, dict):
                     return result
             except Exception as exc:
