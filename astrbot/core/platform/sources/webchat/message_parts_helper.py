@@ -4,6 +4,7 @@ import shutil
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from astrbot.core.db.po import Attachment
 from astrbot.core.message.components import (
@@ -19,6 +20,10 @@ from astrbot.core.message.message_event_result import MessageChain
 
 AttachmentGetter = Callable[[str], Awaitable[Attachment | None]]
 AttachmentInserter = Callable[[str, str, str], Awaitable[Attachment | None]]
+ReplyHistoryGetter = Callable[
+    [Any],
+    Awaitable[tuple[list[dict], str | None, str | None] | None],
+]
 
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
 
@@ -33,6 +38,127 @@ def webchat_message_parts_have_content(message_parts: list[dict]) -> bool:
         and (part.get("text") or part.get("attachment_id") or part.get("filename"))
         for part in message_parts
     )
+
+
+async def parse_webchat_message_parts(
+    message_parts: list,
+    *,
+    strict: bool = False,
+    include_empty_plain: bool = False,
+    verify_media_path_exists: bool = True,
+    reply_history_getter: ReplyHistoryGetter | None = None,
+    current_depth: int = 0,
+    max_reply_depth: int = 0,
+    cast_reply_id_to_str: bool = True,
+) -> tuple[list, list[str], bool]:
+    """Parse webchat message parts into components/text parts.
+
+    Returns:
+        tuple[list, list[str], bool]:
+            (components, plain_text_parts, has_non_reply_content)
+    """
+    components = []
+    text_parts: list[str] = []
+    has_content = False
+
+    for part in message_parts:
+        if not isinstance(part, dict):
+            if strict:
+                raise ValueError("message part must be an object")
+            continue
+
+        part_type = str(part.get("type", "")).strip()
+        if part_type == "plain":
+            text = str(part.get("text", ""))
+            if text or include_empty_plain:
+                components.append(Plain(text=text))
+                text_parts.append(text)
+            if text:
+                has_content = True
+            continue
+
+        if part_type == "reply":
+            message_id = part.get("message_id")
+            if message_id is None:
+                if strict:
+                    raise ValueError("reply part missing message_id")
+                continue
+
+            reply_chain = []
+            reply_message_str = str(part.get("selected_text", ""))
+            sender_id = None
+            sender_name = None
+
+            if reply_message_str:
+                reply_chain = [Plain(text=reply_message_str)]
+            elif (
+                reply_history_getter
+                and current_depth < max_reply_depth
+                and message_id is not None
+            ):
+                reply_info = await reply_history_getter(message_id)
+                if reply_info:
+                    reply_parts, sender_id, sender_name = reply_info
+                    (
+                        reply_chain,
+                        reply_text_parts,
+                        _,
+                    ) = await parse_webchat_message_parts(
+                        reply_parts,
+                        strict=strict,
+                        include_empty_plain=include_empty_plain,
+                        verify_media_path_exists=verify_media_path_exists,
+                        reply_history_getter=reply_history_getter,
+                        current_depth=current_depth + 1,
+                        max_reply_depth=max_reply_depth,
+                        cast_reply_id_to_str=cast_reply_id_to_str,
+                    )
+                    reply_message_str = "".join(reply_text_parts)
+
+            reply_id = str(message_id) if cast_reply_id_to_str else message_id
+            components.append(
+                Reply(
+                    id=reply_id,
+                    message_str=reply_message_str,
+                    chain=reply_chain,
+                    sender_id=sender_id,
+                    sender_nickname=sender_name,
+                )
+            )
+            continue
+
+        if part_type not in MEDIA_PART_TYPES:
+            if strict:
+                raise ValueError(f"unsupported message part type: {part_type}")
+            continue
+
+        path = part.get("path")
+        if not path:
+            if strict:
+                raise ValueError(f"{part_type} part missing path")
+            continue
+
+        file_path = Path(str(path))
+        if verify_media_path_exists and not file_path.exists():
+            if strict:
+                raise ValueError(f"file not found: {file_path!s}")
+            continue
+
+        file_path_str = (
+            str(file_path.resolve()) if verify_media_path_exists else str(file_path)
+        )
+        has_content = True
+        if part_type == "image":
+            components.append(Image.fromFileSystem(file_path_str))
+        elif part_type == "record":
+            components.append(Record.fromFileSystem(file_path_str))
+        elif part_type == "video":
+            components.append(Video.fromFileSystem(file_path_str))
+        else:
+            filename = str(part.get("filename", "")).strip() or file_path.name
+            components.append(File(name=filename, file=file_path_str))
+
+    return components, text_parts, has_content
 
 
 async def build_webchat_message_parts(
@@ -192,7 +318,13 @@ async def build_message_chain_from_payload(
         get_attachment_by_id=get_attachment_by_id,
         strict=strict,
     )
-    return webchat_message_parts_to_message_chain(message_parts, strict=strict)
+    components, _, has_content = await parse_webchat_message_parts(
+        message_parts,
+        strict=strict,
+    )
+    if strict and (not components or not has_content):
+        raise ValueError("Message content is empty (reply only is not allowed)")
+    return MessageChain(chain=components)
 
 
 async def create_attachment_part_from_existing_file(
