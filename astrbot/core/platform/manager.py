@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 from asyncio import Queue
+from dataclasses import dataclass
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -12,12 +13,19 @@ from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
 
 
+@dataclass
+class PlatformTasks:
+    run: asyncio.Task
+    wrapper: asyncio.Task
+
+
 class PlatformManager:
     def __init__(self, config: AstrBotConfig, event_queue: Queue) -> None:
         self.platform_insts: list[Platform] = []
         """加载的 Platform 的实例"""
 
         self._inst_map: dict[str, dict] = {}
+        self._platform_tasks: dict[str, PlatformTasks] = {}
 
         self.astrbot_config = config
         self.platforms_config = config["platform"]
@@ -38,6 +46,44 @@ class PlatformManager:
         sanitized = platform_id.replace(":", "_").replace("!", "_")
         return sanitized, sanitized != platform_id
 
+    def _start_platform_task(self, task_name: str, inst: Platform) -> None:
+        run_task = asyncio.create_task(inst.run(), name=task_name)
+        wrapper_task = asyncio.create_task(
+            self._task_wrapper(run_task, platform=inst),
+            name=f"{task_name}_wrapper",
+        )
+        self._platform_tasks[inst.client_self_id] = PlatformTasks(
+            run=run_task,
+            wrapper=wrapper_task,
+        )
+
+    async def _stop_platform_task(self, client_id: str) -> None:
+        tasks = self._platform_tasks.pop(client_id, None)
+        if not tasks:
+            return
+        for task in (tasks.run, tasks.wrapper):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(tasks.run, tasks.wrapper, return_exceptions=True)
+
+    async def _terminate_inst_and_tasks(self, inst: Platform) -> None:
+        client_id = inst.client_self_id
+        try:
+            if getattr(inst, "terminate", None):
+                try:
+                    await inst.terminate()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(
+                        "终止平台适配器失败: client_id=%s, error=%s",
+                        client_id,
+                        e,
+                    )
+                    logger.error(traceback.format_exc())
+        finally:
+            await self._stop_platform_task(client_id)
+
     async def initialize(self) -> None:
         """初始化所有平台适配器"""
         for platform in self.platforms_config:
@@ -51,12 +97,7 @@ class PlatformManager:
         # 网页聊天
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
         self.platform_insts.append(webchat_inst)
-        asyncio.create_task(
-            self._task_wrapper(
-                asyncio.create_task(webchat_inst.run(), name="webchat"),
-                platform=webchat_inst,
-            ),
-        )
+        self._start_platform_task("webchat", webchat_inst)
 
     async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""
@@ -135,6 +176,10 @@ class PlatformManager:
                     from .sources.satori.satori_adapter import (
                         SatoriPlatformAdapter,  # noqa: F401
                     )
+                case "line":
+                    from .sources.line.line_adapter import (
+                        LinePlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
@@ -154,15 +199,9 @@ class PlatformManager:
             "client_id": inst.client_self_id,
         }
         self.platform_insts.append(inst)
-
-        asyncio.create_task(
-            self._task_wrapper(
-                asyncio.create_task(
-                    inst.run(),
-                    name=f"platform_{platform_config['type']}_{platform_config['id']}",
-                ),
-                platform=inst,
-            ),
+        self._start_platform_task(
+            f"platform_{platform_config['type']}_{platform_config['id']}",
+            inst,
         )
         handlers = star_handlers_registry.get_handlers_by_event_type(
             EventType.OnPlatformLoadedEvent,
@@ -230,13 +269,25 @@ class PlatformManager:
             except Exception:
                 logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
 
-            if getattr(inst, "terminate", None):
-                await inst.terminate()
+            await self._terminate_inst_and_tasks(inst)
 
     async def terminate(self) -> None:
-        for inst in self.platform_insts:
-            if getattr(inst, "terminate", None):
-                await inst.terminate()
+        terminated_client_ids: set[str] = set()
+        for platform_id in list(self._inst_map.keys()):
+            info = self._inst_map.get(platform_id)
+            if info:
+                terminated_client_ids.add(info["client_id"])
+            await self.terminate_platform(platform_id)
+
+        for inst in list(self.platform_insts):
+            client_id = inst.client_self_id
+            if client_id in terminated_client_ids:
+                continue
+            await self._terminate_inst_and_tasks(inst)
+
+        self.platform_insts.clear()
+        self._inst_map.clear()
+        self._platform_tasks.clear()
 
     def get_insts(self) -> list:
         return self.platform_insts

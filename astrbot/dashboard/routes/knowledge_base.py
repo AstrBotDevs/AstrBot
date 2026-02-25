@@ -14,6 +14,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..utils import generate_tsne_visualization
 from .route import Response, Route, RouteContext
@@ -711,7 +712,10 @@ class KnowledgeBaseRoute(Route):
                 file_name = file.filename
 
                 # 保存到临时文件
-                temp_file_path = f"data/temp/{uuid.uuid4()}_{file_name}"
+                temp_file_path = os.path.join(
+                    get_astrbot_temp_path(),
+                    f"kb_upload_{uuid.uuid4()}_{file_name}",
+                )
                 await file.save(temp_file_path)
 
                 try:

@@ -17,7 +17,7 @@ import certifi
 import psutil
 from PIL import Image
 
-from .astrbot_path import get_astrbot_data_path
+from .astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
 
@@ -57,21 +57,10 @@ def port_checker(port: int, host: str = "localhost") -> bool:
 
 
 def save_temp_img(img: Image.Image | bytes) -> str:
-    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-    # 获得文件创建时间，清除超过 12 小时的
-    try:
-        for f in os.listdir(temp_dir):
-            path = os.path.join(temp_dir, f)
-            if os.path.isfile(path):
-                ctime = os.path.getctime(path)
-                if time.time() - ctime > 3600 * 12:
-                    os.remove(path)
-    except Exception as e:
-        print(f"清除临时文件失败: {e}")
-
+    temp_dir = get_astrbot_temp_path()
     # 获得时间戳
     timestamp = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
-    p = os.path.join(temp_dir, f"{timestamp}.jpg")
+    p = os.path.join(temp_dir, f"io_temp_img_{timestamp}.jpg")
 
     if isinstance(img, Image.Image):
         img.save(p)

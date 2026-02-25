@@ -1323,6 +1323,30 @@ class ConfigRoute(Route):
                 f"Unexpected error registering logo for platform {platform.name}: {e}",
             )
 
+    def _inject_platform_metadata_with_i18n(
+        self, platform, metadata, platform_i18n_translations: dict
+    ):
+        """将配置元数据注入到 metadata 中并处理国际化键转换。"""
+        metadata["platform_group"]["metadata"]["platform"].setdefault("items", {})
+        platform_items_to_inject = copy.deepcopy(platform.config_metadata)
+
+        if platform.i18n_resources:
+            i18n_prefix = f"platform_group.platform.{platform.name}"
+
+            for lang, lang_data in platform.i18n_resources.items():
+                platform_i18n_translations.setdefault(lang, {}).setdefault(
+                    "platform_group", {}
+                ).setdefault("platform", {})[platform.name] = lang_data
+
+            for field_key, field_value in platform_items_to_inject.items():
+                for key in ("description", "hint", "labels"):
+                    if key in field_value:
+                        field_value[key] = f"{i18n_prefix}.{field_key}.{key}"
+
+        metadata["platform_group"]["metadata"]["platform"]["items"].update(
+            platform_items_to_inject
+        )
+
     async def _get_astrbot_config(self) -> dict:
         config = self.config
         metadata = copy.deepcopy(CONFIG_METADATA_2)
@@ -1344,11 +1368,23 @@ class ConfigRoute(Route):
             "config_template"
         ]
 
+        # 收集平台的 i18n 翻译数据
+        platform_i18n_translations = {}
+
         # 收集需要注册logo的平台
         logo_registration_tasks = []
         for platform in platform_registry:
             if platform.default_config_tmpl:
-                platform_default_tmpl[platform.name] = platform.default_config_tmpl
+                platform_default_tmpl[platform.name] = copy.deepcopy(
+                    platform.default_config_tmpl
+                )
+
+                # 注入配置元数据（在 convert_to_i18n_keys 之后，使用国际化键）
+                if platform.config_metadata:
+                    self._inject_platform_metadata_with_i18n(
+                        platform, metadata, platform_i18n_translations
+                    )
+
                 # 收集logo注册任务
                 if platform.logo_path:
                     logo_registration_tasks.append(
@@ -1367,7 +1403,11 @@ class ConfigRoute(Route):
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
 
-        return {"metadata": metadata, "config": config}
+        return {
+            "metadata": metadata,
+            "config": config,
+            "platform_i18n_translations": platform_i18n_translations,
+        }
 
     async def _get_plugin_config(self, plugin_name: str) -> dict:
         ret: dict = {"metadata": None, "config": None}

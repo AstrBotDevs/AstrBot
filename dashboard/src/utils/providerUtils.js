@@ -18,6 +18,7 @@ export function getProviderIcon(type) {
     'deepseek': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/deepseek.svg',
     'modelscope': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/modelscope.svg',
     'zhipu': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/zhipu.svg',
+    'nvidia': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/nvidia-color.svg',
     'siliconflow': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/siliconcloud.svg',
     'moonshot': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/kimi.svg',
     'ppio': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/ppio.svg',
@@ -32,6 +33,8 @@ export function getProviderIcon(type) {
     'microsoft': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/microsoft.svg',
     'vllm': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/vllm.svg',
     'groq': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/groq.svg',
+    'aihubmix': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/aihubmix-color.svg',
+    'openrouter': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openrouter.svg',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
     "compshare": "https://compshare.cn/favicon.ico"
   };

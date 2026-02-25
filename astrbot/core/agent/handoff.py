@@ -30,8 +30,6 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         tool_description: str | None = None,
         **kwargs: Unpack[HandoffInitKwargs],
     ) -> None:
-        self.agent = agent
-
         # Avoid passing duplicate `description` to the FunctionTool dataclass.
         # Some call sites (e.g. SubAgentOrchestrator) pass `description` via kwargs
         # to override what the main agent sees, while we also compute a default
@@ -49,6 +47,8 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         # Optional provider override for this subagent. When set, the handoff
         # execution will use this chat provider id instead of the global/default.
         self.provider_id: str | None = None
+        # Note: Must assign after super().__init__() to prevent parent class from overriding this attribute
+        self.agent = agent
 
     def default_parameters(self) -> dict:
         return {
@@ -57,6 +57,19 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                 "input": {
                     "type": "string",
                     "description": "The input to be handed off to another agent. This should be a clear and concise request or task.",
+                },
+                "image_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: An array of image sources (public HTTP URLs or local file paths) used as references in multimodal tasks such as video generation.",
+                },
+                "background_task": {
+                    "type": "boolean",
+                    "description": (
+                        "Defaults to false. "
+                        "Set to true if the task may take noticeable time, involves external tools, or the user does not need to wait. "
+                        "Use false only for quick, immediate tasks."
+                    ),
                 },
             },
         }

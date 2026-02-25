@@ -27,7 +27,7 @@ export default {
     return {
       autoScroll: true,
       logColorAnsiMap: {
-        '\u001b[1;34m': 'color: #0000FF; font-weight: bold;',
+        '\u001b[1;34m': 'color: #39C5BB; font-weight: bold;',
         '\u001b[1;36m': 'color: #00FFFF; font-weight: bold;',
         '\u001b[1;33m': 'color: #FFFF00; font-weight: bold;',
         '\u001b[31m': 'color: #FF0000;',
@@ -269,8 +269,8 @@ export default {
         }
       }
 
-      span.style = style + 'display: block; font-size: 12px; font-family: Consolas, monospace; white-space: pre-wrap; margin-bottom: 2px;'
-      span.classList.add('fade-in')
+      span.style = style
+      span.classList.add('console-log-line', 'fade-in')
       span.innerText = `${log}`;
       ele.appendChild(span)
       if (this.autoScroll) {
@@ -290,7 +290,15 @@ export default {
   margin-left: 20px;
 }
 
-.fade-in {
+:deep(.console-log-line) {
+  display: block;
+  margin-bottom: 2px;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, var(--astrbot-font-cjk-mono), monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+:deep(.fade-in) {
   animation: fadeIn 0.3s;
 }
 

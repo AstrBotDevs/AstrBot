@@ -320,6 +320,7 @@ class ResultDecorateStage(Stage):
                                 Record(
                                     file=url or audio_path,
                                     url=url or audio_path,
+                                    text=comp.text,
                                 ),
                             )
                             if dual_output:

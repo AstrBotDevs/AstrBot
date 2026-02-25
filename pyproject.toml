@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.14.8"
+version = "4.18.2"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,7 +17,7 @@ dependencies = [
   "beautifulsoup4>=4.13.4",
   "certifi>=2025.4.26",
   "chardet~=5.1.0",
-  "colorlog>=6.9.0",
+  "loguru>=0.7.2",
   "cryptography>=44.0.3",
   "dashscope>=1.23.2",
   "defusedxml>=0.7.1",
@@ -36,7 +36,7 @@ dependencies = [
   "pip>=25.1.1",
   "psutil>=5.8.0,<7.2.0",
   "py-cord>=2.6.1",
-  "pydantic~=2.10.3",
+  "pydantic>=2.12.5",
   "pydub>=0.25.1",
   "pyjwt>=2.10.1",
   "python-telegram-bot>=22.0",
@@ -62,6 +62,7 @@ dependencies = [
   "tenacity>=9.1.2",
   "shipyard-python-sdk>=0.2.4",
   "python-socks>=2.8.0",
+  "packaging>=24.2",
 ]
 
 [dependency-groups]

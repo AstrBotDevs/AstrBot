@@ -82,6 +82,10 @@ export function useMessages(
     const activeSSECount = ref(0);
     const enableStreaming = ref(true);
     const attachmentCache = new Map<string, string>();  // attachment_id -> blob URL
+    const currentRequestController = ref<AbortController | null>(null);
+    const currentReader = ref<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+    const currentRunningSessionId = ref('');
+    const userStopRequested = ref(false);
     
     // 当前会话的项目信息
     const currentSessionProject = ref<{ project_id: string; title: string; emoji: string } | null>(null);
@@ -289,6 +293,8 @@ export function useMessages(
             if (activeSSECount.value === 1) {
                 isConvRunning.value = true;
             }
+            userStopRequested.value = false;
+            currentRunningSessionId.value = currSessionId.value;
 
             // 收集所有 attachment_id
             const files = stagedFiles.map(f => f.attachment_id);
@@ -330,12 +336,15 @@ export function useMessages(
                 messageToSend = prompt;
             }
 
+            const controller = new AbortController();
+            currentRequestController.value = controller;
             const response = await fetch('/api/chat/send', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + localStorage.getItem('token')
                 },
+                signal: controller.signal,
                 body: JSON.stringify({
                     message: messageToSend,
                     session_id: currSessionId.value,
@@ -350,6 +359,7 @@ export function useMessages(
             }
 
             const reader = response.body!.getReader();
+            currentReader.value = reader;
             const decoder = new TextDecoder();
             let in_streaming = false;
             let message_obj: MessageContent | null = null;
@@ -385,6 +395,10 @@ export function useMessages(
 
                         if (!chunk_json || typeof chunk_json !== 'object' || !chunk_json.hasOwnProperty('type')) {
                             console.warn('无效的数据对象:', chunk_json);
+                            continue;
+                        }
+
+                        if (chunk_json.type === 'session_id') {
                             continue;
                         }
 
@@ -556,7 +570,9 @@ export function useMessages(
                         }
                     }
                 } catch (readError) {
-                    console.error('SSE读取错误:', readError);
+                    if (!userStopRequested.value) {
+                        console.error('SSE读取错误:', readError);
+                    }
                     break;
                 }
             }
@@ -565,7 +581,9 @@ export function useMessages(
             onSessionsUpdate();
 
         } catch (err) {
-            console.error('发送消息失败:', err);
+            if (!userStopRequested.value) {
+                console.error('发送消息失败:', err);
+            }
             // 移除加载占位符
             const lastMsg = messages.value[messages.value.length - 1];
             if (lastMsg?.content?.isLoading) {
@@ -573,11 +591,42 @@ export function useMessages(
             }
         } finally {
             isStreaming.value = false;
+            currentReader.value = null;
+            currentRequestController.value = null;
+            currentRunningSessionId.value = '';
+            userStopRequested.value = false;
             activeSSECount.value--;
             if (activeSSECount.value === 0) {
                 isConvRunning.value = false;
             }
         }
+    }
+
+    async function stopMessage() {
+        const sessionId = currentRunningSessionId.value || currSessionId.value;
+        if (!sessionId) {
+            return;
+        }
+
+        userStopRequested.value = true;
+        try {
+            await axios.post('/api/chat/stop', {
+                session_id: sessionId
+            });
+        } catch (err) {
+            console.error('停止会话失败:', err);
+        }
+
+        try {
+            await currentReader.value?.cancel();
+        } catch (err) {
+            // ignore reader cancel failures
+        }
+        currentReader.value = null;
+        currentRequestController.value?.abort();
+        currentRequestController.value = null;
+
+        isStreaming.value = false;
     }
 
     return {
@@ -588,6 +637,7 @@ export function useMessages(
         currentSessionProject,
         getSessionMessages,
         sendMessage,
+        stopMessage,
         toggleStreaming,
         getAttachment
     };

@@ -218,6 +218,10 @@ import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import ItemCard from '@/components/shared/ItemCard.vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
+import {
+  askForConfirmation as askForConfirmationDialog,
+  useConfirmDialog
+} from '@/utils/confirmDialog';
 
 export default {
   name: 'McpServersSection',
@@ -228,7 +232,8 @@ export default {
   setup() {
     const { t } = useI18n();
     const { tm } = useModuleI18n('features/tooluse');
-    return { t, tm };
+    const confirmDialog = useConfirmDialog();
+    return { t, tm, confirmDialog };
   },
   data() {
     return {
@@ -382,18 +387,21 @@ export default {
         this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
       }
     },
-    deleteServer(server) {
+    async deleteServer(server) {
       const serverName = server.name || server;
-      if (confirm(this.tm('dialogs.confirmDelete', { name: serverName }))) {
-        axios.post('/api/tools/mcp/delete', { name: serverName })
-          .then(response => {
-            this.getServers();
-            this.showSuccess(response.data.message || this.tm('messages.deleteSuccess'));
-          })
-          .catch(error => {
-            this.showError(this.tm('messages.deleteError', { error: error.response?.data?.message || error.message }));
-          });
+      const message = this.tm('dialogs.confirmDelete', { name: serverName });
+      if (!(await askForConfirmationDialog(message, this.confirmDialog))) {
+        return;
       }
+
+      axios.post('/api/tools/mcp/delete', { name: serverName })
+        .then(response => {
+          this.getServers();
+          this.showSuccess(response.data.message || this.tm('messages.deleteSuccess'));
+        })
+        .catch(error => {
+          this.showError(this.tm('messages.deleteError', { error: error.response?.data?.message || error.message }));
+        });
     },
     editServer(server) {
       const configCopy = { ...server };

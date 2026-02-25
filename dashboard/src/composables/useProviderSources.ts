@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -36,6 +37,12 @@ export function resolveDefaultTab(value?: string) {
 
 export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
+
+  const confirmDialog = useConfirmDialog()
+
+  async function askForConfirmation(message: string) {
+    return askForConfirmationDialog(message, confirmDialog)
+  }
 
   // ===== State =====
   const config = ref<Record<string, any>>({})
@@ -74,10 +81,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return []
     }
 
-    const types: Array<{ value: string; label: string }> = []
+    const types: Array<{ value: string; label: string; icon: string }> = []
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
-        types.push({ value: templateName, label: templateName })
+        types.push({
+          value: templateName,
+          label: templateName,
+          icon: getProviderIcon(template.provider)
+        })
       }
     }
 
@@ -396,7 +407,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProviderSource(source: any) {
-    if (!confirm(tm('providerSources.deleteConfirm', { id: source.id }))) return
+    const confirmed = await askForConfirmation(
+      tm('providerSources.deleteConfirm', { id: source.id })
+    )
+    if (!confirmed) return
 
     try {
       await axios.post('/api/config/provider_sources/delete', { id: source.id })
@@ -558,7 +572,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function deleteProvider(provider: any) {
-    if (!confirm(tm('models.deleteConfirm', { id: provider.id }))) return
+    const confirmed = await askForConfirmation(tm('models.deleteConfirm', { id: provider.id }))
+    if (!confirmed) return
 
     try {
       await axios.post('/api/config/provider/delete', { id: provider.id })

@@ -21,11 +21,14 @@ def register_platform_adapter(
     adapter_display_name: str | None = None,
     logo_path: str | None = None,
     support_streaming_message: bool = True,
+    i18n_resources: dict[str, dict] | None = None,
+    config_metadata: dict | None = None,
 ) -> Callable[[type[T]], type[T]]:
     """用于注册平台适配器的带参装饰器。
 
     default_config_tmpl 指定了平台适配器的默认配置模板。用户填写好后将会作为 platform_config 传入你的 Platform 类的实现类。
     logo_path 指定了平台适配器的 logo 文件路径，是相对于插件目录的路径。
+    config_metadata 指定了配置项的元数据，用于 WebUI 生成表单。如果不指定，WebUI 将会把配置项渲染为原始的键值对编辑框。
     """
 
     def decorator(cls: type[T]) -> type[T]:
@@ -55,6 +58,8 @@ def register_platform_adapter(
             logo_path=logo_path,
             support_streaming_message=support_streaming_message,
             module_path=module_path,
+            i18n_resources=i18n_resources,
+            config_metadata=config_metadata,
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls

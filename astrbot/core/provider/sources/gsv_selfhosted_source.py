@@ -5,7 +5,7 @@ import uuid
 import aiohttp
 
 from astrbot import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -121,7 +121,7 @@ class ProviderGSVTTS(TTSProvider):
 
         params = self.build_synthesis_params(text)
 
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, f"gsv_tts_{uuid.uuid4().hex}.wav")
 
