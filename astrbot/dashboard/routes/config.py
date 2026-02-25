@@ -754,6 +754,16 @@ class ConfigRoute(Route):
             if not provider_type:
                 return Response().error("provider_config 缺少 type 字段").__dict__
 
+            # 首次添加某类提供商时，provider_cls_map 可能尚未注册该适配器
+            if provider_type not in provider_cls_map:
+                try:
+                    self.core_lifecycle.provider_manager.dynamic_import_provider(
+                        provider_type,
+                    )
+                except ImportError as e:
+                    logger.error(traceback.format_exc())
+                    return Response().error(f"动态导入提供商适配器失败: {e!s}").__dict__
+
             # 获取对应的 provider 类
             if provider_type not in provider_cls_map:
                 return (
@@ -779,9 +789,8 @@ class ConfigRoute(Route):
             if inspect.iscoroutinefunction(init_fn):
                 await init_fn()
 
-            # 获取嵌入向量维度
-            vec = await inst.get_embedding("echo")
-            dim = len(vec)
+            # 探测嵌入向量维度（优先使用 provider 的原生探测逻辑）
+            dim = await inst.detect_dim()
 
             logger.info(
                 f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}",

@@ -52,6 +52,64 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         )
         return [item.embedding for item in embeddings.data]
 
+    async def detect_dim(self) -> int:
+        """探测模型可用的最大向量维度"""
+
+        async def _request_dim(dimensions: int | None) -> int:
+            kwargs = {
+                "input": "echo",
+                "model": self.model,
+            }
+            if dimensions is not None:
+                kwargs["dimensions"] = dimensions
+            embedding = await self.client.embeddings.create(**kwargs)
+            return len(embedding.data[0].embedding)
+
+        # 1) 默认调用，获取当前默认维度
+        base_dim = await _request_dim(None)
+
+        # 2) 先判断 dimensions 参数是否可调
+        probe_dim = base_dim + 1
+        try:
+            probe_result = await _request_dim(probe_dim)
+            if probe_result != probe_dim:
+                return base_dim
+        except Exception:
+            return base_dim
+
+        # 3) 可调时探测上界：指数扩张 + 二分
+        max_cap = 32768
+        low = probe_dim
+        high = max(base_dim * 2, probe_dim + 1)
+        if high > max_cap:
+            high = max_cap
+
+        while high < max_cap:
+            try:
+                result_dim = await _request_dim(high)
+                if result_dim != high:
+                    break
+                low = high
+                high = min(high * 2, max_cap)
+            except Exception:
+                break
+
+        left = low + 1
+        right = high - 1
+        while left <= right:
+            mid = (left + right) // 2
+            try:
+                result_dim = await _request_dim(mid)
+                if result_dim == mid:
+                    low = mid
+                    left = mid + 1
+                else:
+                    right = mid - 1
+            except Exception:
+                right = mid - 1
+
+        return low
+
     def get_dim(self) -> int:
         """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 1024))

@@ -78,6 +78,19 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         except APIError as e:
             raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
 
+    async def detect_dim(self) -> int:
+        """探测模型原生向量维度（不传 output_dimensionality）"""
+        try:
+            result = await self.client.models.embed_content(
+                model=self.model,
+                contents="echo",
+            )
+            assert result.embeddings is not None
+            assert result.embeddings[0].values is not None
+            return len(result.embeddings[0].values)
+        except APIError as e:
+            raise Exception(f"Gemini Embedding 维度探测失败: {e.message}")
+
     def get_dim(self) -> int:
         """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 768))
