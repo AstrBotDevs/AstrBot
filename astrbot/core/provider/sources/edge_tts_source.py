@@ -35,7 +35,7 @@ class ProviderEdgeTTS(TTSProvider):
         super().__init__(provider_config, provider_settings)
 
         # 设置默认语音，如果没有指定则使用中文小萱
-        self.voice = provider_config.get("edge-tts-voice", "zh-CN-XiaoxiaoNeural")
+        self.voice = provider_config.get("edge_tts_voice", "zh-CN-XiaoxiaoNeural")
         self.rate = provider_config.get("rate")
         self.volume = provider_config.get("volume")
         self.pitch = provider_config.get("pitch")

@@ -1317,7 +1317,7 @@ CONFIG_METADATA_2 = {
                         "type": "edge_tts",
                         "provider_type": "text_to_speech",
                         "enable": False,
-                        "edge-tts-voice": "zh-CN-XiaoxiaoNeural",
+                        "edge_tts_voice": "zh-CN-XiaoxiaoNeural",
                         "rate": "+0%",
                         "volume": "+0%",
                         "pitch": "+0Hz",
@@ -1574,7 +1574,7 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "选择合成语音的情感风格，默认为 default，具体可选情感取决于角色模型的支持。",
                     },
-                    "edge-tts-voice": {
+                    "edge_tts_voice": {
                         "description": "Edge TTS 音色选择",
                         "type": "string",
                         "hint": "选择微软 Edge TTS 的语音角色，默认为 zh-CN-XiaoxiaoNeural，可参考微软官方文档获取完整列表。",

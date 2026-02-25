@@ -948,7 +948,7 @@
         "description": "GPT-SoVITS Emotion Selection",
         "hint": "Select the emotional style for speech synthesis. Default is default, available emotions depend on character model support."
       },
-      "edge-tts-voice": {
+      "edge_tts_voice": {
         "description": "Edge TTS Voice Selection",
         "hint": "Select the voice character for Microsoft Edge TTS. Default is zh-CN-XiaoxiaoNeural, refer to Microsoft official documentation for complete list."
       },

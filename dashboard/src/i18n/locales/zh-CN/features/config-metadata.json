@@ -951,7 +951,7 @@
         "description": "GPT-SoVITS 情感选择",
         "hint": "选择合成语音的情感风格，默认为 default，具体可选情感取决于角色模型的支持。"
       },
-      "edge-tts-voice": {
+      "edge_tts_voice": {
         "description": "Edge TTS 音色选择",
         "hint": "选择微软 Edge TTS 的语音角色，默认为 zh-CN-XiaoxiaoNeural，可参考微软官方文档获取完整列表。"
       },
