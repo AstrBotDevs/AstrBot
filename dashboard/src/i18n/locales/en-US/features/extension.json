@@ -8,6 +8,9 @@
     "handlersOperation": "Manage Handlers",
     "market": "AstrBot Plugin Market"
   },
+  "titles": {
+    "installedAstrBotPlugins": "Installed AstrBot Plugins"
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
