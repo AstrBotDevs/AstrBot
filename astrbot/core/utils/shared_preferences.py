@@ -25,7 +25,7 @@ class SharedPreferences:
             )
         self.path = json_storage_path
         self.db_helper = db_helper
-        self.temorary_cache: dict[str, dict[str, Any]] = defaultdict(dict)
+        self.temporary_cache: dict[str, dict[str, Any]] = defaultdict(dict)
         """automatically clear per 24 hours. Might be helpful in some cases XD"""
 
         self._sync_loop = asyncio.new_event_loop()
@@ -39,7 +39,7 @@ class SharedPreferences:
         self._scheduler.start()
 
     def _clear_temporary_cache(self) -> None:
-        self.temorary_cache.clear()
+        self.temporary_cache.clear()
 
     async def get_async(
         self,

@@ -36,12 +36,10 @@ class PlatformError:
 
 
 class Platform(abc.ABC):
-    def __init__(
-        self, platform_config: dict, platform_settings: dict, event_queue: Queue
-    ) -> None:
+    def __init__(self, config: dict, event_queue: Queue) -> None:
         super().__init__()
         # 平台配置
-        self.config = platform_config
+        self.config = config
         # 维护了消息平台的事件队列，EventBus 会从这里取出事件并处理。
         self._event_queue = event_queue
         self.client_self_id = uuid.uuid4().hex
@@ -148,7 +146,7 @@ class Platform(abc.ABC):
         """提交一个事件到事件队列。"""
         self._event_queue.put_nowait(event)
 
-    def get_client(self) -> None:
+    def get_client(self) -> object:
         """获取平台的客户端对象。"""
 
     async def webhook_callback(self, request: Request) -> ResponseReturnValue:

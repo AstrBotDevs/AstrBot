@@ -3,13 +3,10 @@ import base64
 import json
 import re
 import time
-import uuid
 from typing import cast
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
-    CreateMessageRequest,
-    CreateMessageRequestBody,
     GetMessageResourceRequest,
 )
 from lark_oapi.api.im.v1.processor import P2ImMessageReceiveV1Processor
@@ -126,43 +123,22 @@ class LarkPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        if self.lark_api.im is None:
-            logger.error("[Lark] API Client im 模块未初始化，无法发送消息")
-            return
-
-        res = await LarkMessageEvent._convert_to_lark(message_chain, self.lark_api)
-        wrapped = {
-            "zh_cn": {
-                "title": "",
-                "content": res,
-            },
-        }
-
         if session.message_type == MessageType.GROUP_MESSAGE:
             id_type = "chat_id"
-            if "%" in session.session_id:
-                session.session_id = session.session_id.split("%")[1]
+            receive_id = session.session_id
+            if "%" in receive_id:
+                receive_id = receive_id.split("%")[1]
         else:
             id_type = "open_id"
+            receive_id = session.session_id
 
-        request = (
-            CreateMessageRequest.builder()
-            .receive_id_type(id_type)
-            .request_body(
-                CreateMessageRequestBody.builder()
-                .receive_id(session.session_id)
-                .content(json.dumps(wrapped))
-                .msg_type("post")
-                .uuid(str(uuid.uuid4()))
-                .build(),
-            )
-            .build()
+        # 复用 LarkMessageEvent 中的通用发送逻辑
+        await LarkMessageEvent.send_message_chain(
+            message_chain,
+            self.lark_api,
+            receive_id=receive_id,
+            receive_id_type=id_type,
         )
-
-        response = await self.lark_api.im.v1.message.acreate(request)
-
-        if not response.success():
-            logger.error(f"发送飞书消息失败({response.code}): {response.msg}")
 
         await super().send_by_session(session, message_chain)
 
