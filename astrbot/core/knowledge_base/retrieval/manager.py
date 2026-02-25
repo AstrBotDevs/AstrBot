@@ -143,7 +143,7 @@ class RetrievalManager:
         )
 
         # 4. 转换为 RetrievalResult (批量获取元数据)
-        doc_ids = list({fr.doc_id for fr in fused_results})
+        doc_ids = {fr.doc_id for fr in fused_results}
         metadata_map = await self.kb_db.get_documents_with_metadata_batch(doc_ids)
 
         retrieval_results = []
