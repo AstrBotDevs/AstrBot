@@ -139,7 +139,7 @@
             "description": "文档解析提供商"
           },
           "moonshotai_api_key": {
-            "description": "Moonshot AI API 密钥"
+            "description": "Moonshot AI API Key"
           }
         }
       }
