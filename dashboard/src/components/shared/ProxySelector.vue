@@ -72,6 +72,7 @@ export default {
             loadingTestingConnection: false,
             testingProxies: {},
             proxyStatus: {},
+            initializing: true,
         }
     },
     methods: {
@@ -118,25 +119,41 @@ export default {
         },
     },
     mounted() {
-        this.selectedGitHubProxy = localStorage.getItem('selectedGitHubProxy') || "";
-        this.radioValue = localStorage.getItem('githubProxyRadioValue') || "0";
-        this.githubProxyRadioControl = localStorage.getItem('githubProxyRadioControl') || "0";
-        if (this.radioValue === "1") {
-            if (this.githubProxyRadioControl !== "-1") {
-                this.selectedGitHubProxy = this.githubProxies[this.githubProxyRadioControl] || "";
+        this.initializing = true;
+
+        const savedProxy = localStorage.getItem('selectedGitHubProxy') || "";
+        const savedRadio = localStorage.getItem('githubProxyRadioValue') || "0";
+        const savedControl = localStorage.getItem('githubProxyRadioControl') || "0";
+
+        this.radioValue = savedRadio;
+        this.githubProxyRadioControl = savedControl;
+
+        if (savedRadio === "1") {
+            if (savedControl !== "-1") {
+                this.selectedGitHubProxy = this.githubProxies[savedControl] || "";
+            } else {
+                this.selectedGitHubProxy = savedProxy;
             }
         } else {
             this.selectedGitHubProxy = "";
         }
+
+        this.initializing = false;
     },
     watch: {
         selectedGitHubProxy: function (newVal, oldVal) {
+            if (this.initializing) {
+                return;
+            }
             if (!newVal) {
                 newVal = ""
             }
             localStorage.setItem('selectedGitHubProxy', newVal);
         },
         radioValue: function (newVal) {
+            if (this.initializing) {
+                return;
+            }
             localStorage.setItem('githubProxyRadioValue', newVal);
             if (newVal === "0") {
                 this.selectedGitHubProxy = "";
@@ -145,6 +162,9 @@ export default {
             }
         },
         githubProxyRadioControl: function (newVal) {
+            if (this.initializing) {
+                return;
+            }
             localStorage.setItem('githubProxyRadioControl', newVal);
             if (this.radioValue !== "1") {
                 this.selectedGitHubProxy = "";
@@ -152,8 +172,6 @@ export default {
             }
             if (newVal !== "-1") {
                 this.selectedGitHubProxy = this.githubProxies[newVal] || "";
-            } else {
-                this.selectedGitHubProxy = "";
             }
         }
     }
