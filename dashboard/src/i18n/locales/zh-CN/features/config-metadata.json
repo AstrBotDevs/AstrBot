@@ -1087,8 +1087,13 @@
         "description": "API Key"
       },
       "embedding_api_base": {
-        "description": "API Base URL",
-        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。Gemini Embedding 建议填写 https://generativelanguage.googleapis.com，无需手动添加 /v1beta。"
+        "description": "API Base URL"
+      },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding 无需手动添加 /v1beta。"
       },
       "volcengine_cluster": {
         "description": "火山引擎集群",

@@ -1084,8 +1084,13 @@
         "description": "API Key"
       },
       "embedding_api_base": {
-        "description": "API Base URL",
-        "hint": "OpenAI Embedding automatically appends /v1 at request time. For Gemini Embedding, use https://generativelanguage.googleapis.com and do not add /v1beta manually."
+        "description": "API Base URL"
+      },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding automatically appends /v1 at request time."
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding does not require manually adding /v1beta."
       },
       "volcengine_cluster": {
         "description": "Volcengine cluster",

@@ -1463,6 +1463,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_embedding",
                         "provider": "openai",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.openai_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1476,6 +1477,7 @@ CONFIG_METADATA_2 = {
                         "type": "gemini_embedding",
                         "provider": "google",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.gemini_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1771,7 +1773,6 @@ CONFIG_METADATA_2 = {
                     "embedding_api_base": {
                         "description": "API Base URL",
                         "type": "string",
-                        "hint": "provider_group.provider.embedding_api_base.hint",
                     },
                     "volcengine_cluster": {
                         "type": "string",
