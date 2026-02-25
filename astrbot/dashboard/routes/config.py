@@ -760,9 +760,15 @@ class ConfigRoute(Route):
                     self.core_lifecycle.provider_manager.dynamic_import_provider(
                         provider_type,
                     )
-                except ImportError as e:
+                except ImportError:
                     logger.error(traceback.format_exc())
-                    return Response().error(f"动态导入提供商适配器失败: {e!s}").__dict__
+                    return (
+                        Response()
+                        .error(
+                            "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
+                        )
+                        .__dict__
+                    )
 
             # 获取对应的 provider 类
             if provider_type not in provider_cls_map:
