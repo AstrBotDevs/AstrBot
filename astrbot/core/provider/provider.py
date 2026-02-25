@@ -305,10 +305,6 @@ class EmbeddingProvider(AbstractProvider):
         """获取向量的维度"""
         ...
 
-    async def detect_dim(self) -> int:
-        """探测模型原生向量维度（默认实现）"""
-        return len(await self.get_embedding("astrbot"))
-
     async def test(self) -> None:
         await self.get_embedding("astrbot")
 
