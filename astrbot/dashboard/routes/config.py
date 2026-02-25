@@ -288,7 +288,7 @@ class ConfigRoute(Route):
             ),
         }
         self.register_routes()
-    
+
     @staticmethod
     def _with_default_custom_headers(config: dict) -> dict:
         normalized = dict(config) if isinstance(config, dict) else {}
@@ -296,6 +296,7 @@ class ConfigRoute(Route):
         if not isinstance(headers, dict):
             normalized["custom_headers"] = {}
         return normalized
+
     # 在返回 provider_sources 和 provider 配置时，如果 custom_headers 字段不是 dict，则强制转换为 dict，避免前端使用时出错
     def _normalize_custom_headers_configs(self, configs: list) -> list:
         normalized = []
