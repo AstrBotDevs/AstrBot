@@ -3,7 +3,7 @@ import os
 import sys
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
 import quart
@@ -65,7 +65,9 @@ class WeixinOfficialAccountServer:
 
         self.event_queue = event_queue
 
-        self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
+        self.callback: (
+            Callable[[BaseMessage], Coroutine[Any, Any, str | None]] | None
+        ) = None
         self.shutdown_event = asyncio.Event()
 
         self._wx_msg_time_out = 4.0  # 微信服务器要求 5 秒内回复

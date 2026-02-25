@@ -4,7 +4,7 @@ import typing as T
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult
+from sqlalchemy import CursorResult, Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
@@ -626,7 +626,7 @@ class SQLiteDatabase(BaseDatabase):
             query = select(ApiKey).where(
                 ApiKey.key_hash == key_hash,
                 col(ApiKey.revoked_at).is_(None),
-                or_(col(ApiKey.expires_at).is_(None), ApiKey.expires_at > now),
+                or_(col(ApiKey.expires_at).is_(None), col(ApiKey.expires_at) > now),
             )
             result = await session.execute(query)
             return result.scalar_one_or_none()
@@ -638,7 +638,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     update(ApiKey)
-                    .where(ApiKey.key_id == key_id)
+                    .where(col(ApiKey.key_id) == key_id)
                     .values(last_used_at=datetime.now(timezone.utc)),
                 )
 
@@ -649,7 +649,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 query = (
                     update(ApiKey)
-                    .where(ApiKey.key_id == key_id)
+                    .where(col(ApiKey.key_id) == key_id)
                     .values(revoked_at=datetime.now(timezone.utc))
                 )
                 result = T.cast(CursorResult, await session.execute(query))
@@ -663,7 +663,7 @@ class SQLiteDatabase(BaseDatabase):
                 result = T.cast(
                     CursorResult,
                     await session.execute(
-                        delete(ApiKey).where(ApiKey.key_id == key_id)
+                        delete(ApiKey).where(col(ApiKey.key_id) == key_id)
                     ),
                 )
                 return result.rowcount > 0
@@ -1457,7 +1457,7 @@ class SQLiteDatabase(BaseDatabase):
         return query
 
     @staticmethod
-    def _rows_to_session_dicts(rows: list[tuple]) -> list[dict]:
+    def _rows_to_session_dicts(rows: T.Sequence[Row[tuple]]) -> list[dict]:
         sessions_with_projects = []
         for row in rows:
             platform_session = row[0]
