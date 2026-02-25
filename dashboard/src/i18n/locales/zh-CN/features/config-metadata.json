@@ -964,7 +964,24 @@
       },
       "custom_headers": {
         "description": "自定义添加请求头",
-        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
+        "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+        "template_schema": {
+          "User-Agent": {
+            "description": "User-Agent 请求头",
+            "hint": "用于覆盖默认客户端标识。",
+            "name": "User-Agent"
+          },
+          "Accept": {
+            "description": "Accept 请求头",
+            "hint": "声明可接受的响应类型，通常保持 application/json。",
+            "name": "Accept"
+          },
+          "Accept-Language": {
+            "description": "Accept-Language 请求头",
+            "hint": "声明偏好语言，例如 zh-CN,zh;q=0.9,en;q=0.8。",
+            "name": "Accept-Language"
+          }
+        }
       },
       "custom_extra_body": {
         "description": "自定义请求体参数",

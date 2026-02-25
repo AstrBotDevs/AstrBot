@@ -40,6 +40,19 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   const confirmDialog = useConfirmDialog()
 
+  function withDefaultCustomHeaders<T extends Record<string, any>>(entry: T): T {
+    const normalized = JSON.parse(JSON.stringify(entry || {}))
+    if (
+      !Object.prototype.hasOwnProperty.call(normalized, 'custom_headers') ||
+      typeof normalized.custom_headers !== 'object' ||
+      normalized.custom_headers === null ||
+      Array.isArray(normalized.custom_headers)
+    ) {
+      normalized.custom_headers = {}
+    }
+    return normalized as T
+  }
+
   async function askForConfirmation(message: string) {
     return askForConfirmationDialog(message, confirmDialog)
   }
@@ -549,6 +562,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       provider_source_id: sourceId,
       model: modelName,
       modalities,
+      custom_headers: {},
       custom_extra_body: {},
       max_context_tokens: max_context_tokens
     }
@@ -614,8 +628,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         if (configSchema.value.provider?.config_template) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
-        providerSources.value = response.data.data.provider_sources || []
-        providers.value = response.data.data.providers || []
+        providerSources.value = (response.data.data.provider_sources || []).map((source: any) => withDefaultCustomHeaders(source))
+        providers.value = (response.data.data.providers || []).map((provider: any) => withDefaultCustomHeaders(provider))
       }
     } catch (error) {
       console.error('Failed to load provider template:', error)
