@@ -58,21 +58,12 @@ const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
 
-type AppUpdaterBridge = {
-  checkForAppUpdate: () => Promise<{
-    ok: boolean;
-    reason: string | null;
-    currentVersion: string;
-    latestVersion: string | null;
-    hasUpdate: boolean;
-  }>;
-  installAppUpdate: () => Promise<{
-    ok: boolean;
-    reason: string | null;
-  }>;
-};
+type AppUpdaterBridge = NonNullable<Window['astrbotAppUpdater']>;
 
 const getAppUpdaterBridge = (): AppUpdaterBridge | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
   const bridge = window.astrbotAppUpdater;
   if (
     bridge &&
@@ -196,7 +187,7 @@ async function confirmDesktopUpdate() {
   try {
     const result = await bridge.installAppUpdate();
     if (result?.ok) {
-      desktopUpdateStatus.value = t('core.header.updateDialog.desktopApp.installing');
+      desktopUpdateDialog.value = false;
       return;
     }
     desktopUpdateStatus.value =
