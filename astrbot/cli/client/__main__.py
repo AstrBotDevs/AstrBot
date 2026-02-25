@@ -84,10 +84,6 @@ EPILOG = """
     astr session convs <session_id> 查看该会话下的对话列表
     astr session history <sid>      查看聊天记录（-c 指定对话，默认当前）
 
-  [交互模式]
-    astr interactive                进入 REPL 模式（支持命令历史）
-    astr -i                         同上（快捷方式）
-
   [批量执行]
     astr batch <file>               从文件逐行读取并执行命令
                                     （# 开头为注释，空行跳过）
@@ -112,8 +108,6 @@ class RawEpilogGroup(click.Group):
     _send_opts = {"-j", "--json", "-t", "--timeout", "-s", "--socket"}
     # --log 旧用法映射到 log 子命令
     _log_flag = {"--log"}
-    # -i 快捷方式映射到 interactive 子命令
-    _interactive_flag = {"-i"}
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         if args:
@@ -121,9 +115,6 @@ class RawEpilogGroup(click.Group):
             if first in self._log_flag:
                 # astr --log ... → astr log ...
                 args = ["log"] + args[1:]
-            elif first in self._interactive_flag:
-                # astr -i → astr interactive
-                args = ["interactive"] + args[1:]
             elif first not in self.commands:
                 if not first.startswith("-") or first in self._send_opts:
                     # astr 你好 / astr -j "你好" → astr send ...

@@ -26,7 +26,6 @@ from .socket_handler import (
     write_connection_info,
 )
 from .socket_server import create_socket_server, detect_platform
-from .tty_handler import TTYHandler
 
 # ------------------------------------------------------------------
 # Token管理
@@ -275,17 +274,10 @@ class CLIPlatformAdapter(Platform):
         try:
             if self.mode == "socket":
                 await self._run_socket_mode()
-            elif self.mode == "tty":
-                await self._run_tty_mode()
             elif self.mode == "file":
                 await self._run_file_mode()
             else:
-                import sys
-
-                if sys.stdin.isatty():
-                    await self._run_tty_mode()
-                else:
-                    await self._run_socket_mode()
+                await self._run_socket_mode()
         finally:
             self._running = False
             await self.session_manager.stop_cleanup_task()
@@ -321,15 +313,6 @@ class CLIPlatformAdapter(Platform):
             data_path=get_astrbot_data_path(),
         )
 
-        await self._handler.run()
-
-    async def _run_tty_mode(self) -> None:
-        self._handler = TTYHandler(
-            message_converter=self.message_converter,
-            platform_meta=self.metadata,
-            output_queue=self._output_queue,
-            event_committer=self.commit_event,
-        )
         await self._handler.run()
 
     async def _run_file_mode(self) -> None:

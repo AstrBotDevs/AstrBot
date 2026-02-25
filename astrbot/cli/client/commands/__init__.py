@@ -4,7 +4,6 @@ import click
 
 from .conv import conv
 from .debug import ping, status, test
-from .interactive import interactive
 from .log import log
 from .plugin import plugin
 from .provider import key, model, provider
@@ -44,9 +43,6 @@ def register_commands(group):
 
     # 函数工具管理
     group.add_command(tool)
-
-    # 交互模式
-    group.add_command(interactive)
 
     # 快捷别名（独立命令，映射到 send /cmd）
     _register_aliases(group)

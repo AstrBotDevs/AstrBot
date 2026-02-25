@@ -542,21 +542,6 @@ class TestBackwardCompatibility:
         assert "plugin" in result.output
         assert "provider" in result.output
         assert "ping" in result.output
-        assert "interactive" in result.output
-
-
-class TestInteractiveFlag:
-    """交互模式快捷方式测试"""
-
-    @patch("astrbot.cli.client.commands.interactive.send_message")
-    def test_interactive_flag(self, mock_send):
-        """astr -i → astr interactive"""
-        runner = CliRunner()
-        # 输入 /quit 以退出交互模式
-        result = runner.invoke(main, ["-i"], input="/quit\n")
-
-        assert result.exit_code == 0
-        assert "再见" in result.output
 
 
 class TestSessionCommand:
