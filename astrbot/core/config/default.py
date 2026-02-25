@@ -1633,9 +1633,9 @@ CONFIG_METADATA_2 = {
                             "Accept": {
                                 "name": "Accept",
                                 "description": "Accept 请求头",
-                                "hint": "声明可接受的响应类型，通常保持 application/json。",
+                                "hint": "声明可接受的响应类型。默认留空以使用 SDK/服务端默认值，仅在需要时显式覆盖（例如指定 application/json）。",
                                 "type": "string",
-                                "default": "application/json",
+                                "default": "",
                             },
                             "Accept-Language": {
                                 "name": "Accept-Language",

@@ -970,7 +970,7 @@
           },
           "Accept": {
             "description": "Accept header",
-            "hint": "Declares accepted response formats. Usually keep application/json.",
+            "hint": "Declares accepted response formats. Leave empty by default to use SDK/provider defaults and only override when needed (e.g. application/json).",
             "name": "Accept"
           },
           "Accept-Language": {
