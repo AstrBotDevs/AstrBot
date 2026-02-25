@@ -1314,6 +1314,10 @@
       "api_base": {
         "description": "API Base URL"
       },
+      "proxy": {
+        "description": "Proxy address",
+        "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."
+      },
       "model": {
         "description": "Model ID",
         "hint": "Model name, e.g., gpt-4o-mini, deepseek-chat."
