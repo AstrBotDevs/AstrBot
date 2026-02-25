@@ -10,6 +10,14 @@
     <template v-else-if="itemMeta?._special === 'select_provider_tts'">
       <ProviderSelector :model-value="modelValue" @update:model-value="emitUpdate" :provider-type="'text_to_speech'" />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_providers'">
+      <ProviderSelector
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+        :provider-type="'chat_completion'"
+        :multiple="true"
+      />
+    </template>
     <template v-else-if="getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'">
       <ProviderSelector
         :model-value="modelValue"

@@ -2,7 +2,9 @@
 import { ref, computed, inject } from "vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
+import { getPlatformDisplayName, getPlatformIcon } from "@/utils/platformUtils";
 import UninstallConfirmDialog from "./UninstallConfirmDialog.vue";
+import PluginPlatformChip from "./PluginPlatformChip.vue";
 
 const props = defineProps({
   extension: {
@@ -37,6 +39,25 @@ const showUninstallDialog = ref(false);
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
+
+const supportPlatforms = computed(() => {
+  const platforms = props.extension?.support_platforms;
+  if (!Array.isArray(platforms)) {
+    return [];
+  }
+  return platforms.filter((item) => typeof item === "string");
+});
+
+const supportPlatformDisplayNames = computed(() =>
+  supportPlatforms.value.map((platformId) => getPlatformDisplayName(platformId)),
+);
+
+const astrbotVersionRequirement = computed(() => {
+  const versionSpec = props.extension?.astrbot_version;
+  return typeof versionSpec === "string" && versionSpec.trim().length
+    ? versionSpec.trim()
+    : "";
+});
 
 // 操作函数
 const configure = () => {
@@ -87,8 +108,9 @@ const viewChangelog = () => {
 
 <template>
   <v-card
-    class="mx-auto d-flex flex-column"
+    class="mx-auto d-flex flex-column h-100"
     elevation="0"
+    height="100%"
     :style="{
       position: 'relative',
       backgroundColor:
@@ -315,6 +337,20 @@ const viewChangelog = () => {
               class="ml-2"
             >
               {{ tag === "danger" ? tm("tags.danger") : tag }}
+            </v-chip>
+            <PluginPlatformChip
+              :platforms="supportPlatforms"
+              class="ml-2"
+            />
+            <v-chip
+              v-if="astrbotVersionRequirement"
+              color="secondary"
+              variant="outlined"
+              label
+              size="small"
+              class="ml-2"
+            >
+              AstrBot: {{ astrbotVersionRequirement }}
             </v-chip>
           </div>
 

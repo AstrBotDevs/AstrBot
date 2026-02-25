@@ -323,7 +323,8 @@ class ProviderOpenAIOfficial(Provider):
                 llm_response.reasoning_content = reasoning
                 _y = True
             if delta.content:
-                completion_text = delta.content
+                # Don't strip streaming chunks to preserve spaces between words
+                completion_text = self._normalize_content(delta.content, strip=False)
                 llm_response.result_chain = MessageChain(
                     chain=[Comp.Plain(completion_text)],
                 )
@@ -371,6 +372,96 @@ class ProviderOpenAIOfficial(Provider):
             output=completion_tokens,
         )
 
+    @staticmethod
+    def _normalize_content(raw_content: Any, strip: bool = True) -> str:
+        """Normalize content from various formats to plain string.
+
+        Some LLM providers return content as list[dict] format
+        like [{'type': 'text', 'text': '...'}] instead of
+        plain string. This method handles both formats.
+
+        Args:
+            raw_content: The raw content from LLM response, can be str, list, dict, or other.
+            strip: Whether to strip whitespace from the result. Set to False for
+                   streaming chunks to preserve spaces between words.
+
+        Returns:
+            Normalized plain text string.
+        """
+        # Handle dict format (e.g., {"type": "text", "text": "..."})
+        if isinstance(raw_content, dict):
+            if "text" in raw_content:
+                text_val = raw_content.get("text", "")
+                return str(text_val) if text_val is not None else ""
+            # For other dict formats, return empty string and log
+            logger.warning(f"Unexpected dict format content: {raw_content}")
+            return ""
+
+        if isinstance(raw_content, list):
+            # Check if this looks like OpenAI content-part format
+            # Only process if at least one item has {'type': 'text', 'text': ...} structure
+            has_content_part = any(
+                isinstance(part, dict) and part.get("type") == "text"
+                for part in raw_content
+            )
+            if has_content_part:
+                text_parts = []
+                for part in raw_content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_val = part.get("text", "")
+                        # Coerce to str in case text is null or non-string
+                        text_parts.append(str(text_val) if text_val is not None else "")
+                return "".join(text_parts)
+            # Not content-part format, return string representation
+            return str(raw_content)
+
+        if isinstance(raw_content, str):
+            content = raw_content.strip() if strip else raw_content
+            # Check if the string is a JSON-encoded list (e.g., "[{'type': 'text', ...}]")
+            # This can happen when streaming concatenates content that was originally list format
+            # Only check if it looks like a complete JSON array (requires strip for check)
+            check_content = raw_content.strip()
+            if (
+                check_content.startswith("[")
+                and check_content.endswith("]")
+                and len(check_content) < 8192
+            ):
+                try:
+                    # First try standard JSON parsing
+                    parsed = json.loads(check_content)
+                except json.JSONDecodeError:
+                    # If that fails, try parsing as Python literal (handles single quotes)
+                    # This is safer than blind replace("'", '"') which corrupts apostrophes
+                    try:
+                        import ast
+
+                        parsed = ast.literal_eval(check_content)
+                    except (ValueError, SyntaxError):
+                        parsed = None
+
+                if isinstance(parsed, list):
+                    # Only convert if it matches OpenAI content-part schema
+                    # i.e., at least one item has {'type': 'text', 'text': ...}
+                    has_content_part = any(
+                        isinstance(part, dict) and part.get("type") == "text"
+                        for part in parsed
+                    )
+                    if has_content_part:
+                        text_parts = []
+                        for part in parsed:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                text_val = part.get("text", "")
+                                # Coerce to str in case text is null or non-string
+                                text_parts.append(
+                                    str(text_val) if text_val is not None else ""
+                                )
+                        if text_parts:
+                            return "".join(text_parts)
+            return content
+
+        # Fallback for other types (int, float, etc.)
+        return str(raw_content) if raw_content is not None else ""
+
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
     ) -> LLMResponse:
@@ -383,8 +474,7 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the text completion
         if choice.message.content is not None:
-            # text completion
-            completion_text = str(choice.message.content).strip()
+            completion_text = self._normalize_content(choice.message.content)
             # specially, some providers may set <think> tags around reasoning content in the completion text,
             # we use regex to remove them, and store then in reasoning_content field
             reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
@@ -394,6 +484,8 @@ class ProviderOpenAIOfficial(Provider):
                     [match.strip() for match in matches],
                 )
                 completion_text = reasoning_pattern.sub("", completion_text).strip()
+            # Also clean up orphan </think> tags that may leak from some models
+            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
             llm_response.result_chain = MessageChain().message(completion_text)
 
         # parse the reasoning content if any

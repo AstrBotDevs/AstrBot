@@ -37,7 +37,7 @@
 
 AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主流即時通訊軟體，為個人、開發者和團隊打造可靠、可擴展的對話式智慧基礎設施。無論是個人 AI 夥伴、智慧客服、自動化助手，還是企業知識庫，AstrBot 都能在您的即時通訊軟體平台的工作流程中快速構建生產可用的 AI 應用程式。
 
-<img width="1776" height="1080" alt="image" src="https://github.com/user-attachments/assets/00782c4c-4437-4d97-aabc-605e3738da5c" />
+![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
 
 ## 主要功能
 
@@ -45,7 +45,7 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
 2. ✨ AI 大模型對話，多模態，Agent，MCP，Skills，知識庫，人格設定，自動壓縮對話。
 3. 🤖 支援接入 Dify、阿里雲百煉、Coze 等智慧體 (Agent) 平台。
 4. 🌐 多平台，支援 QQ、企業微信、飛書、釘釘、微信公眾號、Telegram、Slack 以及[更多](#支援的訊息平台)。
-5. 📦 插件擴展，已有近 800 個插件可一鍵安裝。
+5. 📦 插件擴展，已有 1000+ 個插件可一鍵安裝。
 6. 🛡️ [Agent Sandbox](https://docs.astrbot.app/use/astrbot-agent-sandbox.html) 隔離化環境，安全地執行任何代碼、調用 Shell、會話級資源複用。
 7. 💻 WebUI 支援。
 8. 🌈 Web ChatUI 支援，ChatUI 內置代理沙盒 (Agent Sandbox)、網頁搜尋等。
@@ -58,7 +58,7 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
     <th>💙 角色扮演 & 情感陪伴</th>
     <th>✨ 主動式 Agent</th>
     <th>🚀 通用 Agentic 能力</th>
-    <th>🧩 900+ 社區外掛程式</th>
+    <th>🧩 1000+ 社區外掛程式</th>
   </tr>
   <tr>
     <td align="center"><p align="center"><img width="984" height="1746" alt="99b587c5d35eea09d84f33e6cf6cfd4f" src="https://github.com/user-attachments/assets/89196061-3290-458d-b51f-afa178049f84" /></p></td>
@@ -82,6 +82,16 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
 uv tool install astrbot
 astrbot
 ```
+
+#### 桌面應用部署（Tauri）
+
+桌面應用倉庫 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+
+支援多系統架構，安裝包直接安裝，開箱即用，最適合新手和懶人的一鍵桌面部署方案，不推薦伺服器場景。
+
+#### 啟動器一鍵部署（AstrBot Launcher）
+
+快速部署和多開方案，實現環境隔離，進入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 倉庫，在 Releases 頁最新版本下找到對應的系統安裝包安裝即可。
 
 #### 寶塔面板部署
 
@@ -158,8 +168,9 @@ paru -S astrbot-git
 - Discord
 - Satori
 - Misskey
+- LINE
 - Whatsapp（即將支援）
-- LINE（即將支援）
+
 
 **社群維護**
 
@@ -252,7 +263,7 @@ pre-commit install
 特別感謝所有 Contributors 和外掛開發者對 AstrBot 的貢獻 ❤️
 
 <a href="https://github.com/AstrBotDevs/AstrBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot" />
+  <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=200&columns=14" />
 </a>
 
 此外，本專案的誕生離不開以下開源專案的幫助：

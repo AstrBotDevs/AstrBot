@@ -91,6 +91,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
+        fallback_providers: list[Provider] | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -120,11 +121,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.context_manager = ContextManager(self.context_config)
 
         self.provider = provider
+        self.fallback_providers: list[Provider] = []
+        seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
+        for fallback_provider in fallback_providers or []:
+            fallback_id = str(fallback_provider.provider_config.get("id", ""))
+            if fallback_provider is provider:
+                continue
+            if fallback_id and fallback_id in seen_provider_ids:
+                continue
+            self.fallback_providers.append(fallback_provider)
+            if fallback_id:
+                seen_provider_ids.add(fallback_id)
         self.final_llm_resp = None
         self._state = AgentState.IDLE
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
+        self._stop_requested = False
+        self._aborted = False
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -166,22 +180,96 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.stats = AgentStats()
         self.stats.start_time = time.time()
 
-    async def _iter_llm_responses(self) -> T.AsyncGenerator[LLMResponse, None]:
+    async def _iter_llm_responses(
+        self, *, include_model: bool = True
+    ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
         payload = {
             "contexts": self.run_context.messages,  # list[Message]
             "func_tool": self.req.func_tool,
-            "model": self.req.model,  # NOTE: in fact, this arg is None in most cases
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
         }
-
+        if include_model:
+            # For primary provider we keep explicit model selection if provided.
+            payload["model"] = self.req.model
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
             async for resp in stream:  # type: ignore
                 yield resp
         else:
             yield await self.provider.text_chat(**payload)
+
+    async def _iter_llm_responses_with_fallback(
+        self,
+    ) -> T.AsyncGenerator[LLMResponse, None]:
+        """Wrap _iter_llm_responses with provider fallback handling."""
+        candidates = [self.provider, *self.fallback_providers]
+        total_candidates = len(candidates)
+        last_exception: Exception | None = None
+        last_err_response: LLMResponse | None = None
+
+        for idx, candidate in enumerate(candidates):
+            candidate_id = candidate.provider_config.get("id", "<unknown>")
+            is_last_candidate = idx == total_candidates - 1
+            if idx > 0:
+                logger.warning(
+                    "Switched from %s to fallback chat provider: %s",
+                    self.provider.provider_config.get("id", "<unknown>"),
+                    candidate_id,
+                )
+            self.provider = candidate
+            has_stream_output = False
+            try:
+                async for resp in self._iter_llm_responses(include_model=idx == 0):
+                    if resp.is_chunk:
+                        has_stream_output = True
+                        yield resp
+                        continue
+
+                    if (
+                        resp.role == "err"
+                        and not has_stream_output
+                        and (not is_last_candidate)
+                    ):
+                        last_err_response = resp
+                        logger.warning(
+                            "Chat Model %s returns error response, trying fallback to next provider.",
+                            candidate_id,
+                        )
+                        break
+
+                    yield resp
+                    return
+
+                if has_stream_output:
+                    return
+            except Exception as exc:  # noqa: BLE001
+                last_exception = exc
+                logger.warning(
+                    "Chat Model %s request error: %s",
+                    candidate_id,
+                    exc,
+                    exc_info=True,
+                )
+                continue
+
+        if last_err_response:
+            yield last_err_response
+            return
+        if last_exception:
+            yield LLMResponse(
+                role="err",
+                completion_text=(
+                    "All chat models failed: "
+                    f"{type(last_exception).__name__}: {last_exception}"
+                ),
+            )
+            return
+        yield LLMResponse(
+            role="err",
+            completion_text="All available chat models are unavailable.",
+        )
 
     def _simple_print_message_role(self, tag: str = ""):
         roles = []
@@ -215,7 +303,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
         self._simple_print_message_role("[AftCompact]")
 
-        async for llm_response in self._iter_llm_responses():
+        async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
                 # update ttft
                 if self.stats.time_to_first_token == 0:
@@ -242,6 +330,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
+                if self._stop_requested:
+                    llm_resp_result = LLMResponse(
+                        role="assistant",
+                        completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                        reasoning_content=llm_response.reasoning_content,
+                        reasoning_signature=llm_response.reasoning_signature,
+                    )
+                    break
                 continue
             llm_resp_result = llm_response
 
@@ -253,6 +349,48 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if not llm_resp_result:
+            if self._stop_requested:
+                llm_resp_result = LLMResponse(role="assistant", completion_text="")
+            else:
+                return
+
+        if self._stop_requested:
+            logger.info("Agent execution was requested to stop by user.")
+            llm_resp = llm_resp_result
+            if llm_resp.role != "assistant":
+                llm_resp = LLMResponse(
+                    role="assistant",
+                    completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                )
+            self.final_llm_resp = llm_resp
+            self._aborted = True
+            self._transition_state(AgentState.DONE)
+            self.stats.end_time = time.time()
+
+            parts = []
+            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+                parts.append(
+                    ThinkPart(
+                        think=llm_resp.reasoning_content,
+                        encrypted=llm_resp.reasoning_signature,
+                    )
+                )
+            if llm_resp.completion_text:
+                parts.append(TextPart(text=llm_resp.completion_text))
+            if parts:
+                self.run_context.messages.append(
+                    Message(role="assistant", content=parts)
+                )
+
+            try:
+                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            except Exception as e:
+                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
+            yield AgentResponse(
+                type="aborted",
+                data=AgentResponseData(chain=MessageChain(type="aborted")),
+            )
             return
 
         # 处理 LLM 响应
@@ -271,6 +409,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 ),
             )
+            return
 
         if not llm_resp.tools_call_name:
             # 如果没有工具调用，转换到完成状态
@@ -760,6 +899,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def done(self) -> bool:
         """检查 Agent 是否已完成工作"""
         return self._state in (AgentState.DONE, AgentState.ERROR)
+
+    def request_stop(self) -> None:
+        self._stop_requested = True
+
+    def was_aborted(self) -> bool:
+        return self._aborted
 
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp

@@ -11,6 +11,7 @@ from astrbot.core.message.components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..computer_client import get_booter
+from .permissions import check_admin_permission
 
 # @dataclass
 # class CreateFileTool(FunctionTool):
@@ -102,6 +103,8 @@ class FileUploadTool(FunctionTool):
         context: ContextWrapper[AstrAgentContext],
         local_path: str,
     ) -> str | None:
+        if permission_error := check_admin_permission(context, "File upload/download"):
+            return permission_error
         sb = await get_booter(
             context.context.context,
             context.context.event.unified_msg_origin,
@@ -161,6 +164,8 @@ class FileDownloadTool(FunctionTool):
         remote_path: str,
         also_send_to_user: bool = True,
     ) -> ToolExecResult:
+        if permission_error := check_admin_permission(context, "File upload/download"):
+            return permission_error
         sb = await get_booter(
             context.context.context,
             context.context.event.unified_msg_origin,

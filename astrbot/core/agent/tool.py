@@ -285,6 +285,9 @@ class ToolSet:
                     prop_value = convert_schema(value)
                     if "default" in prop_value:
                         del prop_value["default"]
+                    # see #5217
+                    if "additionalProperties" in prop_value:
+                        del prop_value["additionalProperties"]
                     properties[key] = prop_value
 
                 if properties:

@@ -870,6 +870,41 @@ def _get_compress_provider(
     return provider
 
 
+def _get_fallback_chat_providers(
+    provider: Provider, plugin_context: Context, provider_settings: dict
+) -> list[Provider]:
+    fallback_ids = provider_settings.get("fallback_chat_models", [])
+    if not isinstance(fallback_ids, list):
+        logger.warning(
+            "fallback_chat_models setting is not a list, skip fallback providers."
+        )
+        return []
+
+    provider_id = str(provider.provider_config.get("id", ""))
+    seen_provider_ids: set[str] = {provider_id} if provider_id else set()
+    fallbacks: list[Provider] = []
+
+    for fallback_id in fallback_ids:
+        if not isinstance(fallback_id, str) or not fallback_id:
+            continue
+        if fallback_id in seen_provider_ids:
+            continue
+        fallback_provider = plugin_context.get_provider_by_id(fallback_id)
+        if fallback_provider is None:
+            logger.warning("Fallback chat provider `%s` not found, skip.", fallback_id)
+            continue
+        if not isinstance(fallback_provider, Provider):
+            logger.warning(
+                "Fallback chat provider `%s` is invalid type: %s, skip.",
+                fallback_id,
+                type(fallback_provider),
+            )
+            continue
+        fallbacks.append(fallback_provider)
+        seen_provider_ids.add(fallback_id)
+    return fallbacks
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1093,6 +1128,9 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
+        fallback_providers=_get_fallback_chat_providers(
+            provider, plugin_context, config.provider_settings
+        ),
     )
 
     if apply_reset:

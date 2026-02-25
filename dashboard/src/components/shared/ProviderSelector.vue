@@ -1,14 +1,33 @@
 <template>
   <div class="d-flex align-center justify-space-between">
-    <span v-if="!modelValue" style="color: rgb(var(--v-theme-primaryText));">
+    <span v-if="!hasSelection" style="color: rgb(var(--v-theme-primaryText));">
       {{ tm('providerSelector.notSelected') }}
     </span>
     <span v-else class="provider-name-text">
-      {{ modelValue }}
+      <template v-if="multiple">
+        {{ tm('providerSelector.selectedCount', { count: selectedProviders.length }) }}
+      </template>
+      <template v-else>
+        {{ modelValue }}
+      </template>
     </span>
     <v-btn size="small" color="primary" variant="tonal" @click="openDialog">
       {{ buttonText || tm('providerSelector.buttonText') }}
     </v-btn>
+  </div>
+
+  <div v-if="multiple && selectedProviders.length > 0" class="selected-preview mt-2">
+    <v-chip
+      v-for="providerId in selectedProviders"
+      :key="`preview-${providerId}`"
+      size="x-small"
+      color="primary"
+      variant="tonal"
+      class="mr-1 mb-1"
+      label
+    >
+      {{ providerId }}
+    </v-chip>
   </div>
 
   <!-- Provider Selection Dialog -->
@@ -32,10 +51,52 @@
       
       <v-card-text class="pa-0" style="max-height: 400px; overflow-y: auto;">
         <v-progress-linear v-if="loading" indeterminate color="primary"></v-progress-linear>
+
+        <div v-if="multiple && selectedProviders.length > 0" class="pa-3">
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ tm('providerSelector.selectedCount', { count: selectedProviders.length }) }}
+          </div>
+          <v-list density="compact" class="selected-order-list">
+            <v-list-item
+              v-for="(providerId, index) in selectedProviders"
+              :key="`selected-${providerId}-${index}`"
+              rounded="md"
+              class="ma-1"
+            >
+              <v-list-item-title>{{ providerId }}</v-list-item-title>
+              <template #append>
+                <div class="d-flex ga-1">
+                  <v-btn
+                    icon="mdi-arrow-up"
+                    size="x-small"
+                    variant="text"
+                    :disabled="index === 0"
+                    @click.stop="moveSelected(index, -1)"
+                  />
+                  <v-btn
+                    icon="mdi-arrow-down"
+                    size="x-small"
+                    variant="text"
+                    :disabled="index === selectedProviders.length - 1"
+                    @click.stop="moveSelected(index, 1)"
+                  />
+                  <v-btn
+                    icon="mdi-close"
+                    size="x-small"
+                    variant="text"
+                    @click.stop="removeSelected(providerId)"
+                  />
+                </div>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-divider class="ma-1"></v-divider>
+        </div>
         
         <v-list v-if="!loading && providerList.length > 0" density="compact">
           <!-- 不选择选项 -->
           <v-list-item
+            v-if="!multiple"
             key="none"
             value=""
             @click="selectProvider({ id: '' })"
@@ -57,7 +118,7 @@
             :key="provider.id"
             :value="provider.id"
             @click="selectProvider(provider)"
-            :active="selectedProvider === provider.id"
+            :active="isProviderSelected(provider.id)"
             rounded="md"
             class="ma-1">
             <v-list-item-title>{{ provider.id }}</v-list-item-title>
@@ -67,7 +128,7 @@
             </v-list-item-subtitle>
             
             <template v-slot:append>
-              <v-icon v-if="selectedProvider === provider.id" color="primary">mdi-check-circle</v-icon>
+              <v-icon v-if="isProviderSelected(provider.id)" color="primary">mdi-check-circle</v-icon>
             </template>
           </v-list-item>
         </v-list>
@@ -121,7 +182,7 @@ import ProviderPage from '@/views/ProviderPage.vue'
 
 const props = defineProps({
   modelValue: {
-    type: String,
+    type: [String, Array],
     default: ''
   },
   providerType: {
@@ -135,6 +196,10 @@ const props = defineProps({
   buttonText: {
     type: String,
     default: ''
+  },
+  multiple: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -145,7 +210,15 @@ const dialog = ref(false)
 const providerList = ref([])
 const loading = ref(false)
 const selectedProvider = ref('')
+const selectedProviders = ref([])
 const providerDrawer = ref(false)
+
+const hasSelection = computed(() => {
+  if (props.multiple) {
+    return selectedProviders.value.length > 0
+  }
+  return Boolean(props.modelValue)
+})
 
 const defaultTab = computed(() => {
   if (props.providerType === 'agent_runner' && props.providerSubtype) {
@@ -156,7 +229,13 @@ const defaultTab = computed(() => {
 
 // 监听 modelValue 变化，同步到 selectedProvider
 watch(() => props.modelValue, (newValue) => {
-  selectedProvider.value = newValue || ''
+  if (props.multiple) {
+    selectedProviders.value = Array.isArray(newValue)
+      ? [...newValue.filter((v) => typeof v === 'string' && v)]
+      : []
+    return
+  }
+  selectedProvider.value = typeof newValue === 'string' ? newValue : ''
 }, { immediate: true })
 
 watch(providerDrawer, (isOpen, wasOpen) => {
@@ -166,7 +245,13 @@ watch(providerDrawer, (isOpen, wasOpen) => {
 })
 
 async function openDialog() {
-  selectedProvider.value = props.modelValue || ''
+  if (props.multiple) {
+    selectedProviders.value = Array.isArray(props.modelValue)
+      ? [...props.modelValue.filter((v) => typeof v === 'string' && v)]
+      : []
+  } else {
+    selectedProvider.value = typeof props.modelValue === 'string' ? props.modelValue : ''
+  }
   dialog.value = true
   await loadProviders()
 }
@@ -205,17 +290,70 @@ function matchesProviderSubtype(provider, subtype) {
 }
 
 function selectProvider(provider) {
+  if (props.multiple) {
+    if (!provider.id) {
+      selectedProviders.value = []
+      return
+    }
+    const idx = selectedProviders.value.indexOf(provider.id)
+    if (idx >= 0) {
+      selectedProviders.value.splice(idx, 1)
+    } else {
+      selectedProviders.value.push(provider.id)
+    }
+    return
+  }
   selectedProvider.value = provider.id
 }
 
 function confirmSelection() {
-  emit('update:modelValue', selectedProvider.value)
+  if (props.multiple) {
+    emit('update:modelValue', [...selectedProviders.value])
+  } else {
+    emit('update:modelValue', selectedProvider.value)
+  }
   dialog.value = false
 }
 
 function cancelSelection() {
-  selectedProvider.value = props.modelValue || ''
+  if (props.multiple) {
+    selectedProviders.value = Array.isArray(props.modelValue)
+      ? [...props.modelValue.filter((v) => typeof v === 'string' && v)]
+      : []
+  } else {
+    selectedProvider.value = typeof props.modelValue === 'string' ? props.modelValue : ''
+  }
   dialog.value = false
+}
+
+function isProviderSelected(providerId) {
+  if (props.multiple) {
+    return selectedProviders.value.includes(providerId)
+  }
+  return selectedProvider.value === providerId
+}
+
+function removeSelected(providerId) {
+  const idx = selectedProviders.value.indexOf(providerId)
+  if (idx >= 0) {
+    selectedProviders.value.splice(idx, 1)
+  }
+}
+
+function moveSelected(index, delta) {
+  const targetIndex = index + delta
+  if (
+    targetIndex < 0
+    || targetIndex >= selectedProviders.value.length
+    || index < 0
+    || index >= selectedProviders.value.length
+  ) {
+    return
+  }
+  const copied = [...selectedProviders.value]
+  const [item] = copied.splice(index, 1)
+  copied.splice(targetIndex, 0, item)
+  selectedProviders.value = copied
 }
 
 function openProviderDrawer() {
@@ -234,6 +372,16 @@ function closeProviderDrawer() {
   white-space: nowrap;
   max-width: calc(100% - 80px);
   display: inline-block;
+}
+
+.selected-preview {
+  width: 100%;
+  max-width: 100%;
+}
+
+.selected-order-list {
+  background: rgba(var(--v-theme-surface-variant), 0.15);
+  border-radius: 10px;
 }
 
 .v-list-item {

@@ -33,6 +33,21 @@ class RespondStage(Stage):
         Comp.Nodes: lambda comp: bool(comp.nodes),  # 多个转发节点
         Comp.File: lambda comp: bool(comp.file_ or comp.url),
         Comp.WechatEmoji: lambda comp: comp.md5 is not None,  # 微信表情
+        Comp.Json: lambda comp: bool(comp.data),  # Json 卡片
+        Comp.Share: lambda comp: bool(comp.url) or bool(comp.title),
+        Comp.Music: lambda comp: (
+            (comp.id and comp._type and comp._type != "custom")
+            or (comp._type == "custom" and comp.url and comp.audio and comp.title)
+        ),  # 音乐分享
+        Comp.Forward: lambda comp: bool(comp.id),  # 合并转发
+        Comp.Location: lambda comp: bool(
+            comp.lat is not None and comp.lon is not None
+        ),  # 位置
+        Comp.Contact: lambda comp: bool(comp._type and comp.id),  # 推荐好友 or 群
+        Comp.Shake: lambda _: True,  # 窗口抖动（戳一戳）
+        Comp.Dice: lambda _: True,  # 掷骰子魔法表情
+        Comp.RPS: lambda _: True,  # 猜拳魔法表情
+        Comp.Unknown: lambda comp: bool(comp.text and comp.text.strip()),
     }
 
     async def initialize(self, ctx: PipelineContext) -> None:

@@ -3,7 +3,7 @@
   "subtitle": "管理和配置系统插件",
   "tabs": {
     "installedPlugins": "AstrBot 插件",
-    "market": "AstrBot 插件市场", 
+    "market": "AstrBot 插件市场",
     "installedMcpServers": "MCP",
     "skills": "Skills",
     "handlersOperation": "管理行为"
@@ -38,7 +38,8 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
-    "deleteSource": "删除源"
+    "deleteSource": "删除源",
+    "reshuffle": "随机一发"
   },
   "status": {
     "enabled": "启用",
@@ -103,7 +104,9 @@
     "sourceUpdated": "插件源更新成功",
     "defaultOfficialSource": "默认官方源",
     "sourceExists": "该插件源已存在",
-    "installPlugin": "安装插件"
+    "installPlugin": "安装插件",
+    "randomPlugins": "🎲 随机插件",
+    "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {
     "default": "默认排序",
@@ -140,13 +143,20 @@
     "install": {
       "title": "安装插件",
       "fromFile": "从文件安装",
-      "fromUrl": "从链接安装"
+      "fromUrl": "从链接安装",
+      "supportPlatformsCount": "支持 {count} 个平台"
     },
     "danger_warning": {
       "title": "警告",
       "message": "该插件可能包含不安全的代码或功能，可能导致系统异常或数据损失等。请确认是否继续安装？",
       "confirm": "继续",
       "cancel": "取消"
+    },
+    "versionCompatibility": {
+      "title": "版本兼容性警告",
+      "message": "该插件声明的 AstrBot 版本范围与当前版本不匹配。你可以无视警告继续安装，但可能无法正常运行。",
+      "confirm": "无视警告，继续安装",
+      "cancel": "取消安装"
     },
     "forceUpdate": {
       "title": "未检测到新版本",
@@ -227,7 +237,10 @@
     "status": {
       "hasUpdate": "有新版本可用",
       "disabled": "该插件已经被禁用",
-      "handlersCount": "个行为"
+      "handlersCount": "个行为",
+      "supportPlatform": "支持平台",
+      "supportPlatformsCount": "支持 {count} 个平台",
+      "astrbotVersion": "AstrBot 版本要求"
     },
     "alt": {
       "logo": "logo",

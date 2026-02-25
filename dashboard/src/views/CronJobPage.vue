@@ -55,11 +55,12 @@
           <template #item.last_run_at="{ item }">{{ formatTime(item.last_run_at) }}</template>
           <template #item.note="{ item }">{{ item.note || tm('table.notAvailable') }}</template>
           <template #item.actions="{ item }">
-            <div class="d-flex" style="gap: 8px;">
+            <div class="d-flex align-center flex-nowrap" style="gap: 12px; min-width: 140px;">
               <v-switch v-model="item.enabled" inset density="compact" hide-details color="primary"
-                @change="toggleJob(item)" />
-              <v-btn size="small" variant="text" color="primary" @click="deleteJob(item)">{{ tm('actions.delete')
-                }}</v-btn>
+                class="mt-0" @change="toggleJob(item)" />
+              <v-btn size="small" variant="text" color="error" @click="deleteJob(item)">
+                {{ tm('actions.delete') }}
+              </v-btn>
             </div>
           </template>
         </v-data-table>

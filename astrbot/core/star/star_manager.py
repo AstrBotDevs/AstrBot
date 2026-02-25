@@ -11,10 +11,13 @@ import traceback
 from types import ModuleType
 
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from astrbot.core import logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.config.default import VERSION
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
@@ -30,7 +33,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
-from .star_handler import star_handlers_registry
+from .star_handler import EventType, star_handlers_registry
 from .updator import PluginUpdator
 
 try:
@@ -40,12 +43,19 @@ except ImportError:
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
 
+class PluginVersionIncompatibleError(Exception):
+    """Raised when plugin astrbot_version is incompatible with current AstrBot."""
+
+
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
+        from .star_tools import StarTools
+
         self.updator = PluginUpdator()
 
         self.context = context
         self.context._star_manager = self  # type: ignore
+        StarTools.initialize(context)
 
         self.config = config
         self.plugin_store_path = get_astrbot_plugin_path()
@@ -268,9 +278,57 @@ class PluginManager:
                 version=metadata["version"],
                 repo=metadata["repo"] if "repo" in metadata else None,
                 display_name=metadata.get("display_name", None),
+                support_platforms=(
+                    [
+                        platform_id
+                        for platform_id in metadata["support_platforms"]
+                        if isinstance(platform_id, str)
+                    ]
+                    if isinstance(metadata.get("support_platforms"), list)
+                    else []
+                ),
+                astrbot_version=(
+                    metadata["astrbot_version"]
+                    if isinstance(metadata.get("astrbot_version"), str)
+                    else None
+                ),
             )
 
         return metadata
+
+    @staticmethod
+    def _validate_astrbot_version_specifier(
+        version_spec: str | None,
+    ) -> tuple[bool, str | None]:
+        if not version_spec:
+            return True, None
+
+        normalized_spec = version_spec.strip()
+        if not normalized_spec:
+            return True, None
+
+        try:
+            specifier = SpecifierSet(normalized_spec)
+        except InvalidSpecifier:
+            return (
+                False,
+                "astrbot_version 格式无效，请使用 PEP 440 版本范围格式，例如 >=4.16,<5。",
+            )
+
+        try:
+            current_version = Version(VERSION)
+        except InvalidVersion:
+            return (
+                False,
+                f"AstrBot 当前版本 {VERSION} 无法被解析，无法校验插件版本范围。",
+            )
+
+        if current_version not in specifier:
+            return (
+                False,
+                f"当前 AstrBot 版本为 {VERSION}，不满足插件要求的 astrbot_version: {normalized_spec}",
+            )
+        return True, None
 
     @staticmethod
     def _get_plugin_related_modules(
@@ -408,7 +466,12 @@ class PluginManager:
 
             return result
 
-    async def load(self, specified_module_path=None, specified_dir_name=None):
+    async def load(
+        self,
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check: bool = False,
+    ):
         """载入插件。
         当 specified_module_path 或者 specified_dir_name 不为 None 时，只载入指定的插件。
 
@@ -469,8 +532,19 @@ class PluginManager:
                         requirements_path=requirements_path,
                     )
                 except Exception as e:
-                    logger.error(traceback.format_exc())
+                    error_trace = traceback.format_exc()
+                    logger.error(error_trace)
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
+                    fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                    self.failed_plugin_dict[root_dir_name] = {
+                        "error": str(e),
+                        "traceback": error_trace,
+                    }
+                    if path in star_map:
+                        logger.info("失败插件依旧在插件列表中，正在清理...")
+                        metadata = star_map.pop(path)
+                        if metadata in star_registry:
+                            star_registry.remove(metadata)
                     continue
 
                 # 检查 _conf_schema.json
@@ -507,12 +581,37 @@ class PluginManager:
                             metadata.version = metadata_yaml.version
                             metadata.repo = metadata_yaml.repo
                             metadata.display_name = metadata_yaml.display_name
+                            metadata.support_platforms = metadata_yaml.support_platforms
+                            metadata.astrbot_version = metadata_yaml.astrbot_version
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
                         )
+
+                    if not ignore_version_check:
+                        is_valid, error_message = (
+                            self._validate_astrbot_version_specifier(
+                                metadata.astrbot_version,
+                            )
+                        )
+                        if not is_valid:
+                            raise PluginVersionIncompatibleError(
+                                error_message
+                                or "The plugin is not compatible with the current AstrBot version."
+                            )
+
                     logger.info(metadata)
                     metadata.config = plugin_config
+                    p_name = (metadata.name or "unknown").lower().replace("/", "_")
+                    p_author = (metadata.author or "unknown").lower().replace("/", "_")
+                    plugin_id = f"{p_author}/{p_name}"
+
+                    # 在实例化前注入类属性，保证插件 __init__ 可读取这些值
+                    if metadata.star_cls_type:
+                        setattr(metadata.star_cls_type, "name", p_name)
+                        setattr(metadata.star_cls_type, "author", p_author)
+                        setattr(metadata.star_cls_type, "plugin_id", plugin_id)
+
                     if path not in inactivated_plugins:
                         # 只有没有禁用插件时才实例化插件类
                         if plugin_config and metadata.star_cls_type:
@@ -530,17 +629,10 @@ class PluginManager:
                                 context=self.context,
                             )
 
-                        p_name = (metadata.name or "unknown").lower().replace("/", "_")
-                        p_author = (
-                            (metadata.author or "unknown").lower().replace("/", "_")
-                        )
-                        setattr(metadata.star_cls, "name", p_name)
-                        setattr(metadata.star_cls, "author", p_author)
-                        setattr(
-                            metadata.star_cls,
-                            "plugin_id",
-                            f"{p_author}/{p_name}",
-                        )
+                        if metadata.star_cls:
+                            setattr(metadata.star_cls, "name", p_name)
+                            setattr(metadata.star_cls, "author", p_author)
+                            setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
                         logger.info(f"插件 {metadata.name} 已被禁用。")
 
@@ -618,6 +710,19 @@ class PluginManager:
                     )
                     if not metadata:
                         raise Exception(f"无法找到插件 {plugin_dir_path} 的元数据。")
+
+                    if not ignore_version_check:
+                        is_valid, error_message = (
+                            self._validate_astrbot_version_specifier(
+                                metadata.astrbot_version,
+                            )
+                        )
+                        if not is_valid:
+                            raise PluginVersionIncompatibleError(
+                                error_message
+                                or "The plugin is not compatible with the current AstrBot version."
+                            )
+
                     metadata.star_cls = obj
                     metadata.config = plugin_config
                     metadata.module = module
@@ -681,6 +786,19 @@ class PluginManager:
                 if hasattr(metadata.star_cls, "initialize") and metadata.star_cls:
                     await metadata.star_cls.initialize()
 
+                # 触发插件加载事件
+                handlers = star_handlers_registry.get_handlers_by_event_type(
+                    EventType.OnPluginLoadedEvent,
+                )
+                for handler in handlers:
+                    try:
+                        logger.info(
+                            f"hook(on_plugin_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                        )
+                        await handler.handler(metadata)
+                    except Exception:
+                        logger.error(traceback.format_exc())
+
             except BaseException as e:
                 logger.error(f"----- 插件 {root_dir_name} 载入失败 -----")
                 errors = traceback.format_exc()
@@ -693,6 +811,11 @@ class PluginManager:
                     "traceback": errors,
                 }
                 # 记录注册失败的插件名称，以便后续重载插件
+                if path in star_map:
+                    logger.info("失败插件依旧在插件列表中，正在清理...")
+                    metadata = star_map.pop(path)
+                    if metadata in star_registry:
+                        star_registry.remove(metadata)
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -751,7 +874,9 @@ class PluginManager:
                     f"清理安装失败插件配置失败: {plugin_config_path}，原因: {e!s}",
                 )
 
-    async def install_plugin(self, repo_url: str, proxy=""):
+    async def install_plugin(
+        self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
+    ):
         """从仓库 URL 安装插件
 
         从指定的仓库 URL 下载并安装插件，然后加载该插件到系统中
@@ -785,7 +910,10 @@ class PluginManager:
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
-                success, error_message = await self.load(specified_dir_name=dir_name)
+                success, error_message = await self.load(
+                    specified_dir_name=dir_name,
+                    ignore_version_check=ignore_version_check,
+                )
                 if not success:
                     raise Exception(
                         error_message
@@ -1063,6 +1191,19 @@ class PluginManager:
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
 
+        # 触发插件卸载事件
+        handlers = star_handlers_registry.get_handlers_by_event_type(
+            EventType.OnPluginUnloadedEvent,
+        )
+        for handler in handlers:
+            try:
+                logger.info(
+                    f"hook(on_plugin_unloaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                )
+                await handler.handler(star_metadata)
+            except Exception:
+                logger.error(traceback.format_exc())
+
     async def turn_on_plugin(self, plugin_name: str) -> None:
         plugin = self.context.get_registered_star(plugin_name)
         if plugin is None:
@@ -1089,7 +1230,9 @@ class PluginManager:
 
         await self.reload(plugin_name)
 
-    async def install_plugin_from_file(self, zip_file_path: str):
+    async def install_plugin_from_file(
+        self, zip_file_path: str, ignore_version_check: bool = False
+    ):
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
@@ -1145,7 +1288,10 @@ class PluginManager:
             except BaseException as e:
                 logger.warning(f"删除插件压缩包失败: {e!s}")
             # await self.reload()
-            success, error_message = await self.load(specified_dir_name=dir_name)
+            success, error_message = await self.load(
+                specified_dir_name=dir_name,
+                ignore_version_check=ignore_version_check,
+            )
             if not success:
                 raise Exception(
                     error_message

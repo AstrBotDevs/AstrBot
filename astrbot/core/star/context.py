@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
@@ -12,14 +14,12 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.conversation_mgr import ConversationManager
-from astrbot.core.cron.manager import CronJobManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.platform import Platform
 from astrbot.core.platform.astr_message_event import AstrMessageEvent, MessageSesion
-from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, ProviderType
 from astrbot.core.provider.func_tool_manager import FunctionTool, FunctionToolManager
@@ -45,6 +45,15 @@ from .star_handler import EventType, StarHandlerMetadata, star_handlers_registry
 
 logger = logging.getLogger("astrbot")
 
+if TYPE_CHECKING:
+    from astrbot.core.cron.manager import CronJobManager
+else:
+    CronJobManager = Any
+
+
+class PlatformManagerProtocol(Protocol):
+    platform_insts: list[Platform]
+
 
 class Context:
     """暴露给插件的接口上下文。"""
@@ -61,7 +70,7 @@ class Context:
         config: AstrBotConfig,
         db: BaseDatabase,
         provider_manager: ProviderManager,
-        platform_manager: PlatformManager,
+        platform_manager: PlatformManagerProtocol,
         conversation_manager: ConversationManager,
         message_history_manager: PlatformMessageHistoryManager,
         persona_manager: PersonaManager,
@@ -448,6 +457,9 @@ class Context:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 return True
+        logger.warning(
+            f"cannot find platform for session {str(session)}, message not sent"
+        )
         return False
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:

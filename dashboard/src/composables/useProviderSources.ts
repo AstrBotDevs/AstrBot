@@ -81,10 +81,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return []
     }
 
-    const types: Array<{ value: string; label: string }> = []
+    const types: Array<{ value: string; label: string; icon: string }> = []
     for (const [templateName, template] of Object.entries(providerTemplates.value)) {
       if (template.provider_type === selectedProviderType.value) {
-        types.push({ value: templateName, label: templateName })
+        types.push({
+          value: templateName,
+          label: templateName,
+          icon: getProviderIcon(template.provider)
+        })
       }
     }
 

@@ -28,6 +28,7 @@
   "messages": {
     "configApplied": "配置成功应用。如要保存，需再点击右下角保存按钮。",
     "configApplyError": "配置未应用，Json 格式错误。",
+    "unsavedChangesNotice": "当前配置有未保存修改。请点击右下角保存按钮以生效。",
     "saveSuccess": "配置保存成功",
     "saveError": "配置保存失败",
     "loadError": "配置加载失败",
@@ -68,6 +69,10 @@
     "normalConfig": "普通",
     "systemConfig": "系统"
   },
+  "search": {
+    "placeholder": "搜索配置项（字段名/描述/提示）",
+    "noResult": "未找到匹配的配置项"
+  },
   "configManagement": {
     "title": "配置文件管理",
     "description": "AstrBot 支持针对不同机器人分别设置配置文件。默认会使用 `default` 配置。",
@@ -107,5 +112,18 @@
     "addToConfig": "已加入配置",
     "fileCount": "文件：{count}",
     "done": "完成"
+    },
+  "unsavedChangesWarning": {
+    "dialogTitle": "未保存的更改",
+    "leavePage": "当前配置有未保存的更改，切换前是否保存？",
+    "switchConfig": "切换配置文件会丢失当前未保存的更改，是否先保存？",
+    "options": {
+      "save": "保存",
+      "saveAndSwitch": "保存并切换",
+      "discardAndSwitch": "放弃更改并切换",
+      "closeCard": "关闭弹窗",
+      "confirm": "确定",
+      "cancel": "取消"
+    }
   }
 }
