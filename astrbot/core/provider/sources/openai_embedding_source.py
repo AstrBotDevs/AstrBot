@@ -59,7 +59,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     async def detect_dim(self) -> int:
         """探测模型可用的最大向量维度"""
 
+        class _DetectBudgetExceeded(Exception):
+            pass
+
+        max_probe_calls = 12
+        probe_calls = 0
+
         async def _request_dim(dimensions: int | None) -> int:
+            nonlocal probe_calls
+            if probe_calls >= max_probe_calls:
+                raise _DetectBudgetExceeded
+            probe_calls += 1
             kwargs = {
                 "input": "echo",
                 "model": self.model,
@@ -78,6 +88,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             probe_result = await _request_dim(probe_dim)
             if probe_result != probe_dim:
                 return base_dim
+        except _DetectBudgetExceeded:
+            logger.warning(
+                f"[OpenAI Embedding] 维度探测达到调用上限({max_probe_calls})，"
+                f"返回当前已确认维度 {base_dim}",
+            )
+            return base_dim
         except Exception:
             return base_dim
 
@@ -95,6 +111,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                     break
                 low = high
                 high = min(high * 2, max_cap)
+            except _DetectBudgetExceeded:
+                logger.warning(
+                    f"[OpenAI Embedding] 维度探测达到调用上限({max_probe_calls})，"
+                    f"短路返回当前已确认维度 {low}",
+                )
+                return low
             except Exception:
                 break
 
@@ -109,6 +131,12 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                     left = mid + 1
                 else:
                     right = mid - 1
+            except _DetectBudgetExceeded:
+                logger.warning(
+                    f"[OpenAI Embedding] 维度探测达到调用上限({max_probe_calls})，"
+                    f"短路返回当前已确认维度 {low}",
+                )
+                return low
             except Exception:
                 right = mid - 1
 
