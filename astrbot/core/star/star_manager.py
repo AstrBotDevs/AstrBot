@@ -427,7 +427,7 @@ class PluginManager:
         """
 
         async with self._pm_lock:
-            if not dir_name in self.failed_plugin_dict:
+            if dir_name not in self.failed_plugin_dict:
                 return False, "插件不存在于失败列表中"
 
             self._cleanup_plugin_state(dir_name)
