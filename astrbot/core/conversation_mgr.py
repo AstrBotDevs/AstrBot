@@ -12,11 +12,21 @@ from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegme
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Conversation, ConversationV2
 
+# 模块级单例引用，供无法通过依赖注入获取实例的模块使用（如CLI适配器）
+_global_instance: "ConversationManager | None" = None
+
+
+def get_conversation_manager() -> "ConversationManager | None":
+    """获取全局 ConversationManager 实例"""
+    return _global_instance
+
 
 class ConversationManager:
     """负责管理会话与 LLM 的对话，某个会话当前正在用哪个对话。"""
 
     def __init__(self, db_helper: BaseDatabase) -> None:
+        global _global_instance
+        _global_instance = self
         self.session_conversations: dict[str, str] = {}
         self.db = db_helper
         self.save_interval = 60  # 每 60 秒保存一次

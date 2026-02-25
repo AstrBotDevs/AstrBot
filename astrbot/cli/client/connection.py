@@ -356,3 +356,69 @@ def call_tool(
         socket_path=socket_path,
         timeout=timeout,
     )
+
+
+def list_sessions(
+    page: int = 1,
+    page_size: int = 20,
+    platform: str | None = None,
+    search_query: str | None = None,
+    socket_path: str | None = None,
+    timeout: float = 30.0,
+) -> dict:
+    """列出所有会话"""
+    fields: dict = {"page": page, "page_size": page_size}
+    if platform:
+        fields["platform"] = platform
+    if search_query:
+        fields["search_query"] = search_query
+    return _send_action_request(
+        "list_sessions",
+        extra_fields=fields,
+        socket_path=socket_path,
+        timeout=timeout,
+    )
+
+
+def list_session_conversations(
+    session_id: str,
+    page: int = 1,
+    page_size: int = 20,
+    socket_path: str | None = None,
+    timeout: float = 30.0,
+) -> dict:
+    """列出指定会话的所有对话"""
+    return _send_action_request(
+        "list_session_conversations",
+        extra_fields={
+            "session_id": session_id,
+            "page": page,
+            "page_size": page_size,
+        },
+        socket_path=socket_path,
+        timeout=timeout,
+    )
+
+
+def get_session_history(
+    session_id: str,
+    conversation_id: str | None = None,
+    page: int = 1,
+    page_size: int = 10,
+    socket_path: str | None = None,
+    timeout: float = 30.0,
+) -> dict:
+    """获取指定会话的聊天记录"""
+    fields: dict = {
+        "session_id": session_id,
+        "page": page,
+        "page_size": page_size,
+    }
+    if conversation_id:
+        fields["conversation_id"] = conversation_id
+    return _send_action_request(
+        "get_session_history",
+        extra_fields=fields,
+        socket_path=socket_path,
+        timeout=timeout,
+    )

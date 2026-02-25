@@ -173,6 +173,12 @@ class SocketClientHandler:
                 response = self._list_tools(request_id)
             elif action == "call_tool":
                 response = await self._call_tool(request, request_id)
+            elif action == "list_sessions":
+                response = await self._list_sessions(request, request_id)
+            elif action == "list_session_conversations":
+                response = await self._list_session_conversations(request, request_id)
+            elif action == "get_session_history":
+                response = await self._get_session_history(request, request_id)
             else:
                 message_text = request.get("message", "")
                 response = await self._process_message(message_text, request_id)
@@ -450,6 +456,239 @@ class SocketClientHandler:
                 f"调用工具 {tool_name} 失败: {e}\n{traceback.format_exc()[-300:]}",
                 request_id,
             )
+
+    # ------------------------------------------------------------------
+    # 跨会话浏览（CLI专属）
+    # ------------------------------------------------------------------
+
+    async def _list_sessions(self, request: dict, request_id: str) -> str:
+        """列出所有会话"""
+        from astrbot.core.conversation_mgr import get_conversation_manager
+
+        conv_mgr = get_conversation_manager()
+        if conv_mgr is None:
+            return _build_error_response("ConversationManager 未初始化", request_id)
+
+        try:
+            page = request.get("page", 1)
+            page_size = request.get("page_size", 20)
+            platform = request.get("platform") or None
+            search_query = request.get("search_query") or None
+
+            sessions, total = await conv_mgr.db.get_session_conversations(
+                page=page,
+                page_size=page_size,
+                search_query=search_query,
+                platform=platform,
+            )
+
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+            return json.dumps(
+                {
+                    "status": "success",
+                    "sessions": sessions,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "response": f"共 {total} 个会话，第 {page}/{total_pages} 页",
+                    "images": [],
+                    "request_id": request_id,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.exception("[CLI] Error listing sessions")
+            return _build_error_response(f"列出会话失败: {e}", request_id)
+
+    async def _list_session_conversations(self, request: dict, request_id: str) -> str:
+        """列出指定会话的所有对话"""
+        from astrbot.core.conversation_mgr import get_conversation_manager
+
+        conv_mgr = get_conversation_manager()
+        if conv_mgr is None:
+            return _build_error_response("ConversationManager 未初始化", request_id)
+
+        session_id = request.get("session_id", "")
+        if not session_id:
+            return _build_error_response("缺少 session_id 参数", request_id)
+
+        try:
+            page = request.get("page", 1)
+            page_size = request.get("page_size", 20)
+
+            conversations = await conv_mgr.get_conversations(
+                unified_msg_origin=session_id,
+            )
+
+            # 手动分页
+            total = len(conversations)
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+            start = (page - 1) * page_size
+            end = start + page_size
+            paged = conversations[start:end]
+
+            convs_data = []
+            curr_cid = await conv_mgr.get_curr_conversation_id(session_id)
+            for conv in paged:
+                convs_data.append(
+                    {
+                        "cid": conv.cid,
+                        "title": conv.title or "(无标题)",
+                        "persona_id": conv.persona_id,
+                        "created_at": conv.created_at,
+                        "updated_at": conv.updated_at,
+                        "token_usage": conv.token_usage,
+                        "is_current": conv.cid == curr_cid,
+                    }
+                )
+
+            return json.dumps(
+                {
+                    "status": "success",
+                    "conversations": convs_data,
+                    "total": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "current_cid": curr_cid,
+                    "response": f"会话 {session_id} 共 {total} 个对话，第 {page}/{total_pages} 页",
+                    "images": [],
+                    "request_id": request_id,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.exception("[CLI] Error listing session conversations")
+            return _build_error_response(f"列出会话对话失败: {e}", request_id)
+
+    async def _get_session_history(self, request: dict, request_id: str) -> str:
+        """获取指定会话的聊天记录"""
+        from astrbot.core.conversation_mgr import get_conversation_manager
+
+        conv_mgr = get_conversation_manager()
+        if conv_mgr is None:
+            return _build_error_response("ConversationManager 未初始化", request_id)
+
+        session_id = request.get("session_id", "")
+        if not session_id:
+            return _build_error_response("缺少 session_id 参数", request_id)
+
+        try:
+            conversation_id = request.get("conversation_id") or None
+            page = request.get("page", 1)
+            page_size = request.get("page_size", 10)
+
+            # 如果未指定 conversation_id，获取当前对话
+            if not conversation_id:
+                conversation_id = await conv_mgr.get_curr_conversation_id(session_id)
+
+            if not conversation_id:
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "history": [],
+                        "total_pages": 0,
+                        "page": page,
+                        "conversation_id": None,
+                        "response": f"会话 {session_id} 没有活跃的对话",
+                        "images": [],
+                        "request_id": request_id,
+                    },
+                    ensure_ascii=False,
+                )
+
+            conversation = await conv_mgr.get_conversation(session_id, conversation_id)
+            if not conversation:
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "history": [],
+                        "total_pages": 0,
+                        "page": page,
+                        "conversation_id": conversation_id,
+                        "session_id": session_id,
+                        "response": "(无记录)",
+                        "images": [],
+                        "request_id": request_id,
+                    },
+                    ensure_ascii=False,
+                )
+
+            raw_history = json.loads(conversation.history)
+
+            # 构建简洁的消息对列表，每对是 {"role": ..., "text": ...}
+            messages = []
+            for record in raw_history:
+                role = record.get("role", "")
+                if role not in ("user", "assistant"):
+                    continue
+                text = _extract_content_text(record)
+                messages.append({"role": role, "text": text})
+
+            # 分页（按消息条数）
+            total = len(messages)
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+            start = (page - 1) * page_size
+            end = start + page_size
+            paged = messages[start:end]
+
+            return json.dumps(
+                {
+                    "status": "success",
+                    "history": paged,
+                    "total": total,
+                    "total_pages": total_pages,
+                    "page": page,
+                    "conversation_id": conversation_id,
+                    "session_id": session_id,
+                    "response": "",
+                    "images": [],
+                    "request_id": request_id,
+                },
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.exception("[CLI] Error getting session history")
+            return _build_error_response(f"获取聊天记录失败: {e}", request_id)
+
+
+def _extract_content_text(record: dict) -> str:
+    """从 OpenAI 格式的消息记录中提取纯文本，图片用 [图片] 占位。"""
+    content = record.get("content")
+
+    # content 是字符串（最常见情况）
+    if isinstance(content, str):
+        return content
+
+    # content 是 list（多部分内容，可能含图片）
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                part_type = part.get("type", "")
+                if part_type == "text":
+                    parts.append(part.get("text", ""))
+                elif part_type in ("image_url", "image"):
+                    parts.append("[图片]")
+                else:
+                    parts.append(f"[{part_type}]")
+            elif isinstance(part, str):
+                parts.append(part)
+        return " ".join(parts) if parts else ""
+
+    # content 为 None（tool_calls 等情况）
+    if content is None:
+        if "tool_calls" in record:
+            names = []
+            for tc in record.get("tool_calls", []):
+                fn = tc.get("function", {})
+                names.append(fn.get("name", "?"))
+            return f"[调用工具: {', '.join(names)}]"
+        return ""
+
+    return str(content)
 
 
 # ------------------------------------------------------------------

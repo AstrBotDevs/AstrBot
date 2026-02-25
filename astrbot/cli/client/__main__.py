@@ -78,6 +78,12 @@ EPILOG = """
     astr tool info <name>           查看工具详细信息和参数
     astr tool call <name> [json]    调用工具，例: astr tool call my_func '{"k":"v"}'
 
+  [跨会话浏览] astr session <子命令>
+    astr session ls                 列出所有会话（跨平台：QQ/TG/微信/CLI…）
+    astr session ls -P qq           按平台过滤（-q 搜索关键词）
+    astr session convs <session_id> 查看该会话下的对话列表
+    astr session history <sid>      查看聊天记录（-c 指定对话，默认当前）
+
   [交互模式]
     astr interactive                进入 REPL 模式（支持命令历史）
     astr -i                         同上（快捷方式）

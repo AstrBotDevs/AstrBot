@@ -557,3 +557,201 @@ class TestInteractiveFlag:
 
         assert result.exit_code == 0
         assert "再见" in result.output
+
+
+class TestSessionCommand:
+    """session 命令组测试"""
+
+    @patch("astrbot.cli.client.commands.session.list_sessions")
+    def test_session_ls(self, mock_list):
+        """列出所有会话"""
+        mock_list.return_value = {
+            "status": "success",
+            "sessions": [
+                {
+                    "session_id": "cli:FriendMessage:cli_session",
+                    "conversation_id": "conv-123",
+                    "title": "测试对话",
+                    "persona_id": None,
+                    "persona_name": None,
+                }
+            ],
+            "total": 1,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 1,
+            "response": "共 1 个会话",
+        }
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "ls"])
+
+        assert result.exit_code == 0
+        assert "cli_session" in result.output
+        mock_list.assert_called_once()
+
+    @patch("astrbot.cli.client.commands.session.list_sessions")
+    def test_session_ls_with_platform(self, mock_list):
+        """按平台过滤会话"""
+        mock_list.return_value = {
+            "status": "success",
+            "sessions": [],
+            "total": 0,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 0,
+            "response": "共 0 个会话",
+        }
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "ls", "-P", "qq"])
+
+        assert result.exit_code == 0
+        mock_list.assert_called_once_with(
+            page=1, page_size=20, platform="qq", search_query=None
+        )
+
+    @patch("astrbot.cli.client.commands.session.list_sessions")
+    def test_session_ls_json(self, mock_list):
+        """JSON 输出"""
+        mock_list.return_value = {
+            "status": "success",
+            "sessions": [],
+            "total": 0,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 0,
+            "response": "共 0 个会话",
+        }
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "ls", "-j"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.output)
+        assert output["status"] == "success"
+
+    @patch("astrbot.cli.client.commands.session.list_sessions")
+    def test_session_ls_error(self, mock_list):
+        """错误响应"""
+        mock_list.return_value = {"status": "error", "error": "未初始化"}
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "ls"])
+
+        assert result.exit_code == 1
+
+    @patch("astrbot.cli.client.commands.session.list_session_conversations")
+    def test_session_convs(self, mock_convs):
+        """查看指定会话的对话列表"""
+        mock_convs.return_value = {
+            "status": "success",
+            "conversations": [
+                {
+                    "cid": "conv-abc",
+                    "title": "测试对话",
+                    "persona_id": None,
+                    "created_at": 1700000000,
+                    "updated_at": 1700000000,
+                    "token_usage": 100,
+                    "is_current": True,
+                }
+            ],
+            "total": 1,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 1,
+            "current_cid": "conv-abc",
+            "response": "共 1 个对话",
+        }
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["session", "convs", "cli:FriendMessage:cli_session"]
+        )
+
+        assert result.exit_code == 0
+        assert "conv-abc" in result.output
+        assert "测试对话" in result.output
+
+    @patch("astrbot.cli.client.commands.session.list_session_conversations")
+    def test_session_convs_json(self, mock_convs):
+        """对话列表 JSON 输出"""
+        mock_convs.return_value = {
+            "status": "success",
+            "conversations": [],
+            "total": 0,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 0,
+            "current_cid": None,
+            "response": "共 0 个对话",
+        }
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "convs", "test_session", "-j"])
+
+        assert result.exit_code == 0
+        output = json.loads(result.output)
+        assert output["status"] == "success"
+
+    @patch("astrbot.cli.client.commands.session.get_session_history")
+    def test_session_history(self, mock_history):
+        """查看指定会话的聊天记录"""
+        mock_history.return_value = {
+            "status": "success",
+            "history": [
+                {"role": "user", "text": "你好"},
+                {"role": "assistant", "text": "你好！"},
+            ],
+            "total_pages": 1,
+            "page": 1,
+            "conversation_id": "conv-abc",
+            "session_id": "cli:FriendMessage:cli_session",
+            "response": "",
+        }
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["session", "history", "cli:FriendMessage:cli_session"]
+        )
+
+        assert result.exit_code == 0
+        assert "You: 你好" in result.output
+        assert "AI: 你好！" in result.output
+
+    @patch("astrbot.cli.client.commands.session.get_session_history")
+    def test_session_history_with_cid(self, mock_history):
+        """指定对话 ID 查看聊天记录"""
+        mock_history.return_value = {
+            "status": "success",
+            "history": [],
+            "total_pages": 0,
+            "page": 1,
+            "conversation_id": "conv-xyz",
+            "session_id": "test_session",
+            "response": "(无记录)",
+        }
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["session", "history", "test_session", "-c", "conv-xyz"]
+        )
+
+        assert result.exit_code == 0
+        mock_history.assert_called_once_with(
+            session_id="test_session",
+            conversation_id="conv-xyz",
+            page=1,
+            page_size=10,
+        )
+
+    @patch("astrbot.cli.client.commands.session.list_sessions")
+    def test_session_ls_empty(self, mock_list):
+        """空会话列表"""
+        mock_list.return_value = {
+            "status": "success",
+            "sessions": [],
+            "total": 0,
+            "page": 1,
+            "page_size": 20,
+            "total_pages": 0,
+            "response": "共 0 个会话",
+        }
+        runner = CliRunner()
+        result = runner.invoke(main, ["session", "ls"])
+
+        assert result.exit_code == 0
+        assert "没有找到会话" in result.output

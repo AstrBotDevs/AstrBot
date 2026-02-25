@@ -9,6 +9,7 @@ from .log import log
 from .plugin import plugin
 from .provider import key, model, provider
 from .send import send
+from .session import session
 from .tool import tool
 
 
@@ -24,6 +25,9 @@ def register_commands(group):
 
     # 会话管理
     group.add_command(conv)
+
+    # 跨会话浏览
+    group.add_command(session)
 
     # 插件管理
     group.add_command(plugin)

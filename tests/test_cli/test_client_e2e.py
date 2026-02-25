@@ -21,6 +21,9 @@ from astrbot.cli.client.connection import (
     call_tool,
     get_data_path,
     get_logs,
+    get_session_history,
+    list_session_conversations,
+    list_sessions,
     list_tools,
     load_auth_token,
     load_connection_info,
@@ -239,6 +242,100 @@ class TestFunctionTools:
         resp = call_tool("__nonexistent_tool_xyz__")
         assert resp["status"] == "error"
         assert "未找到" in resp.get("error", "")
+
+
+# ============================================================
+# 第5层：跨会话浏览（通过 socket action 协议）
+#
+# 服务端调用：list_sessions ×2, list_session_conversations ×1,
+#             get_session_history ×2 = 5 次
+# ============================================================
+
+
+class TestCrossSessionBrowse:
+    """跨会话浏览功能端到端测试"""
+
+    def test_list_sessions(self):
+        """列出所有会话 — 响应结构完整"""
+        resp = list_sessions()
+        assert resp["status"] == "success"
+        assert "sessions" in resp
+        assert isinstance(resp["sessions"], list)
+        assert "total" in resp
+        assert isinstance(resp["total"], int)
+        assert "total_pages" in resp
+        # 至少应有 CLI 管理员会话
+        if resp["total"] > 0:
+            s = resp["sessions"][0]
+            assert "session_id" in s
+            assert "conversation_id" in s
+
+    def test_list_sessions_pagination(self):
+        """会话列表分页参数正确回传"""
+        resp = list_sessions(page=1, page_size=5)
+        assert resp["status"] == "success"
+        assert resp["page"] == 1
+        assert resp["page_size"] == 5
+        assert "total_pages" in resp
+
+    def test_list_sessions_platform_filter(self):
+        """按平台过滤 — 不崩溃，结果与总数一致"""
+        resp = list_sessions(platform="cli")
+        assert resp["status"] == "success"
+        for s in resp["sessions"]:
+            assert s["session_id"].startswith("cli:")
+
+    def test_list_sessions_search(self):
+        """搜索过滤 — 不崩溃"""
+        resp = list_sessions(search_query="cli_session")
+        assert resp["status"] == "success"
+
+    def test_list_session_conversations(self):
+        """列出 CLI 管理员会话的对话列表"""
+        resp = list_session_conversations("cli:FriendMessage:cli_session")
+        assert resp["status"] == "success"
+        assert "conversations" in resp
+        assert isinstance(resp["conversations"], list)
+        assert "current_cid" in resp
+        # 每个对话应有 cid/title/is_current
+        for c in resp["conversations"]:
+            assert "cid" in c
+            assert "title" in c
+            assert "is_current" in c
+
+    def test_list_session_conversations_empty(self):
+        """不存在的会话 — 返回空对话列表，不报错"""
+        resp = list_session_conversations("nonexistent:FriendMessage:no_one")
+        assert resp["status"] == "success"
+        assert resp["conversations"] == []
+
+    def test_get_session_history_admin(self):
+        """获取管理员 CLI 会话的聊天记录 — 新格式验证"""
+        resp = get_session_history("cli:FriendMessage:cli_session")
+        assert resp["status"] == "success"
+        assert "history" in resp
+        assert isinstance(resp["history"], list)
+        assert "total_pages" in resp
+        assert "total" in resp
+        # 验证消息格式（每条是 dict 含 role/text）
+        for msg in resp["history"]:
+            assert isinstance(msg, dict)
+            assert "role" in msg
+            assert msg["role"] in ("user", "assistant")
+            assert "text" in msg
+
+    def test_get_session_history_pagination(self):
+        """聊天记录分页"""
+        resp = get_session_history("cli:FriendMessage:cli_session", page=1, page_size=2)
+        assert resp["status"] == "success"
+        assert resp["page"] == 1
+        assert len(resp["history"]) <= 2
+
+    def test_get_session_history_nonexistent(self):
+        """获取不存在会话的聊天记录（应返回空记录）"""
+        resp = get_session_history("nonexistent:FriendMessage:no_session")
+        assert resp["status"] == "success"
+        assert resp["history"] == []
 
 
 # ============================================================
