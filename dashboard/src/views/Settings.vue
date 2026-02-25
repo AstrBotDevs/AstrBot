@@ -336,7 +336,7 @@ const loadApiKeys = async () => {
 const tryExecCommandCopy = (text) => {
     let textArea = null;
     try {
-        if (typeof document === 'undefined') return false;
+        if (typeof document === 'undefined' || !document.body) return false;
         textArea = document.createElement('textarea');
         textArea.value = text;
         textArea.setAttribute('readonly', '');
@@ -353,7 +353,9 @@ const tryExecCommandCopy = (text) => {
         return false;
     } finally {
         try {
-            textArea?.remove?.();
+            if (textArea?.parentNode) {
+                textArea.parentNode.removeChild(textArea);
+            }
         } catch (_) {
             // ignore cleanup errors
         }

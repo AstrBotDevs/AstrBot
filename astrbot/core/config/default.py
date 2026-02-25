@@ -1463,6 +1463,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_embedding",
                         "provider": "openai",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.openai_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1476,6 +1477,7 @@ CONFIG_METADATA_2 = {
                         "type": "gemini_embedding",
                         "provider": "google",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.gemini_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -2192,9 +2194,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "proxy": {
-                        "description": "代理地址",
+                        "description": "provider_group.provider.proxy.description",
                         "type": "string",
-                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
+                        "hint": "provider_group.provider.proxy.hint",
                     },
                     "model": {
                         "description": "模型 ID",
