@@ -58,9 +58,7 @@ const desktopUpdateCurrentVersion = ref('-');
 const desktopUpdateLatestVersion = ref('-');
 const desktopUpdateStatus = ref('');
 
-type AppUpdaterBridge = NonNullable<Window['astrbotAppUpdater']>;
-
-const getAppUpdaterBridge = (): AppUpdaterBridge | null => {
+const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === 'undefined') {
     return null;
   }

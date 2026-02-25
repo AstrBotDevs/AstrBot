@@ -3,15 +3,15 @@ export {};
 declare global {
   interface AstrBotDesktopAppUpdateCheckResult {
     ok: boolean;
-    reason: string | null;
-    currentVersion: string;
-    latestVersion: string | null;
+    reason?: string | null;
+    currentVersion?: string;
+    latestVersion?: string | null;
     hasUpdate: boolean;
   }
 
   interface AstrBotDesktopAppUpdateResult {
     ok: boolean;
-    reason: string | null;
+    reason?: string | null;
   }
 
   interface AstrBotAppUpdaterBridge {
@@ -38,8 +38,6 @@ declare global {
         ok: boolean;
         reason: string | null;
       }>;
-      checkDesktopAppUpdate: () => Promise<AstrBotDesktopAppUpdateCheckResult>;
-      installDesktopAppUpdate: () => Promise<AstrBotDesktopAppUpdateResult>;
       onTrayRestartBackend?: (callback: () => void) => () => void;
     };
   }
