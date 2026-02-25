@@ -162,7 +162,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    payload["markdown"] = None
+                    payload.pop("markdown", None)
                     payload["content"] = plain_text or None
                 if record_file_path:  # group record msg
                     media = await self.upload_group_and_c2c_record(
@@ -172,7 +172,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    payload["markdown"] = None
+                    payload.pop("markdown", None)
                     payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
@@ -192,7 +192,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    payload["markdown"] = None
+                    payload.pop("markdown", None)
                     payload["content"] = plain_text or None
                 if record_file_path:  # c2c record
                     media = await self.upload_group_and_c2c_record(
@@ -202,7 +202,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     )
                     payload["media"] = media
                     payload["msg_type"] = 7
-                    payload["markdown"] = None
+                    payload.pop("markdown", None)
                     payload["content"] = plain_text or None
                 if stream:
                     ret = await self._send_with_markdown_fallback(
