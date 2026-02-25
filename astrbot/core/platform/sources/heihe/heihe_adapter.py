@@ -28,12 +28,27 @@ HEIHE_CONFIG_METADATA = {
     "heihe_ws_url": {
         "description": "Heihe WebSocket URL",
         "type": "string",
-        "hint": "黑盒 WebSocket 地址，示例：wss://chat.xiaoheihe.cn/chatroom/api/v2/websocket。",
+        "hint": "一般情况下不需要修改。",
     },
     "heihe_token": {
         "description": "Bot Token",
         "type": "string",
-        "hint": "黑盒 Bot Token。适配器会放入 Authorization: Bearer <token>。",
+        "hint": "黑盒 Bot Token。可填写纯 Token（推荐），适配器会自动添加 Authorization 头。",
+    },
+    "heihe_origin": {
+        "description": "WebSocket Origin",
+        "type": "string",
+        "hint": "用于 WebSocket 握手的 Origin 头，默认 https://chat.xiaoheihe.cn。",
+    },
+    "heihe_bot_id": {
+        "description": "Bot ID",
+        "type": "string",
+        "hint": "可选。为空时会根据收到的消息自动识别机器人 ID。",
+    },
+    "heihe_auto_reconnect": {
+        "description": "Auto Reconnect",
+        "type": "bool",
+        "hint": "WebSocket 断开后是否自动重连。",
     },
     "heihe_heartbeat_interval": {
         "description": "Heartbeat Interval (seconds)",
@@ -45,17 +60,34 @@ HEIHE_CONFIG_METADATA = {
         "type": "int",
         "hint": "WebSocket 断开后的重连等待时间。",
     },
+    "heihe_ignore_self_message": {
+        "description": "Ignore Self Message",
+        "type": "bool",
+        "hint": "是否忽略机器人自身发送的消息。",
+    },
 }
 
 HEIHE_I18N_RESOURCES = {
     "zh-CN": {
         "heihe_ws_url": {
             "description": "黑盒 WebSocket 地址",
-            "hint": "示例：wss://chat.xiaoheihe.cn/chatroom/api/v2/websocket。",
+            "hint": "一般情况下不需要修改。",
         },
         "heihe_token": {
             "description": "机器人 Token",
-            "hint": "会以 Authorization: Bearer <token> 方式发送。",
+            "hint": "建议填写纯 Token，适配器会自动补齐 Authorization 头。",
+        },
+        "heihe_origin": {
+            "description": "WebSocket Origin",
+            "hint": "用于握手的 Origin 头，默认 https://chat.xiaoheihe.cn。",
+        },
+        "heihe_bot_id": {
+            "description": "机器人 ID",
+            "hint": "可选。为空时会根据收到的消息自动识别机器人 ID。",
+        },
+        "heihe_auto_reconnect": {
+            "description": "自动重连",
+            "hint": "WebSocket 断开后是否自动重连。",
         },
         "heihe_heartbeat_interval": {
             "description": "心跳间隔（秒）",
@@ -65,15 +97,31 @@ HEIHE_I18N_RESOURCES = {
             "description": "重连间隔（秒）",
             "hint": "WebSocket 断开后的重连等待时间。",
         },
+        "heihe_ignore_self_message": {
+            "description": "忽略机器人自身消息",
+            "hint": "开启后，机器人自己发出的消息将不会触发事件处理。",
+        },
     },
     "en-US": {
         "heihe_ws_url": {
             "description": "Heihe WebSocket URL",
-            "hint": "Example: wss://chat.xiaoheihe.cn/chatroom/api/v2/websocket.",
+            "hint": "Usually no need to change this.",
         },
         "heihe_token": {
             "description": "Bot Token",
-            "hint": "Sent as Authorization: Bearer <token>.",
+            "hint": "Plain token is recommended. Authorization header is added automatically.",
+        },
+        "heihe_origin": {
+            "description": "WebSocket Origin",
+            "hint": "Origin header used in websocket handshake. Default: https://chat.xiaoheihe.cn.",
+        },
+        "heihe_bot_id": {
+            "description": "Bot ID",
+            "hint": "Optional. If empty, the adapter will infer it from incoming messages.",
+        },
+        "heihe_auto_reconnect": {
+            "description": "Auto Reconnect",
+            "hint": "Whether to reconnect automatically after websocket disconnects.",
         },
         "heihe_heartbeat_interval": {
             "description": "Heartbeat Interval (seconds)",
@@ -82,6 +130,10 @@ HEIHE_I18N_RESOURCES = {
         "heihe_reconnect_delay": {
             "description": "Reconnect Delay (seconds)",
             "hint": "Delay before reconnecting after disconnect.",
+        },
+        "heihe_ignore_self_message": {
+            "description": "Ignore Self Message",
+            "hint": "When enabled, messages sent by the bot itself will be ignored.",
         },
     },
 }
@@ -95,8 +147,9 @@ HEIHE_I18N_RESOURCES = {
         "id": "heihe",
         "type": "heihe",
         "enable": False,
-        "heihe_ws_url": "wss://chat.xiaoheihe.cn/chatroom/api/v2/websocket",
+        "heihe_ws_url": "wss://chat.xiaoheihe.cn/chatroom/ws/connect",
         "heihe_token": "",
+        "heihe_origin": "https://chat.xiaoheihe.cn",
         "heihe_bot_id": "",
         "heihe_auto_reconnect": True,
         "heihe_heartbeat_interval": 20,
@@ -118,6 +171,9 @@ class HeihePlatformAdapter(Platform):
 
         self.ws_url = str(platform_config.get("heihe_ws_url", "")).strip()
         self.token = str(platform_config.get("heihe_token", "")).strip()
+        self.origin = str(
+            platform_config.get("heihe_origin", "https://chat.xiaoheihe.cn"),
+        ).strip()
         self.bot_id = str(platform_config.get("heihe_bot_id", "")).strip()
         self.auto_reconnect = bool(platform_config.get("heihe_auto_reconnect", True))
         self.heartbeat_interval = int(
