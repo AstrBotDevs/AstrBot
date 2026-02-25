@@ -256,6 +256,41 @@ class KBSQLiteDatabase:
                 "knowledge_base": row[1],
             }
 
+    async def get_documents_with_metadata_batch(
+        self, doc_ids: list[str]
+    ) -> dict[str, dict]:
+        """批量获取文档及其所属知识库元数据
+
+        Args:
+            doc_ids: 文档 ID 列表
+
+        Returns:
+            dict: doc_id -> {"document": KBDocument, "knowledge_base": KnowledgeBase}
+
+        """
+        if not doc_ids:
+            return {}
+
+        async with self.get_db() as session:
+            stmt = (
+                select(KBDocument, KnowledgeBase)
+                .join(
+                    KnowledgeBase,
+                    col(KBDocument.kb_id) == col(KnowledgeBase.kb_id),
+                )
+                .where(col(KBDocument.doc_id).in_(doc_ids))
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+
+            return {
+                row[0].doc_id: {
+                    "document": row[0],
+                    "knowledge_base": row[1],
+                }
+                for row in rows
+            }
+
     async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB) -> None:
         """删除单个文档及其相关数据"""
         # 在知识库表中删除
