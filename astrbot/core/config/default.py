@@ -425,7 +425,15 @@ CONFIG_METADATA_2 = {
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
                     },
-                    # LINE's config is located in line_adapter.py
+                    "Line": {
+                        "id": "line",
+                        "type": "line",
+                        "enable": False,
+                        "channel_access_token": "",
+                        "channel_secret": "",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
+                    },
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
