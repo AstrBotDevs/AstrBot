@@ -152,6 +152,10 @@
           "description": "运行环境",
           "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
         },
+        "computer_use_require_admin": {
+          "description": "需要 AstrBot 管理员权限",
+          "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。"
+        },
         "sandbox": {
           "booter": {
             "description": "沙箱环境驱动器"
@@ -265,6 +269,10 @@
         },
         "show_tool_use_status": {
           "description": "输出函数调用状态"
+        },
+        "show_tool_call_result": {
+          "description": "输出函数调用返回结果",
+          "hint": "仅在启用“输出函数调用状态”时生效，且最多展示 70 个字符。"
         },
         "sanitize_context_by_modalities": {
           "description": "按模型能力清理历史上下文",
@@ -1097,6 +1105,12 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding 无需手动添加 /v1beta。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
@@ -1193,9 +1207,17 @@
       },
       "anth_thinking_config": {
         "description": "思考配置",
+        "type": {
+          "description": "思考类型",
+          "hint": "设为 'adaptive' 以使用自适应思考（推荐 Opus 4.6+ / Sonnet 4.6+）。留空则使用手动预算模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
         "budget": {
           "description": "思考预算",
-          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens 参数。必须 >= 1024。仅在思考类型为空时生效。Opus 4.6 / Sonnet 4.6 已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "思考深度",
+          "hint": "当思考类型为 'adaptive' 时控制思考深度。'high' 为默认值。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort"
         }
       },
       "minimax-group-id": {
@@ -1315,6 +1337,10 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "proxy": {
+        "description": "代理地址",
+        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
       },
       "model": {
         "description": "模型 ID",

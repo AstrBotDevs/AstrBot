@@ -6,6 +6,7 @@ from typing import Any, cast
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
 from telegram.constants import ChatAction
+from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
@@ -17,6 +18,7 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Reply,
+    Video,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 
@@ -35,6 +37,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     # 消息类型到 chat action 的映射，用于优先级判断
     ACTION_BY_TYPE: dict[type, str] = {
         Record: ChatAction.UPLOAD_VOICE,
+        Video: ChatAction.UPLOAD_VIDEO,
         File: ChatAction.UPLOAD_DOCUMENT,
         Image: ChatAction.UPLOAD_PHOTO,
         Plain: ChatAction.TYPING,
@@ -113,11 +116,82 @@ class TelegramPlatformEvent(AstrMessageEvent):
         **payload: Any,
     ) -> None:
         """发送媒体时显示 upload action，发送完成后恢复 typing"""
-        await cls._send_chat_action(client, user_name, upload_action, message_thread_id)
-        await send_coro(**payload)
-        await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, message_thread_id
+        effective_thread_id = message_thread_id or cast(
+            str | None, payload.get("message_thread_id")
         )
+        await cls._send_chat_action(
+            client, user_name, upload_action, effective_thread_id
+        )
+        send_payload = dict(payload)
+        if effective_thread_id and "message_thread_id" not in send_payload:
+            send_payload["message_thread_id"] = effective_thread_id
+        await send_coro(**send_payload)
+        await cls._send_chat_action(
+            client, user_name, ChatAction.TYPING, effective_thread_id
+        )
+
+    @classmethod
+    async def _send_voice_with_fallback(
+        cls,
+        client: ExtBot,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        caption: str | None = None,
+        user_name: str = "",
+        message_thread_id: str | None = None,
+        use_media_action: bool = False,
+    ) -> None:
+        """Send a voice message, falling back to a document if the user's
+        privacy settings forbid voice messages (``BadRequest`` with
+        ``Voice_messages_forbidden``).
+
+        When *use_media_action* is ``True`` the helper wraps the send calls
+        with ``_send_media_with_action`` (used by the streaming path).
+        """
+        try:
+            if use_media_action:
+                media_payload = dict(payload)
+                if message_thread_id and "message_thread_id" not in media_payload:
+                    media_payload["message_thread_id"] = message_thread_id
+                await cls._send_media_with_action(
+                    client,
+                    ChatAction.UPLOAD_VOICE,
+                    client.send_voice,
+                    user_name=user_name,
+                    voice=path,
+                    **cast(Any, media_payload),
+                )
+            else:
+                await client.send_voice(voice=path, **cast(Any, payload))
+        except BadRequest as e:
+            # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
+            # distinguish the voice-privacy case via the API error message.
+            if "Voice_messages_forbidden" not in e.message:
+                raise
+            logger.warning(
+                "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
+                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+            )
+            if use_media_action:
+                media_payload = dict(payload)
+                if message_thread_id and "message_thread_id" not in media_payload:
+                    media_payload["message_thread_id"] = message_thread_id
+                await cls._send_media_with_action(
+                    client,
+                    ChatAction.UPLOAD_DOCUMENT,
+                    client.send_document,
+                    user_name=user_name,
+                    document=path,
+                    caption=caption,
+                    **cast(Any, media_payload),
+                )
+            else:
+                await client.send_document(
+                    document=path,
+                    caption=caption,
+                    **cast(Any, payload),
+                )
 
     async def _ensure_typing(
         self,
@@ -211,7 +285,20 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
-                await client.send_voice(voice=path, **cast(Any, payload))
+                await cls._send_voice_with_fallback(
+                    client,
+                    path,
+                    payload,
+                    caption=i.text or None,
+                    use_media_action=False,
+                )
+            elif isinstance(i, Video):
+                path = await i.convert_to_file_path()
+                await client.send_video(
+                    video=path,
+                    caption=getattr(i, "text", None) or None,
+                    **cast(Any, payload),
+                )
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -267,7 +354,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             "chat_id": user_name,
         }
         if message_thread_id:
-            payload["reply_to_message_id"] = message_thread_id
+            payload["message_thread_id"] = message_thread_id
 
         delta = ""
         current_content = ""
@@ -309,7 +396,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             ChatAction.UPLOAD_PHOTO,
                             self.client.send_photo,
                             user_name=user_name,
-                            message_thread_id=message_thread_id,
                             photo=image_path,
                             **cast(Any, payload),
                         )
@@ -322,7 +408,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             ChatAction.UPLOAD_DOCUMENT,
                             self.client.send_document,
                             user_name=user_name,
-                            message_thread_id=message_thread_id,
                             document=path,
                             filename=name,
                             **cast(Any, payload),
@@ -330,13 +415,24 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         continue
                     elif isinstance(i, Record):
                         path = await i.convert_to_file_path()
-                        await self._send_media_with_action(
+                        await self._send_voice_with_fallback(
                             self.client,
-                            ChatAction.UPLOAD_VOICE,
-                            self.client.send_voice,
+                            path,
+                            payload,
+                            caption=i.text or delta or None,
                             user_name=user_name,
                             message_thread_id=message_thread_id,
-                            voice=path,
+                            use_media_action=True,
+                        )
+                        continue
+                    elif isinstance(i, Video):
+                        path = await i.convert_to_file_path()
+                        await self._send_media_with_action(
+                            self.client,
+                            ChatAction.UPLOAD_VIDEO,
+                            self.client.send_video,
+                            user_name=user_name,
+                            video=path,
                             **cast(Any, payload),
                         )
                         continue

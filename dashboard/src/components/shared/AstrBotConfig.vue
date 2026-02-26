@@ -48,6 +48,40 @@ const filteredIterable = computed(() => {
   return rest
 })
 
+const providerHint = computed(() => {
+  const hint = props.iterable?.hint
+  if (typeof hint !== 'string' || !hint) return ''
+
+  if (
+    hint === 'provider_group.provider.openai_embedding.hint'
+    || hint === 'provider_group.provider.gemini_embedding.hint'
+  ) {
+    return ''
+  }
+
+  return hint
+})
+
+const getItemHint = (itemKey, itemMeta) => {
+  if (itemMeta?.hint) return itemMeta.hint
+
+  if (itemKey !== 'embedding_api_base') return ''
+
+  const providerType = props.iterable?.type
+  if (providerType === 'openai_embedding') {
+    return getRaw('provider_group.provider.openai_embedding.hint')
+      ? 'provider_group.provider.openai_embedding.hint'
+      : ''
+  }
+  if (providerType === 'gemini_embedding') {
+    return getRaw('provider_group.provider.gemini_embedding.hint')
+      ? 'provider_group.provider.gemini_embedding.hint'
+      : ''
+  }
+
+  return ''
+}
+
 const dialog = ref(false)
 const currentEditingKey = ref('')
 const currentEditingLanguage = ref('json')
@@ -153,14 +187,14 @@ function hasVisibleItemsAfter(items, currentIndex) {
     <div v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template" class="object-config">
       <!-- Provider-level hint -->
       <v-alert
-        v-if="iterable.hint && !isEditing"
+        v-if="providerHint"
         type="info"
         variant="tonal"
         class="mb-4"
         border="start"
         density="compact"
       >
-        {{ iterable.hint }}
+        {{ translateIfKey(providerHint) }}
       </v-alert>
 
       <div v-for="(val, key, index) in filteredIterable" :key="key" class="config-item">
@@ -218,9 +252,9 @@ function hasVisibleItemsAfter(items, currentIndex) {
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint"
+                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
                         class="important-hint">‼️</span>
-                  {{ translateIfKey(metadata[metadataKey].items[key]?.hint) }}
+                  {{ translateIfKey(getItemHint(key, metadata[metadataKey].items[key])) }}
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>

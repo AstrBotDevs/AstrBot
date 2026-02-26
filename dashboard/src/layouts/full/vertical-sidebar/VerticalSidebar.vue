@@ -7,7 +7,7 @@ import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
 const sidebarMenu = shallowRef(sidebarItems);
@@ -107,6 +107,13 @@ function openIframeLink(url) {
     let url_ = url || "https://astrbot.app";
     window.open(url_, "_blank");
   }
+}
+
+function openFaqLink() {
+  const faqUrl = locale.value === 'en-US'
+    ? 'https://docs.astrbot.app/en/faq.html'
+    : 'https://docs.astrbot.app/faq.html';
+  openIframeLink(faqUrl);
 }
 
 let offsetX = 0;
@@ -263,6 +270,10 @@ function openChangelogDialog() {
         <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
           @click="toggleIframe">
           {{ t('core.navigation.documentation') }}
+        </v-btn>
+        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
+          @click="openFaqLink">
+          {{ t('core.navigation.faq') }}
         </v-btn>
         <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
           @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">

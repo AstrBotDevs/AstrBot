@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -6,6 +7,14 @@ from pydantic.dataclasses import dataclass
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+def _extract_job_session(job: Any) -> str | None:
+    payload = getattr(job, "payload", None)
+    if not isinstance(payload, dict):
+        return None
+    session = payload.get("session")
+    return str(session) if session is not None else None
 
 
 @dataclass
@@ -119,9 +128,15 @@ class DeleteCronJobTool(FunctionTool[AstrAgentContext]):
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
             return "error: cron manager is not available."
+        current_umo = context.context.event.unified_msg_origin
         job_id = kwargs.get("job_id")
         if not job_id:
             return "error: job_id is required."
+        job = await cron_mgr.db.get_cron_job(str(job_id))
+        if not job:
+            return f"error: cron job {job_id} not found."
+        if _extract_job_session(job) != current_umo:
+            return "error: you can only delete future tasks in the current umo."
         await cron_mgr.delete_job(str(job_id))
         return f"Deleted cron job {job_id}."
 
@@ -148,8 +163,13 @@ class ListCronJobsTool(FunctionTool[AstrAgentContext]):
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
             return "error: cron manager is not available."
+        current_umo = context.context.event.unified_msg_origin
         job_type = kwargs.get("job_type")
-        jobs = await cron_mgr.list_jobs(job_type)
+        jobs = [
+            job
+            for job in await cron_mgr.list_jobs(job_type)
+            if _extract_job_session(job) == current_umo
+        ]
         if not jobs:
             return "No cron jobs found."
         lines = []

@@ -1121,7 +1121,7 @@ export default {
 
 .text-truncate {
     display: inline-block;
-    max-width: 100px;
+    /* max-width: 100px; */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

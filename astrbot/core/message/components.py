@@ -119,6 +119,8 @@ class Record(BaseMessageComponent):
     cache: bool | None = True
     proxy: bool | None = True
     timeout: int | None = 0
+    # Original text content (e.g. TTS source text), used as caption in fallback scenarios
+    text: str | None = None
     # 额外
     path: str | None
 
@@ -718,13 +720,38 @@ class File(BaseMessageComponent):
         if allow_return_url and self.url:
             return self.url
 
-        if self.file_ and os.path.exists(self.file_):
-            return os.path.abspath(self.file_)
+        if self.file_:
+            path = self.file_
+            if path.startswith("file://"):
+                # 处理 file:// (2 slashes) 或 file:/// (3 slashes)
+                # pathlib.as_uri() 通常生成 file:///
+                path = path[7:]
+                # 兼容 Windows: file:///C:/path -> /C:/path -> C:/path
+                if (
+                    os.name == "nt"
+                    and len(path) > 2
+                    and path[0] == "/"
+                    and path[2] == ":"
+                ):
+                    path = path[1:]
+
+            if os.path.exists(path):
+                return os.path.abspath(path)
 
         if self.url:
             await self._download_file()
             if self.file_:
-                return os.path.abspath(self.file_)
+                path = self.file_
+                if path.startswith("file://"):
+                    path = path[7:]
+                    if (
+                        os.name == "nt"
+                        and len(path) > 2
+                        and path[0] == "/"
+                        and path[2] == ":"
+                    ):
+                        path = path[1:]
+                return os.path.abspath(path)
 
         return ""
 

@@ -4,17 +4,39 @@
     <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
       style="display: flex; flex-direction: column; align-items: start;">
 
-      <div class="d-flex flex-row pr-4"
+      <div class="config-toolbar d-flex flex-row pr-4"
         style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
-        <div class="d-flex flex-row align-center" style="gap: 12px;">
-          <v-select style="min-width: 130px;" v-model="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
+        <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
+          <v-select class="config-select" style="min-width: 130px;" :model-value="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
             v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
             variant="outlined" @update:model-value="onConfigSelect">
           </v-select>
+          <v-text-field
+            class="config-search-input"
+            v-model="configSearchKeyword"
+            prepend-inner-icon="mdi-magnify"
+            :label="tm('search.placeholder')"
+            hide-details
+            density="compact"
+            rounded="md"
+            variant="outlined"
+            style="min-width: 280px;"
+          />
           <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
 
         </div>
       </div>
+      <v-slide-y-transition>
+        <div v-if="fetched && hasUnsavedChanges" class="unsaved-changes-banner-wrap">
+          <v-banner
+            icon="$warning"
+            lines="one"
+            class="unsaved-changes-banner my-4"
+          >
+            {{ tm('messages.unsavedChangesNotice') }}
+          </v-banner>
+        </div>
+      </v-slide-y-transition>
       <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
 
       <v-slide-y-transition mode="out-in">
@@ -23,6 +45,7 @@
           <AstrBotCoreConfigWrapper 
             :metadata="metadata" 
             :config_data="config_data"
+            :search-keyword="configSearchKeyword"
           />
 
           <v-tooltip :text="tm('actions.save')" location="left">
@@ -168,6 +191,10 @@
       </div>
     </v-card>
   </v-overlay>
+
+  <!-- 未保存更改确认弹窗 -->
+  <UnsavedChangesConfirmDialog ref="unsavedChangesDialog" />
+
 </template>
 
 
@@ -183,6 +210,7 @@ import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
 } from '@/utils/confirmDialog';
+import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
 
 export default {
   name: 'ConfigPage',
@@ -190,7 +218,8 @@ export default {
     AstrBotCoreConfigWrapper,
     VueMonacoEditor,
     WaitingForRestart,
-    StandaloneChat
+    StandaloneChat,
+    UnsavedChangesConfirmDialog
   },
   props: {
     initialConfigId: {
@@ -210,6 +239,40 @@ export default {
     };
   },
 
+// 检查未保存的更改
+  async beforeRouteLeave(to, from, next) {
+    if (this.hasUnsavedChanges) {
+      const confirmed = await this.$refs.unsavedChangesDialog?.open({
+        title: this.tm('unsavedChangesWarning.dialogTitle'),
+        message: this.tm('unsavedChangesWarning.leavePage'),
+        confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+        cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+        closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
+      });
+      // 关闭弹窗不跳转
+      if (confirmed === 'close') {
+        next(false);
+      } else if (confirmed) {
+        const result = await this.updateConfig();
+        if (this.isSystemConfig) {
+          next(false);
+        } else {
+          if (result?.success) {
+            await new Promise(resolve => setTimeout(resolve, 800));
+            next();
+          } else {
+            next(false);
+          }
+        }
+      } else {
+        this.hasUnsavedChanges = false;
+        next();
+      }
+    } else {
+      next();
+    }
+  },
+
   computed: {
     messages() {
       return {
@@ -219,6 +282,11 @@ export default {
         configApplied: this.tm('messages.configApplied'),
         configApplyError: this.tm('messages.configApplyError')
       };
+    },
+    // 检查配置是否变化
+    configHasChanges() {
+      if (!this.originalConfigData || !this.config_data) return false;
+      return JSON.stringify(this.originalConfigData) !== JSON.stringify(this.config_data);
     },
     configInfoNameList() {
       return this.configInfoList.map(info => info.name);
@@ -235,13 +303,27 @@ export default {
       });
       return items;
     },
+    hasUnsavedChanges() {
+      if (!this.fetched) {
+        return false;
+      }
+      return this.getConfigSnapshot(this.config_data) !== this.lastSavedConfigSnapshot;
+    }
   },
   watch: {
     config_data_str(val) {
       this.config_data_has_changed = true;
     },
-    '$route.fullPath'(newVal) {
-      this.syncConfigTypeFromHash(newVal);
+    config_data: {
+      deep: true,
+      handler() {
+        if (this.fetched) {
+          this.hasUnsavedChanges = this.configHasChanges;
+        }
+      }
+    },
+    async '$route.fullPath'(newVal) {
+      await this.syncConfigTypeFromHash(newVal);
     },
     initialConfigId(newVal) {
       if (!newVal) {
@@ -269,15 +351,18 @@ export default {
       save_message: "",
       save_message_success: "",
   configContentKey: 0,
+      lastSavedConfigSnapshot: '',
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
+      configSearchKeyword: '',
 
       // 系统配置开关
       isSystemConfig: false,
 
       // 多配置文件管理
       selectedConfigID: null, // 用于存储当前选中的配置项信息
+      currentConfigId: null, // 跟踪当前正在编辑的配置id
       configInfoList: [],
       configFormData: {
         name: '',
@@ -287,6 +372,11 @@ export default {
       // 测试聊天
       testChatDrawer: false,
       testConfigId: null,
+
+      // 未保存的更改状态
+      hasUnsavedChanges: false,
+      // 存储原始配置
+      originalConfigData: null,
     }
   },
   mounted() {
@@ -303,6 +393,13 @@ export default {
     
     // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
     window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
+
+    // 保存初始配置
+    this.$watch('config_data', (newVal) => {
+      if (!this.originalConfigData && newVal) {
+        this.originalConfigData = JSON.parse(JSON.stringify(newVal));
+      }
+    }, { immediate: false, deep: true });
   },
 
   beforeUnmount() {
@@ -331,14 +428,14 @@ export default {
       const cleanHash = rawHash.slice(lastHashIndex + 1);
       return cleanHash === 'system' || cleanHash === 'normal' ? cleanHash : null;
     },
-    syncConfigTypeFromHash(hash) {
+    async syncConfigTypeFromHash(hash) {
       const configType = this.extractConfigTypeFromHash(hash);
       if (!configType || configType === this.configType) {
         return false;
       }
 
       this.configType = configType;
-      this.onConfigTypeToggle();
+      await this.onConfigTypeToggle();
       return true;
     },
     getConfigInfoList(abconf_id) {
@@ -351,6 +448,7 @@ export default {
           for (let i = 0; i < this.configInfoList.length; i++) {
             if (this.configInfoList[i].id === abconf_id) {
               this.selectedConfigID = this.configInfoList[i].id;
+              this.currentConfigId = this.configInfoList[i].id;
               this.getConfig(abconf_id);
               matched = true;
               break;
@@ -360,6 +458,7 @@ export default {
           if (!matched && this.configInfoList.length) {
             // 当找不到目标配置时，默认展示列表中的第一个配置
             this.selectedConfigID = this.configInfoList[0].id;
+            this.currentConfigId = this.configInfoList[0].id;
             this.getConfig(this.selectedConfigID);
           }
         }
@@ -383,9 +482,18 @@ export default {
         params: params
       }).then((res) => {
         this.config_data = res.data.data.config;
+        this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
         this.fetched = true
         this.metadata = res.data.data.metadata;
         this.configContentKey += 1;
+        // 获取配置后更新
+          this.$nextTick(() => {
+            this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
+            this.hasUnsavedChanges = false;
+            if (!this.isSystemConfig) {
+              this.currentConfigId = abconf_id || this.selectedConfigID;
+            }
+          });
       }).catch((err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
@@ -405,26 +513,37 @@ export default {
         postData.conf_id = this.selectedConfigID;
       }
 
-      axios.post('/api/config/astrbot/update', postData).then((res) => {
+      return axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
+          this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
+          this.onConfigSaved();
 
           if (this.isSystemConfig) {
             restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
           }
+          return { success: true };
         } else {
           this.save_message = res.data.message || this.messages.saveError;
           this.save_message_snack = true;
           this.save_message_success = "error";
+          return { success: false };
         }
       }).catch((err) => {
         this.save_message = this.messages.saveError;
         this.save_message_snack = true;
         this.save_message_success = "error";
+        return { success: false };
       });
     },
+    // 重置未保存状态
+    onConfigSaved() {
+      this.hasUnsavedChanges = false;
+      this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
+    },
+
     configToString() {
       this.config_data_str = JSON.stringify(this.config_data, null, 2);
       this.config_data_has_changed = false;
@@ -464,15 +583,53 @@ export default {
         this.save_message_success = "error";
       });
     },
-    onConfigSelect(value) {
+    async onConfigSelect(value) {
       if (value === '_%manage%_') {
         this.configManageDialog = true;
         // 重置选择到之前的值
         this.$nextTick(() => {
           this.selectedConfigID = this.selectedConfigInfo.id || 'default';
+          this.getConfig(this.selectedConfigID);
         });
       } else {
-        this.getConfig(value);
+        // 检查是否有未保存的更改
+        if (this.hasUnsavedChanges) {
+          // 获取之前正在编辑的配置id
+          const prevConfigId = this.isSystemConfig ? 'default' : (this.currentConfigId || this.selectedConfigID || 'default');
+          const message = this.tm('unsavedChangesWarning.switchConfig');
+          const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
+            title: this.tm('unsavedChangesWarning.dialogTitle'),
+            message: message,
+            confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+            cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+            closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
+          });
+          // 关闭弹窗不切换
+          if (saveAndSwitch === 'close') {
+            return;
+          }
+          if (saveAndSwitch) {
+            // 设置临时变量保存切换后的id
+            const currentSelectedId = this.selectedConfigID;
+            // 把id设置回切换前的用于保存上一次的配置，保存完后恢复id为切换后的
+            this.selectedConfigID = prevConfigId;
+            const result = await this.updateConfig();
+            this.selectedConfigID = currentSelectedId;
+            if (result?.success) {
+              this.selectedConfigID = value;
+              this.getConfig(value);
+            }
+            return;
+          } else {
+            // 取消保存并切换配置
+            this.selectedConfigID = value;
+            this.getConfig(value);
+          }
+        } else {
+          // 无未保存更改直接切换
+          this.selectedConfigID = value;
+          this.getConfig(value);
+        }
       }
     },
     startCreateConfig() {
@@ -566,7 +723,34 @@ export default {
         this.save_message_success = "error";
       });
     },
-    onConfigTypeToggle() {
+    async onConfigTypeToggle() {
+      // 检查是否有未保存的更改
+      if (this.hasUnsavedChanges) {
+        const message = this.tm('unsavedChangesWarning.leavePage');
+        const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
+          title: this.tm('unsavedChangesWarning.dialogTitle'),
+          message: message,
+          confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+          cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+          closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
+        });
+        // 关闭弹窗
+        if (saveAndSwitch === 'close') {
+          // 恢复路由
+          const originalHash = this.isSystemConfig ? '#system' : '#normal';
+          this.$router.replace('/config' + originalHash);
+          this.configType = this.isSystemConfig ? 'system' : 'normal';
+          return;
+        }
+        if (saveAndSwitch) {
+          await this.updateConfig();
+          // 系统配置保存后不跳转
+          if (this.isSystemConfig) {
+            this.$router.replace('/config#system');
+            return;
+          }
+        }
+      }
       this.isSystemConfig = this.configType === 'system';
       this.fetched = false; // 重置加载状态
 
@@ -601,6 +785,9 @@ export default {
     closeTestChat() {
       this.testChatDrawer = false;
       this.testConfigId = null;
+    },
+    getConfigSnapshot(config) {
+      return JSON.stringify(config ?? {});
     }
   },
 }
@@ -610,6 +797,26 @@ export default {
 <style>
 .v-tab {
   text-transform: none !important;
+}
+
+.unsaved-changes-banner {
+  border-radius: 8px;
+}
+
+.v-theme--light .unsaved-changes-banner {
+  background-color: #f1f4f9 !important;
+}
+
+.v-theme--dark .unsaved-changes-banner {
+  background-color: #2d2d2d !important;
+}
+
+.unsaved-changes-banner-wrap {
+  position: sticky;
+  top: calc(var(--v-layout-top, 64px));
+  z-index: 20;
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 /* 按钮切换样式优化 */
@@ -658,6 +865,21 @@ export default {
 
   .config-panel {
     width: 100%;
+  }
+
+  .config-toolbar {
+    padding-right: 0 !important;
+  }
+
+  .config-toolbar-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .config-select,
+  .config-search-input {
+    width: 100%;
+    min-width: 0 !important;
   }
 }
 

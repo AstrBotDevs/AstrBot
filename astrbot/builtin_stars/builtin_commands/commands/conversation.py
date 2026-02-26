@@ -4,6 +4,7 @@ from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
 
@@ -62,6 +63,7 @@ class ConversationCommands:
 
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(umo, exclude=message)
             await sp.remove_async(
                 scope="umo",
                 scope_id=umo,
@@ -86,6 +88,8 @@ class ConversationCommands:
             )
             return
 
+        active_event_registry.stop_all(umo, exclude=message)
+
         await self.context.conversation_manager.update_conversation(
             umo,
             cid,
@@ -97,6 +101,30 @@ class ConversationCommands:
         message.set_extra("_clean_ltm_session", True)
 
         message.set_result(MessageEventResult().message(ret))
+
+    async def stop(self, message: AstrMessageEvent) -> None:
+        """停止当前会话正在运行的 Agent"""
+        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
+        umo = message.unified_msg_origin
+
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            stopped_count = active_event_registry.stop_all(umo, exclude=message)
+        else:
+            stopped_count = active_event_registry.request_agent_stop_all(
+                umo,
+                exclude=message,
+            )
+
+        if stopped_count > 0:
+            message.set_result(
+                MessageEventResult().message(
+                    f"已请求停止 {stopped_count} 个运行中的任务。"
+                )
+            )
+            return
+
+        message.set_result(MessageEventResult().message("当前会话没有运行中的任务。"))
 
     async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
@@ -178,16 +206,33 @@ class ConversationCommands:
             _titles[conv.cid] = title
 
         """遍历分页后的对话生成列表显示"""
+        provider_settings = cfg.get("provider_settings", {})
+        platform_name = message.get_platform_name()
         for conv in conversations_paged:
-            persona_id = conv.persona_id
-            if not persona_id or persona_id == "[%None]":
-                persona = await self.context.persona_manager.get_default_persona_v3(
-                    umo=message.unified_msg_origin,
-                )
-                persona_id = persona["name"]
+            (
+                persona_id,
+                _,
+                force_applied_persona_id,
+                _,
+            ) = await self.context.persona_manager.resolve_selected_persona(
+                umo=message.unified_msg_origin,
+                conversation_persona_id=conv.persona_id,
+                platform_name=platform_name,
+                provider_settings=provider_settings,
+            )
+            if persona_id == "[%None]":
+                persona_name = "无"
+            elif persona_id:
+                persona_name = persona_id
+            else:
+                persona_name = "无"
+
+            if force_applied_persona_id:
+                persona_name = f"{persona_name} (自定义规则)"
+
             title = _titles.get(conv.cid, "新对话")
             parts.append(
-                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_name}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             )
             global_index += 1
 
@@ -221,6 +266,7 @@ class ConversationCommands:
         cfg = self.context.get_config(umo=message.unified_msg_origin)
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
             await sp.remove_async(
                 scope="umo",
                 scope_id=message.unified_msg_origin,
@@ -229,6 +275,7 @@ class ConversationCommands:
             message.set_result(MessageEventResult().message("已创建新对话。"))
             return
 
+        active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
         cpersona = await self._get_current_persona_id(message.unified_msg_origin)
         cid = await self.context.conversation_manager.new_conversation(
             message.unified_msg_origin,
@@ -321,7 +368,8 @@ class ConversationCommands:
 
     async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
-        cfg = self.context.get_config(umo=message.unified_msg_origin)
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
         is_unique_session = cfg["platform_settings"]["unique_session"]
         if message.get_group_id() and not is_unique_session and message.role != "admin":
             # 群聊，没开独立会话，发送人不是管理员
@@ -334,18 +382,17 @@ class ConversationCommands:
 
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            active_event_registry.stop_all(umo, exclude=message)
             await sp.remove_async(
                 scope="umo",
-                scope_id=message.unified_msg_origin,
+                scope_id=umo,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
             message.set_result(MessageEventResult().message("重置对话成功。"))
             return
 
         session_curr_cid = (
-            await self.context.conversation_manager.get_curr_conversation_id(
-                message.unified_msg_origin,
-            )
+            await self.context.conversation_manager.get_curr_conversation_id(umo)
         )
 
         if not session_curr_cid:
@@ -356,8 +403,10 @@ class ConversationCommands:
             )
             return
 
+        active_event_registry.stop_all(umo, exclude=message)
+
         await self.context.conversation_manager.delete_conversation(
-            message.unified_msg_origin,
+            umo,
             session_curr_cid,
         )
 

@@ -1,32 +1,30 @@
 <template>
-    <v-dialog v-model="showDialog" max-width="500px">
-        <v-card>
-            <v-card-title class="text-h2">
+    <v-dialog v-model="showDialog" :max-width="$vuetify.display.smAndDown ? undefined : '1200px'" scrollable>
+        <v-card class="persona-form-card" :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }">
+            <v-card-title class="persona-form-title text-h2 px-6 pt-6 pl-6">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
             </v-card-title>
 
-            <v-card-text>
+            <v-card-text class="persona-form-content">
                 <!-- 创建位置提示 -->
-                <v-alert
-                    v-if="!editingPersona"
-                    type="info"
-                    variant="tonal"
-                    density="compact"
-                    class="mb-4"
-                    icon="mdi-folder-outline"
-                >
+                <v-alert v-if="!editingPersona" type="info" variant="tonal" density="compact" class="mb-4"
+                    icon="mdi-folder-outline">
                     {{ tm('form.createInFolder', { folder: folderDisplayName }) }}
                 </v-alert>
 
                 <v-form ref="personaForm" v-model="formValid">
-                    <v-text-field v-model="personaForm.persona_id" :label="tm('form.personaId')"
-                        :rules="personaIdRules" :disabled="editingPersona" variant="outlined" density="comfortable"
-                        class="mb-4" />
+                    <v-row class="persona-form-layout">
+                        <v-col cols="12" md="6" class="persona-basic-col">
+                            <v-text-field v-model="personaForm.persona_id" :label="tm('form.personaId')"
+                                :rules="personaIdRules" :disabled="editingPersona" variant="outlined"
+                                density="comfortable" class="mb-4" />
 
-                    <v-textarea v-model="personaForm.system_prompt" :label="tm('form.systemPrompt')"
-                        :rules="systemPromptRules" variant="outlined" rows="6" class="mb-4" />
+                            <v-textarea v-model="personaForm.system_prompt" :label="tm('form.systemPrompt')"
+                                :rules="systemPromptRules" variant="outlined" rows="16" class="mb-4" />
+                        </v-col>
 
-                    <v-expansion-panels v-model="expandedPanels" multiple>
+                        <v-col cols="12" md="6" class="persona-panels-col">
+                            <v-expansion-panels v-model="expandedPanels" multiple>
                         <!-- 工具选择面板 -->
                         <v-expansion-panel value="tools">
                             <v-expansion-panel-title>
@@ -51,7 +49,7 @@
                                     </v-radio>
                                 </v-radio-group>
 
-                                <div v-if="toolSelectValue === '1'" class="mt-3 ml-8">
+                                <div v-if="toolSelectValue === '1'" class="mt-3 selected-config-area">
 
                                     <!-- 工具搜索 -->
                                     <v-text-field v-model="toolSearch" :label="tm('form.searchTools')"
@@ -65,8 +63,8 @@
                                         <div class="d-flex flex-wrap ga-2">
                                             <v-chip v-for="server in mcpServers" :key="server.name"
                                                 :color="isServerSelected(server) ? 'primary' : 'default'"
-                                                :variant="isServerSelected(server) ? 'flat' : 'outlined'"
-                                                size="small" clickable @click="toggleMcpServer(server)"
+                                                :variant="isServerSelected(server) ? 'flat' : 'outlined'" size="small"
+                                                clickable @click="toggleMcpServer(server)"
                                                 :disabled="!server.tools || server.tools.length === 0">
                                                 <v-icon start size="small">mdi-server</v-icon>
                                                 {{ server.name }}
@@ -79,7 +77,7 @@
 
                                     <!-- 工具选择列表 -->
                                     <div v-if="filteredTools.length > 0" class="tools-selection">
-                                        <v-virtual-scroll :items="filteredTools" height="300" item-height="48">
+                                        <v-virtual-scroll :items="filteredTools" height="300" item-height="72">
                                             <template v-slot:default="{ item }">
                                                 <v-list-item :key="item.name" density="comfortable"
                                                     @click="toggleTool(item.name)">
@@ -90,10 +88,16 @@
 
                                                     <v-list-item-title>
                                                         {{ item.name }}
-                                                        <v-chip v-if="item.mcp_server_name" size="x-small"
-                                                            color="secondary" variant="tonal" class="ml-2">
-                                                            {{ item.mcp_server_name }}
+
+                                                        <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
+                                                            variant="tonal">
+                                                            {{ item.origin }}
                                                         </v-chip>
+                                                        <v-chip v-if="item.origin_name" size="x-small" color="info"
+                                                            variant="outlined">
+                                                            {{ item.origin_name }}
+                                                        </v-chip>
+
                                                     </v-list-item-title>
 
                                                     <v-list-item-subtitle v-if="item.description">
@@ -108,7 +112,7 @@
                                         class="text-center pa-4">
                                         <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-tools</v-icon>
                                         <p class="text-body-2 text-medium-emphasis">{{ tm('form.noToolsAvailable')
-                                            }}
+                                        }}
                                         </p>
                                     </div>
 
@@ -123,7 +127,7 @@
                                     <div v-if="loadingTools" class="text-center pa-4">
                                         <v-progress-circular indeterminate color="primary" />
                                         <p class="text-body-2 text-medium-emphasis mt-2">{{ tm('form.loadingTools')
-                                            }}
+                                        }}
                                         </p>
                                     </div>
 
@@ -139,9 +143,9 @@
                                             </span>
                                         </h4>
                                         <div v-if="Array.isArray(personaForm.tools) && personaForm.tools.length > 0"
-                                            class="d-flex flex-wrap ga-1"  style="max-height: 100px; overflow-y: auto;">
-                                            <v-chip v-for="toolName in personaForm.tools" :key="toolName"
-                                                size="small" color="primary" variant="tonal" closable
+                                            class="d-flex flex-wrap ga-1" style="max-height: 100px; overflow-y: auto;">
+                                            <v-chip v-for="toolName in personaForm.tools" :key="toolName" size="small"
+                                                color="primary" variant="tonal" closable
                                                 @click:close="removeTool(toolName)">
                                                 {{ toolName }}
                                             </v-chip>
@@ -178,7 +182,7 @@
                                     <v-radio :label="tm('form.skillsSelectSpecific')" value="1"></v-radio>
                                 </v-radio-group>
 
-                                <div v-if="skillSelectValue === '1'" class="mt-3 ml-8">
+                                <div v-if="skillSelectValue === '1'" class="mt-3 selected-config-area">
                                     <v-text-field v-model="skillSearch" :label="tm('form.searchSkills')"
                                         prepend-inner-icon="mdi-magnify" variant="outlined" density="compact"
                                         hide-details clearable class="mb-3" />
@@ -205,7 +209,8 @@
 
                                     <div v-else-if="!loadingSkills && availableSkills.length === 0"
                                         class="text-center pa-4">
-                                        <v-icon size="48" color="grey-lighten-2" class="mb-2">mdi-lightning-bolt</v-icon>
+                                        <v-icon size="48" color="grey-lighten-2"
+                                            class="mb-2">mdi-lightning-bolt</v-icon>
                                         <p class="text-body-2 text-medium-emphasis">{{ tm('form.noSkillsAvailable') }}
                                         </p>
                                     </div>
@@ -284,11 +289,13 @@
                                 </v-btn>
                             </v-expansion-panel-text>
                         </v-expansion-panel>
-                    </v-expansion-panels>
+                            </v-expansion-panels>
+                        </v-col>
+                    </v-row>
                 </v-form>
             </v-card-text>
 
-            <v-card-actions>
+            <v-card-actions class="persona-form-actions">
                 <v-btn v-if="editingPersona" color="error" variant="text" @click="deletePersona">
                     {{ tm('buttons.delete') }}
                 </v-btn>
@@ -480,7 +487,7 @@ export default {
             };
             this.toolSelectValue = '0';
             this.skillSelectValue = '0';
-            this.expandedPanels = [];
+            this.expandedPanels = this.getDefaultExpandedPanels();
         },
 
         initFormWithPersona(persona) {
@@ -495,7 +502,11 @@ export default {
             // 根据 tools 的值设置 toolSelectValue
             this.toolSelectValue = persona.tools === null ? '0' : '1';
             this.skillSelectValue = persona.skills === null ? '0' : '1';
-            this.expandedPanels = [];
+            this.expandedPanels = this.getDefaultExpandedPanels();
+        },
+
+        getDefaultExpandedPanels() {
+            return this.$vuetify.display.smAndDown ? [] : ['tools', 'skills', 'dialogs'];
         },
 
         closeDialog() {
@@ -799,6 +810,36 @@ export default {
 </script>
 
 <style scoped>
+.persona-form-card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.persona-form-content {
+    max-height: min(78vh, 760px);
+    overflow-y: auto;
+}
+
+.persona-form-title {
+    line-height: 1.3;
+}
+
+.persona-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: rgb(var(--v-theme-surface));
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.selected-config-area {
+    margin-left: 32px;
+}
+
+.persona-form-layout {
+    align-items: flex-start;
+}
+
 .tools-selection {
     max-height: 300px;
     overflow-y: auto;
@@ -811,5 +852,44 @@ export default {
 
 .v-virtual-scroll {
     padding-bottom: 16px;
+}
+
+@media (max-width: 600px) {
+    .persona-form-card-mobile {
+        border-radius: 0;
+    }
+
+    .persona-form-content {
+        max-height: calc(100vh - 128px);
+        padding: 16px !important;
+    }
+
+    .persona-basic-col,
+    .persona-panels-col {
+        padding-top: 0 !important;
+    }
+
+    .persona-form-title {
+        font-size: 1.15rem !important;
+        padding: 12px 16px !important;
+    }
+
+    .selected-config-area {
+        margin-left: 0;
+    }
+
+    .tools-selection,
+    .skills-selection {
+        max-height: 38vh;
+    }
+
+    .persona-form-actions {
+        padding: 12px 16px !important;
+        gap: 8px;
+    }
+
+    .persona-form-actions .v-btn {
+        min-width: 0;
+    }
 }
 </style>

@@ -11,6 +11,7 @@ class PlatformAdapterType(enum.Flag):
     QQOFFICIAL = enum.auto()
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
+    WECOM_AI_BOT = enum.auto()
     LARK = enum.auto()
     DINGTALK = enum.auto()
     DISCORD = enum.auto()
@@ -26,6 +27,7 @@ class PlatformAdapterType(enum.Flag):
         | QQOFFICIAL
         | TELEGRAM
         | WECOM
+        | WECOM_AI_BOT
         | LARK
         | DINGTALK
         | DISCORD
@@ -44,6 +46,7 @@ ADAPTER_NAME_2_TYPE = {
     "qq_official": PlatformAdapterType.QQOFFICIAL,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
+    "wecom_ai_bot": PlatformAdapterType.WECOM_AI_BOT,
     "lark": PlatformAdapterType.LARK,
     "dingtalk": PlatformAdapterType.DINGTALK,
     "discord": PlatformAdapterType.DISCORD,

@@ -7,6 +7,7 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 
 from ..computer_client import get_booter, get_local_booter
+from .permissions import check_admin_permission
 
 
 @dataclass
@@ -46,8 +47,8 @@ class ExecuteShellTool(FunctionTool):
         background: bool = False,
         env: dict = {},
     ) -> ToolExecResult:
-        if context.context.event.role != "admin":
-            return "error: Permission denied. Shell execution is only allowed for admin users. Tell user to Set admins in AstrBot WebUI."
+        if permission_error := check_admin_permission(context, "Shell execution"):
+            return permission_error
 
         if self.is_local:
             sb = get_local_booter()

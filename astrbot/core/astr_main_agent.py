@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import builtins
 import copy
 import datetime
 import json
@@ -10,7 +9,6 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
@@ -56,7 +54,6 @@ from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
-from astrbot.core.provider.manager import llm_tools
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import star_map
@@ -290,47 +287,26 @@ async def _ensure_persona_and_skills(
     if not req.conversation:
         return
 
-    # get persona ID
-
-    # 1. from session service config - highest priority
-    persona_id = (
-        await sp.get_async(
-            scope="umo",
-            scope_id=event.unified_msg_origin,
-            key="session_service_config",
-            default={},
-        )
-    ).get("persona_id")
-
-    if not persona_id:
-        # 2. from conversation setting - second priority
-        persona_id = req.conversation.persona_id
-
-        if persona_id == "[%None]":
-            # explicitly set to no persona
-            pass
-        elif persona_id is None:
-            # 3. from config default persona setting - last priority
-            persona_id = cfg.get("default_personality")
-
-    persona = next(
-        builtins.filter(
-            lambda persona: persona["name"] == persona_id,
-            plugin_context.persona_manager.personas_v3,
-        ),
-        None,
+    (
+        persona_id,
+        persona,
+        _,
+        use_webchat_special_default,
+    ) = await plugin_context.persona_manager.resolve_selected_persona(
+        umo=event.unified_msg_origin,
+        conversation_persona_id=req.conversation.persona_id,
+        platform_name=event.get_platform_name(),
+        provider_settings=cfg,
     )
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    else:
-        # special handling for webchat persona
-        if event.get_platform_name() == "webchat" and persona_id != "[%None]":
-            persona_id = "_chatui_default_"
-            req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+    elif use_webchat_special_default:
+        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
@@ -784,14 +760,6 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
-    else:
-        # mcp tools
-        tool_set = req.func_tool
-        if not tool_set:
-            tool_set = ToolSet()
-        for tool in llm_tools.func_list:
-            if isinstance(tool, MCPTool):
-                tool_set.add_tool(tool)
 
 
 async def _handle_webchat(

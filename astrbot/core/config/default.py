@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.17.3"
+VERSION = "4.18.2"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -100,6 +100,7 @@ DEFAULT_CONFIG = {
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
+        "show_tool_call_result": False,
         "sanitize_context_by_modalities": False,
         "max_quoted_fallback_images": 20,
         "quoted_message_parser": {
@@ -128,6 +129,7 @@ DEFAULT_CONFIG = {
             "add_cron_tools": True,
         },
         "computer_use_runtime": "local",
+        "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard_neo",
             "shipyard_endpoint": "",
@@ -982,7 +984,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "anth_thinking_config": {"budget": 0},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
                         "id": "moonshot",
@@ -1030,6 +1032,30 @@ CONFIG_METADATA_2 = {
                         "key": [],
                         "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "AIHubMix": {
+                        "id": "aihubmix",
+                        "provider": "aihubmix",
+                        "type": "aihubmix_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://aihubmix.com/v1",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "OpenRouter": {
+                        "id": "openrouter",
+                        "provider": "openrouter",
+                        "type": "openrouter_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://openrouter.ai/v1",
                         "proxy": "",
                         "custom_headers": {},
                     },
@@ -1441,6 +1467,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_embedding",
                         "provider": "openai",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.openai_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1454,6 +1481,7 @@ CONFIG_METADATA_2 = {
                         "type": "gemini_embedding",
                         "provider": "google",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.gemini_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1943,13 +1971,25 @@ CONFIG_METADATA_2 = {
                         },
                     },
                     "anth_thinking_config": {
-                        "description": "Thinking Config",
+                        "description": "思考配置",
                         "type": "object",
                         "items": {
+                            "type": {
+                                "description": "思考类型",
+                                "type": "string",
+                                "options": ["", "adaptive"],
+                                "hint": "Opus 4.6+ / Sonnet 4.6+ 推荐设为 'adaptive'。留空则使用手动 budget 模式。参见: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking",
+                            },
                             "budget": {
-                                "description": "Thinking Budget",
+                                "description": "思考预算",
                                 "type": "int",
-                                "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+                                "hint": "手动 budget_tokens，需 >= 1024。仅在 type 为空时生效。Opus 4.6 / Sonnet 4.6 上已弃用。参见: https://platform.claude.com/docs/en/build-with-claude/extended-thinking",
+                            },
+                            "effort": {
+                                "description": "思考深度",
+                                "type": "string",
+                                "options": ["", "low", "medium", "high", "max"],
+                                "hint": "type 为 'adaptive' 时控制思考深度。默认 'high'。'max' 仅限 Opus 4.6。参见: https://platform.claude.com/docs/en/build-with-claude/effort",
                             },
                         },
                     },
@@ -2158,9 +2198,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "proxy": {
-                        "description": "代理地址",
+                        "description": "provider_group.provider.proxy.description",
                         "type": "string",
-                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
+                        "hint": "provider_group.provider.proxy.hint",
                     },
                     "model": {
                         "description": "模型 ID",
@@ -2271,6 +2311,9 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                     },
                     "show_tool_use_status": {
+                        "type": "bool",
+                    },
+                    "show_tool_call_result": {
                         "type": "bool",
                     },
                     "unsupported_streaming_strategy": {
@@ -2729,6 +2772,11 @@ CONFIG_METADATA_3 = {
                         "labels": ["无", "本地", "沙箱"],
                         "hint": "选择 Computer Use 运行环境。",
                     },
+                    "provider_settings.computer_use_require_admin": {
+                        "description": "需要 AstrBot 管理员权限",
+                        "type": "bool",
+                        "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                    },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
@@ -2990,6 +3038,15 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.show_tool_call_result": {
+                        "description": "输出函数调用返回结果",
+                        "type": "bool",
+                        "hint": "仅在输出函数调用状态启用时生效，展示结果前 70 个字符。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.show_tool_use_status": True,
                         },
                     },
                     "provider_settings.sanitize_context_by_modalities": {

@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { buildWebchatUmoDetails, getStoredSelectedChatConfigId } from '@/utils/chatConfigBinding';
 
 export interface Session {
     session_id: string;
@@ -62,9 +63,24 @@ export function useSessions(chatboxMode: boolean = false) {
 
     async function newSession() {
         try {
+            const selectedConfigId = getStoredSelectedChatConfigId();
             const response = await axios.get('/api/chat/new_session');
             const sessionId = response.data.data.session_id;
+            const platformId = response.data.data.platform_id;
+
             currSessionId.value = sessionId;
+
+            if (selectedConfigId && selectedConfigId !== 'default' && platformId === 'webchat') {
+                try {
+                    const umoDetails = buildWebchatUmoDetails(sessionId, false);
+                    await axios.post('/api/config/umo_abconf_route/update', {
+                        umo: umoDetails.umo,
+                        conf_id: selectedConfigId
+                    });
+                } catch (err) {
+                    console.error('Failed to bind config to session', err);
+                }
+            }
 
             // 更新 URL
             const basePath = chatboxMode ? '/chatbox' : '/chat';

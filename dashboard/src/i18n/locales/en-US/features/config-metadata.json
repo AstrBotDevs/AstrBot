@@ -149,6 +149,10 @@
           "description": "Computer Use Runtime",
           "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
         },
+        "computer_use_require_admin": {
+          "description": "Require AstrBot Admin Permission",
+          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
+        },
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"
@@ -262,6 +266,10 @@
         },
         "show_tool_use_status": {
           "description": "Output Function Call Status"
+        },
+        "show_tool_call_result": {
+          "description": "Output Tool Call Results",
+          "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
         },
         "sanitize_context_by_modalities": {
           "description": "Sanitize History by Modalities",
@@ -1094,6 +1102,12 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding automatically appends /v1 at request time."
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding does not require manually adding /v1beta."
+      },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
         "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
@@ -1190,9 +1204,17 @@
       },
       "anth_thinking_config": {
         "description": "Thinking Config",
+        "type": {
+          "description": "Thinking Type",
+          "hint": "Set 'adaptive' for Opus 4.6+ / Sonnet 4.6+ (recommended). Leave empty to use manual budget mode. See: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
         "budget": {
           "description": "Thinking Budget",
-          "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+          "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. Only used when type is empty. Deprecated on Opus 4.6 / Sonnet 4.6. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "Effort Level",
+          "hint": "Controls thinking depth when type is 'adaptive'. 'high' is the default. 'max' is Opus 4.6 only. See: https://platform.claude.com/docs/en/build-with-claude/effort"
         }
       },
       "minimax-group-id": {
@@ -1312,6 +1334,10 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "proxy": {
+        "description": "Proxy address",
+        "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."
       },
       "model": {
         "description": "Model ID",

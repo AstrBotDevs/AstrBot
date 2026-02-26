@@ -295,6 +295,16 @@ class ProviderManager:
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
                 from .sources.groq_source import ProviderGroq as ProviderGroq
+            case "xai_chat_completion":
+                from .sources.xai_source import ProviderXAI as ProviderXAI
+            case "aihubmix_chat_completion":
+                from .sources.oai_aihubmix_source import (
+                    ProviderAIHubMix as ProviderAIHubMix,
+                )
+            case "openrouter_chat_completion":
+                from .sources.openrouter_source import (
+                    ProviderOpenRouter as ProviderOpenRouter,
+                )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
