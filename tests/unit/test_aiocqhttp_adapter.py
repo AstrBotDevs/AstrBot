@@ -481,10 +481,12 @@ class TestAiocqhttpAdapterHandleMsg:
             from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
                 AiocqhttpAdapter,
             )
+            from astrbot.core.platform import MessageType
 
             adapter = AiocqhttpAdapter(platform_config, platform_settings, event_queue)
 
             message = AstrBotMessage()
+            message.type = MessageType.FRIEND_MESSAGE
             message.message_str = "Test message"
             message.session_id = "test_session"
 

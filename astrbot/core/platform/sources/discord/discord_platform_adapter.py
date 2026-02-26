@@ -365,7 +365,6 @@ class DiscordPlatformAdapter(Platform):
     async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
-        registered_commands = []
         registered_command_names: set[str] = set()
 
         for handler_md in star_handlers_registry:
@@ -407,11 +406,10 @@ class DiscordPlatformAdapter(Platform):
                     )
                     self.client.add_application_command(slash_command)
                     registered_command_names.add(cmd_name)
-                    registered_commands.append(cmd_name)
 
-        if registered_commands:
+        if registered_command_names:
             logger.info(
-                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
+                f"[Discord] 准备同步 {len(registered_command_names)} 个指令: {', '.join(sorted(registered_command_names))}",
             )
         else:
             logger.info("[Discord] 没有发现可注册的指令。")

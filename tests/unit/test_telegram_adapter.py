@@ -1201,7 +1201,7 @@ class TestTelegramAdapterCommandRegistration:
                 commands = adapter.collect_commands()
 
             names = sorted(cmd.command for cmd in commands)
-            assert names == ["admin", "h", "help"]
+            assert names == ["adm", "admin", "h", "help"]
 
     def test_collect_commands_warns_on_duplicates(
         self,
@@ -1586,12 +1586,13 @@ class TestTelegramPlatformEventSend:
     @pytest.fixture
     def event_setup(self, mock_bot):
         """Create a basic event setup for testing."""
-        from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+        from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
         from astrbot.core.platform.sources.telegram.tg_event import (
             TelegramPlatformEvent,
         )
 
         message_obj = AstrBotMessage()
+        message_obj.type = MessageType.FRIEND_MESSAGE
         message_obj.session_id = "123456789"
         message_obj.message_id = "1"
         message_obj.group_id = None

@@ -2,7 +2,6 @@ import asyncio
 import re
 import sys
 import uuid
-from typing import Any
 
 import apscheduler.schedulers.asyncio as _apscheduler_asyncio_import
 import telegram.ext as _telegram_ext_import
@@ -227,6 +226,8 @@ class TelegramPlatformAdapter(Platform):
             if event_filter.parent_group:
                 return None
             cmd_names = [event_filter.group_name]
+            if getattr(event_filter, "alias", None):
+                cmd_names.extend(event_filter.alias)
             is_group = True
 
         result: list[tuple[str, str]] = []
@@ -250,7 +251,7 @@ class TelegramPlatformAdapter(Platform):
 
         return result if result else None
 
-    async def start(self, update: Update, context: Any) -> None:
+    async def start(self, update: Update, context: telegram_ext.CallbackContext) -> None:
         if not update.effective_chat:
             logger.warning(
                 "Received a start command without an effective chat, skipping /start reply.",
@@ -261,7 +262,7 @@ class TelegramPlatformAdapter(Platform):
             text=self.config["start_message"],
         )
 
-    async def message_handler(self, update: Update, context: Any) -> None:
+    async def message_handler(self, update: Update, context: telegram_ext.CallbackContext) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
         # Handle media group messages
@@ -277,7 +278,7 @@ class TelegramPlatformAdapter(Platform):
     async def convert_message(
         self,
         update: Update,
-        context: Any,
+        context: telegram_ext.CallbackContext,
         get_reply=True,
     ) -> AstrBotMessage | None:
         """转换 Telegram 的消息对象为 AstrBotMessage 对象。
@@ -444,7 +445,7 @@ class TelegramPlatformAdapter(Platform):
 
         return message
 
-    async def handle_media_group_message(self, update: Update, context: Any):
+    async def handle_media_group_message(self, update: Update, context: telegram_ext.CallbackContext):
         """Handle messages that are part of a media group (album).
 
         Caches incoming messages and schedules delayed processing to collect all
@@ -559,7 +560,7 @@ class TelegramPlatformAdapter(Platform):
         )
         self.commit_event(message_event)
 
-    def get_client(self):
+    def get_client(self) -> telegram_ext.ExtBot:
         return self.client
 
     async def terminate(self) -> None:
