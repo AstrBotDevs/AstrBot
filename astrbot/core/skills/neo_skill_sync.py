@@ -173,7 +173,9 @@ class NeoSkillSyncManager:
             raise ValueError("release_id or skill_key is required for sync.")
 
         release_id_val = str(release.get("id") or "")
-        release_stage = str(release.get("stage") or "")
+        release_stage_raw = release.get("stage")
+        release_stage_value = getattr(release_stage_raw, "value", release_stage_raw)
+        release_stage = str(release_stage_value or "").strip().lower()
         skill_key_val = str(release.get("skill_key") or "")
         candidate_id = str(release.get("candidate_id") or "")
 
@@ -181,7 +183,8 @@ class NeoSkillSyncManager:
             raise ValueError("Release payload is incomplete.")
         if require_stable and release_stage != "stable":
             raise ValueError(
-                f"Only stable releases can be synced to local SKILL.md (got: {release_stage})."
+                "Only stable releases can be synced to local SKILL.md "
+                f"(got: {release_stage_raw})."
             )
 
         candidate = await client.skills.get_candidate(candidate_id)
@@ -268,10 +271,17 @@ class NeoSkillSyncManager:
                     )
                     rollback_json = _to_jsonable(rollback)
                 except Exception as rollback_err:
-                    raise RuntimeError(
-                        "stable release synced failed and auto rollback also failed; "
-                        f"sync_error={sync_error}; rollback_error={rollback_err}"
-                    ) from rollback_err
+                    rollback_msg = str(rollback_err)
+                    if "no previous release exists" in rollback_msg.lower():
+                        rollback_json = {
+                            "skipped": True,
+                            "reason": rollback_msg,
+                        }
+                    else:
+                        raise RuntimeError(
+                            "stable release synced failed and auto rollback also failed; "
+                            f"sync_error={sync_error}; rollback_error={rollback_err}"
+                        ) from rollback_err
 
         return {
             "release": release_json,
