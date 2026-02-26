@@ -388,7 +388,7 @@ class ShipyardNeoBooter(ComputerBooter):
             return self._profile
 
         # Query Bay for available profiles
-        from shipyard_neo.errors import UnauthorizedError, ForbiddenError
+        from shipyard_neo.errors import ForbiddenError, UnauthorizedError
 
         try:
             profile_list = await client.list_profiles()
