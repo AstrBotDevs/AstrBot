@@ -19,12 +19,18 @@
         </div>
         <v-btn-toggle v-model="mode" mandatory divided density="comfortable">
           <v-btn value="local">{{ tm("skills.modeLocal") }}</v-btn>
-          <v-btn value="neo">{{ tm("skills.modeNeo") }}</v-btn>
+          <v-btn value="neo" :disabled="!neoEnabled">{{ tm("skills.modeNeo") }}</v-btn>
         </v-btn-toggle>
       </v-row>
 
       <div v-if="mode === 'local'" class="px-2 pb-2">
         <small style="color: grey;">{{ tm("skills.runtimeHint") }}</small>
+      </div>
+
+      <div v-if="mode === 'neo' && !neoEnabled" class="px-3 pb-3">
+        <v-alert type="warning" variant="tonal" density="comfortable" border="start">
+          {{ neoUnavailableMessage }}
+        </v-alert>
       </div>
 
       <template v-if="mode === 'local'">
@@ -62,7 +68,7 @@
         </v-row>
       </template>
 
-      <template v-else>
+      <template v-else-if="mode === 'neo' && neoEnabled">
         <v-card class="mx-3 mb-4 pa-4 neo-filter-card" variant="outlined">
           <div class="d-flex flex-wrap justify-space-between align-center ga-2 mb-3">
             <div>
@@ -304,6 +310,9 @@ export default {
       content: "",
     });
 
+    const neoEnabled = ref(false);
+    const neoUnavailableMessage = ref("");
+
     const candidateStatusItems = computed(() => [
       { title: tm("skills.neoAll"), value: "" },
       { title: "draft", value: "draft" },
@@ -474,6 +483,24 @@ export default {
       });
     };
 
+    const loadNeoAvailability = async () => {
+      try {
+        const res = await axios.get("/api/config/get");
+        const config = res?.data?.data?.config || {};
+        const providerSettings = config?.provider_settings || {};
+        const runtime = providerSettings?.computer_use_runtime || "local";
+        const booter = providerSettings?.sandbox?.booter || "";
+        neoEnabled.value = runtime === "sandbox" && booter === "shipyard_neo";
+      } catch (_err) {
+        neoEnabled.value = false;
+      }
+
+      neoUnavailableMessage.value = tm("skills.neoRuntimeRequired");
+      if (!neoEnabled.value && mode.value === "neo") {
+        mode.value = "local";
+      }
+    };
+
     const fetchNeoData = async () => {
       neoLoading.value = true;
       try {
@@ -623,7 +650,12 @@ export default {
 
     const refreshCurrentMode = async () => {
       if (mode.value === "neo") {
-        await fetchNeoData();
+        await loadNeoAvailability();
+        if (neoEnabled.value) {
+          await fetchNeoData();
+        } else {
+          showMessage(tm("skills.neoRuntimeRequired"), "warning");
+        }
       } else {
         await fetchSkills();
       }
@@ -631,14 +663,20 @@ export default {
 
     watch(mode, async (nextMode) => {
       if (nextMode === "neo") {
-        await fetchNeoData();
+        await loadNeoAvailability();
+        if (neoEnabled.value) {
+          await fetchNeoData();
+        }
       } else {
         await fetchSkills();
       }
     });
 
     onMounted(async () => {
-      await Promise.all([fetchSkills(), fetchNeoData()]);
+      await Promise.all([fetchSkills(), loadNeoAvailability()]);
+      if (neoEnabled.value) {
+        await fetchNeoData();
+      }
     });
 
     return {
@@ -654,6 +692,8 @@ export default {
       deleteDialog,
       deleting,
       snackbar,
+      neoEnabled,
+      neoUnavailableMessage,
       neoLoading,
       neoCandidates,
       neoReleases,
