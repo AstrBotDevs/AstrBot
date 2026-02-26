@@ -32,6 +32,85 @@ def _to_jsonable(model_like: Any) -> dict[str, Any]:
     return {}
 
 
+def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    if not text.startswith("---"):
+        return {}, text
+
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+
+    end_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+
+    if end_idx is None:
+        return {}, text
+
+    data: dict[str, str] = {}
+    for line in lines[1:end_idx]:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip().lower()
+        value = value.strip().strip('"').strip("'")
+        if key in {"name", "description"} and value:
+            data[key] = value
+
+    body = "\n".join(lines[end_idx + 1 :]).lstrip("\n")
+    return data, body
+
+
+def _derive_description(markdown_body: str) -> str:
+    lines = markdown_body.splitlines()
+
+    heading_idx = None
+    for i, line in enumerate(lines):
+        normalized = line.strip().lower()
+        if normalized in {"## 描述", "## description"}:
+            heading_idx = i
+            break
+
+    if heading_idx is not None:
+        for line in lines[heading_idx + 1 :]:
+            text = line.strip()
+            if not text:
+                continue
+            if text.startswith("#"):
+                break
+            return text
+
+    for line in lines:
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        return text
+
+    return ""
+
+
+def _ensure_skill_frontmatter(markdown: str, *, skill_name: str, skill_key: str) -> str:
+    frontmatter, body = _parse_frontmatter(markdown)
+
+    name = frontmatter.get("name") or skill_name
+    description = frontmatter.get("description") or _derive_description(body)
+    if not description:
+        description = f"Synced skill for `{skill_key}`."
+
+    description = " ".join(description.split())
+
+    header = (
+        "---\n"
+        f"name: {name}\n"
+        f"description: {description}\n"
+        "---\n\n"
+    )
+    body = body.strip("\n")
+    return f"{header}{body}\n"
+
+
 @dataclass
 class NeoSkillSyncResult:
     skill_key: str
@@ -210,8 +289,14 @@ class NeoSkillSyncManager:
         skill_dir = Path(self.skills_root) / local_skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
 
+        normalized_markdown = _ensure_skill_frontmatter(
+            skill_markdown,
+            skill_name=local_skill_name,
+            skill_key=skill_key_val,
+        )
+
         skill_md_path = skill_dir / "SKILL.md"
-        skill_md_path.write_text(skill_markdown, encoding="utf-8")
+        skill_md_path.write_text(normalized_markdown, encoding="utf-8")
 
         items = mapping.setdefault("items", {})
         items[skill_key_val] = {
