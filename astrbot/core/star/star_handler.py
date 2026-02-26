@@ -108,6 +108,22 @@ class StarHandlerRegistry(Generic[T]):
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[EventType.OnPluginLoadedEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
+        event_type: Literal[EventType.OnPluginUnloadedEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: EventType,
         only_activated=True,
         plugins_name: list[str] | None = None,

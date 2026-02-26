@@ -62,7 +62,7 @@
               <template #label>
                 <div class="d-flex flex-column">
                   <span class="text-body-2 font-weight-medium">{{ tm('switches.enable') }}</span>
-                  <span class="text-caption text-medium-emphasis">Enable sub-agent functionality</span>
+                  <span class="text-caption text-medium-emphasis">{{ tm('switches.enableHint') }}</span>
                 </div>
               </template>
             </v-switch>
@@ -80,7 +80,7 @@
               <template #label>
                 <div class="d-flex flex-column">
                   <span class="text-body-2 font-weight-medium">{{ tm('switches.dedupe') }}</span>
-                  <span class="text-caption text-medium-emphasis">Remove duplicate tools from main agent</span>
+                  <span class="text-caption text-medium-emphasis">{{ tm('switches.dedupeHint') }}</span>
                 </div>
               </template>
             </v-switch>
@@ -166,7 +166,7 @@
                 <v-text-field
                   v-model="agent.name"
                   :label="tm('form.nameLabel')"
-                  :rules="[v => !!v || 'Name is required', v => /^[a-z][a-z0-9_]*$/.test(v) || 'Lowercase letters, numbers, underscore only']"
+                  :rules="[v => !!v || tm('messages.nameRequired'), v => /^[a-z][a-z0-9_]*$/.test(v) || tm('messages.namePattern')]"
                   variant="outlined"
                   density="comfortable"
                   hide-details="auto"
@@ -215,7 +215,7 @@
             <v-col cols="12" md="6">
               <div class="h-100">
                 <div class="text-caption font-weight-bold text-medium-emphasis mb-2 ml-1">
-                  PERSONA PREVIEW
+                  {{ tm('cards.personaPreview') }}
                 </div>
                 <PersonaQuickPreview
                   :model-value="agent.persona_id"
@@ -231,17 +231,17 @@
     <!-- Empty State -->
     <div v-if="cfg.agents.length === 0" class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis">
       <v-icon icon="mdi-robot-off" size="64" class="mb-4 opacity-50" />
-      <div class="text-h6">No Agents Configured</div>
-      <div class="text-body-2 mb-4">Add a new sub-agent to get started</div>
+      <div class="text-h6">{{ tm('empty.title') }}</div>
+      <div class="text-body-2 mb-4">{{ tm('empty.subtitle') }}</div>
       <v-btn color="primary" variant="tonal" @click="addAgent">
-        Create First Agent
+        {{ tm('empty.action') }}
       </v-btn>
     </div>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
       {{ snackbar.message }}
       <template #actions>
-        <v-btn variant="text" @click="snackbar.show = false">Close</v-btn>
+         <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
       </template>
     </v-snackbar>
   </div>

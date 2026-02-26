@@ -49,10 +49,13 @@ class PluginVersionIncompatibleError(Exception):
 
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
+        from .star_tools import StarTools
+
         self.updator = PluginUpdator()
 
         self.context = context
         self.context._star_manager = self  # type: ignore
+        StarTools.initialize(context)
 
         self.config = config
         self.plugin_store_path = get_astrbot_plugin_path()
@@ -385,6 +388,33 @@ class PluginManager:
                 except KeyError:
                     logger.warning(f"模块 {module_name} 未载入")
 
+    def _cleanup_plugin_state(self, dir_name: str) -> None:
+        plugin_root_name = "data.plugins."
+
+        # 清理 sys.modules
+        for key in list(sys.modules.keys()):
+            if key.startswith(f"{plugin_root_name}{dir_name}"):
+                logger.info(f"清除了插件{dir_name}中的{key}模块")
+                del sys.modules[key]
+
+        possible_paths = [
+            f"{plugin_root_name}{dir_name}.main",
+            f"{plugin_root_name}{dir_name}.{dir_name}",
+        ]
+
+        # 清理 handlers
+        for path in possible_paths:
+            handlers = star_handlers_registry.get_handlers_by_module_name(path)
+            for handler in handlers:
+                star_handlers_registry.remove(handler)
+                logger.info(f"清理处理器: {handler.handler_name}")
+
+        # 清理工具
+        for tool in list(llm_tools.func_list):
+            if tool.handler_module_path in possible_paths:
+                llm_tools.func_list.remove(tool)
+                logger.info(f"清理工具: {tool.name}")
+
     async def reload_failed_plugin(self, dir_name):
         """
         重新加载未注册（加载失败）的插件
@@ -395,17 +425,21 @@ class PluginManager:
                 - success (bool): 重载是否成功
                 - error_message (str|None): 错误信息，成功时为 None
         """
+
         async with self._pm_lock:
-            if dir_name in self.failed_plugin_dict:
-                success, error = await self.load(specified_dir_name=dir_name)
-                if success:
-                    self.failed_plugin_dict.pop(dir_name, None)
-                    if not self.failed_plugin_dict:
-                        self.failed_plugin_info = ""
-                    return success, None
-                else:
-                    return False, error
-            return False, "插件不存在于失败列表中"
+            if dir_name not in self.failed_plugin_dict:
+                return False, "插件不存在于失败列表中"
+
+            self._cleanup_plugin_state(dir_name)
+
+            success, error = await self.load(specified_dir_name=dir_name)
+            if success:
+                self.failed_plugin_dict.pop(dir_name, None)
+                if not self.failed_plugin_dict:
+                    self.failed_plugin_info = ""
+                return success, None
+            else:
+                return False, error
 
     async def reload(self, specified_plugin_name=None):
         """重新加载插件

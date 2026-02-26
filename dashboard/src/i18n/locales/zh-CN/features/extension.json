@@ -8,6 +8,9 @@
     "skills": "Skills",
     "handlersOperation": "管理行为"
   },
+  "titles": {
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
