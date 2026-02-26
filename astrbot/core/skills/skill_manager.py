@@ -290,10 +290,34 @@ class SkillManager:
         config["skills"][name] = {"active": bool(active)}
         self._save_config(config)
 
+    def _remove_skill_from_sandbox_cache(self, name: str) -> None:
+        cache = self._load_sandbox_skills_cache()
+        skills = cache.get("skills", [])
+        if not isinstance(skills, list):
+            return
+
+        filtered = [
+            item
+            for item in skills
+            if not (
+                isinstance(item, dict)
+                and str(item.get("name", "")).strip() == name
+            )
+        ]
+
+        if len(filtered) != len(skills):
+            cache["skills"] = filtered
+            self._save_sandbox_skills_cache(cache)
+
     def delete_skill(self, name: str) -> None:
         skill_dir = Path(self.skills_root) / name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
+
+        # Ensure UI consistency even when there is no active sandbox session
+        # to refresh cache from runtime side.
+        self._remove_skill_from_sandbox_cache(name)
+
         config = self._load_config()
         if name in config.get("skills", {}):
             config["skills"].pop(name, None)
