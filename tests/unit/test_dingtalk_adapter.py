@@ -278,7 +278,7 @@ class TestDingtalkAdapterSendMessage:
 
 
 class TestDingtalkAdapterTypoCompatibility:
-    def test_send_with_sesisp_typo(self):
+    def test_send_with_sesison_typo(self):
         _assert_dingtalk_case("send_with_sesison_typo")
 
 

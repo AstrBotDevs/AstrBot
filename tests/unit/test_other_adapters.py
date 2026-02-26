@@ -11,7 +11,25 @@ Tests cover:
 Note: Uses unittest.mock to simulate external dependencies.
 """
 
+import asyncio
+
 import pytest
+
+# ============================================================================
+# Shared Fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def event_queue():
+    """Create an event queue for testing."""
+    return asyncio.Queue()
+
+
+@pytest.fixture
+def platform_settings():
+    """Create platform settings for testing."""
+    return {}
 
 # ============================================================================
 # QQ Official Adapter Tests

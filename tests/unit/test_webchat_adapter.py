@@ -10,10 +10,9 @@ Note: Uses unittest.mock to simulate dependencies.
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ============================================================================
 # Fixtures
@@ -108,8 +107,8 @@ class TestWebChatAdapterTerminate:
 
             adapter = WebChatAdapter(platform_config, platform_settings, event_queue)
 
-            # terminate() should set the stop_event
+            # terminate() should set the _shutdown_event
             await adapter.terminate()
 
-            # Verify stop_event is set after terminate
-            assert adapter.stop_event.is_set()
+            # Verify _shutdown_event is set after terminate
+            assert adapter._shutdown_event.is_set()
