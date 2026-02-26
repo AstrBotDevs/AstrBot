@@ -206,16 +206,33 @@ class ConversationCommands:
             _titles[conv.cid] = title
 
         """遍历分页后的对话生成列表显示"""
+        provider_settings = cfg.get("provider_settings", {})
+        platform_name = message.get_platform_name()
         for conv in conversations_paged:
-            persona_id = conv.persona_id
-            if not persona_id or persona_id == "[%None]":
-                persona = await self.context.persona_manager.get_default_persona_v3(
-                    umo=message.unified_msg_origin,
-                )
-                persona_id = persona["name"]
+            (
+                persona_id,
+                _,
+                force_applied_persona_id,
+                _,
+            ) = await self.context.persona_manager.resolve_selected_persona(
+                umo=message.unified_msg_origin,
+                conversation_persona_id=conv.persona_id,
+                platform_name=platform_name,
+                provider_settings=provider_settings,
+            )
+            if persona_id == "[%None]":
+                persona_name = "无"
+            elif persona_id:
+                persona_name = persona_id
+            else:
+                persona_name = "无"
+
+            if force_applied_persona_id:
+                persona_name = f"{persona_name} (自定义规则)"
+
             title = _titles.get(conv.cid, "新对话")
             parts.append(
-                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_id}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
+                f"{global_index}. {title}({conv.cid[:4]})\n  人格情景: {persona_name}\n  上次更新: {datetime.datetime.fromtimestamp(conv.updated_at).strftime('%m-%d %H:%M')}\n"
             )
             global_index += 1
 

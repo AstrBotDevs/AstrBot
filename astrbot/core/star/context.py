@@ -457,6 +457,9 @@ class Context:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 return True
+        logger.warning(
+            f"cannot find platform for session {str(session)}, message not sent"
+        )
         return False
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:

@@ -23,12 +23,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if proxy:
             logger.info(f"[OpenAI Embedding] 使用代理: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
+        api_base = provider_config.get("embedding_api_base", "").strip()
+        if not api_base:
+            api_base = "https://api.openai.com/v1"
+        else:
+            api_base = api_base.removesuffix("/")
+            if not api_base.endswith("/v1"):
+                api_base = f"{api_base}/v1"
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
-            base_url=provider_config.get(
-                "embedding_api_base",
-                "https://api.openai.com/v1",
-            ),
+            base_url=api_base,
             timeout=int(provider_config.get("timeout", 20)),
             http_client=http_client,
         )
@@ -36,12 +40,20 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     async def get_embedding(self, text: str) -> list[float]:
         """获取文本的嵌入"""
-        embedding = await self.client.embeddings.create(input=text, model=self.model)
+        embedding = await self.client.embeddings.create(
+            input=text,
+            model=self.model,
+            dimensions=self.get_dim(),
+        )
         return embedding.data[0].embedding
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
-        embeddings = await self.client.embeddings.create(input=text, model=self.model)
+        embeddings = await self.client.embeddings.create(
+            input=text,
+            model=self.model,
+            dimensions=self.get_dim(),
+        )
         return [item.embedding for item in embeddings.data]
 
     def get_dim(self) -> int:
