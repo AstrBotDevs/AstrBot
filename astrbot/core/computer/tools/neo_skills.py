@@ -155,7 +155,10 @@ class AnnotateExecutionTool(NeoSkillToolBase):
 @dataclass
 class CreateSkillPayloadTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_payload"
-    description: str = "Create a generic skill payload and return payload_ref."
+    description: str = (
+        "Step 1/3 for Neo skill authoring: create immutable payload content and return payload_ref. "
+        "Use this to store skill_markdown and structured metadata; do NOT write local skill folders directly."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -163,7 +166,8 @@ class CreateSkillPayloadTool(NeoSkillToolBase):
                 "payload": {
                     "anyOf": [{"type": "object"}, {"type": "array"}],
                     "description": (
-                        "Skill payload JSON. Recommended fields: skill_markdown, commands, meta."
+                        "Skill payload JSON. Typical schema: {skill_markdown, inputs, outputs, meta}. "
+                        "This only stores content and returns payload_ref; it does not create a candidate or release."
                     ),
                 },
                 "kind": {
@@ -221,18 +225,31 @@ class GetSkillPayloadTool(NeoSkillToolBase):
 @dataclass
 class CreateSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_create_skill_candidate"
-    description: str = "Create a skill candidate from source execution IDs."
+    description: str = (
+        "Step 2/3 for Neo skill authoring: create a candidate by binding execution evidence "
+        "(source_execution_ids) with skill identity (skill_key) and optional payload_ref."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
-                "skill_key": {"type": "string"},
+                "skill_key": {
+                    "type": "string",
+                    "description": "Stable logical identifier, e.g. image-collage-9grid.",
+                },
                 "source_execution_ids": {
                     "type": "array",
                     "items": {"type": "string"},
+                    "description": "Execution evidence IDs captured from sandbox history.",
                 },
-                "scenario_key": {"type": "string"},
-                "payload_ref": {"type": "string"},
+                "scenario_key": {
+                    "type": "string",
+                    "description": "Optional scenario namespace for grouping candidates.",
+                },
+                "payload_ref": {
+                    "type": "string",
+                    "description": "Optional payload reference created by astrbot_create_skill_payload.",
+                },
             },
             "required": ["skill_key", "source_execution_ids"],
         }
@@ -338,7 +355,10 @@ class EvaluateSkillCandidateTool(NeoSkillToolBase):
 @dataclass
 class PromoteSkillCandidateTool(NeoSkillToolBase):
     name: str = "astrbot_promote_skill_candidate"
-    description: str = "Promote one candidate to release stage (canary/stable)."
+    description: str = (
+        "Step 3/3 for Neo skill authoring: promote candidate to canary/stable release. "
+        "If stage=stable and sync_to_local=true, payload.skill_markdown is synced to local SKILL.md automatically."
+    )
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
@@ -351,7 +371,10 @@ class PromoteSkillCandidateTool(NeoSkillToolBase):
                 },
                 "sync_to_local": {
                     "type": "boolean",
-                    "description": "When stage is stable, sync payload.skill_markdown to local SKILL.md.",
+                    "description": (
+                        "Only used with stage=stable. true means sync payload.skill_markdown to local SKILL.md; "
+                        "false means release remains Neo-side only."
+                    ),
                     "default": True,
                 },
             },
