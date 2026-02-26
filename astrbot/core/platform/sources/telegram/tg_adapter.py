@@ -256,7 +256,9 @@ class TelegramPlatformAdapter(Platform):
 
         return result if result else None
 
-    async def start(self, update: Update, context: telegram_ext.CallbackContext) -> None:
+    async def start(
+        self, update: Update, context: telegram_ext.CallbackContext
+    ) -> None:
         if not update.effective_chat:
             logger.warning(
                 "Received a start command without an effective chat, skipping /start reply.",
@@ -267,7 +269,9 @@ class TelegramPlatformAdapter(Platform):
             text=self.config["start_message"],
         )
 
-    async def message_handler(self, update: Update, context: telegram_ext.CallbackContext) -> None:
+    async def message_handler(
+        self, update: Update, context: telegram_ext.CallbackContext
+    ) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
         # Handle media group messages
@@ -461,7 +465,9 @@ class TelegramPlatformAdapter(Platform):
 
         return message
 
-    async def handle_media_group_message(self, update: Update, context: telegram_ext.CallbackContext):
+    async def handle_media_group_message(
+        self, update: Update, context: telegram_ext.CallbackContext
+    ):
         """Handle messages that are part of a media group (album).
 
         Caches incoming messages and schedules delayed processing to collect all
