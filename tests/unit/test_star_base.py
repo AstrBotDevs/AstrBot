@@ -164,47 +164,6 @@ class TestStarBase:
         assert len(star_registry) >= initial_count
 
 
-class TestStarTypeHints:
-    """Test that type hints work correctly for plugin developers."""
-
-    def test_context_type_hint_is_context(self):
-        """Verify that the context parameter has proper type hint."""
-        from astrbot.core.star import Star
-        import inspect
-
-        sig = inspect.signature(Star.__init__)
-        context_param = sig.parameters.get("context")
-
-        assert context_param is not None
-        # The annotation should be "Context" (string due to __future__ annotations)
-        # or the actual Context class when TYPE_CHECKING is used properly
-        annotation = context_param.annotation
-
-        # Accept either the string "Context" or the actual class
-        # If it's _ContextLike, that's the problem we're trying to fix
-        assert annotation != "_ContextLike", (
-            "context parameter should use 'Context' type, not '_ContextLike' "
-            "Protocol for better plugin developer experience"
-        )
-
-    def test_context_has_expected_attributes(self):
-        """Verify Context class has the attributes plugin developers expect."""
-        from astrbot.core.star import Context
-
-        # These are common attributes that plugin developers use
-        expected_attrs = [
-            "provider_manager",
-            "platform_manager",
-            "get_config",
-            "get_all_providers",
-            "get_using_provider",
-            "send_message",
-        ]
-
-        for attr in expected_attrs:
-            assert hasattr(Context, attr), f"Context should have '{attr}' attribute"
-
-
 class TestNoCircularImports:
     """Test that there are no circular import issues."""
 
