@@ -63,56 +63,73 @@
       </template>
 
       <template v-else>
-        <v-card class="mx-3 mb-4 pa-3" variant="outlined">
-          <v-row>
+        <v-card class="mx-3 mb-4 pa-4 neo-filter-card" variant="outlined">
+          <div class="d-flex flex-wrap justify-space-between align-center ga-2 mb-3">
+            <div>
+              <div class="text-subtitle-1 font-weight-bold">Neo Skills</div>
+              <div class="text-caption text-medium-emphasis">筛选候选与发布记录</div>
+            </div>
+            <v-btn color="primary" prepend-icon="mdi-refresh" variant="flat" @click="fetchNeoData">
+              {{ tm("skills.refresh") }}
+            </v-btn>
+          </div>
+
+          <v-row class="ga-md-0 ga-2">
             <v-col cols="12" md="4">
               <v-text-field
                 v-model="neoFilters.skill_key"
                 :label="tm('skills.neoSkillKey')"
+                prepend-inner-icon="mdi-key-outline"
                 density="comfortable"
                 hide-details
                 variant="outlined"
               />
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col cols="12" md="4">
               <v-select
                 v-model="neoFilters.status"
                 :label="tm('skills.neoStatus')"
                 :items="candidateStatusItems"
                 item-title="title"
                 item-value="value"
+                prepend-inner-icon="mdi-progress-check"
                 density="comfortable"
                 hide-details
                 variant="outlined"
               />
             </v-col>
-            <v-col cols="12" md="3">
+            <v-col cols="12" md="4">
               <v-select
                 v-model="neoFilters.stage"
                 :label="tm('skills.neoStage')"
                 :items="releaseStageItems"
                 item-title="title"
                 item-value="value"
+                prepend-inner-icon="mdi-layers-outline"
                 density="comfortable"
                 hide-details
                 variant="outlined"
               />
-            </v-col>
-            <v-col cols="12" md="2" class="d-flex align-center">
-              <v-btn color="primary" block @click="fetchNeoData">{{ tm("skills.refresh") }}</v-btn>
             </v-col>
           </v-row>
         </v-card>
 
         <v-progress-linear v-if="neoLoading" indeterminate color="primary"></v-progress-linear>
 
-        <v-card class="mx-3 mb-4" variant="outlined">
-          <v-card-title>{{ tm("skills.neoCandidates") }}</v-card-title>
+        <div class="mx-3 mb-3 d-flex flex-wrap ga-2">
+          <v-chip size="small" color="primary" variant="tonal">Candidates: {{ neoCandidates.length }}</v-chip>
+          <v-chip size="small" color="indigo" variant="tonal">Releases: {{ neoReleases.length }}</v-chip>
+          <v-chip size="small" color="success" variant="tonal">Active: {{ activeReleaseCount }}</v-chip>
+        </div>
+
+        <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
+          <v-card-title class="text-subtitle-1 font-weight-bold">{{ tm("skills.neoCandidates") }}</v-card-title>
           <v-data-table
             :headers="candidateHeaders"
             :items="neoCandidates"
             density="compact"
             :items-per-page="10"
+            class="neo-data-table"
           >
             <template #item.latest_score="{ item }">
               {{ item.latest_score ?? "-" }}
@@ -139,18 +156,27 @@
                 >
                   Payload
                 </v-btn>
+                <v-btn
+                  size="x-small"
+                  color="error"
+                  variant="tonal"
+                  @click="deleteCandidate(item)"
+                >
+                  {{ tm("skills.neoDelete") }}
+                </v-btn>
               </div>
             </template>
           </v-data-table>
         </v-card>
 
-        <v-card class="mx-3 mb-4" variant="outlined">
-          <v-card-title>{{ tm("skills.neoReleases") }}</v-card-title>
+        <v-card class="mx-3 mb-4 neo-table-card" variant="outlined">
+          <v-card-title class="text-subtitle-1 font-weight-bold">{{ tm("skills.neoReleases") }}</v-card-title>
           <v-data-table
             :headers="releaseHeaders"
             :items="neoReleases"
             density="compact"
             :items-per-page="10"
+            class="neo-data-table"
           >
             <template #item.is_active="{ item }">
               <v-chip size="small" :color="item.is_active ? 'success' : 'default'" variant="tonal">
@@ -159,11 +185,24 @@
             </template>
             <template #item.actions="{ item }">
               <div class="d-flex ga-1 flex-wrap">
-                <v-btn size="x-small" color="warning" variant="tonal" @click="rollbackRelease(item)">
-                  {{ tm("skills.neoRollback") }}
+                <v-btn
+                  size="x-small"
+                  color="warning"
+                  variant="tonal"
+                  @click="handleReleaseLifecycleAction(item)"
+                >
+                  {{ item.is_active ? tm("skills.neoDeactivate") : tm("skills.neoRollback") }}
                 </v-btn>
                 <v-btn size="x-small" color="primary" variant="tonal" @click="syncRelease(item)">
                   {{ tm("skills.neoSync") }}
+                </v-btn>
+                <v-btn
+                  size="x-small"
+                  color="error"
+                  variant="tonal"
+                  @click="deleteRelease(item)"
+                >
+                  {{ tm("skills.neoDelete") }}
                 </v-btn>
               </div>
             </template>
@@ -281,6 +320,8 @@ export default {
       { title: "canary", value: "canary" },
       { title: "stable", value: "stable" },
     ]);
+
+    const activeReleaseCount = computed(() => neoReleases.value.filter((item) => item?.is_active).length);
 
     const candidateHeaders = computed(() => [
       { title: "ID", key: "id", width: "180px" },
@@ -495,6 +536,32 @@ export default {
       }
     };
 
+    const deactivateRelease = async (release) => {
+      try {
+        const res = await axios.post("/api/skills/neo/rollback", {
+          release_id: release.id,
+        });
+        handleApiResponse(
+          res,
+          tm("skills.neoDeactivateSuccess"),
+          tm("skills.neoDeactivateFailed"),
+          async () => {
+            await fetchNeoData();
+          },
+        );
+      } catch (_err) {
+        showMessage(tm("skills.neoDeactivateFailed"), "error");
+      }
+    };
+
+    const handleReleaseLifecycleAction = async (release) => {
+      if (release?.is_active) {
+        await deactivateRelease(release);
+        return;
+      }
+      await rollbackRelease(release);
+    };
+
     const syncRelease = async (release) => {
       try {
         const res = await axios.post("/api/skills/neo/sync", {
@@ -523,6 +590,34 @@ export default {
         payloadDialog.show = true;
       } catch (_err) {
         showMessage(tm("skills.neoPayloadFailed"), "error");
+      }
+    };
+
+    const deleteCandidate = async (candidate) => {
+      try {
+        const res = await axios.post("/api/skills/neo/delete-candidate", {
+          candidate_id: candidate.id,
+          reason: "deleted_from_webui",
+        });
+        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
+          await fetchNeoData();
+        });
+      } catch (_err) {
+        showMessage(tm("skills.neoDeleteFailed"), "error");
+      }
+    };
+
+    const deleteRelease = async (release) => {
+      try {
+        const res = await axios.post("/api/skills/neo/delete-release", {
+          release_id: release.id,
+          reason: "deleted_from_webui",
+        });
+        handleApiResponse(res, tm("skills.neoDeleteSuccess"), tm("skills.neoDeleteFailed"), async () => {
+          await fetchNeoData();
+        });
+      } catch (_err) {
+        showMessage(tm("skills.neoDeleteFailed"), "error");
       }
     };
 
@@ -565,6 +660,7 @@ export default {
       neoFilters,
       candidateStatusItems,
       releaseStageItems,
+      activeReleaseCount,
       candidateHeaders,
       releaseHeaders,
       payloadDialog,
@@ -577,8 +673,12 @@ export default {
       evaluateCandidate,
       promoteCandidate,
       rollbackRelease,
+      deactivateRelease,
+      handleReleaseLifecycleAction,
       syncRelease,
       viewPayload,
+      deleteCandidate,
+      deleteRelease,
     };
   },
 };
@@ -600,5 +700,22 @@ export default {
   padding: 12px;
   border-radius: 8px;
   font-size: 12px;
+}
+.neo-filter-card {
+  border-radius: 14px;
+  border-color: rgba(var(--v-theme-primary), 0.25);
+  background: linear-gradient(180deg, rgba(var(--v-theme-primary), 0.03), rgba(var(--v-theme-surface), 1));
+}
+
+.neo-table-card {
+  border-radius: 14px;
+}
+
+.neo-data-table :deep(.v-data-table-header__content) {
+  font-weight: 700;
+}
+
+.neo-data-table :deep(tbody tr:hover) {
+  background: rgba(var(--v-theme-primary), 0.04);
 }
 </style>

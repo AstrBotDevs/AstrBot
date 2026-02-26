@@ -53,6 +53,8 @@ class SkillsRoute(Route):
             "/skills/neo/promote": ("POST", self.promote_neo_candidate),
             "/skills/neo/rollback": ("POST", self.rollback_neo_release),
             "/skills/neo/sync": ("POST", self.sync_neo_release),
+            "/skills/neo/delete-candidate": ("POST", self.delete_neo_candidate),
+            "/skills/neo/delete-release": ("POST", self.delete_neo_release),
         }
         self.register_routes()
 
@@ -75,6 +77,14 @@ class SkillsRoute(Route):
                 "Set them in Dashboard or ensure Bay's credentials.json is accessible."
             )
         return endpoint, access_token
+
+    async def _delete_neo_release(self, client: Any, release_id: str, reason: str | None):
+        return await client.skills.delete_release(release_id, reason=reason)
+
+    async def _delete_neo_candidate(
+        self, client: Any, candidate_id: str, reason: str | None
+    ):
+        return await client.skills.delete_candidate(candidate_id, reason=reason)
 
     async def _with_neo_client(
         self,
@@ -413,5 +423,47 @@ class SkillsRoute(Route):
                 )
                 .__dict__
             )
+
+        return await self._with_neo_client(_do)
+
+    async def delete_neo_candidate(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+        logger.info("[Neo] POST /skills/neo/delete-candidate requested.")
+        data = await request.get_json()
+        candidate_id = data.get("candidate_id")
+        reason = data.get("reason")
+        if not candidate_id:
+            return Response().error("Missing candidate_id").__dict__
+
+        async def _do(client):
+            result = await self._delete_neo_candidate(client, candidate_id, reason)
+            logger.info(f"[Neo] Candidate deleted: id={candidate_id}")
+            return Response().ok(_to_jsonable(result)).__dict__
+
+        return await self._with_neo_client(_do)
+
+    async def delete_neo_release(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+        logger.info("[Neo] POST /skills/neo/delete-release requested.")
+        data = await request.get_json()
+        release_id = data.get("release_id")
+        reason = data.get("reason")
+        if not release_id:
+            return Response().error("Missing release_id").__dict__
+
+        async def _do(client):
+            result = await self._delete_neo_release(client, release_id, reason)
+            logger.info(f"[Neo] Release deleted: id={release_id}")
+            return Response().ok(_to_jsonable(result)).__dict__
 
         return await self._with_neo_client(_do)
