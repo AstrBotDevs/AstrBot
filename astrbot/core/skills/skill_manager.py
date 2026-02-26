@@ -82,8 +82,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     for skill in skills:
         description = skill.description or "No description"
         skills_lines.append(
-            f"- **{skill.name}**: {description}\n"
-            f"  File: `{skill.path}`"
+            f"- **{skill.name}**: {description}\n  File: `{skill.path}`"
         )
         if not example_path:
             example_path = skill.path

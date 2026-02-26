@@ -322,9 +322,7 @@ class ShipyardNeoBooter(ComputerBooter):
             # Read auto-provisioned credentials
             if not self._access_token:
                 self._access_token = await self._bay_manager.read_credentials()
-            logger.info(
-                "[Computer] Bay auto-started at %s", self._endpoint_url
-            )
+            logger.info("[Computer] Bay auto-started at %s", self._endpoint_url)
 
         if not self._endpoint_url or not self._access_token:
             if self._bay_manager is not None:
@@ -359,7 +357,9 @@ class ShipyardNeoBooter(ComputerBooter):
         self._shell = NeoShellComponent(self._sandbox)
 
         caps = self.capabilities or ()
-        self._browser = NeoBrowserComponent(self._sandbox) if "browser" in caps else None
+        self._browser = (
+            NeoBrowserComponent(self._sandbox) if "browser" in caps else None
+        )
 
         logger.info(
             "Got Shipyard Neo sandbox: %s (profile=%s, capabilities=%s, auto=%s)",

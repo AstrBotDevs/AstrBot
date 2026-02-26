@@ -78,7 +78,9 @@ class SkillsRoute(Route):
             )
         return endpoint, access_token
 
-    async def _delete_neo_release(self, client: Any, release_id: str, reason: str | None):
+    async def _delete_neo_release(
+        self, client: Any, release_id: str, reason: str | None
+    ):
         return await client.skills.delete_release(release_id, reason=reason)
 
     async def _delete_neo_candidate(

@@ -101,12 +101,7 @@ def _ensure_skill_frontmatter(markdown: str, *, skill_name: str, skill_key: str)
 
     description = " ".join(description.split())
 
-    header = (
-        "---\n"
-        f"name: {name}\n"
-        f"description: {description}\n"
-        "---\n\n"
-    )
+    header = f"---\nname: {name}\ndescription: {description}\n---\n\n"
     body = body.strip("\n")
     return f"{header}{body}\n"
 
