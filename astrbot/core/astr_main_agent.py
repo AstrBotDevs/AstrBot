@@ -831,6 +831,15 @@ def _apply_sandbox_tools(
     req.func_tool.add_tool(FILE_DOWNLOAD_TOOL)
 
     if booter == "shipyard_neo":
+        # Neo-specific path rule: filesystem tools operate relative to sandbox
+        # workspace root. Do not prepend "/workspace".
+        req.system_prompt += (
+            "\n[Shipyard Neo File Path Rule]\n"
+            "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
+            "always pass paths relative to the sandbox workspace root. "
+            "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
+        )
+
         # Determine sandbox capabilities from an already-booted session.
         # If no session exists yet (first request), capabilities is None
         # and we register all tools conservatively.
