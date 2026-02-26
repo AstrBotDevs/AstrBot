@@ -149,6 +149,20 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_done_called = True
 
 
+class MockEvent:
+    def __init__(self, umo: str, sender_id: str):
+        self.unified_msg_origin = umo
+        self._sender_id = sender_id
+
+    def get_sender_id(self):
+        return self._sender_id
+
+
+class MockAgentContext:
+    def __init__(self, event):
+        self.event = event
+
+
 @pytest.fixture
 def mock_provider():
     return MockProvider()
@@ -449,6 +463,76 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     assert final_resp.role == "assistant"
     assert final_resp.completion_text == "partial "
     assert runner.run_context.messages[-1].role == "assistant"
+
+
+@pytest.mark.asyncio
+async def test_tool_result_injects_follow_up_notice(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_event = MockEvent("test:FriendMessage:follow_up", "u1")
+    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    ticket1 = runner.follow_up(
+        message_text="follow up 1",
+    )
+    ticket2 = runner.follow_up(
+        message_text="follow up 2",
+    )
+    assert ticket1 is not None
+    assert ticket2 is not None
+
+    async for _ in runner.step():
+        pass
+
+    assert provider_request.tool_calls_result is not None
+    assert isinstance(provider_request.tool_calls_result, list)
+    assert provider_request.tool_calls_result
+    tool_result = str(
+        provider_request.tool_calls_result[0].tool_calls_result[0].content
+    )
+    assert "SYSTEM NOTICE" in tool_result
+    assert "1. follow up 1" in tool_result
+    assert "2. follow up 2" in tool_result
+    assert ticket1.resolved.is_set() is True
+    assert ticket2.resolved.is_set() is True
+    assert ticket1.consumed is True
+    assert ticket2.consumed is True
+
+
+@pytest.mark.asyncio
+async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = False
+    mock_event = MockEvent("test:FriendMessage:follow_up_no_tool", "u1")
+    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=run_context,
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    ticket = runner.follow_up(message_text="follow up without tool")
+    assert ticket is not None
+
+    async for _ in runner.step():
+        pass
+
+    assert ticket.resolved.is_set() is True
+    assert ticket.consumed is False
 
 
 if __name__ == "__main__":
