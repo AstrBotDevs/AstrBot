@@ -330,9 +330,11 @@ class TestSendBySession:
 
         with patch(
             "astrbot.core.platform.platform.Metric.upload", new_callable=AsyncMock
-        ):
-            # Should not raise any exception
+        ) as mock_upload:
             await platform.send_by_session(mock_session, mock_message_chain)
+            mock_upload.assert_awaited_once_with(
+                msg_event_tick=1, adapter_name="test_platform"
+            )
 
 
 class TestPlatformStatusEnum:

@@ -6,8 +6,8 @@ from astrbot.core.platform.platform_metadata import PlatformMetadata
 class TestPlatformMetadata:
     """Tests for PlatformMetadata dataclass."""
 
-    def test_platform_metadata_creation_basic(self):
-        """Test creating PlatformMetadata with required fields."""
+    def test_platform_metadata_creation_and_defaults(self):
+        """Test creating PlatformMetadata with required fields and checking defaults."""
         meta = PlatformMetadata(
             name="test_platform",
             description="A test platform",
@@ -17,14 +17,6 @@ class TestPlatformMetadata:
         assert meta.name == "test_platform"
         assert meta.description == "A test platform"
         assert meta.id == "test_platform_id"
-
-    def test_platform_metadata_default_values(self):
-        """Test PlatformMetadata default values."""
-        meta = PlatformMetadata(
-            name="test_platform",
-            description="A test platform",
-            id="test_platform_id",
-        )
 
         # Default values
         assert meta.default_config_tmpl is None
