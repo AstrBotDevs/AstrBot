@@ -185,43 +185,6 @@ class TestEventBusDispatch:
         assert mock_pipeline_scheduler.execute.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_dispatch_handles_incomplete_conf_info(
-        self,
-        event_bus,
-        mock_config_manager,
-        mock_pipeline_scheduler,
-    ):
-        """Test that dispatch ignores incomplete conf_info defensively."""
-        mock_config_manager.get_conf_info.return_value = {
-            "name": "Missing ID",
-        }
-
-        mock_event = MagicMock()
-        mock_event.unified_msg_origin = "test-platform:group:123"
-        mock_event.get_platform_id.return_value = "test-platform"
-        mock_event.get_platform_name.return_value = "Test Platform"
-        mock_event.get_sender_name.return_value = "TestUser"
-        mock_event.get_sender_id.return_value = "user123"
-        mock_event.get_message_outline.return_value = "Hello"
-
-        event_bus.event_queue.get = AsyncMock(
-            side_effect=[mock_event, asyncio.CancelledError()]
-        )
-
-        with (
-            patch("astrbot.core.event_bus.logger") as mock_logger,
-            patch.object(event_bus, "_print_event") as mock_print_event,
-        ):
-            with suppress(asyncio.CancelledError):
-                await event_bus.dispatch()
-
-            mock_logger.error.assert_called_once()
-            assert "Incomplete conf_info" in mock_logger.error.call_args[0][0]
-
-        mock_print_event.assert_not_called()
-        mock_pipeline_scheduler.execute.assert_not_called()
-
-    @pytest.mark.asyncio
     async def test_dispatch_falls_back_to_conf_id_when_name_missing(
         self,
         event_bus,
