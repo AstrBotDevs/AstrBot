@@ -619,7 +619,7 @@ class RegisteringAgent:
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
-    def __init__(self, agent: Agent[Any]) -> None:
+    def __init__(self, agent: Agent[AstrAgentContext]) -> None:
         self._agent = agent
 
 
@@ -627,7 +627,7 @@ def register_agent(
     name: str,
     instruction: str,
     tools: list[str | FunctionTool] | None = None,
-    run_hooks: BaseAgentRunHooks[Any] | None = None,
+    run_hooks: BaseAgentRunHooks[AstrAgentContext] | None = None,
 ):
     """注册一个 Agent
 
@@ -641,12 +641,12 @@ def register_agent(
     tools_ = tools or []
 
     def decorator(awaitable: Callable[..., Awaitable[Any]]):
-        AstrAgent = Agent[Any]
+        AstrAgent = Agent[AstrAgentContext]
         agent = AstrAgent(
             name=name,
             instructions=instruction,
             tools=tools_,
-            run_hooks=run_hooks or BaseAgentRunHooks[Any](),
+            run_hooks=run_hooks or BaseAgentRunHooks[AstrAgentContext](),
         )
         handoff_tool = HandoffTool(agent=agent)
         handoff_tool.handler = awaitable
