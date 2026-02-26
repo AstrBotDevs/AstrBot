@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import uuid
+from typing import cast
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
@@ -27,7 +28,7 @@ from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import convert_audio_to_wav
 
 from .tg_event import TelegramPlatformEvent
@@ -380,10 +381,10 @@ class TelegramPlatformAdapter(Platform):
         elif update.message.voice:
             file = await update.message.voice.get_file()
 
-            file_basename = os.path.basename(file.file_path)
+            file_basename = os.path.basename(cast(str, file.file_path))
             temp_dir = get_astrbot_temp_path()
             temp_path = os.path.join(temp_dir, file_basename)
-            temp_path = await download_image_by_url(file.file_path, path=temp_path)
+            await download_file(cast(str, file.file_path), path=temp_path)
             path_wav = os.path.join(
                 temp_dir,
                 f"{file_basename}.wav",
