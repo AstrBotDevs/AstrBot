@@ -365,7 +365,7 @@ class DiscordPlatformAdapter(Platform):
     async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
         logger.info("[Discord] 开始收集并注册斜杠指令...")
-        registered_command_names: set[str] = set()
+        registered_commands: set[str] = set()
 
         for handler_md in star_handlers_registry:
             if not star_map[handler_md.handler_module_path].activated:
@@ -375,7 +375,7 @@ class DiscordPlatformAdapter(Platform):
             for event_filter in handler_md.event_filters:
                 cmd_infos = self._extract_command_infos(event_filter, handler_md)
                 for cmd_name, description in cmd_infos:
-                    if cmd_name in registered_command_names:
+                    if cmd_name in registered_commands:
                         logger.warning(
                             "[Discord] Duplicate slash command '%s' from %s ignored.",
                             cmd_name,
@@ -405,11 +405,11 @@ class DiscordPlatformAdapter(Platform):
                         guild_ids=[self.guild_id] if self.guild_id else None,
                     )
                     self.client.add_application_command(slash_command)
-                    registered_command_names.add(cmd_name)
+                    registered_commands.add(cmd_name)
 
-        if registered_command_names:
+        if registered_commands:
             logger.info(
-                f"[Discord] 准备同步 {len(registered_command_names)} 个指令: {', '.join(sorted(registered_command_names))}",
+                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(sorted(registered_commands))}",
             )
         else:
             logger.info("[Discord] 没有发现可注册的指令。")
