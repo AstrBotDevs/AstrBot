@@ -95,6 +95,7 @@ def _ensure_skill_frontmatter(markdown: str, *, skill_name: str, skill_key: str)
     frontmatter, body = _parse_frontmatter(markdown)
 
     name = frontmatter.get("name") or skill_name
+    name = " ".join(str(name).split())
     description = frontmatter.get("description") or _derive_description(body)
     if not description:
         description = f"Synced skill for `{skill_key}`."
