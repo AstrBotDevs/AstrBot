@@ -493,19 +493,38 @@ export function useMessages(
                                     }
                                 }
                             } else if (chain_type === 'tool_call_result') {
-                                // 解析工具调用结果数据
+                                // Parse tool call result payload
                                 const resultData = JSON.parse(chunk_json.data);
 
-                                if (message_obj) {
-                                    // 遍历所有 tool_call parts 找到对应的 tool_call
-                                    for (const part of message_obj.message) {
-                                        if (part.type === 'tool_call' && part.tool_calls) {
-                                            const toolCall = part.tool_calls.find((tc: ToolCall) => tc.id === resultData.id);
-                                            if (toolCall) {
-                                                toolCall.result = resultData.result;
-                                                toolCall.finished_ts = resultData.ts;
-                                                break;
-                                            }
+                                const updateToolCallInContent = (content: MessageContent | null | undefined): boolean => {
+                                    if (!content || !Array.isArray(content.message)) {
+                                        return false;
+                                    }
+                                    for (const part of content.message) {
+                                        if (part.type !== 'tool_call' || !part.tool_calls) {
+                                            continue;
+                                        }
+                                        const toolCall = part.tool_calls.find((tc: ToolCall) => tc.id === resultData.id);
+                                        if (!toolCall) {
+                                            continue;
+                                        }
+                                        toolCall.result = resultData.result;
+                                        toolCall.finished_ts = resultData.ts;
+                                        return true;
+                                    }
+                                    return false;
+                                };
+
+                                let updated = updateToolCallInContent(message_obj);
+                                if (!updated) {
+                                    for (let i = messages.value.length - 1; i >= 0; i--) {
+                                        const message = messages.value[i]?.content;
+                                        if (message?.type !== 'bot') {
+                                            continue;
+                                        }
+                                        if (updateToolCallInContent(message)) {
+                                            updated = true;
+                                            break;
                                         }
                                     }
                                 }
@@ -562,7 +581,14 @@ export function useMessages(
                             }
                         }
 
-                        if ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) {
+                        const isToolCallEvent =
+                            chunk_json.type === 'plain' &&
+                            (chunk_json.chain_type === 'tool_call' || chunk_json.chain_type === 'tool_call_result');
+
+                        if (
+                            ((chunk_json.type === 'break' && chunk_json.streaming) || !chunk_json.streaming) &&
+                            !isToolCallEvent
+                        ) {
                             in_streaming = false;
                             if (!chunk_json.streaming) {
                                 isStreaming.value = false;

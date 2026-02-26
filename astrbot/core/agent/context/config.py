@@ -29,6 +29,8 @@ class ContextConfig:
     """Number of recent messages to keep during LLM-based compression."""
     llm_compress_provider: "Provider | None" = None
     """LLM provider used for compression tasks. If None, truncation strategy is used."""
+    llm_compress_use_compact_api: bool = True
+    """Whether to prefer provider native compact API when available."""
     custom_token_counter: TokenCounter | None = None
     """Custom token counting method. If None, the default method is used."""
     custom_compressor: ContextCompressor | None = None

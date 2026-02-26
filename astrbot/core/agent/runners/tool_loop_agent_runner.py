@@ -85,6 +85,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_compress_instruction: str | None = None,
         llm_compress_keep_recent: int = 0,
         llm_compress_provider: Provider | None = None,
+        # llm_compress_use_compact_api:
+        #   some provider has its on compact logic, such as OpenAI Responses API,
+        #   when this is True, the agent will try to use the provider's compact API if available,
+        #   and fall back to compressor if not.
+        llm_compress_use_compact_api: bool = True,
         # truncate by turns compressor
         truncate_turns: int = 1,
         # customize
@@ -100,6 +105,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.llm_compress_instruction = llm_compress_instruction
         self.llm_compress_keep_recent = llm_compress_keep_recent
         self.llm_compress_provider = llm_compress_provider
+        self.llm_compress_use_compact_api = llm_compress_use_compact_api
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
@@ -115,6 +121,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_compress_instruction=self.llm_compress_instruction,
             llm_compress_keep_recent=self.llm_compress_keep_recent,
             llm_compress_provider=self.llm_compress_provider,
+            llm_compress_use_compact_api=self.llm_compress_use_compact_api,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
@@ -806,24 +813,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
-        # yield the last tool call result
-        if tool_call_result_blocks:
-            last_tcr_content = str(tool_call_result_blocks[-1].content)
-            yield _HandleFunctionToolsResult.from_message_chain(
-                MessageChain(
-                    type="tool_call_result",
-                    chain=[
-                        Json(
-                            data={
-                                "id": func_tool_id,
-                                "ts": time.time(),
-                                "result": last_tcr_content,
-                            }
-                        )
-                    ],
+            # yield the tool call result
+            if tool_call_result_blocks:
+                last_tcr_content = str(tool_call_result_blocks[-1].content)
+                yield _HandleFunctionToolsResult.from_message_chain(
+                    MessageChain(
+                        type="tool_call_result",
+                        chain=[
+                            Json(
+                                data={
+                                    "id": func_tool_id,
+                                    "ts": time.time(),
+                                    "result": last_tcr_content,
+                                }
+                            )
+                        ],
+                    )
                 )
-            )
-            logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
+                logger.info(f"Tool `{func_tool_name}` Result: {last_tcr_content}")
 
         # 处理函数调用响应
         if tool_call_result_blocks:

@@ -222,6 +222,10 @@
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
           "hint": "留空时将降级为\"按对话轮数截断\"的策略。"
+        },
+        "llm_compress_use_compact_api": {
+          "description": "优先使用提供商 Context Compact 接口",
+          "hint": "启用后会优先调用当前会话提供商的 Native Compact 接口，若不支持则回退到常规 LLM 压缩逻辑。如 OpenAI Responses API 支持原生的上下文压缩接口"
         }
       }
     },

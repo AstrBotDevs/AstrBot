@@ -96,6 +96,7 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent": 6,
         "llm_compress_provider_id": "",
+        "llm_compress_use_compact_api": True,
         "max_context_length": -1,
         "dequeue_context_length": 1,
         "streaming_response": False,
@@ -955,6 +956,19 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
+                    },
+                    "OpenAI Responses": {
+                        "id": "openai_responses",
+                        "provider": "openai",
+                        "type": "openai_responses",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.openai.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                        "custom_extra_body": {},
                     },
                     "Google Gemini": {
                         "id": "google_gemini",
@@ -2933,6 +2947,15 @@ CONFIG_METADATA_3 = {
                         "type": "string",
                         "_special": "select_provider",
                         "hint": "留空时将降级为“按对话轮数截断”的策略。",
+                        "condition": {
+                            "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.llm_compress_use_compact_api": {
+                        "description": "Prefer compact API when available",
+                        "type": "bool",
+                        "hint": "When enabled, local runner first tries provider native compact API and falls back to LLM summary compression.",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
