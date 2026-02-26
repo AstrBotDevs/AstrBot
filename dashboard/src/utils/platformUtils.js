@@ -61,6 +61,7 @@ export function getTutorialLink(platformType) {
     "vocechat": "https://docs.astrbot.app/deploy/platform/vocechat.html",
     "satori": "https://docs.astrbot.app/deploy/platform/satori/llonebot.html",
     "misskey": "https://docs.astrbot.app/deploy/platform/misskey.html",
+    "line": "https://docs.astrbot.app/deploy/platform/line.html",
   }
   return tutorialMap[platformType] || "https://docs.astrbot.app";
 }
