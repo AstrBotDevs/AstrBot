@@ -31,7 +31,7 @@ from astrbot.core.utils.session_lock import session_lock_manager
 
 from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
-from ....follow_up import (
+from ...follow_up import (
     FollowUpCapture,
     finalize_follow_up_capture,
     prepare_follow_up_capture,
