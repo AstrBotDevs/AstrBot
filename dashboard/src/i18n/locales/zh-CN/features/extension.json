@@ -225,7 +225,7 @@
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
     "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
-    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。"
+    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local”、“local_sandboxed” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。"
   },
   "card": {
     "actions": {

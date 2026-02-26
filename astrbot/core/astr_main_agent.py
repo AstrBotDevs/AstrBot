@@ -110,7 +110,7 @@ class MainAgentBuildConfig:
     to prevent LLM output harmful information"""
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "local"
-    """The runtime for agent computer use: none, local, or sandbox."""
+    """The runtime for agent computer use: none, local, local_sandboxed, or sandbox."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -1050,7 +1050,7 @@ async def build_main_agent(
 
     if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
-    elif config.computer_use_runtime == "local":
+    elif config.computer_use_runtime in {"local", "local_sandboxed"}:
         _apply_local_env_tools(req)
 
     agent_runner = AgentRunner()

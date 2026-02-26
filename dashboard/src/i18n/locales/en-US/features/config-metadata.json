@@ -147,7 +147,7 @@
       "provider_settings": {
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
-          "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
+          "hint": "sandbox means running in a remote sandbox environment, local means running directly on the local machine, local_sandboxed means local execution with OS-level sandboxing (bwrap/seatbelt), and none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
         },
         "computer_use_require_admin": {
           "description": "Require AstrBot Admin Permission",
