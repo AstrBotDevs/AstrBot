@@ -43,7 +43,7 @@ class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
         self.server = quart.Quart(__name__)
         self.port = int(cast(str, config.get("port")))
-        self.callback_server_host = config.get("callback_server_host", "::")
+        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
             "/callback/command",
             view_func=self.verify,
@@ -407,7 +407,7 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
-            resp = await asyncio.get_event_loop().run_in_executor(
+            resp: Response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 media_id,

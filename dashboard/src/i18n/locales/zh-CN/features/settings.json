@@ -1,14 +1,6 @@
 {
   "network": {
     "title": "网络",
-    "server": {
-      "title": "服务器地址",
-      "subtitle": "配置后端 API 地址",
-      "label": "API 基础地址",
-      "placeholder": "例如：http://localhost:6185",
-      "hint": "留空以使用默认设置（相对路径）",
-      "save": "保存并刷新"
-    },
     "githubProxy": {
       "title": "GitHub 加速地址",
       "subtitle": "设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。",

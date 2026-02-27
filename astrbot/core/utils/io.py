@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import logging
 import os
@@ -8,7 +7,6 @@ import ssl
 import time
 import uuid
 import zipfile
-from ipaddress import IPv4Address, IPv6Address, ip_address
 from pathlib import Path
 
 import aiohttp
@@ -208,51 +206,16 @@ def file_to_base64(file_path: str) -> str:
     return "base64://" + base64_str
 
 
-def get_local_ip_addresses() -> list[IPv4Address | IPv6Address]:
+def get_local_ip_addresses():
     net_interfaces = psutil.net_if_addrs()
-    network_ips: list[IPv4Address | IPv6Address] = []
+    network_ips = []
 
-    for _, addrs in net_interfaces.items():
+    for interface, addrs in net_interfaces.items():
         for addr in addrs:
-            if addr.family == socket.AF_INET:
-                network_ips.append(ip_address(addr.address))
-            elif addr.family == socket.AF_INET6:
-                # 过滤掉 IPv6 的 link-local 地址（fe80:...）
-                ip = ip_address(addr.address.split("%")[0])  # 处理带 zone index 的情况
-                if not ip.is_link_local:
-                    network_ips.append(ip)
+            if addr.family == socket.AF_INET:  # 使用 socket.AF_INET 代替 psutil.AF_INET
+                network_ips.append(addr.address)
 
     return network_ips
-
-
-async def get_public_ip_address() -> list[IPv4Address | IPv6Address]:
-    urls = [
-        "https://api64.ipify.org",
-        "https://ident.me",
-        "https://ifconfig.me",
-        "https://icanhazip.com",
-    ]
-    found_ips: dict[int, IPv4Address | IPv6Address] = {}
-
-    async def fetch(session: aiohttp.ClientSession, url: str):
-        try:
-            async with session.get(url, timeout=3) as resp:
-                if resp.status == 200:
-                    raw_ip = (await resp.text()).strip()
-                    ip = ip_address(raw_ip)
-                    if ip.version not in found_ips:
-                        found_ips[ip.version] = ip
-        except Exception as e:
-            # Ignore errors from individual services so that a single failing
-            # endpoint does not prevent discovering the public IP from others.
-            logger.debug("Failed to fetch public IP from %s: %s", url, e)
-
-    async with aiohttp.ClientSession() as session:
-        tasks = [fetch(session, url) for url in urls]
-        await asyncio.gather(*tasks)
-
-    # 返回找到的所有 IP 对象列表
-    return list(found_ips.values())
 
 
 async def get_dashboard_version():
