@@ -42,6 +42,7 @@ const buildFailedPluginItems = (raw) => {
   return Object.entries(raw || {}).map(([dirName, info]) => {
     const detail = info && typeof info === "object" ? info : {};
     return {
+      ...detail,
       dir_name: dirName,
       name: detail.name || dirName,
       display_name: detail.display_name || detail.name || dirName,
@@ -552,48 +553,35 @@ export const useExtensionPage = () => {
   };
 
   const requestUninstall = (target) => {
-    if (!target?.action) return;
+    if (!target?.id || !target?.kind) return;
     uninstallTarget.value = target;
     showUninstallDialog.value = true;
   };
 
-  const performUninstallNormal = async (
-    pluginName,
+  const performUninstall = async (
+    target,
     { deleteConfig = false, deleteData = false } = {},
   ) => {
-    toast(`${tm("messages.uninstalling")} ${pluginName}`, "primary");
+    if (!target?.id || !target?.kind) return;
+
+    const isFailed = target.kind === "failed";
+    const endpoint = isFailed
+      ? "/api/plugin/uninstall-failed"
+      : "/api/plugin/uninstall";
+    const payload = isFailed
+      ? { dir_name: target.id, delete_config: deleteConfig, delete_data: deleteData }
+      : { name: target.id, delete_config: deleteConfig, delete_data: deleteData };
+
+    toast(`${tm("messages.uninstalling")} ${target.id}`, "primary");
+
     try {
-      const res = await axios.post("/api/plugin/uninstall", {
-        name: pluginName,
-        delete_config: deleteConfig,
-        delete_data: deleteData,
-      });
+      const res = await axios.post(endpoint, payload);
       if (res.data.status === "error") {
         toast(res.data.message, "error");
         return;
       }
-      Object.assign(extension_data, res.data);
-      toast(res.data.message, "success");
-      await getExtensions();
-    } catch (err) {
-      toast(resolveErrorMessage(err), "error");
-    }
-  };
-
-  const performUninstallFailed = async (
-    dirName,
-    { deleteConfig = false, deleteData = false } = {},
-  ) => {
-    toast(`${tm("messages.uninstalling")} ${dirName}`, "primary");
-    try {
-      const res = await axios.post("/api/plugin/uninstall-failed", {
-        dir_name: dirName,
-        delete_config: deleteConfig,
-        delete_data: deleteData,
-      });
-      if (res.data.status === "error") {
-        toast(res.data.message, "error");
-        return;
+      if (!isFailed) {
+        Object.assign(extension_data, res.data);
       }
       toast(res.data.message, "success");
       await getExtensions();
@@ -604,22 +592,12 @@ export const useExtensionPage = () => {
 
   const requestUninstallPlugin = (name) => {
     if (!name) return;
-    requestUninstall({
-      label: name,
-      action: async (options) => {
-        await performUninstallNormal(name, options);
-      },
-    });
+    requestUninstall({ kind: "normal", id: name });
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
     if (!dirName) return;
-    requestUninstall({
-      label: dirName,
-      action: async (options) => {
-        await performUninstallFailed(dirName, options);
-      },
-    });
+    requestUninstall({ kind: "failed", id: dirName });
   };
   
   const checkUpdate = () => {
@@ -656,7 +634,7 @@ export const useExtensionPage = () => {
 
     if (typeof options === "boolean") {
       if (options) {
-        await performUninstallNormal(extensionName);
+        await performUninstall({ kind: "normal", id: extensionName });
       } else {
         requestUninstallPlugin(extensionName);
       }
@@ -664,7 +642,7 @@ export const useExtensionPage = () => {
     }
 
     if (options && typeof options === "object") {
-      await performUninstallNormal(extensionName, options);
+      await performUninstall({ kind: "normal", id: extensionName }, options);
       return;
     }
 
@@ -677,7 +655,7 @@ export const useExtensionPage = () => {
     if (!target) return;
 
     try {
-      await target.action(options);
+      await performUninstall(target, options);
     } finally {
       uninstallTarget.value = null;
       showUninstallDialog.value = false;
@@ -1246,7 +1224,8 @@ export const useExtensionPage = () => {
       await checkAndPromptConflicts();
     } catch (err) {
       loading_.value = false;
-      onLoadingDialogResult(2, err, -1);
+      const message = resolveErrorMessage(err, tm("messages.installFailed"));
+      onLoadingDialogResult(2, message, -1);
       await refreshExtensionsAfterInstallFailure();
     }
   };
@@ -1283,8 +1262,9 @@ export const useExtensionPage = () => {
       await checkAndPromptConflicts();
     } catch (err) {
       loading_.value = false;
-      toast(tm("messages.installFailed") + " " + err, "error");
-      onLoadingDialogResult(2, err, -1);
+      const message = resolveErrorMessage(err, tm("messages.installFailed"));
+      toast(message, "error");
+      onLoadingDialogResult(2, message, -1);
       await refreshExtensionsAfterInstallFailure();
     }
   };

@@ -1047,7 +1047,6 @@ class PluginManager:
         templates = {
             "not_found_in_failed_list": "插件不存在于失败列表中。",
             "reserved_plugin_cannot_uninstall": "该插件是 AstrBot 保留插件，无法卸载。",
-            "plugin_dir_not_exists": "插件目录不存在。",
             "failed_plugin_dir_remove_error": (
                 "移除失败插件成功，但是删除插件文件夹失败: {error}。"
                 "您可以手动删除该文件夹，位于 addons/plugins/ 下。"
@@ -1220,22 +1219,23 @@ class PluginManager:
                     self._format_plugin_error("reserved_plugin_cannot_uninstall"),
                 )
 
-            plugin_path = os.path.join(self.plugin_store_path, dir_name)
-            if not os.path.exists(plugin_path):
-                raise Exception(
-                    self._format_plugin_error("plugin_dir_not_exists"),
-                )
-
             self._cleanup_plugin_state(dir_name)
 
-            try:
-                remove_dir(plugin_path)
-            except Exception as e:
-                raise Exception(
-                    self._format_plugin_error(
-                        "failed_plugin_dir_remove_error",
-                        error=f"{e!s}",
-                    ),
+            plugin_path = os.path.join(self.plugin_store_path, dir_name)
+            if os.path.exists(plugin_path):
+                try:
+                    remove_dir(plugin_path)
+                except Exception as e:
+                    raise Exception(
+                        self._format_plugin_error(
+                            "failed_plugin_dir_remove_error",
+                            error=f"{e!s}",
+                        ),
+                    )
+            else:
+                logger.debug(
+                    "插件目录不存在，视为已部分卸载状态，继续清理失败插件记录和可选产物: %s",
+                    plugin_path,
                 )
 
             plugin_label = dir_name
