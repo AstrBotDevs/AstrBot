@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 import re
 import uuid
@@ -64,7 +63,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             self.timeout = 20
         self.proxy: str = provider_config.get("proxy", "")
         if self.proxy:
-            logger.info(t("msg-c785baf0", res=self.proxy))
+            logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
@@ -127,7 +126,9 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             # 验证reference_id格式
             if not self._validate_reference_id(self.reference_id):
                 raise ValueError(
-                    t("msg-822bce1c", res=self.reference_id),
+                    f"无效的FishAudio参考模型ID: '{self.reference_id}'. "
+                    f"请确保ID是32位十六进制字符串（例如: 626bb6d3f3364c9cbc3aa6a67300a664）。"
+                    f"您可以从 https://fish.audio/zh-CN/discovery 获取有效的模型ID。",
                 )
             reference_id = self.reference_id.strip()
         else:
@@ -165,5 +166,5 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             error_bytes = await response.aread()
             error_text = error_bytes.decode("utf-8", errors="replace")[:1024]
             raise Exception(
-                t("msg-5956263b", res=response.status_code, error_text=error_text)
+                f"Fish Audio API请求失败: 状态码 {response.status_code}, 响应内容: {error_text}"
             )

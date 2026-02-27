@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import re
@@ -110,7 +109,7 @@ class LineMessageEvent(AstrMessageEvent):
         try:
             return await segment.register_to_file_service()
         except Exception as e:
-            logger.debug(t("msg-4068a191"), e)
+            logger.debug("[LINE] resolve image url failed: %s", e)
             return ""
 
     @staticmethod
@@ -121,7 +120,7 @@ class LineMessageEvent(AstrMessageEvent):
         try:
             return await segment.register_to_file_service()
         except Exception as e:
-            logger.debug(t("msg-2233b256"), e)
+            logger.debug("[LINE] resolve record url failed: %s", e)
             return ""
 
     @staticmethod
@@ -132,7 +131,7 @@ class LineMessageEvent(AstrMessageEvent):
             if isinstance(duration_ms, int) and duration_ms > 0:
                 return duration_ms
         except Exception as e:
-            logger.debug(t("msg-a7455817"), e)
+            logger.debug("[LINE] resolve record duration failed: %s", e)
         return 1000
 
     @staticmethod
@@ -143,7 +142,7 @@ class LineMessageEvent(AstrMessageEvent):
         try:
             return await segment.register_to_file_service()
         except Exception as e:
-            logger.debug(t("msg-9d0fee66"), e)
+            logger.debug("[LINE] resolve video url failed: %s", e)
             return ""
 
     @staticmethod
@@ -159,7 +158,7 @@ class LineMessageEvent(AstrMessageEvent):
                 cover_seg = Image(file=cover_candidate)
                 return await cover_seg.register_to_file_service()
             except Exception as e:
-                logger.debug(t("msg-3b8ea946"), e)
+                logger.debug("[LINE] resolve video cover failed: %s", e)
 
         try:
             video_path = await segment.convert_to_file_path()
@@ -187,7 +186,7 @@ class LineMessageEvent(AstrMessageEvent):
             cover_seg = Image.fromFileSystem(str(thumb_path))
             return await cover_seg.register_to_file_service()
         except Exception as e:
-            logger.debug(t("msg-aea2081a"), e)
+            logger.debug("[LINE] generate video preview failed: %s", e)
             return ""
 
     @staticmethod
@@ -197,7 +196,7 @@ class LineMessageEvent(AstrMessageEvent):
         try:
             return await segment.register_to_file_service()
         except Exception as e:
-            logger.debug(t("msg-af426b7e"), e)
+            logger.debug("[LINE] resolve file url failed: %s", e)
             return ""
 
     @staticmethod
@@ -207,7 +206,7 @@ class LineMessageEvent(AstrMessageEvent):
             if file_path and os.path.exists(file_path):
                 return int(os.path.getsize(file_path))
         except Exception as e:
-            logger.debug(t("msg-fe44c12d"), e)
+            logger.debug("[LINE] resolve file size failed: %s", e)
         return 0
 
     @classmethod
@@ -223,7 +222,7 @@ class LineMessageEvent(AstrMessageEvent):
 
         if len(messages) > 5:
             logger.warning(
-                t("msg-d6443173")
+                "[LINE] message count exceeds 5, extra segments will be dropped."
             )
             messages = messages[:5]
         return messages

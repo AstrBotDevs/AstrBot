@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import abc
 import uuid
 from asyncio import Queue
@@ -163,4 +162,4 @@ class Platform(abc.ABC):
         Raises:
             NotImplementedError: 平台未实现统一 Webhook 模式
         """
-        raise NotImplementedError(t("msg-30fc9871", res=self.meta().name))
+        raise NotImplementedError(f"平台 {self.meta().name} 未实现统一 Webhook 模式")

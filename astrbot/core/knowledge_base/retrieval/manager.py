@@ -2,7 +2,6 @@
 
 协调稠密检索、稀疏检索和 Rerank,提供统一的检索接口
 """
-from astrbot.core.lang import t
 
 import time
 from dataclasses import dataclass
@@ -103,7 +102,7 @@ class RetrievalManager:
                 }
                 new_kb_ids.append(kb_id)
             else:
-                logger.warning(t("msg-fcc0dde2", kb_id=kb_id))
+                logger.warning(f"知识库 ID {kb_id} 实例未找到, 已跳过该知识库的检索")
 
         kb_ids = new_kb_ids
 
@@ -116,7 +115,7 @@ class RetrievalManager:
         )
         time_end = time.time()
         logger.debug(
-            t("msg-320cfcff", res=len(kb_ids), res_2=time_end - time_start, res_3=len(dense_results)),
+            f"Dense retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(dense_results)} results.",
         )
 
         # 2. 稀疏检索
@@ -128,7 +127,7 @@ class RetrievalManager:
         )
         time_end = time.time()
         logger.debug(
-            t("msg-90ffcfc8", res=len(kb_ids), res_2=time_end - time_start, res_3=len(sparse_results)),
+            f"Sparse retrieval across {len(kb_ids)} bases took {time_end - time_start:.2f}s and returned {len(sparse_results)} results.",
         )
 
         # 3. 结果融合
@@ -140,7 +139,7 @@ class RetrievalManager:
         )
         time_end = time.time()
         logger.debug(
-            t("msg-12bcf404", res=time_end - time_start, res_2=len(fused_results)),
+            f"Rank fusion took {time_end - time_start:.2f}s and returned {len(fused_results)} results.",
         )
 
         # 4. 转换为 RetrievalResult (批量获取元数据)
@@ -172,7 +171,7 @@ class RetrievalManager:
         for kb_id in kb_ids:
             vec_db = kb_options[kb_id]["vec_db"]
             if not isinstance(vec_db, FaissVecDB):
-                logger.warning(t("msg-28c084bc", kb_id=kb_id))
+                logger.warning(f"vec_db for kb_id {kb_id} is not FaissVecDB")
                 continue
 
             rerank_pi = kb_options[kb_id]["rerank_provider_id"]
@@ -232,7 +231,7 @@ class RetrievalManager:
             except Exception as e:
                 from astrbot.core import logger
 
-                logger.warning(t("msg-cc0230a3", kb_id=kb_id, e=e))
+                logger.warning(f"知识库 {kb_id} 稠密检索失败: {e}")
                 continue
 
         # 按相似度排序并返回 top_k

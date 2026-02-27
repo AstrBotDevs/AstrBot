@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, Generic
@@ -71,7 +70,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
         """Run the tool with the given arguments. The handler field has priority."""
         raise NotImplementedError(
-            t("msg-983bc802")
+            "FunctionTool.call() must be implemented by subclasses or set a handler."
         )
 
 

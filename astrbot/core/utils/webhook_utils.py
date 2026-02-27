@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 import uuid
 
@@ -10,7 +9,7 @@ def _get_callback_api_base() -> str:
     try:
         return astrbot_config.get("callback_api_base", "").rstrip("/")
     except Exception as e:
-        logger.error(t("msg-64c7ddcf", e=e))
+        logger.error(f"获取 callback_api_base 失败: {e!s}")
         return ""
 
 
@@ -18,7 +17,7 @@ def _get_dashboard_port() -> int:
     try:
         return astrbot_config.get("dashboard", {}).get("port", 6185)
     except Exception as e:
-        logger.error(t("msg-9b5d1bb1", e=e))
+        logger.error(f"获取 dashboard 端口失败: {e!s}")
         return 6185
 
 
@@ -32,7 +31,7 @@ def _is_dashboard_ssl_enabled() -> bool:
     try:
         return bool(astrbot_config.get("dashboard", {}).get("ssl", {}).get("enable"))
     except Exception as e:
-        logger.error(t("msg-3db149ad", e=e))
+        logger.error(f"获取 dashboard SSL 配置失败: {e!s}")
         return False
 
 
@@ -64,7 +63,7 @@ def log_webhook_info(platform_name: str, webhook_uuid: str) -> None:
         f"   ➜  {webhook_url}\n"
         "====================\n"
     )
-    logger.info(t("msg-3739eec9", display_log=display_log))
+    logger.info(display_log)
 
 
 def ensure_platform_webhook_config(platform_cfg: dict) -> bool:

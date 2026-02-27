@@ -1,7 +1,6 @@
 """企业微信智能机器人 webhook 推送客户端。"""
 
 from __future__ import annotations
-from astrbot.core.lang import t
 
 import base64
 import hashlib
@@ -29,14 +28,14 @@ class WecomAIBotWebhookClient:
         self.webhook_url = webhook_url.strip()
         self.timeout_seconds = timeout_seconds
         if not self.webhook_url:
-            raise WecomAIBotWebhookError(t("msg-a5c90267"))
+            raise WecomAIBotWebhookError("消息推送 webhook URL 不能为空")
         self._webhook_key = self._extract_webhook_key()
 
     def _extract_webhook_key(self) -> str:
         parsed = urlparse(self.webhook_url)
         key = parse_qs(parsed.query).get("key", [""])[0].strip()
         if not key:
-            raise WecomAIBotWebhookError(t("msg-76bfb25b"))
+            raise WecomAIBotWebhookError("消息推送 webhook URL 缺少 key 参数")
         return key
 
     def _build_upload_url(self, media_type: Literal["file", "voice"]) -> str:
@@ -70,14 +69,14 @@ class WecomAIBotWebhookClient:
                 text = await response.text()
                 if response.status != 200:
                     raise WecomAIBotWebhookError(
-                        t("msg-3545eb07", res=response.status, text=text)
+                        f"Webhook 请求失败: HTTP {response.status}, {text}"
                     )
                 result = await response.json(content_type=None)
                 if result.get("errcode") != 0:
                     raise WecomAIBotWebhookError(
-                        t("msg-758dfe0d", res=result.get('errcode'), res_2=result.get('errmsg'))
+                        f"Webhook 返回错误: {result.get('errcode')} {result.get('errmsg')}"
                     )
-        logger.debug(t("msg-c056646b"), payload.get("msgtype", "unknown"))
+        logger.debug("企业微信消息推送成功: %s", payload.get("msgtype", "unknown"))
 
     async def send_markdown_v2(self, content: str) -> None:
         for chunk in self._split_markdown_v2_content(content):
@@ -105,7 +104,7 @@ class WecomAIBotWebhookClient:
         self, file_path: Path, media_type: Literal["file", "voice"]
     ) -> str:
         if not file_path.exists() or not file_path.is_file():
-            raise WecomAIBotWebhookError(t("msg-73d3e179", file_path=file_path))
+            raise WecomAIBotWebhookError(f"文件不存在: {file_path}")
 
         content_type = (
             mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
@@ -127,16 +126,16 @@ class WecomAIBotWebhookClient:
                 text = await response.text()
                 if response.status != 200:
                     raise WecomAIBotWebhookError(
-                        t("msg-774a1821", res=response.status, text=text)
+                        f"上传媒体失败: HTTP {response.status}, {text}"
                     )
                 result = await response.json(content_type=None)
                 if result.get("errcode") != 0:
                     raise WecomAIBotWebhookError(
-                        t("msg-6ff016a4", res=result.get('errcode'), res_2=result.get('errmsg'))
+                        f"上传媒体失败: {result.get('errcode')} {result.get('errmsg')}"
                     )
                 media_id = result.get("media_id", "")
                 if not media_id:
-                    raise WecomAIBotWebhookError(t("msg-0e8252d1"))
+                    raise WecomAIBotWebhookError("上传媒体失败: 返回缺少 media_id")
                 return str(media_id)
 
     async def send_file(self, file_path: Path) -> None:
@@ -190,7 +189,7 @@ class WecomAIBotWebhookClient:
                 await flush_markdown_buffer(markdown_buffer)
                 file_path = await component.get_file()
                 if not file_path:
-                    logger.warning(t("msg-9dbc2296"), component)
+                    logger.warning("文件消息缺少有效文件路径，已跳过: %s", component)
                     continue
                 await self.send_file(Path(file_path))
             elif isinstance(component, Video):
@@ -215,11 +214,11 @@ class WecomAIBotWebhookClient:
                             target_voice_path.unlink()
                         except Exception as e:
                             logger.warning(
-                                t("msg-2e567c36"), target_voice_path, e
+                                "清理临时语音文件失败 %s: %s", target_voice_path, e
                             )
             else:
                 logger.warning(
-                    t("msg-e99c4df9"),
+                    "企业微信消息推送暂不支持组件类型 %s，已跳过",
                     type(component).__name__,
                 )
 

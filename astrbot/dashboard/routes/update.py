@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import traceback
 
 from quart import request
@@ -49,8 +48,8 @@ class UpdateRoute(Route):
             )
             return Response().ok(None, "迁移成功。").__dict__
         except Exception as e:
-            logger.error(t("msg-a3503781", res=traceback.format_exc()))
-            return Response().error(t("msg-543d8e4d", e=e)).__dict__
+            logger.error(f"迁移失败: {traceback.format_exc()}")
+            return Response().error(f"迁移失败: {e!s}").__dict__
 
     async def check_update(self):
         type_ = request.args.get("type", None)
@@ -75,7 +74,7 @@ class UpdateRoute(Route):
                 },
             ).__dict__
         except Exception as e:
-            logger.warning(t("msg-251a5f4a", e=e))
+            logger.warning(f"检查更新失败: {e!s} (不影响除项目更新外的正常使用)")
             return Response().error(e.__str__()).__dict__
 
     async def get_releases(self):
@@ -83,7 +82,7 @@ class UpdateRoute(Route):
             ret = await self.astrbot_updator.get_releases()
             return Response().ok(ret).__dict__
         except Exception as e:
-            logger.error(t("msg-aa6bff26", res=traceback.format_exc()))
+            logger.error(f"/api/update/releases: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
     async def update_project(self):
@@ -110,14 +109,14 @@ class UpdateRoute(Route):
             try:
                 await download_dashboard(latest=latest, version=version, proxy=proxy)
             except Exception as e:
-                logger.error(t("msg-c5170c27", e=e))
+                logger.error(f"下载管理面板文件失败: {e}。")
 
             # pip 更新依赖
-            logger.info(t("msg-db715c26"))
+            logger.info("更新依赖中...")
             try:
                 await pip_installer.install(requirements_path="requirements.txt")
             except Exception as e:
-                logger.error(t("msg-9a00f940", e=e))
+                logger.error(f"更新依赖失败: {e}")
 
             if reboot:
                 await self.core_lifecycle.restart()
@@ -134,7 +133,7 @@ class UpdateRoute(Route):
             )
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
-            logger.error(t("msg-6f96e3ba", res=traceback.format_exc()))
+            logger.error(f"/api/update_project: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
     async def update_dashboard(self):
@@ -142,19 +141,19 @@ class UpdateRoute(Route):
             try:
                 await download_dashboard(version=f"v{VERSION}", latest=False)
             except Exception as e:
-                logger.error(t("msg-c5170c27", e=e))
-                return Response().error(t("msg-3217b509", e=e)).__dict__
+                logger.error(f"下载管理面板文件失败: {e}。")
+                return Response().error(f"下载管理面板文件失败: {e}").__dict__
             ret = Response().ok(None, "更新成功。刷新页面即可应用新版本面板。").__dict__
             return ret, 200, CLEAR_SITE_DATA_HEADERS
         except Exception as e:
-            logger.error(t("msg-9cff28cf", res=traceback.format_exc()))
+            logger.error(f"/api/update_dashboard: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__
 
     async def install_pip_package(self):
         if DEMO_MODE:
             return (
                 Response()
-                .error(t("msg-1198c327"))
+                .error("You are not permitted to do this operation in demo mode")
                 .__dict__
             )
 
@@ -162,10 +161,10 @@ class UpdateRoute(Route):
         package = data.get("package", "")
         mirror = data.get("mirror", None)
         if not package:
-            return Response().error(t("msg-38e60adf")).__dict__
+            return Response().error("缺少参数 package 或不合法。").__dict__
         try:
             await pip_installer.install(package, mirror=mirror)
             return Response().ok(None, "安装成功。").__dict__
         except Exception as e:
-            logger.error(t("msg-a1191473", res=traceback.format_exc()))
+            logger.error(f"/api/update_pip: {traceback.format_exc()}")
             return Response().error(e.__str__()).__dict__

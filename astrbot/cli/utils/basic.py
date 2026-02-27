@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from pathlib import Path
 
 import click
@@ -31,28 +30,28 @@ async def check_dashboard(astrbot_root: Path) -> None:
         dashboard_version = await get_dashboard_version()
         match dashboard_version:
             case None:
-                click.echo(t("msg-f4e0fd7b"))
+                click.echo("未安装管理面板")
                 if click.confirm(
                     "是否安装管理面板？",
                     default=True,
                     abort=True,
                 ):
-                    click.echo(t("msg-2d090cc3"))
+                    click.echo("正在安装管理面板...")
                     await download_dashboard(
                         path="data/dashboard.zip",
                         extract_path=str(astrbot_root),
                         version=f"v{VERSION}",
                         latest=False,
                     )
-                    click.echo(t("msg-2eeb67e0"))
+                    click.echo("管理面板安装完成")
 
             case str():
                 if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
-                    click.echo(t("msg-9c727dca"))
+                    click.echo("管理面板已是最新版本")
                     return
                 try:
                     version = dashboard_version.split("v")[1]
-                    click.echo(t("msg-11b49913", version=version))
+                    click.echo(f"管理面板版本: {version}")
                     await download_dashboard(
                         path="data/dashboard.zip",
                         extract_path=str(astrbot_root),
@@ -60,10 +59,10 @@ async def check_dashboard(astrbot_root: Path) -> None:
                         latest=False,
                     )
                 except Exception as e:
-                    click.echo(t("msg-f0b6145e", e=e))
+                    click.echo(f"下载管理面板失败: {e}")
                     return
     except FileNotFoundError:
-        click.echo(t("msg-9504d173"))
+        click.echo("初始化管理面板目录...")
         try:
             await download_dashboard(
                 path=str(astrbot_root / "dashboard.zip"),
@@ -71,7 +70,7 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 version=f"v{VERSION}",
                 latest=False,
             )
-            click.echo(t("msg-699e2509"))
+            click.echo("管理面板初始化完成")
         except Exception as e:
-            click.echo(t("msg-f0b6145e", e=e))
+            click.echo(f"下载管理面板失败: {e}")
             return

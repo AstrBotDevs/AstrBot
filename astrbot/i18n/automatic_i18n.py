@@ -313,6 +313,38 @@ def extract_and_rewrite(source: str):
             continue
 
         ftl_value, kwargs = result
+
+        # logging 多参数形式：logger.warning("msg %s %s", var1, var2)
+        # 此时 kwargs 为空（第一个参数是纯字符串），但 args[1:] 是实际变量
+        # 需要把 %s/%d 等占位符与 args[1:] 对应起来
+        extra_args = node.args[1:]
+        if not kwargs and extra_args and isinstance(node.args[0], ast.Constant):
+            res_counter = [0]
+            extra_kwargs = []
+            import re as _re
+
+            def _replacer(m):
+                fmt_letter = m.group(0)[-1]
+                if fmt_letter == "%":
+                    return "%"
+                if extra_args:
+                    arg_node_extra = extra_args.pop(0)
+                    param, src = get_param_and_src(
+                        arg_node_extra, res_counter, fmt_letter
+                    )
+                    extra_kwargs.append((param, src))
+                    return "{$" + param + "}"
+                return m.group(0)
+
+            ftl_value = _re.sub(
+                r"%(?:\(\w+\))?[-+0-9*.]*[sdfrx%]", _replacer, ftl_value
+            )
+            kwargs = extra_kwargs
+            # 重写时需要把 args[1:] 也一并删除，记录需要删除的尾部参数范围
+            extra_arg_nodes = node.args[1:]
+        else:
+            extra_arg_nodes = []
+
         # 保留原样的换行符转义，避免 FTL 文件出现裸换行
         ftl_value = ftl_value.replace("\r", "\\r").replace("\n", "\\n")
 
@@ -343,8 +375,23 @@ def extract_and_rewrite(source: str):
         pos = source.find(original_arg, window_start)
         if pos == -1:
             continue
+        arg_end = pos + len(original_arg)
 
-        replacements.append((pos, pos + len(original_arg), t_call, msg_id, ftl_value))
+        # 如果有 logging 多参数，替换范围从第一个参数起始到最后一个参数结束
+        # 即把 "msg %s", var1, var2 整体替换为 t("id", var1=var1, var2=var2)
+        # 注意：AST 的 col_offset 是字节偏移，含中文时不能用于 str.find 的 start
+        # 改为从 arg_end 之后搜索最后一个参数，避免中文偏移问题
+        if extra_arg_nodes:
+            last_extra = extra_arg_nodes[-1]
+            last_extra_seg = ast.get_source_segment(source, last_extra)
+            if last_extra_seg:
+                last_pos = source.find(last_extra_seg, arg_end)
+                if last_pos != -1:
+                    end_pos = last_pos + len(last_extra_seg)
+                    replacements.append((pos, end_pos, t_call, msg_id, ftl_value))
+                    continue
+
+        replacements.append((pos, arg_end, t_call, msg_id, ftl_value))
 
     # 从后往前替换，保证偏移量不受影响
     replacements.sort(key=lambda x: x[0], reverse=True)

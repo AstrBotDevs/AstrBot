@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from astrbot import logger
 
 from ..message import Message
@@ -77,7 +76,7 @@ class ContextManager:
 
             return result
         except Exception as e:
-            logger.error(t("msg-59241964", e=e), exc_info=True)
+            logger.error(f"Error during context processing: {e}", exc_info=True)
             return messages
 
     async def _run_compression(
@@ -93,7 +92,7 @@ class ContextManager:
         Returns:
             The compressed/truncated message list.
         """
-        logger.debug(t("msg-a0d672dc"))
+        logger.debug("Compress triggered, starting compression...")
 
         messages = await self.compressor(messages)
 
@@ -103,7 +102,9 @@ class ContextManager:
         # calculate compress rate
         compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
         logger.info(
-            t("msg-e6ef66f0", prev_tokens=prev_tokens, tokens_after_summary=tokens_after_summary, compress_rate=compress_rate),
+            f"Compress completed."
+            f" {prev_tokens} -> {tokens_after_summary} tokens,"
+            f" compression rate: {compress_rate:.2f}%.",
         )
 
         # last check
@@ -111,7 +112,7 @@ class ContextManager:
             messages, tokens_after_summary, self.config.max_context_tokens
         ):
             logger.info(
-                t("msg-3fe644eb")
+                "Context still exceeds max tokens after compression, applying halving truncation..."
             )
             # still need compress, truncate by half
             messages = self.truncator.truncate_by_halving(messages)

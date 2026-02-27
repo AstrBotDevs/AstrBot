@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 
 import aiohttp
@@ -15,7 +14,7 @@ class URLExtractor:
             tavily_keys: Tavily API 密钥列表
         """
         if not tavily_keys:
-            raise ValueError(t("msg-2de85bf5"))
+            raise ValueError("Error: Tavily API keys are not configured.")
 
         self.tavily_keys = tavily_keys
         self.tavily_key_index = 0
@@ -45,7 +44,7 @@ class URLExtractor:
             IOError: 如果请求失败或返回错误
         """
         if not url:
-            raise ValueError(t("msg-98ed69f4"))
+            raise ValueError("Error: url must be a non-empty string.")
 
         tavily_key = await self._get_tavily_key()
         api_url = "https://api.tavily.com/extract"
@@ -70,22 +69,22 @@ class URLExtractor:
                     if response.status != 200:
                         reason = await response.text()
                         raise OSError(
-                            t("msg-7b14cdb7", reason=reason, res=response.status)
+                            f"Tavily web extraction failed: {reason}, status: {response.status}"
                         )
 
                     data = await response.json()
                     results = data.get("results", [])
 
                     if not results:
-                        raise ValueError(t("msg-cfe431b3", url=url))
+                        raise ValueError(f"No content extracted from URL: {url}")
 
                     # 返回第一个结果的内容
                     return results[0].get("raw_content", "")
 
         except aiohttp.ClientError as e:
-            raise OSError(t("msg-b0897365", url=url, e=e)) from e
+            raise OSError(f"Failed to fetch URL {url}: {e}") from e
         except Exception as e:
-            raise OSError(t("msg-975d88e0", url=url, e=e)) from e
+            raise OSError(f"Failed to extract content from URL {url}: {e}") from e
 
 
 # 为了向后兼容，提供一个简单的函数接口

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -123,18 +122,18 @@ class FileUploadTool(FunctionTool):
 
             # Upload file to sandbox
             result = await sb.upload_file(local_path, remote_path)
-            logger.debug(t("msg-99ab0efe", result=result))
+            logger.debug(f"Upload result: {result}")
             success = result.get("success", False)
 
             if not success:
                 return f"Error uploading file: {result.get('message', 'Unknown error')}"
 
             file_path = result.get("file_path", "")
-            logger.info(t("msg-bca9d578", local_path=local_path, file_path=file_path))
+            logger.info(f"File {local_path} uploaded to sandbox at {file_path}")
 
             return f"File uploaded successfully to {file_path}"
         except Exception as e:
-            logger.error(t("msg-da21a6a5", local_path=local_path, e=e))
+            logger.error(f"Error uploading file {local_path}: {e}")
             return f"Error uploading file: {str(e)}"
 
 
@@ -180,7 +179,7 @@ class FileDownloadTool(FunctionTool):
 
             # Download file from sandbox
             await sb.download_file(remote_path, local_path)
-            logger.info(t("msg-93476abb", remote_path=remote_path, local_path=local_path))
+            logger.info(f"File {remote_path} downloaded from sandbox to {local_path}")
 
             if also_send_to_user:
                 try:
@@ -189,7 +188,7 @@ class FileDownloadTool(FunctionTool):
                         MessageChain(chain=[File(name=name, file=local_path)])
                     )
                 except Exception as e:
-                    logger.error(t("msg-079c5972", e=e))
+                    logger.error(f"Error sending file message: {e}")
 
                 # remove
                 # try:
@@ -201,5 +200,5 @@ class FileDownloadTool(FunctionTool):
 
             return f"File downloaded successfully to {local_path}"
         except Exception as e:
-            logger.error(t("msg-ce35bb2c", remote_path=remote_path, e=e))
+            logger.error(f"Error downloading file {remote_path}: {e}")
             return f"Error downloading file: {str(e)}"

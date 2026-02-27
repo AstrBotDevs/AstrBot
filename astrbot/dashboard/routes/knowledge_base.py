@@ -1,5 +1,4 @@
 """知识库管理 API 路由"""
-from astrbot.core.lang import t
 
 import asyncio
 import os
@@ -188,7 +187,7 @@ class KnowledgeBaseRoute(Route):
 
                     uploaded_docs.append(doc.model_dump())
                 except Exception as e:
-                    logger.error(t("msg-ce669289", res=file_info['file_name'], e=e))
+                    logger.error(f"上传文档 {file_info['file_name']} 失败: {e}")
                     failed_docs.append(
                         {"file_name": file_info["file_name"], "error": str(e)},
                     )
@@ -206,8 +205,8 @@ class KnowledgeBaseRoute(Route):
             self._set_task_result(task_id, "completed", result=result)
 
         except Exception as e:
-            logger.error(t("msg-87e99c2d", task_id=task_id, e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            logger.error(f"后台上传任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
     async def _background_import_task(
@@ -275,7 +274,7 @@ class KnowledgeBaseRoute(Route):
 
                     uploaded_docs.append(doc.model_dump())
                 except Exception as e:
-                    logger.error(t("msg-d5355233", file_name=file_name, e=e))
+                    logger.error(f"导入文档 {file_name} 失败: {e}")
                     failed_docs.append(
                         {"file_name": file_name, "error": str(e)},
                     )
@@ -293,8 +292,8 @@ class KnowledgeBaseRoute(Route):
             self._set_task_result(task_id, "completed", result=result)
 
         except Exception as e:
-            logger.error(t("msg-5e7f1683", task_id=task_id, e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            logger.error(f"后台导入任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))
 
     async def list_kbs(self):
@@ -325,9 +324,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-e1949850", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-e1949850", e=e)).__dict__
+            logger.error(f"获取知识库列表失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库列表失败: {e!s}").__dict__
 
     async def create_kb(self):
         """创建知识库
@@ -349,7 +348,7 @@ class KnowledgeBaseRoute(Route):
             data = await request.json
             kb_name = data.get("kb_name")
             if not kb_name:
-                return Response().error(t("msg-299af36d")).__dict__
+                return Response().error("知识库名称不能为空").__dict__
 
             description = data.get("description")
             emoji = data.get("emoji")
@@ -363,22 +362,22 @@ class KnowledgeBaseRoute(Route):
 
             # pre-check embedding dim
             if not embedding_provider_id:
-                return Response().error(t("msg-faf380ec")).__dict__
+                return Response().error("缺少参数 embedding_provider_id").__dict__
             prv = await kb_manager.provider_manager.get_provider_by_id(
                 embedding_provider_id,
             )  # type: ignore
             if not prv or not isinstance(prv, EmbeddingProvider):
                 return (
-                    Response().error(t("msg-9015b689", res=type(prv))).__dict__
+                    Response().error(f"嵌入模型不存在或类型错误({type(prv)})").__dict__
                 )
             try:
                 vec = await prv.get_embedding("astrbot")
                 if len(vec) != prv.get_dim():
                     raise ValueError(
-                        t("msg-a63b3aa9", res=len(vec), res_2=prv.get_dim()),
+                        f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {prv.get_dim()}",
                     )
             except Exception as e:
-                return Response().error(t("msg-9b281e88", e=e)).__dict__
+                return Response().error(f"测试嵌入模型失败: {e!s}").__dict__
             # pre-check rerank
             if rerank_provider_id:
                 rerank_prv: RerankProvider = (
@@ -387,7 +386,7 @@ class KnowledgeBaseRoute(Route):
                     )
                 )  # type: ignore
                 if not rerank_prv:
-                    return Response().error(t("msg-d3fb6072")).__dict__
+                    return Response().error("重排序模型不存在").__dict__
                 # 检查重排序模型可用性
                 try:
                     res = await rerank_prv.rerank(
@@ -395,11 +394,11 @@ class KnowledgeBaseRoute(Route):
                         documents=["astrbot knowledge base"],
                     )
                     if not res:
-                        raise ValueError(t("msg-fbec0dfd"))
+                        raise ValueError("重排序模型返回结果异常")
                 except Exception as e:
                     return (
                         Response()
-                        .error(t("msg-872feec8", e=e))
+                        .error(f"测试重排序模型失败: {e!s}，请检查平台日志输出。")
                         .__dict__
                     )
 
@@ -422,9 +421,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-a4ac0b9e", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-a4ac0b9e", e=e)).__dict__
+            logger.error(f"创建知识库失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"创建知识库失败: {e!s}").__dict__
 
     async def get_kb(self):
         """获取知识库详情
@@ -436,11 +435,11 @@ class KnowledgeBaseRoute(Route):
             kb_manager = self._get_kb_manager()
             kb_id = request.args.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
 
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
             kb = kb_helper.kb
 
             return Response().ok(kb.model_dump()).__dict__
@@ -448,9 +447,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-2137a3e6", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-2137a3e6", e=e)).__dict__
+            logger.error(f"获取知识库详情失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库详情失败: {e!s}").__dict__
 
     async def update_kb(self):
         """更新知识库
@@ -474,7 +473,7 @@ class KnowledgeBaseRoute(Route):
 
             kb_id = data.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
 
             kb_name = data.get("kb_name")
             description = data.get("description")
@@ -503,7 +502,7 @@ class KnowledgeBaseRoute(Route):
                     top_m_final,
                 ]
             ):
-                return Response().error(t("msg-e7cf9cfd")).__dict__
+                return Response().error("至少需要提供一个更新字段").__dict__
 
             kb_helper = await kb_manager.update_kb(
                 kb_id=kb_id,
@@ -520,7 +519,7 @@ class KnowledgeBaseRoute(Route):
             )
 
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             kb = kb_helper.kb
             return Response().ok(kb.model_dump(), "更新知识库成功").__dict__
@@ -528,9 +527,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-d3d82c22", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-d3d82c22", e=e)).__dict__
+            logger.error(f"更新知识库失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"更新知识库失败: {e!s}").__dict__
 
     async def delete_kb(self):
         """删除知识库
@@ -544,20 +543,20 @@ class KnowledgeBaseRoute(Route):
 
             kb_id = data.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
 
             success = await kb_manager.delete_kb(kb_id)
             if not success:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             return Response().ok(message="删除知识库成功").__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-5d5d4090", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-5d5d4090", e=e)).__dict__
+            logger.error(f"删除知识库失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除知识库失败: {e!s}").__dict__
 
     async def get_kb_stats(self):
         """获取知识库统计信息
@@ -569,11 +568,11 @@ class KnowledgeBaseRoute(Route):
             kb_manager = self._get_kb_manager()
             kb_id = request.args.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
 
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
             kb = kb_helper.kb
 
             stats = {
@@ -590,9 +589,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-787a5dea", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-787a5dea", e=e)).__dict__
+            logger.error(f"获取知识库统计失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取知识库统计失败: {e!s}").__dict__
 
     # ===== 文档管理 API =====
 
@@ -608,10 +607,10 @@ class KnowledgeBaseRoute(Route):
             kb_manager = self._get_kb_manager()
             kb_id = request.args.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 100, type=int)
@@ -632,9 +631,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-97a2d918", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-97a2d918", e=e)).__dict__
+            logger.error(f"获取文档列表失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取文档列表失败: {e!s}").__dict__
 
     async def upload_document(self):
         """上传文档
@@ -671,7 +670,7 @@ class KnowledgeBaseRoute(Route):
 
             if content_type and "multipart/form-data" not in content_type:
                 return (
-                    Response().error(t("msg-b170e0fa")).__dict__
+                    Response().error("Content-Type 须为 multipart/form-data").__dict__
                 )
             form_data = await request.form
             files = await request.files
@@ -683,7 +682,7 @@ class KnowledgeBaseRoute(Route):
             tasks_limit = int(form_data.get("tasks_limit", 3))
             max_retries = int(form_data.get("max_retries", 3))
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
 
             # 收集所有文件
             file_list = []
@@ -694,11 +693,11 @@ class KnowledgeBaseRoute(Route):
                     file_list.extend(file_items)
 
             if not file_list:
-                return Response().error(t("msg-5afbfa8e")).__dict__
+                return Response().error("缺少文件").__dict__
 
             # 限制文件数量
             if len(file_list) > 10:
-                return Response().error(t("msg-6636fd31")).__dict__
+                return Response().error("最多只能上传10个文件").__dict__
 
             # 处理每个文件
             for file in file_list:
@@ -736,7 +735,7 @@ class KnowledgeBaseRoute(Route):
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             # 生成任务ID
             task_id = str(uuid.uuid4())
@@ -773,28 +772,28 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-975f06d7", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-975f06d7", e=e)).__dict__
+            logger.error(f"上传文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"上传文档失败: {e!s}").__dict__
 
     def _validate_import_request(self, data: dict):
         kb_id = data.get("kb_id")
         if not kb_id:
-            raise ValueError(t("msg-c8d487e9"))
+            raise ValueError("缺少参数 kb_id")
 
         documents = data.get("documents")
         if not documents or not isinstance(documents, list):
-            raise ValueError(t("msg-35bacf60"))
+            raise ValueError("缺少参数 documents 或格式错误")
 
         for doc in documents:
             if "file_name" not in doc or "chunks" not in doc:
-                raise ValueError(t("msg-6cc1edcd"))
+                raise ValueError("文档格式错误，必须包含 file_name 和 chunks")
             if not isinstance(doc["chunks"], list):
-                raise ValueError(t("msg-376d7d5f"))
+                raise ValueError("chunks 必须是列表")
             if not all(
                 isinstance(chunk, str) and chunk.strip() for chunk in doc["chunks"]
             ):
-                raise ValueError(t("msg-e7e2f311"))
+                raise ValueError("chunks 必须是非空字符串列表")
 
         batch_size = data.get("batch_size", 32)
         tasks_limit = data.get("tasks_limit", 3)
@@ -825,7 +824,7 @@ class KnowledgeBaseRoute(Route):
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             # 生成任务ID
             task_id = str(uuid.uuid4())
@@ -860,9 +859,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-42315b8d", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-42315b8d", e=e)).__dict__
+            logger.error(f"导入文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"导入文档失败: {e!s}").__dict__
 
     async def get_upload_progress(self):
         """获取上传进度和结果
@@ -879,11 +878,11 @@ class KnowledgeBaseRoute(Route):
         try:
             task_id = request.args.get("task_id")
             if not task_id:
-                return Response().error(t("msg-6906aa65")).__dict__
+                return Response().error("缺少参数 task_id").__dict__
 
             # 检查任务是否存在
             if task_id not in self.upload_tasks:
-                return Response().error(t("msg-5ea3d72c")).__dict__
+                return Response().error("找不到该任务").__dict__
 
             task_info = self.upload_tasks[task_id]
             status = task_info["status"]
@@ -913,9 +912,9 @@ class KnowledgeBaseRoute(Route):
             return Response().ok(response_data).__dict__
 
         except Exception as e:
-            logger.error(t("msg-194def99", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-194def99", e=e)).__dict__
+            logger.error(f"获取上传进度失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取上传进度失败: {e!s}").__dict__
 
     async def get_document(self):
         """获取文档详情
@@ -927,26 +926,26 @@ class KnowledgeBaseRoute(Route):
             kb_manager = self._get_kb_manager()
             kb_id = request.args.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
             doc_id = request.args.get("doc_id")
             if not doc_id:
-                return Response().error(t("msg-df6ec98e")).__dict__
+                return Response().error("缺少参数 doc_id").__dict__
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             doc = await kb_helper.get_document(doc_id)
             if not doc:
-                return Response().error(t("msg-7c3cfe22")).__dict__
+                return Response().error("文档不存在").__dict__
 
             return Response().ok(doc.model_dump()).__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-b54ab822", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-b54ab822", e=e)).__dict__
+            logger.error(f"获取文档详情失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取文档详情失败: {e!s}").__dict__
 
     async def delete_document(self):
         """删除文档
@@ -961,14 +960,14 @@ class KnowledgeBaseRoute(Route):
 
             kb_id = data.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
             doc_id = data.get("doc_id")
             if not doc_id:
-                return Response().error(t("msg-df6ec98e")).__dict__
+                return Response().error("缺少参数 doc_id").__dict__
 
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             await kb_helper.delete_document(doc_id)
             return Response().ok(message="删除文档成功").__dict__
@@ -976,9 +975,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-0ef7f633", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-0ef7f633", e=e)).__dict__
+            logger.error(f"删除文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除文档失败: {e!s}").__dict__
 
     async def delete_chunk(self):
         """删除文本块
@@ -993,17 +992,17 @@ class KnowledgeBaseRoute(Route):
 
             kb_id = data.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
             chunk_id = data.get("chunk_id")
             if not chunk_id:
-                return Response().error(t("msg-2fe40cbd")).__dict__
+                return Response().error("缺少参数 chunk_id").__dict__
             doc_id = data.get("doc_id")
             if not doc_id:
-                return Response().error(t("msg-df6ec98e")).__dict__
+                return Response().error("缺少参数 doc_id").__dict__
 
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             await kb_helper.delete_chunk(chunk_id, doc_id)
             return Response().ok(message="删除文本块成功").__dict__
@@ -1011,9 +1010,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-fc13d42a", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-fc13d42a", e=e)).__dict__
+            logger.error(f"删除文本块失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"删除文本块失败: {e!s}").__dict__
 
     async def list_chunks(self):
         """获取块列表
@@ -1030,14 +1029,14 @@ class KnowledgeBaseRoute(Route):
             page = request.args.get("page", 1, type=int)
             page_size = request.args.get("page_size", 100, type=int)
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
             if not doc_id:
-                return Response().error(t("msg-df6ec98e")).__dict__
+                return Response().error("缺少参数 doc_id").__dict__
             kb_helper = await kb_manager.get_kb(kb_id)
             offset = (page - 1) * page_size
             limit = page_size
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
             chunk_list = await kb_helper.get_chunks_by_doc_id(
                 doc_id=doc_id,
                 offset=offset,
@@ -1058,9 +1057,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-4ef8315b", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-4ef8315b", e=e)).__dict__
+            logger.error(f"获取块列表失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取块列表失败: {e!s}").__dict__
 
     # ===== 检索 API =====
 
@@ -1082,9 +1081,9 @@ class KnowledgeBaseRoute(Route):
             debug = data.get("debug", False)
 
             if not query:
-                return Response().error(t("msg-b70a1816")).__dict__
+                return Response().error("缺少参数 query").__dict__
             if not kb_names or not isinstance(kb_names, list):
-                return Response().error(t("msg-82ee646e")).__dict__
+                return Response().error("缺少参数 kb_names 或格式错误").__dict__
 
             top_k = data.get("top_k", 5)
 
@@ -1114,8 +1113,8 @@ class KnowledgeBaseRoute(Route):
                     if img_base64:
                         response_data["visualization"] = img_base64
                 except Exception as e:
-                    logger.error(t("msg-07a61a9a", e=e))
-                    logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+                    logger.error(f"生成 t-SNE 可视化失败: {e}")
+                    logger.error(traceback.format_exc())
                     response_data["visualization_error"] = str(e)
 
             return Response().ok(response_data).__dict__
@@ -1123,9 +1122,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-20a3b3f7", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-20a3b3f7", e=e)).__dict__
+            logger.error(f"检索失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"检索失败: {e!s}").__dict__
 
     async def upload_document_from_url(self):
         """从 URL 上传文档
@@ -1148,11 +1147,11 @@ class KnowledgeBaseRoute(Route):
 
             kb_id = data.get("kb_id")
             if not kb_id:
-                return Response().error(t("msg-c8d487e9")).__dict__
+                return Response().error("缺少参数 kb_id").__dict__
 
             url = data.get("url")
             if not url:
-                return Response().error(t("msg-1b76f5ab")).__dict__
+                return Response().error("缺少参数 url").__dict__
 
             chunk_size = data.get("chunk_size", 512)
             chunk_overlap = data.get("chunk_overlap", 50)
@@ -1165,7 +1164,7 @@ class KnowledgeBaseRoute(Route):
             # 获取知识库
             kb_helper = await kb_manager.get_kb(kb_id)
             if not kb_helper:
-                return Response().error(t("msg-978b3c73")).__dict__
+                return Response().error("知识库不存在").__dict__
 
             # 生成任务ID
             task_id = str(uuid.uuid4())
@@ -1204,9 +1203,9 @@ class KnowledgeBaseRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-5dc86dc6", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-            return Response().error(t("msg-5dc86dc6", e=e)).__dict__
+            logger.error(f"从URL上传文档失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"从URL上传文档失败: {e!s}").__dict__
 
     async def _background_upload_from_url_task(
         self,
@@ -1264,6 +1263,6 @@ class KnowledgeBaseRoute(Route):
             self._set_task_result(task_id, "completed", result=result)
 
         except Exception as e:
-            logger.error(t("msg-890b3dee", task_id=task_id, e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            logger.error(f"后台上传URL任务 {task_id} 失败: {e}")
+            logger.error(traceback.format_exc())
             self._set_task_result(task_id, "failed", error=str(e))

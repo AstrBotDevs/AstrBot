@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import random
 from typing import Any
@@ -38,7 +37,7 @@ class MockShipyardSandboxClient:
                 else:
                     error_text = await response.text()
                     raise Exception(
-                        t("msg-019c4d18", res=response.status, error_text=error_text)
+                        f"Failed to exec operation: {response.status} {error_text}"
                     )
 
     async def upload_file(self, path: str, remote_path: str) -> dict:
@@ -79,7 +78,7 @@ class MockShipyardSandboxClient:
                         }
 
         except aiohttp.ClientError as e:
-            logger.error(t("msg-b135b7bd", e=e))
+            logger.error(f"Failed to upload file: {e}")
             return {
                 "success": False,
                 "error": f"Connection error: {str(e)}",
@@ -92,14 +91,14 @@ class MockShipyardSandboxClient:
                 "message": "File upload failed",
             }
         except FileNotFoundError:
-            logger.error(t("msg-873ed1c8", path=path))
+            logger.error(f"File not found: {path}")
             return {
                 "success": False,
                 "error": f"File not found: {path}",
                 "message": "File upload failed",
             }
         except Exception as e:
-            logger.error(t("msg-f58ceec6", e=e))
+            logger.error(f"Unexpected error uploading file: {e}")
             return {
                 "success": False,
                 "error": f"Internal error: {str(e)}",
@@ -112,13 +111,13 @@ class MockShipyardSandboxClient:
         while loop > 0:
             try:
                 logger.info(
-                    t("msg-900ab999", ship_id=ship_id, res=self.sb_url)
+                    f"Checking health for sandbox {ship_id} on {self.sb_url}..."
                 )
                 url = f"{self.sb_url}/health"
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         if response.status == 200:
-                            logger.info(t("msg-2a50d6f3", ship_id=ship_id))
+                            logger.info(f"Sandbox {ship_id} is healthy")
                 return
             except Exception:
                 await asyncio.sleep(1)
@@ -128,7 +127,7 @@ class MockShipyardSandboxClient:
 class BoxliteBooter(ComputerBooter):
     async def boot(self, session_id: str) -> None:
         logger.info(
-            t("msg-fbdbe32f", session_id=session_id)
+            f"Booting(Boxlite) for session: {session_id}, this may take a while..."
         )
         random_port = random.randint(20000, 30000)
         self.box = boxlite.SimpleBox(
@@ -143,7 +142,7 @@ class BoxliteBooter(ComputerBooter):
             ],
         )
         await self.box.start()
-        logger.info(t("msg-b1f13f5f", session_id=session_id))
+        logger.info(f"Boxlite booter started for session: {session_id}")
         self.mocked = MockShipyardSandboxClient(
             sb_url=f"http://127.0.0.1:{random_port}"
         )
@@ -166,9 +165,9 @@ class BoxliteBooter(ComputerBooter):
         await self.mocked.wait_healthy(self.box.id, session_id)
 
     async def shutdown(self) -> None:
-        logger.info(t("msg-e93d0c30", res=self.box.id))
+        logger.info(f"Shutting down Boxlite booter for ship: {self.box.id}")
         self.box.shutdown()
-        logger.info(t("msg-6deea473", res=self.box.id))
+        logger.info(f"Boxlite booter for ship: {self.box.id} stopped")
 
     @property
     def fs(self) -> FileSystemComponent:

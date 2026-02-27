@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import re
 from collections.abc import AsyncGenerator, Iterable
@@ -52,13 +51,13 @@ class SlackMessageEvent(AstrMessageEvent):
                 filename="image.jpg",
             )
             if not response["ok"]:
-                logger.error(t("msg-b233107c", res=response['error']))
+                logger.error(f"Slack file upload failed: {response['error']}")
                 return {
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": "图片上传失败"},
                 }
             image_url = cast(list, response["files"])[0]["url_private"]
-            logger.debug(t("msg-596945d1", response=response))
+            logger.debug(f"Slack file upload response: {response}")
             return {
                 "type": "image",
                 "slack_file": {
@@ -74,7 +73,7 @@ class SlackMessageEvent(AstrMessageEvent):
                 filename=segment.name or "file",
             )
             if not response["ok"]:
-                logger.error(t("msg-b233107c", res=response['error']))
+                logger.error(f"Slack file upload failed: {response['error']}")
                 return {
                     "type": "section",
                     "text": {"type": "mrkdwn", "text": "文件上传失败"},

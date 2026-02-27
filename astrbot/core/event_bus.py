@@ -9,7 +9,6 @@ class:
 1. 维护一个异步队列, 来接受各种消息事件
 2. 无限循环的调度函数, 从事件队列中获取新的事件, 打印日志并创建一个新的异步任务来执行管道调度器的处理逻辑
 """
-from astrbot.core.lang import t
 
 import asyncio
 from asyncio import Queue
@@ -43,7 +42,7 @@ class EventBus:
             scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
             if not scheduler:
                 logger.error(
-                    t("msg-da466871", res=conf_info['id'])
+                    f"PipelineScheduler not found for id: {conf_info['id']}, event ignored."
                 )
                 continue
             asyncio.create_task(scheduler.execute(event))
@@ -58,10 +57,10 @@ class EventBus:
         # 如果有发送者名称: [平台名] 发送者名称/发送者ID: 消息概要
         if event.get_sender_name():
             logger.info(
-                t("msg-7eccffa5", conf_name=conf_name, res=event.get_platform_id(), res_2=event.get_platform_name(), res_3=event.get_sender_name(), res_4=event.get_sender_id(), res_5=event.get_message_outline()),
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_name()}/{event.get_sender_id()}: {event.get_message_outline()}",
             )
         # 没有发送者名称: [平台名] 发送者ID: 消息概要
         else:
             logger.info(
-                t("msg-88bc26f2", conf_name=conf_name, res=event.get_platform_id(), res_2=event.get_platform_name(), res_3=event.get_sender_id(), res_4=event.get_message_outline()),
+                f"[{conf_name}] [{event.get_platform_id()}({event.get_platform_name()})] {event.get_sender_id()}: {event.get_message_outline()}",
             )

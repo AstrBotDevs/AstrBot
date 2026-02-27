@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import mimetypes
 import time
@@ -87,7 +86,7 @@ class LinePlatformAdapter(Platform):
         channel_secret = str(platform_config.get("channel_secret", ""))
         if not channel_access_token or not channel_secret:
             raise ValueError(
-                t("msg-68539775"),
+                "LINE 适配器需要 channel_access_token 和 channel_secret。",
             )
 
         self.line_api = LineAPIClient(
@@ -118,7 +117,7 @@ class LinePlatformAdapter(Platform):
         if webhook_uuid:
             log_webhook_info(f"{self.meta().id}(LINE)", webhook_uuid)
         else:
-            logger.warning(t("msg-30c67081"))
+            logger.warning("[LINE] webhook_uuid 为空，统一 Webhook 可能无法接收消息。")
         await self.shutdown_event.wait()
 
     async def terminate(self) -> None:
@@ -129,13 +128,13 @@ class LinePlatformAdapter(Platform):
         raw_body = await request.get_data()
         signature = request.headers.get("x-line-signature")
         if not self.line_api.verify_signature(raw_body, signature):
-            logger.warning(t("msg-64e92929"))
+            logger.warning("[LINE] invalid webhook signature")
             return "invalid signature", 400
 
         try:
             payload = await request.get_json(force=True, silent=False)
         except Exception as e:
-            logger.warning(t("msg-71bc0b77"), e)
+            logger.warning("[LINE] invalid webhook body: %s", e)
             return "bad request", 400
 
         if not isinstance(payload, dict):
@@ -159,7 +158,7 @@ class LinePlatformAdapter(Platform):
 
             event_id = str(event.get("webhookEventId", ""))
             if event_id and self._is_duplicate_event(event_id):
-                logger.debug(t("msg-8c7d9bab"), event_id)
+                logger.debug("[LINE] duplicate event skipped: %s", event_id)
                 continue
 
             abm = await self.convert_message(event)

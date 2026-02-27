@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
@@ -56,7 +55,7 @@ class CronJobManager:
                 continue
             if job.job_type == "basic" and job.job_id not in self._basic_handlers:
                 logger.warning(
-                    t("msg-724e64a9"),
+                    "Skip scheduling basic cron job %s due to missing handler.",
                     job.job_id,
                 )
                 continue
@@ -152,7 +151,7 @@ class CronJobManager:
                     tzinfo = ZoneInfo(job.timezone)
                 except Exception:
                     logger.warning(
-                        t("msg-78ef135f"),
+                        "Invalid timezone %s for cron job %s, fallback to system.",
                         job.timezone,
                         job.job_id,
                     )
@@ -162,7 +161,7 @@ class CronJobManager:
                     run_at_str = job.payload.get("run_at")
                 run_at_str = run_at_str or job.cron_expression
                 if not run_at_str:
-                    raise ValueError(t("msg-e71c28d3"))
+                    raise ValueError("run_once job missing run_at timestamp")
                 run_at = datetime.fromisoformat(run_at_str)
                 if run_at.tzinfo is None and tzinfo is not None:
                     run_at = run_at.replace(tzinfo=tzinfo)
@@ -183,7 +182,7 @@ class CronJobManager:
                 )
             )
         except Exception as e:
-            logger.error(t("msg-dd46e69f", res=job.job_id, e=e))
+            logger.error(f"Failed to schedule cron job {job.job_id}: {e!s}")
 
     def _get_next_run_time(self, job_id: str):
         aps_job = self.scheduler.get_job(job_id)
@@ -205,11 +204,11 @@ class CronJobManager:
             elif job.job_type == "active_agent":
                 await self._run_active_agent_job(job, start_time=start_time)
             else:
-                raise ValueError(t("msg-aa2e4688", res=job.job_type))
+                raise ValueError(f"Unknown cron job type: {job.job_type}")
         except Exception as e:  # noqa: BLE001
             status = "failed"
             last_error = str(e)
-            logger.error(t("msg-186627d9", job_id=job_id, e=e), exc_info=True)
+            logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
         finally:
             next_run = self._get_next_run_time(job_id)
             await self.db.update_cron_job(
@@ -226,7 +225,7 @@ class CronJobManager:
     async def _run_basic_job(self, job: CronJob) -> None:
         handler = self._basic_handlers.get(job.job_id)
         if not handler:
-            raise RuntimeError(t("msg-cb955de0", res=job.job_id))
+            raise RuntimeError(f"Basic cron job handler not found for {job.job_id}")
         payload = job.payload or {}
         result = handler(**payload) if payload else handler()
         if asyncio.iscoroutine(result):
@@ -236,7 +235,7 @@ class CronJobManager:
         payload = job.payload or {}
         session_str = payload.get("session")
         if not session_str:
-            raise ValueError(t("msg-2029c4b2"))
+            raise ValueError("ActiveAgentCronJob missing session.")
         note = payload.get("note") or job.description or job.name
 
         extras = {
@@ -286,7 +285,7 @@ class CronJobManager:
                 else MessageSession.from_str(session_str)
             )
         except Exception as e:  # noqa: BLE001
-            logger.error(t("msg-6babddc9", e=e))
+            logger.error(f"Invalid session for cron job: {e}")
             return
 
         cron_event = CronMessageEvent(
@@ -346,7 +345,7 @@ class CronJobManager:
             event=cron_event, plugin_context=self.ctx, config=config, req=req
         )
         if not result:
-            logger.error(t("msg-865a2b07"))
+            logger.error("Failed to build main agent for cron job.")
             return
 
         runner = result.agent_runner
@@ -371,7 +370,7 @@ class CronJobManager:
             summary_note=summary_note,
         )
         if not llm_resp:
-            logger.warning(t("msg-27c9c6b3"))
+            logger.warning("Cron job agent got no response")
             return
 
 

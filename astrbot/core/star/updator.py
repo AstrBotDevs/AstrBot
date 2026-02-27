@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 import shutil
 import zipfile
@@ -32,21 +31,21 @@ class PluginUpdator(RepoZipUpdator):
         repo_url = plugin.repo
 
         if not repo_url:
-            raise Exception(t("msg-66be72ec", res=plugin.name))
+            raise Exception(f"插件 {plugin.name} 没有指定仓库地址。")
 
         if not plugin.root_dir_name:
-            raise Exception(t("msg-7a29adea", res=plugin.name))
+            raise Exception(f"插件 {plugin.name} 的根目录名未指定。")
 
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
 
-        logger.info(t("msg-99a86f88", plugin_path=plugin_path, repo_url=repo_url))
+        logger.info(f"正在更新插件，路径: {plugin_path}，仓库地址: {repo_url}")
         await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
 
         try:
             remove_dir(plugin_path)
         except BaseException as e:
             logger.error(
-                t("msg-df2c7e1b", plugin_path=plugin_path, e=e),
+                f"删除旧版本插件 {plugin_path} 文件夹失败: {e!s}，使用覆盖安装。",
             )
 
         self.unzip_file(plugin_path + ".zip", plugin_path)
@@ -56,7 +55,7 @@ class PluginUpdator(RepoZipUpdator):
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         os.makedirs(target_dir, exist_ok=True)
         update_dir = ""
-        logger.info(t("msg-b3471491", zip_path=zip_path))
+        logger.info(f"正在解压压缩包: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = z.namelist()[0]
             z.extractall(target_dir)
@@ -72,11 +71,11 @@ class PluginUpdator(RepoZipUpdator):
 
         try:
             logger.info(
-                t("msg-7197ad11", zip_path=zip_path, res=os.path.join(target_dir, update_dir)),
+                f"删除临时文件: {zip_path} 和 {os.path.join(target_dir, update_dir)}",
             )
             shutil.rmtree(os.path.join(target_dir, update_dir), onerror=on_error)
             os.remove(zip_path)
         except BaseException:
             logger.warning(
-                t("msg-f8a43aa5", zip_path=zip_path, res=os.path.join(target_dir, update_dir)),
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {os.path.join(target_dir, update_dir)}",
             )

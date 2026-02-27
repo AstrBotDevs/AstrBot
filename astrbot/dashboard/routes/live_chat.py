@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import json
 import os
@@ -37,7 +36,7 @@ class LiveChatSession:
         self.is_speaking = True
         self.current_stamp = stamp
         self.audio_frames = []
-        logger.debug(t("msg-40f242d5", res=self.username, stamp=stamp))
+        logger.debug(f"[Live Chat] {self.username} 开始说话 stamp={stamp}")
 
     def add_audio_frame(self, data: bytes) -> None:
         """添加音频帧"""
@@ -49,14 +48,14 @@ class LiveChatSession:
         start_time = time.time()
         if not self.is_speaking or stamp != self.current_stamp:
             logger.warning(
-                t("msg-a168d76d", stamp=stamp, res=self.current_stamp)
+                f"[Live Chat] stamp 不匹配或未在说话状态: {stamp} vs {self.current_stamp}"
             )
             return None, 0.0
 
         self.is_speaking = False
 
         if not self.audio_frames:
-            logger.warning(t("msg-e01b2fea"))
+            logger.warning("[Live Chat] 没有音频帧数据")
             return None, 0.0
 
         # 组装 WAV 文件
@@ -75,12 +74,12 @@ class LiveChatSession:
 
             self.temp_audio_path = audio_path
             logger.info(
-                t("msg-33856925", audio_path=audio_path, res=os.path.getsize(audio_path))
+                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes"
             )
             return audio_path, time.time() - start_time
 
         except Exception as e:
-            logger.error(t("msg-9e9b7e59", e=e), exc_info=True)
+            logger.error(f"[Live Chat] 组装 WAV 文件失败: {e}", exc_info=True)
             return None, 0.0
 
     def cleanup(self) -> None:
@@ -88,9 +87,9 @@ class LiveChatSession:
         if self.temp_audio_path and os.path.exists(self.temp_audio_path):
             try:
                 os.remove(self.temp_audio_path)
-                logger.debug(t("msg-21430f56", res=self.temp_audio_path))
+                logger.debug(f"[Live Chat] 已删除临时文件: {self.temp_audio_path}")
             except Exception as e:
-                logger.warning(t("msg-6b4f88bc", e=e))
+                logger.warning(f"[Live Chat] 删除临时文件失败: {e}")
         self.temp_audio_path = None
 
 
@@ -136,7 +135,7 @@ class LiveChatRoute(Route):
         live_session = LiveChatSession(session_id, username)
         self.sessions[session_id] = live_session
 
-        logger.info(t("msg-0849d043", username=username))
+        logger.info(f"[Live Chat] WebSocket 连接建立: {username}")
 
         try:
             while True:
@@ -144,14 +143,14 @@ class LiveChatRoute(Route):
                 await self._handle_message(live_session, message)
 
         except Exception as e:
-            logger.error(t("msg-5477338a", e=e), exc_info=True)
+            logger.error(f"[Live Chat] WebSocket 错误: {e}", exc_info=True)
 
         finally:
             # 清理会话
             if session_id in self.sessions:
                 live_session.cleanup()
                 del self.sessions[session_id]
-            logger.info(t("msg-fdbfdba8", username=username))
+            logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def _handle_message(self, session: LiveChatSession, message: dict) -> None:
         """处理 WebSocket 消息"""
@@ -161,7 +160,7 @@ class LiveChatRoute(Route):
             # 开始说话
             stamp = message.get("stamp")
             if not stamp:
-                logger.warning(t("msg-7be90ac0"))
+                logger.warning("[Live Chat] start_speaking 缺少 stamp")
                 return
             session.start_speaking(stamp)
 
@@ -178,13 +177,13 @@ class LiveChatRoute(Route):
                 audio_data = base64.b64decode(audio_data_b64)
                 session.add_audio_frame(audio_data)
             except Exception as e:
-                logger.error(t("msg-8215062a", e=e))
+                logger.error(f"[Live Chat] 解码音频数据失败: {e}")
 
         elif msg_type == "end_speaking":
             # 结束说话
             stamp = message.get("stamp")
             if not stamp:
-                logger.warning(t("msg-438980ea"))
+                logger.warning("[Live Chat] end_speaking 缺少 stamp")
                 return
 
             audio_path, assemble_duration = await session.end_speaking(stamp)
@@ -198,7 +197,7 @@ class LiveChatRoute(Route):
         elif msg_type == "interrupt":
             # 用户打断
             session.should_interrupt = True
-            logger.info(t("msg-b35a375c", res=session.username))
+            logger.info(f"[Live Chat] 用户打断: {session.username}")
 
     async def _process_audio(
         self, session: LiveChatSession, audio_path: str, assemble_duration: float
@@ -219,7 +218,7 @@ class LiveChatRoute(Route):
             stt_provider = ctx.provider_manager.stt_provider_insts[0]
 
             if not stt_provider:
-                logger.error(t("msg-2c3e7bbc"))
+                logger.error("[Live Chat] STT Provider 未配置")
                 await websocket.send_json({"t": "error", "data": "语音识别服务未配置"})
                 return
 
@@ -229,10 +228,10 @@ class LiveChatRoute(Route):
 
             user_text = await stt_provider.get_text(audio_path)
             if not user_text:
-                logger.warning(t("msg-0582c8ba"))
+                logger.warning("[Live Chat] STT 识别结果为空")
                 return
 
-            logger.info(t("msg-57c2b539", user_text=user_text))
+            logger.info(f"[Live Chat] STT 结果: {user_text}")
 
             await websocket.send_json(
                 {
@@ -266,7 +265,7 @@ class LiveChatRoute(Route):
                 while True:
                     if session.should_interrupt:
                         # 用户打断，停止处理
-                        logger.info(t("msg-6b7628c6"))
+                        logger.info("[Live Chat] 检测到用户打断")
                         await websocket.send_json({"t": "stop_play"})
                         # 保存消息并标记为被打断
                         await self._save_interrupted_message(
@@ -291,7 +290,7 @@ class LiveChatRoute(Route):
                     result_message_id = result.get("message_id")
                     if result_message_id != message_id:
                         logger.warning(
-                            t("msg-2cab2269", result_message_id=result_message_id, message_id=message_id)
+                            f"[Live Chat] 消息 ID 不匹配: {result_message_id} != {message_id}"
                         )
                         continue
 
@@ -313,7 +312,7 @@ class LiveChatRoute(Route):
                                 }
                             )
                         except Exception as e:
-                            logger.error(t("msg-74c2470e", e=e))
+                            logger.error(f"[Live Chat] 解析 AgentStats 失败: {e}")
                         continue
 
                     if result_chain_type == "tts_stats":
@@ -326,7 +325,7 @@ class LiveChatRoute(Route):
                                 }
                             )
                         except Exception as e:
-                            logger.error(t("msg-4738a2b3", e=e))
+                            logger.error(f"[Live Chat] 解析 TTSStats 失败: {e}")
                         continue
 
                     if result_type == "plain":
@@ -337,7 +336,7 @@ class LiveChatRoute(Route):
                         # 流式音频数据
                         if not audio_playing:
                             audio_playing = True
-                            logger.debug(t("msg-944d5022"))
+                            logger.debug("[Live Chat] 开始播放音频流")
 
                             # Calculate latency from wav assembly finish to first audio chunk
                             speak_to_first_frame_latency = (
@@ -371,7 +370,7 @@ class LiveChatRoute(Route):
 
                     elif result_type in ["complete", "end"]:
                         # 处理完成
-                        logger.info(t("msg-009104d8", bot_text=bot_text))
+                        logger.info(f"[Live Chat] Bot 回复完成: {bot_text}")
 
                         # 如果没有音频流，发送 bot 消息文本
                         if not audio_playing:
@@ -401,7 +400,7 @@ class LiveChatRoute(Route):
                 webchat_queue_mgr.remove_back_queue(message_id)
 
         except Exception as e:
-            logger.error(t("msg-0c4c3051", e=e), exc_info=True)
+            logger.error(f"[Live Chat] 处理音频失败: {e}", exc_info=True)
             await websocket.send_json({"t": "error", "data": f"处理失败: {str(e)}"})
 
         finally:
@@ -413,17 +412,17 @@ class LiveChatRoute(Route):
     ) -> None:
         """保存被打断的消息"""
         interrupted_text = bot_text + " [用户打断]"
-        logger.info(t("msg-140caa36", interrupted_text=interrupted_text))
+        logger.info(f"[Live Chat] 保存打断消息: {interrupted_text}")
 
         # 简单记录到日志，实际保存逻辑可以后续完善
         try:
             timestamp = int(time.time() * 1000)
             logger.info(
-                t("msg-869f51ea", user_text=user_text, res=session.session_id, timestamp=timestamp)
+                f"[Live Chat] 用户消息: {user_text} (session: {session.session_id}, ts: {timestamp})"
             )
             if bot_text:
                 logger.info(
-                    t("msg-d26dee52", interrupted_text=interrupted_text, res=session.session_id, timestamp=timestamp)
+                    f"[Live Chat] Bot 消息（打断）: {interrupted_text} (session: {session.session_id}, ts: {timestamp})"
                 )
         except Exception as e:
-            logger.error(t("msg-1377f378", e=e), exc_info=True)
+            logger.error(f"[Live Chat] 记录消息失败: {e}", exc_info=True)

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import inspect
 import json
@@ -81,7 +80,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     )
                 except Exception as e:  # noqa: BLE001
                     logger.error(
-                        t("msg-e5f2fb34", task_id=task_id, e=e),
+                        f"Background task {task_id} failed: {e!s}",
                         exc_info=True,
                     )
 
@@ -238,7 +237,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
             except Exception as e:  # noqa: BLE001
                 logger.error(
-                    t("msg-c54b2335", task_id=task_id, res=tool.name, e=e),
+                    f"Background handoff {task_id} ({tool.name}) failed: {e!s}",
                     exc_info=True,
                 )
 
@@ -412,7 +411,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             event=cron_event, plugin_context=ctx, config=config, req=req
         )
         if not result:
-            logger.error(t("msg-8c2fe51d", tool_name=tool_name))
+            logger.error(f"Failed to build main agent for background task {tool_name}.")
             return
 
         runner = result.agent_runner
@@ -437,7 +436,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             summary_note=summary_note,
         )
         if not llm_resp:
-            logger.warning(t("msg-c6d4e4a6"))
+            logger.warning("background task agent got no response")
             return
 
     @classmethod
@@ -451,7 +450,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         event = run_context.context.event
         if not event:
-            raise ValueError(t("msg-0b3711f1"))
+            raise ValueError("Event must be provided for local function tools.")
 
         is_override_call = False
         for ty in type(tool).mro():
@@ -461,7 +460,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # 检查 tool 下有没有 run 方法
         if not tool.handler and not hasattr(tool, "run") and not is_override_call:
-            raise ValueError(t("msg-8c19e27a"))
+            raise ValueError("Tool must have a valid handler or override 'run' method.")
 
         awaitable = None
         method_name = ""
@@ -475,7 +474,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             awaitable = getattr(tool, "run")
             method_name = "run"
         if awaitable is None:
-            raise ValueError(t("msg-8c19e27a"))
+            raise ValueError("Tool must have a valid handler or override 'run' method.")
 
         wrapper = call_local_llm_tool(
             context=run_context,
@@ -513,13 +512,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                 )
                             except Exception as e:
                                 logger.error(
-                                    t("msg-24053a5f", e=e),
+                                    f"Tool 直接发送消息失败: {e}",
                                     exc_info=True,
                                 )
                     yield None
             except asyncio.TimeoutError:
                 raise Exception(
-                    t("msg-f940b51e", res=tool.name, res_2=tool_call_timeout or run_context.tool_call_timeout),
+                    f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
                 )
             except StopAsyncIteration:
                 break
@@ -561,9 +560,9 @@ async def call_local_llm_tool(
         elif method_name == "call":
             ready_to_call = handler(context, *args, **kwargs)
         else:
-            raise ValueError(t("msg-7e22fc8e", method_name=method_name))
+            raise ValueError(f"未知的方法名: {method_name}")
     except ValueError as e:
-        raise Exception(t("msg-c285315c", e=e)) from e
+        raise Exception(f"Tool execution ValueError: {e}") from e
     except TypeError as e:
         # 获取函数的签名（包括类型），除了第一个 event/context 参数。
         try:
@@ -594,11 +593,11 @@ async def call_local_llm_tool(
             handler_param_str = "(unable to inspect signature)"
 
         raise Exception(
-            t("msg-41366b74", handler_param_str=handler_param_str)
+            f"Tool handler parameter mismatch, please check the handler definition. Handler parameters: {handler_param_str}"
         ) from e
     except Exception as e:
         trace_ = traceback.format_exc()
-        raise Exception(t("msg-e8cadf8e", e=e, trace_=trace_)) from e
+        raise Exception(f"Tool execution error: {e}. Traceback: {trace_}") from e
 
     if not ready_to_call:
         return
@@ -622,7 +621,7 @@ async def call_local_llm_tool(
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield
         except Exception as e:
-            logger.error(t("msg-d7b4aa84", trace_=trace_))
+            logger.error(f"Previous Error: {trace_}")
             raise e
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行

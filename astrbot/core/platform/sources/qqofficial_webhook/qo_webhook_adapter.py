@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import logging
 import random
@@ -136,7 +135,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         msg_id = self._session_last_message_id.get(session.session_id)
         if not msg_id:
             logger.warning(
-                t("msg-3803e307"),
+                "[QQOfficialWebhook] No cached msg_id for session: %s, skip send_by_session",
                 session.session_id,
             )
             return
@@ -204,7 +203,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             )
         else:
             logger.warning(
-                t("msg-08fd28cf"),
+                "[QQOfficialWebhook] Unsupported message type for send_by_session: %s",
                 session.message_type,
             )
             return
@@ -278,7 +277,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
                 await self.webhook_helper.server.shutdown()
             except Exception as exc:
                 logger.warning(
-                    t("msg-6fa95bb3", exc=exc),
+                    f"Exception occurred during QQOfficialWebhook server shutdown: {exc}",
                     exc_info=True,
                 )
-        logger.info(t("msg-6f83eea0"))
+        logger.info("QQ 机器人官方 API 适配器已经被优雅地关闭")

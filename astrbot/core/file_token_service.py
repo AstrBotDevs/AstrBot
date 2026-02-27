@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import platform
@@ -62,7 +61,7 @@ class FileTokenService:
 
             if not os.path.exists(local_path):
                 raise FileNotFoundError(
-                    t("msg-0e444e51", local_path=local_path, file_path=file_path),
+                    f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
 
             file_token = str(uuid.uuid4())
@@ -91,9 +90,9 @@ class FileTokenService:
             await self._cleanup_expired_tokens()
 
             if file_token not in self.staged_files:
-                raise KeyError(t("msg-f61a5322", file_token=file_token))
+                raise KeyError(f"无效或过期的文件 token: {file_token}")
 
             file_path, _ = self.staged_files.pop(file_token)
             if not os.path.exists(file_path):
-                raise FileNotFoundError(t("msg-73d3e179", file_path=file_path))
+                raise FileNotFoundError(f"文件不存在: {file_path}")
             return file_path

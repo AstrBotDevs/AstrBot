@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import abc
 import asyncio
 import os
@@ -46,7 +45,7 @@ class AbstractProvider(abc.ABC):
         provider_type_name = self.provider_config["type"]
         meta_data = provider_cls_map.get(provider_type_name)
         if not meta_data:
-            raise ValueError(t("msg-e6f0c96f", provider_type_name=provider_type_name))
+            raise ValueError(f"Provider type {provider_type_name} not registered")
         meta = ProviderMeta(
             id=self.provider_config.get("id", "default"),
             model=self.get_model(),
@@ -352,7 +351,7 @@ class EmbeddingProvider(AbstractProvider):
                             # 最后一次重试失败，记录失败的批次
                             failed_batches.append((batch_idx, batch_texts))
                             raise Exception(
-                                t("msg-c7953e3f", batch_idx=batch_idx, max_retries=max_retries, e=e),
+                                f"批次 {batch_idx} 处理失败，已重试 {max_retries} 次: {e!s}",
                             )
                         # 等待一段时间后重试，使用指数退避
                         await asyncio.sleep(2**attempt)
@@ -372,7 +371,7 @@ class EmbeddingProvider(AbstractProvider):
             error_msg = (
                 f"有 {len(errors)} 个批次处理失败: {'; '.join(str(e) for e in errors)}"
             )
-            raise Exception(t("msg-10f72727", error_msg=error_msg))
+            raise Exception(error_msg)
 
         return all_embeddings
 
@@ -396,4 +395,4 @@ class RerankProvider(AbstractProvider):
     async def test(self) -> None:
         result = await self.rerank("Apple", documents=["apple", "banana"])
         if not result:
-            raise Exception(t("msg-7ff71721"))
+            raise Exception("Rerank provider test failed, no results returned")

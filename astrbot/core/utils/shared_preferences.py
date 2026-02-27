@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import threading
@@ -180,7 +179,7 @@ class SharedPreferences:
         if scope_id is None or key is None:
             # result = asyncio.run(self.range_get_async(scope, scope_id, key))
             raise ValueError(
-                t("msg-9a1e6a9a"),
+                "scope_id and key cannot be None when getting a specific preference.",
             )
         result = asyncio.run_coroutine_threadsafe(
             self.get_async(scope or "unknown", scope_id or "unknown", key, default),

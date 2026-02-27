@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import hashlib
 import hmac
@@ -89,9 +88,9 @@ class SlackWebhookClient:
             )
             # Verify the signature
             if not hmac.compare_digest(my_signature, signature):
-                logger.warning(t("msg-1d6b68b9"))
+                logger.warning("Slack request signature verification failed")
                 return Response("Invalid signature", status=400)
-            logger.info(t("msg-53ef18c3", event_data=event_data))
+            logger.info(f"Received Slack event: {event_data}")
 
             # 处理 URL 验证事件
             if event_data.get("type") == "url_verification":
@@ -103,13 +102,13 @@ class SlackWebhookClient:
             return Response("", status=200)
 
         except Exception as e:
-            logger.error(t("msg-58488af6", e=e))
+            logger.error(f"处理 Slack 事件时出错: {e}")
             return Response("Internal Server Error", status=500)
 
     async def start(self) -> None:
         """启动 Webhook 服务器"""
         logger.info(
-            t("msg-477be979", res=self.host, res_2=self.port, res_3=self.path),
+            f"Slack Webhook 服务器启动中，监听 {self.host}:{self.port}{self.path}...",
         )
 
         await self.app.run_task(
@@ -125,7 +124,7 @@ class SlackWebhookClient:
     async def stop(self) -> None:
         """停止 Webhook 服务器"""
         self.shutdown_event.set()
-        logger.info(t("msg-639fee6c"))
+        logger.info("Slack Webhook 服务器已停止")
 
 
 class SlackSocketClient:
@@ -148,7 +147,7 @@ class SlackSocketClient:
         """处理 Socket Mode 事件"""
         try:
             if self.socket_client is None:
-                raise RuntimeError(t("msg-a238d798"))
+                raise RuntimeError("Socket client is not initialized")
 
             # 确认收到事件
             response = SocketModeResponse(envelope_id=req.envelope_id)
@@ -159,7 +158,7 @@ class SlackSocketClient:
                 await self.event_handler(req)
 
         except Exception as e:
-            logger.error(t("msg-4e6de580", e=e))
+            logger.error(f"处理 Socket Mode 事件时出错: {e}")
 
     async def start(self) -> None:
         """启动 Socket Mode 连接"""
@@ -172,7 +171,7 @@ class SlackSocketClient:
         # 注册事件处理器
         self.socket_client.socket_mode_request_listeners.append(self._handle_events)
 
-        logger.info(t("msg-5bb71de9"))
+        logger.info("Slack Socket Mode 客户端启动中...")
         await self.socket_client.connect()
 
     async def stop(self) -> None:
@@ -180,4 +179,4 @@ class SlackSocketClient:
         if self.socket_client:
             await self.socket_client.disconnect()
             await self.socket_client.close()
-        logger.info(t("msg-f79ed37f"))
+        logger.info("Slack Socket Mode 客户端已停止")

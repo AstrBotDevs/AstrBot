@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
@@ -16,7 +15,7 @@ class SetUnsetCommands:
 
         event.set_result(
             MessageEventResult().message(
-                t("msg-8b56b437", uid=uid, key=key),
+                f"会话 {uid} 变量 {key} 存储成功。使用 /unset 移除。",
             ),
         )
 
@@ -27,11 +26,11 @@ class SetUnsetCommands:
 
         if key not in session_var:
             event.set_result(
-                MessageEventResult().message(t("msg-dfd31d9d")),
+                MessageEventResult().message("没有那个变量名。格式 /unset 变量名。"),
             )
         else:
             del session_var[key]
             await sp.session_put(uid, "session_variables", session_var)
             event.set_result(
-                MessageEventResult().message(t("msg-bf181241", uid=uid, key=key)),
+                MessageEventResult().message(f"会话 {uid} 变量 {key} 移除成功。"),
             )

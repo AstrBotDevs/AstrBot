@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import sys
 from collections.abc import Awaitable, Callable
 
@@ -36,11 +35,11 @@ class DiscordBotClient(discord.Bot):
     async def on_ready(self) -> None:
         """当机器人成功连接并准备就绪时触发"""
         if self.user is None:
-            logger.error(t("msg-940888cb"))
+            logger.error("[Discord] 客户端未正确加载用户信息 (self.user is None)")
             return
 
-        logger.info(t("msg-9a3c1925", res=self.user, res_2=self.user.id))
-        logger.info(t("msg-30c1f1c8"))
+        logger.info(f"[Discord] 已作为 {self.user} (ID: {self.user.id}) 登录")
+        logger.info("[Discord] 客户端已准备就绪。")
 
         if self.on_ready_once_callback and not self._ready_once_fired:
             self._ready_once_fired = True
@@ -48,14 +47,14 @@ class DiscordBotClient(discord.Bot):
                 await self.on_ready_once_callback()
             except Exception as e:
                 logger.error(
-                    t("msg-d8c03bdf", e=e),
+                    f"[Discord] on_ready_once_callback 执行失败: {e}",
                     exc_info=True,
                 )
 
     def _create_message_data(self, message: discord.Message) -> dict:
         """从 discord.Message 创建数据字典"""
         if self.user is None:
-            raise RuntimeError(t("msg-c9601653"))
+            raise RuntimeError("Bot is not ready: self.user is None")
 
         is_mentioned = self.user in message.mentions
         return {
@@ -75,10 +74,10 @@ class DiscordBotClient(discord.Bot):
     def _create_interaction_data(self, interaction: discord.Interaction) -> dict:
         """从 discord.Interaction 创建数据字典"""
         if self.user is None:
-            raise RuntimeError(t("msg-c9601653"))
+            raise RuntimeError("Bot is not ready: self.user is None")
 
         if interaction.user is None:
-            raise ValueError(t("msg-4b017a7c"))
+            raise ValueError("Interaction received without a valid user")
 
         return {
             "interaction": interaction,
@@ -100,7 +99,7 @@ class DiscordBotClient(discord.Bot):
             return
 
         logger.debug(
-            t("msg-3067bdce", res=message.author.name, res_2=message.content),
+            f"[Discord] 收到原始消息 from {message.author.name}: {message.content}",
         )
 
         if self.on_message_received:

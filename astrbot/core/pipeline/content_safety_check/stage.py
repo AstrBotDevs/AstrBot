@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -33,10 +32,10 @@ class ContentSafetyCheckStage(Stage):
             if event.is_at_or_wake_command:
                 event.set_result(
                     MessageEventResult().message(
-                        t("msg-c733275f"),
+                        "你的消息或者大模型的响应中包含不适当的内容，已被屏蔽。",
                     ),
                 )
                 yield
             event.stop_event()
-            logger.info(t("msg-46c80f28", info=info))
+            logger.info(f"内容安全检查不通过，原因：{info}")
             return

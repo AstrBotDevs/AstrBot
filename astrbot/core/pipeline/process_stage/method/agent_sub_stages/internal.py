@@ -1,5 +1,4 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
-from astrbot.core.lang import t
 
 import asyncio
 import base64
@@ -56,7 +55,7 @@ class InternalAgentSubStage(Stage):
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
-                t("msg-60493581"),
+                "Unsupported tool_schema_mode: %s, fallback to skills_like",
                 self.tool_schema_mode,
             )
             self.tool_schema_mode = "full"
@@ -158,10 +157,10 @@ class InternalAgentSubStage(Stage):
                 and not has_valid_message
                 and not has_media_content
             ):
-                logger.debug(t("msg-9cdb2b6e"))
+                logger.debug("skip llm request: empty message and no provider_request")
                 return
 
-            logger.debug(t("msg-e461e5af"))
+            logger.debug("ready to request llm provider")
             follow_up_capture = try_capture_follow_up(event)
             if follow_up_capture:
                 (
@@ -170,7 +169,7 @@ class InternalAgentSubStage(Stage):
                 ) = await prepare_follow_up_capture(follow_up_capture)
                 if follow_up_consumed_marked:
                     logger.info(
-                        t("msg-be33dd11"),
+                        "Follow-up ticket already consumed, stopping processing. umo=%s, seq=%s",
                         event.unified_msg_origin,
                         follow_up_capture.ticket.seq,
                     )
@@ -180,7 +179,7 @@ class InternalAgentSubStage(Stage):
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
-                logger.debug(t("msg-abd5ccbc"))
+                logger.debug("acquired session lock for llm request")
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 try:
@@ -209,7 +208,7 @@ class InternalAgentSubStage(Stage):
                     for host in decoded_blocked:
                         if host in api_base:
                             logger.error(
-                                t("msg-f9d617d7"),
+                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
                                 api_base,
                             )
                             return
@@ -246,7 +245,7 @@ class InternalAgentSubStage(Stage):
                     # 检测 Live Mode
                     if action_type == "live":
                         # Live Mode: 使用 run_live_agent
-                        logger.info(t("msg-3247374d"))
+                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
 
                         # 获取 TTS Provider
                         tts_provider = (
@@ -257,7 +256,7 @@ class InternalAgentSubStage(Stage):
 
                         if not tts_provider:
                             logger.warning(
-                                t("msg-dae92399")
+                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
                             )
 
                         # 使用 run_live_agent，总是使用流式响应
@@ -366,10 +365,10 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-            logger.error(t("msg-1b1af61e", e=e))
+            logger.error(f"Error occurred while processing agent: {e}")
             await event.send(
                 MessageChain().message(
-                    t("msg-ea02b899", e=e)
+                    f"Error occurred while processing agent request: {e}"
                 )
             )
         finally:
@@ -410,7 +409,7 @@ class InternalAgentSubStage(Stage):
             and not req.tool_calls_result
             and not user_aborted
         ):
-            logger.debug(t("msg-ee7e792b"))
+            logger.debug("LLM 响应为空，不保存记录。")
             return
 
         message_to_save = []

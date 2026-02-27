@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import re
@@ -91,7 +90,7 @@ class TelegramPlatformAdapter(Platform):
         )
         self.application.add_handler(message_handler)
         self.client = self.application.bot
-        logger.debug(t("msg-cb53f79a", res=self.client.base_url))
+        logger.debug(f"Telegram base url: {self.client.base_url}")
 
         self.scheduler = AsyncIOScheduler()
 
@@ -143,11 +142,11 @@ class TelegramPlatformAdapter(Platform):
             self.scheduler.start()
 
         if not self.application.updater:
-            logger.error(t("msg-e6b6040f"))
+            logger.error("Telegram Updater is not initialized. Cannot start polling.")
             return
 
         queue = self.application.updater.start_polling()
-        logger.info(t("msg-2c4b186e"))
+        logger.info("Telegram Platform Adapter is running.")
         await queue
 
     async def register_commands(self) -> None:
@@ -166,7 +165,7 @@ class TelegramPlatformAdapter(Platform):
                 await self.client.set_my_commands(commands)
 
         except Exception as e:
-            logger.error(t("msg-908d0414", e=e))
+            logger.error(f"向 Telegram 注册指令时发生错误: {e!s}")
 
     def collect_commands(self) -> list[BotCommand]:
         """从注册的处理器中收集所有指令"""
@@ -189,7 +188,8 @@ class TelegramPlatformAdapter(Platform):
                     for cmd_name, description in cmd_info_list:
                         if cmd_name in command_dict:
                             logger.warning(
-                                t("msg-d2dfe45e", cmd_name=cmd_name, res=command_dict[cmd_name])
+                                f"命令名 '{cmd_name}' 重复注册，将使用首次注册的定义: "
+                                f"'{command_dict[cmd_name]}'"
                             )
                         command_dict.setdefault(cmd_name, description)
 
@@ -241,7 +241,7 @@ class TelegramPlatformAdapter(Platform):
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_chat:
             logger.warning(
-                t("msg-63bdfab8"),
+                "Received a start command without an effective chat, skipping /start reply.",
             )
             return
         await context.bot.send_message(
@@ -252,7 +252,7 @@ class TelegramPlatformAdapter(Platform):
     async def message_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        logger.debug(t("msg-03a27b01", res=update.message))
+        logger.debug(f"Telegram message: {update.message}")
 
         # Handle media group messages
         if update.message and update.message.media_group_id:
@@ -277,7 +277,7 @@ class TelegramPlatformAdapter(Platform):
         @param get_reply: 是否获取回复消息。这个参数是为了防止多个回复嵌套。
         """
         if not update.message:
-            logger.warning(t("msg-e47b4bb4"))
+            logger.warning("Received an update without a message.")
             return None
 
         message = AstrBotMessage()
@@ -296,7 +296,7 @@ class TelegramPlatformAdapter(Platform):
         message.message_id = str(update.message.message_id)
         _from_user = update.message.from_user
         if not _from_user:
-            logger.warning(t("msg-c97401c6"))
+            logger.warning("[Telegram] Received a message without a from_user.")
             return None
         message.sender = MessageMember(
             str(_from_user.id),
@@ -425,7 +425,7 @@ class TelegramPlatformAdapter(Platform):
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
-                    t("msg-f5c839ee", file_name=file_name),
+                    f"Telegram document file_path is None, cannot save the file {file_name}.",
                 )
             else:
                 message.message.append(
@@ -438,7 +438,7 @@ class TelegramPlatformAdapter(Platform):
             file_path = file.file_path
             if file_path is None:
                 logger.warning(
-                    t("msg-dca991a9", file_name=file_name),
+                    f"Telegram video file_path is None, cannot save the file {file_name}.",
                 )
             else:
                 message.message.append(Comp.Video(file=file_path, path=file.file_path))
@@ -469,13 +469,14 @@ class TelegramPlatformAdapter(Platform):
                 "created_at": datetime.now(),
                 "items": [],
             }
-            logger.debug(t("msg-56fb2950", media_group_id=media_group_id))
+            logger.debug(f"Create media group cache: {media_group_id}")
 
         # Add this message to the cache
         entry = self.media_group_cache[media_group_id]
         entry["items"].append((update, context))
         logger.debug(
-            t("msg-0de2d4b5", media_group_id=media_group_id, res=len(entry['items'])),
+            f"Add message to media group {media_group_id}, "
+            f"currently has {len(entry['items'])} items.",
         )
 
         # Calculate delay: if already waited too long, process immediately;
@@ -484,12 +485,14 @@ class TelegramPlatformAdapter(Platform):
         if elapsed >= self.media_group_max_wait:
             delay = 0
             logger.debug(
-                t("msg-9e5069e9", media_group_id=media_group_id, elapsed=elapsed, res=self.media_group_max_wait),
+                f"Media group {media_group_id} has reached max wait time "
+                f"({elapsed:.1f}s >= {self.media_group_max_wait}s), processing immediately.",
             )
         else:
             delay = self.media_group_timeout
             logger.debug(
-                t("msg-9156b9d6", media_group_id=media_group_id, delay=delay, elapsed=elapsed)
+                f"Scheduled media group {media_group_id} to be processed in {delay} seconds "
+                f"(already waited {elapsed:.1f}s)"
             )
 
         # Schedule/reschedule processing (replace_existing=True handles debounce)
@@ -510,17 +513,17 @@ class TelegramPlatformAdapter(Platform):
             media_group_id: The unique identifier for this media group
         """
         if media_group_id not in self.media_group_cache:
-            logger.warning(t("msg-2849c882", media_group_id=media_group_id))
+            logger.warning(f"Media group {media_group_id} not found in cache")
             return
 
         entry = self.media_group_cache.pop(media_group_id)
         updates_and_contexts = entry["items"]
         if not updates_and_contexts:
-            logger.warning(t("msg-c75b2163", media_group_id=media_group_id))
+            logger.warning(f"Media group {media_group_id} is empty")
             return
 
         logger.info(
-            t("msg-0a3626c1", media_group_id=media_group_id, res=len(updates_and_contexts))
+            f"Processing media group {media_group_id}, total {len(updates_and_contexts)} items"
         )
 
         # Use the first update to create the base message (with reply, caption, etc.)
@@ -529,7 +532,7 @@ class TelegramPlatformAdapter(Platform):
 
         if not abm:
             logger.warning(
-                t("msg-2842e389", media_group_id=media_group_id)
+                f"Failed to convert the first message of media group {media_group_id}"
             )
             return
 
@@ -543,7 +546,7 @@ class TelegramPlatformAdapter(Platform):
             # Merge only the message components (keep base session/meta from first)
             abm.message.extend(extra.message)
             logger.debug(
-                t("msg-32fbf7c1", res=len(extra.message), media_group_id=media_group_id)
+                f"Added {len(extra.message)} components to media group {media_group_id}"
             )
 
         # Process the merged message
@@ -576,6 +579,6 @@ class TelegramPlatformAdapter(Platform):
             if self.application.updater is not None:
                 await self.application.updater.stop()
 
-            logger.info(t("msg-23bae28a"))
+            logger.info("Telegram adapter has been closed.")
         except Exception as e:
-            logger.error(t("msg-e46e7740", e=e))
+            logger.error(f"Error occurred while closing Telegram adapter: {e}")

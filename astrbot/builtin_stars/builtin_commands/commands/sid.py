@@ -1,5 +1,4 @@
 """会话ID命令"""
-from astrbot.core.lang import t
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -34,4 +33,4 @@ class SIDCommand:
         ):
             ret += f"\n\n当前处于独立会话模式, 此群 ID: 「{event.get_group_id()}」, 也可将此 ID 加入白名单来放行整个群聊。"
 
-        event.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)).use_t2i(False))
+        event.set_result(MessageEventResult().message(ret).use_t2i(False))

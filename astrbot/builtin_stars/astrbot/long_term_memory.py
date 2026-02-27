@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import datetime
 import random
 import uuid
@@ -29,7 +28,7 @@ class LongTermMemory:
         try:
             max_cnt = int(cfg["provider_ltm_settings"]["group_message_max_cnt"])
         except BaseException as e:
-            logger.error(t("msg-5bdf8f5c", e=e))
+            logger.error(e)
             max_cnt = 300
         image_caption_prompt = cfg["provider_settings"]["image_caption_prompt"]
         image_caption_provider_id = cfg["provider_ltm_settings"].get(
@@ -75,9 +74,9 @@ class LongTermMemory:
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
-                raise Exception(t("msg-8e11fa57", image_caption_provider_id=image_caption_provider_id))
+                raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
-            raise Exception(t("msg-8ebaa397", res=type(provider)))
+            raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
@@ -129,7 +128,7 @@ class LongTermMemory:
                         try:
                             url = comp.url if comp.url else comp.file
                             if not url:
-                                raise Exception(t("msg-30954f77"))
+                                raise Exception("图片 URL 为空")
                             caption = await self.get_image_caption(
                                 url,
                                 cfg["image_caption_provider_id"],
@@ -137,14 +136,14 @@ class LongTermMemory:
                             )
                             parts.append(f" [Image: {caption}]")
                         except Exception as e:
-                            logger.error(t("msg-62de0c3e", e=e))
+                            logger.error(f"获取图片描述失败: {e}")
                     else:
                         parts.append(" [Image]")
                 elif isinstance(comp, At):
                     parts.append(f" [At: {comp.name}]")
 
             final_message = "".join(parts)
-            logger.debug(t("msg-d0647999", res=event.unified_msg_origin, final_message=final_message))
+            logger.debug(f"ltm | {event.unified_msg_origin} | {final_message}")
             self.session_chats[event.unified_msg_origin].append(final_message)
             if len(self.session_chats[event.unified_msg_origin]) > cfg["max_cnt"]:
                 self.session_chats[event.unified_msg_origin].pop(0)
@@ -181,7 +180,7 @@ class LongTermMemory:
         if llm_resp.completion_text:
             final_message = f"[You/{datetime.datetime.now().strftime('%H:%M:%S')}]: {llm_resp.completion_text}"
             logger.debug(
-                t("msg-133c1f1d", res=event.unified_msg_origin, final_message=final_message)
+                f"Recorded AI response: {event.unified_msg_origin} | {final_message}"
             )
             self.session_chats[event.unified_msg_origin].append(final_message)
             cfg = self.cfg(event)

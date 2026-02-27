@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from astrbot.api import logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.umop_config_router import UmopConfigRouter
@@ -10,7 +9,7 @@ async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter) -> 
     if not isinstance(abconf_data, dict):
         # should be unreachable
         logger.warning(
-            t("msg-782b01c1", res=type(abconf_data), abconf_data=abconf_data),
+            f"migrate_45_to_46: abconf_data is not a dict (type={type(abconf_data)}). Value: {abconf_data!r}",
         )
         return
 
@@ -24,7 +23,7 @@ async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter) -> 
     if not need_migration:
         return
 
-    logger.info(t("msg-49e09620"))
+    logger.info("Starting migration from version 4.5 to 4.6")
 
     # extract umo->conf_id mapping
     umo_to_conf_id = {}
@@ -42,4 +41,4 @@ async def migrate_45_to_46(acm: AstrBotConfigManager, ucr: UmopConfigRouter) -> 
     # update the umop config router
     await ucr.update_routing_data(umo_to_conf_id)
 
-    logger.info(t("msg-791b79f8"))
+    logger.info("Migration from version 45 to 46 completed successfully")

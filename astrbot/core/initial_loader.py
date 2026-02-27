@@ -4,7 +4,6 @@
 1. 初始化核心生命周期, 传递数据库和日志代理实例到核心生命周期
 2. 运行核心生命周期任务和仪表板服务器
 """
-from astrbot.core.lang import t
 
 import asyncio
 import traceback
@@ -30,8 +29,8 @@ class InitialLoader:
         try:
             await core_lifecycle.initialize()
         except Exception as e:
-            logger.critical(t("msg-78b9c276", res=traceback.format_exc()))
-            logger.critical(t("msg-58525c23", e=e))
+            logger.critical(traceback.format_exc())
+            logger.critical(f"😭 初始化 AstrBot 失败：{e} !!!")
             return
 
         core_task = core_lifecycle.start()
@@ -54,5 +53,5 @@ class InitialLoader:
         try:
             await task  # 整个AstrBot在这里运行
         except asyncio.CancelledError:
-            logger.info(t("msg-002cc3e8"))
+            logger.info("🌈 正在关闭 AstrBot...")
             await core_lifecycle.stop()

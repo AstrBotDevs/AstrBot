@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 import socket
 import sys
@@ -67,7 +66,7 @@ class Metric:
                     platform_type=kwargs.get("adapter_type", "unknown"),
                 )
         except Exception as e:
-            logger.error(t("msg-314258f2", e=e))
+            logger.error(f"保存指标到数据库失败: {e}")
 
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:

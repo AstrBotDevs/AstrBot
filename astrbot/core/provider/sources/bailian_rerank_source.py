@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 
 import aiohttp
@@ -44,7 +43,7 @@ class BailianRerankProvider(RerankProvider):
             "DASHSCOPE_API_KEY", ""
         )
         if not self.api_key:
-            raise ValueError(t("msg-dc1a9e6e"))
+            raise ValueError("阿里云百炼 API Key 不能为空。")
 
         self.model = provider_config.get("rerank_model", "qwen3-rerank")
         self.timeout = provider_config.get("timeout", 30)
@@ -69,7 +68,7 @@ class BailianRerankProvider(RerankProvider):
         # 设置模型名称
         self.set_model(self.model)
 
-        logger.info(t("msg-f7079f37", res=self.model))
+        logger.info(f"AstrBot 百炼 Rerank 初始化完成。模型: {self.model}")
 
     def _build_payload(
         self, query: str, documents: list[str], top_n: int | None
@@ -122,12 +121,12 @@ class BailianRerankProvider(RerankProvider):
         # 检查响应状态
         if data.get("code", "200") != "200":
             raise BailianAPIError(
-                t("msg-5b6d35ce", res=data.get('code'), res_2=data.get('message', ''))
+                f"百炼 API 错误: {data.get('code')} – {data.get('message', '')}"
             )
 
         results = data.get("output", {}).get("results", [])
         if not results:
-            logger.warning(t("msg-d600c5e2", data=data))
+            logger.warning(f"百炼 Rerank 返回空结果: {data}")
             return []
 
         # 转换为RerankResult对象，使用.get()避免KeyError
@@ -138,7 +137,7 @@ class BailianRerankProvider(RerankProvider):
                 relevance_score = result.get("relevance_score", 0.0)
 
                 if relevance_score is None:
-                    logger.warning(t("msg-d3312319", idx=idx))
+                    logger.warning(f"结果 {idx} 缺少 relevance_score，使用默认值 0.0")
                     relevance_score = 0.0
 
                 rerank_result = RerankResult(
@@ -146,7 +145,7 @@ class BailianRerankProvider(RerankProvider):
                 )
                 rerank_results.append(rerank_result)
             except Exception as e:
-                logger.warning(t("msg-2855fb44", idx=idx, e=e, result=result))
+                logger.warning(f"解析结果 {idx} 时出错: {e}, result={result}")
                 continue
 
         return rerank_results
@@ -159,7 +158,7 @@ class BailianRerankProvider(RerankProvider):
         """
         tokens = data.get("usage", {}).get("total_tokens", 0)
         if tokens > 0:
-            logger.debug(t("msg-392f26e8", tokens=tokens))
+            logger.debug(f"百炼 Rerank 消耗 Token: {tokens}")
 
     async def rerank(
         self,
@@ -179,21 +178,21 @@ class BailianRerankProvider(RerankProvider):
             重排序结果列表
         """
         if not self.client:
-            logger.error(t("msg-595e0cf9"))
+            logger.error("百炼 Rerank 客户端会话已关闭，返回空结果")
             return []
 
         if not documents:
-            logger.warning(t("msg-d0388210"))
+            logger.warning("文档列表为空，返回空结果")
             return []
 
         if not query.strip():
-            logger.warning(t("msg-44d6cc76"))
+            logger.warning("查询文本为空，返回空结果")
             return []
 
         # 检查限制
         if len(documents) > 500:
             logger.warning(
-                t("msg-bd8b942a", res=len(documents))
+                f"文档数量({len(documents)})超过限制(500)，将截断前500个文档"
             )
             documents = documents[:500]
 
@@ -202,7 +201,7 @@ class BailianRerankProvider(RerankProvider):
             payload = self._build_payload(query, documents, top_n)
 
             logger.debug(
-                t("msg-0dc3bca4", res=query[:50], res_2=len(documents))
+                f"百炼 Rerank 请求: query='{query[:50]}...', 文档数量={len(documents)}"
             )
 
             # 发送请求
@@ -214,28 +213,28 @@ class BailianRerankProvider(RerankProvider):
                 results = self._parse_results(response_data)
                 self._log_usage(response_data)
 
-                logger.debug(t("msg-4a9f4ee3", res=len(results)))
+                logger.debug(f"百炼 Rerank 成功返回 {len(results)} 个结果")
 
                 return results
 
         except aiohttp.ClientError as e:
             error_msg = f"网络请求失败: {e}"
-            logger.error(t("msg-fa301307", e=e))
-            raise BailianNetworkError(t("msg-10f72727", error_msg=error_msg)) from e
+            logger.error(f"百炼 Rerank 网络请求失败: {e}")
+            raise BailianNetworkError(error_msg) from e
         except BailianRerankError:
             raise
         except Exception as e:
             error_msg = f"重排序失败: {e}"
-            logger.error(t("msg-9879e226", e=e))
-            raise BailianRerankError(t("msg-10f72727", error_msg=error_msg)) from e
+            logger.error(f"百炼 Rerank 处理失败: {e}")
+            raise BailianRerankError(error_msg) from e
 
     async def terminate(self) -> None:
         """关闭HTTP客户端会话."""
         if self.client:
-            logger.info(t("msg-4f15074c"))
+            logger.info("关闭 百炼 Rerank 客户端会话")
             try:
                 await self.client.close()
             except Exception as e:
-                logger.error(t("msg-d01b1b0f", e=e))
+                logger.error(f"关闭 百炼 Rerank 客户端时出错: {e}")
             finally:
                 self.client = None

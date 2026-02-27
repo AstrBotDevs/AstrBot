@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import httpx
 from openai import AsyncOpenAI
 
@@ -22,7 +21,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         proxy = provider_config.get("proxy", "")
         http_client = None
         if proxy:
-            logger.info(t("msg-cecb2fbc", proxy=proxy))
+            logger.info(f"[OpenAI Embedding] 使用代理: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
         api_base = provider_config.get("embedding_api_base", "").strip()
         if not api_base:

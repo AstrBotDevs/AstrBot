@@ -1,5 +1,4 @@
 """企业微信智能机器人事件处理模块，处理消息事件的发送和接收"""
-from astrbot.core.lang import t
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -107,13 +106,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                             },
                         )
                     else:
-                        logger.warning(t("msg-e44e77b0"))
+                        logger.warning("图片数据为空，跳过")
                 except Exception as e:
-                    logger.error(t("msg-30d116ed"), e)
+                    logger.error("处理图片消息失败: %s", e)
             else:
                 if not suppress_unsupported_log:
                     logger.warning(
-                        t("msg-31b11295", res=type(comp))
+                        f"[WecomAI] 不支持的消息组件类型: {type(comp)}, 跳过"
                     )
 
         return data

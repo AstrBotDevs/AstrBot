@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import base64
 import hmac
@@ -103,14 +102,14 @@ class LineAPIClient:
                     return True
                 body = await resp.text()
                 logger.error(
-                    t("msg-06e3f874"),
+                    "[LINE] %s message failed: status=%s body=%s",
                     op_name,
                     resp.status,
                     body,
                 )
                 return False
         except Exception as e:
-            logger.error(t("msg-1478c917"), op_name, e)
+            logger.error("[LINE] %s message request failed: %s", op_name, e)
             return False
 
     async def get_message_content(
@@ -129,7 +128,7 @@ class LineAPIClient:
                     if retry_resp.status != 200:
                         body = await retry_resp.text()
                         logger.warning(
-                            t("msg-39941f06"),
+                            "[LINE] get content retry failed: message_id=%s status=%s body=%s",
                             message_id,
                             retry_resp.status,
                             body,
@@ -140,7 +139,7 @@ class LineAPIClient:
             if resp.status != 200:
                 body = await resp.text()
                 logger.warning(
-                    t("msg-1fe70511"),
+                    "[LINE] get content failed: message_id=%s status=%s body=%s",
                     message_id,
                     resp.status,
                     body,

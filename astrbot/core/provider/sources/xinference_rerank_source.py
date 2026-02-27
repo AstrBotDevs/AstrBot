@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from typing import cast
 
 from xinference_client.client.restful.async_restful_client import (
@@ -40,10 +39,10 @@ class XinferenceRerankProvider(RerankProvider):
 
     async def initialize(self) -> None:
         if self.api_key:
-            logger.info(t("msg-1ec1e6e4"))
+            logger.info("Xinference Rerank: Using API key for authentication.")
             self.client = Client(self.base_url, api_key=self.api_key)
         else:
-            logger.info(t("msg-7bcb6e1b"))
+            logger.info("Xinference Rerank: No API key provided.")
             self.client = Client(self.base_url)
 
         try:
@@ -51,22 +50,22 @@ class XinferenceRerankProvider(RerankProvider):
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
-                        t("msg-b0d1e564", res=self.model_name, uid=uid),
+                        f"Model '{self.model_name}' is already running with UID: {uid}",
                     )
                     self.model_uid = uid
                     break
 
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
-                    logger.info(t("msg-16965859", res=self.model_name))
+                    logger.info(f"Launching {self.model_name} model...")
                     self.model_uid = await self.client.launch_model(
                         model_name=self.model_name,
                         model_type="rerank",
                     )
-                    logger.info(t("msg-7b1dfdd3"))
+                    logger.info("Model launched.")
                 else:
                     logger.warning(
-                        t("msg-3fc7310e", res=self.model_name),
+                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available.",
                     )
                     return
 
@@ -77,9 +76,9 @@ class XinferenceRerankProvider(RerankProvider):
                 )
 
         except Exception as e:
-            logger.error(t("msg-15f19a42", e=e))
+            logger.error(f"Failed to initialize Xinference model: {e}")
             logger.debug(
-                t("msg-01af1651", e=e),
+                f"Xinference initialization failed with exception: {e}",
                 exc_info=True,
             )
             self.model = None
@@ -91,16 +90,16 @@ class XinferenceRerankProvider(RerankProvider):
         top_n: int | None = None,
     ) -> list[RerankResult]:
         if not self.model:
-            logger.error(t("msg-2607cc7a"))
+            logger.error("Xinference rerank model is not initialized.")
             return []
         try:
             response = await self.model.rerank(documents, query, top_n)
             results = response.get("results", [])
-            logger.debug(t("msg-3d28173b", response=response))
+            logger.debug(f"Rerank API response: {response}")
 
             if not results:
                 logger.warning(
-                    t("msg-4c63e1bd", response=response),
+                    f"Rerank API returned an empty list. Original response: {response}",
                 )
 
             return [
@@ -111,15 +110,15 @@ class XinferenceRerankProvider(RerankProvider):
                 for result in results
             ]
         except Exception as e:
-            logger.error(t("msg-cac71506", e=e))
-            logger.debug(t("msg-4135cf72", e=e), exc_info=True)
+            logger.error(f"Xinference rerank failed: {e}")
+            logger.debug(f"Xinference rerank failed with exception: {e}", exc_info=True)
             return []
 
     async def terminate(self) -> None:
         """关闭客户端会话"""
         if self.client:
-            logger.info(t("msg-ea2b36d0"))
+            logger.info("Closing Xinference rerank client...")
             try:
                 await self.client.close()
             except Exception as e:
-                logger.error(t("msg-633a269f", e=e), exc_info=True)
+                logger.error(f"Failed to close Xinference client: {e}", exc_info=True)

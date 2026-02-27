@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 from collections.abc import Awaitable, Callable
 
@@ -120,7 +119,7 @@ class WebChatQueueMgr:
         task.add_done_callback(
             lambda _: self._listener_tasks.pop(conversation_id, None)
         )
-        logger.debug(t("msg-4af4f885", conversation_id=conversation_id))
+        logger.debug(f"Started listener for conversation: {conversation_id}")
 
     async def _listen_to_queue(
         self,
@@ -147,7 +146,7 @@ class WebChatQueueMgr:
                     await self._listener_callback(data)
                 except Exception as e:
                     logger.error(
-                        t("msg-10237240", conversation_id=conversation_id, e=e)
+                        f"Error processing message from conversation {conversation_id}: {e}"
                     )
             except asyncio.CancelledError:
                 break

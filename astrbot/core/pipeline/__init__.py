@@ -6,7 +6,6 @@ resolution for backward compatibility.
 """
 
 from __future__ import annotations
-from astrbot.core.lang import t
 
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
@@ -86,7 +85,7 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     if name not in _LAZY_EXPORTS:
-        raise AttributeError(t("msg-1c9fc93d", __name__=__name__, name=name))
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     module_path, attr_name = _LAZY_EXPORTS[name]
     module = import_module(module_path)
     value = getattr(module, attr_name)

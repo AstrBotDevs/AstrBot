@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import shutil
 import tempfile
 from enum import Enum
@@ -45,10 +44,10 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
                     download_url = releases[0]["zipball_url"]
                 else:
                     # 没有 release，使用默认分支
-                    click.echo(t("msg-e327bc14", author=author, repo=repo))
+                    click.echo(f"正在从默认分支下载 {author}/{repo}")
                     download_url = f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
         except Exception as e:
-            click.echo(t("msg-c804f59f", e=e))
+            click.echo(f"获取 release 信息失败: {e}，将直接使用提供的 URL")
             download_url = url
 
         # 应用代理
@@ -66,7 +65,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
                 and "archive/refs/heads/master.zip" in download_url
             ):
                 alt_url = download_url.replace("master.zip", "main.zip")
-                click.echo(t("msg-aa398bd5"))
+                click.echo("master 分支不存在，尝试下载 main 分支")
                 resp = client.get(alt_url)
                 resp.raise_for_status()
             else:
@@ -99,7 +98,7 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
         try:
             return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
         except Exception as e:
-            click.echo(t("msg-5587d9fb", yaml_path=yaml_path, e=e), err=True)
+            click.echo(f"读取 {yaml_path} 失败: {e}", err=True)
     return {}
 
 
@@ -161,7 +160,7 @@ def build_plug_list(plugins_dir: Path) -> list:
                     },
                 )
     except Exception as e:
-        click.echo(t("msg-8dbce791", e=e), err=True)
+        click.echo(f"获取在线插件列表失败: {e}", err=True)
 
     # 与在线插件比对，更新状态
     online_plugin_names = {plugin["name"] for plugin in online_plugins}
@@ -219,7 +218,7 @@ def manage_plugin(
 
     # 检查插件是否存在
     if is_update and not target_path.exists():
-        raise click.ClickException(t("msg-6999155d", plugin_name=plugin_name))
+        raise click.ClickException(f"插件 {plugin_name} 未安装，无法更新")
 
     # 备份现有插件
     if is_update and backup_path is not None and backup_path.exists():
@@ -229,19 +228,19 @@ def manage_plugin(
 
     try:
         click.echo(
-            t("msg-fa5e129a", repo_url=repo_url, res='更新' if is_update else '下载', plugin_name=plugin_name),
+            f"正在从 {repo_url} {'更新' if is_update else '下载'}插件 {plugin_name}...",
         )
         get_git_repo(repo_url, target_path, proxy)
 
         # 更新成功，删除备份
         if is_update and backup_path is not None and backup_path.exists():
             shutil.rmtree(backup_path)
-        click.echo(t("msg-9ac1f4db", plugin_name=plugin_name, res='更新' if is_update else '安装'))
+        click.echo(f"插件 {plugin_name} {'更新' if is_update else '安装'}成功")
     except Exception as e:
         if target_path.exists():
             shutil.rmtree(target_path, ignore_errors=True)
         if is_update and backup_path is not None and backup_path.exists():
             shutil.move(backup_path, target_path)
         raise click.ClickException(
-            t("msg-b9c719ae", res='更新' if is_update else '安装', plugin_name=plugin_name, e=e),
+            f"{'更新' if is_update else '安装'}插件 {plugin_name} 时出错: {e}",
         )

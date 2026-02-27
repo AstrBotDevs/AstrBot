@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import datetime
 
@@ -32,7 +31,7 @@ class AuthRoute(Route):
                 and not DEMO_MODE
             ):
                 change_pwd_hint = True
-                logger.warning(t("msg-ee9cf260"))
+                logger.warning("为了保证安全，请尽快修改默认密码。")
 
             return (
                 Response()
@@ -46,13 +45,13 @@ class AuthRoute(Route):
                 .__dict__
             )
         await asyncio.sleep(3)
-        return Response().error(t("msg-87f936b8")).__dict__
+        return Response().error("用户名或密码错误").__dict__
 
     async def edit_account(self):
         if DEMO_MODE:
             return (
                 Response()
-                .error(t("msg-1198c327"))
+                .error("You are not permitted to do this operation in demo mode")
                 .__dict__
             )
 
@@ -60,18 +59,18 @@ class AuthRoute(Route):
         post_data = await request.json
 
         if post_data["password"] != password:
-            return Response().error(t("msg-25562cd3")).__dict__
+            return Response().error("原密码错误").__dict__
 
         new_pwd = post_data.get("new_password", None)
         new_username = post_data.get("new_username", None)
         if not new_pwd and not new_username:
-            return Response().error(t("msg-d31087d2")).__dict__
+            return Response().error("新用户名和新密码不能同时为空").__dict__
 
         # Verify password confirmation
         if new_pwd:
             confirm_pwd = post_data.get("confirm_password", None)
             if confirm_pwd != new_pwd:
-                return Response().error(t("msg-b512c27e")).__dict__
+                return Response().error("两次输入的新密码不一致").__dict__
             self.config["dashboard"]["password"] = new_pwd
         if new_username:
             self.config["dashboard"]["username"] = new_username
@@ -87,6 +86,6 @@ class AuthRoute(Route):
         }
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:
-            raise ValueError(t("msg-7b947d8b"))
+            raise ValueError("JWT secret is not set in the cmd_config.")
         token = jwt.encode(payload, jwt_token, algorithm="HS256")
         return token

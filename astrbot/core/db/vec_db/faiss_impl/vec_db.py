@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import time
 import uuid
 
@@ -76,7 +75,7 @@ class FaissVecDB(BaseVecDB):
         ids = ids or [str(uuid.uuid4()) for _ in contents]
 
         start = time.time()
-        logger.debug(t("msg-9f9765dc", res=len(contents)))
+        logger.debug(f"Generating embeddings for {len(contents)} contents...")
         vectors = await self.embedding_provider.get_embeddings_batch(
             contents,
             batch_size=batch_size,
@@ -86,7 +85,7 @@ class FaissVecDB(BaseVecDB):
         )
         end = time.time()
         logger.debug(
-            t("msg-385bc50a", res=len(contents), res_2=end - start),
+            f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
         )
 
         # 使用 DocumentStorage 的批量插入方法

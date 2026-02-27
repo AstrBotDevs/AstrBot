@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 # astrbot/dashboard/routes/t2i.py
 
 from dataclasses import asdict
@@ -57,7 +56,7 @@ class T2iRoute(Route):
                 asdict(Response().ok(data={"active_template": active_template})),
             )
         except Exception as e:
-            logger.error(t("msg-76cc0933"), exc_info=True)
+            logger.error("Error in get_active_template", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 500
             return response
@@ -70,7 +69,7 @@ class T2iRoute(Route):
                 asdict(Response().ok(data={"name": name, "content": content})),
             )
         except FileNotFoundError:
-            response = jsonify(asdict(Response().error(t("msg-5350f35b"))))
+            response = jsonify(asdict(Response().error("Template not found")))
             response.status_code = 404
             return response
         except Exception as e:
@@ -86,7 +85,7 @@ class T2iRoute(Route):
             content = data.get("content")
             if not name or not content:
                 response = jsonify(
-                    asdict(Response().error(t("msg-d7b101c5"))),
+                    asdict(Response().error("Name and content are required.")),
                 )
                 response.status_code = 400
                 return response
@@ -105,7 +104,7 @@ class T2iRoute(Route):
             return response
         except FileExistsError:
             response = jsonify(
-                asdict(Response().error(t("msg-e910b6f3"))),
+                asdict(Response().error("Template with this name already exists.")),
             )
             response.status_code = 409
             return response
@@ -125,7 +124,7 @@ class T2iRoute(Route):
             data = await request.json
             content = data.get("content")
             if content is None:
-                response = jsonify(asdict(Response().error(t("msg-18cfb637"))))
+                response = jsonify(asdict(Response().error("Content is required.")))
                 response.status_code = 400
                 return response
 
@@ -158,7 +157,7 @@ class T2iRoute(Route):
                 asdict(Response().ok(message="Template deleted successfully.")),
             )
         except FileNotFoundError:
-            response = jsonify(asdict(Response().error(t("msg-2480cf2f"))))
+            response = jsonify(asdict(Response().error("Template not found.")))
             response.status_code = 404
             return response
         except ValueError as e:
@@ -176,7 +175,7 @@ class T2iRoute(Route):
             data = await request.json
             name = data.get("name")
             if not name:
-                response = jsonify(asdict(Response().error(t("msg-9fe026f1"))))
+                response = jsonify(asdict(Response().error("模板名称(name)不能为空。")))
                 response.status_code = 400
                 return response
 
@@ -195,12 +194,12 @@ class T2iRoute(Route):
 
         except FileNotFoundError:
             response = jsonify(
-                asdict(Response().error(t("msg-eeefe1dc", name=name))),
+                asdict(Response().error(f"模板 '{name}' 不存在，无法应用。")),
             )
             response.status_code = 404
             return response
         except Exception as e:
-            logger.error(t("msg-0048e060"), exc_info=True)
+            logger.error("Error in set_active_template", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 500
             return response
@@ -230,7 +229,7 @@ class T2iRoute(Route):
             response.status_code = 404
             return response
         except Exception as e:
-            logger.error(t("msg-8fde62dd"), exc_info=True)
+            logger.error("Error in reset_default_template", exc_info=True)
             response = jsonify(asdict(Response().error(str(e))))
             response.status_code = 500
             return response

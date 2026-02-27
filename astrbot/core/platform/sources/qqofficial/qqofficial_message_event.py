@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import base64
 import os
@@ -40,7 +39,7 @@ def _patch_qq_botpy_formdata() -> None:
         if not hasattr(_FormData, "_is_processed"):
             setattr(_FormData, "_is_processed", False)
     except Exception:
-        logger.debug(t("msg-28a74d9d"))
+        logger.debug("[QQOfficial] Skip botpy FormData patch.")
 
 
 _patch_qq_botpy_formdata()
@@ -101,7 +100,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 ret = await self._post_send()
 
         except Exception as e:
-            logger.error(t("msg-c0b123f6", e=e), exc_info=True)
+            logger.error(f"发送流式消息时出错: {e}", exc_info=True)
             self.send_buffer = None
 
         return await super().send_streaming(generator, use_fallback)
@@ -119,7 +118,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             | botpy.message.DirectMessage
             | botpy.message.C2CMessage,
         ):
-            logger.warning(t("msg-05d6bba5", res=type(source)))
+            logger.warning(f"[QQOfficial] 不支持的消息源类型: {type(source)}")
             return None
 
         (
@@ -152,7 +151,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         match source:
             case botpy.message.GroupMessage():
                 if not source.group_openid:
-                    logger.error(t("msg-e5339577"))
+                    logger.error("[QQOfficial] GroupMessage 缺少 group_openid")
                     return None
 
                 if image_base64:
@@ -224,7 +223,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         payload=payload,
                         plain_text=plain_text,
                     )
-                logger.debug(t("msg-71275806", ret=ret))
+                logger.debug(f"Message sent to C2C: {ret}")
 
             case botpy.message.Message():
                 if image_path:
@@ -280,7 +279,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 raise
 
             logger.warning(
-                t("msg-040e7942")
+                "[QQOfficial] markdown 发送被拒绝，回退到 content 模式重试。"
             )
             fallback_payload = payload.copy()
             fallback_payload["markdown"] = None
@@ -315,11 +314,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             )
             result = await self.bot.api._http.request(route, json=payload)
         else:
-            raise ValueError(t("msg-9000f8f7"))
+            raise ValueError("Invalid upload parameters")
 
         if not isinstance(result, dict):
             raise RuntimeError(
-                t("msg-d72cffe7", result=result)
+                f"Failed to upload image, response is not dict: {result}"
             )
 
         return Media(
@@ -370,7 +369,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
             if result:
                 if not isinstance(result, dict):
-                    logger.error(t("msg-5944a27c", result=result))
+                    logger.error(f"上传文件响应格式错误: {result}")
                     return None
 
                 return Media(
@@ -379,7 +378,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     ttl=result.get("ttl", 0),
                 )
         except Exception as e:
-            logger.error(t("msg-1e513ee5", e=e))
+            logger.error(f"上传请求错误: {e}")
 
         return None
 
@@ -406,7 +405,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         if not isinstance(result, dict):
             raise RuntimeError(
-                t("msg-f1f1733c", result=result)
+                f"Failed to post c2c message, response is not dict: {result}"
             )
 
         return message.Message(**result)
@@ -432,7 +431,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 elif i.file:
                     image_base64 = file_to_base64(i.file)
                 else:
-                    raise ValueError(t("msg-9b8f9f70"))
+                    raise ValueError("Unsupported image file format")
                 image_base64 = image_base64.removeprefix("base64://")
             elif isinstance(i, Record):
                 if i.file:
@@ -451,10 +450,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                             record_file_path = record_tecent_silk_path
                         else:
                             record_file_path = None
-                            logger.error(t("msg-24eb302a"))
+                            logger.error("转换音频格式时出错：音频时长不大于0")
                     except Exception as e:
-                        logger.error(t("msg-b49e55f9", e=e))
+                        logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
             else:
-                logger.debug(t("msg-6e716579", res=i.type))
+                logger.debug(f"qq_official 忽略 {i.type}")
         return plain_text, image_base64, image_file_path, record_file_path

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import base64
 import json
 import sys
@@ -46,17 +45,17 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
         self.api_key = provider_config.get("coze_api_key", "")
         if not self.api_key:
-            raise Exception(t("msg-448549b0"))
+            raise Exception("Coze API Key 不能为空。")
         self.bot_id = provider_config.get("bot_id", "")
         if not self.bot_id:
-            raise Exception(t("msg-b88724b0"))
+            raise Exception("Coze Bot ID 不能为空。")
         self.api_base: str = provider_config.get("coze_api_base", "https://api.coze.cn")
 
         if not isinstance(self.api_base, str) or not self.api_base.startswith(
             ("http://", "https://"),
         ):
             raise Exception(
-                t("msg-ea5a135a"),
+                "Coze API Base URL 格式不正确，必须以 http:// 或 https:// 开头。",
             )
 
         self.timeout = provider_config.get("timeout", 120)
@@ -76,13 +75,13 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         执行 Coze Agent 的一个步骤
         """
         if not self.req:
-            raise ValueError(t("msg-55333301"))
+            raise ValueError("Request is not set. Please call reset() first.")
 
         if self._state == AgentState.IDLE:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
-                logger.error(t("msg-d3b77736", e=e), exc_info=True)
+                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
 
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
@@ -92,7 +91,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             async for response in self._execute_coze_request():
                 yield response
         except Exception as e:
-            logger.error(t("msg-5aa3eb1c", res=str(e)))
+            logger.error(f"Coze 请求失败：{str(e)}")
             self._transition_state(AgentState.ERROR)
             self.final_llm_resp = LLMResponse(
                 role="err", completion_text=f"Coze 请求失败：{str(e)}"
@@ -100,7 +99,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-                    chain=MessageChain().message(t("msg-5aa3eb1c", res=str(e)))
+                    chain=MessageChain().message(f"Coze 请求失败：{str(e)}")
                 ),
             )
         finally:
@@ -178,7 +177,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                                                 }
                                             )
                                     except Exception as e:
-                                        logger.warning(t("msg-333354c6", e=e))
+                                        logger.warning(f"处理上下文图片失败: {e}")
                                         continue
 
                         if processed_content:
@@ -219,7 +218,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                             }
                         )
                     except Exception as e:
-                        logger.warning(t("msg-2d9e1c08", url=url, e=e))
+                        logger.warning(f"处理图片失败 {url}: {e}")
                         continue
 
                 if object_string_content:
@@ -283,29 +282,29 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                         yield AgentResponse(
                             type="streaming_delta",
                             data=AgentResponseData(
-                                chain=MessageChain().message(t("msg-1f50979d", content=content))
+                                chain=MessageChain().message(content)
                             ),
                         )
 
             elif event_type == "conversation.message.completed":
                 # 消息完成
-                logger.debug(t("msg-6fe5588b"))
+                logger.debug("Coze message completed")
                 message_started = True
 
             elif event_type == "conversation.chat.completed":
                 # 对话完成
-                logger.debug(t("msg-d2802f3b"))
+                logger.debug("Coze chat completed")
                 break
 
             elif event_type == "error":
                 # 错误处理
                 error_msg = data.get("msg", "未知错误")
                 error_code = data.get("code", "UNKNOWN")
-                logger.error(t("msg-ba4afcda", error_code=error_code, error_msg=error_msg))
-                raise Exception(t("msg-ba4afcda", error_code=error_code, error_msg=error_msg))
+                logger.error(f"Coze 出现错误: {error_code} - {error_msg}")
+                raise Exception(f"Coze 出现错误: {error_code} - {error_msg}")
 
         if not message_started and not accumulated_content:
-            logger.warning(t("msg-ee300f25"))
+            logger.warning("Coze 未返回任何内容")
             accumulated_content = ""
 
         # 创建最终响应
@@ -316,7 +315,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:
-            logger.error(t("msg-8eb53be3", e=e), exc_info=True)
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
         # 返回最终结果
         yield AgentResponse(
@@ -341,7 +340,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             if cache_key in self.file_id_cache[session_id]:
                 file_id = self.file_id_cache[session_id][cache_key]
-                logger.debug(t("msg-034c1858", file_id=file_id))
+                logger.debug(f"[Coze] 使用缓存的 file_id: {file_id}")
                 return file_id
 
         try:
@@ -350,13 +349,13 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id
-                logger.debug(t("msg-475d8a41", file_id=file_id))
+                logger.debug(f"[Coze] 图片上传成功并缓存，file_id: {file_id}")
 
             return file_id
 
         except Exception as e:
-            logger.error(t("msg-696dad99", image_url=image_url, e=e))
-            raise Exception(t("msg-7793a347", e=e))
+            logger.error(f"处理图片失败 {image_url}: {e!s}")
+            raise Exception(f"处理图片失败: {e!s}")
 
     @override
     def done(self) -> bool:

@@ -1,5 +1,4 @@
 """会话服务管理器 - 负责管理每个会话的LLM、TTS等服务的启停状态"""
-from astrbot.core.lang import t
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -137,7 +136,7 @@ class SessionServiceManager:
         )
 
         logger.info(
-            t("msg-7b90d0e9", session_id=session_id, res='启用' if enabled else '禁用'),
+            f"会话 {session_id} 的TTS状态已更新为: {'启用' if enabled else '禁用'}",
         )
 
     @staticmethod

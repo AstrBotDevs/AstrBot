@@ -1,5 +1,4 @@
 from __future__ import annotations
-from astrbot.core.lang import t
 
 import asyncio
 import copy
@@ -161,7 +160,7 @@ class FunctionToolManager:
                 handler=handler,
             ),
         )
-        logger.info(t("msg-0c42a4d9", name=name))
+        logger.info(f"添加函数调用工具: {name}")
 
     def remove_func(self, name: str) -> None:
         """删除一个函数调用工具。"""
@@ -206,7 +205,7 @@ class FunctionToolManager:
             # 配置文件不存在错误处理
             with open(mcp_json_file, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
-            logger.info(t("msg-e8fdbb8c", mcp_json_file=mcp_json_file))
+            logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return
 
         mcp_server_json_obj: dict[str, dict] = json.load(
@@ -237,9 +236,9 @@ class FunctionToolManager:
                 # tell the caller we are ready
                 ready_future.set_result(tools)
             await event.wait()
-            logger.info(t("msg-cf8aed84", name=name))
+            logger.info(f"收到 MCP 客户端 {name} 终止信号")
         except Exception as e:
-            logger.error(t("msg-3d7bcc64", name=name), exc_info=True)
+            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
             if ready_future and not ready_future.done():
                 ready_future.set_exception(e)
         finally:
@@ -257,7 +256,7 @@ class FunctionToolManager:
         self.mcp_client_dict[name] = mcp_client
         await mcp_client.connect_to_server(config, name)
         tools_res = await mcp_client.list_tools_and_save()
-        logger.debug(t("msg-1b190842", name=name, tools_res=tools_res))
+        logger.debug(f"MCP server {name} list tools response: {tools_res}")
         tool_names = [tool.name for tool in tools_res.tools]
 
         # 移除该MCP服务之前的工具（如有）
@@ -276,7 +275,7 @@ class FunctionToolManager:
             )
             self.func_list.append(func_tool)
 
-        logger.info(t("msg-6dc4f652", name=name, tool_names=tool_names))
+        logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
@@ -286,7 +285,7 @@ class FunctionToolManager:
                 # 关闭MCP连接
                 await client.cleanup()
             except Exception as e:
-                logger.error(t("msg-a44aa4f2", name=name, e=e))
+                logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
             finally:
                 # Remove client from dict after cleanup attempt (successful or not)
                 self.mcp_client_dict.pop(name, None)
@@ -296,23 +295,23 @@ class FunctionToolManager:
                     for f in self.func_list
                     if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
                 ]
-                logger.info(t("msg-e9c96c53", name=name))
+                logger.info(f"已关闭 MCP 服务 {name}")
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
         if "url" in config:
             success, error_msg = await _quick_test_mcp_connection(config)
             if not success:
-                raise Exception(t("msg-10f72727", error_msg=error_msg))
+                raise Exception(error_msg)
 
         mcp_client = MCPClient()
         try:
-            logger.debug(t("msg-85f156e0", config=config))
+            logger.debug(f"testing MCP server connection with config: {config}")
             await mcp_client.connect_to_server(config, "test")
             tools_res = await mcp_client.list_tools_and_save()
             tool_names = [tool.name for tool in tools_res.tools]
         finally:
-            logger.debug(t("msg-93c54ce0"))
+            logger.debug("Cleaning up MCP client after testing connection.")
             await mcp_client.cleanup()
         return tool_names
 
@@ -458,7 +457,7 @@ class FunctionToolManager:
             if func_tool.handler_module_path in star_map:
                 if not star_map[func_tool.handler_module_path].activated:
                     raise ValueError(
-                        t("msg-368450ee", res=star_map[func_tool.handler_module_path].name),
+                        f"此函数调用工具所属的插件 {star_map[func_tool.handler_module_path].name} 已被禁用，请先在管理面板启用再激活此工具。",
                     )
 
             func_tool.active = True
@@ -498,7 +497,7 @@ class FunctionToolManager:
             with open(self.mcp_config_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logger.error(t("msg-4ffa2135", e=e))
+            logger.error(f"加载 MCP 配置失败: {e}")
             return DEFAULT_MCP_CONFIG
 
     def save_mcp_config(self, config: dict) -> bool:
@@ -507,7 +506,7 @@ class FunctionToolManager:
                 json.dump(config, f, ensure_ascii=False, indent=4)
             return True
         except Exception as e:
-            logger.error(t("msg-a486ac39", e=e))
+            logger.error(f"保存 MCP 配置失败: {e}")
             return False
 
     async def sync_modelscope_mcp_servers(self, access_token: str) -> None:
@@ -562,19 +561,19 @@ class FunctionToolManager:
                                 )
                             await asyncio.gather(*tasks)
                             logger.info(
-                                t("msg-58dfdfe7", synced_count=synced_count),
+                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器",
                             )
                         else:
-                            logger.warning(t("msg-75f1222f"))
+                            logger.warning("没有找到可用的 ModelScope MCP 服务器")
                     else:
                         raise Exception(
-                            t("msg-c9f6cb1d", res=response.status),
+                            f"ModelScope API 请求失败: HTTP {response.status}",
                         )
 
         except aiohttp.ClientError as e:
-            raise Exception(t("msg-c8ebb4f7", e=e))
+            raise Exception(f"网络连接错误: {e!s}")
         except Exception as e:
-            raise Exception(t("msg-0ac6970f", e=e))
+            raise Exception(f"同步 ModelScope MCP 服务器时发生错误: {e!s}")
 
     def __str__(self) -> str:
         return str(self.func_list)

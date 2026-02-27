@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import argparse
 import asyncio
 import mimetypes
@@ -43,7 +42,7 @@ logo_tmpl = r"""
 
 def check_env() -> None:
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
-        logger.error(t("msg-5e25709f"))
+        logger.error("请使用 Python3.10+ 运行本项目。")
         exit()
 
     astrbot_root = get_astrbot_root()
@@ -71,9 +70,9 @@ async def check_dashboard_files(webui_dir: str | None = None):
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
-            logger.info(t("msg-afd0ab81", webui_dir=webui_dir))
+            logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
             return webui_dir
-        logger.warning(t("msg-7765f00f", webui_dir=webui_dir))
+        logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(data_dist_path):
@@ -81,24 +80,24 @@ async def check_dashboard_files(webui_dir: str | None = None):
         if v is not None:
             # 存在文件
             if v == f"v{VERSION}":
-                logger.info(t("msg-9af20e37"))
+                logger.info("WebUI 版本已是最新。")
             else:
                 logger.warning(
-                    t("msg-9dd5c1d2", v=v, VERSION=VERSION),
+                    f"检测到 WebUI 版本 ({v}) 与当前 AstrBot 版本 (v{VERSION}) 不符。",
                 )
         return data_dist_path
 
     logger.info(
-        t("msg-ec714d4e"),
+        "开始下载管理面板文件...高峰期（晚上）可能导致较慢的速度。如多次下载失败，请前往 https://github.com/AstrBotDevs/AstrBot/releases/latest 下载 dist.zip，并将其中的 dist 文件夹解压至 data 目录下。",
     )
 
     try:
         await download_dashboard(version=f"v{VERSION}", latest=False)
     except Exception as e:
-        logger.critical(t("msg-c5170c27", e=e))
+        logger.critical(f"下载管理面板文件失败: {e}。")
         return None
 
-    logger.info(t("msg-e1592ad1"))
+    logger.info("管理面板下载完成。")
     return data_dist_path
 
 
@@ -124,7 +123,7 @@ if __name__ == "__main__":
     db = db_helper
 
     # 打印 logo
-    logger.info(t("msg-fe494da6", logo_tmpl=logo_tmpl))
+    logger.info(logo_tmpl)
 
     core_lifecycle = InitialLoader(db, log_broker)
     core_lifecycle.webui_dir = webui_dir

@@ -20,7 +20,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from astrbot.core.lang import t
 
 import asyncio
 import base64
@@ -140,7 +139,7 @@ class Record(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Record(file=url, **_)
-        raise Exception(t("msg-afb10076"))
+        raise Exception("not a valid url")
 
     @staticmethod
     def fromBase64(bs64_data: str, **_):
@@ -154,7 +153,7 @@ class Record(BaseMessageComponent):
 
         """
         if not self.file:
-            raise Exception(t("msg-fe4c33a0", res=self.file))
+            raise Exception(f"not a valid file: {self.file}")
         if self.file.startswith("file:///"):
             return self.file[8:]
         if self.file.startswith("http"):
@@ -171,7 +170,7 @@ class Record(BaseMessageComponent):
             return os.path.abspath(file_path)
         if os.path.exists(self.file):
             return os.path.abspath(self.file)
-        raise Exception(t("msg-fe4c33a0", res=self.file))
+        raise Exception(f"not a valid file: {self.file}")
 
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
@@ -182,7 +181,7 @@ class Record(BaseMessageComponent):
         """
         # convert to base64
         if not self.file:
-            raise Exception(t("msg-fe4c33a0", res=self.file))
+            raise Exception(f"not a valid file: {self.file}")
         if self.file.startswith("file:///"):
             bs64_data = file_to_base64(self.file[8:])
         elif self.file.startswith("http"):
@@ -193,7 +192,7 @@ class Record(BaseMessageComponent):
         elif os.path.exists(self.file):
             bs64_data = file_to_base64(self.file)
         else:
-            raise Exception(t("msg-fe4c33a0", res=self.file))
+            raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
@@ -210,13 +209,13 @@ class Record(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception(t("msg-24d98e13"))
+            raise Exception("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(t("msg-a5c69cc9", callback_host=callback_host, token=token))
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
@@ -240,7 +239,7 @@ class Video(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Video(file=url, **_)
-        raise Exception(t("msg-afb10076"))
+        raise Exception("not a valid url")
 
     async def convert_to_file_path(self) -> str:
         """将这个视频统一转换为本地文件路径。这个方法避免了手动判断视频数据类型，直接返回视频数据的本地路径（如果是网络 URL，则会自动进行下载）。
@@ -259,10 +258,10 @@ class Video(BaseMessageComponent):
             await download_file(url, video_file_path)
             if os.path.exists(video_file_path):
                 return os.path.abspath(video_file_path)
-            raise Exception(t("msg-3cddc5ef", url=url))
+            raise Exception(f"download failed: {url}")
         if os.path.exists(url):
             return os.path.abspath(url)
-        raise Exception(t("msg-1921aa47", url=url))
+        raise Exception(f"not a valid file: {url}")
 
     async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
@@ -277,13 +276,13 @@ class Video(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception(t("msg-24d98e13"))
+            raise Exception("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(t("msg-a5c69cc9", callback_host=callback_host, token=token))
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
@@ -296,7 +295,7 @@ class Video(BaseMessageComponent):
             callback_host = str(callback_host).removesuffix("/")
             token = await file_token_service.register_file(url_or_path)
             payload_file = f"{callback_host}/api/file/{token}"
-            logger.debug(t("msg-2ee3827c", payload_file=payload_file))
+            logger.debug(f"Generated video file callback link: {payload_file}")
         else:
             payload_file = url_or_path
         return {
@@ -418,7 +417,7 @@ class Image(BaseMessageComponent):
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
             return Image(file=url, **_)
-        raise Exception(t("msg-afb10076"))
+        raise Exception("not a valid url")
 
     @staticmethod
     def fromFileSystem(path, **_):
@@ -445,7 +444,7 @@ class Image(BaseMessageComponent):
         """
         url = self.url or self.file
         if not url:
-            raise ValueError(t("msg-32f4fc78"))
+            raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
             return url[8:]
         if url.startswith("http"):
@@ -462,7 +461,7 @@ class Image(BaseMessageComponent):
             return os.path.abspath(image_file_path)
         if os.path.exists(url):
             return os.path.abspath(url)
-        raise Exception(t("msg-1921aa47", url=url))
+        raise Exception(f"not a valid file: {url}")
 
     async def convert_to_base64(self) -> str:
         """将这个图片统一转换为 base64 编码。这个方法避免了手动判断图片数据类型，直接返回图片数据的 base64 编码。
@@ -474,7 +473,7 @@ class Image(BaseMessageComponent):
         # convert to base64
         url = self.url or self.file
         if not url:
-            raise ValueError(t("msg-32f4fc78"))
+            raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
             bs64_data = file_to_base64(url[8:])
         elif url.startswith("http"):
@@ -485,7 +484,7 @@ class Image(BaseMessageComponent):
         elif os.path.exists(url):
             bs64_data = file_to_base64(url)
         else:
-            raise Exception(t("msg-1921aa47", url=url))
+            raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
 
@@ -502,13 +501,13 @@ class Image(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception(t("msg-24d98e13"))
+            raise Exception("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.convert_to_file_path()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(t("msg-a5c69cc9", callback_host=callback_host, token=token))
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
@@ -680,7 +679,9 @@ class File(BaseMessageComponent):
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     logger.warning(
-                        t("msg-36375f4c"),
+                        "不可以在异步上下文中同步等待下载! "
+                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
                     )
                     return ""
                 # 等待下载完成
@@ -689,7 +690,7 @@ class File(BaseMessageComponent):
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
             except Exception as e:
-                logger.error(t("msg-4a987754", e=e))
+                logger.error(f"文件下载失败: {e}")
 
         return ""
 
@@ -757,7 +758,7 @@ class File(BaseMessageComponent):
     async def _download_file(self) -> None:
         """下载文件"""
         if not self.url:
-            raise ValueError(t("msg-7c1935ee"))
+            raise ValueError("Download failed: No URL provided in File component.")
         download_dir = get_astrbot_temp_path()
         if self.name:
             name, ext = os.path.splitext(self.name)
@@ -781,13 +782,13 @@ class File(BaseMessageComponent):
         callback_host = astrbot_config.get("callback_api_base")
 
         if not callback_host:
-            raise Exception(t("msg-24d98e13"))
+            raise Exception("未配置 callback_api_base，文件服务不可用")
 
         file_path = await self.get_file()
 
         token = await file_token_service.register_file(file_path)
 
-        logger.debug(t("msg-a5c69cc9", callback_host=callback_host, token=token))
+        logger.debug(f"已注册：{callback_host}/api/file/{token}")
 
         return f"{callback_host}/api/file/{token}"
 
@@ -800,7 +801,7 @@ class File(BaseMessageComponent):
             callback_host = str(callback_host).removesuffix("/")
             token = await file_token_service.register_file(url_or_path)
             payload_file = f"{callback_host}/api/file/{token}"
-            logger.debug(t("msg-35bb8d53", payload_file=payload_file))
+            logger.debug(f"Generated file callback link: {payload_file}")
         else:
             payload_file = url_or_path
         return {

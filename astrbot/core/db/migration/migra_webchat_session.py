@@ -8,7 +8,6 @@ Changes:
 - Adds display_name field
 - Session_id format: {platform_id}_{uuid}
 """
-from astrbot.core.lang import t
 
 from sqlalchemy import func, select
 from sqlmodel import col
@@ -31,7 +30,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
     if migration_done:
         return
 
-    logger.info(t("msg-53fad3d0"))
+    logger.info("开始执行数据库迁移（WebChat 会话迁移）...")
 
     try:
         async with db_helper.get_db() as session:
@@ -52,13 +51,13 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
             webchat_users = result.all()
 
             if not webchat_users:
-                logger.info(t("msg-7674efb0"))
+                logger.info("没有找到需要迁移的 WebChat 数据")
                 await sp.put_async(
                     "global", "global", "migration_done_webchat_session_1", True
                 )
                 return
 
-            logger.info(t("msg-139e39ee", res=len(webchat_users)))
+            logger.info(f"找到 {len(webchat_users)} 个 WebChat 会话需要迁移")
 
             # 检查已存在的会话
             existing_query = select(col(PlatformSession.session_id))
@@ -94,7 +93,7 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
 
                 # 检查是否已经存在该会话
                 if session_id in existing_session_ids:
-                    logger.debug(t("msg-cf287e58", session_id=session_id))
+                    logger.debug(f"会话 {session_id} 已存在，跳过")
                     skipped_count += 1
                     continue
 
@@ -119,14 +118,14 @@ async def migrate_webchat_session(db_helper: BaseDatabase) -> None:
                 await session.commit()
 
                 logger.info(
-                    t("msg-062c72fa", res=len(sessions_to_add), skipped_count=skipped_count),
+                    f"WebChat 会话迁移完成！成功迁移: {len(sessions_to_add)}, 跳过: {skipped_count}",
                 )
             else:
-                logger.info(t("msg-a516cc9f"))
+                logger.info("没有新会话需要迁移")
 
         # 标记迁移完成
         await sp.put_async("global", "global", "migration_done_webchat_session_1", True)
 
     except Exception as e:
-        logger.error(t("msg-91571aaf", e=e), exc_info=True)
+        logger.error(f"迁移过程中发生错误: {e}", exc_info=True)
         raise

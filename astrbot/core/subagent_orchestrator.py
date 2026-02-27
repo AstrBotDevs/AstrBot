@@ -1,5 +1,4 @@
 from __future__ import annotations
-from astrbot.core.lang import t
 
 from typing import Any
 
@@ -29,7 +28,7 @@ class SubAgentOrchestrator:
 
         agents = cfg.get("agents", [])
         if not isinstance(agents, list):
-            logger.warning(t("msg-5d950986"))
+            logger.warning("subagent_orchestrator.agents must be a list")
             return
 
         handoffs: list[HandoffTool] = []
@@ -50,7 +49,7 @@ class SubAgentOrchestrator:
                     persona_data = await self._persona_mgr.get_persona(persona_id)
                 except StopIteration:
                     logger.warning(
-                        t("msg-29e3b482"),
+                        "SubAgent persona %s not found, fallback to inline prompt.",
                         persona_id,
                     )
 
@@ -94,6 +93,6 @@ class SubAgentOrchestrator:
             handoffs.append(handoff)
 
         for handoff in handoffs:
-            logger.info(t("msg-f425c9f0", res=handoff.name))
+            logger.info(f"Registered subagent handoff tool: {handoff.name}")
 
         self.handoffs = handoffs

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import os
 import uuid
 
@@ -35,7 +34,7 @@ class ProviderOpenAITTSAPI(TTSProvider):
         proxy = provider_config.get("proxy", "")
         http_client = None
         if proxy:
-            logger.info(t("msg-d7084760", proxy=proxy))
+            logger.info(f"[OpenAI TTS] 使用代理: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,

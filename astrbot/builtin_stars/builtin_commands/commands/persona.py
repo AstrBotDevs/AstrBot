@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import builtins
 from typing import TYPE_CHECKING
 
@@ -72,7 +71,7 @@ class PersonaCommands:
             if conv is None:
                 message.set_result(
                     MessageEventResult().message(
-                        t("msg-4f52d0dd"),
+                        "当前对话不存在，请先使用 /new 新建一个对话。",
                     ),
                 )
                 return
@@ -108,7 +107,18 @@ class PersonaCommands:
             message.set_result(
                 MessageEventResult()
                 .message(
-                    t("msg-e092b97c", res=default_persona['name'], curr_cid_title=curr_cid_title, curr_persona_name=curr_persona_name),
+                    f"""[Persona]
+
+- 人格情景列表: `/persona list`
+- 设置人格情景: `/persona 人格`
+- 人格情景详细信息: `/persona view 人格`
+- 取消人格: `/persona unset`
+
+默认人格情景: {default_persona["name"]}
+当前对话 {curr_cid_title} 的人格情景: {curr_persona_name}
+
+配置人格情景请前往管理面板-配置页
+""",
                 )
                 .use_t2i(False),
             )
@@ -138,10 +148,10 @@ class PersonaCommands:
             lines.append("*使用 `/persona view <人格名>` 查看详细信息")
 
             msg = "\n".join(lines)
-            message.set_result(MessageEventResult().message(t("msg-c046b6e4", msg=msg)).use_t2i(False))
+            message.set_result(MessageEventResult().message(msg).use_t2i(False))
         elif l[1] == "view":
             if len(l) == 2:
-                message.set_result(MessageEventResult().message(t("msg-99139ef8")))
+                message.set_result(MessageEventResult().message("请输入人格情景名"))
                 return
             ps = l[2].strip()
             if persona := next(
@@ -155,24 +165,24 @@ class PersonaCommands:
                 msg += f"{persona['prompt']}\n"
             else:
                 msg = f"人格{ps}不存在"
-            message.set_result(MessageEventResult().message(t("msg-c046b6e4", msg=msg)))
+            message.set_result(MessageEventResult().message(msg))
         elif l[1] == "unset":
             if not cid:
                 message.set_result(
-                    MessageEventResult().message(t("msg-a44c7ec0")),
+                    MessageEventResult().message("当前没有对话，无法取消人格。"),
                 )
                 return
             await self.context.conversation_manager.update_conversation_persona_id(
                 message.unified_msg_origin,
                 "[%None]",
             )
-            message.set_result(MessageEventResult().message(t("msg-a90c75d4")))
+            message.set_result(MessageEventResult().message("取消人格成功。"))
         else:
             ps = "".join(l[1:]).strip()
             if not cid:
                 message.set_result(
                     MessageEventResult().message(
-                        t("msg-a712d71a"),
+                        "当前没有对话，请先开始对话或使用 /new 创建一个对话。",
                     ),
                 )
                 return
@@ -195,12 +205,12 @@ class PersonaCommands:
 
                 message.set_result(
                     MessageEventResult().message(
-                        t("msg-4e4e746d", force_warn_msg=force_warn_msg),
+                        f"设置成功。如果您正在切换到不同的人格，请注意使用 /reset 来清空上下文，防止原人格对话影响现人格。{force_warn_msg}",
                     ),
                 )
             else:
                 message.set_result(
                     MessageEventResult().message(
-                        t("msg-ab60a2e7"),
+                        "不存在该人格情景。使用 /persona list 查看所有。",
                     ),
                 )

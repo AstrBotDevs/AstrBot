@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import base64
 import binascii
@@ -59,7 +58,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 reference_message_id,
             ) = await self._parse_to_discord(message)
         except Exception as e:
-            logger.error(t("msg-0056366b", e=e), exc_info=True)
+            logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
             return
 
         kwargs = {}
@@ -74,7 +73,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if reference_message_id and not self.interaction_followup_webhook:
             kwargs["reference"] = self.client.get_message(int(reference_message_id))
         if not kwargs:
-            logger.debug(t("msg-fa0a9e40"))
+            logger.debug("[Discord] 尝试发送空消息，已忽略。")
             return
 
         # 根据上下文执行发送/回复操作
@@ -89,12 +88,12 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 if not channel:
                     return
                 if not isinstance(channel, discord.abc.Messageable):
-                    logger.error(t("msg-5ccebf9a", res=channel.id))
+                    logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
                     return
                 await channel.send(**kwargs)
 
         except Exception as e:
-            logger.error(t("msg-1550c1eb", e=e), exc_info=True)
+            logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
 
         await super().send(message)
 
@@ -123,7 +122,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 channel_id,
             ) or await self.client.fetch_channel(channel_id)
         except (ValueError, discord.errors.NotFound, discord.errors.Forbidden):
-            logger.error(t("msg-7857133d", res=self.session_id))
+            logger.error(f"[Discord] 无法获取频道 {self.session_id}")
             return None
 
     async def _parse_to_discord(
@@ -150,27 +149,27 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, At):
                 content_parts.append(f"<@{i.qq}>")
             elif isinstance(i, Image):
-                logger.debug(t("msg-050aa8d6", i=i))
+                logger.debug(f"[Discord] 开始处理 Image 组件: {i}")
                 try:
                     filename = getattr(i, "filename", None)
                     file_content = getattr(i, "file", None)
 
                     if not file_content:
-                        logger.warning(t("msg-57c802ef", i=i))
+                        logger.warning(f"[Discord] Image 组件没有 file 属性: {i}")
                         continue
 
                     discord_file = None
 
                     # 1. URL
                     if file_content.startswith("http"):
-                        logger.debug(t("msg-f2bea7ac", file_content=file_content))
+                        logger.debug(f"[Discord] 处理 URL 图片: {file_content}")
                         embed = discord.Embed().set_image(url=file_content)
                         embeds.append(embed)
                         continue
 
                     # 2. File URI
                     if file_content.startswith("file:///"):
-                        logger.debug(t("msg-c3eae1f1", file_content=file_content))
+                        logger.debug(f"[Discord] 处理 File URI: {file_content}")
                         path = Path(file_content[8:])
                         if await asyncio.to_thread(path.exists):
                             file_bytes = await asyncio.to_thread(path.read_bytes)
@@ -179,11 +178,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
                                 filename=filename or path.name,
                             )
                         else:
-                            logger.warning(t("msg-6201da92", path=path))
+                            logger.warning(f"[Discord] 图片文件不存在: {path}")
 
                     # 3. Base64 URI
                     elif file_content.startswith("base64://"):
-                        logger.debug(t("msg-2a6f0cd4"))
+                        logger.debug("[Discord] 处理 Base64 URI")
                         b64_data = file_content.split("base64://", 1)[1]
                         missing_padding = len(b64_data) % 4
                         if missing_padding:
@@ -197,7 +196,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     # 4. 裸 Base64 或本地路径
                     else:
                         try:
-                            logger.debug(t("msg-b589c643"))
+                            logger.debug("[Discord] 尝试作为裸 Base64 处理")
                             b64_data = file_content
                             missing_padding = len(b64_data) % 4
                             if missing_padding:
@@ -209,7 +208,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             )
                         except (ValueError, TypeError, binascii.Error):
                             logger.debug(
-                                t("msg-41dd4b8f", file_content=file_content),
+                                f"[Discord] 裸 Base64 解码失败，作为本地路径处理: {file_content}",
                             )
                             path = Path(file_content)
                             if await asyncio.to_thread(path.exists):
@@ -219,7 +218,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                                     filename=filename or path.name,
                                 )
                             else:
-                                logger.warning(t("msg-6201da92", path=path))
+                                logger.warning(f"[Discord] 图片文件不存在: {path}")
 
                     if discord_file:
                         files.append(discord_file)
@@ -228,7 +227,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
                     file_info = getattr(i, "file", "未知")
                     logger.error(
-                        t("msg-f59778a1", file_info=file_info),
+                        f"[Discord] 处理图片时发生未知严重错误: {file_info}",
                         exc_info=True,
                     )
             elif isinstance(i, File):
@@ -243,12 +242,12 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             )
                         else:
                             logger.warning(
-                                t("msg-85665612", file_path_str=file_path_str),
+                                f"[Discord] 获取文件失败，路径不存在: {file_path_str}",
                             )
                     else:
-                        logger.warning(t("msg-e55956fb", res=i.name))
+                        logger.warning(f"[Discord] 获取文件失败: {i.name}")
                 except Exception as e:
-                    logger.warning(t("msg-56cc0d48", res=i.name, e=e))
+                    logger.warning(f"[Discord] 处理文件失败: {i.name}, 错误: {e}")
             elif isinstance(i, DiscordEmbed):
                 # Discord Embed消息
                 embeds.append(i.to_discord_embed())
@@ -260,11 +259,11 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 if isinstance(i.view, discord.ui.View):
                     view = i.view
             else:
-                logger.debug(t("msg-c0705d4e", res=i.type))
+                logger.debug(f"[Discord] 忽略了不支持的消息组件: {i.type}")
 
         content = "".join(content_parts)
         if len(content) > 2000:
-            logger.warning(t("msg-0417d127"))
+            logger.warning("[Discord] 消息内容超过2000字符，将被截断。")
             content = content[:2000]
         return content, files, view, embeds, reference_message_id
 
@@ -279,7 +278,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
                     emoji
                 )
         except Exception as e:
-            logger.error(t("msg-6277510f", e=e))
+            logger.error(f"[Discord] 添加反应失败: {e}")
 
     def is_slash_command(self) -> bool:
         """判断是否为斜杠命令"""

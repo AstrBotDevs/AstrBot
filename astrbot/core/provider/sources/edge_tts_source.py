@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import subprocess
@@ -70,7 +69,7 @@ class ProviderEdgeTTS(TTSProvider):
                 ff = FFmpeg()
                 ff.convert(input_file=mp3_path, output_file=wav_path)
             except Exception as e:
-                logger.debug(t("msg-f4ab0713", e=e))
+                logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
                 # use ffmpeg command line
 
                 # 使用ffmpeg将MP3转换为标准WAV格式
@@ -96,32 +95,32 @@ class ProviderEdgeTTS(TTSProvider):
                 )
                 # 等待进程完成并获取输出
                 stdout, stderr = await p.communicate()
-                logger.info(t("msg-ddc3594a", res=stdout.decode().strip()))
-                logger.debug(t("msg-1b8c0a83", res=stderr.decode().strip()))
-                logger.info(t("msg-1e980a68", res=p.returncode))
+                logger.info(f"[EdgeTTS] FFmpeg 标准输出: {stdout.decode().strip()}")
+                logger.debug(f"FFmpeg错误输出: {stderr.decode().strip()}")
+                logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")
 
             os.remove(mp3_path)
             if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
                 return wav_path
-            logger.error(t("msg-c39d210c"))
-            raise RuntimeError(t("msg-c39d210c"))
+            logger.error("生成的WAV文件不存在或为空")
+            raise RuntimeError("生成的WAV文件不存在或为空")
 
         except subprocess.CalledProcessError as e:
             logger.error(
-                t("msg-57f60837", res=e.stderr.decode() if e.stderr else str(e)),
+                f"FFmpeg 转换失败: {e.stderr.decode() if e.stderr else str(e)}",
             )
             try:
                 if os.path.exists(mp3_path):
                     os.remove(mp3_path)
             except Exception:
                 pass
-            raise RuntimeError(t("msg-ca94a42a", e=e))
+            raise RuntimeError(f"FFmpeg 转换失败: {e!s}")
 
         except Exception as e:
-            logger.error(t("msg-be660d63", e=e))
+            logger.error(f"音频生成失败: {e!s}")
             try:
                 if os.path.exists(mp3_path):
                     os.remove(mp3_path)
             except Exception:
                 pass
-            raise RuntimeError(t("msg-be660d63", e=e))
+            raise RuntimeError(f"音频生成失败: {e!s}")

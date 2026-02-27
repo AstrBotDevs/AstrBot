@@ -1,5 +1,4 @@
 from __future__ import annotations
-from astrbot.core.lang import t
 
 import base64
 import enum
@@ -197,7 +196,7 @@ class ProviderRequest:
                 else:
                     image_data = await self._encode_image_bs64(image_url)
                 if not image_data:
-                    logger.warning(t("msg-7fc6f623", image_url=image_url))
+                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
                     continue
                 content_blocks.append(
                     {"type": "image_url", "image_url": {"url": image_data}},

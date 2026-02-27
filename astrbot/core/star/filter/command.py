@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import inspect
 import re
 import types
@@ -106,7 +105,7 @@ class CommandFilter(HandlerFilter):
                 # GreedyStr 必须是最后一个参数
                 if i != len(param_items) - 1:
                     raise ValueError(
-                        t("msg-995944c2", param_name=param_name),
+                        f"参数 '{param_name}' (GreedyStr) 必须是最后一个参数。",
                     )
 
                 # 将剩余的所有部分合并成一个字符串
@@ -122,7 +121,7 @@ class CommandFilter(HandlerFilter):
                 ):
                     # 是类型
                     raise ValueError(
-                        t("msg-04dbdc3a", res=self.print_types()),
+                        f"必要参数缺失。该指令完整参数: {self.print_types()}",
                     )
                 # 是默认值
                 result[param_name] = param_type_or_default_val
@@ -146,7 +145,7 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = False
                         else:
                             raise ValueError(
-                                t("msg-bda71712", param_name=param_name),
+                                f"参数 {param_name} 必须是布尔值（true/false, yes/no, 1/0）。",
                             )
                     elif isinstance(param_type_or_default_val, int):
                         result[param_name] = int(params[i])
@@ -169,7 +168,7 @@ class CommandFilter(HandlerFilter):
                             result[param_name] = param_type_or_default_val(params[i])
                 except ValueError:
                     raise ValueError(
-                        t("msg-a9afddbf", param_name=param_name, res=self.print_types()),
+                        f"参数 {param_name} 类型错误。完整参数: {self.print_types()}",
                     )
         return result
 

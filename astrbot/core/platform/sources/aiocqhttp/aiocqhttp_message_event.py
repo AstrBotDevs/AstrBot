@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import re
 from collections.abc import AsyncGenerator
@@ -100,7 +99,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await bot.send(event=event, message=messages)
         else:
             raise ValueError(
-                t("msg-0db8227d", session_id=session_id, event=event),
+                f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})",
             )
 
     @classmethod

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import base64
 import json
@@ -69,9 +68,9 @@ class ProviderVolcengineTTS(TTSProvider):
 
         payload = self._build_request_payload(text)
 
-        logger.debug(t("msg-4b55f021", headers=headers))
-        logger.debug(t("msg-d252d96d", res=self.api_base))
-        logger.debug(t("msg-72e07cfd", res=json.dumps(payload, ensure_ascii=False)[:100]))
+        logger.debug(f"请求头: {headers}")
+        logger.debug(f"请求 URL: {self.api_base}")
+        logger.debug(f"请求体: {json.dumps(payload, ensure_ascii=False)[:100]}...")
 
         try:
             async with (
@@ -83,10 +82,10 @@ class ProviderVolcengineTTS(TTSProvider):
                     timeout=self.timeout,
                 ) as response,
             ):
-                logger.debug(t("msg-fb8cdd69", res=response.status))
+                logger.debug(f"响应状态码: {response.status}")
 
                 response_text = await response.text()
-                logger.debug(t("msg-4c62e457", res=response_text[:200]))
+                logger.debug(f"响应内容: {response_text[:200]}...")
 
                 if response.status == 200:
                     resp_data = json.loads(response_text)
@@ -109,12 +108,12 @@ class ProviderVolcengineTTS(TTSProvider):
 
                         return file_path
                     error_msg = resp_data.get("message", "未知错误")
-                    raise Exception(t("msg-1477973b", error_msg=error_msg))
+                    raise Exception(f"火山引擎 TTS API 返回错误: {error_msg}")
                 raise Exception(
-                    t("msg-75401c15", res=response.status, response_text=response_text),
+                    f"火山引擎 TTS API 请求失败: {response.status}, {response_text}",
                 )
 
         except Exception as e:
             error_details = traceback.format_exc()
-            logger.debug(t("msg-a29cc73d", error_details=error_details))
-            raise Exception(t("msg-01433007", e=e))
+            logger.debug(f"火山引擎 TTS 异常详情: {error_details}")
+            raise Exception(f"火山引擎 TTS 异常: {e!s}")

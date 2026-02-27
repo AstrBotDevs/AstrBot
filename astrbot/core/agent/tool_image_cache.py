@@ -2,7 +2,6 @@
 
 This module allows LLM to review images before deciding whether to send them to users.
 """
-from astrbot.core.lang import t
 
 import base64
 import os
@@ -53,7 +52,7 @@ class ToolImageCache:
         self._initialized = True
         self._cache_dir = os.path.join(get_astrbot_temp_path(), self.CACHE_DIR_NAME)
         os.makedirs(self._cache_dir, exist_ok=True)
-        logger.debug(t("msg-45da4af7", res=self._cache_dir))
+        logger.debug(f"ToolImageCache initialized, cache dir: {self._cache_dir}")
 
     def _get_file_extension(self, mime_type: str) -> str:
         """Get file extension from MIME type."""
@@ -97,9 +96,9 @@ class ToolImageCache:
             image_bytes = base64.b64decode(base64_data)
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
-            logger.debug(t("msg-017bde96", file_path=file_path))
+            logger.debug(f"Saved tool image to: {file_path}")
         except Exception as e:
-            logger.error(t("msg-29398f55", e=e))
+            logger.error(f"Failed to save tool image: {e}")
             raise
 
         return CachedImage(
@@ -130,7 +129,7 @@ class ToolImageCache:
             base64_data = base64.b64encode(image_bytes).decode("utf-8")
             return base64_data, mime_type
         except Exception as e:
-            logger.error(t("msg-128aa08a", file_path=file_path, e=e))
+            logger.error(f"Failed to read cached image {file_path}: {e}")
             return None
 
     def cleanup_expired(self) -> int:
@@ -151,10 +150,10 @@ class ToolImageCache:
                         os.remove(file_path)
                         cleaned += 1
         except Exception as e:
-            logger.warning(t("msg-3c111d1f", e=e))
+            logger.warning(f"Error during cache cleanup: {e}")
 
         if cleaned:
-            logger.info(t("msg-eeb1b849", cleaned=cleaned))
+            logger.info(f"Cleaned up {cleaned} expired cached images")
 
         return cleaned
 

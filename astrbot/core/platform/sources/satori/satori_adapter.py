@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import json
 import time
@@ -112,17 +111,17 @@ class SatoriPlatformAdapter(Platform):
                 await self.connect_websocket()
                 retry_count = 0
             except websockets.exceptions.ConnectionClosed as e:
-                logger.warning(t("msg-ab7db6d9", e=e))
+                logger.warning(f"Satori WebSocket 连接关闭: {e}")
                 retry_count += 1
             except Exception as e:
-                logger.error(t("msg-4ef42cd1", e=e))
+                logger.error(f"Satori WebSocket 连接失败: {e}")
                 retry_count += 1
 
             if not self.running:
                 break
 
             if retry_count >= max_retries:
-                logger.error(t("msg-b50d159b", max_retries=max_retries))
+                logger.error(f"达到最大重试次数 ({max_retries})，停止重试")
                 break
 
             if not self.auto_reconnect:
@@ -135,12 +134,12 @@ class SatoriPlatformAdapter(Platform):
             await self.session.close()
 
     async def connect_websocket(self) -> None:
-        logger.info(t("msg-89de477c", res=self.endpoint))
-        logger.info(t("msg-cfa5b059", res=self.api_base_url))
+        logger.info(f"Satori 适配器正在连接到 WebSocket: {self.endpoint}")
+        logger.info(f"Satori 适配器 HTTP API 地址: {self.api_base_url}")
 
         if not self.endpoint.startswith(("ws://", "wss://")):
-            logger.error(t("msg-d534864b", res=self.endpoint))
-            raise ValueError(t("msg-a110f9f7", res=self.endpoint))
+            logger.error(f"无效的WebSocket URL: {self.endpoint}")
+            raise ValueError(f"WebSocket URL必须以ws://或wss://开头: {self.endpoint}")
 
         try:
             websocket = await connect(
@@ -161,13 +160,13 @@ class SatoriPlatformAdapter(Platform):
                 try:
                     await self.handle_message(message)  # type: ignore
                 except Exception as e:
-                    logger.error(t("msg-bf43ccb6", e=e))
+                    logger.error(f"Satori 处理消息异常: {e}")
 
         except websockets.exceptions.ConnectionClosed as e:
-            logger.warning(t("msg-ab7db6d9", e=e))
+            logger.warning(f"Satori WebSocket 连接关闭: {e}")
             raise
         except Exception as e:
-            logger.error(t("msg-89081a1a", e=e))
+            logger.error(f"Satori WebSocket 连接异常: {e}")
             raise
         finally:
             if self.heartbeat_task:
@@ -180,14 +179,14 @@ class SatoriPlatformAdapter(Platform):
                 try:
                     await self.ws.close()
                 except Exception as e:
-                    logger.error(t("msg-5c04bfcd", e=e))
+                    logger.error(f"Satori WebSocket 关闭异常: {e}")
 
     async def send_identify(self) -> None:
         if not self.ws:
-            raise Exception(t("msg-b67bcee0"))
+            raise Exception("WebSocket连接未建立")
 
         if self._is_websocket_closed(self.ws):
-            raise Exception(t("msg-89ea8b76"))
+            raise Exception("WebSocket连接已关闭")
 
         identify_payload = {
             "op": 3,  # IDENTIFY
@@ -204,10 +203,10 @@ class SatoriPlatformAdapter(Platform):
             message_str = json.dumps(identify_payload, ensure_ascii=False)
             await self.ws.send(message_str)
         except websockets.exceptions.ConnectionClosed as e:
-            logger.error(t("msg-4c8a40e3", e=e))
+            logger.error(f"发送 IDENTIFY 信令时连接关闭: {e}")
             raise
         except Exception as e:
-            logger.error(t("msg-05a6b99d", e=e))
+            logger.error(f"发送 IDENTIFY 信令失败: {e}")
             raise
 
     async def heartbeat_loop(self) -> None:
@@ -223,17 +222,17 @@ class SatoriPlatformAdapter(Platform):
                         }
                         await self.ws.send(json.dumps(ping_payload, ensure_ascii=False))
                     except websockets.exceptions.ConnectionClosed as e:
-                        logger.error(t("msg-ab7db6d9", e=e))
+                        logger.error(f"Satori WebSocket 连接关闭: {e}")
                         break
                     except Exception as e:
-                        logger.error(t("msg-c9b1b774", e=e))
+                        logger.error(f"Satori WebSocket 发送心跳失败: {e}")
                         break
                 else:
                     break
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logger.error(t("msg-61edb4f3", e=e))
+            logger.error(f"心跳任务异常: {e}")
 
     async def handle_message(self, message: str) -> None:
         try:
@@ -253,7 +252,7 @@ class SatoriPlatformAdapter(Platform):
                         user_id = user.get("id", "")
                         user_name = user.get("name", "")
                         logger.info(
-                            t("msg-7db44899", res=i + 1, platform=platform, user_id=user_id, user_name=user_name),
+                            f"Satori 连接成功 - Bot {i + 1}: platform={platform}, user_id={user_id}, user_name={user_name}",
                         )
 
                 if "sn" in body:
@@ -272,9 +271,9 @@ class SatoriPlatformAdapter(Platform):
                     self.sequence = body["sn"]
 
         except json.JSONDecodeError as e:
-            logger.error(t("msg-01564612", e=e, message=message))
+            logger.error(f"解析 WebSocket 消息失败: {e}, 消息内容: {message}")
         except Exception as e:
-            logger.error(t("msg-3a1657ea", e=e))
+            logger.error(f"处理 WebSocket 消息异常: {e}")
 
     async def handle_event(self, event_data: dict) -> None:
         try:
@@ -306,7 +305,7 @@ class SatoriPlatformAdapter(Platform):
                     await self.handle_msg(abm)
 
         except Exception as e:
-            logger.error(t("msg-dc6b459c", e=e))
+            logger.error(f"处理事件失败: {e}")
 
     async def convert_satori_message(
         self,
@@ -359,7 +358,7 @@ class SatoriPlatformAdapter(Platform):
                         quote = quote_info["quote"]
                         content_for_parsing = quote_info["content_without_quote"]
                 except Exception as e:
-                    logger.error(t("msg-6524f582", e=e, content=content))
+                    logger.error(f"解析<quote>标签时发生错误: {e}, 错误内容: {content}")
 
             if quote:
                 # 引用消息
@@ -401,7 +400,7 @@ class SatoriPlatformAdapter(Platform):
             return abm
 
         except Exception as e:
-            logger.error(t("msg-3be535c3", e=e))
+            logger.error(f"转换 Satori 消息失败: {e}")
             return None
 
     def _extract_namespace_prefixes(self, content: str) -> set:
@@ -521,10 +520,10 @@ class SatoriPlatformAdapter(Platform):
 
             return None
         except ET.ParseError as e:
-            logger.warning(t("msg-be17caf1", e=e))
+            logger.warning(f"XML解析失败，使用正则提取: {e}")
             return await self._extract_quote_with_regex(content)
         except Exception as e:
-            logger.error(t("msg-f6f41d74", e=e))
+            logger.error(f"提取<quote>标签时发生错误: {e}")
             return None
 
     async def _extract_quote_with_regex(self, content: str) -> dict | None:
@@ -587,7 +586,7 @@ class SatoriPlatformAdapter(Platform):
 
             return quote_abm
         except Exception as e:
-            logger.error(t("msg-ca6dca7f", e=e))
+            logger.error(f"转换引用消息失败: {e}")
             return None
 
     async def parse_satori_elements(self, content: str) -> list:
@@ -621,12 +620,12 @@ class SatoriPlatformAdapter(Platform):
             root = ET.fromstring(processed_content)
             await self._parse_xml_node(root, elements)
         except ET.ParseError as e:
-            logger.warning(t("msg-cd3b067e", e=e, content=content))
+            logger.warning(f"解析 Satori 元素时发生解析错误: {e}, 错误内容: {content}")
             # 如果解析失败，将整个内容当作纯文本
             if content.strip():
                 elements.append(Plain(text=content))
         except Exception as e:
-            logger.error(t("msg-03071274", e=e))
+            logger.error(f"解析 Satori 元素时发生未知错误: {e}")
             raise e
 
         # 如果没有解析到任何元素，将整个内容当作纯文本
@@ -742,7 +741,7 @@ class SatoriPlatformAdapter(Platform):
         user_id: str | None = None,
     ) -> dict:
         if not self.session:
-            raise Exception(t("msg-775cd5c0"))
+            raise Exception("HTTP session 未初始化")
 
         headers = {
             "Content-Type": "application/json",
@@ -778,7 +777,7 @@ class SatoriPlatformAdapter(Platform):
                     return result
                 return {}
         except Exception as e:
-            logger.error(t("msg-e354c8d1", e=e))
+            logger.error(f"Satori HTTP 请求异常: {e}")
             return {}
 
     async def terminate(self) -> None:
@@ -791,7 +790,7 @@ class SatoriPlatformAdapter(Platform):
             try:
                 await self.ws.close()
             except Exception as e:
-                logger.error(t("msg-5c04bfcd", e=e))
+                logger.error(f"Satori WebSocket 关闭异常: {e}")
 
         if self.session:
             await self.session.close()

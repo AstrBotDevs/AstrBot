@@ -1,5 +1,4 @@
 from __future__ import annotations
-from astrbot.core.lang import t
 
 import logging
 from typing import Any, Protocol
@@ -31,7 +30,7 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
             try:
                 return get_config()
             except Exception as e:
-                logger.debug(t("msg-57019272", e=e))
+                logger.debug(f"get_config() failed: {e}")
                 return None
         return getattr(self.context, "_config", None)
 

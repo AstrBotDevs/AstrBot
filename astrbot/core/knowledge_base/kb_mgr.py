@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import traceback
 from pathlib import Path
 
@@ -38,7 +37,7 @@ class KnowledgeBaseManager:
     async def initialize(self) -> None:
         """初始化知识库模块"""
         try:
-            logger.info(t("msg-98bfa670"))
+            logger.info("正在初始化知识库模块...")
 
             # 初始化数据库
             await self._init_kb_database()
@@ -54,17 +53,17 @@ class KnowledgeBaseManager:
             await self.load_kbs()
 
         except ImportError as e:
-            logger.error(t("msg-7da7ae15", e=e))
-            logger.warning(t("msg-842a3c65"))
+            logger.error(f"知识库模块导入失败: {e}")
+            logger.warning("请确保已安装所需依赖: pypdf, aiofiles, Pillow, rank-bm25")
         except Exception as e:
-            logger.error(t("msg-c9e943f7", e=e))
-            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            logger.error(f"知识库模块初始化失败: {e}")
+            logger.error(traceback.format_exc())
 
     async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
         await self.kb_db.initialize()
         await self.kb_db.migrate_to_v1()
-        logger.info(t("msg-9349e112", DB_PATH=DB_PATH))
+        logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
 
     async def load_kbs(self) -> None:
         """加载所有知识库实例"""
@@ -95,7 +94,7 @@ class KnowledgeBaseManager:
     ) -> KBHelper:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
-            raise ValueError(t("msg-7605893e"))
+            raise ValueError("创建知识库时必须提供embedding_provider_id")
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
@@ -126,7 +125,7 @@ class KnowledgeBaseManager:
                 return kb_helper
         except Exception as e:
             if "kb_name" in str(e):
-                raise ValueError(t("msg-0b632cbd", kb_name=kb_name))
+                raise ValueError(f"知识库名称 '{kb_name}' 已存在")
             raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
@@ -283,7 +282,7 @@ class KnowledgeBaseManager:
             try:
                 await kb_helper.terminate()
             except Exception as e:
-                logger.error(t("msg-ca30330f", kb_id=kb_id, e=e))
+                logger.error(f"关闭知识库 {kb_id} 失败: {e}")
 
         self.kb_insts.clear()
 
@@ -292,7 +291,7 @@ class KnowledgeBaseManager:
             try:
                 await self.kb_db.close()
             except Exception as e:
-                logger.error(t("msg-00262e1f", e=e))
+                logger.error(f"关闭知识库元数据数据库失败: {e}")
 
     async def upload_from_url(
         self,
@@ -326,7 +325,7 @@ class KnowledgeBaseManager:
         """
         kb_helper = await self.get_kb(kb_id)
         if not kb_helper:
-            raise ValueError(t("msg-3fc9ef0b", kb_id=kb_id))
+            raise ValueError(f"Knowledge base with id {kb_id} not found.")
 
         return await kb_helper.upload_from_url(
             url=url,

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import contextlib
 import importlib
@@ -33,7 +32,10 @@ def _get_pip_main():
             from pip import main as pip_main
         except ImportError as exc:
             raise ImportError(
-                t("msg-aa9e40b8", res=sys.executable, res_2=getattr(sys, 'frozen', False), res_3=os.environ.get('ASTRBOT_DESKTOP_CLIENT'))
+                "pip module is unavailable "
+                f"(sys.executable={sys.executable}, "
+                f"frozen={getattr(sys, 'frozen', False)}, "
+                f"ASTRBOT_DESKTOP_CLIENT={os.environ.get('ASTRBOT_DESKTOP_CLIENT')})"
             ) from exc
 
     return pip_main
@@ -125,7 +127,7 @@ def _extract_requirement_names(requirements_path: str) -> set[str]:
                 if requirement_name:
                     names.add(requirement_name)
     except Exception as exc:
-        logger.warning(t("msg-560f11f2"), exc)
+        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
     return names
 
 
@@ -159,7 +161,7 @@ def _collect_candidate_modules(
             canonical_name = _canonicalize_distribution_name(distribution_name)
             by_name.setdefault(canonical_name, []).append(distribution)
     except Exception as exc:
-        logger.warning(t("msg-91ae1d17"), exc)
+        logger.warning("读取 site-packages 元数据失败，使用回退模块名: %s", exc)
 
     expanded_requirement_names: set[str] = set()
     pending = deque(requirement_names)
@@ -225,7 +227,7 @@ def _ensure_preferred_modules(
             "检测到插件依赖与当前运行时发生冲突，无法安全加载该插件。"
             f"冲突模块: {', '.join(unresolved_modules)}"
         )
-        raise RuntimeError(t("msg-c815b9dc", conflict_message=conflict_message))
+        raise RuntimeError(conflict_message)
 
 
 def _prefer_module_from_site_packages(
@@ -277,7 +279,7 @@ def _prefer_module_from_site_packages(
                     setattr(parent_module, child_name, module)
 
             logger.info(
-                t("msg-e8d4b617"),
+                "Loaded %s from plugin site-packages: %s",
                 module_name,
                 module_location,
             )
@@ -339,7 +341,7 @@ def _prefer_module_with_dependency_recovery(
             if not recovered:
                 raise
             logger.info(
-                t("msg-4ef5d900"),
+                "Recovered dependency %s while preferring %s from plugin site-packages.",
                 dependency_name,
                 module_name,
             )
@@ -378,7 +380,7 @@ def _prefer_modules_from_site_packages(
                 round_progress = True
             else:
                 logger.debug(
-                    t("msg-0bf22754"),
+                    "Module %s not found in plugin site-packages: %s",
                     module_name,
                     site_packages_path,
                 )
@@ -399,7 +401,7 @@ def _prefer_modules_from_site_packages(
     }
     for module_name, reason in final_unresolved.items():
         logger.warning(
-            t("msg-76a41595"),
+            "Failed to prefer module %s from plugin site-packages: %s",
             module_name,
             reason,
         )
@@ -451,7 +453,7 @@ def _try_register_distlib_finder(
         register_finder(loader, resource_finder)
     except Exception as exc:
         logger.warning(
-            t("msg-3d4de966"),
+            "Failed to patch pip distlib finder for loader %s (%s): %s",
             loader_type.__name__,
             package_name,
             exc,
@@ -461,14 +463,14 @@ def _try_register_distlib_finder(
     updated_registry = getattr(distlib_resources, "_finder_registry", finder_registry)
     if isinstance(updated_registry, dict) and loader_type not in updated_registry:
         logger.warning(
-            t("msg-117d9cf4"),
+            "Distlib finder patch did not take effect for loader %s (%s).",
             loader_type.__name__,
             package_name,
         )
         return False
 
     logger.info(
-        t("msg-b7975236"),
+        "Patched pip distlib finder for frozen loader: %s (%s)",
         loader_type.__name__,
         package_name,
     )
@@ -496,12 +498,12 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
 
     if not isinstance(finder_registry, dict):
         logger.warning(
-            t("msg-b1fa741c")
+            "Skip patching distlib finder because _finder_registry is unavailable."
         )
         return
     if not callable(register_finder) or resource_finder is None:
         logger.warning(
-            t("msg-4ef0e609")
+            "Skip patching distlib finder because register API is unavailable."
         )
         return
 
@@ -564,11 +566,11 @@ class PipInstaller:
         if self.pip_install_arg:
             args.extend(self.pip_install_arg.split())
 
-        logger.info(t("msg-b8c741dc", res=' '.join(args)))
+        logger.info(f"Pip 包管理器: pip {' '.join(args)}")
         result_code = await self._run_pip_in_process(args)
 
         if result_code != 0:
-            raise Exception(t("msg-6b72a960", result_code=result_code))
+            raise Exception(f"安装失败，错误码：{result_code}")
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
@@ -609,7 +611,7 @@ class PipInstaller:
         for line in output.splitlines():
             line = line.strip()
             if line:
-                logger.info(t("msg-c8325399", line=line))
+                logger.info(line)
 
         _cleanup_added_root_handlers(original_handlers)
         return result_code

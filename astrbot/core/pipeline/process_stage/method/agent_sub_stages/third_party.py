@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -55,12 +54,12 @@ async def run_third_party_agent(
                 if stream_to_general:
                     yield resp.data["chain"]
     except Exception as e:
-        logger.error(t("msg-5e551baf", e=e))
+        logger.error(f"Third party agent runner error: {e}")
         err_msg = (
             f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
             f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
         )
-        yield MessageChain().message(t("msg-34f164d4", err_msg=err_msg))
+        yield MessageChain().message(err_msg)
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -93,11 +92,11 @@ class ThirdPartyAgentSubStage(Stage):
             {},
         )
         if not self.prov_id:
-            logger.error(t("msg-f9d76893"))
+            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
             return
         if not self.prov_cfg:
             logger.error(
-                t("msg-0f856470", res=self.prov_id)
+                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
             )
             return
 
@@ -125,7 +124,7 @@ class ThirdPartyAgentSubStage(Stage):
             runner = DashscopeAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
-                t("msg-b3f25c81", res=self.runner_type),
+                f"Unsupported third party agent runner type: {self.runner_type}",
             )
 
         astr_agent_ctx = AstrAgentContext(
@@ -186,7 +185,7 @@ class ThirdPartyAgentSubStage(Stage):
             final_resp = runner.get_final_llm_resp()
 
             if not final_resp or not final_resp.result_chain:
-                logger.warning(t("msg-6c63eb68"))
+                logger.warning("Agent Runner 未返回最终结果。")
                 return
 
             event.set_result(

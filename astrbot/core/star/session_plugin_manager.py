@@ -1,5 +1,4 @@
 """会话插件管理器 - 负责管理每个会话的插件启停状态"""
-from astrbot.core.lang import t
 
 from astrbot.core import logger, sp
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -94,7 +93,7 @@ class SessionPluginManager:
             # 检查插件是否在当前会话中启用
             if plugin.name in disabled_plugins:
                 logger.debug(
-                    t("msg-16cc2a7a", res=plugin.name, session_id=session_id, res_2=handler.handler_name),
+                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用，跳过处理器 {handler.handler_name}",
                 )
             else:
                 filtered_handlers.append(handler)

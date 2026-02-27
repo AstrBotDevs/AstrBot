@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import traceback
 
 from astrbot.api import star
@@ -17,7 +16,7 @@ class Main(star.Star):
         try:
             self.ltm = LongTermMemory(self.context.astrbot_config_mgr, self.context)
         except BaseException as e:
-            logger.error(t("msg-3df554a1", e=e))
+            logger.error(f"聊天增强 err: {e}")
 
     def ltm_enabled(self, event: AstrMessageEvent):
         ltmse = self.context.get_config(umo=event.unified_msg_origin)[
@@ -45,13 +44,13 @@ class Main(star.Star):
                 try:
                     await self.ltm.handle_message(event)
                 except BaseException as e:
-                    logger.error(t("msg-5bdf8f5c", e=e))
+                    logger.error(e)
 
             if need_active:
                 """主动回复"""
                 provider = self.context.get_using_provider(event.unified_msg_origin)
                 if not provider:
-                    logger.error(t("msg-bb6ff036"))
+                    logger.error("未找到任何 LLM 提供商。请先配置。无法主动回复")
                     return
                 try:
                     conv = None
@@ -61,7 +60,7 @@ class Main(star.Star):
 
                     if not session_curr_cid:
                         logger.error(
-                            t("msg-afa050be"),
+                            "当前未处于对话状态，无法主动回复，请确保 平台设置->会话隔离(unique_session) 未开启，并使用 /switch 序号 切换或者 /new 创建一个会话。",
                         )
                         return
 
@@ -73,7 +72,7 @@ class Main(star.Star):
                     prompt = event.message_str
 
                     if not conv:
-                        logger.error(t("msg-9a6a6b2e"))
+                        logger.error("未找到对话，无法主动回复")
                         return
 
                     yield event.request_llm(
@@ -82,8 +81,8 @@ class Main(star.Star):
                         conversation=conv,
                     )
                 except BaseException as e:
-                    logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-                    logger.error(t("msg-b177e640", e=e))
+                    logger.error(traceback.format_exc())
+                    logger.error(f"主动回复失败: {e}")
 
     @filter.on_llm_request()
     async def decorate_llm_req(
@@ -94,7 +93,7 @@ class Main(star.Star):
             try:
                 await self.ltm.on_req_llm(event, req)
             except BaseException as e:
-                logger.error(t("msg-24d2f380", e=e))
+                logger.error(f"ltm: {e}")
 
     @filter.on_llm_response()
     async def record_llm_resp_to_ltm(
@@ -105,7 +104,7 @@ class Main(star.Star):
             try:
                 await self.ltm.after_req_llm(event, resp)
             except Exception as e:
-                logger.error(t("msg-24d2f380", e=e))
+                logger.error(f"ltm: {e}")
 
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent) -> None:
@@ -116,4 +115,4 @@ class Main(star.Star):
                 if clean_session:
                     await self.ltm.remove_session(event)
             except Exception as e:
-                logger.error(t("msg-24d2f380", e=e))
+                logger.error(f"ltm: {e}")

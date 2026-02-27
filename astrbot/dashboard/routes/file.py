@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 from quart import abort, send_file
 
 from astrbot import logger
@@ -23,5 +22,5 @@ class FileRoute(Route):
             file_path = await file_token_service.handle_file(file_token)
             return await send_file(file_path)
         except (FileNotFoundError, KeyError) as e:
-            logger.warning(t("msg-78b9c276", res=str(e)))
+            logger.warning(str(e))
             return abort(404)

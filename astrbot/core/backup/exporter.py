@@ -3,7 +3,6 @@
 负责将所有数据导出为 ZIP 备份文件。
 导出格式为 JSON，这是数据库无关的方案，支持未来向 MySQL/PostgreSQL 迁移。
 """
-from astrbot.core.lang import t
 
 import hashlib
 import json
@@ -90,7 +89,7 @@ class AstrBotExporter:
         zip_filename = f"astrbot_backup_{timestamp}.zip"
         zip_path = os.path.join(output_dir, zip_filename)
 
-        logger.info(t("msg-c7ed7177", zip_path=zip_path))
+        logger.info(f"开始导出备份到 {zip_path}")
 
         try:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -194,11 +193,11 @@ class AstrBotExporter:
                 if progress_callback:
                     await progress_callback("manifest", 100, 100, "清单生成完成")
 
-            logger.info(t("msg-8099b694", zip_path=zip_path))
+            logger.info(f"备份导出完成: {zip_path}")
             return zip_path
 
         except Exception as e:
-            logger.error(t("msg-75a4910d", e=e))
+            logger.error(f"备份导出失败: {e}")
             # 清理失败的文件
             if os.path.exists(zip_path):
                 os.remove(zip_path)
@@ -217,10 +216,10 @@ class AstrBotExporter:
                         self._model_to_dict(record) for record in records
                     ]
                     logger.debug(
-                        t("msg-2821fc92", table_name=table_name, res=len(export_data[table_name]))
+                        f"导出表 {table_name}: {len(export_data[table_name])} 条记录"
                     )
                 except Exception as e:
-                    logger.warning(t("msg-52b7c242", table_name=table_name, e=e))
+                    logger.warning(f"导出表 {table_name} 失败: {e}")
                     export_data[table_name] = []
 
         return export_data
@@ -241,10 +240,10 @@ class AstrBotExporter:
                         self._model_to_dict(record) for record in records
                     ]
                     logger.debug(
-                        t("msg-56310830", table_name=table_name, res=len(export_data[table_name]))
+                        f"导出知识库表 {table_name}: {len(export_data[table_name])} 条记录"
                     )
                 except Exception as e:
-                    logger.warning(t("msg-f4e8f57e", table_name=table_name, e=e))
+                    logger.warning(f"导出知识库表 {table_name} 失败: {e}")
                     export_data[table_name] = []
 
         return export_data
@@ -267,7 +266,7 @@ class AstrBotExporter:
 
             return {"documents": docs}
         except Exception as e:
-            logger.warning(t("msg-8e4ddd12", e=e))
+            logger.warning(f"导出知识库文档失败: {e}")
             return {"documents": []}
 
     async def _export_faiss_index(
@@ -282,9 +281,9 @@ class AstrBotExporter:
             if index_path.exists():
                 archive_path = f"databases/kb_{kb_id}/index.faiss"
                 zf.write(str(index_path), archive_path)
-                logger.debug(t("msg-c1960618", archive_path=archive_path))
+                logger.debug(f"导出 FAISS 索引: {archive_path}")
         except Exception as e:
-            logger.warning(t("msg-314bf920", e=e))
+            logger.warning(f"导出 FAISS 索引失败: {e}")
 
     async def _export_kb_media_files(
         self, zf: zipfile.ZipFile, kb_helper: Any, kb_id: str
@@ -303,7 +302,7 @@ class AstrBotExporter:
                     archive_path = f"files/kb_media/{kb_id}/{rel_path}"
                     zf.write(str(file_path), archive_path)
         except Exception as e:
-            logger.warning(t("msg-528757b2", e=e))
+            logger.warning(f"导出知识库媒体文件失败: {e}")
 
     async def _export_directories(
         self, zf: zipfile.ZipFile
@@ -319,7 +318,7 @@ class AstrBotExporter:
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
             if not full_path.exists():
-                logger.debug(t("msg-d89d6dfe", full_path=full_path))
+                logger.debug(f"目录不存在，跳过: {full_path}")
                 continue
 
             file_count = 0
@@ -344,14 +343,14 @@ class AstrBotExporter:
                             file_count += 1
                             total_size += file_path.stat().st_size
                         except Exception as e:
-                            logger.warning(t("msg-94527edd", file_path=file_path, e=e))
+                            logger.warning(f"导出文件 {file_path} 失败: {e}")
 
                 stats[dir_name] = {"files": file_count, "size": total_size}
                 logger.debug(
-                    t("msg-cb773e24", dir_name=dir_name, file_count=file_count, total_size=total_size)
+                    f"导出目录 {dir_name}: {file_count} 个文件, {total_size} 字节"
                 )
             except Exception as e:
-                logger.warning(t("msg-ae929510", dir_path=dir_path, e=e))
+                logger.warning(f"导出目录 {dir_path} 失败: {e}")
                 stats[dir_name] = {"files": 0, "size": 0}
 
         return stats
@@ -370,7 +369,7 @@ class AstrBotExporter:
                     archive_path = f"files/attachments/{attachment_id}{ext}"
                     zf.write(file_path, archive_path)
             except Exception as e:
-                logger.warning(t("msg-93e331d2", e=e))
+                logger.warning(f"导出附件失败: {e}")
 
     def _model_to_dict(self, record: Any) -> dict:
         """将 SQLModel 实例转换为字典

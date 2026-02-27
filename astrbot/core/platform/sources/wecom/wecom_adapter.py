@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import sys
@@ -79,7 +78,7 @@ class WecomServer:
         Returns:
             验证响应
         """
-        logger.info(t("msg-d4bbf9cb", res=request.args))
+        logger.info(f"验证请求有效性: {request.args}")
         args = request.args
         try:
             echo_str = self.crypto.check_signature(
@@ -88,10 +87,10 @@ class WecomServer:
                 args.get("nonce"),
                 args.get("echostr"),
             )
-            logger.info(t("msg-f8694a8a"))
+            logger.info("验证请求有效性成功。")
             return echo_str
         except InvalidSignatureException:
-            logger.error(t("msg-8f4cda74"))
+            logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
 
     async def callback_command(self):
@@ -114,11 +113,11 @@ class WecomServer:
         try:
             xml = self.crypto.decrypt_message(data, msg_signature, timestamp, nonce)
         except InvalidSignatureException:
-            logger.error(t("msg-46d3feb9"))
+            logger.error("解密失败，签名异常，请检查配置。")
             raise
         else:
             msg = cast(BaseMessage, parse_message(xml))
-            logger.info(t("msg-4d1dfce4", msg=msg))
+            logger.info(f"解析成功: {msg}")
 
             if self.callback:
                 await self.callback(msg)
@@ -127,7 +126,7 @@ class WecomServer:
 
     async def start_polling(self) -> None:
         logger.info(
-            t("msg-a98efa4b", res=self.callback_server_host, res_2=self.port),
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 企业微信 适配器。",
         )
         await self.server.run_task(
             host=self.callback_server_host,
@@ -220,12 +219,12 @@ class WecomPlatformAdapter(Platform):
     ) -> None:
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
-            logger.warning(t("msg-a616d9ce"))
+            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
             await super().send_by_session(session, message_chain)
             return
         if not self.agent_id:
             logger.warning(
-                t("msg-5d01d7b9", res=session.session_id),
+                f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
             )
             await super().send_by_session(session, message_chain)
             return
@@ -271,15 +270,15 @@ class WecomPlatformAdapter(Platform):
                         self.wechat_kf_api.get_account_list,
                     )
                 ).get("account_list", [])
-                logger.debug(t("msg-3f05613d", acc_list=acc_list))
+                logger.debug(f"获取到微信客服列表: {acc_list!s}")
                 for acc in acc_list:
                     name = acc.get("name", None)
                     if name != self.kf_name:
                         continue
                     open_kfid = acc.get("open_kfid", None)
                     if not open_kfid:
-                        logger.error(t("msg-8fd19bd9"))
-                    logger.debug(t("msg-5900d9b6", open_kfid=open_kfid))
+                        logger.error("获取微信客服失败，open_kfid 为空。")
+                    logger.debug(f"Found open_kfid: {open_kfid!s}")
                     kf_url = (
                         await loop.run_in_executor(
                             None,
@@ -289,10 +288,10 @@ class WecomPlatformAdapter(Platform):
                         )
                     ).get("url", "")
                     logger.info(
-                        t("msg-391119b8", kf_url=kf_url),
+                        f"请打开以下链接，在微信扫码以获取客服微信: https://api.cl2wm.cn/api/qrcode/code?text={kf_url}",
                     )
             except Exception as e:
-                logger.error(t("msg-5bdf8f5c", e=e))
+                logger.error(e)
 
         # 如果启用统一 webhook 模式，则不启动独立服务器
         webhook_uuid = self.config.get("webhook_uuid")
@@ -354,7 +353,7 @@ class WecomPlatformAdapter(Platform):
                 path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
-                logger.error(t("msg-93c9125e", e=e))
+                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
                 return
 
@@ -371,11 +370,11 @@ class WecomPlatformAdapter(Platform):
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         else:
-            logger.warning(t("msg-b2f7d1dc", res=msg.type))
+            logger.warning(f"暂未实现的事件: {msg.type}")
             return
 
         self.agent_id = abm.self_id
-        logger.info(t("msg-61480a61", abm=abm))
+        logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
@@ -423,13 +422,13 @@ class WecomPlatformAdapter(Platform):
                 path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
                 path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
-                logger.error(t("msg-93c9125e", e=e))
+                logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
                 return
 
             abm.message = [Record(file=path_wav, url=path_wav)]
         else:
-            logger.warning(t("msg-42431e46", msg=msg))
+            logger.warning(f"未实现的微信客服消息事件: {msg}")
             return
         await self.handle_msg(abm)
 
@@ -452,4 +451,4 @@ class WecomPlatformAdapter(Platform):
             await self.server.server.shutdown()
         except Exception as _:
             pass
-        logger.info(t("msg-fbca491d"))
+        logger.info("企业微信 适配器已被关闭")

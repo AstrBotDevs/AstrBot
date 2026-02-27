@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import traceback
 from asyncio import Queue
@@ -77,11 +76,11 @@ class PlatformManager:
                     raise
                 except Exception as e:
                     logger.error(
-                        t("msg-464b7ab7"),
+                        "终止平台适配器失败: client_id=%s, error=%s",
                         client_id,
                         e,
                     )
-                    logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+                    logger.error(traceback.format_exc())
         finally:
             await self._stop_platform_task(client_id)
 
@@ -93,7 +92,7 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 await self.load_platform(platform)
             except Exception as e:
-                logger.error(t("msg-563a0a74", platform=platform, e=e))
+                logger.error(f"初始化 {platform} 平台适配器失败: {e}")
 
         # 网页聊天
         webchat_inst = WebChatAdapter({}, self.settings, self.event_queue)
@@ -111,7 +110,7 @@ class PlatformManager:
                 sanitized_id, changed = self._sanitize_platform_id(platform_id)
                 if sanitized_id and changed:
                     logger.warning(
-                        t("msg-8432d24e"),
+                        "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
                         platform_id,
                         sanitized_id,
                     )
@@ -119,12 +118,12 @@ class PlatformManager:
                     self.astrbot_config.save_config()
                 else:
                     logger.error(
-                        t("msg-31361418", platform_id=platform_id),
+                        f"平台 ID {platform_id!r} 不能为空，跳过加载该平台适配器。",
                     )
                     return
 
             logger.info(
-                t("msg-e395bbcc", res=platform_config['type'], res_2=platform_config['id']),
+                f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...",
             )
             match platform_config["type"]:
                 case "aiocqhttp":
@@ -183,14 +182,14 @@ class PlatformManager:
                     )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
-                t("msg-b4b29344", res=platform_config['type'], e=e),
+                f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",
             )
         except Exception as e:
-            logger.error(t("msg-18f0e1fe", res=platform_config['type'], e=e))
+            logger.error(f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。")
 
         if platform_config["type"] not in platform_cls_map:
             logger.error(
-                t("msg-2636a882", res=platform_config['type'], res_2=platform_config['id']),
+                f"未找到适用于 {platform_config['type']}({platform_config['id']}) 平台适配器，请检查是否已经安装或者名称填写错误",
             )
             return
         cls_type = platform_cls_map[platform_config["type"]]
@@ -210,11 +209,11 @@ class PlatformManager:
         for handler in handlers:
             try:
                 logger.info(
-                    t("msg-c4a38b85", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
+                    f"hook(on_platform_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
                 await handler.handler()
             except Exception:
-                logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+                logger.error(traceback.format_exc())
 
     async def _task_wrapper(
         self, task: asyncio.Task, platform: Platform | None = None
@@ -231,10 +230,10 @@ class PlatformManager:
         except Exception as e:
             error_msg = str(e)
             tb_str = traceback.format_exc()
-            logger.error(t("msg-967606fd", res=task.get_name(), e=e))
+            logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
             for line in tb_str.split("\n"):
-                logger.error(t("msg-a2cd77f3", line=line))
-            logger.error(t("msg-1f686eeb"))
+                logger.error(f"|    {line}")
+            logger.error("-------")
 
             # 记录错误到平台实例
             if platform:
@@ -253,7 +252,7 @@ class PlatformManager:
 
     async def terminate_platform(self, platform_id: str) -> None:
         if platform_id in self._inst_map:
-            logger.info(t("msg-38723ea8", platform_id=platform_id))
+            logger.info(f"正在尝试终止 {platform_id} 平台适配器 ...")
 
             # client_id = self._inst_map.pop(platform_id, None)
             info = self._inst_map.pop(platform_id)
@@ -268,7 +267,7 @@ class PlatformManager:
                     ),
                 )
             except Exception:
-                logger.warning(t("msg-63f684c6", platform_id=platform_id))
+                logger.warning(f"可能未完全移除 {platform_id} 平台适配器")
 
             await self._terminate_inst_and_tasks(inst)
 
@@ -315,7 +314,7 @@ class PlatformManager:
                     error_count += 1
             except Exception as e:
                 # 如果获取统计信息失败，记录基本信息
-                logger.warning(t("msg-136a952f", e=e))
+                logger.warning(f"获取平台统计信息失败: {e}")
                 stats_list.append(
                     {
                         "id": getattr(inst, "config", {}).get("id", "unknown"),

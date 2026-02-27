@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import enum
 import json
 import logging
@@ -74,7 +73,7 @@ class AstrBotConfig(dict):
             for k, v in schema.items():
                 if v["type"] not in DEFAULT_VALUE_MAP:
                     raise TypeError(
-                        t("msg-e0a69978", res=v['type'], res_2=DEFAULT_VALUE_MAP.keys()),
+                        f"不受支持的配置类型 {v['type']}。支持的类型有：{DEFAULT_VALUE_MAP.keys()}",
                     )
                 if "default" in v:
                     default = v["default"]
@@ -105,7 +104,7 @@ class AstrBotConfig(dict):
             if key not in conf:
                 # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
-                logger.info(t("msg-b9583fc9", path_=path_, value=value))
+                logger.info(f"检查到配置项 {path_} 不存在，已插入默认值 {value}")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
@@ -135,15 +134,15 @@ class AstrBotConfig(dict):
         for key in list(conf.keys()):
             if key not in refer_conf:
                 path_ = path + "." + key if path else key
-                logger.info(t("msg-ee26e40e", path_=path_))
+                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
                 has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):
             if path:
-                logger.info(t("msg-2d7497a5", path=path))
+                logger.info(f"检查到配置项 {path} 的子项顺序不一致，已重新排序")
             else:
-                logger.info(t("msg-5fdad937"))
+                logger.info("检查到配置项顺序不一致，已重新排序")
             has_new = True
 
         # 更新原始配置
@@ -173,7 +172,7 @@ class AstrBotConfig(dict):
             del self[key]
             self.save_config()
         except KeyError:
-            raise AttributeError(t("msg-555373b0", key=key))
+            raise AttributeError(f"没有找到 Key: '{key}'")
 
     def __setattr__(self, key, value) -> None:
         self[key] = value

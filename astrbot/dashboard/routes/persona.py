@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import traceback
 
 from quart import request
@@ -74,8 +73,8 @@ class PersonaRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(t("msg-4a12aead", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-c168407f", e=e)).__dict__
+            logger.error(f"获取人格列表失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取人格列表失败: {e!s}").__dict__
 
     async def get_persona_detail(self):
         """获取指定人格的详细信息"""
@@ -84,11 +83,11 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error(t("msg-63c6f414")).__dict__
+                return Response().error("缺少必要参数: persona_id").__dict__
 
             persona = await self.persona_mgr.get_persona(persona_id)
             if not persona:
-                return Response().error(t("msg-ce7da6f3")).__dict__
+                return Response().error("人格不存在").__dict__
 
             return (
                 Response()
@@ -112,8 +111,8 @@ class PersonaRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(t("msg-9c07774d", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-ee3b44ad", e=e)).__dict__
+            logger.error(f"获取人格详情失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取人格详情失败: {e!s}").__dict__
 
     async def create_persona(self):
         """创建新人格"""
@@ -128,16 +127,16 @@ class PersonaRoute(Route):
             sort_order = data.get("sort_order", 0)
 
             if not persona_id:
-                return Response().error(t("msg-ad455c14")).__dict__
+                return Response().error("人格ID不能为空").__dict__
 
             if not system_prompt:
-                return Response().error(t("msg-43037094")).__dict__
+                return Response().error("系统提示词不能为空").__dict__
 
             # 验证 begin_dialogs 格式
             if begin_dialogs and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error(t("msg-ec9dda44"))
+                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
                     .__dict__
                 )
 
@@ -178,8 +177,8 @@ class PersonaRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-26b214d5", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-8913dfe6", e=e)).__dict__
+            logger.error(f"创建人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"创建人格失败: {e!s}").__dict__
 
     async def update_persona(self):
         """更新人格信息"""
@@ -192,13 +191,13 @@ class PersonaRoute(Route):
             skills = data.get("skills")
 
             if not persona_id:
-                return Response().error(t("msg-63c6f414")).__dict__
+                return Response().error("缺少必要参数: persona_id").__dict__
 
             # 验证 begin_dialogs 格式
             if begin_dialogs is not None and len(begin_dialogs) % 2 != 0:
                 return (
                     Response()
-                    .error(t("msg-ec9dda44"))
+                    .error("预设对话数量必须为偶数（用户和助手轮流对话）")
                     .__dict__
                 )
 
@@ -214,8 +213,8 @@ class PersonaRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-3d94d18d", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-f2cdfbb8", e=e)).__dict__
+            logger.error(f"更新人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新人格失败: {e!s}").__dict__
 
     async def delete_persona(self):
         """删除人格"""
@@ -224,7 +223,7 @@ class PersonaRoute(Route):
             persona_id = data.get("persona_id")
 
             if not persona_id:
-                return Response().error(t("msg-63c6f414")).__dict__
+                return Response().error("缺少必要参数: persona_id").__dict__
 
             await self.persona_mgr.delete_persona(persona_id)
 
@@ -232,8 +231,8 @@ class PersonaRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-51d84afc", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-8314a263", e=e)).__dict__
+            logger.error(f"删除人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"删除人格失败: {e!s}").__dict__
 
     async def move_persona(self):
         """移动人格到指定文件夹"""
@@ -243,7 +242,7 @@ class PersonaRoute(Route):
             folder_id = data.get("folder_id")  # None 表示移动到根目录
 
             if not persona_id:
-                return Response().error(t("msg-63c6f414")).__dict__
+                return Response().error("缺少必要参数: persona_id").__dict__
 
             await self.persona_mgr.move_persona_to_folder(persona_id, folder_id)
 
@@ -251,8 +250,8 @@ class PersonaRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(t("msg-b8ecb8f9", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-ab0420e3", e=e)).__dict__
+            logger.error(f"移动人格失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"移动人格失败: {e!s}").__dict__
 
     # ====
     # Folder Routes
@@ -289,8 +288,8 @@ class PersonaRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(t("msg-e5604a24", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-4d7c7f4a", e=e)).__dict__
+            logger.error(f"获取文件夹列表失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取文件夹列表失败: {e!s}").__dict__
 
     async def get_folder_tree(self):
         """获取文件夹树形结构"""
@@ -298,8 +297,8 @@ class PersonaRoute(Route):
             tree = await self.persona_mgr.get_folder_tree()
             return Response().ok(tree).__dict__
         except Exception as e:
-            logger.error(t("msg-cf0ee4aa", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-bb515af0", e=e)).__dict__
+            logger.error(f"获取文件夹树失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取文件夹树失败: {e!s}").__dict__
 
     async def get_folder_detail(self):
         """获取指定文件夹的详细信息"""
@@ -308,11 +307,11 @@ class PersonaRoute(Route):
             folder_id = data.get("folder_id")
 
             if not folder_id:
-                return Response().error(t("msg-c92b4863")).__dict__
+                return Response().error("缺少必要参数: folder_id").__dict__
 
             folder = await self.persona_mgr.get_folder(folder_id)
             if not folder:
-                return Response().error(t("msg-77cdd6fa")).__dict__
+                return Response().error("文件夹不存在").__dict__
 
             return (
                 Response()
@@ -334,8 +333,8 @@ class PersonaRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(t("msg-2d34652f", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-650ef096", e=e)).__dict__
+            logger.error(f"获取文件夹详情失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"获取文件夹详情失败: {e!s}").__dict__
 
     async def create_folder(self):
         """创建文件夹"""
@@ -347,7 +346,7 @@ class PersonaRoute(Route):
             sort_order = data.get("sort_order", 0)
 
             if not name:
-                return Response().error(t("msg-27c413df")).__dict__
+                return Response().error("文件夹名称不能为空").__dict__
 
             folder = await self.persona_mgr.create_folder(
                 name=name,
@@ -379,8 +378,8 @@ class PersonaRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(t("msg-b5866931", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-5e57f3b5", e=e)).__dict__
+            logger.error(f"创建文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"创建文件夹失败: {e!s}").__dict__
 
     async def update_folder(self):
         """更新文件夹信息"""
@@ -393,7 +392,7 @@ class PersonaRoute(Route):
             sort_order = data.get("sort_order")
 
             if not folder_id:
-                return Response().error(t("msg-c92b4863")).__dict__
+                return Response().error("缺少必要参数: folder_id").__dict__
 
             await self.persona_mgr.update_folder(
                 folder_id=folder_id,
@@ -405,8 +404,8 @@ class PersonaRoute(Route):
 
             return Response().ok({"message": "文件夹更新成功"}).__dict__
         except Exception as e:
-            logger.error(t("msg-9bd8f820", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-1eada044", e=e)).__dict__
+            logger.error(f"更新文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新文件夹失败: {e!s}").__dict__
 
     async def delete_folder(self):
         """删除文件夹"""
@@ -415,14 +414,14 @@ class PersonaRoute(Route):
             folder_id = data.get("folder_id")
 
             if not folder_id:
-                return Response().error(t("msg-c92b4863")).__dict__
+                return Response().error("缺少必要参数: folder_id").__dict__
 
             await self.persona_mgr.delete_folder(folder_id)
 
             return Response().ok({"message": "文件夹删除成功"}).__dict__
         except Exception as e:
-            logger.error(t("msg-9cef0256", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-22020727", e=e)).__dict__
+            logger.error(f"删除文件夹失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"删除文件夹失败: {e!s}").__dict__
 
     async def reorder_items(self):
         """批量更新排序顺序
@@ -442,20 +441,20 @@ class PersonaRoute(Route):
             items = data.get("items", [])
 
             if not items:
-                return Response().error(t("msg-7a69fe08")).__dict__
+                return Response().error("items 不能为空").__dict__
 
             # 验证每个 item 的格式
             for item in items:
                 if not all(k in item for k in ("id", "type", "sort_order")):
                     return (
                         Response()
-                        .error(t("msg-e71ba5c2"))
+                        .error("每个 item 必须包含 id, type, sort_order 字段")
                         .__dict__
                     )
                 if item["type"] not in ("persona", "folder"):
                     return (
                         Response()
-                        .error(t("msg-dfeb8320"))
+                        .error("type 字段必须是 'persona' 或 'folder'")
                         .__dict__
                     )
 
@@ -463,5 +462,5 @@ class PersonaRoute(Route):
 
             return Response().ok({"message": "排序更新成功"}).__dict__
         except Exception as e:
-            logger.error(t("msg-aec43ed3", e=e, res=traceback.format_exc()))
-            return Response().error(t("msg-75ec4427", e=e)).__dict__
+            logger.error(f"更新排序失败: {e!s}\n{traceback.format_exc()}")
+            return Response().error(f"更新排序失败: {e!s}").__dict__

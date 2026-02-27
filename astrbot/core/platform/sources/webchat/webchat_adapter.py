@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import os
 import time
@@ -184,7 +183,7 @@ class WebChatAdapter(Platform):
         message_parts = payload.get("message", [])
         abm.message, message_str_parts = await self._parse_message_parts(message_parts)
 
-        logger.debug(t("msg-9406158c", res=abm.message))
+        logger.debug(f"WebChatAdapter: {abm.message}")
 
         abm.timestamp = int(time.time())
         abm.message_str = "".join(message_str_parts)

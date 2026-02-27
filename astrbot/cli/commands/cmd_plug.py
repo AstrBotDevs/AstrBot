@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import re
 import shutil
 from pathlib import Path
@@ -24,22 +23,23 @@ def _get_data_path() -> Path:
     base = get_astrbot_root()
     if not check_astrbot_root(base):
         raise click.ClickException(
-            t("msg-cbd8802b", base=base),
+            f"{base}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
         )
     return (base / "data").resolve()
 
 
 def display_plugins(plugins, title=None, color=None) -> None:
     if title:
-        click.echo(t("msg-78b9c276", res=click.style(title, fg=color, bold=True)))
+        click.echo(click.style(title, fg=color, bold=True))
 
-    click.echo(t("msg-83664fcf", val='名称'))
+    click.echo(f"{'名称':<20} {'版本':<10} {'状态':<10} {'作者':<15} {'描述':<30}")
     click.echo("-" * 85)
 
     for p in plugins:
         desc = p["desc"][:30] + ("..." if len(p["desc"]) > 30 else "")
         click.echo(
-            t("msg-56f3f0bf", res=p['name'], res_2=p['version'], res_3=p['status'], res_4=p['author'], desc=desc),
+            f"{p['name']:<20} {p['version']:<10} {p['status']:<10} "
+            f"{p['author']:<15} {desc:<30}",
         )
 
 
@@ -51,24 +51,24 @@ def new(name: str) -> None:
     plug_path = base_path / "plugins" / name
 
     if plug_path.exists():
-        raise click.ClickException(t("msg-1d802ff2", name=name))
+        raise click.ClickException(f"插件 {name} 已存在")
 
     author = click.prompt("请输入插件作者", type=str)
     desc = click.prompt("请输入插件描述", type=str)
     version = click.prompt("请输入插件版本", type=str)
     if not re.match(r"^\d+\.\d+(\.\d+)?$", version.lower().lstrip("v")):
-        raise click.ClickException(t("msg-a7be9d23"))
+        raise click.ClickException("版本号必须为 x.y 或 x.y.z 格式")
     repo = click.prompt("请输入插件仓库：", type=str)
     if not repo.startswith("http"):
-        raise click.ClickException(t("msg-4d81299b"))
+        raise click.ClickException("仓库地址必须以 http 开头")
 
-    click.echo(t("msg-93289755"))
+    click.echo("下载插件模板...")
     get_git_repo(
         "https://github.com/Soulter/helloworld",
         plug_path,
     )
 
-    click.echo(t("msg-b21682dd"))
+    click.echo("重写插件信息...")
     # 重写 metadata.yaml
     with open(plug_path / "metadata.yaml", "w", encoding="utf-8") as f:
         f.write(
@@ -95,7 +95,7 @@ def new(name: str) -> None:
     with open(plug_path / "main.py", "w", encoding="utf-8") as f:
         f.write(new_content)
 
-    click.echo(t("msg-bffc8bfa", name=name))
+    click.echo(f"插件 {name} 创建成功")
 
 
 @plug.command()
@@ -135,7 +135,7 @@ def list(all: bool) -> None:
         not any([not_published_plugins, need_update_plugins, installed_plugins])
         and not all
     ):
-        click.echo(t("msg-08eae1e3"))
+        click.echo("未安装任何插件")
 
 
 @plug.command()
@@ -157,7 +157,7 @@ def install(name: str, proxy: str | None) -> None:
     )
 
     if not plugin:
-        raise click.ClickException(t("msg-1a021bf4", name=name))
+        raise click.ClickException(f"未找到可安装的插件 {name}，可能是不存在或已安装")
 
     manage_plugin(plugin, plug_path, is_update=False, proxy=proxy)
 
@@ -171,7 +171,7 @@ def remove(name: str) -> None:
     plugin = next((p for p in plugins if p["name"] == name), None)
 
     if not plugin or not plugin.get("local_path"):
-        raise click.ClickException(t("msg-c120bafd", name=name))
+        raise click.ClickException(f"插件 {name} 不存在或未安装")
 
     plugin_path = plugin["local_path"]
 
@@ -179,9 +179,9 @@ def remove(name: str) -> None:
 
     try:
         shutil.rmtree(plugin_path)
-        click.echo(t("msg-63da4867", name=name))
+        click.echo(f"插件 {name} 已卸载")
     except Exception as e:
-        raise click.ClickException(t("msg-e4925708", name=name, e=e))
+        raise click.ClickException(f"卸载插件 {name} 失败: {e}")
 
 
 @plug.command()
@@ -204,7 +204,7 @@ def update(name: str, proxy: str | None) -> None:
         )
 
         if not plugin:
-            raise click.ClickException(t("msg-f4d15a87", name=name))
+            raise click.ClickException(f"插件 {name} 不需要更新或无法更新")
 
         manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)
     else:
@@ -213,13 +213,13 @@ def update(name: str, proxy: str | None) -> None:
         ]
 
         if not need_update_plugins:
-            click.echo(t("msg-94b035f7"))
+            click.echo("没有需要更新的插件")
             return
 
-        click.echo(t("msg-0766d599", res=len(need_update_plugins)))
+        click.echo(f"发现 {len(need_update_plugins)} 个插件需要更新")
         for plugin in need_update_plugins:
             plugin_name = plugin["name"]
-            click.echo(t("msg-bd5ab99c", plugin_name=plugin_name))
+            click.echo(f"正在更新插件 {plugin_name}...")
             manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)
 
 
@@ -239,7 +239,7 @@ def search(query: str) -> None:
     ]
 
     if not matched_plugins:
-        click.echo(t("msg-e32912b8", query=query))
+        click.echo(f"未找到匹配 '{query}' 的插件")
         return
 
     display_plugins(matched_plugins, f"搜索结果: '{query}'", "cyan")

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import random
 import traceback
@@ -45,7 +44,7 @@ class PreProcessStage(Stage):
             try:
                 await event.react(random.choice(emojis))
             except Exception as e:
-                logger.warning(t("msg-7b9074fa", platform=platform, e=e))
+                logger.warning(f"{platform} 预回应表情发送失败: {e}")
 
         # 路径映射
         if mappings := self.platform_settings.get("path_mapping", []):
@@ -62,7 +61,7 @@ class PreProcessStage(Stage):
                         url = component.url.removeprefix("file://")
                         if url.startswith(from_):
                             component.url = url.replace(from_, to_, 1)
-                            logger.debug(t("msg-43f1b4ed", url=url, res=component.url))
+                            logger.debug(f"路径映射: {url} -> {component.url}")
                     message_chain[idx] = component
 
         # STT
@@ -72,7 +71,7 @@ class PreProcessStage(Stage):
             stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)
             if not stt_provider:
                 logger.warning(
-                    t("msg-9549187d", res=event.unified_msg_origin),
+                    f"会话 {event.unified_msg_origin} 未配置语音转文本模型。",
                 )
                 return
             message_chain = event.get_messages()
@@ -91,11 +90,11 @@ class PreProcessStage(Stage):
                             break
                         except FileNotFoundError as e:
                             # napcat workaround
-                            logger.warning(t("msg-5bdf8f5c", e=e))
-                            logger.warning(t("msg-ad90e19e", res=i + 1, retry=retry))
+                            logger.warning(e)
+                            logger.warning(f"重试中: {i + 1}/{retry}")
                             await asyncio.sleep(0.5)
                             continue
                         except BaseException as e:
-                            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
-                            logger.error(t("msg-4f3245bf", e=e))
+                            logger.error(traceback.format_exc())
+                            logger.error(f"语音转文本失败: {e}")
                             break

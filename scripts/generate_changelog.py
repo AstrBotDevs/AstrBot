@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 #!/usr/bin/env python3
 """
 Auto-generate changelog from git commits using LLM.
@@ -118,12 +117,12 @@ Example format:
 
     except ImportError:
         print(
-            t("msg-a79937ef")
+            "Warning: openai package not installed. Install it with: pip install openai"
         )
         return generate_simple_changelog(commits)
     except Exception as e:
-        print(t("msg-090bfd36", e=e))
-        print(t("msg-a3ac9130"))
+        print(f"Warning: Failed to call LLM API: {e}")
+        print("Falling back to simple changelog generation...")
         return generate_simple_changelog(commits)
 
 
@@ -201,18 +200,18 @@ def main() -> None:
     # Get latest tag
     try:
         latest_tag = get_latest_tag()
-        print(t("msg-6f1011c5", latest_tag=latest_tag))
+        print(f"Latest tag: {latest_tag}")
     except subprocess.CalledProcessError:
-        print(t("msg-8c7f64d7"))
+        print("Error: No tags found in repository")
         sys.exit(1)
 
     # Get commits since tag
     commits = get_commits_since_tag(latest_tag)
     if not commits:
-        print(t("msg-a89fa0eb", latest_tag=latest_tag))
+        print(f"No commits found since {latest_tag}")
         sys.exit(0)
 
-    print(t("msg-846ebecf", res=len(commits), latest_tag=latest_tag))
+    print(f"Found {len(commits)} commits since {latest_tag}")
 
     # Determine version
     if args.version:
@@ -224,10 +223,10 @@ def main() -> None:
             major, minor, patch = map(int, match.groups())
             version = f"v{major}.{minor}.{patch + 1}"
         else:
-            print(t("msg-9ad686af", latest_tag=latest_tag))
+            print(f"Warning: Could not parse version from tag {latest_tag}")
             version = "vX.X.X"
 
-    print(t("msg-f5d43a54", version=version))
+    print(f"Generating changelog for {version}...")
 
     # Generate changelog
     if args.use_llm:
@@ -243,10 +242,10 @@ def main() -> None:
     with open(changelog_file, "w", encoding="utf-8") as f:
         f.write(changelog_content)
 
-    print(t("msg-e54756e8", changelog_file=changelog_file))
-    print(t("msg-82be6c98"))
+    print(f"\n✓ Changelog generated: {changelog_file}")
+    print("\nPreview:")
     print("=" * 80)
-    print(t("msg-321ac5b1", changelog_content=changelog_content))
+    print(changelog_content)
     print("=" * 80)
 
 

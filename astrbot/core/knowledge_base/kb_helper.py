@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import json
 import re
@@ -97,11 +96,11 @@ Text chunk to process:
                 return []
         except Exception as e:
             logger.warning(
-                t("msg-7b3dc642", res=attempt + 1, res_2=max_retries + 1, res_3=str(e))
+                f"  - LLM call failed on attempt {attempt + 1}/{max_retries + 1}. Error: {str(e)}"
             )
 
     logger.error(
-        t("msg-4ba9530f", res=max_retries + 1)
+        f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
     )
     return [chunk]
 
@@ -136,13 +135,13 @@ class KBHelper:
 
     async def get_ep(self) -> EmbeddingProvider:
         if not self.kb.embedding_provider_id:
-            raise ValueError(t("msg-77670a3a", res=self.kb.kb_name))
+            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
         ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
             self.kb.embedding_provider_id,
         )  # type: ignore
         if not ep:
             raise ValueError(
-                t("msg-8e9eb3f9", res=self.kb.embedding_provider_id),
+                f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider",
             )
         return ep
 
@@ -154,13 +153,13 @@ class KBHelper:
         )  # type: ignore
         if not rp:
             raise ValueError(
-                t("msg-3e426806", res=self.kb.rerank_provider_id),
+                f"无法找到 ID 为 {self.kb.rerank_provider_id} 的 Rerank Provider",
             )
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
         if not self.kb.embedding_provider_id:
-            raise ValueError(t("msg-77670a3a", res=self.kb.kb_name))
+            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
         ep = await self.get_ep()
         rp = await self.get_rp()
@@ -235,12 +234,12 @@ class KBHelper:
                 # 如果提供了预分块文本，直接使用
                 chunks_text = pre_chunked_text
                 file_size = sum(len(chunk) for chunk in chunks_text)
-                logger.info(t("msg-6e780e1e", res=len(chunks_text)))
+                logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
             else:
                 # 否则，执行标准的文件解析和分块流程
                 if file_content is None:
                     raise ValueError(
-                        t("msg-f4b82f18")
+                        "当未提供 pre_chunked_text 时，file_content 不能为空。"
                     )
 
                 file_size = len(file_content)
@@ -334,7 +333,7 @@ class KBHelper:
             await self.refresh_document(doc_id)
             return doc
         except Exception as e:
-            logger.error(t("msg-975f06d7", e=e))
+            logger.error(f"上传文档失败: {e}")
             # if file_path.exists():
             #     file_path.unlink()
 
@@ -343,7 +342,7 @@ class KBHelper:
                     if media_path.exists():
                         media_path.unlink()
                 except Exception as me:
-                    logger.warning(t("msg-969b17ca", media_path=media_path, me=me))
+                    logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
 
             raise e
 
@@ -394,7 +393,7 @@ class KBHelper:
         """更新文档的元数据"""
         doc = await self.get_document(doc_id)
         if not doc:
-            raise ValueError(t("msg-18d25e55", doc_id=doc_id))
+            raise ValueError(f"无法找到 ID 为 {doc_id} 的文档")
         chunk_count = await self.get_chunk_count_by_doc_id(doc_id)
         doc.chunk_count = chunk_count
         async with self.kb_db.get_db() as session:
@@ -505,7 +504,7 @@ class KBHelper:
         )
         if not tavily_keys:
             raise ValueError(
-                t("msg-f5d7c34c")
+                "Error: Tavily API key is not configured in provider_settings."
             )
 
         # 阶段1: 从 URL 提取内容
@@ -515,11 +514,11 @@ class KBHelper:
         try:
             text_content = await extract_text_from_url(url, tavily_keys)
         except Exception as e:
-            logger.error(t("msg-975d88e0", url=url, e=e))
-            raise OSError(t("msg-975d88e0", url=url, e=e)) from e
+            logger.error(f"Failed to extract content from URL {url}: {e}")
+            raise OSError(f"Failed to extract content from URL {url}: {e}") from e
 
         if not text_content:
-            raise ValueError(t("msg-cfe431b3", url=url))
+            raise ValueError(f"No content extracted from URL: {url}")
 
         if progress_callback:
             await progress_callback("extracting", 100, 100)
@@ -537,7 +536,7 @@ class KBHelper:
 
         if enable_cleaning and not final_chunks:
             raise ValueError(
-                t("msg-e7f5f836")
+                "内容清洗后未提取到有效文本。请尝试关闭内容清洗功能，或更换更高性能的LLM模型后重试。"
             )
 
         # 创建一个虚拟文件名
@@ -576,7 +575,7 @@ class KBHelper:
         if not enable_cleaning:
             # 如果不启用清洗，则使用从前端传递的参数进行分块
             logger.info(
-                t("msg-693aa5c5", chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+                f"内容清洗未启用，使用指定参数进行分块: chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
             )
             return await self.chunker.chunk(
                 content, chunk_size=chunk_size, chunk_overlap=chunk_overlap
@@ -584,7 +583,7 @@ class KBHelper:
 
         if not cleaning_provider_id:
             logger.warning(
-                t("msg-947d8f46")
+                "启用了内容清洗，但未提供 cleaning_provider_id，跳过清洗并使用默认分块。"
             )
             return await self.chunker.chunk(content)
 
@@ -596,7 +595,7 @@ class KBHelper:
             llm_provider = await self.prov_mgr.get_provider_by_id(cleaning_provider_id)
             if not llm_provider or not isinstance(llm_provider, LLMProvider):
                 raise ValueError(
-                    t("msg-31963d3f", cleaning_provider_id=cleaning_provider_id)
+                    f"无法找到 ID 为 {cleaning_provider_id} 的 LLM Provider 或类型不正确"
                 )
 
             # 初步分块
@@ -607,7 +606,7 @@ class KBHelper:
                 separators=["\n\n", "\n", " "],  # 优先使用段落分隔符
             )
             initial_chunks = await text_splitter.chunk(content)
-            logger.info(t("msg-82728272", res=len(initial_chunks)))
+            logger.info(f"初步分块完成，生成 {len(initial_chunks)} 个块用于修复。")
 
             # 并发处理所有块
             rate_limiter = RateLimiter(repair_max_rpm)
@@ -623,13 +622,13 @@ class KBHelper:
             final_chunks = []
             for i, result in enumerate(repaired_results):
                 if isinstance(result, Exception):
-                    logger.warning(t("msg-6fa5fdca", i=i, res=str(result)))
+                    logger.warning(f"块 {i} 处理异常: {str(result)}. 回退到原始块。")
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
 
             logger.info(
-                t("msg-6780e950", res=len(initial_chunks), res_2=len(final_chunks))
+                f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"
             )
 
             if progress_callback:
@@ -638,6 +637,6 @@ class KBHelper:
             return final_chunks
 
         except Exception as e:
-            logger.error(t("msg-79056c76", cleaning_provider_id=cleaning_provider_id, e=e))
+            logger.error(f"使用 Provider '{cleaning_provider_id}' 清洗内容失败: {e}")
             # 清洗失败，返回默认分块结果，保证流程不中断
             return await self.chunker.chunk(content)

@@ -1,7 +1,6 @@
 """企业微信智能机器人工具模块
 提供常量定义、工具函数和辅助方法
 """
-from astrbot.core.lang import t
 
 import asyncio
 import base64
@@ -134,7 +133,7 @@ def safe_json_loads(json_str: str, default: Any = None) -> Any:
     try:
         return json.loads(json_str)
     except (json.JSONDecodeError, TypeError) as e:
-        logger.warning(t("msg-14d01778", e=e, json_str=json_str))
+        logger.warning(f"JSON 解析失败: {e}, 原始字符串: {json_str}")
         return default
 
 
@@ -168,26 +167,26 @@ async def process_encrypted_image(
 
     """
     # 1. 下载加密图片
-    logger.info(t("msg-df346cf5"), image_url)
+    logger.info("开始下载加密图片: %s", image_url)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(image_url, timeout=15) as response:
                 response.raise_for_status()
                 encrypted_data = await response.read()
-        logger.info(t("msg-cb266fb3"), len(encrypted_data))
+        logger.info("图片下载成功，大小: %d 字节", len(encrypted_data))
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         error_msg = f"下载图片失败: {e!s}"
-        logger.error(t("msg-10f72727", error_msg=error_msg))
+        logger.error(error_msg)
         return False, error_msg
 
     # 2. 准备AES密钥和IV
     if not aes_key_base64:
-        raise ValueError(t("msg-1d91d2bb"))
+        raise ValueError("AES密钥不能为空")
 
     # Base64解码密钥 (自动处理填充)
     aes_key = base64.b64decode(aes_key_base64 + "=" * (-len(aes_key_base64) % 4))
     if len(aes_key) != 32:
-        raise ValueError(t("msg-bb32bedd"))
+        raise ValueError("无效的AES密钥长度: 应为32字节")
 
     iv = aes_key[:16]  # 初始向量为密钥前16字节
 
@@ -198,13 +197,13 @@ async def process_encrypted_image(
     # 4. 去除PKCS#7填充 (Python 3兼容写法)
     pad_len = decrypted_data[-1]  # 直接获取最后一个字节的整数值
     if pad_len > 32:  # AES-256块大小为32字节
-        raise ValueError(t("msg-bde4bb57"))
+        raise ValueError("无效的填充长度 (大于32字节)")
 
     decrypted_data = decrypted_data[:-pad_len]
-    logger.info(t("msg-3cf2120e"), len(decrypted_data))
+    logger.info("图片解密成功，解密后大小: %d 字节", len(decrypted_data))
 
     # 5. 转换为base64编码
     base64_data = base64.b64encode(decrypted_data).decode("utf-8")
-    logger.info(t("msg-3f8ca8aa"), len(base64_data))
+    logger.info("图片已转换为base64编码，编码后长度: %d", len(base64_data))
 
     return True, base64_data

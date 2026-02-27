@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -52,7 +51,7 @@ class TempDirCleaner:
         if parsed <= 0:
             fallback = parse_size_to_bytes(self.DEFAULT_MAX_SIZE)
             logger.warning(
-                t("msg-752c7cc8", res=self.CONFIG_KEY, configured=configured, res_2=self.DEFAULT_MAX_SIZE),
+                f"Invalid {self.CONFIG_KEY}={configured!r}, fallback to {self.DEFAULT_MAX_SIZE}MB.",
             )
             return fallback
         return parsed
@@ -69,7 +68,7 @@ class TempDirCleaner:
             try:
                 stat = path.stat()
             except OSError as e:
-                logger.debug(t("msg-b1fc3643", path=path, e=e))
+                logger.debug(f"Skip temp file {path} due to stat error: {e}")
                 continue
             total_size += stat.st_size
             files.append(
@@ -108,7 +107,7 @@ class TempDirCleaner:
             try:
                 file_info.path.unlink()
             except OSError as e:
-                logger.warning(t("msg-5e61f6b7", res=file_info.path, e=e))
+                logger.warning(f"Failed to delete temp file {file_info.path}: {e}")
                 continue
 
             released += file_info.size
@@ -119,12 +118,15 @@ class TempDirCleaner:
         self._cleanup_empty_dirs()
 
         logger.warning(
-            t("msg-391449f0", total_size=total_size, limit=limit, removed_files=removed_files, released=released, target_release=target_release),
+            f"Temp dir exceeded limit ({total_size} > {limit}). "
+            f"Removed {removed_files} files, released {released} bytes "
+            f"(target {target_release} bytes).",
         )
 
     async def run(self) -> None:
         logger.info(
-            t("msg-aaf1e12a", res=self.CHECK_INTERVAL_SECONDS, res_2=self.CLEANUP_RATIO),
+            f"TempDirCleaner started. interval={self.CHECK_INTERVAL_SECONDS}s "
+            f"cleanup_ratio={self.CLEANUP_RATIO}",
         )
         while not self._stop_event.is_set():
             try:
@@ -132,7 +134,7 @@ class TempDirCleaner:
                 # Run cleanup in a worker thread to avoid blocking the event loop.
                 await asyncio.to_thread(self.cleanup_once)
             except Exception as e:
-                logger.error(t("msg-e6170717", e=e), exc_info=True)
+                logger.error(f"TempDirCleaner run failed: {e}", exc_info=True)
 
             try:
                 await asyncio.wait_for(
@@ -142,7 +144,7 @@ class TempDirCleaner:
             except asyncio.TimeoutError:
                 continue
 
-        logger.info(t("msg-0fc33fbc"))
+        logger.info("TempDirCleaner stopped.")
 
     async def stop(self) -> None:
         self._stop_event.set()
