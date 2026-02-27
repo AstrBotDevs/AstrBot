@@ -10,6 +10,7 @@
                     :selectedSessions="selectedSessions"
                     :currSessionId="currSessionId"
                     :selectedProjectId="selectedProjectId"
+                    :transportMode="transportMode"
                     :isDark="isDark"
                     :chatboxMode="chatboxMode"
                     :isMobile="isMobile"
@@ -26,6 +27,7 @@
                     @createProject="showCreateProjectDialog"
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
+                    @updateTransportMode="setTransportMode"
                 />
 
                 <!-- 右侧聊天内容区域 -->
@@ -301,11 +303,14 @@ const {
     isStreaming,
     isConvRunning,
     enableStreaming,
+    transportMode,
     currentSessionProject,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
     stopMessage: stopMsg,
-    toggleStreaming
+    toggleStreaming,
+    setTransportMode,
+    cleanupTransport
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
 
 // 组件引用
@@ -695,6 +700,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('resize', checkMobile);
     cleanupMediaCache();
+    cleanupTransport();
 });
 </script>
 
