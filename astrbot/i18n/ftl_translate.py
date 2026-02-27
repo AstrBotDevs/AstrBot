@@ -12,7 +12,6 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
     """使用 DeepSeek API 翻译 i18n 字符串。"""
     api_key = os.environ.get("DEEPSEEK_API_KEY")
 
-
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
     system_prompt = (
@@ -28,13 +27,13 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"待翻译文本：{input_string}"},
+                {"role": "user", "content": f"{input_string}"},
             ],
             temperature=1.3,
             stream=False,
         )
         return response.choices[0].message.content.strip()
-    except Exception as e:
+    except Exception:
         return input_string
 
 
@@ -84,7 +83,7 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
             element = future_to_element[future]
             try:
                 element.value = future.result()
-            except Exception as e:
+            except Exception:
                 ...
 
     # 序列化并写回
