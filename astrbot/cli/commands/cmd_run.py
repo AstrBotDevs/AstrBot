@@ -15,8 +15,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
 
-    if os.environ.get("DASHBOARD_ENABLE") == "True":
-        await check_dashboard(astrbot_root / "data")
+    await check_dashboard(astrbot_root / "data")
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
@@ -28,17 +27,9 @@ async def run_astrbot(astrbot_root: Path) -> None:
 
 
 @click.option("--reload", "-r", is_flag=True, help="插件自动重载")
-@click.option(
-    "--host", "-H", help="Astrbot Dashboard Host,默认::", required=False, type=str
-)
-@click.option(
-    "--port", "-p", help="Astrbot Dashboard端口,默认6185", required=False, type=str
-)
-@click.option(
-    "--backend-only", is_flag=True, default=False, help="禁用WEBUI,仅启动后端"
-)
+@click.option("--port", "-p", help="Astrbot Dashboard端口", required=False, type=str)
 @click.command()
-def run(reload: bool, host: str, port: str, backend_only: bool) -> None:
+def run(reload: bool, port: str) -> None:
     """运行 AstrBot"""
     try:
         os.environ["ASTRBOT_CLI"] = "1"
@@ -52,11 +43,8 @@ def run(reload: bool, host: str, port: str, backend_only: bool) -> None:
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
         sys.path.insert(0, str(astrbot_root))
 
-        if port is not None:
+        if port:
             os.environ["DASHBOARD_PORT"] = port
-        if host is not None:
-            os.environ["DASHBOARD_HOST"] = host
-        os.environ["DASHBOARD_ENABLE"] = str(not backend_only)
 
         if reload:
             click.echo("启用插件自动重载")
