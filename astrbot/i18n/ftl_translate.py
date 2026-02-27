@@ -21,7 +21,7 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
         "规则：\n\n"
         "1. 必须原样保留所有代码占位符（如 {$var} 等）。\n\n"
         "2. 只输出最终译文，绝对禁止包含任何解释、多余的引号或Markdown格式。"
-        "3. 如果原文为中文则直接返回原文"
+        "3. 如果原文为目标语言则直接返回原文"
     )
 
     try:
@@ -107,12 +107,12 @@ def main():
     )
     parser.add_argument(
         "--file",
-        default="astrbot/i18n/locales/en-us/i18n_messages.ftl",
+        default="astrbot/i18n/locales/zh-cn/i18n_messages.ftl",
         help="待翻译的 FTL 文件路径",
     )
-    parser.add_argument("--lang", default="English", help="目标语言（默认: English）")
+    parser.add_argument("--lang", default="Chinese", help="目标语言（默认: Chinese）")
     parser.add_argument(
-        "--workers", type=int, default=10, help="并发线程数（默认: 10）"
+        "--workers", type=int, default=28, help="并发线程数（默认: 10）"
     )
     args = parser.parse_args()
 
