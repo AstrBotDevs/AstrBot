@@ -694,13 +694,6 @@ const {
   }
 }
 
-@media (max-width: 1280px) {
-  .plugin-list-table :deep(th:nth-child(4)),
-  .plugin-list-table :deep(td:nth-child(4)) {
-    display: none;
-  }
-}
-
 .fab-button {
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);

@@ -575,7 +575,7 @@ class PluginManager:
         if plugin_modules is None:
             return False, "未找到任何插件模块"
 
-        fail_rec = ""
+        has_load_error = False
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -617,7 +617,7 @@ class PluginManager:
                     error_trace = traceback.format_exc()
                     logger.error(error_trace)
                     logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
-                    fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                    has_load_error = True
                     self.failed_plugin_dict[root_dir_name] = (
                         self._build_failed_plugin_record(
                             root_dir_name=root_dir_name,
@@ -892,7 +892,7 @@ class PluginManager:
                 for line in errors.split("\n"):
                     logger.error(f"| {line}")
                 logger.error("----------------------------------")
-                fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
+                has_load_error = True
                 self.failed_plugin_dict[root_dir_name] = (
                     self._build_failed_plugin_record(
                         root_dir_name=root_dir_name,
@@ -919,9 +919,9 @@ class PluginManager:
             logger.error(traceback.format_exc())
 
         self._rebuild_failed_plugin_info()
-        if not fail_rec:
-            return True, None
-        return False, self.failed_plugin_info
+        if has_load_error:
+            return False, self.failed_plugin_info
+        return True, None
 
     async def _cleanup_failed_plugin_install(
         self,

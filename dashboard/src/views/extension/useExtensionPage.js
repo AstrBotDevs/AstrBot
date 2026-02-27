@@ -6,6 +6,7 @@ import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useDisplay } from "vuetify";
 
 export const useExtensionPage = () => {
   
@@ -15,6 +16,7 @@ export const useExtensionPage = () => {
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
+  const { width } = useDisplay();
   
   const getSelectedGitHubProxy = () => {
     if (typeof window === "undefined" || !window.localStorage) return "";
@@ -230,18 +232,43 @@ export const useExtensionPage = () => {
   ]);
   
   // 插件表格的表头定义
-  const pluginHeaders = computed(() => [
-    { title: tm("table.headers.name"), key: "name", width: "24%" },
-    { title: tm("table.headers.description"), key: "desc", width: "32%" },
-    { title: tm("table.headers.version"), key: "version", width: "12%" },
-    { title: tm("table.headers.author"), key: "author", width: "10%" },
-    {
+  const showAuthorColumn = computed(() => width.value >= 1280);
+  const pluginHeaders = computed(() => {
+    const headers = [
+      {
+        title: tm("table.headers.name"),
+        key: "name",
+        width: showAuthorColumn.value ? "24%" : "26%",
+      },
+      {
+        title: tm("table.headers.description"),
+        key: "desc",
+        width: showAuthorColumn.value ? "32%" : "36%",
+      },
+      {
+        title: tm("table.headers.version"),
+        key: "version",
+        width: showAuthorColumn.value ? "12%" : "14%",
+      },
+    ];
+
+    if (showAuthorColumn.value) {
+      headers.push({
+        title: tm("table.headers.author"),
+        key: "author",
+        width: "10%",
+      });
+    }
+
+    headers.push({
       title: tm("table.headers.actions"),
       key: "actions",
       sortable: false,
-      width: "22%",
-    },
-  ]);
+      width: showAuthorColumn.value ? "22%" : "24%",
+    });
+
+    return headers;
+  });
   
   // 过滤要显示的插件
   const filteredExtensions = computed(() => {
@@ -548,7 +575,7 @@ export const useExtensionPage = () => {
       toast(res.data.message, "success");
       await getExtensions();
     } catch (err) {
-      toast(err, "error");
+      toast(String(err), "error");
     }
   };
   
