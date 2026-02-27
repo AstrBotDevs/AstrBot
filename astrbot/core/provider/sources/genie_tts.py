@@ -6,7 +6,7 @@ from astrbot.core import logger
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.provider.provider import TTSProvider
 from astrbot.core.provider.register import register_provider_adapter
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 try:
     import genie_tts as genie  # type: ignore
@@ -54,14 +54,14 @@ class GenieTTSProvider(TTSProvider):
         return True
 
     async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
         filename = f"genie_tts_{uuid.uuid4()}.wav"
         path = os.path.join(temp_dir, filename)
 
         loop = asyncio.get_event_loop()
 
-        def _generate(save_path: str):
+        def _generate(save_path: str) -> None:
             assert genie is not None
             genie.tts(
                 character_name=self.character_name,
@@ -94,12 +94,12 @@ class GenieTTSProvider(TTSProvider):
                 break
 
             try:
-                temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+                temp_dir = get_astrbot_temp_path()
                 os.makedirs(temp_dir, exist_ok=True)
                 filename = f"genie_tts_{uuid.uuid4()}.wav"
                 path = os.path.join(temp_dir, filename)
 
-                def _generate(save_path: str, t: str):
+                def _generate(save_path: str, t: str) -> None:
                     assert genie is not None
                     genie.tts(
                         character_name=self.character_name,

@@ -10,9 +10,12 @@ T2I 模板目录路径：固定为数据目录下的 t2i_templates 目录
 WebChat 数据目录路径：固定为数据目录下的 webchat 目录
 临时文件目录路径：固定为数据目录下的 temp 目录
 Skills 目录路径：固定为数据目录下的 skills 目录
+第三方依赖目录路径：固定为数据目录下的 site-packages 目录
 """
 
 import os
+
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 
 def get_astrbot_path() -> str:
@@ -26,6 +29,8 @@ def get_astrbot_root() -> str:
     """获取Astrbot根目录路径"""
     if path := os.environ.get("ASTRBOT_ROOT"):
         return os.path.realpath(path)
+    if is_packaged_desktop_runtime():
+        return os.path.realpath(os.path.join(os.path.expanduser("~"), ".astrbot"))
     return os.path.realpath(os.getcwd())
 
 
@@ -67,6 +72,11 @@ def get_astrbot_temp_path() -> str:
 def get_astrbot_skills_path() -> str:
     """获取Astrbot Skills 目录路径"""
     return os.path.realpath(os.path.join(get_astrbot_data_path(), "skills"))
+
+
+def get_astrbot_site_packages_path() -> str:
+    """获取Astrbot第三方依赖目录路径"""
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "site-packages"))
 
 
 def get_astrbot_knowledge_base_path() -> str:

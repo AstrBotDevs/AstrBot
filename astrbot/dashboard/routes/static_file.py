@@ -5,9 +5,6 @@ class StaticFileRoute(Route):
     def __init__(self, context: RouteContext) -> None:
         super().__init__(context)
 
-        if "index" in self.app.view_functions:
-            return
-
         index_ = [
             "/",
             "/auth/login",
@@ -33,7 +30,7 @@ class StaticFileRoute(Route):
             self.app.add_url_rule(i, view_func=self.index)
 
         @self.app.errorhandler(404)
-        async def page_not_found(e):
+        async def page_not_found(e) -> str:
             return "404 Not found。如果你初次使用打开面板发现 404, 请参考文档: https://astrbot.app/faq.html。如果你正在测试回调地址可达性，显示这段文字说明测试成功了。"
 
     async def index(self):

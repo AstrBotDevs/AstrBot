@@ -9,7 +9,8 @@
     "voice": "Voice Input",
     "recordingPrompt": "Recording, please speak...",
     "chatPrompt": "Let's chat!",
-    "dropToUpload": "Drop files to upload"
+    "dropToUpload": "Drop files to upload",
+    "stopGenerating": "Stop generating"
   },
   "message": {
     "user": "User",
@@ -80,9 +81,16 @@
     "disabled": "Streaming disabled",
     "on": "Stream",
     "off": "Normal"
-  },  "config": {
+  },
+  "transport": {
+    "title": "Transport Mode",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
     "title": "Config"
-  },  "reasoning": {
+  },
+  "reasoning": {
     "thinking": "Thinking Process"
   },
   "reply": {

@@ -10,6 +10,7 @@
                     :selectedSessions="selectedSessions"
                     :currSessionId="currSessionId"
                     :selectedProjectId="selectedProjectId"
+                    :transportMode="transportMode"
                     :isDark="isDark"
                     :chatboxMode="chatboxMode"
                     :isMobile="isMobile"
@@ -26,6 +27,7 @@
                     @createProject="showCreateProjectDialog"
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
+                    @updateTransportMode="setTransportMode"
                 />
 
                 <!-- 右侧聊天内容区域 -->
@@ -77,12 +79,14 @@
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
                                 :disabled="isStreaming"
+                                :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
                                 @send="handleSendMessage"
+                                @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
                                 @removeImage="removeImage"
                                 @removeAudio="removeAudio"
@@ -106,12 +110,14 @@
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
                                 :disabled="isStreaming"
+                                :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
                                 @send="handleSendMessage"
+                                @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
                                 @removeImage="removeImage"
                                 @removeAudio="removeAudio"
@@ -134,12 +140,14 @@
                             :stagedAudioUrl="stagedAudioUrl"
                             :stagedFiles="stagedNonImageFiles"
                             :disabled="isStreaming"
+                            :is-running="isStreaming || isConvRunning"
                             :enableStreaming="enableStreaming"
                             :isRecording="isRecording"
                             :session-id="currSessionId || null"
                             :current-session="getCurrentSession"
                             :replyTo="replyTo"
                             @send="handleSendMessage"
+                            @stop="handleStopMessage"
                             @toggleStreaming="toggleStreaming"
                             @removeImage="removeImage"
                             @removeAudio="removeAudio"
@@ -295,10 +303,14 @@ const {
     isStreaming,
     isConvRunning,
     enableStreaming,
+    transportMode,
     currentSessionProject,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
-    toggleStreaming
+    stopMessage: stopMsg,
+    toggleStreaming,
+    setTransportMode,
+    cleanupTransport
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
 
 // 组件引用
@@ -631,6 +643,10 @@ async function handleSendMessage() {
     }
 }
 
+async function handleStopMessage() {
+    await stopMsg();
+}
+
 // 路由变化监听
 watch(
     () => route.path,
@@ -684,6 +700,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('resize', checkMobile);
     cleanupMediaCache();
+    cleanupTransport();
 });
 </script>
 

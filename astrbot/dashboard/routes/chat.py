@@ -1,6 +1,5 @@
 import asyncio
 import json
-import mimetypes
 import os
 import re
 import uuid
@@ -13,7 +12,15 @@ from quart import g, make_response, request, send_file
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.webchat.message_parts_helper import (
+    build_webchat_message_parts,
+    create_attachment_part_from_existing_file,
+    strip_message_parts_path_fields,
+    webchat_message_parts_have_content,
+)
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .route import Response, Route, RouteContext
@@ -41,6 +48,7 @@ class ChatRoute(Route):
             "/chat/new_session": ("GET", self.new_session),
             "/chat/sessions": ("GET", self.get_sessions),
             "/chat/get_session": ("GET", self.get_session),
+            "/chat/stop": ("POST", self.stop_session),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
             "/chat/update_session_display_name": (
                 "POST",
@@ -52,8 +60,9 @@ class ChatRoute(Route):
         }
         self.core_lifecycle = core_lifecycle
         self.register_routes()
-        self.imgs_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
-        os.makedirs(self.imgs_dir, exist_ok=True)
+        self.attachments_dir = os.path.join(get_astrbot_data_path(), "attachments")
+        self.legacy_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
+        os.makedirs(self.attachments_dir, exist_ok=True)
 
         self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = core_lifecycle.conversation_manager
@@ -69,9 +78,18 @@ class ChatRoute(Route):
             return Response().error("Missing key: filename").__dict__
 
         try:
-            file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
+            file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
             real_file_path = os.path.realpath(file_path)
-            real_imgs_dir = os.path.realpath(self.imgs_dir)
+            real_imgs_dir = os.path.realpath(self.attachments_dir)
+
+            if not os.path.exists(real_file_path):
+                # try legacy
+                file_path = os.path.join(
+                    self.legacy_img_dir, os.path.basename(filename)
+                )
+                if os.path.exists(file_path):
+                    real_file_path = os.path.realpath(file_path)
+                    real_imgs_dir = os.path.realpath(self.legacy_img_dir)
 
             if not real_file_path.startswith(real_imgs_dir):
                 return Response().error("Invalid file path").__dict__
@@ -125,7 +143,7 @@ class ChatRoute(Route):
         else:
             attach_type = "file"
 
-        path = os.path.join(self.imgs_dir, filename)
+        path = os.path.join(self.attachments_dir, filename)
         await file.save(path)
 
         # 创建 attachment 记录
@@ -153,78 +171,24 @@ class ChatRoute(Route):
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
-        """构建用户消息的部分列表
-
-        Args:
-            message: 文本消息 (str) 或消息段列表 (list)
-        """
-        parts = []
-
-        if isinstance(message, list):
-            for part in message:
-                part_type = part.get("type")
-                if part_type == "plain":
-                    parts.append({"type": "plain", "text": part.get("text", "")})
-                elif part_type == "reply":
-                    parts.append(
-                        {
-                            "type": "reply",
-                            "message_id": part.get("message_id"),
-                            "selected_text": part.get("selected_text", ""),
-                        }
-                    )
-                elif attachment_id := part.get("attachment_id"):
-                    attachment = await self.db.get_attachment_by_id(attachment_id)
-                    if attachment:
-                        parts.append(
-                            {
-                                "type": attachment.type,
-                                "attachment_id": attachment.attachment_id,
-                                "filename": os.path.basename(attachment.path),
-                                "path": attachment.path,  # will be deleted
-                            }
-                        )
-            return parts
-
-        if message:
-            parts.append({"type": "plain", "text": message})
-
-        return parts
+        """构建用户消息的部分列表。"""
+        return await build_webchat_message_parts(
+            message,
+            get_attachment_by_id=self.db.get_attachment_by_id,
+            strict=False,
+        )
 
     async def _create_attachment_from_file(
         self, filename: str, attach_type: str
     ) -> dict | None:
-        """从本地文件创建 attachment 并返回消息部分
-
-        用于处理 bot 回复中的媒体文件
-
-        Args:
-            filename: 存储的文件名
-            attach_type: 附件类型 (image, record, file, video)
-        """
-        file_path = os.path.join(self.imgs_dir, os.path.basename(filename))
-        if not os.path.exists(file_path):
-            return None
-
-        # guess mime type
-        mime_type, _ = mimetypes.guess_type(filename)
-        if not mime_type:
-            mime_type = "application/octet-stream"
-
-        # insert attachment
-        attachment = await self.db.insert_attachment(
-            path=file_path,
-            type=attach_type,
-            mime_type=mime_type,
+        """从本地文件创建 attachment 并返回消息部分。"""
+        return await create_attachment_part_from_existing_file(
+            filename,
+            attach_type=attach_type,
+            insert_attachment=self.db.insert_attachment,
+            attachments_dir=self.attachments_dir,
+            fallback_dirs=[self.legacy_img_dir],
         )
-        if not attachment:
-            return None
-
-        return {
-            "type": attach_type,
-            "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(file_path),
-        }
 
     def _extract_web_search_refs(
         self, accumulated_text: str, accumulated_parts: list
@@ -238,6 +202,7 @@ class ChatRoute(Route):
         Returns:
             包含 used 列表的字典，记录被引用的搜索结果
         """
+        supported = ["web_search_tavily", "web_search_bocha"]
         # 从 accumulated_parts 中找到所有 web_search_tavily 的工具调用结果
         web_search_results = {}
         tool_call_parts = [
@@ -248,7 +213,7 @@ class ChatRoute(Route):
 
         for part in tool_call_parts:
             for tool_call in part["tool_calls"]:
-                if tool_call.get("name") != "web_search_tavily" or not tool_call.get(
+                if tool_call.get("name") not in supported or not tool_call.get(
                     "result"
                 ):
                     continue
@@ -278,7 +243,7 @@ class ChatRoute(Route):
             if ref_index not in web_search_results:
                 continue
             payload = {"index": ref_index, **web_search_results[ref_index]}
-            if favicon := sp.temorary_cache.get("_ws_favicon", {}).get(payload["url"]):
+            if favicon := sp.temporary_cache.get("_ws_favicon", {}).get(payload["url"]):
                 payload["favicon"] = favicon
             used_refs.append(payload)
 
@@ -316,10 +281,13 @@ class ChatRoute(Route):
         )
         return record
 
-    async def chat(self):
+    async def chat(self, post_data: dict | None = None):
         username = g.get("username", "guest")
 
-        post_data = await request.json
+        if post_data is None:
+            post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
         if "message" not in post_data and "files" not in post_data:
             return Response().error("Missing key: message or files").__dict__
 
@@ -334,31 +302,25 @@ class ChatRoute(Route):
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
-        # 检查消息是否为空
-        if isinstance(message, list):
-            has_content = any(
-                part.get("type") in ("plain", "image", "record", "file", "video")
-                for part in message
-            )
-            if not has_content:
-                return (
-                    Response()
-                    .error("Message content is empty (reply only is not allowed)")
-                    .__dict__
-                )
-        elif not message:
-            return Response().error("Message are both empty").__dict__
-
         if not session_id:
             return Response().error("session_id is empty").__dict__
 
         webchat_conv_id = session_id
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(webchat_conv_id)
 
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
+        if not webchat_message_parts_have_content(message_parts):
+            return (
+                Response()
+                .error("Message content is empty (reply only is not allowed)")
+                .__dict__
+            )
 
         message_id = str(uuid.uuid4())
+        back_queue = webchat_queue_mgr.get_or_create_back_queue(
+            message_id,
+            webchat_conv_id,
+        )
 
         async def stream():
             client_disconnected = False
@@ -369,6 +331,14 @@ class ChatRoute(Route):
             agent_stats = {}
             refs = {}
             try:
+                # Emit session_id first so clients can bind the stream immediately.
+                session_info = {
+                    "type": "session_id",
+                    "data": None,
+                    "session_id": webchat_conv_id,
+                }
+                yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
                         try:
@@ -441,13 +411,13 @@ class ChatRoute(Route):
                                 if tc_id in tool_calls:
                                     tool_calls[tc_id]["result"] = tcr.get("result")
                                     tool_calls[tc_id]["finished_ts"] = tcr.get("ts")
-                                accumulated_parts.append(
-                                    {
-                                        "type": "tool_call",
-                                        "tool_calls": [tool_calls[tc_id]],
-                                    }
-                                )
-                                tool_calls.pop(tc_id, None)
+                                    accumulated_parts.append(
+                                        {
+                                            "type": "tool_call",
+                                            "tool_calls": [tool_calls[tc_id]],
+                                        }
+                                    )
+                                    tool_calls.pop(tc_id, None)
                             elif chain_type == "reasoning":
                                 accumulated_reasoning += result_text
                             elif streaming:
@@ -531,6 +501,8 @@ class ChatRoute(Route):
                             refs = {}
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
+            finally:
+                webchat_queue_mgr.remove_back_queue(message_id)
 
         # 将消息放入会话特定的队列
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
@@ -548,10 +520,7 @@ class ChatRoute(Route):
             ),
         )
 
-        message_parts_for_storage = []
-        for part in message_parts:
-            part_copy = {k: v for k, v in part.items() if k != "path"}
-            message_parts_for_storage.append(part_copy)
+        message_parts_for_storage = strip_message_parts_path_fields(message_parts)
 
         await self.platform_history_mgr.insert(
             platform_id="webchat",
@@ -575,6 +544,36 @@ class ChatRoute(Route):
         )
         response.timeout = None  # fix SSE auto disconnect issue
         return response
+
+    async def stop_session(self):
+        """Stop active agent runs for a session."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = post_data.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        message_type = (
+            MessageType.GROUP_MESSAGE.value
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE.value
+        )
+        umo = (
+            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}!{username}!{session_id}"
+        )
+        stopped_count = active_event_registry.request_agent_stop_all(umo)
+
+        return Response().ok(data={"stopped_count": stopped_count}).__dict__
 
     async def delete_webchat_session(self):
         """Delete a Platform session and all its related data."""
@@ -645,7 +644,7 @@ class ChatRoute(Route):
                     attachment_ids.append(part["attachment_id"])
         return attachment_ids
 
-    async def _delete_attachments(self, attachment_ids: list[str]):
+    async def _delete_attachments(self, attachment_ids: list[str]) -> None:
         """删除附件（包括数据库记录和磁盘文件）"""
         try:
             attachments = await self.db.get_attachments(attachment_ids)
@@ -699,23 +698,18 @@ class ChatRoute(Route):
         # 获取可选的 platform_id 参数
         platform_id = request.args.get("platform_id")
 
-        sessions = await self.db.get_platform_sessions_by_creator(
+        sessions, _ = await self.db.get_platform_sessions_by_creator_paginated(
             creator=username,
             platform_id=platform_id,
             page=1,
             page_size=100,  # 暂时返回前100个
+            exclude_project_sessions=True,
         )
 
-        # 转换为字典格式，并添加项目信息
-        # get_platform_sessions_by_creator 现在返回 list[dict] 包含 session 和项目字段
+        # 转换为字典格式
         sessions_data = []
         for item in sessions:
             session = item["session"]
-            project_id = item["project_id"]
-
-            # 跳过属于项目的会话（在侧边栏对话列表中不显示）
-            if project_id is not None:
-                continue
 
             sessions_data.append(
                 {

@@ -8,6 +8,9 @@
     "handlersOperation": "Manage Handlers",
     "market": "AstrBot Plugin Market"
   },
+  "titles": {
+    "installedAstrBotPlugins": "Installed AstrBot Plugins"
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
@@ -38,7 +41,8 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
-    "deleteSource": "Delete Source"
+    "deleteSource": "Delete Source",
+    "reshuffle": "Shuffle Again"
   },
   "status": {
     "enabled": "Enabled",
@@ -103,7 +107,9 @@
     "sourceUpdated": "Source updated successfully",
     "defaultOfficialSource": "Default Official Source",
     "sourceExists": "This source already exists",
-    "installPlugin": "Install Plugin"
+    "installPlugin": "Install Plugin",
+    "randomPlugins": "🎲 Random Plugins",
+    "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
     "default": "Default",
@@ -140,13 +146,20 @@
     "install": {
       "title": "Install Extension",
       "fromFile": "Install from File",
-      "fromUrl": "Install from URL"
+      "fromUrl": "Install from URL",
+      "supportPlatformsCount": "Supports {count} Platforms"
     },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",
       "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. Do you wish to proceed with the installation?",
       "confirm": "Continue",
       "cancel": "Cancel"
+    },
+    "versionCompatibility": {
+      "title": "Version Compatibility Warning",
+      "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
+      "confirm": "Ignore Warning and Install",
+      "cancel": "Cancel Installation"
     },
     "forceUpdate": {
       "title": "No New Version Detected",
@@ -227,7 +240,10 @@
     "status": {
       "hasUpdate": "New version available",
       "disabled": "This extension is disabled",
-      "handlersCount": " handlers"
+      "handlersCount": " handlers",
+      "supportPlatform": "Supported Platform",
+      "supportPlatformsCount": "Supports {count} Platforms",
+      "astrbotVersion": "AstrBot Version Requirement"
     },
     "alt": {
       "logo": "logo",

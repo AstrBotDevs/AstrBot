@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import builtins
 import copy
 import datetime
 import json
@@ -10,7 +9,6 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.api import sp
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
@@ -52,6 +50,17 @@ from astrbot.core.tools.cron_tools import (
 )
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.quoted_message.settings import (
+    SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
+)
+from astrbot.core.utils.quoted_message.settings import (
+    QuotedMessageParserSettings,
+)
+from astrbot.core.utils.quoted_message_parser import (
+    extract_quoted_message_images,
+    extract_quoted_message_text,
+)
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 @dataclass(slots=True)
@@ -108,6 +117,8 @@ class MainAgentBuildConfig:
     provider_settings: dict = field(default_factory=dict)
     subagent_orchestrator: dict = field(default_factory=dict)
     timezone: str | None = None
+    max_quoted_fallback_images: int = 20
+    """Maximum number of images injected from quoted-message fallback extraction."""
 
 
 @dataclass(slots=True)
@@ -262,47 +273,26 @@ async def _ensure_persona_and_skills(
     if not req.conversation:
         return
 
-    # get persona ID
-
-    # 1. from session service config - highest priority
-    persona_id = (
-        await sp.get_async(
-            scope="umo",
-            scope_id=event.unified_msg_origin,
-            key="session_service_config",
-            default={},
-        )
-    ).get("persona_id")
-
-    if not persona_id:
-        # 2. from conversation setting - second priority
-        persona_id = req.conversation.persona_id
-
-        if persona_id == "[%None]":
-            # explicitly set to no persona
-            pass
-        elif persona_id is None:
-            # 3. from config default persona setting - last priority
-            persona_id = cfg.get("default_personality")
-
-    persona = next(
-        builtins.filter(
-            lambda persona: persona["name"] == persona_id,
-            plugin_context.persona_manager.personas_v3,
-        ),
-        None,
+    (
+        persona_id,
+        persona,
+        _,
+        use_webchat_special_default,
+    ) = await plugin_context.persona_manager.resolve_selected_persona(
+        umo=event.unified_msg_origin,
+        conversation_persona_id=req.conversation.persona_id,
+        platform_name=event.get_platform_name(),
+        provider_settings=cfg,
     )
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
             req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
-    else:
-        # special handling for webchat persona
-        if event.get_platform_name() == "webchat" and persona_id != "[%None]":
-            persona_id = "_chatui_default_"
-            req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+    elif use_webchat_special_default:
+        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
@@ -325,6 +315,24 @@ async def _ensure_persona_and_skills(
                     "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
                 )
     tmgr = plugin_context.get_llm_tool_manager()
+
+    # inject toolset in the persona
+    if (persona and persona.get("tools") is None) or not persona:
+        persona_toolset = tmgr.get_full_tool_set()
+        for tool in list(persona_toolset):
+            if not tool.active:
+                persona_toolset.remove_tool(tool.name)
+    else:
+        persona_toolset = ToolSet()
+        if persona["tools"]:
+            for tool_name in persona["tools"]:
+                tool = tmgr.get_func(tool_name)
+                if tool and tool.active:
+                    persona_toolset.add_tool(tool)
+    if not req.func_tool:
+        req.func_tool = persona_toolset
+    else:
+        req.func_tool.merge(persona_toolset)
 
     # sub agents integration
     orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
@@ -371,22 +379,19 @@ async def _ensure_persona_and_skills(
                         assigned_tools.add(name)
 
         if req.func_tool is None:
-            toolset = ToolSet()
-        else:
-            toolset = req.func_tool
+            req.func_tool = ToolSet()
 
         # add subagent handoff tools
         for tool in so.handoffs:
-            toolset.add_tool(tool)
+            req.func_tool.add_tool(tool)
 
         # check duplicates
         if remove_dup:
-            names = toolset.names()
+            handoff_names = {tool.name for tool in so.handoffs}
             for tool_name in assigned_tools:
-                if tool_name in names:
-                    toolset.remove_tool(tool_name)
-
-        req.func_tool = toolset
+                if tool_name in handoff_names:
+                    continue
+                req.func_tool.remove_tool(tool_name)
 
         router_prompt = (
             plugin_context.get_config()
@@ -395,32 +400,14 @@ async def _ensure_persona_and_skills(
         ).strip()
         if router_prompt:
             req.system_prompt += f"\n{router_prompt}\n"
-        return
-
-    # inject toolset in the persona
-    if (persona and persona.get("tools") is None) or not persona:
-        toolset = tmgr.get_full_tool_set()
-        for tool in list(toolset):
-            if not tool.active:
-                toolset.remove_tool(tool.name)
-    else:
-        toolset = ToolSet()
-        if persona["tools"]:
-            for tool_name in persona["tools"]:
-                tool = tmgr.get_func(tool_name)
-                if tool and tool.active:
-                    toolset.add_tool(tool)
-    if not req.func_tool:
-        req.func_tool = toolset
-    else:
-        req.func_tool.merge(toolset)
     try:
         event.trace.record(
-            "sel_persona", persona_id=persona_id, persona_toolset=toolset.names()
+            "sel_persona",
+            persona_id=persona_id,
+            persona_toolset=persona_toolset.names(),
         )
     except Exception:
         pass
-    logger.debug("Tool set for persona %s: %s", persona_id, toolset.names())
 
 
 async def _request_img_caption(
@@ -473,11 +460,29 @@ async def _ensure_img_caption(
         logger.error("处理图片描述失败: %s", exc)
 
 
+def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
+    req.extra_user_content_parts.append(
+        TextPart(text=f"[Image Attachment in quoted message: path {image_path}]")
+    )
+
+
+def _get_quoted_message_parser_settings(
+    provider_settings: dict[str, object] | None,
+) -> QuotedMessageParserSettings:
+    if not isinstance(provider_settings, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS
+    overrides = provider_settings.get("quoted_message_parser")
+    if not isinstance(overrides, dict):
+        return DEFAULT_QUOTED_MESSAGE_SETTINGS
+    return DEFAULT_QUOTED_MESSAGE_SETTINGS.with_overrides(overrides)
+
+
 async def _process_quote_message(
     event: AstrMessageEvent,
     req: ProviderRequest,
     img_cap_prov_id: str,
     plugin_context: Context,
+    quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -489,7 +494,15 @@ async def _process_quote_message(
 
     content_parts = []
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
-    message_str = quote.message_str or "[Empty Text]"
+    message_str = (
+        await extract_quoted_message_text(
+            event,
+            quote,
+            settings=quoted_message_settings,
+        )
+        or quote.message_str
+        or "[Empty Text]"
+    )
     content_parts.append(f"{sender_info}{message_str}")
 
     image_seg = None
@@ -595,11 +608,13 @@ async def _decorate_llm_request(
             )
 
     img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
+    quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
         req,
         img_cap_prov_id,
         plugin_context,
+        quoted_message_settings,
     )
 
     tz = config.timezone
@@ -832,6 +847,41 @@ def _get_compress_provider(
     return provider
 
 
+def _get_fallback_chat_providers(
+    provider: Provider, plugin_context: Context, provider_settings: dict
+) -> list[Provider]:
+    fallback_ids = provider_settings.get("fallback_chat_models", [])
+    if not isinstance(fallback_ids, list):
+        logger.warning(
+            "fallback_chat_models setting is not a list, skip fallback providers."
+        )
+        return []
+
+    provider_id = str(provider.provider_config.get("id", ""))
+    seen_provider_ids: set[str] = {provider_id} if provider_id else set()
+    fallbacks: list[Provider] = []
+
+    for fallback_id in fallback_ids:
+        if not isinstance(fallback_id, str) or not fallback_id:
+            continue
+        if fallback_id in seen_provider_ids:
+            continue
+        fallback_provider = plugin_context.get_provider_by_id(fallback_id)
+        if fallback_provider is None:
+            logger.warning("Fallback chat provider `%s` not found, skip.", fallback_id)
+            continue
+        if not isinstance(fallback_provider, Provider):
+            logger.warning(
+                "Fallback chat provider `%s` is invalid type: %s, skip.",
+                fallback_id,
+                type(fallback_provider),
+            )
+            continue
+        fallbacks.append(fallback_provider)
+        seen_provider_ids.add(fallback_id)
+    return fallbacks
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -870,6 +920,8 @@ async def build_main_agent(
                 return None
 
             req.prompt = event.message_str[len(config.provider_wake_prefix) :]
+
+            # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     image_path = await comp.convert_to_file_path()
@@ -885,6 +937,81 @@ async def build_main_agent(
                             text=f"[File Attachment: name {file_name}, path {file_path}]"
                         )
                     )
+            # quoted message attachments
+            reply_comps = [
+                comp for comp in event.message_obj.message if isinstance(comp, Reply)
+            ]
+            quoted_message_settings = _get_quoted_message_parser_settings(
+                config.provider_settings
+            )
+            fallback_quoted_image_count = 0
+            for comp in reply_comps:
+                has_embedded_image = False
+                if comp.chain:
+                    for reply_comp in comp.chain:
+                        if isinstance(reply_comp, Image):
+                            has_embedded_image = True
+                            image_path = await reply_comp.convert_to_file_path()
+                            req.image_urls.append(image_path)
+                            _append_quoted_image_attachment(req, image_path)
+                        elif isinstance(reply_comp, File):
+                            file_path = await reply_comp.get_file()
+                            file_name = reply_comp.name or os.path.basename(file_path)
+                            req.extra_user_content_parts.append(
+                                TextPart(
+                                    text=(
+                                        f"[File Attachment in quoted message: "
+                                        f"name {file_name}, path {file_path}]"
+                                    )
+                                )
+                            )
+
+                # Fallback quoted image extraction for reply-id-only payloads, or when
+                # embedded reply chain only contains placeholders (e.g. [Forward Message], [Image]).
+                if not has_embedded_image:
+                    try:
+                        fallback_images = normalize_and_dedupe_strings(
+                            await extract_quoted_message_images(
+                                event,
+                                comp,
+                                settings=quoted_message_settings,
+                            )
+                        )
+                        remaining_limit = max(
+                            config.max_quoted_fallback_images
+                            - fallback_quoted_image_count,
+                            0,
+                        )
+                        if remaining_limit <= 0 and fallback_images:
+                            logger.warning(
+                                "Skip quoted fallback images due to limit=%d for umo=%s",
+                                config.max_quoted_fallback_images,
+                                event.unified_msg_origin,
+                            )
+                            continue
+                        if len(fallback_images) > remaining_limit:
+                            logger.warning(
+                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                                event.unified_msg_origin,
+                                getattr(comp, "id", None),
+                                len(fallback_images),
+                                remaining_limit,
+                            )
+                            fallback_images = fallback_images[:remaining_limit]
+                        for image_ref in fallback_images:
+                            if image_ref in req.image_urls:
+                                continue
+                            req.image_urls.append(image_ref)
+                            fallback_quoted_image_count += 1
+                            _append_quoted_image_attachment(req, image_ref)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
+                            event.unified_msg_origin,
+                            getattr(comp, "id", None),
+                            exc,
+                            exc_info=True,
+                        )
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
@@ -893,6 +1020,7 @@ async def build_main_agent(
 
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
+    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
 
     if config.file_extract_enabled:
         try:
@@ -977,6 +1105,9 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
+        fallback_providers=_get_fallback_chat_providers(
+            provider, plugin_context, config.provider_settings
+        ),
     )
 
     if apply_reset:

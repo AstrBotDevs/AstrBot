@@ -1,0 +1,212 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (branch/tag/SHA)"
+        required: false
+        default: "master"
+      tag:
+        description: "Release tag to publish assets to (for example: v4.14.6)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-dashboard:
+    name: Build Dashboard
+    runs-on: ubuntu-24.04
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.13.0'
+          cache: "pnpm"
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Build dashboard dist
+        shell: bash
+        run: |
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run build
+          echo "${{ steps.tag.outputs.tag }}" > dashboard/dist/assets/version
+          cd dashboard
+          zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
+
+      - name: Upload dashboard artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Dashboard-${{ steps.tag.outputs.tag }}
+          if-no-files-found: error
+          path: dashboard/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
+
+      - name: Upload dashboard package to Cloudflare R2
+        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' }}
+        env:
+          R2_BUCKET_NAME: "astrbot"
+          R2_OBJECT_NAME: "astrbot-webui-latest.zip"
+          VERSION_TAG: ${{ steps.tag.outputs.tag }}
+        shell: bash
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+
+          mkdir -p ~/.config/rclone
+          cat <<EOF > ~/.config/rclone/rclone.conf
+          [r2]
+          type = s3
+          provider = Cloudflare
+          access_key_id = $R2_ACCESS_KEY_ID
+          secret_access_key = $R2_SECRET_ACCESS_KEY
+          endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+          EOF
+
+          cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/${R2_OBJECT_NAME}"
+          rclone copy "dashboard/${R2_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
+          cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/astrbot-webui-${VERSION_TAG}.zip"
+          rclone copy "dashboard/astrbot-webui-${VERSION_TAG}.zip" "r2:${R2_BUCKET_NAME}" --progress
+
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-24.04
+    needs:
+      - build-dashboard
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download dashboard artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: Dashboard-${{ steps.tag.outputs.tag }}
+          path: release-assets
+
+
+      - name: Resolve release notes
+        id: notes
+        shell: bash
+        run: |
+          note_file="changelogs/${{ steps.tag.outputs.tag }}.md"
+          if [ ! -f "$note_file" ]; then
+            note_file="$(mktemp)"
+            echo "Release ${{ steps.tag.outputs.tag }}" > "$note_file"
+          fi
+          echo "file=$note_file" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes-file "${{ steps.notes.outputs.file }}"
+          fi
+
+      - name: Remove stale assets from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          while IFS= read -r asset; do
+            case "$asset" in
+              *.AppImage|*.dmg|*.zip|*.exe|*.blockmap)
+                gh release delete-asset "$tag" "$asset" -y || true
+                ;;
+            esac
+          done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          gh release upload "$tag" release-assets/* --clobber
+
+  publish-pypi:
+    name: Publish PyPI
+    runs-on: ubuntu-24.04
+    needs: publish-release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        shell: bash
+        run: python -m pip install uv
+
+      - name: Build package
+        shell: bash
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        shell: bash
+        run: uv publish

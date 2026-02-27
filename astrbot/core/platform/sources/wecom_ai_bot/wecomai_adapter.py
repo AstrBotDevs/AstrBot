@@ -39,6 +39,7 @@ from .wecomai_utils import (
     generate_random_string,
     process_encrypted_image,
 )
+from .wecomai_webhook import WecomAIBotWebhookClient, WecomAIBotWebhookError
 
 
 class WecomAIQueueListener:
@@ -51,44 +52,13 @@ class WecomAIQueueListener:
     ) -> None:
         self.queue_mgr = queue_mgr
         self.callback = callback
-        self.running_tasks = set()
 
-    async def listen_to_queue(self, session_id: str):
-        """监听特定会话的队列"""
-        queue = self.queue_mgr.get_or_create_queue(session_id)
+    async def run(self) -> None:
+        """注册监听回调并定期清理过期响应。"""
+        self.queue_mgr.set_listener(self.callback)
         while True:
-            try:
-                data = await queue.get()
-                await self.callback(data)
-            except Exception as e:
-                logger.error(f"处理会话 {session_id} 消息时发生错误: {e}")
-                break
-
-    async def run(self):
-        """监控新会话队列并启动监听器"""
-        monitored_sessions = set()
-
-        while True:
-            # 检查新会话
-            current_sessions = set(self.queue_mgr.queues.keys())
-            new_sessions = current_sessions - monitored_sessions
-
-            # 为新会话启动监听器
-            for session_id in new_sessions:
-                task = asyncio.create_task(self.listen_to_queue(session_id))
-                self.running_tasks.add(task)
-                task.add_done_callback(self.running_tasks.discard)
-                monitored_sessions.add(session_id)
-                logger.debug(f"[WecomAI] 为会话启动监听器: {session_id}")
-
-            # 清理已不存在的会话
-            removed_sessions = monitored_sessions - current_sessions
-            monitored_sessions -= removed_sessions
-
-            # 清理过期的待处理响应
             self.queue_mgr.cleanup_expired_responses()
-
-            await asyncio.sleep(1)  # 每秒检查一次新会话
+            await asyncio.sleep(1)
 
 
 @register_platform_adapter(
@@ -111,24 +81,28 @@ class WecomAIBotAdapter(Platform):
         self.token = self.config["token"]
         self.encoding_aes_key = self.config["encoding_aes_key"]
         self.port = int(self.config["port"])
-        self.host = self.config.get("callback_server_host", "::")
+        self.host = self.config.get("callback_server_host", "0.0.0.0")
         self.bot_name = self.config.get("wecom_ai_bot_name", "")
         self.initial_respond_text = self.config.get(
             "wecomaibot_init_respond_text",
-            "💭 思考中...",
+            "",
         )
         self.friend_message_welcome_text = self.config.get(
             "wecomaibot_friend_message_welcome_text",
             "",
         )
         self.unified_webhook_mode = self.config.get("unified_webhook_mode", False)
+        self.msg_push_webhook_url = self.config.get("msg_push_webhook_url", "").strip()
+        self.only_use_webhook_url_to_send = bool(
+            self.config.get("only_use_webhook_url_to_send", False),
+        )
 
         # 平台元数据
         self.metadata = PlatformMetadata(
             name="wecom_ai_bot",
             description="企业微信智能机器人适配器，支持 HTTP 回调接收消息",
             id=self.config.get("id", "wecom_ai_bot"),
-            support_proactive_message=False,
+            support_proactive_message=bool(self.msg_push_webhook_url),
         )
 
         # 初始化 API 客户端
@@ -153,8 +127,18 @@ class WecomAIBotAdapter(Platform):
             self.queue_mgr,
             self._handle_queued_message,
         )
+        self._stream_plain_cache: dict[str, str] = {}
 
-    async def _handle_queued_message(self, data: dict):
+        self.webhook_client: WecomAIBotWebhookClient | None = None
+        if self.msg_push_webhook_url:
+            try:
+                self.webhook_client = WecomAIBotWebhookClient(
+                    self.msg_push_webhook_url,
+                )
+            except WecomAIBotWebhookError as e:
+                logger.error("企业微信消息推送 webhook 配置无效: %s", e)
+
+    async def _handle_queued_message(self, data: dict) -> None:
         """处理队列中的消息，类似webchat的callback"""
         try:
             abm = await self.convert_message(data)
@@ -195,16 +179,19 @@ class WecomAIBotAdapter(Platform):
                 )
                 self.queue_mgr.set_pending_response(stream_id, callback_params)
 
-                resp = WecomAIBotStreamMessageBuilder.make_text_stream(
-                    stream_id,
-                    self.initial_respond_text,
-                    False,
-                )
-                return await self.api_client.encrypt_message(
-                    resp,
-                    callback_params["nonce"],
-                    callback_params["timestamp"],
-                )
+                if self.only_use_webhook_url_to_send and self.webhook_client:
+                    return None
+                if self.initial_respond_text:
+                    resp = WecomAIBotStreamMessageBuilder.make_text_stream(
+                        stream_id,
+                        self.initial_respond_text,
+                        False,
+                    )
+                    return await self.api_client.encrypt_message(
+                        resp,
+                        callback_params["nonce"],
+                        callback_params["timestamp"],
+                    )
             except Exception as e:
                 logger.error("处理消息时发生异常: %s", e)
                 return None
@@ -212,7 +199,13 @@ class WecomAIBotAdapter(Platform):
             # wechat server is requesting for updates of a stream
             stream_id = message_data["stream"]["id"]
             if not self.queue_mgr.has_back_queue(stream_id):
-                logger.error(f"Cannot find back queue for stream_id: {stream_id}")
+                self._stream_plain_cache.pop(stream_id, None)
+                if self.queue_mgr.is_stream_finished(stream_id):
+                    logger.debug(
+                        f"Stream already finished, returning end message: {stream_id}"
+                    )
+                else:
+                    logger.warning(f"Cannot find back queue for stream_id: {stream_id}")
 
                 # 返回结束标志，告诉微信服务器流已结束
                 end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
@@ -234,24 +227,48 @@ class WecomAIBotAdapter(Platform):
                 return None
 
             # aggregate all delta chains in the back queue
-            latest_plain_content = ""
+            cached_plain_content = self._stream_plain_cache.get(stream_id, "")
+            latest_plain_content = cached_plain_content
             image_base64 = []
             finish = False
             while not queue.empty():
                 msg = await queue.get()
                 if msg["type"] == "plain":
-                    latest_plain_content = msg["data"] or ""
+                    plain_data = msg.get("data") or ""
+                    if msg.get("streaming", False):
+                        # streaming plain payload is already cumulative
+                        cached_plain_content = plain_data
+                    else:
+                        # segmented non-stream send() pushes plain chunks, needs append
+                        cached_plain_content += plain_data
+                    latest_plain_content = cached_plain_content
                 elif msg["type"] == "image":
                     image_base64.append(msg["image_data"])
-                elif msg["type"] == "end":
+                elif msg["type"] == "break":
+                    continue
+                elif msg["type"] in {"end", "complete"}:
                     # stream end
                     finish = True
-                    self.queue_mgr.remove_queues(stream_id)
+                    self.queue_mgr.remove_queues(stream_id, mark_finished=True)
+                    self._stream_plain_cache.pop(stream_id, None)
                     break
 
             logger.debug(
                 f"Aggregated content: {latest_plain_content}, image: {len(image_base64)}, finish: {finish}",
             )
+            if not finish:
+                self._stream_plain_cache[stream_id] = cached_plain_content
+            if finish and not latest_plain_content and not image_base64:
+                end_message = WecomAIBotStreamMessageBuilder.make_text_stream(
+                    stream_id,
+                    "",
+                    True,
+                )
+                return await self.api_client.encrypt_message(
+                    end_message,
+                    callback_params["nonce"],
+                    callback_params["timestamp"],
+                )
             if latest_plain_content or image_base64:
                 msg_items = []
                 if finish and image_base64:
@@ -314,7 +331,7 @@ class WecomAIBotAdapter(Platform):
         callback_params: dict[str, str],
         stream_id: str,
         session_id: str,
-    ):
+    ) -> None:
         """将消息放入队列进行异步处理"""
         input_queue = self.queue_mgr.get_or_create_queue(stream_id)
         _ = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -418,16 +435,30 @@ class WecomAIBotAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
-        """通过会话发送消息"""
-        # 企业微信智能机器人主要通过回调响应，这里记录日志
-        logger.info("会话发送消息: %s -> %s", session.session_id, message_chain)
+    ) -> None:
+        """通过消息推送 webhook 发送消息。"""
+        if not self.webhook_client:
+            logger.warning(
+                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。session_id=%s",
+                session.session_id,
+            )
+            await super().send_by_session(session, message_chain)
+            return
+
+        try:
+            await self.webhook_client.send_message_chain(message_chain)
+        except Exception as e:
+            logger.error(
+                "企业微信消息推送失败(session=%s): %s",
+                session.session_id,
+                e,
+            )
         await super().send_by_session(session, message_chain)
 
     def run(self) -> Awaitable[Any]:
         """运行适配器，同时启动HTTP服务器和队列监听器"""
 
-        async def run_both():
+        async def run_both() -> None:
             # 如果启用统一 webhook 模式，则不启动独立服务器
             webhook_uuid = self.config.get("webhook_uuid")
             if self.unified_webhook_mode and webhook_uuid:
@@ -454,7 +485,7 @@ class WecomAIBotAdapter(Platform):
         else:
             return await self.server.handle_callback(request)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止适配器"""
         logger.info("企业微信智能机器人适配器正在关闭...")
         self.shutdown_event.set()
@@ -464,7 +495,7 @@ class WecomAIBotAdapter(Platform):
         """获取平台元数据"""
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         """处理消息，创建消息事件并提交到事件队列"""
         try:
             message_event = WecomAIBotMessageEvent(
@@ -474,6 +505,8 @@ class WecomAIBotAdapter(Platform):
                 session_id=message.session_id,
                 api_client=self.api_client,
                 queue_mgr=self.queue_mgr,
+                webhook_client=self.webhook_client,
+                only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
             )
 
             self.commit_event(message_event)

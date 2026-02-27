@@ -32,8 +32,8 @@ tests/astrbot_plugin_openai
 # Dashboard
 dashboard/node_modules/
 dashboard/dist/
+.pnpm-store/
 package-lock.json
-package.json
 yarn.lock
 
 # Operating System

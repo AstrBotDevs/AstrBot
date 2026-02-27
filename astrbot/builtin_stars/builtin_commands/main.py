@@ -35,84 +35,84 @@ class Main(star.Star):
         self.sid_c = SIDCommand(self.context)
 
     @filter.command("help")
-    async def help(self, event: AstrMessageEvent):
+    async def help(self, event: AstrMessageEvent) -> None:
         """查看帮助"""
         await self.help_c.help(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("llm")
-    async def llm(self, event: AstrMessageEvent):
+    async def llm(self, event: AstrMessageEvent) -> None:
         """开启/关闭 LLM"""
         await self.llm_c.llm(event)
 
     @filter.command_group("plugin")
-    def plugin(self):
+    def plugin(self) -> None:
         """插件管理"""
 
     @plugin.command("ls")
-    async def plugin_ls(self, event: AstrMessageEvent):
+    async def plugin_ls(self, event: AstrMessageEvent) -> None:
         """获取已经安装的插件列表。"""
         await self.plugin_c.plugin_ls(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @plugin.command("off")
-    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = ""):
+    async def plugin_off(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """禁用插件"""
         await self.plugin_c.plugin_off(event, plugin_name)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @plugin.command("on")
-    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = ""):
+    async def plugin_on(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """启用插件"""
         await self.plugin_c.plugin_on(event, plugin_name)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @plugin.command("get")
-    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = ""):
+    async def plugin_get(self, event: AstrMessageEvent, plugin_repo: str = "") -> None:
         """安装插件"""
         await self.plugin_c.plugin_get(event, plugin_repo)
 
     @plugin.command("help")
-    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = ""):
+    async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """获取插件帮助"""
         await self.plugin_c.plugin_help(event, plugin_name)
 
     @filter.command("t2i")
-    async def t2i(self, event: AstrMessageEvent):
+    async def t2i(self, event: AstrMessageEvent) -> None:
         """开关文本转图片"""
         await self.t2i_c.t2i(event)
 
     @filter.command("tts")
-    async def tts(self, event: AstrMessageEvent):
+    async def tts(self, event: AstrMessageEvent) -> None:
         """开关文本转语音（会话级别）"""
         await self.tts_c.tts(event)
 
     @filter.command("sid")
-    async def sid(self, event: AstrMessageEvent):
+    async def sid(self, event: AstrMessageEvent) -> None:
         """获取会话 ID 和 管理员 ID"""
         await self.sid_c.sid(event)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("op")
-    async def op(self, event: AstrMessageEvent, admin_id: str = ""):
+    async def op(self, event: AstrMessageEvent, admin_id: str = "") -> None:
         """授权管理员。op <admin_id>"""
         await self.admin_c.op(event, admin_id)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("deop")
-    async def deop(self, event: AstrMessageEvent, admin_id: str):
+    async def deop(self, event: AstrMessageEvent, admin_id: str) -> None:
         """取消授权管理员。deop <admin_id>"""
         await self.admin_c.deop(event, admin_id)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("wl")
-    async def wl(self, event: AstrMessageEvent, sid: str = ""):
+    async def wl(self, event: AstrMessageEvent, sid: str = "") -> None:
         """添加白名单。wl <sid>"""
         await self.admin_c.wl(event, sid)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dwl")
-    async def dwl(self, event: AstrMessageEvent, sid: str):
+    async def dwl(self, event: AstrMessageEvent, sid: str) -> None:
         """删除白名单。dwl <sid>"""
         await self.admin_c.dwl(event, sid)
 
@@ -123,14 +123,19 @@ class Main(star.Star):
         event: AstrMessageEvent,
         idx: str | int | None = None,
         idx2: int | None = None,
-    ):
+    ) -> None:
         """查看或者切换 LLM Provider"""
         await self.provider_c.provider(event, idx, idx2)
 
     @filter.command("reset")
-    async def reset(self, message: AstrMessageEvent):
+    async def reset(self, message: AstrMessageEvent) -> None:
         """重置 LLM 会话"""
         await self.conversation_c.reset(message)
+
+    @filter.command("stop")
+    async def stop(self, message: AstrMessageEvent) -> None:
+        """停止当前会话中正在运行的 Agent"""
+        await self.conversation_c.stop(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("model")
@@ -138,74 +143,76 @@ class Main(star.Star):
         self,
         message: AstrMessageEvent,
         idx_or_name: int | str | None = None,
-    ):
+    ) -> None:
         """查看或者切换模型"""
         await self.provider_c.model_ls(message, idx_or_name)
 
     @filter.command("history")
-    async def his(self, message: AstrMessageEvent, page: int = 1):
+    async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
         await self.conversation_c.his(message, page)
 
     @filter.command("ls")
-    async def convs(self, message: AstrMessageEvent, page: int = 1):
+    async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
         await self.conversation_c.convs(message, page)
 
     @filter.command("new")
-    async def new_conv(self, message: AstrMessageEvent):
+    async def new_conv(self, message: AstrMessageEvent) -> None:
         """创建新对话"""
         await self.conversation_c.new_conv(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("groupnew")
-    async def groupnew_conv(self, message: AstrMessageEvent, sid: str):
+    async def groupnew_conv(self, message: AstrMessageEvent, sid: str) -> None:
         """创建新群聊对话"""
         await self.conversation_c.groupnew_conv(message, sid)
 
     @filter.command("switch")
-    async def switch_conv(self, message: AstrMessageEvent, index: int | None = None):
+    async def switch_conv(
+        self, message: AstrMessageEvent, index: int | None = None
+    ) -> None:
         """通过 /ls 前面的序号切换对话"""
         await self.conversation_c.switch_conv(message, index)
 
     @filter.command("rename")
-    async def rename_conv(self, message: AstrMessageEvent, new_name: str):
+    async def rename_conv(self, message: AstrMessageEvent, new_name: str) -> None:
         """重命名对话"""
         await self.conversation_c.rename_conv(message, new_name)
 
     @filter.command("del")
-    async def del_conv(self, message: AstrMessageEvent):
+    async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
         await self.conversation_c.del_conv(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("key")
-    async def key(self, message: AstrMessageEvent, index: int | None = None):
+    async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
         """查看或者切换 Key"""
         await self.provider_c.key(message, index)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("persona")
-    async def persona(self, message: AstrMessageEvent):
+    async def persona(self, message: AstrMessageEvent) -> None:
         """查看或者切换 Persona"""
         await self.persona_c.persona(message)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("dashboard_update")
-    async def update_dashboard(self, event: AstrMessageEvent):
+    async def update_dashboard(self, event: AstrMessageEvent) -> None:
         """更新管理面板"""
         await self.admin_c.update_dashboard(event)
 
     @filter.command("set")
-    async def set_variable(self, event: AstrMessageEvent, key: str, value: str):
+    async def set_variable(self, event: AstrMessageEvent, key: str, value: str) -> None:
         await self.setunset_c.set_variable(event, key, value)
 
     @filter.command("unset")
-    async def unset_variable(self, event: AstrMessageEvent, key: str):
+    async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
         await self.setunset_c.unset_variable(event, key)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.command("alter_cmd", alias={"alter"})
-    async def alter_cmd(self, event: AstrMessageEvent):
+    async def alter_cmd(self, event: AstrMessageEvent) -> None:
         """修改命令权限"""
         await self.alter_cmd_c.alter_cmd(event)

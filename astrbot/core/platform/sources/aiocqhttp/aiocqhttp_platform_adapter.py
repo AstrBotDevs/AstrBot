@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import itertools
 import logging
 import time
@@ -61,7 +62,7 @@ class AiocqhttpAdapter(Platform):
         )
 
         @self.bot.on_request()
-        async def request(event: Event):
+        async def request(event: Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if not abm:
@@ -72,7 +73,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_notice()
-        async def notice(event: Event):
+        async def notice(event: Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -82,7 +83,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_message("group")
-        async def group(event: Event):
+        async def group(event: Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -92,7 +93,7 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_message("private")
-        async def private(event: Event):
+        async def private(event: Event) -> None:
             try:
                 abm = await self.convert_message(event)
                 if abm:
@@ -102,14 +103,14 @@ class AiocqhttpAdapter(Platform):
                 return
 
         @self.bot.on_websocket_connection
-        def on_websocket_connection(_):
+        def on_websocket_connection(_) -> None:
             logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
 
     async def send_by_session(
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         is_group = session.message_type == MessageType.GROUP_MESSAGE
         if is_group:
             session_id = session.session_id.split("_")[-1]
@@ -418,9 +419,9 @@ class AiocqhttpAdapter(Platform):
     def run(self) -> Awaitable[Any]:
         if not self.host or not self.port:
             logger.warning(
-                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://[::]:6199",
+                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199",
             )
-            self.host = "::"
+            self.host = "0.0.0.0"
             self.port = 6199
 
         coro = self.bot.run_task(
@@ -435,17 +436,52 @@ class AiocqhttpAdapter(Platform):
         self.shutdown_event = asyncio.Event()
         return coro
 
-    async def terminate(self):
-        self.shutdown_event.set()
+    async def terminate(self) -> None:
+        if hasattr(self, "shutdown_event"):
+            self.shutdown_event.set()
+        await self._close_reverse_ws_connections()
 
-    async def shutdown_trigger_placeholder(self):
+    async def _close_reverse_ws_connections(self) -> None:
+        api_clients = getattr(self.bot, "_wsr_api_clients", None)
+        event_clients = getattr(self.bot, "_wsr_event_clients", None)
+
+        ws_clients: set[Any] = set()
+        if isinstance(api_clients, dict):
+            ws_clients.update(api_clients.values())
+        if isinstance(event_clients, set):
+            ws_clients.update(event_clients)
+
+        close_tasks: list[Awaitable[Any]] = []
+        for ws in ws_clients:
+            close_func = getattr(ws, "close", None)
+            if not callable(close_func):
+                continue
+            try:
+                close_result = close_func(code=1000, reason="Adapter shutdown")
+            except TypeError:
+                close_result = close_func()
+            except Exception:
+                continue
+
+            if inspect.isawaitable(close_result):
+                close_tasks.append(close_result)
+
+        if close_tasks:
+            await asyncio.gather(*close_tasks, return_exceptions=True)
+
+        if isinstance(api_clients, dict):
+            api_clients.clear()
+        if isinstance(event_clients, set):
+            event_clients.clear()
+
+    async def shutdown_trigger_placeholder(self) -> None:
         await self.shutdown_event.wait()
         logger.info("aiocqhttp 适配器已被关闭")
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage):
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = AiocqhttpMessageEvent(
             message_str=message.message_str,
             message_obj=message,

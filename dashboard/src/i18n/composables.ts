@@ -89,6 +89,13 @@ export function useI18n() {
       
       // 保存到localStorage
       localStorage.setItem('astrbot-locale', newLocale);
+      
+      // 触发自定义事件，通知相关页面重新加载配置数据
+      // 这是因为插件适配器的 i18n 数据是通过后端 API 注入的，
+      // 需要根据 Accept-Language 头重新获取
+      window.dispatchEvent(new CustomEvent('astrbot-locale-changed', {
+        detail: { locale: newLocale }
+      }));
     }
   };
   
@@ -169,6 +176,44 @@ export function useLanguageSwitcher() {
     switchLanguage,
     availableLocales
   };
+}
+
+/**
+ * 将动态翻译数据（如插件提供的 i18n）合并到当前翻译中。
+ * @param modulePath 模块路径，如 'features.config-metadata'
+ * @param allLocaleData 所有语言的翻译数据，如 { "zh-CN": {...}, "en-US": {...} }
+ */
+export function mergeDynamicTranslations(modulePath: string, allLocaleData: Record<string, any>) {
+  const locale = currentLocale.value;
+  const localeData = allLocaleData[locale];
+  if (!localeData || typeof localeData !== 'object') return;
+
+  const pathParts = modulePath.split('.');
+  let target: any = translations.value;
+  for (const part of pathParts) {
+    if (!(part in target) || typeof target[part] !== 'object') {
+      target[part] = {};
+    }
+    target = target[part];
+  }
+
+  deepMerge(target, localeData);
+
+  // 触发响应式更新
+  translations.value = { ...translations.value };
+}
+
+function deepMerge(target: Record<string, any>, source: Record<string, any>) {
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      if (!(key in target) || typeof target[key] !== 'object') {
+        target[key] = {};
+      }
+      deepMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
 }
 
 // 初始化函数（在应用启动时调用）

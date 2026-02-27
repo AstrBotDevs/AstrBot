@@ -110,7 +110,7 @@ class ImportPreCheckResult:
 class ImportResult:
     """导入结果"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.success = True
         self.imported_tables: dict[str, int] = {}
         self.imported_files: dict[str, int] = {}
@@ -161,7 +161,7 @@ class AstrBotImporter:
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = CMD_CONFIG_FILE_PATH,
         kb_root_dir: str = KB_PATH,
-    ):
+    ) -> None:
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path

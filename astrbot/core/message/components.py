@@ -25,13 +25,17 @@ import asyncio
 import base64
 import json
 import os
+import sys
 import uuid
 from enum import Enum
 
-from pydantic.v1 import BaseModel
+if sys.version_info >= (3, 14):
+    from pydantic import BaseModel
+else:
+    from pydantic.v1 import BaseModel
 
 from astrbot.core import astrbot_config, file_token_service, logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
 
 
@@ -66,7 +70,7 @@ class ComponentType(str, Enum):
 class BaseMessageComponent(BaseModel):
     type: ComponentType
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
     def toDict(self):
@@ -85,11 +89,11 @@ class BaseMessageComponent(BaseModel):
 
 
 class Plain(BaseMessageComponent):
-    type = ComponentType.Plain
+    type: ComponentType = ComponentType.Plain
     text: str
     convert: bool | None = True
 
-    def __init__(self, text: str, convert: bool = True, **_):
+    def __init__(self, text: str, convert: bool = True, **_) -> None:
         super().__init__(text=text, convert=convert, **_)
 
     def toDict(self):
@@ -100,25 +104,27 @@ class Plain(BaseMessageComponent):
 
 
 class Face(BaseMessageComponent):
-    type = ComponentType.Face
+    type: ComponentType = ComponentType.Face
     id: int
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Record(BaseMessageComponent):
-    type = ComponentType.Record
+    type: ComponentType = ComponentType.Record
     file: str | None = ""
     magic: bool | None = False
     url: str | None = ""
     cache: bool | None = True
     proxy: bool | None = True
     timeout: int | None = 0
+    # Original text content (e.g. TTS source text), used as caption in fallback scenarios
+    text: str | None = None
     # 额外
     path: str | None
 
-    def __init__(self, file: str | None, **_):
+    def __init__(self, file: str | None, **_) -> None:
         for k in _:
             if k == "url":
                 pass
@@ -156,8 +162,9 @@ class Record(BaseMessageComponent):
         if self.file.startswith("base64://"):
             bs64_data = self.file.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            file_path = os.path.join(
+                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.jpg"
+            )
             with open(file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(file_path)
@@ -214,14 +221,14 @@ class Record(BaseMessageComponent):
 
 
 class Video(BaseMessageComponent):
-    type = ComponentType.Video
+    type: ComponentType = ComponentType.Video
     file: str
     cover: str | None = ""
     c: int | None = 2
     # 额外
     path: str | None = ""
 
-    def __init__(self, file: str, **_):
+    def __init__(self, file: str, **_) -> None:
         super().__init__(file=file, **_)
 
     @staticmethod
@@ -245,8 +252,9 @@ class Video(BaseMessageComponent):
         if url and url.startswith("file:///"):
             return url[8:]
         if url and url.startswith("http"):
-            download_dir = os.path.join(get_astrbot_data_path(), "temp")
-            video_file_path = os.path.join(download_dir, f"{uuid.uuid4().hex}")
+            video_file_path = os.path.join(
+                get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}"
+            )
             await download_file(url, video_file_path)
             if os.path.exists(video_file_path):
                 return os.path.abspath(video_file_path)
@@ -255,7 +263,7 @@ class Video(BaseMessageComponent):
             return os.path.abspath(url)
         raise Exception(f"not a valid file: {url}")
 
-    async def register_to_file_service(self):
+    async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
 
         Returns:
@@ -299,11 +307,11 @@ class Video(BaseMessageComponent):
 
 
 class At(BaseMessageComponent):
-    type = ComponentType.At
+    type: ComponentType = ComponentType.At
     qq: int | str  # 此处str为all时代表所有人
     name: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
     def toDict(self):
@@ -316,64 +324,64 @@ class At(BaseMessageComponent):
 class AtAll(At):
     qq: str = "all"
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class RPS(BaseMessageComponent):  # TODO
-    type = ComponentType.RPS
+    type: ComponentType = ComponentType.RPS
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Dice(BaseMessageComponent):  # TODO
-    type = ComponentType.Dice
+    type: ComponentType = ComponentType.Dice
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Shake(BaseMessageComponent):  # TODO
-    type = ComponentType.Shake
+    type: ComponentType = ComponentType.Shake
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Share(BaseMessageComponent):
-    type = ComponentType.Share
+    type: ComponentType = ComponentType.Share
     url: str
     title: str
     content: str | None = ""
     image: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Contact(BaseMessageComponent):  # TODO
-    type = ComponentType.Contact
+    type: ComponentType = ComponentType.Contact
     _type: str  # type 字段冲突
     id: int | None = 0
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Location(BaseMessageComponent):  # TODO
-    type = ComponentType.Location
+    type: ComponentType = ComponentType.Location
     lat: float
     lon: float
     title: str | None = ""
     content: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Music(BaseMessageComponent):
-    type = ComponentType.Music
+    type: ComponentType = ComponentType.Music
     _type: str
     id: int | None = 0
     url: str | None = ""
@@ -382,7 +390,7 @@ class Music(BaseMessageComponent):
     content: str | None = ""
     image: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         # for k in _.keys():
         #     if k == "_type" and _[k] not in ["qq", "163", "xm", "custom"]:
         #         logger.warn(f"Protocol: {k}={_[k]} doesn't match values")
@@ -390,7 +398,7 @@ class Music(BaseMessageComponent):
 
 
 class Image(BaseMessageComponent):
-    type = ComponentType.Image
+    type: ComponentType = ComponentType.Image
     file: str | None = ""
     _type: str | None = ""
     subType: int | None = 0
@@ -402,7 +410,7 @@ class Image(BaseMessageComponent):
     path: str | None = ""
     file_unique: str | None = ""  # 某些平台可能有图片缓存的唯一标识
 
-    def __init__(self, file: str | None, **_):
+    def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
 
     @staticmethod
@@ -445,8 +453,9 @@ class Image(BaseMessageComponent):
         if url.startswith("base64://"):
             bs64_data = url.removeprefix("base64://")
             image_bytes = base64.b64decode(bs64_data)
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            image_file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.jpg")
+            image_file_path = os.path.join(
+                get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
+            )
             with open(image_file_path, "wb") as f:
                 f.write(image_bytes)
             return os.path.abspath(image_file_path)
@@ -504,7 +513,7 @@ class Image(BaseMessageComponent):
 
 
 class Reply(BaseMessageComponent):
-    type = ComponentType.Reply
+    type: ComponentType = ComponentType.Reply
     id: str | int
     """所引用的消息 ID"""
     chain: list["BaseMessageComponent"] | None = []
@@ -525,7 +534,7 @@ class Reply(BaseMessageComponent):
     seq: int | None = 0
     """deprecated"""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
@@ -534,23 +543,23 @@ class Poke(BaseMessageComponent):
     id: int | None = 0
     qq: int | None = 0
 
-    def __init__(self, type: str, **_):
+    def __init__(self, type: str, **_) -> None:
         type = f"Poke:{type}"
         super().__init__(type=type, **_)
 
 
 class Forward(BaseMessageComponent):
-    type = ComponentType.Forward
+    type: ComponentType = ComponentType.Forward
     id: str
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 
 class Node(BaseMessageComponent):
     """群合并转发消息"""
 
-    type = ComponentType.Node
+    type: ComponentType = ComponentType.Node
     id: int | None = 0  # 忽略
     name: str | None = ""  # qq昵称
     uin: str | None = "0"  # qq号
@@ -558,7 +567,7 @@ class Node(BaseMessageComponent):
     seq: str | list | None = ""  # 忽略
     time: int | None = 0  # 忽略
 
-    def __init__(self, content: list[BaseMessageComponent], **_):
+    def __init__(self, content: list[BaseMessageComponent], **_) -> None:
         if isinstance(content, Node):
             # back
             content = [content]
@@ -602,10 +611,10 @@ class Node(BaseMessageComponent):
 
 
 class Nodes(BaseMessageComponent):
-    type = ComponentType.Nodes
+    type: ComponentType = ComponentType.Nodes
     nodes: list[Node]
 
-    def __init__(self, nodes: list[Node], **_):
+    def __init__(self, nodes: list[Node], **_) -> None:
         super().__init__(nodes=nodes, **_)
 
     def toDict(self):
@@ -628,29 +637,29 @@ class Nodes(BaseMessageComponent):
 
 
 class Json(BaseMessageComponent):
-    type = ComponentType.Json
+    type: ComponentType = ComponentType.Json
     data: dict
 
-    def __init__(self, data: str | dict, **_):
+    def __init__(self, data: str | dict, **_) -> None:
         if isinstance(data, str):
             data = json.loads(data)
         super().__init__(data=data, **_)
 
 
 class Unknown(BaseMessageComponent):
-    type = ComponentType.Unknown
+    type: ComponentType = ComponentType.Unknown
     text: str
 
 
 class File(BaseMessageComponent):
     """文件消息段"""
 
-    type = ComponentType.File
+    type: ComponentType = ComponentType.File
     name: str | None = ""  # 名字
     file_: str | None = ""  # 本地路径
     url: str | None = ""  # url
 
-    def __init__(self, name: str, file: str = "", url: str = ""):
+    def __init__(self, name: str, file: str = "", url: str = "") -> None:
         """文件消息段。"""
         super().__init__(name=name, file_=file, url=url)
 
@@ -686,7 +695,7 @@ class File(BaseMessageComponent):
         return ""
 
     @file.setter
-    def file(self, value: str):
+    def file(self, value: str) -> None:
         """向前兼容, 设置file属性, 传入的参数可能是文件路径或URL
 
         Args:
@@ -711,32 +720,56 @@ class File(BaseMessageComponent):
         if allow_return_url and self.url:
             return self.url
 
-        if self.file_ and os.path.exists(self.file_):
-            return os.path.abspath(self.file_)
+        if self.file_:
+            path = self.file_
+            if path.startswith("file://"):
+                # 处理 file:// (2 slashes) 或 file:/// (3 slashes)
+                # pathlib.as_uri() 通常生成 file:///
+                path = path[7:]
+                # 兼容 Windows: file:///C:/path -> /C:/path -> C:/path
+                if (
+                    os.name == "nt"
+                    and len(path) > 2
+                    and path[0] == "/"
+                    and path[2] == ":"
+                ):
+                    path = path[1:]
+
+            if os.path.exists(path):
+                return os.path.abspath(path)
 
         if self.url:
             await self._download_file()
             if self.file_:
-                return os.path.abspath(self.file_)
+                path = self.file_
+                if path.startswith("file://"):
+                    path = path[7:]
+                    if (
+                        os.name == "nt"
+                        and len(path) > 2
+                        and path[0] == "/"
+                        and path[2] == ":"
+                    ):
+                        path = path[1:]
+                return os.path.abspath(path)
 
         return ""
 
-    async def _download_file(self):
+    async def _download_file(self) -> None:
         """下载文件"""
         if not self.url:
             raise ValueError("Download failed: No URL provided in File component.")
-        download_dir = os.path.join(get_astrbot_data_path(), "temp")
-        os.makedirs(download_dir, exist_ok=True)
+        download_dir = get_astrbot_temp_path()
         if self.name:
             name, ext = os.path.splitext(self.name)
-            filename = f"{name}_{uuid.uuid4().hex[:8]}{ext}"
+            filename = f"fileseg_{name}_{uuid.uuid4().hex[:8]}{ext}"
         else:
-            filename = f"{uuid.uuid4().hex}"
+            filename = f"fileseg_{uuid.uuid4().hex}"
         file_path = os.path.join(download_dir, filename)
         await download_file(self.url, file_path)
         self.file_ = os.path.abspath(file_path)
 
-    async def register_to_file_service(self):
+    async def register_to_file_service(self) -> str:
         """将文件注册到文件服务。
 
         Returns:
@@ -781,12 +814,12 @@ class File(BaseMessageComponent):
 
 
 class WechatEmoji(BaseMessageComponent):
-    type = ComponentType.WechatEmoji
+    type: ComponentType = ComponentType.WechatEmoji
     md5: str | None = ""
     md5_len: int | None = 0
     cdnurl: str | None = ""
 
-    def __init__(self, **_):
+    def __init__(self, **_) -> None:
         super().__init__(**_)
 
 

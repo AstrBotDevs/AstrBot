@@ -3,6 +3,7 @@ from typing import Literal, TypedDict
 import aiohttp
 
 from astrbot.core import logger
+from astrbot.core.utils.http_ssl import build_tls_connector
 
 
 class LLMModalities(TypedDict):
@@ -29,10 +30,12 @@ class LLMMetadata(TypedDict):
 LLM_METADATAS: dict[str, LLMMetadata] = {}
 
 
-async def update_llm_metadata():
+async def update_llm_metadata() -> None:
     url = "https://models.dev/api.json"
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(
+            trust_env=True, connector=build_tls_connector()
+        ) as session:
             async with session.get(url) as response:
                 data = await response.json()
                 global LLM_METADATAS

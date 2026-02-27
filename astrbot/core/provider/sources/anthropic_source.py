@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncGenerator
 
 import anthropic
+import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 from anthropic.types.message_delta_usage import MessageDeltaUsage
@@ -14,6 +15,11 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, TextPart
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
 from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    is_connection_error,
+    log_connection_failure,
+)
 
 from ..register import register_provider_adapter
 
@@ -27,29 +33,56 @@ class ProviderAnthropic(Provider):
         self,
         provider_config,
         provider_settings,
+        *,
+        use_api_key: bool = True,
     ) -> None:
         super().__init__(
             provider_config,
             provider_settings,
         )
 
-        self.chosen_api_key: str = ""
-        self.api_keys: list = super().get_keys()
-        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
+        self.thinking_config = provider_config.get("anth_thinking_config", {})
 
+        if use_api_key:
+            self._init_api_key(provider_config)
+
+        self.set_model(provider_config.get("model", "unknown"))
+
+    def _init_api_key(self, provider_config: dict) -> None:
+        self.chosen_api_key: str = ""
+        self.api_keys: list = super().get_keys()
+        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else ""
         self.client = AsyncAnthropic(
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
+            http_client=self._create_http_client(provider_config),
         )
 
-        self.thinking_config = provider_config.get("anth_thinking_config", {})
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """创建带代理的 HTTP 客户端"""
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("Anthropic", proxy)
 
-        self.set_model(provider_config.get("model", "unknown"))
+    def _apply_thinking_config(self, payloads: dict) -> None:
+        thinking_type = self.thinking_config.get("type", "")
+        if thinking_type == "adaptive":
+            payloads["thinking"] = {"type": "adaptive"}
+            effort = self.thinking_config.get("effort", "")
+            output_cfg = dict(payloads.get("output_config", {}))
+            if effort:
+                output_cfg["effort"] = effort
+            if output_cfg:
+                payloads["output_config"] = output_cfg
+        elif not thinking_type and self.thinking_config.get("budget"):
+            payloads["thinking"] = {
+                "budget_tokens": self.thinking_config.get("budget"),
+                "type": "enabled",
+            }
 
     def _prepare_payload(self, messages: list[dict]):
         """准备 Anthropic API 的请求 payload
@@ -201,15 +234,21 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 1024
-        if self.thinking_config.get("budget"):
-            payloads["thinking"] = {
-                "budget_tokens": self.thinking_config.get("budget"),
-                "type": "enabled",
-            }
+        self._apply_thinking_config(payloads)
 
-        completion = await self.client.messages.create(
-            **payloads, stream=False, extra_body=extra_body
-        )
+        try:
+            completion = await self.client.messages.create(
+                **payloads, stream=False, extra_body=extra_body
+            )
+        except httpx.RequestError as e:
+            proxy = self.provider_config.get("proxy", "")
+            log_connection_failure("Anthropic", e, proxy)
+            raise
+        except Exception as e:
+            if is_connection_error(e):
+                proxy = self.provider_config.get("proxy", "")
+                log_connection_failure("Anthropic", e, proxy)
+            raise
 
         assert isinstance(completion, Message)
         logger.debug(f"completion: {completion}")
@@ -265,11 +304,7 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 1024
-        if self.thinking_config.get("budget"):
-            payloads["thinking"] = {
-                "budget_tokens": self.thinking_config.get("budget"),
-                "type": "enabled",
-            }
+        self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
             **payloads, extra_body=extra_body
@@ -620,5 +655,9 @@ class ProviderAnthropic(Provider):
             models_str.append(model.id)
         return models_str
 
-    def set_key(self, key: str):
+    def set_key(self, key: str) -> None:
         self.chosen_api_key = key
+
+    async def terminate(self):
+        if self.client:
+            await self.client.close()

@@ -20,15 +20,81 @@ from astrbot.core.provider.provider import TTSProvider
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
+def _should_stop_agent(astr_event) -> bool:
+    return astr_event.is_stopped() or bool(astr_event.get_extra("agent_stop_requested"))
+
+
+def _truncate_tool_result(text: str, limit: int = 70) -> str:
+    if limit <= 0:
+        return ""
+    if len(text) <= limit:
+        return text
+    if limit <= 3:
+        return text[:limit]
+    return f"{text[: limit - 3]}..."
+
+
+def _extract_chain_json_data(msg_chain: MessageChain) -> dict | None:
+    if not msg_chain.chain:
+        return None
+    first_comp = msg_chain.chain[0]
+    if isinstance(first_comp, Json) and isinstance(first_comp.data, dict):
+        return first_comp.data
+    return None
+
+
+def _record_tool_call_name(
+    tool_info: dict | None, tool_name_by_call_id: dict[str, str]
+) -> None:
+    if not isinstance(tool_info, dict):
+        return
+    tool_call_id = tool_info.get("id")
+    tool_name = tool_info.get("name")
+    if tool_call_id is None or tool_name is None:
+        return
+    tool_name_by_call_id[str(tool_call_id)] = str(tool_name)
+
+
+def _build_tool_call_status_message(tool_info: dict | None) -> str:
+    if tool_info:
+        return f"🔨 调用工具: {tool_info.get('name', 'unknown')}"
+    return "🔨 调用工具..."
+
+
+def _build_tool_result_status_message(
+    msg_chain: MessageChain, tool_name_by_call_id: dict[str, str]
+) -> str:
+    tool_name = "unknown"
+    tool_result = ""
+
+    result_data = _extract_chain_json_data(msg_chain)
+    if result_data:
+        tool_call_id = result_data.get("id")
+        if tool_call_id is not None:
+            tool_name = tool_name_by_call_id.pop(str(tool_call_id), "unknown")
+        tool_result = str(result_data.get("result", ""))
+
+    if not tool_result:
+        tool_result = msg_chain.get_plain_text(with_other_comps_mark=True)
+    tool_result = _truncate_tool_result(tool_result, 70)
+
+    status_msg = f"🔨 调用工具: {tool_name}"
+    if tool_result:
+        status_msg = f"{status_msg}\n📎 返回结果: {tool_result}"
+    return status_msg
+
+
 async def run_agent(
     agent_runner: AgentRunner,
     max_step: int = 30,
     show_tool_use: bool = True,
+    show_tool_call_result: bool = False,
     stream_to_general: bool = False,
     show_reasoning: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
+    tool_name_by_call_id: dict[str, str] = {}
     while step_idx < max_step + 1:
         step_idx += 1
 
@@ -48,10 +114,28 @@ async def run_agent(
                     )
                 )
 
+        stop_watcher = asyncio.create_task(
+            _watch_agent_stop_signal(agent_runner, astr_event),
+        )
         try:
             async for resp in agent_runner.step():
-                if astr_event.is_stopped():
+                if _should_stop_agent(astr_event):
+                    agent_runner.request_stop()
+
+                if resp.type == "aborted":
+                    if not stop_watcher.done():
+                        stop_watcher.cancel()
+                        try:
+                            await stop_watcher
+                        except asyncio.CancelledError:
+                            pass
+                    astr_event.set_extra("agent_user_aborted", True)
+                    astr_event.set_extra("agent_stop_requested", False)
                     return
+
+                if _should_stop_agent(astr_event):
+                    continue
+
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
 
@@ -68,6 +152,13 @@ async def run_agent(
                         continue
                     if astr_event.get_platform_id() == "webchat":
                         await astr_event.send(msg_chain)
+                    elif show_tool_use and show_tool_call_result:
+                        status_msg = _build_tool_result_status_message(
+                            msg_chain, tool_name_by_call_id
+                        )
+                        await astr_event.send(
+                            MessageChain(type="tool_call").message(status_msg)
+                        )
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":
@@ -75,25 +166,22 @@ async def run_agent(
                         # 用来标记流式响应需要分节
                         yield MessageChain(chain=[], type="break")
 
-                    tool_info = None
-
-                    if resp.data["chain"].chain:
-                        json_comp = resp.data["chain"].chain[0]
-                        if isinstance(json_comp, Json):
-                            tool_info = json_comp.data
-                        astr_event.trace.record(
-                            "agent_tool_call",
-                            tool_name=tool_info if tool_info else "unknown",
-                        )
+                    tool_info = _extract_chain_json_data(resp.data["chain"])
+                    astr_event.trace.record(
+                        "agent_tool_call",
+                        tool_name=tool_info if tool_info else "unknown",
+                    )
+                    _record_tool_call_name(tool_info, tool_name_by_call_id)
 
                     if astr_event.get_platform_name() == "webchat":
                         await astr_event.send(resp.data["chain"])
                     elif show_tool_use:
-                        if tool_info:
-                            m = f"🔨 调用工具: {tool_info.get('name', 'unknown')}"
-                        else:
-                            m = "🔨 调用工具..."
-                        chain = MessageChain(type="tool_call").message(m)
+                        if show_tool_call_result and isinstance(tool_info, dict):
+                            # Delay tool status notification until tool_call_result.
+                            continue
+                        chain = MessageChain(type="tool_call").message(
+                            _build_tool_call_status_message(tool_info)
+                        )
                         await astr_event.send(chain)
                     continue
 
@@ -120,6 +208,12 @@ async def run_agent(
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+            if not stop_watcher.done():
+                stop_watcher.cancel()
+                try:
+                    await stop_watcher
+                except asyncio.CancelledError:
+                    pass
             if agent_runner.done():
                 # send agent stats to webchat
                 if astr_event.get_platform_name() == "webchat":
@@ -133,6 +227,12 @@ async def run_agent(
                 break
 
         except Exception as e:
+            if "stop_watcher" in locals() and not stop_watcher.done():
+                stop_watcher.cancel()
+                try:
+                    await stop_watcher
+                except asyncio.CancelledError:
+                    pass
             logger.error(traceback.format_exc())
 
             err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
@@ -155,11 +255,20 @@ async def run_agent(
             return
 
 
+async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> None:
+    while not agent_runner.done():
+        if _should_stop_agent(astr_event):
+            agent_runner.request_stop()
+            return
+        await asyncio.sleep(0.5)
+
+
 async def run_live_agent(
     agent_runner: AgentRunner,
     tts_provider: TTSProvider | None = None,
     max_step: int = 30,
     show_tool_use: bool = True,
+    show_tool_call_result: bool = False,
     show_reasoning: bool = False,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """Live Mode 的 Agent 运行器，支持流式 TTS
@@ -169,6 +278,7 @@ async def run_live_agent(
         tts_provider: TTS Provider 实例
         max_step: 最大步数
         show_tool_use: 是否显示工具使用
+        show_tool_call_result: 是否显示工具返回结果
         show_reasoning: 是否显示推理过程
 
     Yields:
@@ -180,6 +290,7 @@ async def run_live_agent(
             agent_runner,
             max_step=max_step,
             show_tool_use=show_tool_use,
+            show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
         ):
@@ -208,7 +319,12 @@ async def run_live_agent(
     # 1. 启动 Agent Feeder 任务：负责运行 Agent 并将文本分句喂给 text_queue
     feeder_task = asyncio.create_task(
         _run_agent_feeder(
-            agent_runner, text_queue, max_step, show_tool_use, show_reasoning
+            agent_runner,
+            text_queue,
+            max_step,
+            show_tool_use,
+            show_tool_call_result,
+            show_reasoning,
         )
     )
 
@@ -294,8 +410,9 @@ async def _run_agent_feeder(
     text_queue: asyncio.Queue,
     max_step: int,
     show_tool_use: bool,
+    show_tool_call_result: bool,
     show_reasoning: bool,
-):
+) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
     try:
@@ -303,6 +420,7 @@ async def _run_agent_feeder(
             agent_runner,
             max_step=max_step,
             show_tool_use=show_tool_use,
+            show_tool_call_result=show_tool_call_result,
             stream_to_general=False,
             show_reasoning=show_reasoning,
         ):
@@ -352,7 +470,7 @@ async def _safe_tts_stream_wrapper(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
-):
+) -> None:
     """包装原生流式 TTS 确保异常处理和队列关闭"""
     try:
         await tts_provider.get_audio_stream(text_queue, audio_queue)
@@ -366,7 +484,7 @@ async def _simulated_stream_tts(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
-):
+) -> None:
     """模拟流式 TTS 分句生成音频"""
     try:
         while True:

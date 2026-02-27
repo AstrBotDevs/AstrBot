@@ -1,4 +1,5 @@
 from astrbot import logger
+from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
@@ -17,7 +18,7 @@ DEFAULT_PERSONALITY = Personality(
 
 
 class PersonaManager:
-    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager):
+    def __init__(self, db_helper: BaseDatabase, acm: AstrBotConfigManager) -> None:
         self.db = db_helper
         self.acm = acm
         default_ps = acm.default_conf.get("provider_settings", {})
@@ -29,7 +30,7 @@ class PersonaManager:
         self.selected_default_persona_v3: Personality | None = None
         self.persona_v3_config: list[dict] = []
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
         logger.info(f"已加载 {len(self.personas)} 个人格。")
@@ -58,7 +59,61 @@ class PersonaManager:
         except Exception:
             return DEFAULT_PERSONALITY
 
-    async def delete_persona(self, persona_id: str):
+    async def resolve_selected_persona(
+        self,
+        *,
+        umo: str | MessageSession,
+        conversation_persona_id: str | None,
+        platform_name: str,
+        provider_settings: dict | None = None,
+    ) -> tuple[str | None, Personality | None, str | None, bool]:
+        """解析当前会话最终生效的人格。
+
+        Returns:
+            tuple:
+                - selected persona_id
+                - selected persona object
+                - force applied persona_id from session rule
+                - whether use webchat special default persona
+        """
+        session_service_config = (
+            await sp.get_async(
+                scope="umo",
+                scope_id=str(umo),
+                key="session_service_config",
+                default={},
+            )
+            or {}
+        )
+
+        force_applied_persona_id = session_service_config.get("persona_id")
+        persona_id = force_applied_persona_id
+
+        if not persona_id:
+            persona_id = conversation_persona_id
+            if persona_id == "[%None]":
+                pass
+            elif persona_id is None:
+                persona_id = (provider_settings or {}).get("default_personality")
+
+        persona = next(
+            (item for item in self.personas_v3 if item["name"] == persona_id),
+            None,
+        )
+
+        use_webchat_special_default = False
+        if not persona and platform_name == "webchat" and persona_id != "[%None]":
+            persona_id = "_chatui_default_"
+            use_webchat_special_default = True
+
+        return (
+            persona_id,
+            persona,
+            force_applied_persona_id,
+            use_webchat_special_default,
+        )
+
+    async def delete_persona(self, persona_id: str) -> None:
         """删除指定 persona"""
         if not await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} does not exist.")
@@ -313,7 +368,7 @@ class PersonaManager:
                         {
                             "role": "user" if user_turn else "assistant",
                             "content": dialog,
-                            "_no_save": None,  # 不持久化到 db
+                            "_no_save": True,  # 不持久化到 db
                         },
                     )
                     user_turn = not user_turn

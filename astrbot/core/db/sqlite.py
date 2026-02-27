@@ -4,12 +4,13 @@ import typing as T
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult
+from sqlalchemy import CursorResult, Row
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import col, delete, desc, func, or_, select, text, update
 
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
@@ -305,7 +306,7 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(query)
         return await self.get_conversation_by_id(cid)
 
-    async def delete_conversation(self, cid):
+    async def delete_conversation(self, cid) -> None:
         async with self.get_db() as session:
             session: AsyncSession
             async with session.begin():
@@ -461,7 +462,7 @@ class SQLiteDatabase(BaseDatabase):
         platform_id,
         user_id,
         offset_sec=86400,
-    ):
+    ) -> None:
         """Delete platform message history records newer than the specified offset."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -573,6 +574,100 @@ class SQLiteDatabase(BaseDatabase):
                 result = T.cast(CursorResult, await session.execute(query))
                 return result.rowcount
 
+    async def create_api_key(
+        self,
+        name: str,
+        key_hash: str,
+        key_prefix: str,
+        scopes: list[str] | None,
+        created_by: str,
+        expires_at: datetime | None = None,
+    ) -> ApiKey:
+        """Create a new API key record."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                api_key = ApiKey(
+                    name=name,
+                    key_hash=key_hash,
+                    key_prefix=key_prefix,
+                    scopes=scopes,
+                    created_by=created_by,
+                    expires_at=expires_at,
+                )
+                session.add(api_key)
+                await session.flush()
+                await session.refresh(api_key)
+                return api_key
+
+    async def list_api_keys(self) -> list[ApiKey]:
+        """List all API keys."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(ApiKey).order_by(desc(ApiKey.created_at))
+            )
+            return list(result.scalars().all())
+
+    async def get_api_key_by_id(self, key_id: str) -> ApiKey | None:
+        """Get an API key by key_id."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(ApiKey).where(ApiKey.key_id == key_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_active_api_key_by_hash(self, key_hash: str) -> ApiKey | None:
+        """Get an active API key by hash (not revoked, not expired)."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            now = datetime.now(timezone.utc)
+            query = select(ApiKey).where(
+                ApiKey.key_hash == key_hash,
+                col(ApiKey.revoked_at).is_(None),
+                or_(col(ApiKey.expires_at).is_(None), col(ApiKey.expires_at) > now),
+            )
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
+    async def touch_api_key(self, key_id: str) -> None:
+        """Update last_used_at of an API key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                await session.execute(
+                    update(ApiKey)
+                    .where(col(ApiKey.key_id) == key_id)
+                    .values(last_used_at=datetime.now(timezone.utc)),
+                )
+
+    async def revoke_api_key(self, key_id: str) -> bool:
+        """Revoke an API key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                query = (
+                    update(ApiKey)
+                    .where(col(ApiKey.key_id) == key_id)
+                    .values(revoked_at=datetime.now(timezone.utc))
+                )
+                result = T.cast(CursorResult, await session.execute(query))
+                return result.rowcount > 0
+
+    async def delete_api_key(self, key_id: str) -> bool:
+        """Delete an API key."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = T.cast(
+                    CursorResult,
+                    await session.execute(
+                        delete(ApiKey).where(col(ApiKey.key_id) == key_id)
+                    ),
+                )
+                return result.rowcount > 0
+
     async def insert_persona(
         self,
         persona_id,
@@ -645,7 +740,7 @@ class SQLiteDatabase(BaseDatabase):
                 await session.execute(query)
         return await self.get_persona_by_id(persona_id)
 
-    async def delete_persona(self, persona_id):
+    async def delete_persona(self, persona_id) -> None:
         """Delete a persona by its ID."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -903,7 +998,7 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalars().all()
 
-    async def remove_preference(self, scope, scope_id, key):
+    async def remove_preference(self, scope, scope_id, key) -> None:
         """Remove a preference by scope ID and key."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -917,7 +1012,7 @@ class SQLiteDatabase(BaseDatabase):
                 )
             await session.commit()
 
-    async def clear_preferences(self, scope, scope_id):
+    async def clear_preferences(self, scope, scope_id) -> None:
         """Clear all preferences for a specific scope ID."""
         async with self.get_db() as session:
             session: AsyncSession
@@ -1195,7 +1290,7 @@ class SQLiteDatabase(BaseDatabase):
 
         result = None
 
-        def runner():
+        def runner() -> None:
             nonlocal result
             result = asyncio.run(_inner())
 
@@ -1218,7 +1313,7 @@ class SQLiteDatabase(BaseDatabase):
 
         result = None
 
-        def runner():
+        def runner() -> None:
             nonlocal result
             result = asyncio.run(_inner())
 
@@ -1253,7 +1348,7 @@ class SQLiteDatabase(BaseDatabase):
 
         result = None
 
-        def runner():
+        def runner() -> None:
             nonlocal result
             result = asyncio.run(_inner())
 
@@ -1317,58 +1412,102 @@ class SQLiteDatabase(BaseDatabase):
 
         Returns a list of dicts containing session info and project info (if session belongs to a project).
         """
+        (
+            sessions_with_projects,
+            _,
+        ) = await self.get_platform_sessions_by_creator_paginated(
+            creator=creator,
+            platform_id=platform_id,
+            page=page,
+            page_size=page_size,
+            exclude_project_sessions=False,
+        )
+        return sessions_with_projects
+
+    @staticmethod
+    def _build_platform_sessions_query(
+        creator: str,
+        platform_id: str | None = None,
+        exclude_project_sessions: bool = False,
+    ):
+        query = (
+            select(
+                PlatformSession,
+                col(ChatUIProject.project_id),
+                col(ChatUIProject.title).label("project_title"),
+                col(ChatUIProject.emoji).label("project_emoji"),
+            )
+            .outerjoin(
+                SessionProjectRelation,
+                col(PlatformSession.session_id)
+                == col(SessionProjectRelation.session_id),
+            )
+            .outerjoin(
+                ChatUIProject,
+                col(SessionProjectRelation.project_id) == col(ChatUIProject.project_id),
+            )
+            .where(col(PlatformSession.creator) == creator)
+        )
+
+        if platform_id:
+            query = query.where(PlatformSession.platform_id == platform_id)
+        if exclude_project_sessions:
+            query = query.where(col(ChatUIProject.project_id).is_(None))
+
+        return query
+
+    @staticmethod
+    def _rows_to_session_dicts(rows: T.Sequence[Row[tuple]]) -> list[dict]:
+        sessions_with_projects = []
+        for row in rows:
+            platform_session = row[0]
+            project_id = row[1]
+            project_title = row[2]
+            project_emoji = row[3]
+
+            session_dict = {
+                "session": platform_session,
+                "project_id": project_id,
+                "project_title": project_title,
+                "project_emoji": project_emoji,
+            }
+            sessions_with_projects.append(session_dict)
+
+        return sessions_with_projects
+
+    async def get_platform_sessions_by_creator_paginated(
+        self,
+        creator: str,
+        platform_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        exclude_project_sessions: bool = False,
+    ) -> tuple[list[dict], int]:
+        """Get paginated Platform sessions for a creator with total count."""
         async with self.get_db() as session:
             session: AsyncSession
             offset = (page - 1) * page_size
 
-            # LEFT JOIN with SessionProjectRelation and ChatUIProject to get project info
-            query = (
-                select(
-                    PlatformSession,
-                    col(ChatUIProject.project_id),
-                    col(ChatUIProject.title).label("project_title"),
-                    col(ChatUIProject.emoji).label("project_emoji"),
-                )
-                .outerjoin(
-                    SessionProjectRelation,
-                    col(PlatformSession.session_id)
-                    == col(SessionProjectRelation.session_id),
-                )
-                .outerjoin(
-                    ChatUIProject,
-                    col(SessionProjectRelation.project_id)
-                    == col(ChatUIProject.project_id),
-                )
-                .where(col(PlatformSession.creator) == creator)
+            base_query = self._build_platform_sessions_query(
+                creator=creator,
+                platform_id=platform_id,
+                exclude_project_sessions=exclude_project_sessions,
             )
 
-            if platform_id:
-                query = query.where(PlatformSession.platform_id == platform_id)
+            total_result = await session.execute(
+                select(func.count()).select_from(base_query.subquery())
+            )
+            total = int(total_result.scalar_one() or 0)
 
-            query = (
-                query.order_by(desc(PlatformSession.updated_at))
+            result_query = (
+                base_query.order_by(desc(PlatformSession.updated_at))
                 .offset(offset)
                 .limit(page_size)
             )
-            result = await session.execute(query)
+            result = await session.execute(result_query)
 
-            # Convert to list of dicts with session and project info
-            sessions_with_projects = []
-            for row in result.all():
-                platform_session = row[0]
-                project_id = row[1]
-                project_title = row[2]
-                project_emoji = row[3]
-
-                session_dict = {
-                    "session": platform_session,
-                    "project_id": project_id,
-                    "project_title": project_title,
-                    "project_emoji": project_emoji,
-                }
-                sessions_with_projects.append(session_dict)
-
-            return sessions_with_projects
+            sessions_with_projects = self._rows_to_session_dicts(result.all())
+            return sessions_with_projects, total
 
     async def update_platform_session(
         self,

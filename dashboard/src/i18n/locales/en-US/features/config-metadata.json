@@ -37,6 +37,10 @@
           "description": "Default Chat Model",
           "hint": "Uses the first model when left empty"
         },
+        "fallback_chat_models": {
+          "description": "Fallback chat model IDs",
+          "hint": "When the primary chat model request fails, fallback to these chat models in order."
+        },
         "default_image_caption_provider_id": {
           "description": "Default Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
@@ -108,6 +112,10 @@
           "description": "Tavily API Key",
           "hint": "Multiple keys can be added for rotation."
         },
+        "websearch_bocha_key": {
+          "description": "BoCha API Key",
+          "hint": "Multiple keys can be added for rotation."
+        },
         "websearch_baidu_app_builder_key": {
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -140,6 +148,10 @@
         "computer_use_runtime": {
           "description": "Computer Use Runtime",
           "hint": "sandbox means running in a sandbox environment, local means running in a local environment, none means disabling Computer Use. If skills are uploaded, choosing none will cause them to not be usable by the Agent."
+        },
+        "computer_use_require_admin": {
+          "description": "Require AstrBot Admin Permission",
+          "hint": "When enabled, AstrBot admin permission is required to use computer capabilities. Admins can be added in Platform Config. Use the /sid command to view admin IDs."
         },
         "sandbox": {
           "booter": {
@@ -239,9 +251,35 @@
         "show_tool_use_status": {
           "description": "Output Function Call Status"
         },
+        "show_tool_call_result": {
+          "description": "Output Tool Call Results",
+          "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
+        },
         "sanitize_context_by_modalities": {
           "description": "Sanitize History by Modalities",
           "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."
+        },
+        "max_quoted_fallback_images": {
+          "description": "Forwarded Image Fetch Limit",
+          "hint": "Maximum number of images injected from forwarded-message parsing; extra images are truncated."
+        },
+        "quoted_message_parser": {
+          "max_component_chain_depth": {
+            "description": "Forwarded Rich-Text Parse Depth",
+            "hint": "Maximum recursive depth when parsing rich-text component chains inside forwarded messages."
+          },
+          "max_forward_node_depth": {
+            "description": "Forward Nesting Parse Depth",
+            "hint": "Maximum recursive depth when parsing nested forwarded nodes."
+          },
+          "max_forward_fetch": {
+            "description": "Forward Recursive Fetch Limit",
+            "hint": "Maximum number of recursive get_forward_msg fetch operations."
+          },
+          "warn_on_action_failure": {
+            "description": "Warn on Forward Parse Failure",
+            "hint": "When enabled, log warnings when all get_msg/get_forward_msg attempts fail."
+          }
         },
         "max_agent_step": {
           "description": "Maximum Tool Call Rounds"
@@ -290,6 +328,243 @@
   },
   "platform_group": {
     "name": "Platform",
+    "platform": {
+      "description": "Message Platform Adapters",
+      "active_send_mode": {
+        "description": "Use Proactive Send API"
+      },
+      "appid": {
+        "description": "App ID",
+        "hint": "Required. App ID for the QQ Official Bot platform. See the docs for how to obtain it."
+      },
+      "callback_server_host": {
+        "description": "Callback Server Host",
+        "hint": "Callback server host. Leave empty to disable the callback server."
+      },
+      "card_template_id": {
+        "description": "Card Template ID",
+        "hint": "Optional. DingTalk interactive card template ID. When enabled, streaming replies will use interactive cards."
+      },
+      "discord_activity_name": {
+        "description": "Discord Activity Name",
+        "hint": "Optional Discord activity name. Leave empty to disable."
+      },
+      "discord_command_register": {
+        "description": "Auto-register plugin commands as Discord slash commands"
+      },
+      "discord_proxy": {
+        "description": "Discord Proxy URL",
+        "hint": "Optional proxy URL: http://ip:port"
+      },
+      "discord_token": {
+        "description": "Discord Bot Token",
+        "hint": "Enter your Discord Bot Token here."
+      },
+      "enable": {
+        "description": "Enable",
+        "hint": "Whether to enable this adapter. Disabled adapters will not receive messages."
+      },
+      "enable_group_c2c": {
+        "description": "Enable Message List Private Chat",
+        "hint": "When enabled, the bot can receive private chats from QQ message list. You may need to add the bot as a friend by scanning a QR code in the QQ bot platform. See docs."
+      },
+      "enable_guild_direct_message": {
+        "description": "Enable Guild Direct Messages",
+        "hint": "When enabled, the bot can receive guild direct messages."
+      },
+      "id": {
+        "description": "Bot Name",
+        "hint": "Bot name"
+      },
+      "is_sandbox": {
+        "description": "Sandbox Mode"
+      },
+      "kf_name": {
+        "description": "WeChat Customer Service Account Name",
+        "hint": "Optional. Customer service account name (not ID). Get it at https://kf.weixin.qq.com/kf/frame#/accounts"
+      },
+      "lark_bot_name": {
+        "description": "Lark Bot Name",
+        "hint": "Must be correct; otherwise @ mentions will not wake the bot and only prefix wake will work."
+      },
+      "lark_connection_mode": {
+        "description": "Subscription Mode",
+        "labels": [
+          "Long Connection Mode",
+          "Webhook Server Mode"
+        ]
+      },
+      "lark_encrypt_key": {
+        "description": "Encrypt Key",
+        "hint": "Encryption key for decrypting Lark callback data."
+      },
+      "lark_verification_token": {
+        "description": "Verification Token",
+        "hint": "Token for verifying Lark callback requests."
+      },
+      "misskey_allow_insecure_downloads": {
+        "description": "Allow Insecure Downloads (Disable SSL Verification)",
+        "hint": "If remote servers have certificate issues, SSL verification will be disabled as a fallback. Use only when necessary due to security risks."
+      },
+      "misskey_default_visibility": {
+        "description": "Default Post Visibility",
+        "hint": "Default visibility for bot posts. public: public, home: home timeline, followers: followers only."
+      },
+      "misskey_download_chunk_size": {
+        "description": "Stream Download Chunk Size (bytes)",
+        "hint": "Bytes read per chunk during streaming download and MD5 calculation. Too small increases overhead; too large uses more memory."
+      },
+      "misskey_download_timeout": {
+        "description": "Remote Download Timeout (seconds)",
+        "hint": "Timeout for downloading remote files (seconds), used when falling back to local upload."
+      },
+      "misskey_enable_chat": {
+        "description": "Enable Chat Message Responses",
+        "hint": "When enabled, the bot listens and responds to private chat messages."
+      },
+      "misskey_enable_file_upload": {
+        "description": "Enable File Upload to Misskey",
+        "hint": "When enabled, the adapter uploads files in message chains to Misskey. URL files try server-side upload first; if async upload fails, it falls back to local download and upload."
+      },
+      "misskey_instance_url": {
+        "description": "Misskey Instance URL",
+        "hint": "e.g. https://misskey.example. The Misskey instance where the bot account lives."
+      },
+      "misskey_local_only": {
+        "description": "Local Only (No Federation)",
+        "hint": "When enabled, bot posts are visible only on this instance and are not federated."
+      },
+      "misskey_max_download_bytes": {
+        "description": "Max Download Size (bytes)",
+        "hint": "To limit download size to prevent OOM, set the maximum bytes; empty or null means no limit."
+      },
+      "misskey_token": {
+        "description": "Misskey Access Token",
+        "hint": "API access token generated in the connection service settings."
+      },
+      "misskey_upload_concurrency": {
+        "description": "Upload Concurrency Limit",
+        "hint": "Max number of concurrent upload tasks (integer, default 3)."
+      },
+      "misskey_upload_folder": {
+        "description": "Target Drive Folder ID",
+        "hint": "Optional: ID of the target folder in Misskey drive. Leave empty to use the root folder."
+      },
+      "port": {
+        "description": "Callback Server Port",
+        "hint": "Callback server port. Leave empty to disable the callback server."
+      },
+      "satori_api_base_url": {
+        "description": "Satori API Endpoint",
+        "hint": "Base URL for the Satori API."
+      },
+      "satori_auto_reconnect": {
+        "description": "Enable Auto Reconnect",
+        "hint": "Automatically reconnect the WebSocket when disconnected."
+      },
+      "satori_endpoint": {
+        "description": "Satori WebSocket Endpoint",
+        "hint": "WebSocket endpoint for Satori events."
+      },
+      "satori_heartbeat_interval": {
+        "description": "Satori Heartbeat Interval",
+        "hint": "Interval in seconds between heartbeat messages."
+      },
+      "satori_reconnect_delay": {
+        "description": "Satori Reconnect Delay",
+        "hint": "Delay before attempting to reconnect (seconds)."
+      },
+      "satori_token": {
+        "description": "Satori Token",
+        "hint": "Token for Satori API authentication."
+      },
+      "secret": {
+        "description": "Secret",
+        "hint": "Required."
+      },
+      "slack_connection_mode": {
+        "description": "Slack Connection Mode",
+        "hint": "The connection mode for Slack. `webhook` uses a webhook server, `socket` uses Slack's Socket Mode."
+      },
+      "slack_webhook_host": {
+        "description": "Slack Webhook Host",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_path": {
+        "description": "Slack Webhook Path",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "slack_webhook_port": {
+        "description": "Slack Webhook Port",
+        "hint": "Only valid when Slack connection mode is `webhook`."
+      },
+      "telegram_command_auto_refresh": {
+        "description": "Telegram Command Auto Refresh",
+        "hint": "When enabled, AstrBot automatically refreshes Telegram commands at runtime. (Setting this alone has no effect)"
+      },
+      "telegram_command_register": {
+        "description": "Telegram Command Registration",
+        "hint": "When enabled, AstrBot automatically registers Telegram commands."
+      },
+      "telegram_command_register_interval": {
+        "description": "Telegram Command Auto Refresh Interval",
+        "hint": "Telegram command auto-refresh interval in seconds."
+      },
+      "telegram_token": {
+        "description": "Bot Token",
+        "hint": "If you are in mainland China, set a proxy or change api_base in Other Settings."
+      },
+      "type": {
+        "description": "Adapter Type"
+      },
+      "unified_webhook_mode": {
+        "description": "Unified Webhook Mode",
+        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/platform/webhook/{webhook_uuid}."
+      },
+      "webhook_uuid": {
+        "description": "Webhook UUID",
+        "hint": "Unique identifier for unified webhook mode; generated when creating the platform."
+      },
+      "wecom_ai_bot_name": {
+        "description": "WeCom AI Bot Name",
+        "hint": "Must be correct; otherwise some commands won't work."
+      },
+      "wecomaibot_friend_message_welcome_text": {
+        "description": "WeCom AI Bot DM Welcome Message",
+        "hint": "When a user enters a DM session on that day, reply with a welcome message. Leave empty to disable."
+      },
+      "wecomaibot_init_respond_text": {
+        "description": "WeCom AI Bot Initial Response Text",
+        "hint": "First reply when the bot receives a message. Leave empty to disable."
+      },
+      "wpp_active_message_poll": {
+        "description": "Enable Proactive Message Polling",
+        "hint": "Only enable if WeChat messages are not syncing to AstrBot on time. Disabled by default."
+      },
+      "wpp_active_message_poll_interval": {
+        "description": "Proactive Message Poll Interval",
+        "hint": "Interval in seconds, default 3, should not exceed 60 or it may be considered old messages."
+      },
+      "ws_reverse_host": {
+        "description": "Reverse WebSocket Host",
+        "hint": "AstrBot acts as the server."
+      },
+      "ws_reverse_port": {
+        "description": "Reverse WebSocket Port"
+      },
+      "ws_reverse_token": {
+        "description": "Reverse WebSocket Token",
+        "hint": "Reverse WebSocket token. If not set, token verification is disabled."
+      },
+      "msg_push_webhook_url": {
+        "description": "WeCom Message Push Webhook URL",
+        "hint": "Used for proactive message push. It is strongly recommended to set this for a better message sending experience."
+      },
+      "only_use_webhook_url_to_send": {
+        "description": "Send Replies via Webhook Only",
+        "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
+      }
+    },
     "general": {
       "description": "General",
       "admins_id": {
@@ -578,6 +853,10 @@
         "description": "Log File Max Size (MB)",
         "hint": "Rotate when exceeding this size; default 20MB."
       },
+      "temp_dir_max_size": {
+        "description": "Temp Directory Size Limit (MB)",
+        "hint": "Limits total size of data/temp in MB. The system checks every 10 minutes, and when exceeded, deletes oldest files first to release about 30% of current size."
+      },
       "trace_log_enable": {
         "description": "Enable Trace File Logging",
         "hint": "Write trace events to a separate file (does not change console output)."
@@ -602,6 +881,26 @@
         "description": "Externally Accessible Callback API Address",
         "hint": "External services may access AstrBot's backend through callback links generated by AstrBot (such as file download links). Since AstrBot cannot automatically determine the externally accessible host address in the deployment environment, this configuration item is needed to explicitly specify how external services should access AstrBot's address. Examples: [http://localhost:6185](http://localhost:6185), [https://example.com](https://example.com), etc."
       },
+      "dashboard": {
+        "ssl": {
+          "enable": {
+            "description": "Enable WebUI HTTPS",
+            "hint": "When enabled, WebUI serves directly over HTTPS."
+          },
+          "cert_file": {
+            "description": "SSL Certificate File Path",
+            "hint": "Certificate file path (PEM). Supports absolute and relative paths (relative to current working directory)."
+          },
+          "key_file": {
+            "description": "SSL Private Key File Path",
+            "hint": "Private key file path (PEM). Supports absolute and relative paths (relative to current working directory)."
+          },
+          "ca_certs": {
+            "description": "SSL CA Certificate File Path",
+            "hint": "Optional. Path to CA certificate file."
+          }
+        }
+      },
       "timezone": {
         "description": "Timezone",
         "hint": "Timezone setting. Please enter an IANA timezone name, such as Asia/Shanghai. Uses system default timezone when empty. For all timezones, see: [https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab](https://data.iana.org/time-zones/tzdb-2021a/zone1970.tab)"
@@ -612,6 +911,461 @@
       },
       "no_proxy": {
         "description": "Direct Connection Address List"
+      }
+    }
+  },
+  "provider_group": {
+    "provider": {
+      "genie_onnx_model_dir": {
+        "description": "ONNX Model Directory",
+        "hint": "The directory path containing the ONNX model files"
+      },
+      "genie_language": {
+        "description": "Language"
+      },
+      "xai_native_search": {
+        "description": "Enable native search",
+        "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI providers."
+      },
+      "rerank_api_base": {
+        "description": "Rerank Model API Base URL",
+        "hint": "AstrBot appends /v1/rerank to the request URL."
+      },
+      "rerank_api_key": {
+        "description": "API Key",
+        "hint": "Leave empty if no API key is required."
+      },
+      "rerank_model": {
+        "description": "Rerank model name"
+      },
+      "return_documents": {
+        "description": "Return source documents in rerank results",
+        "hint": "Default is false to reduce network overhead."
+      },
+      "instruct": {
+        "description": "Custom rerank task description",
+        "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
+      },
+      "launch_model_if_not_running": {
+        "description": "Auto-start model if not running",
+        "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
+      },
+      "modalities": {
+        "description": "Model capabilities",
+        "hint": "Modalities supported by the model. If the model does not support images, uncheck image.",
+        "labels": [
+          "Text",
+          "Image",
+          "Tool use"
+        ]
+      },
+      "custom_headers": {
+        "description": "Custom request headers",
+        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+      },
+      "custom_extra_body": {
+        "description": "Custom request body parameters",
+        "hint": "Add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",
+        "template_schema": {
+          "temperature": {
+            "description": "Temperature",
+            "hint": "Controls randomness, typically 0-2. Higher is more random.",
+            "name": "Temperature"
+          },
+          "top_p": {
+            "description": "Top-p sampling",
+            "hint": "Nucleus sampling parameter, usually 0-1. Controls probability mass considered.",
+            "name": "Top-p"
+          },
+          "max_tokens": {
+            "description": "Max tokens",
+            "hint": "Maximum number of generated tokens.",
+            "name": "Max Tokens"
+          }
+        }
+      },
+      "gpt_weights_path": {
+        "description": "GPT model file path",
+        "hint": "The .ckpt file. Use an absolute path without quotes. Leave empty to use the GPT_SoVITS built-in SoVITS model (recommended to change defaults in GPT_SoVITS)."
+      },
+      "sovits_weights_path": {
+        "description": "SoVITS model file path",
+        "hint": "The .pth file. Use an absolute path without quotes. Leave empty to use the GPT_SoVITS built-in SoVITS model (recommended to change defaults in GPT_SoVITS)."
+      },
+      "gsv_default_parms": {
+        "description": "GPT_SoVITS default parameters",
+        "hint": "Reference audio file path and text are required; other parameters are optional.",
+        "gsv_ref_audio_path": {
+          "description": "Reference audio file path",
+          "hint": "Required! Use an absolute path without quotes."
+        },
+        "gsv_prompt_text": {
+          "description": "Reference audio text",
+          "hint": "Required! Provide the transcript of the reference audio."
+        },
+        "gsv_prompt_lang": {
+          "description": "Reference audio text language",
+          "hint": "Language of the reference audio text; default is Chinese."
+        },
+        "gsv_aux_ref_audio_paths": {
+          "description": "Auxiliary reference audio file paths",
+          "hint": "Auxiliary reference audio files; optional."
+        },
+        "gsv_text_lang": {
+          "description": "Text language",
+          "hint": "Default is Chinese."
+        },
+        "gsv_top_k": {
+          "description": "Speech diversity",
+          "hint": ""
+        },
+        "gsv_top_p": {
+          "description": "Nucleus sampling threshold",
+          "hint": ""
+        },
+        "gsv_temperature": {
+          "description": "Speech randomness",
+          "hint": ""
+        },
+        "gsv_text_split_method": {
+          "description": "Text splitting method",
+          "hint": "Options: `cut0` no split, `cut1` split every 4 sentences, `cut2` split every 50 chars, `cut3` split by Chinese period, `cut4` split by English period, `cut5` split by punctuation."
+        },
+        "gsv_batch_size": {
+          "description": "Batch size",
+          "hint": ""
+        },
+        "gsv_batch_threshold": {
+          "description": "Batch threshold",
+          "hint": ""
+        },
+        "gsv_split_bucket": {
+          "description": "Split text into buckets for parallel processing",
+          "hint": ""
+        },
+        "gsv_speed_factor": {
+          "description": "Speech playback speed",
+          "hint": "1 is the original speed."
+        },
+        "gsv_fragment_interval": {
+          "description": "Interval between speech segments",
+          "hint": ""
+        },
+        "gsv_streaming_mode": {
+          "description": "Enable streaming mode",
+          "hint": ""
+        },
+        "gsv_seed": {
+          "description": "Random seed",
+          "hint": "For reproducible results."
+        },
+        "gsv_parallel_infer": {
+          "description": "Run inference in parallel",
+          "hint": ""
+        },
+        "gsv_repetition_penalty": {
+          "description": "Repetition penalty",
+          "hint": ""
+        },
+        "gsv_media_type": {
+          "description": "Output media type",
+          "hint": "Recommended: wav"
+        }
+      },
+      "embedding_dimensions": {
+        "description": "Embedding dimensions",
+        "hint": "Embedding vector dimensions. May need adjustment per model; see model documentation. This must be correct or the vector database will not work."
+      },
+      "embedding_model": {
+        "description": "Embedding model",
+        "hint": "Embedding model name."
+      },
+      "embedding_api_key": {
+        "description": "API Key"
+      },
+      "embedding_api_base": {
+        "description": "API Base URL"
+      },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding automatically appends /v1 at request time."
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding does not require manually adding /v1beta."
+      },
+      "volcengine_cluster": {
+        "description": "Volcengine cluster",
+        "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
+      },
+      "volcengine_voice_type": {
+        "description": "Volcengine voice",
+        "hint": "Enter voice id (Voice_type)."
+      },
+      "volcengine_speed_ratio": {
+        "description": "Speech rate",
+        "hint": "Speech rate, range 0.2 to 3.0, default 1.0."
+      },
+      "volcengine_volume_ratio": {
+        "description": "Volume",
+        "hint": "Volume, range 0.0 to 2.0, default 1.0."
+      },
+      "azure_tts_voice": {
+        "description": "Voice style",
+        "hint": "API voice name"
+      },
+      "azure_tts_style": {
+        "description": "Style",
+        "hint": "A voice-specific speaking style. Can express emotions like happy, sympathetic, and calm."
+      },
+      "azure_tts_role": {
+        "description": "Role (optional)",
+        "hint": "Speaking role-play. The voice can emulate different ages and genders without changing the voice name. For example, a male voice can raise pitch to simulate a female voice, but the voice name does not change. If the role is missing or unsupported, this attribute is ignored."
+      },
+      "azure_tts_rate": {
+        "description": "Speech rate",
+        "hint": "Controls speaking rate. You can apply the rate at word or sentence level. Rate should be 0.5x to 2x of original audio."
+      },
+      "azure_tts_volume": {
+        "description": "Speech volume",
+        "hint": "Controls volume level. You can apply changes at sentence level. Use 0.0 to 100.0 (quiet to loud, e.g., 75). Default is 100.0."
+      },
+      "azure_tts_region": {
+        "description": "API region",
+        "hint": "Region where Azure TTS processes data. See https://learn.microsoft.com/zh-cn/azure/ai-services/speech-service/regions"
+      },
+      "azure_tts_subscription_key": {
+        "description": "Service subscription key",
+        "hint": "Azure TTS subscription key (not a token)."
+      },
+      "dashscope_tts_voice": {
+        "description": "Voice"
+      },
+      "gm_resp_image_modal": {
+        "description": "Enable image modality",
+        "hint": "When enabled, responses can include images. Requires model support or it will error. See the Google Gemini website for supported models. Tip: if you need image generation, disable the `Enable member recognition` setting for better results."
+      },
+      "gm_native_search": {
+        "description": "Enable native search",
+        "hint": "When enabled, all function tools are disabled. Check official docs for free quota limits."
+      },
+      "gm_native_coderunner": {
+        "description": "Enable native code runner",
+        "hint": "When enabled, all function tools are disabled."
+      },
+      "gm_url_context": {
+        "description": "Enable URL context",
+        "hint": "When enabled, all function tools are disabled."
+      },
+      "gm_safety_settings": {
+        "description": "Safety filters",
+        "hint": "Set the safety filtering level for model input. Levels: NONE (no blocking), HIGH (block high risk), MEDIUM_AND_ABOVE (block medium risk and above), LOW_AND_ABOVE (block low risk and above). See Gemini API docs.",
+        "harassment": {
+          "description": "Harassment",
+          "hint": "Negative or harmful comments"
+        },
+        "hate_speech": {
+          "description": "Hate speech",
+          "hint": "Rude, disrespectful, or profane content"
+        },
+        "sexually_explicit": {
+          "description": "Sexually explicit content",
+          "hint": "References to sexual acts or other obscene content"
+        },
+        "dangerous_content": {
+          "description": "Dangerous content",
+          "hint": "Content that promotes, encourages, or assists harmful behavior"
+        }
+      },
+      "gm_thinking_config": {
+        "description": "Thinking Config",
+        "budget": {
+          "description": "Thinking Budget",
+          "hint": "Guides the model on the specific number of thinking tokens to use for reasoning. See: https://ai.google.dev/gemini-api/docs/thinking#set-budget"
+        },
+        "level": {
+          "description": "Thinking Level",
+          "hint": "Recommended for Gemini 3 models and onwards, lets you control reasoning behavior.See: https://ai.google.dev/gemini-api/docs/thinking#thinking-levels"
+        }
+      },
+      "anth_thinking_config": {
+        "description": "Thinking Config",
+        "type": {
+          "description": "Thinking Type",
+          "hint": "Set 'adaptive' for Opus 4.6+ / Sonnet 4.6+ (recommended). Leave empty to use manual budget mode. See: https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking"
+        },
+        "budget": {
+          "description": "Thinking Budget",
+          "hint": "Anthropic thinking.budget_tokens param. Must >= 1024. Only used when type is empty. Deprecated on Opus 4.6 / Sonnet 4.6. See: https://platform.claude.com/docs/en/build-with-claude/extended-thinking"
+        },
+        "effort": {
+          "description": "Effort Level",
+          "hint": "Controls thinking depth when type is 'adaptive'. 'high' is the default. 'max' is Opus 4.6 only. See: https://platform.claude.com/docs/en/build-with-claude/effort"
+        }
+      },
+      "minimax-group-id": {
+        "description": "User group",
+        "hint": "Visible in Account Management -> Basic Info."
+      },
+      "minimax-langboost": {
+        "description": "Target language/dialect",
+        "hint": "Enhances recognition for specified languages/dialects and improves speech performance in those scenarios."
+      },
+      "minimax-voice-speed": {
+        "description": "Speech rate",
+        "hint": "Speech speed for synthesis, range [0.5, 2], default 1.0. Higher is faster."
+      },
+      "minimax-voice-vol": {
+        "description": "Volume",
+        "hint": "Volume for synthesis, range (0, 10], default 1.0. Higher is louder."
+      },
+      "minimax-voice-pitch": {
+        "description": "Pitch",
+        "hint": "Pitch for synthesis, range [-12, 12], default 0."
+      },
+      "minimax-is-timber-weight": {
+        "description": "Enable mixed voices",
+        "hint": "Enable mixing up to four voices with custom weights. When enabled, single voice settings are ignored."
+      },
+      "minimax-timber-weight": {
+        "description": "Mixed voices",
+        "hint": "Mixed voices and their weights. Up to four voices, integer weights in [1, 100]. Get presets and templates from the official API TTS debug console. Must be a JSON string; check the console to confirm parsing. See defaults and the official code preview for structure."
+      },
+      "minimax-voice-id": {
+        "description": "Single voice",
+        "hint": "Single voice ID; see the official documentation."
+      },
+      "minimax-voice-emotion": {
+        "description": "Emotion",
+        "hint": "Controls emotion of synthesized speech. When set to auto, it selects emotion based on text."
+      },
+      "minimax-voice-latex": {
+        "description": "Read LaTeX formulas",
+        "hint": "Read LaTeX formulas, but ensure input text is formatted per the official requirements."
+      },
+      "minimax-voice-english-normalization": {
+        "description": "English text normalization",
+        "hint": "Improves number-reading performance but slightly increases latency."
+      },
+      "rag_options": {
+        "description": "RAG options",
+        "hint": "Knowledge base retrieval settings, optional. Only supported for Agent app types (agent apps, including RAG apps). For Bailian apps, enabling this disables multi-turn conversations.",
+        "pipeline_ids": {
+          "description": "Knowledge base ID list",
+          "hint": "Retrieve all documents in the specified knowledge bases. Go to https://bailian.console.aliyun.com/ Data Apps -> Knowledge Index to create and get IDs."
+        },
+        "file_ids": {
+          "description": "Unstructured document IDs",
+          "hint": "Retrieve specified unstructured documents. Go to https://bailian.console.aliyun.com/ Data Management to create and get IDs."
+        },
+        "output_reference": {
+          "description": "Output knowledge base/document references",
+          "hint": "Append reference sources to the end of each answer. Default is False."
+        }
+      },
+      "sensevoice_hint": {
+        "description": "Deploy SenseVoice",
+        "hint": "Before enabling, install funasr, funasr_onnx, torchaudio, torch, modelscope, and jieba (CPU by default, about 1 GB download), and install ffmpeg. Otherwise STT will not work."
+      },
+      "is_emotion": {
+        "description": "Emotion recognition",
+        "hint": "Enable emotion recognition. happy?sad?angry?neutral?fearful?disgusted?surprised?unknown"
+      },
+      "stt_model": {
+        "description": "Model name",
+        "hint": "Model name on modelscope. Default: iic/SenseVoiceSmall."
+      },
+      "variables": {
+        "description": "Workflow fixed input variables",
+        "hint": "Optional. Fixed workflow input variables are used as workflow inputs. You can also set variables dynamically with /set during a chat. If names conflict, dynamic settings take precedence."
+      },
+      "dashscope_app_type": {
+        "description": "App type",
+        "hint": "Bailian app type."
+      },
+      "timeout": {
+        "description": "Timeout",
+        "hint": "Timeout in seconds."
+      },
+      "openai-tts-voice": {
+        "description": "voice",
+        "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "fishaudio-tts-character": {
+        "description": "character",
+        "hint": "Fishaudio TTS character. Default is Klee. More roles: https://fish.audio/zh-CN/discovery"
+      },
+      "fishaudio-tts-reference-id": {
+        "description": "reference_id",
+        "hint": "Fishaudio TTS reference model ID (optional). If set, the model ID is used directly instead of looking up by role name. Example: 626bb6d3f3364c9cbc3aa6a67300a664. More models: https://fish.audio/zh-CN/discovery; open a model detail page to copy the model ID."
+      },
+      "whisper_hint": {
+        "description": "Notes for local Whisper deployment",
+        "hint": "Before enabling, install the openai-whisper library (NVIDIA users download ~2GB mainly for torch and cuda; CPU users download ~1GB), and install ffmpeg. Otherwise STT will not work."
+      },
+      "id": {
+        "description": "ID"
+      },
+      "type": {
+        "description": "Provider category"
+      },
+      "provider_type": {
+        "description": "Provider capability type"
+      },
+      "enable": {
+        "description": "Enable"
+      },
+      "key": {
+        "description": "API Key"
+      },
+      "api_base": {
+        "description": "API Base URL"
+      },
+      "proxy": {
+        "description": "Proxy address",
+        "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."
+      },
+      "model": {
+        "description": "Model ID",
+        "hint": "Model name, e.g., gpt-4o-mini, deepseek-chat."
+      },
+      "max_context_tokens": {
+        "description": "Model context window size",
+        "hint": "Maximum context tokens. If 0, it auto-fills from model metadata (if available); you can also edit manually."
+      },
+      "dify_api_key": {
+        "description": "API Key",
+        "hint": "Dify API Key. This field is required."
+      },
+      "dify_api_base": {
+        "description": "API Base URL",
+        "hint": "Dify API Base URL. Default: https://api.dify.ai/v1"
+      },
+      "dify_api_type": {
+        "description": "Dify app type",
+        "hint": "Dify API type. According to Dify docs, supported types are chat, chatflow, agent, workflow."
+      },
+      "dify_workflow_output_key": {
+        "description": "Dify workflow output variable name",
+        "hint": "Dify workflow output variable name. Only used when app type is workflow. Default: astrbot_wf_output."
+      },
+      "dify_query_input_key": {
+        "description": "Prompt input variable name",
+        "hint": "Input variable name for the message text. Default: astrbot_text_query."
+      },
+      "coze_api_key": {
+        "description": "Coze API Key",
+        "hint": "Coze API key for accessing Coze services."
+      },
+      "bot_id": {
+        "description": "Bot ID",
+        "hint": "Coze bot ID, obtained after creating a bot on the Coze platform."
+      },
+      "coze_api_base": {
+        "description": "API Base URL",
+        "hint": "Base URL for the Coze API. Default: https://api.coze.cn"
+      },
+      "auto_save_history": {
+        "description": "Conversation history managed by Coze",
+        "hint": "When enabled, Coze manages conversation history. AstrBot's locally saved context will not take effect (read-only), and operations on AstrBot context will not apply. If disabled, AstrBot manages the context."
       }
     }
   },

@@ -91,8 +91,10 @@
   },
   "providerSources": {
     "title": "Provider Sources",
+    "add": "Add",
     "empty": "No provider sources",
     "selectHint": "Please select a provider source",
+    "selectCreated": "Select created provider source",
     "save": "Save Configuration",
     "saveAndFetchModels": "Save and Fetch Models",
     "fetchModels": "Fetch Model List",
@@ -112,7 +114,11 @@
     "hints": {
       "id": "Provider source ID (not provider ID)",
       "key": "API key for authentication",
-      "apiBase": "Custom API endpoint URL"
+      "apiBase": "Custom API endpoint URL",
+      "proxy": "HTTP/HTTPS proxy address, e.g. http://127.0.0.1:7890. Only affects this provider's API requests, doesn't interfere with Docker internal networking."
+    },
+    "labels": {
+      "proxy": "Proxy"
     }
   },
   "models": {
@@ -141,4 +147,4 @@
       "modelId": "Model ID"
     }
   }
-} 
+}

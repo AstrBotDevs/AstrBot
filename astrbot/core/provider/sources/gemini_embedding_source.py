@@ -4,6 +4,8 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
+from astrbot import logger
+
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
@@ -28,6 +30,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         if api_base:
             api_base = api_base.removesuffix("/")
             http_options.base_url = api_base
+        proxy = provider_config.get("proxy", "")
+        if proxy:
+            http_options.async_client_args = {"proxy": proxy}
+            logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
 
@@ -42,6 +48,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=text,
+                config=types.EmbedContentConfig(
+                    output_dimensionality=self.get_dim(),
+                ),
             )
             assert result.embeddings is not None
             assert result.embeddings[0].values is not None
@@ -55,6 +64,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             result = await self.client.models.embed_content(
                 model=self.model,
                 contents=cast(types.ContentListUnion, text),
+                config=types.EmbedContentConfig(
+                    output_dimensionality=self.get_dim(),
+                ),
             )
             assert result.embeddings is not None
 
@@ -69,3 +81,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     def get_dim(self) -> int:
         """获取向量的维度"""
         return int(self.provider_config.get("embedding_dimensions", 768))
+
+    async def terminate(self):
+        if self.client:
+            await self.client.aclose()
