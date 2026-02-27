@@ -229,16 +229,51 @@ class FunctionToolManager:
         # 等待所有 MCP 客户端初始化完成（或失败）
         if init_futures:
             logger.info(f"等待 {len(init_futures)} 个 MCP 服务初始化...")
-            results = await asyncio.gather(
-                *init_futures.values(), return_exceptions=True
-            )
+
+            try:
+                # 设置总超时时间为 20 秒，避免慢速 MCP 服务器阻塞启动过久
+                results = await asyncio.wait_for(
+                    asyncio.gather(*init_futures.values(), return_exceptions=True),
+                    timeout=20.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "MCP 服务初始化超时（20秒），部分服务可能未完全加载。"
+                    "建议检查 MCP 服务器配置和网络连接。"
+                )
+                # 即使超时也继续，已完成的服务仍然可用
+                results = []
+                for name, future in zip(init_futures.keys(), init_futures.values()):
+                    if future.done():
+                        try:
+                            results.append(future.result())
+                        except Exception as e:
+                            results.append(e)
+                    else:
+                        results.append(TimeoutError(f"MCP 服务 {name} 初始化超时"))
 
             success_count = 0
+            failed_services = []
             for name, result in zip(init_futures.keys(), results):
                 if isinstance(result, Exception):
                     logger.error(f"MCP 服务 {name} 初始化失败: {result}")
+                    # 显示配置信息以便调试
+                    cfg = mcp_server_json_obj.get(name, {})
+                    if "command" in cfg:
+                        logger.error(f"  命令: {cfg['command']}")
+                        if "args" in cfg:
+                            logger.error(f"  参数: {cfg['args']}")
+                    elif "url" in cfg:
+                        logger.error(f"  URL: {cfg['url']}")
+                    failed_services.append(name)
                 else:
                     success_count += 1
+
+            if failed_services:
+                logger.warning(
+                    f"以下 MCP 服务初始化失败: {', '.join(failed_services)}。"
+                    f"请检查配置文件 mcp_server.json 和服务器可用性。"
+                )
 
             logger.info(f"MCP 服务初始化完成: {success_count}/{len(init_futures)} 成功")
 
