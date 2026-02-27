@@ -65,6 +65,11 @@
       "subtitle": "Restart AstrBot",
       "button": "Restart"
     },
+    "logout": {
+      "title": "Log Out",
+      "subtitle": "Log out of the current account",
+      "button": "Log Out"
+    },
     "migration": {
       "title": "Data Migration to v4.0.0",
       "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",

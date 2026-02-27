@@ -64,7 +64,7 @@
     "sass": "1.66.1",
     "sass-loader": "13.3.2",
     "typescript": "5.1.6",
-    "vite": "4.4.9",
+    "vite": "^7.3.1",
     "vue-cli-plugin-vuetify": "2.5.8",
     "vue-tsc": "1.8.8",
     "vuetify-loader": "^2.0.0-alpha.9"

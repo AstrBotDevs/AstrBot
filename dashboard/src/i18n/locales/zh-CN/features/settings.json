@@ -65,6 +65,11 @@
       "subtitle": "重启 AstrBot",
       "button": "重启"
     },
+    "logout": {
+      "title": "退出登录",
+      "subtitle": "退出当前账号，回到登录界面",
+      "button": "退出登录"
+    },
     "migration": {
       "title": "数据迁移到 v4.0.0 格式",
       "subtitle": "如果您遇到数据兼容性问题，可以手动启动数据库迁移助手",

@@ -22,7 +22,7 @@
         </div> -->
         <v-row class="mt-2">
           <v-col cols="12">
-            <div class="d-flex align-center">
+            <div>
               <!-- <v-text-field
                 v-model="apiBaseUrl"
                 :label="tm('network.server.label')"
@@ -425,6 +425,22 @@
           </v-btn>
         </div>
       </v-list-item>
+
+      <v-list-item
+        :subtitle="tm('system.logout.subtitle')"
+        :title="tm('system.logout.title')"
+      >
+        <div class="d-flex align-center mt-2">
+          <v-btn
+            color="error"
+            variant="tonal"
+            prepend-icon="mdi-logout"
+            @click="logout"
+          >
+            {{ tm("system.logout.button") }}
+          </v-btn>
+        </div>
+      </v-list-item>
     </v-list>
   </div>
 
@@ -439,6 +455,7 @@ import { useTheme } from "vuetify";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useCommonStore } from "@/stores/common";
 import { useApiStore } from "@/stores/api";
+import { useAuthStore } from "@/stores/auth";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
@@ -474,6 +491,7 @@ const toastStore = useToast();
 
 const theme = useTheme();
 const apiStore = useApiStore();
+const authStore = useAuthStore();
 
 const apiBaseUrl = ref(apiStore.apiBaseUrl);
 
@@ -723,6 +741,12 @@ const restartAstrBot = async () => {
   const commonStore = useCommonStore();
   commonStore.restartAstrBot();
   wfr.value.dialog = true;
+};
+
+const logout = () => {
+  if (confirm(t("core.common.dialog.confirmMessage"))) {
+    authStore.logout();
+  }
 };
 
 const startMigration = async () => {

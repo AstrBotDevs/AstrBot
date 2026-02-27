@@ -10,7 +10,8 @@
     "theme": {
       "light": "浅色模式",
       "dark": "深色模式"
-    }
+    },
+    "logout": "退出登录"
   },
   "updateDialog": {
     "title": "更新 AstrBot",
