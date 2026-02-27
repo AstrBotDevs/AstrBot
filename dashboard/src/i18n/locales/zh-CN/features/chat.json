@@ -82,6 +82,11 @@
     "on": "流式",
     "off": "普通"
   },
+  "transport": {
+    "title": "通信传输模式",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
   "config": {
     "title": "配置文件"
   },
