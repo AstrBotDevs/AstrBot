@@ -16,7 +16,7 @@ async def run_astrbot(astrbot_root: Path) -> None:
     from astrbot.core.initial_loader import InitialLoader
 
     if os.environ.get("DASHBOARD_ENABLE") == "True":
-        await check_dashboard(astrbot_root / "data")
+        await check_dashboard(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
