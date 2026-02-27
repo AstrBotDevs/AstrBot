@@ -333,10 +333,18 @@ class AstrBotDashboard:
     def get_process_using_port(self, port: int) -> str:
         """获取占用端口的进程信息"""
         try:
-            for proc in psutil.process_iter(["pid", "name", "connections"]):
-                for conn in proc.info["connections"] or []:  # type: ignore
-                    if conn.laddr.port == port:
-                        return f"PID: {proc.info['pid']}, Name: {proc.info['name']}"  # type: ignore
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    connections = proc.net_connections()
+                    for conn in connections:
+                        if conn.laddr.port == port:
+                            return f"PID: {proc.info['pid']}, Name: {proc.info['name']}"  # type: ignore
+                except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    psutil.ZombieProcess,
+                ):
+                    pass
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
         return "未知进程"

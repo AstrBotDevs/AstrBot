@@ -43,7 +43,7 @@ class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
         self.server = quart.Quart(__name__)
         self.port = int(cast(str, config.get("port")))
-        self.callback_server_host = config.get("callback_server_host", "::")
+        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
             "/callback/command",
             view_func=self.verify,
