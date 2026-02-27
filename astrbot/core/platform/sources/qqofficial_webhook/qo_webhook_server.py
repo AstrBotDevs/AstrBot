@@ -21,7 +21,7 @@ class QQOfficialWebhook:
         self.secret = config["secret"]
         self.port = config.get("port", 6196)
         self.is_sandbox = config.get("is_sandbox", False)
-        self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
+        self.callback_server_host = config.get("callback_server_host", "::")
 
         if isinstance(self.port, str):
             self.port = int(self.port)

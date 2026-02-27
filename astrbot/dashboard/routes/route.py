@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from quart import Quart
 
@@ -57,3 +57,7 @@ class Response:
         self.data = data
         self.message = message
         return self
+
+    def to_json(self):
+        # Return a plain dict so callers can safely wrap with jsonify()
+        return asdict(self)
