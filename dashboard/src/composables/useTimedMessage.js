@@ -1,4 +1,4 @@
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 
 export const useTimedMessage = (initialType = "success") => {
   const state = reactive({
@@ -6,12 +6,12 @@ export const useTimedMessage = (initialType = "success") => {
     type: initialType,
   });
 
-  let timer = null;
+  const timer = ref(null);
 
   const clearTimer = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
+    if (timer.value) {
+      clearTimeout(timer.value);
+      timer.value = null;
     }
   };
 
@@ -25,7 +25,7 @@ export const useTimedMessage = (initialType = "success") => {
     state.type = type;
     clearTimer();
     if (duration > 0 && state.message) {
-      timer = setTimeout(() => {
+      timer.value = setTimeout(() => {
         state.message = "";
       }, duration);
     }

@@ -3,7 +3,6 @@ import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
-import { useTimedMessage } from "@/composables/useTimedMessage";
 import { resolveErrorMessage } from "@/utils/errorUtils";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -137,12 +136,6 @@ export const useExtensionPage = () => {
   const isListView = ref(getInitialListViewMode());
   const pluginSearch = ref("");
   const loading_ = ref(false);
-  const {
-    state: reloadFeedback,
-    setMessage: setReloadFeedback,
-    clearMessage: clearReloadFeedback,
-    clearTimer: clearReloadFeedbackTimer,
-  } = useTimedMessage();
   
   // 分页相关
   const currentPage = ref(1);
@@ -509,29 +502,19 @@ export const useExtensionPage = () => {
       }
   };
 
-  const showReloadFeedback = (message, type) => {
-    clearReloadFeedback();
-    setReloadFeedback(message, type);
-    toast(message, type === "success" ? "success" : "error");
-  };
-
   const reloadFailedPlugin = async (dirName) => {
     if (!dirName) return;
-    clearReloadFeedback();
 
     try {
       const res = await axios.post("/api/plugin/reload-failed", { dir_name: dirName });
       if (res.data.status === "error") {
-        showReloadFeedback(res.data.message || tm("messages.reloadFailed"), "error");
+        toast(res.data.message || tm("messages.reloadFailed"), "error");
         return;
       }
-      showReloadFeedback(res.data.message || tm("messages.reloadSuccess"), "success");
+      toast(res.data.message || tm("messages.reloadSuccess"), "success");
       await getExtensions();
     } catch (err) {
-      showReloadFeedback(
-        resolveErrorMessage(err, tm("messages.reloadFailed")),
-        "error",
-      );
+      toast(resolveErrorMessage(err, tm("messages.reloadFailed")), "error");
     }
   };
 
@@ -834,7 +817,6 @@ export const useExtensionPage = () => {
   
   const reloadPlugin = async (plugin_name) => {
     try {
-      clearReloadFeedback();
       const res = await axios.post("/api/plugin/reload", { name: plugin_name });
       if (res.data.status === "error") {
         toast(res.data.message || tm("messages.reloadFailed"), "error");
@@ -1377,7 +1359,6 @@ export const useExtensionPage = () => {
   // 清理事件监听器
   onUnmounted(() => {
     window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
-    clearReloadFeedbackTimer();
   });
   
   // 搜索防抖处理
@@ -1486,7 +1467,6 @@ export const useExtensionPage = () => {
     isListView,
     pluginSearch,
     loading_,
-    reloadFeedback,
     currentPage,
     dangerConfirmDialog,
     selectedDangerPlugin,

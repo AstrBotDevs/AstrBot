@@ -976,6 +976,73 @@ class PluginManager:
                     f"清理安装失败插件配置失败: {plugin_config_path}，原因: {e!s}",
                 )
 
+    def _cleanup_plugin_optional_artifacts(
+        self,
+        *,
+        root_dir_name: str,
+        plugin_label: str,
+        delete_config: bool,
+        delete_data: bool,
+    ) -> None:
+        if delete_config:
+            config_file = os.path.join(
+                self.plugin_config_path,
+                f"{root_dir_name}_config.json",
+            )
+            if os.path.exists(config_file):
+                try:
+                    os.remove(config_file)
+                    logger.info(f"已删除插件 {plugin_label} 的配置文件")
+                except Exception as e:
+                    logger.warning(f"删除插件配置文件失败 ({plugin_label}): {e!s}")
+
+        if delete_data:
+            data_base_dir = os.path.dirname(self.plugin_store_path)
+            for data_dir_name in ("plugin_data", "plugins_data"):
+                plugin_data_dir = os.path.join(
+                    data_base_dir,
+                    data_dir_name,
+                    root_dir_name,
+                )
+                if os.path.exists(plugin_data_dir):
+                    try:
+                        remove_dir(plugin_data_dir)
+                        logger.info(
+                            f"已删除插件 {plugin_label} 的持久化数据 ({data_dir_name})",
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"删除插件持久化数据失败 ({data_dir_name}, {plugin_label}): {e!s}",
+                        )
+
+    def _track_failed_install_dir(
+        self,
+        *,
+        dir_name: str,
+        plugin_path: str,
+        error: Exception,
+    ) -> None:
+        if (
+            not dir_name
+            or not plugin_path
+            or not os.path.isdir(plugin_path)
+            or dir_name in self.failed_plugin_dict
+        ):
+            return
+
+        for star in self.context.get_all_stars():
+            if star.root_dir_name == dir_name:
+                return
+
+        self.failed_plugin_dict[dir_name] = self._build_failed_plugin_record(
+            root_dir_name=dir_name,
+            plugin_dir_path=plugin_path,
+            reserved=False,
+            error=error,
+            error_trace=traceback.format_exc(),
+        )
+        self._rebuild_failed_plugin_info()
+
     async def install_plugin(
         self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
     ):
@@ -1053,7 +1120,12 @@ class PluginManager:
                     }
 
                 return plugin_info
-            except Exception:
+            except Exception as e:
+                self._track_failed_install_dir(
+                    dir_name=dir_name,
+                    plugin_path=plugin_path,
+                    error=e,
+                )
                 if dir_name and plugin_path:
                     logger.warning(
                         f"安装插件 {dir_name} 失败，插件安装目录：{plugin_path}",
@@ -1109,50 +1181,12 @@ class PluginManager:
                     f"移除插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
                 )
 
-            # 删除插件配置文件
-            if delete_config and root_dir_name:
-                config_file = os.path.join(
-                    self.plugin_config_path,
-                    f"{root_dir_name}_config.json",
-                )
-                if os.path.exists(config_file):
-                    try:
-                        os.remove(config_file)
-                        logger.info(f"已删除插件 {plugin_name} 的配置文件")
-                    except Exception as e:
-                        logger.warning(f"删除插件配置文件失败: {e!s}")
-
-            # 删除插件持久化数据
-            # 注意：需要检查两个可能的目录名（plugin_data 和 plugins_data）
-            # data/temp 目录可能被多个插件共享，不自动删除以防误删
-            if delete_data and root_dir_name:
-                data_base_dir = os.path.dirname(ppath)  # data/
-
-                # 删除 data/plugin_data 下的插件持久化数据（单数形式，新版本）
-                plugin_data_dir = os.path.join(
-                    data_base_dir, "plugin_data", root_dir_name
-                )
-                if os.path.exists(plugin_data_dir):
-                    try:
-                        remove_dir(plugin_data_dir)
-                        logger.info(
-                            f"已删除插件 {plugin_name} 的持久化数据 (plugin_data)"
-                        )
-                    except Exception as e:
-                        logger.warning(f"删除插件持久化数据失败 (plugin_data): {e!s}")
-
-                # 删除 data/plugins_data 下的插件持久化数据（复数形式，旧版本兼容）
-                plugins_data_dir = os.path.join(
-                    data_base_dir, "plugins_data", root_dir_name
-                )
-                if os.path.exists(plugins_data_dir):
-                    try:
-                        remove_dir(plugins_data_dir)
-                        logger.info(
-                            f"已删除插件 {plugin_name} 的持久化数据 (plugins_data)"
-                        )
-                    except Exception as e:
-                        logger.warning(f"删除插件持久化数据失败 (plugins_data): {e!s}")
+            self._cleanup_plugin_optional_artifacts(
+                root_dir_name=root_dir_name,
+                plugin_label=plugin_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
 
     async def uninstall_failed_plugin(
         self,
@@ -1182,48 +1216,20 @@ class PluginManager:
                     f"移除失败插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
                 )
 
-            if delete_config:
-                config_file = os.path.join(
-                    self.plugin_config_path,
-                    f"{dir_name}_config.json",
+            plugin_label = dir_name
+            if isinstance(failed_info, dict):
+                plugin_label = (
+                    failed_info.get("display_name")
+                    or failed_info.get("name")
+                    or dir_name
                 )
-                if os.path.exists(config_file):
-                    try:
-                        os.remove(config_file)
-                        logger.info(f"已删除失败插件 {dir_name} 的配置文件")
-                    except Exception as e:
-                        logger.warning(f"删除失败插件配置文件失败: {e!s}")
 
-            if delete_data:
-                data_base_dir = os.path.dirname(self.plugin_store_path)
-
-                plugin_data_dir = os.path.join(data_base_dir, "plugin_data", dir_name)
-                if os.path.exists(plugin_data_dir):
-                    try:
-                        remove_dir(plugin_data_dir)
-                        logger.info(
-                            f"已删除失败插件 {dir_name} 的持久化数据 (plugin_data)",
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"删除失败插件持久化数据失败 (plugin_data): {e!s}",
-                        )
-
-                plugins_data_dir = os.path.join(
-                    data_base_dir,
-                    "plugins_data",
-                    dir_name,
-                )
-                if os.path.exists(plugins_data_dir):
-                    try:
-                        remove_dir(plugins_data_dir)
-                        logger.info(
-                            f"已删除失败插件 {dir_name} 的持久化数据 (plugins_data)",
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"删除失败插件持久化数据失败 (plugins_data): {e!s}",
-                        )
+            self._cleanup_plugin_optional_artifacts(
+                root_dir_name=dir_name,
+                plugin_label=plugin_label,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
 
             self.failed_plugin_dict.pop(dir_name, None)
             self._rebuild_failed_plugin_info()
@@ -1508,7 +1514,12 @@ class PluginManager:
                     )
 
             return plugin_info
-        except Exception:
+        except Exception as e:
+            self._track_failed_install_dir(
+                dir_name=dir_name,
+                plugin_path=desti_dir,
+                error=e,
+            )
             logger.warning(
                 f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
             )

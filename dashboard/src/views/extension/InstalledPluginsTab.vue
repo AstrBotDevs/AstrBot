@@ -49,7 +49,6 @@ const {
   isListView,
   pluginSearch,
   loading_,
-  reloadFeedback,
   currentPage,
   dangerConfirmDialog,
   selectedDangerPlugin,
@@ -213,14 +212,6 @@ const {
 
               </v-col>
             </v-row>
-
-            <div
-              v-if="reloadFeedback.message"
-              class="text-body-2 mb-2"
-              :class="reloadFeedback.type === 'success' ? 'text-success' : 'text-error'"
-            >
-              {{ reloadFeedback.message }}
-            </div>
 
             <v-card
               v-if="failedPluginItems.length > 0"
