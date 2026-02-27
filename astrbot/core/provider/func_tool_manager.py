@@ -234,8 +234,6 @@ class FunctionToolManager:
                     "MCP 服务初始化超时（20秒），部分服务可能未完全加载。"
                     "建议检查 MCP 服务器配置和网络连接。"
                 )
-                for task in pending:
-                    task.cancel()
 
             success_count = 0
             failed_services: list[str] = []
@@ -277,17 +275,19 @@ class FunctionToolManager:
         event: asyncio.Event,
     ) -> None:
         """初始化 MCP 客户端的包装函数，用于捕获异常"""
+        initialized = False
         try:
             await self._init_mcp_client(name, cfg)
-            tools = await self.mcp_client_dict[name].list_tools_and_save()
-            logger.debug(f"MCP 服务 {name} 初始化完成，工具: {tools}")
+            initialized = True
             await event.wait()
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
         except Exception:
-            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
-            raise
+            if not initialized:
+                # 初始化阶段失败，记录错误并向上抛出让 task.exception() 捕获
+                logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
+                raise
+            # 初始化已成功，此处异常来自 event.wait() 被取消，属于正常终止流程
         finally:
-            # 无论如何都能清理
             await self._terminate_mcp_client(name)
 
     async def _init_mcp_client(self, name: str, config: dict) -> None:
