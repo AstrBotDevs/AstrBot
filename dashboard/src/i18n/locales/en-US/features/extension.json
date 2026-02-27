@@ -186,6 +186,7 @@
     "refreshSuccess": "Extension list refreshed!",
     "refreshFailed": "Error occurred while refreshing extension list",
     "reloadSuccess": "Reload successful",
+    "reloadFailed": "Reload failed",
     "updateSuccess": "Update successful!",
     "addSuccess": "Add successful!",
     "saveSuccess": "Save successful!",

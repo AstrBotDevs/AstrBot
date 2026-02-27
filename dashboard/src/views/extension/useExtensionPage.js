@@ -8,6 +8,38 @@ import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 
+const useTimedMessage = (initialType = "success") => {
+  const state = reactive({
+    message: "",
+    type: initialType,
+  });
+  let timer = null;
+
+  const clearTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  const setMessage = (message, type = initialType, duration = 4000) => {
+    state.message = message || "";
+    state.type = type;
+    clearTimer();
+    if (duration > 0 && state.message) {
+      timer = setTimeout(() => {
+        state.message = "";
+      }, duration);
+    }
+  };
+
+  return {
+    state,
+    setMessage,
+    clearTimer,
+  };
+};
+
 export const useExtensionPage = () => {
   
   
@@ -136,11 +168,11 @@ export const useExtensionPage = () => {
   const isListView = ref(getInitialListViewMode());
   const pluginSearch = ref("");
   const loading_ = ref(false);
-  const reloadFeedback = reactive({
-    message: "",
-    type: "success",
-  });
-  let reloadFeedbackTimer = null;
+  const {
+    state: reloadFeedback,
+    setMessage: setReloadFeedback,
+    clearTimer: clearReloadFeedbackTimer,
+  } = useTimedMessage();
   
   // 分页相关
   const currentPage = ref(1);
@@ -163,8 +195,7 @@ export const useExtensionPage = () => {
   
   // 卸载插件确认对话框（列表模式用）
   const showUninstallDialog = ref(false);
-  const pluginToUninstall = ref(null);
-  const failedPluginToUninstall = ref(null);
+  const uninstallTarget = ref(null);
   
   // 自定义插件源相关
   const showSourceDialog = ref(false);
@@ -421,19 +452,13 @@ export const useExtensionPage = () => {
     snack_show.value = true;
     snack_success.value = success;
   };
-
-  const setReloadFeedback = (message, type = "success", duration = 4000) => {
-    reloadFeedback.message = message || "";
-    reloadFeedback.type = type;
-    if (reloadFeedbackTimer) {
-      clearTimeout(reloadFeedbackTimer);
-      reloadFeedbackTimer = null;
-    }
-    if (duration > 0 && reloadFeedback.message) {
-      reloadFeedbackTimer = setTimeout(() => {
-        reloadFeedback.message = "";
-      }, duration);
-    }
+  const resolveErrorMessage = (err, fallbackMessage = "") => {
+    return (
+      err?.response?.data?.message ||
+      err?.message ||
+      String(err) ||
+      fallbackMessage
+    );
   };
   
   const resetLoadingDialog = () => {
@@ -523,7 +548,7 @@ export const useExtensionPage = () => {
     try {
       const res = await axios.post("/api/plugin/reload-failed", { dir_name: dirName });
       if (res.data.status === "error") {
-        const message = res.data.message || "Reload failed";
+        const message = res.data.message || tm("messages.reloadFailed");
         setReloadFeedback(message, "error");
         toast(message, "error");
         return;
@@ -531,37 +556,30 @@ export const useExtensionPage = () => {
       setReloadFeedback(res.data.message || tm("messages.reloadSuccess"), "success");
       await getExtensions();
     } catch (err) {
-      const message = String(err) || "Reload failed";
+      const message = resolveErrorMessage(err, tm("messages.reloadFailed"));
       setReloadFeedback(message, "error");
       toast(message, "error");
     }
   };
 
-  const requestUninstallFailedPlugin = (dirName) => {
-    if (!dirName) return;
-    pluginToUninstall.value = null;
-    failedPluginToUninstall.value = dirName;
+  const requestUninstallPlugin = (name) => {
+    if (!name) return;
+    uninstallTarget.value = { type: "normal", id: name };
     showUninstallDialog.value = true;
   };
 
-  const uninstallFailedPlugin = async (
-    dirName,
-    optionsOrSkipConfirm = false,
-  ) => {
-    let deleteConfig = false;
-    let deleteData = false;
-    let skipConfirm = false;
+  const requestUninstallFailedPlugin = (dirName) => {
+    if (!dirName) return;
+    uninstallTarget.value = { type: "failed", id: dirName };
+    showUninstallDialog.value = true;
+  };
 
-    if (typeof optionsOrSkipConfirm === "boolean") {
-      skipConfirm = optionsOrSkipConfirm;
-    } else if (
-      typeof optionsOrSkipConfirm === "object" &&
-      optionsOrSkipConfirm !== null
-    ) {
-      deleteConfig = optionsOrSkipConfirm.deleteConfig || false;
-      deleteData = optionsOrSkipConfirm.deleteData || false;
-      skipConfirm = true;
-    }
+  const uninstallFailedPlugin = async (dirName, options = {}) => {
+    const {
+      deleteConfig = false,
+      deleteData = false,
+      skipConfirm = false,
+    } = options;
 
     if (!skipConfirm) {
       requestUninstallFailedPlugin(dirName);
@@ -582,7 +600,7 @@ export const useExtensionPage = () => {
       toast(res.data.message, "success");
       await getExtensions();
     } catch (err) {
-      toast(String(err), "error");
+      toast(resolveErrorMessage(err), "error");
     }
   };
   
@@ -637,9 +655,7 @@ export const useExtensionPage = () => {
   
     // 如果没有跳过确认且没有传递选项对象，显示自定义卸载对话框
     if (!skipConfirm) {
-      pluginToUninstall.value = extension_name;
-      failedPluginToUninstall.value = null;
-      showUninstallDialog.value = true;
+      requestUninstallPlugin(extension_name);
       return; // 等待对话框回调
     }
   
@@ -665,16 +681,21 @@ export const useExtensionPage = () => {
   
   // 处理卸载确认对话框的确认事件
   const handleUninstallConfirm = (options) => {
-    if (failedPluginToUninstall.value) {
-      uninstallFailedPlugin(failedPluginToUninstall.value, options);
-      failedPluginToUninstall.value = null;
-      pluginToUninstall.value = null;
-      return;
+    const target = uninstallTarget.value;
+    if (!target) return;
+
+    if (target.type === "failed") {
+      uninstallFailedPlugin(target.id, {
+        deleteConfig: options?.deleteConfig || false,
+        deleteData: options?.deleteData || false,
+        skipConfirm: true,
+      });
+    } else if (target.type === "normal") {
+      uninstallExtension(target.id, options);
     }
-    if (pluginToUninstall.value) {
-      uninstallExtension(pluginToUninstall.value, options);
-      pluginToUninstall.value = null;
-    }
+
+    uninstallTarget.value = null;
+    showUninstallDialog.value = false;
   };
   
   const updateExtension = async (extension_name, forceUpdate = false) => {
@@ -881,13 +902,13 @@ export const useExtensionPage = () => {
       reloadFeedback.message = "";
       const res = await axios.post("/api/plugin/reload", { name: plugin_name });
       if (res.data.status === "error") {
-        toast(res.data.message || "Reload failed", "error");
+        toast(res.data.message || tm("messages.reloadFailed"), "error");
         return;
       }
       toast(tm("messages.reloadSuccess"), "success");
       await getExtensions();
     } catch (err) {
-      toast(String(err), "error");
+      toast(resolveErrorMessage(err, tm("messages.reloadFailed")), "error");
     }
   };
   
@@ -1407,10 +1428,7 @@ export const useExtensionPage = () => {
   // 清理事件监听器
   onUnmounted(() => {
     window.removeEventListener("astrbot-locale-changed", handleLocaleChange);
-    if (reloadFeedbackTimer) {
-      clearTimeout(reloadFeedbackTimer);
-      reloadFeedbackTimer = null;
-    }
+    clearReloadFeedbackTimer();
   });
   
   // 搜索防抖处理
@@ -1517,7 +1535,7 @@ export const useExtensionPage = () => {
     installCompat,
     versionCompatibilityDialog,
     showUninstallDialog,
-    pluginToUninstall,
+    uninstallTarget,
     showSourceDialog,
     showSourceManagerDialog,
     sourceName,
@@ -1569,6 +1587,7 @@ export const useExtensionPage = () => {
     checkUpdate,
     uninstallExtension,
     uninstallFailedPlugin,
+    requestUninstallPlugin,
     requestUninstallFailedPlugin,
     handleUninstallConfirm,
     updateExtension,
