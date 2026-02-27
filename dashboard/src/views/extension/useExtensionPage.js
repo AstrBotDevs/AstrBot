@@ -2,43 +2,12 @@ import axios from "axios";
 import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
-import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
+import { useTimedMessage } from "@/composables/useTimedMessage";
+import { resolveErrorMessage } from "@/utils/errorUtils";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-
-const useTimedMessage = (initialType = "success") => {
-  const state = reactive({
-    message: "",
-    type: initialType,
-  });
-  let timer = null;
-
-  const clearTimer = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-
-  const setMessage = (message, type = initialType, duration = 4000) => {
-    state.message = message || "";
-    state.type = type;
-    clearTimer();
-    if (duration > 0 && state.message) {
-      timer = setTimeout(() => {
-        state.message = "";
-      }, duration);
-    }
-  };
-
-  return {
-    state,
-    setMessage,
-    clearTimer,
-  };
-};
 
 export const useExtensionPage = () => {
   
@@ -171,6 +140,7 @@ export const useExtensionPage = () => {
   const {
     state: reloadFeedback,
     setMessage: setReloadFeedback,
+    clearMessage: clearReloadFeedback,
     clearTimer: clearReloadFeedbackTimer,
   } = useTimedMessage();
   
@@ -461,14 +431,6 @@ export const useExtensionPage = () => {
     snack_show.value = true;
     snack_success.value = success;
   };
-  const resolveErrorMessage = (err, fallbackMessage = "") => {
-    return (
-      err?.response?.data?.message ||
-      err?.message ||
-      String(err) ||
-      fallbackMessage
-    );
-  };
   
   const resetLoadingDialog = () => {
     loadingDialog.show = false;
@@ -549,7 +511,7 @@ export const useExtensionPage = () => {
 
   const reloadFailedPlugin = async (dirName) => {
     // Reset stale inline feedback before each retry attempt
-    setReloadFeedback("", "success", 0);
+    clearReloadFeedback();
 
     if (!dirName) {
       return;
@@ -571,34 +533,44 @@ export const useExtensionPage = () => {
     }
   };
 
-  const requestUninstallPlugin = (name) => {
-    if (!name) return;
-    uninstallTarget.value = { type: "normal", id: name };
+  const requestUninstall = (kind, id) => {
+    if (!id) return;
+    uninstallTarget.value = { kind, id };
     showUninstallDialog.value = true;
+  };
+
+  const requestUninstallPlugin = (name) => {
+    requestUninstall("normal", name);
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
-    if (!dirName) return;
-    uninstallTarget.value = { type: "failed", id: dirName };
-    showUninstallDialog.value = true;
+    requestUninstall("failed", dirName);
   };
 
-  const uninstallFailedPlugin = async (dirName, options = {}) => {
-    const {
-      deleteConfig = false,
-      deleteData = false,
-      skipConfirm = false,
-    } = options;
+  const performUninstall = async (target, options = {}) => {
+    if (!target?.id) return;
 
-    if (!skipConfirm) {
-      requestUninstallFailedPlugin(dirName);
-      return;
-    }
+    const { deleteConfig = false, deleteData = false } = options || {};
+    toast(`${tm("messages.uninstalling")} ${target.id}`, "primary");
 
-    toast(tm("messages.uninstalling") + " " + dirName, "primary");
     try {
-      const res = await axios.post("/api/plugin/uninstall-failed", {
-        dir_name: dirName,
+      if (target.kind === "failed") {
+        const res = await axios.post("/api/plugin/uninstall-failed", {
+          dir_name: target.id,
+          delete_config: deleteConfig,
+          delete_data: deleteData,
+        });
+        if (res.data.status === "error") {
+          toast(res.data.message, "error");
+          return;
+        }
+        toast(res.data.message, "success");
+        await getExtensions();
+        return;
+      }
+
+      const res = await axios.post("/api/plugin/uninstall", {
+        name: target.id,
         delete_config: deleteConfig,
         delete_data: deleteData,
       });
@@ -606,11 +578,21 @@ export const useExtensionPage = () => {
         toast(res.data.message, "error");
         return;
       }
+      Object.assign(extension_data, res.data);
       toast(res.data.message, "success");
       await getExtensions();
     } catch (err) {
       toast(resolveErrorMessage(err), "error");
     }
+  };
+
+  const uninstallFailedPlugin = async (dirName, options = null) => {
+    if (!dirName) return;
+    if (!options || typeof options !== "object") {
+      requestUninstallFailedPlugin(dirName);
+      return;
+    }
+    await performUninstall({ kind: "failed", id: dirName }, options);
   };
   
   const checkUpdate = () => {
@@ -642,69 +624,36 @@ export const useExtensionPage = () => {
     });
   };
   
-  const uninstallExtension = async (
-    extension_name,
-    optionsOrSkipConfirm = false,
-  ) => {
-    let deleteConfig = false;
-    let deleteData = false;
-    let skipConfirm = false;
-  
-    // 处理参数：可能是布尔值（旧的 skipConfirm）或对象（新的选项）
+  const uninstallExtension = async (extensionName, optionsOrSkipConfirm = false) => {
+    if (!extensionName) return;
+
     if (typeof optionsOrSkipConfirm === "boolean") {
-      skipConfirm = optionsOrSkipConfirm;
-    } else if (
-      typeof optionsOrSkipConfirm === "object" &&
-      optionsOrSkipConfirm !== null
-    ) {
-      deleteConfig = optionsOrSkipConfirm.deleteConfig || false;
-      deleteData = optionsOrSkipConfirm.deleteData || false;
-      skipConfirm = true; // 如果传递了选项对象，说明已经确认过了
-    }
-  
-    // 如果没有跳过确认且没有传递选项对象，显示自定义卸载对话框
-    if (!skipConfirm) {
-      requestUninstallPlugin(extension_name);
-      return; // 等待对话框回调
-    }
-  
-    // 执行卸载
-    toast(tm("messages.uninstalling") + " " + extension_name, "primary");
-    try {
-      const res = await axios.post("/api/plugin/uninstall", {
-        name: extension_name,
-        delete_config: deleteConfig,
-        delete_data: deleteData,
-      });
-      if (res.data.status === "error") {
-        toast(res.data.message, "error");
+      if (!optionsOrSkipConfirm) {
+        requestUninstallPlugin(extensionName);
         return;
       }
-      Object.assign(extension_data, res.data);
-      toast(res.data.message, "success");
-      getExtensions();
-    } catch (err) {
-      toast(err, "error");
+      await performUninstall({ kind: "normal", id: extensionName });
+      return;
     }
+
+    const options =
+      typeof optionsOrSkipConfirm === "object" && optionsOrSkipConfirm !== null
+        ? optionsOrSkipConfirm
+        : {};
+    await performUninstall({ kind: "normal", id: extensionName }, options);
   };
   
   // 处理卸载确认对话框的确认事件
-  const handleUninstallConfirm = (options) => {
+  const handleUninstallConfirm = async (options) => {
     const target = uninstallTarget.value;
     if (!target) return;
 
-    if (target.type === "failed") {
-      uninstallFailedPlugin(target.id, {
-        deleteConfig: options?.deleteConfig || false,
-        deleteData: options?.deleteData || false,
-        skipConfirm: true,
-      });
-    } else if (target.type === "normal") {
-      uninstallExtension(target.id, options);
+    try {
+      await performUninstall(target, options);
+    } finally {
+      uninstallTarget.value = null;
+      showUninstallDialog.value = false;
     }
-
-    uninstallTarget.value = null;
-    showUninstallDialog.value = false;
   };
   
   const updateExtension = async (extension_name, forceUpdate = false) => {
@@ -908,7 +857,7 @@ export const useExtensionPage = () => {
   
   const reloadPlugin = async (plugin_name) => {
     try {
-      reloadFeedback.message = "";
+      clearReloadFeedback();
       const res = await axios.post("/api/plugin/reload", { name: plugin_name });
       if (res.data.status === "error") {
         toast(res.data.message || tm("messages.reloadFailed"), "error");
