@@ -221,6 +221,7 @@ export const useExtensionPage = () => {
   const sortBy = ref("default"); // default, stars, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
+  const showRandomPlugins = ref(true);
   
   // 插件市场拼音搜索
   const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -418,6 +419,14 @@ export const useExtensionPage = () => {
     randomPluginNames.value = shuffled
       .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
       .map((plugin) => plugin.name);
+  };
+
+  const toggleRandomPluginsVisibility = () => {
+    showRandomPlugins.value = !showRandomPlugins.value;
+  };
+
+  const collapseRandomPlugins = () => {
+    showRandomPlugins.value = false;
   };
   
   // 分页计算属性
@@ -1448,6 +1457,10 @@ export const useExtensionPage = () => {
   // 搜索防抖处理
   let searchDebounceTimer = null;
   watch(marketSearch, (newVal) => {
+    if (activeTab.value === "market") {
+      collapseRandomPlugins();
+    }
+
     if (searchDebounceTimer) {
       clearTimeout(searchDebounceTimer);
     }
@@ -1457,6 +1470,12 @@ export const useExtensionPage = () => {
       // 搜索时重置到第一页
       currentPage.value = 1;
     }, 300); // 300ms 防抖延迟
+  });
+
+  watch(currentPage, (newPage, oldPage) => {
+    if (newPage === oldPage) return;
+    if (activeTab.value !== "market") return;
+    collapseRandomPlugins();
   });
   
   // 监听显示模式变化并保存到 localStorage
@@ -1571,6 +1590,7 @@ export const useExtensionPage = () => {
     sortBy,
     sortOrder,
     randomPluginNames,
+    showRandomPlugins,
     normalizeStr,
     toPinyinText,
     toInitials,
@@ -1585,6 +1605,8 @@ export const useExtensionPage = () => {
     randomPlugins,
     shufflePlugins,
     refreshRandomPlugins,
+    toggleRandomPluginsVisibility,
+    collapseRandomPlugins,
     displayItemsPerPage,
     totalPages,
     paginatedPlugins,

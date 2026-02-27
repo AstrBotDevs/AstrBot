@@ -117,6 +117,8 @@
     "sourceExists": "该插件源已存在",
     "installPlugin": "安装插件",
     "randomPlugins": "🎲 随机插件",
+    "showRandomPlugins": "显示随机插件",
+    "hideRandomPlugins": "隐藏随机插件",
     "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {
