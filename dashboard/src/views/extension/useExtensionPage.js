@@ -514,19 +514,26 @@ export const useExtensionPage = () => {
   };
 
   const reloadFailedPlugin = async (dirName) => {
+    // Reset stale inline feedback before each retry attempt
+    setReloadFeedback("", "success", 0);
+
     if (!dirName) {
       return;
     }
     try {
       const res = await axios.post("/api/plugin/reload-failed", { dir_name: dirName });
       if (res.data.status === "error") {
-        toast(res.data.message || "Reload failed", "error");
+        const message = res.data.message || "Reload failed";
+        setReloadFeedback(message, "error");
+        toast(message, "error");
         return;
       }
       setReloadFeedback(res.data.message || tm("messages.reloadSuccess"), "success");
       await getExtensions();
     } catch (err) {
-      toast(String(err), "error");
+      const message = String(err) || "Reload failed";
+      setReloadFeedback(message, "error");
+      toast(message, "error");
     }
   };
 
