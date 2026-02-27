@@ -34,7 +34,7 @@
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
 </div>
 
-AstrBot 是一个开源的 Agentic 个人与群聊助手，支持在多款即时通讯平台快速构建 AI 应用与自动化工作流。
+AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack、等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
 
 ![landingpage](https://github.com/user-attachments/assets/45fc5699-cddf-4e21-af35-13040706f6c0)
 
