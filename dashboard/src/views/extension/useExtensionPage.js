@@ -1189,6 +1189,14 @@ export const useExtensionPage = () => {
     versionCompatibilityDialog.message = message;
     versionCompatibilityDialog.show = true;
   };
+
+  const refreshExtensionsAfterInstallFailure = async () => {
+    try {
+      await getExtensions();
+    } catch (error) {
+      console.debug("Failed to refresh extensions after install failure:", error);
+    }
+  };
   
   const continueInstallIgnoringVersionWarning = async () => {
     versionCompatibilityDialog.show = false;
@@ -1231,10 +1239,12 @@ export const useExtensionPage = () => {
           ) {
             onLoadingDialogResult(2, res.data.message, -1);
             showVersionCompatibilityWarning(res.data.message);
+            await refreshExtensionsAfterInstallFailure();
             return;
           }
           if (res.data.status === "error") {
             onLoadingDialogResult(2, res.data.message, -1);
+            await refreshExtensionsAfterInstallFailure();
             return;
           }
           upload_file.value = null;
@@ -1249,9 +1259,10 @@ export const useExtensionPage = () => {
   
           await checkAndPromptConflicts();
         })
-        .catch((err) => {
+        .catch(async (err) => {
           loading_.value = false;
           onLoadingDialogResult(2, err, -1);
+          await refreshExtensionsAfterInstallFailure();
         });
     } else {
       toast(
@@ -1272,11 +1283,13 @@ export const useExtensionPage = () => {
           ) {
             onLoadingDialogResult(2, res.data.message, -1);
             showVersionCompatibilityWarning(res.data.message);
+            await refreshExtensionsAfterInstallFailure();
             return;
           }
           toast(res.data.message, res.data.status === "ok" ? "success" : "error");
           if (res.data.status === "error") {
             onLoadingDialogResult(2, res.data.message, -1);
+            await refreshExtensionsAfterInstallFailure();
             return;
           }
           extension_url.value = "";
@@ -1291,10 +1304,11 @@ export const useExtensionPage = () => {
   
           await checkAndPromptConflicts();
         })
-        .catch((err) => {
+        .catch(async (err) => {
           loading_.value = false;
           toast(tm("messages.installFailed") + " " + err, "error");
           onLoadingDialogResult(2, err, -1);
+          await refreshExtensionsAfterInstallFailure();
         });
     }
   };
