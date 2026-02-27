@@ -535,87 +535,49 @@ export const useExtensionPage = () => {
     }
   };
 
-  const openUninstallDialog = (target) => {
+  const requestUninstall = (target) => {
     if (!target?.id) return;
     uninstallTarget.value = target;
     showUninstallDialog.value = true;
   };
 
-  const doUninstallNormal = async (
-    name,
+  const performUninstall = async (
+    target,
     { deleteConfig = false, deleteData = false } = {},
   ) => {
-    toast(`${tm("messages.uninstalling")} ${name}`, "primary");
+    if (!target?.id) return;
+
+    const { kind, id } = target;
+    const isNormal = kind === "normal";
+    const payload = isNormal
+      ? { name: id, delete_config: deleteConfig, delete_data: deleteData }
+      : { dir_name: id, delete_config: deleteConfig, delete_data: deleteData };
+    const url = isNormal ? "/api/plugin/uninstall" : "/api/plugin/uninstall-failed";
+
+    toast(`${tm("messages.uninstalling")} ${id}`, "primary");
+
     try {
-      const res = await axios.post("/api/plugin/uninstall", {
-        name,
-        delete_config: deleteConfig,
-        delete_data: deleteData,
-      });
+      const res = await axios.post(url, payload);
       if (res.data.status === "error") {
         toast(res.data.message, "error");
         return;
       }
-      Object.assign(extension_data, res.data);
-      toast(res.data.message, "success");
-      await getExtensions();
-    } catch (err) {
-      toast(resolveErrorMessage(err), "error");
-    }
-  };
-
-  const doUninstallFailed = async (
-    dirName,
-    { deleteConfig = false, deleteData = false } = {},
-  ) => {
-    toast(`${tm("messages.uninstalling")} ${dirName}`, "primary");
-    try {
-      const res = await axios.post("/api/plugin/uninstall-failed", {
-        dir_name: dirName,
-        delete_config: deleteConfig,
-        delete_data: deleteData,
-      });
-      if (res.data.status === "error") {
-        toast(res.data.message, "error");
-        return;
+      if (isNormal) {
+        Object.assign(extension_data, res.data);
       }
       toast(res.data.message, "success");
       await getExtensions();
     } catch (err) {
       toast(resolveErrorMessage(err), "error");
     }
-  };
-
-  const uninstallNormalPlugin = async (
-    name,
-    { skipConfirm = false, ...options } = {},
-  ) => {
-    if (!name) return;
-    if (!skipConfirm) {
-      openUninstallDialog({ kind: "normal", id: name });
-      return;
-    }
-    await doUninstallNormal(name, options);
-  };
-
-  const uninstallFailedPlugin = async (
-    dirName,
-    { skipConfirm = false, ...options } = {},
-  ) => {
-    if (!dirName) return;
-    if (!skipConfirm) {
-      openUninstallDialog({ kind: "failed", id: dirName });
-      return;
-    }
-    await doUninstallFailed(dirName, options);
   };
 
   const requestUninstallPlugin = (name) => {
-    uninstallNormalPlugin(name);
+    requestUninstall({ kind: "normal", id: name });
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
-    uninstallFailedPlugin(dirName);
+    requestUninstall({ kind: "failed", id: dirName });
   };
   
   const checkUpdate = () => {
@@ -649,11 +611,13 @@ export const useExtensionPage = () => {
   
   const uninstallExtension = async (extensionName, options = null) => {
     if (!extensionName) return;
+
     if (options && typeof options === "object") {
-      await uninstallNormalPlugin(extensionName, { ...options, skipConfirm: true });
+      await performUninstall({ kind: "normal", id: extensionName }, options);
       return;
     }
-    await uninstallNormalPlugin(extensionName);
+
+    requestUninstall({ kind: "normal", id: extensionName });
   };
   
   // 处理卸载确认对话框的确认事件
@@ -662,11 +626,7 @@ export const useExtensionPage = () => {
     if (!target) return;
 
     try {
-      if (target.kind === "normal") {
-        await doUninstallNormal(target.id, options);
-      } else {
-        await doUninstallFailed(target.id, options);
-      }
+      await performUninstall(target, options);
     } finally {
       uninstallTarget.value = null;
       showUninstallDialog.value = false;
@@ -1588,7 +1548,6 @@ export const useExtensionPage = () => {
     reloadFailedPlugin,
     checkUpdate,
     uninstallExtension,
-    uninstallFailedPlugin,
     requestUninstallPlugin,
     requestUninstallFailedPlugin,
     handleUninstallConfirm,
