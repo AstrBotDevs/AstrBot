@@ -46,7 +46,7 @@
                     prepend-icon="mdi-plus"
                     @click="showAddPreset = !showAddPreset"
                   >
-                    Add Preset
+                    {{ tm("network.server.preset.add") }}
                   </v-btn>
                 </div>
 
@@ -57,7 +57,7 @@
                   >
                     <v-text-field
                       v-model="newPresetName"
-                      label="Name"
+                      :label="tm('network.server.preset.name')"
                       density="compact"
                       hide-details
                       class="mb-2"
@@ -66,7 +66,7 @@
                     ></v-text-field>
                     <v-text-field
                       v-model="newPresetUrl"
-                      label="URL"
+                      :label="tm('network.server.preset.url')"
                       density="compact"
                       hide-details
                       class="mb-2"
@@ -79,7 +79,7 @@
                       color="primary"
                       variant="flat"
                       @click="savePreset"
-                      >Add Preset</v-btn
+                      >{{ tm("network.server.preset.add") }}</v-btn
                     >
                   </div>
                 </v-expand-transition>
@@ -374,7 +374,7 @@
           <v-col cols="12" md="4">
             <v-btn color="primary" block @click="applyThemeColors">
               <v-icon start>mdi-palette</v-icon>
-              {{ tm("common.save") }}
+              {{ t("core.common.save") }}
             </v-btn>
           </v-col>
         </v-row>
@@ -439,16 +439,17 @@ import { useTheme } from "vuetify";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useCommonStore } from "@/stores/common";
 import { useApiStore } from "@/stores/api";
-import ProxySelector from "@/components/settings/ProxySelector.vue";
-import SidebarCustomizer from "@/components/settings/SidebarCustomizer.vue";
-import WaitingForRestart from "@/components/settings/WaitingForRestart.vue";
-import MigrationDialog from "@/components/settings/MigrationDialog.vue";
-import BackupDialog from "@/components/settings/BackupDialog.vue";
+import ProxySelector from "@/components/shared/ProxySelector.vue";
+import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
+import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
+import MigrationDialog from "@/components/shared/MigrationDialog.vue";
+import BackupDialog from "@/components/shared/BackupDialog.vue";
 import axios from "axios";
-import { useI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useToast } from "@/utils/toast";
 
-const { tm } = useI18n();
+const { t } = useI18n();
+const { tm } = useModuleI18n("features/settings");
 const toastStore = useToast();
 
 /* const i18n = {
@@ -471,7 +472,6 @@ const toastStore = useToast();
     }
 } */
 
-const { t } = useI18n();
 const theme = useTheme();
 const apiStore = useApiStore();
 
