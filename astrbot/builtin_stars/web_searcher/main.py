@@ -61,6 +61,24 @@ class Main(star.Star):
         self.sogo_search = Sogo()
         self.baidu_initialized = False
 
+        # Deactivate built-in web search tools if web_search is disabled
+        # This allows MCP to provide custom web_search tools
+        websearch_enable = (provider_settings or {}).get("web_search", False)
+        if not websearch_enable:
+            self._set_tools_active(False)
+
+    def _set_tools_active(self, active: bool) -> None:
+        """Set the active status of all built-in web search tools.
+
+        Args:
+            active: True to activate tools, False to deactivate them
+        """
+        func_tool_mgr = self.context.get_llm_tool_manager()
+        for tool_name in self.TOOLS:
+            tool = func_tool_mgr.get_func(tool_name)
+            if tool:
+                tool.active = active
+
     async def _tidy_text(self, text: str) -> str:
         """清理文本，去除空格、换行符等"""
         return text.strip().replace("\n", " ").replace("\r", " ").replace("  ", " ")
@@ -557,6 +575,10 @@ class Main(star.Star):
         prov_settings = cfg.get("provider_settings", {})
         websearch_enable = prov_settings.get("web_search", False)
         provider = prov_settings.get("websearch_provider", "default")
+
+        # Globally activate/deactivate built-in web search tools based on config
+        # This allows MCP to provide custom web_search tools when built-in is disabled
+        self._set_tools_active(websearch_enable)
 
         tool_set = req.func_tool
         if isinstance(tool_set, FunctionToolManager):
