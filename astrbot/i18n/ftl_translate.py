@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import argparse
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,8 +11,7 @@ from tqdm import tqdm
 def translate_string(input_string: str, target_lang: str = "English") -> str:
     """使用 DeepSeek API 翻译 i18n 字符串。"""
     api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise ValueError(t("msg-547c9cc5"))
+
 
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
@@ -37,7 +35,6 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(t("msg-8654e4be", e=e))
         return input_string
 
 
@@ -52,7 +49,6 @@ def translate_element(element: ast.TextElement, target_lang: str) -> str:
 def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int = 10):
     """读取、并发翻译并写回 FTL 文件。"""
     if not ftl_path.exists():
-        print(t("msg-75f207ed", ftl_path=ftl_path))
         return
 
     content = ftl_path.read_text(encoding="utf-8")
@@ -61,7 +57,6 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
     # 收集所有需要翻译的 TextElement（跳过空文本）
     messages = [entry for entry in resource.body if isinstance(entry, ast.Message)]
     if not messages:
-        print(t("msg-dcfbbe82", ftl_path=ftl_path))
         return
 
     # 收集所有待翻译的 (element, ) 对，保留引用以便原地修改
@@ -71,10 +66,6 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
             for element in msg.value.elements:
                 if isinstance(element, ast.TextElement) and element.value.strip():
                     elements_to_translate.append(element)
-
-    print(
-        t("msg-ccd5a28f", res=len(elements_to_translate), max_workers=max_workers)
-    )
 
     # 并发翻译：future -> element 映射，翻译完成后原地写回
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -94,12 +85,11 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
             try:
                 element.value = future.result()
             except Exception as e:
-                print(t("msg-00b24d69", e=e))
+                ...
 
     # 序列化并写回
     translated_content = serialize(resource)
     ftl_path.write_text(translated_content, encoding="utf-8")
-    print(t("msg-ebcdd595", ftl_path=ftl_path))
 
 
 def main():
@@ -108,19 +98,14 @@ def main():
     )
     parser.add_argument(
         "--file",
-        default="astrbot/i18n/locales/zh-cn/i18n_messages.ftl",
+        default="astrbot/i18n/locales/ja-jp/i18n_messages.ftl",
         help="待翻译的 FTL 文件路径",
     )
-    parser.add_argument("--lang", default="Chinese", help="目标语言（默认: Chinese）")
+    parser.add_argument("--lang", default="Japanese", help="目标语言（默认: Chinese）")
     parser.add_argument(
-        "--workers", type=int, default=28, help="并发线程数（默认: 10）"
+        "--workers", type=int, default=32, help="并发线程数（默认: 10）"
     )
     args = parser.parse_args()
-
-    if "DEEPSEEK_API_KEY" not in os.environ:
-        print(t("msg-d6c66497"))
-        print(t("msg-09486085"))
-        return
 
     process_ftl(Path(args.file), args.lang, args.workers)
 
