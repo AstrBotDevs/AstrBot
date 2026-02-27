@@ -267,7 +267,7 @@ def save_config(
     # 验证 SSL 配置
     ssl_errors = validate_ssl_config(post_config)
     if ssl_errors:
-        raise ValueError(f"SSL 配置校验未通过: {ssl_errors}")
+        raise ValueError(f"SSL 配置校验未通过: {'; '.join(ssl_errors)}")
 
     config.save_config(post_config)
 
