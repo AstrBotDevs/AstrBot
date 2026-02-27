@@ -52,8 +52,12 @@ class ProviderEdgeTTS(TTSProvider):
                 # 使用 re.sub 将匹配到的内容替换为空字符串
                 text = re.sub(self.filter_regex, "", text)
                 logger.debug(f"正则过滤后的文本: {text}")
-            except Exception as e:
-                logger.error(f"正则表达式执行错误: {e}")
+            except re.error as e:
+                logger.error(
+                    "正则表达式执行错误: %s | pattern=%r",
+                    e,
+                    self.filter_regex,
+                )
         if not text.strip():
             logger.warning("文本为空，跳过语音生成。")
             raise RuntimeError("过滤后文本为空，跳过语音生成。")
