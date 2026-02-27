@@ -1043,6 +1043,19 @@ class PluginManager:
         )
         self._rebuild_failed_plugin_info()
 
+    def _format_plugin_error(self, key: str, **kwargs) -> str:
+        templates = {
+            "not_found_in_failed_list": "插件不存在于失败列表中。",
+            "reserved_plugin_cannot_uninstall": "该插件是 AstrBot 保留插件，无法卸载。",
+            "plugin_dir_not_exists": "插件目录不存在。",
+            "failed_plugin_dir_remove_error": (
+                "移除失败插件成功，但是删除插件文件夹失败: {error}。"
+                "您可以手动删除该文件夹，位于 addons/plugins/ 下。"
+            ),
+        }
+        template = templates.get(key, key)
+        return template.format(**kwargs)
+
     async def install_plugin(
         self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
     ):
@@ -1198,14 +1211,20 @@ class PluginManager:
         async with self._pm_lock:
             failed_info = self.failed_plugin_dict.get(dir_name)
             if not failed_info:
-                raise Exception("插件不存在于失败列表中。")
+                raise Exception(
+                    self._format_plugin_error("not_found_in_failed_list"),
+                )
 
             if isinstance(failed_info, dict) and failed_info.get("reserved"):
-                raise Exception("该插件是 AstrBot 保留插件，无法卸载。")
+                raise Exception(
+                    self._format_plugin_error("reserved_plugin_cannot_uninstall"),
+                )
 
             plugin_path = os.path.join(self.plugin_store_path, dir_name)
             if not os.path.exists(plugin_path):
-                raise Exception("插件目录不存在。")
+                raise Exception(
+                    self._format_plugin_error("plugin_dir_not_exists"),
+                )
 
             self._cleanup_plugin_state(dir_name)
 
@@ -1213,7 +1232,10 @@ class PluginManager:
                 remove_dir(plugin_path)
             except Exception as e:
                 raise Exception(
-                    f"移除失败插件成功，但是删除插件文件夹失败: {e!s}。您可以手动删除该文件夹，位于 addons/plugins/ 下。",
+                    self._format_plugin_error(
+                        "failed_plugin_dir_remove_error",
+                        error=f"{e!s}",
+                    ),
                 )
 
             plugin_label = dir_name

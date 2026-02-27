@@ -8,6 +8,50 @@ import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 
+const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
+  const showRandomPlugins = ref(true);
+
+  const toggleRandomPluginsVisibility = () => {
+    showRandomPlugins.value = !showRandomPlugins.value;
+  };
+
+  const collapseRandomPlugins = () => {
+    showRandomPlugins.value = false;
+  };
+
+  watch(marketSearch, () => {
+    if (activeTab.value === "market") {
+      collapseRandomPlugins();
+    }
+  });
+
+  watch(currentPage, (newPage, oldPage) => {
+    if (newPage === oldPage) return;
+    if (activeTab.value !== "market") return;
+    collapseRandomPlugins();
+  });
+
+  return {
+    showRandomPlugins,
+    toggleRandomPluginsVisibility,
+    collapseRandomPlugins,
+  };
+};
+
+const buildFailedPluginItems = (raw) => {
+  return Object.entries(raw || {}).map(([dirName, info]) => {
+    const detail = info && typeof info === "object" ? info : {};
+    return {
+      dir_name: dirName,
+      name: detail.name || dirName,
+      display_name: detail.display_name || detail.name || dirName,
+      error: detail.error || "",
+      traceback: detail.traceback || "",
+      reserved: !!detail.reserved,
+    };
+  });
+};
+
 export const useExtensionPage = () => {
   
   
@@ -184,7 +228,15 @@ export const useExtensionPage = () => {
   const sortBy = ref("default"); // default, stars, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
   const randomPluginNames = ref([]);
-  const showRandomPlugins = ref(true);
+  const {
+    showRandomPlugins,
+    toggleRandomPluginsVisibility,
+    collapseRandomPlugins,
+  } = useRandomPluginsDisplay({
+    activeTab,
+    marketSearch,
+    currentPage,
+  });
   
   // 插件市场拼音搜索
   const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -383,14 +435,6 @@ export const useExtensionPage = () => {
       .slice(0, Math.min(RANDOM_PLUGINS_COUNT, shuffled.length))
       .map((plugin) => plugin.name);
   };
-
-  const toggleRandomPluginsVisibility = () => {
-    showRandomPlugins.value = !showRandomPlugins.value;
-  };
-
-  const collapseRandomPlugins = () => {
-    showRandomPlugins.value = false;
-  };
   
   // 分页计算属性
   const displayItemsPerPage = 9; // 固定每页显示9个卡片（3行）
@@ -440,20 +484,9 @@ export const useExtensionPage = () => {
   };
   
   const failedPluginsDict = ref({});
-  const failedPluginItems = computed(() => {
-    const raw = failedPluginsDict.value || {};
-    return Object.entries(raw).map(([dirName, info]) => {
-      const detail = info && typeof info === "object" ? info : {};
-      return {
-        dir_name: dirName,
-        name: detail.name || dirName,
-        display_name: detail.display_name || detail.name || dirName,
-        error: detail.error || "",
-        traceback: detail.traceback || "",
-        reserved: !!detail.reserved,
-      };
-    });
-  });
+  const failedPluginItems = computed(() =>
+    buildFailedPluginItems(failedPluginsDict.value),
+  );
   
   const getExtensions = async () => {
     loading_.value = true;
@@ -519,34 +552,48 @@ export const useExtensionPage = () => {
   };
 
   const requestUninstall = (target) => {
-    if (!target?.id) return;
+    if (!target?.action) return;
     uninstallTarget.value = target;
     showUninstallDialog.value = true;
   };
 
-  const performUninstall = async (
-    target,
+  const performUninstallNormal = async (
+    pluginName,
     { deleteConfig = false, deleteData = false } = {},
   ) => {
-    if (!target?.id) return;
-
-    const { kind, id } = target;
-    const isNormal = kind === "normal";
-    const payload = isNormal
-      ? { name: id, delete_config: deleteConfig, delete_data: deleteData }
-      : { dir_name: id, delete_config: deleteConfig, delete_data: deleteData };
-    const url = isNormal ? "/api/plugin/uninstall" : "/api/plugin/uninstall-failed";
-
-    toast(`${tm("messages.uninstalling")} ${id}`, "primary");
-
+    toast(`${tm("messages.uninstalling")} ${pluginName}`, "primary");
     try {
-      const res = await axios.post(url, payload);
+      const res = await axios.post("/api/plugin/uninstall", {
+        name: pluginName,
+        delete_config: deleteConfig,
+        delete_data: deleteData,
+      });
       if (res.data.status === "error") {
         toast(res.data.message, "error");
         return;
       }
-      if (isNormal) {
-        Object.assign(extension_data, res.data);
+      Object.assign(extension_data, res.data);
+      toast(res.data.message, "success");
+      await getExtensions();
+    } catch (err) {
+      toast(resolveErrorMessage(err), "error");
+    }
+  };
+
+  const performUninstallFailed = async (
+    dirName,
+    { deleteConfig = false, deleteData = false } = {},
+  ) => {
+    toast(`${tm("messages.uninstalling")} ${dirName}`, "primary");
+    try {
+      const res = await axios.post("/api/plugin/uninstall-failed", {
+        dir_name: dirName,
+        delete_config: deleteConfig,
+        delete_data: deleteData,
+      });
+      if (res.data.status === "error") {
+        toast(res.data.message, "error");
+        return;
       }
       toast(res.data.message, "success");
       await getExtensions();
@@ -556,11 +603,23 @@ export const useExtensionPage = () => {
   };
 
   const requestUninstallPlugin = (name) => {
-    requestUninstall({ kind: "normal", id: name });
+    if (!name) return;
+    requestUninstall({
+      label: name,
+      action: async (options) => {
+        await performUninstallNormal(name, options);
+      },
+    });
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
-    requestUninstall({ kind: "failed", id: dirName });
+    if (!dirName) return;
+    requestUninstall({
+      label: dirName,
+      action: async (options) => {
+        await performUninstallFailed(dirName, options);
+      },
+    });
   };
   
   const checkUpdate = () => {
@@ -595,12 +654,21 @@ export const useExtensionPage = () => {
   const uninstallExtension = async (extensionName, options = null) => {
     if (!extensionName) return;
 
-    if (options && typeof options === "object") {
-      await performUninstall({ kind: "normal", id: extensionName }, options);
+    if (typeof options === "boolean") {
+      if (options) {
+        await performUninstallNormal(extensionName);
+      } else {
+        requestUninstallPlugin(extensionName);
+      }
       return;
     }
 
-    requestUninstall({ kind: "normal", id: extensionName });
+    if (options && typeof options === "object") {
+      await performUninstallNormal(extensionName, options);
+      return;
+    }
+
+    requestUninstallPlugin(extensionName);
   };
   
   // 处理卸载确认对话框的确认事件
@@ -609,7 +677,7 @@ export const useExtensionPage = () => {
     if (!target) return;
 
     try {
-      await performUninstall(target, options);
+      await target.action(options);
     } finally {
       uninstallTarget.value = null;
       showUninstallDialog.value = false;
@@ -1123,6 +1191,103 @@ export const useExtensionPage = () => {
   const cancelInstallOnVersionWarning = () => {
     versionCompatibilityDialog.show = false;
   };
+
+  const handleInstallResponse = async (resData, { toastStatus = false } = {}) => {
+    if (
+      resData.status === "warning" &&
+      resData.data?.warning_type === "astrbot_version_incompatible"
+    ) {
+      onLoadingDialogResult(2, resData.message, -1);
+      showVersionCompatibilityWarning(resData.message);
+      await refreshExtensionsAfterInstallFailure();
+      return false;
+    }
+
+    if (toastStatus) {
+      toast(resData.message, resData.status === "ok" ? "success" : "error");
+    }
+
+    if (resData.status === "error") {
+      onLoadingDialogResult(2, resData.message, -1);
+      await refreshExtensionsAfterInstallFailure();
+      return false;
+    }
+
+    return true;
+  };
+
+  const installFromFile = async (ignoreVersionCheck) => {
+    toast(tm("messages.installing"), "primary");
+    const formData = new FormData();
+    formData.append("file", upload_file.value);
+    formData.append("ignore_version_check", String(ignoreVersionCheck));
+
+    try {
+      const res = await axios.post("/api/plugin/install-upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      loading_.value = false;
+
+      const canContinue = await handleInstallResponse(res.data);
+      if (!canContinue) return;
+
+      upload_file.value = null;
+      onLoadingDialogResult(1, res.data.message);
+      dialog.value = false;
+      await getExtensions();
+
+      viewReadme({
+        name: res.data.data.name,
+        repo: res.data.data.repo || null,
+      });
+
+      await checkAndPromptConflicts();
+    } catch (err) {
+      loading_.value = false;
+      onLoadingDialogResult(2, err, -1);
+      await refreshExtensionsAfterInstallFailure();
+    }
+  };
+
+  const installFromUrl = async (ignoreVersionCheck) => {
+    toast(
+      tm("messages.installingFromUrl") + " " + extension_url.value,
+      "primary",
+    );
+
+    try {
+      const res = await axios.post("/api/plugin/install", {
+        url: extension_url.value,
+        proxy: getSelectedGitHubProxy(),
+        ignore_version_check: ignoreVersionCheck,
+      });
+      loading_.value = false;
+
+      const canContinue = await handleInstallResponse(res.data, {
+        toastStatus: true,
+      });
+      if (!canContinue) return;
+
+      extension_url.value = "";
+      onLoadingDialogResult(1, res.data.message);
+      dialog.value = false;
+      await getExtensions();
+
+      viewReadme({
+        name: res.data.data.name,
+        repo: res.data.data.repo || null,
+      });
+
+      await checkAndPromptConflicts();
+    } catch (err) {
+      loading_.value = false;
+      toast(tm("messages.installFailed") + " " + err, "error");
+      onLoadingDialogResult(2, err, -1);
+      await refreshExtensionsAfterInstallFailure();
+    }
+  };
   
   const newExtension = async (ignoreVersionCheck = false) => {
     if (extension_url.value === "" && upload_file.value === null) {
@@ -1137,97 +1302,13 @@ export const useExtensionPage = () => {
     loading_.value = true;
     loadingDialog.title = tm("status.loading");
     loadingDialog.show = true;
+
     if (upload_file.value !== null) {
-      toast(tm("messages.installing"), "primary");
-      const formData = new FormData();
-      formData.append("file", upload_file.value);
-      formData.append("ignore_version_check", String(ignoreVersionCheck));
-      axios
-        .post("/api/plugin/install-upload", formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        })
-        .then(async (res) => {
-          loading_.value = false;
-          if (
-            res.data.status === "warning" &&
-            res.data.data?.warning_type === "astrbot_version_incompatible"
-          ) {
-            onLoadingDialogResult(2, res.data.message, -1);
-            showVersionCompatibilityWarning(res.data.message);
-            await refreshExtensionsAfterInstallFailure();
-            return;
-          }
-          if (res.data.status === "error") {
-            onLoadingDialogResult(2, res.data.message, -1);
-            await refreshExtensionsAfterInstallFailure();
-            return;
-          }
-          upload_file.value = null;
-          onLoadingDialogResult(1, res.data.message);
-          dialog.value = false;
-          await getExtensions();
-  
-          viewReadme({
-            name: res.data.data.name,
-            repo: res.data.data.repo || null,
-          });
-  
-          await checkAndPromptConflicts();
-        })
-        .catch(async (err) => {
-          loading_.value = false;
-          onLoadingDialogResult(2, err, -1);
-          await refreshExtensionsAfterInstallFailure();
-        });
-    } else {
-      toast(
-        tm("messages.installingFromUrl") + " " + extension_url.value,
-        "primary",
-      );
-      axios
-        .post("/api/plugin/install", {
-          url: extension_url.value,
-          proxy: getSelectedGitHubProxy(),
-          ignore_version_check: ignoreVersionCheck,
-        })
-        .then(async (res) => {
-          loading_.value = false;
-          if (
-            res.data.status === "warning" &&
-            res.data.data?.warning_type === "astrbot_version_incompatible"
-          ) {
-            onLoadingDialogResult(2, res.data.message, -1);
-            showVersionCompatibilityWarning(res.data.message);
-            await refreshExtensionsAfterInstallFailure();
-            return;
-          }
-          toast(res.data.message, res.data.status === "ok" ? "success" : "error");
-          if (res.data.status === "error") {
-            onLoadingDialogResult(2, res.data.message, -1);
-            await refreshExtensionsAfterInstallFailure();
-            return;
-          }
-          extension_url.value = "";
-          onLoadingDialogResult(1, res.data.message);
-          dialog.value = false;
-          await getExtensions();
-  
-          viewReadme({
-            name: res.data.data.name,
-            repo: res.data.data.repo || null,
-          });
-  
-          await checkAndPromptConflicts();
-        })
-        .catch(async (err) => {
-          loading_.value = false;
-          toast(tm("messages.installFailed") + " " + err, "error");
-          onLoadingDialogResult(2, err, -1);
-          await refreshExtensionsAfterInstallFailure();
-        });
+      await installFromFile(ignoreVersionCheck);
+      return;
     }
+
+    await installFromUrl(ignoreVersionCheck);
   };
   
   const normalizePlatformList = (platforms) => {
@@ -1364,10 +1445,6 @@ export const useExtensionPage = () => {
   // 搜索防抖处理
   let searchDebounceTimer = null;
   watch(marketSearch, (newVal) => {
-    if (activeTab.value === "market") {
-      collapseRandomPlugins();
-    }
-
     if (searchDebounceTimer) {
       clearTimeout(searchDebounceTimer);
     }
@@ -1377,12 +1454,6 @@ export const useExtensionPage = () => {
       // 搜索时重置到第一页
       currentPage.value = 1;
     }, 300); // 300ms 防抖延迟
-  });
-
-  watch(currentPage, (newPage, oldPage) => {
-    if (newPage === oldPage) return;
-    if (activeTab.value !== "market") return;
-    collapseRandomPlugins();
   });
   
   // 监听显示模式变化并保存到 localStorage
