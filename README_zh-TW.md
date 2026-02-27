@@ -2,8 +2,8 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">简体中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">简体中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
@@ -37,7 +37,7 @@
 
 AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主流即時通訊軟體，為個人、開發者和團隊打造可靠、可擴展的對話式智慧基礎設施。無論是個人 AI 夥伴、智慧客服、自動化助手，還是企業知識庫，AstrBot 都能在您的即時通訊軟體平台的工作流程中快速構建生產可用的 AI 應用程式。
 
-![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
+![screenshot_1 5x_postspark_2026-02-27_22-37-45](https://github.com/user-attachments/assets/f17cdb90-52d7-4773-be2e-ff64b566af6b)
 
 ## 主要功能
 
@@ -107,6 +107,8 @@ AstrBot 已由 1Panel 官方上架至 1Panel 面板。
 
 #### 在雨雲上部署
 
+For Chinese users:
+
 AstrBot 已由雨雲官方上架至雲端應用程式平台，可一鍵部署。
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
@@ -156,71 +158,61 @@ paru -S astrbot-git
 
 ## 支援的訊息平台
 
-**官方維護**
+將 AstrBot 連接到你常用的聊天平台。
 
-- QQ（官方平台 & OneBot）
-- Telegram
-- 企微應用 & 企微智慧機器人
-- 微信客服 & 微信公眾號
-- 飛書
-- 釘釘
-- Slack
-- Discord
-- Satori
-- Misskey
-- LINE
-- Whatsapp（即將支援）
-
-
-**社群維護**
-
-- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
-- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
-- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+| 平台 | 維護方 |
+|---------|---------------|
+| QQ | 官方維護 |
+| OneBot v11 協議實作 | 官方維護 |
+| Telegram | 官方維護 |
+| 企微應用 & 企微智慧機器人 | 官方維護 |
+| 微信客服 & 微信公眾號 | 官方維護 |
+| 飛書 | 官方維護 |
+| 釘釘 | 官方維護 |
+| Slack | 官方維護 |
+| Discord | 官方維護 |
+| LINE | 官方維護 |
+| Satori | 官方維護 |
+| Misskey | 官方維護 |
+| Whatsapp（即將支援） | 官方維護 |
+| [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社群維護 |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | 社群維護 |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | 社群維護 |
 
 ## 支援的模型服務
 
-**大型模型服務**
-
-- OpenAI 及相容服務
-- Anthropic
-- Google Gemini
-- Moonshot AI
-- 智譜 AI
-- DeepSeek
-- Ollama（本機部署）
-- LM Studio（本機部署）
-- [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
-- [302.AI](https://share.302.ai/rr1M3l)
-- [小馬算力](https://www.tokenpony.cn/3YPyf)
-- [矽基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
-- [PPIO 派歐雲](https://ppio.com/user/register?invited_by=AIOONE)
-- ModelScope
-- OneAPI
-
-**LLMOps 平台**
-
-- Dify
-- 阿里雲百煉應用
-- Coze
-
-**語音轉文字服務**
-
-- OpenAI Whisper
-- SenseVoice
-
-**文字轉語音服務**
-
-- OpenAI TTS
-- Gemini TTS
-- GPT-Sovits-Inference
-- GPT-Sovits
-- FishAudio
-- Edge TTS
-- 阿里雲百煉 TTS
-- Azure TTS
-- Minimax TTS
-- 火山引擎 TTS
+| 服務 | 類型 |
+|---------|---------------|
+| OpenAI 及相容服務 | 大型模型服務 |
+| Anthropic | 大型模型服務 |
+| Google Gemini | 大型模型服務 |
+| Moonshot AI | 大型模型服務 |
+| 智譜 AI | 大型模型服務 |
+| DeepSeek | 大型模型服務 |
+| Ollama（本機部署） | 大型模型服務 |
+| LM Studio（本機部署） | 大型模型服務 |
+| [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大型模型服務 |
+| [302.AI](https://share.302.ai/rr1M3l) | 大型模型服務 |
+| [小馬算力](https://www.tokenpony.cn/3YPyf) | 大型模型服務 |
+| [矽基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | 大型模型服務 |
+| [PPIO 派歐雲](https://ppio.com/user/register?invited_by=AIOONE) | 大型模型服務 |
+| ModelScope | 大型模型服務 |
+| OneAPI | 大型模型服務 |
+| Dify | LLMOps 平台 |
+| 阿里雲百煉應用 | LLMOps 平台 |
+| Coze | LLMOps 平台 |
+| OpenAI Whisper | 語音轉文字服務 |
+| SenseVoice | 語音轉文字服務 |
+| OpenAI TTS | 文字轉語音服務 |
+| Gemini TTS | 文字轉語音服務 |
+| GPT-Sovits-Inference | 文字轉語音服務 |
+| GPT-Sovits | 文字轉語音服務 |
+| FishAudio | 文字轉語音服務 |
+| Edge TTS | 文字轉語音服務 |
+| 阿里雲百煉 TTS | 文字轉語音服務 |
+| Azure TTS | 文字轉語音服務 |
+| Minimax TTS | 文字轉語音服務 |
+| 火山引擎 TTS | 文字轉語音服務 |
 
 ## ❤️ 貢獻
 

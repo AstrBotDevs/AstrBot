@@ -2,8 +2,8 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
@@ -37,7 +37,7 @@
 
 AstrBot は、主要なインスタントメッセージングアプリと統合できるオープンソースのオールインワン Agent チャットボットプラットフォームです。個人、開発者、チームに信頼性が高くスケーラブルな会話型 AI インフラストラクチャを提供します。パーソナル AI コンパニオン、インテリジェントカスタマーサービス、オートメーションアシスタント、エンタープライズナレッジベースなど、AstrBot を使用すると、IM プラットフォームのワークフロー内で本番環境対応の AI アプリケーションを迅速に構築できます。
 
-![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
+![screenshot_1 5x_postspark_2026-02-27_22-37-45](https://github.com/user-attachments/assets/f17cdb90-52d7-4773-be2e-ff64b566af6b)
 
 ## 主な機能
 
@@ -107,6 +107,8 @@ AstrBot は 1Panel 公式により 1Panel パネルに公開されています�
 
 #### 雨云でのデプロイ
 
+For Chinese users:
+
 AstrBot は雨云公式によりクラウドアプリケーションプラットフォームに公開され、ワンクリックでデプロイ可能です。
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
@@ -156,71 +158,62 @@ paru -S astrbot-git
 
 ## サポートされているメッセージプラットフォーム
 
-**公式メンテナンス**
+AstrBot をよく使うチャットプラットフォームに接続できます。
 
-- QQ (公式プラットフォーム & OneBot)
-- Telegram
-- WeChat Work アプリケーション & WeChat Work インテリジェントボット
-- WeChat カスタマーサービス & WeChat 公式アカウント
-- Feishu (Lark)
-- DingTalk
-- Slack
-- Discord
-- Satori
-- Misskey
-- LINE
-- WhatsApp (近日対応予定)
-
-**コミュニティメンテナンス**
-
-- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
-- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
-- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+| プラットフォーム | 保守 |
+|---------|---------------|
+| QQ | 公式 |
+| OneBot v11 プロトコル実装 | 公式 |
+| Telegram | 公式 |
+| WeChat Work アプリケーション & WeChat Work インテリジェントボット | 公式 |
+| WeChat カスタマーサービス & WeChat 公式アカウント | 公式 |
+| Feishu (Lark) | 公式 |
+| DingTalk | 公式 |
+| Slack | 公式 |
+| Discord | 公式 |
+| LINE | 公式 |
+| Satori | 公式 |
+| Misskey | 公式 |
+| WhatsApp (近日対応予定) | 公式 |
+| [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | コミュニティ |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | コミュニティ |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | コミュニティ |
 
 
 ## サポートされているモデルサービス
 
-**大規模言語モデルサービス**
-
-- OpenAI および互換サービス
-- Anthropic
-- Google Gemini
-- Moonshot AI
-- 智谱 AI
-- DeepSeek
-- Ollama (セルフホスト)
-- LM Studio (セルフホスト)
-- [優云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
-- [302.AI](https://share.302.ai/rr1M3l)
-- [小馬算力](https://www.tokenpony.cn/3YPyf)
-- [硅基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
-- [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE)
-- ModelScope
-- OneAPI
-
-**LLMOps プラットフォーム**
-
-- Dify
-- Alibaba Cloud 百炼アプリケーション
-- Coze
-
-**音声認識サービス**
-
-- OpenAI Whisper
-- SenseVoice
-
-**音声合成サービス**
-
-- OpenAI TTS
-- Gemini TTS
-- GPT-Sovits-Inference
-- GPT-Sovits
-- FishAudio
-- Edge TTS
-- Alibaba Cloud 百炼 TTS
-- Azure TTS
-- Minimax TTS
-- Volcano Engine TTS
+| サービス | 種類 |
+|---------|---------------|
+| OpenAI および互換サービス | 大規模言語モデルサービス |
+| Anthropic | 大規模言語モデルサービス |
+| Google Gemini | 大規模言語モデルサービス |
+| Moonshot AI | 大規模言語モデルサービス |
+| 智谱 AI | 大規模言語モデルサービス |
+| DeepSeek | 大規模言語モデルサービス |
+| Ollama (セルフホスト) | 大規模言語モデルサービス |
+| LM Studio (セルフホスト) | 大規模言語モデルサービス |
+| [優云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大規模言語モデルサービス |
+| [302.AI](https://share.302.ai/rr1M3l) | 大規模言語モデルサービス |
+| [小馬算力](https://www.tokenpony.cn/3YPyf) | 大規模言語モデルサービス |
+| [硅基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | 大規模言語モデルサービス |
+| [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE) | 大規模言語モデルサービス |
+| ModelScope | 大規模言語モデルサービス |
+| OneAPI | 大規模言語モデルサービス |
+| Dify | LLMOps プラットフォーム |
+| Alibaba Cloud 百炼アプリケーション | LLMOps プラットフォーム |
+| Coze | LLMOps プラットフォーム |
+| OpenAI Whisper | 音声認識サービス |
+| SenseVoice | 音声認識サービス |
+| OpenAI TTS | 音声合成サービス |
+| Gemini TTS | 音声合成サービス |
+| GPT-Sovits-Inference | 音声合成サービス |
+| GPT-Sovits | 音声合成サービス |
+| FishAudio | 音声合成サービス |
+| Edge TTS | 音声合成サービス |
+| Alibaba Cloud 百炼 TTS | 音声合成サービス |
+| Azure TTS | 音声合成サービス |
+| Minimax TTS | 音声合成サービス |
+| Volcano Engine TTS | 音声合成サービス |
 
 ## ❤️ コントリビューション
 

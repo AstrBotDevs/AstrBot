@@ -2,8 +2,8 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a>
@@ -107,6 +107,8 @@ AstrBot официально размещён на маркетплейсе 1Pan
 
 #### Развёртывание на RainYun
 
+For Chinese users:
+
 AstrBot официально размещён на облачной платформе приложений RainYun с развёртыванием в один клик.
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
@@ -156,71 +158,61 @@ paru -S astrbot-git
 
 ## Поддерживаемые платформы обмена сообщениями
 
-**Официально поддерживаемые**
+Подключите AstrBot к вашим любимым чат-платформам.
 
-- QQ (Официальная платформа и OneBot)
-- Telegram
-- Приложение WeChat Work и интеллектуальный бот WeChat Work
-- Служба поддержки WeChat и официальные аккаунты WeChat
-- Feishu (Lark)
-- DingTalk
-- Slack
-- Discord
-- Satori
-- Misskey
-- LINE
-- WhatsApp (Скоро)
-
-
-**Поддерживаемые сообществом**
-
-- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
-- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
-- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+| Платформа | Поддержка |
+|---------|---------------|
+| QQ | Официальная |
+| Реализация протокола OneBot v11 | Официальная |
+| Telegram | Официальная |
+| Приложение WeChat Work и интеллектуальный бот WeChat Work | Официальная |
+| Служба поддержки WeChat и официальные аккаунты WeChat | Официальная |
+| Feishu (Lark) | Официальная |
+| DingTalk | Официальная |
+| Slack | Официальная |
+| Discord | Официальная |
+| LINE | Официальная |
+| Satori | Официальная |
+| Misskey | Официальная |
+| WhatsApp (Скоро) | Официальная |
+| [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | Сообщество |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | Сообщество |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | Сообщество |
 
 ## Поддерживаемые сервисы моделей
 
-**Сервисы LLM**
-
-- OpenAI и совместимые сервисы
-- Anthropic
-- Google Gemini
-- Moonshot AI
-- Zhipu AI
-- DeepSeek
-- Ollama (Самостоятельное размещение)
-- LM Studio (Самостоятельное размещение)
-- [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
-- [302.AI](https://share.302.ai/rr1M3l)
-- [TokenPony](https://www.tokenpony.cn/3YPyf)
-- [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
-- [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE)
-- ModelScope
-- OneAPI
-
-**Платформы LLMOps**
-
-- Dify
-- Приложения Alibaba Cloud Bailian
-- Coze
-
-**Сервисы распознавания речи**
-
-- OpenAI Whisper
-- SenseVoice
-
-**Сервисы синтеза речи**
-
-- OpenAI TTS
-- Gemini TTS
-- GPT-Sovits-Inference
-- GPT-Sovits
-- FishAudio
-- Edge TTS
-- Alibaba Cloud Bailian TTS
-- Azure TTS
-- Minimax TTS
-- Volcano Engine TTS
+| Сервис | Тип |
+|---------|---------------|
+| OpenAI и совместимые сервисы | Сервисы LLM |
+| Anthropic | Сервисы LLM |
+| Google Gemini | Сервисы LLM |
+| Moonshot AI | Сервисы LLM |
+| Zhipu AI | Сервисы LLM |
+| DeepSeek | Сервисы LLM |
+| Ollama (Самостоятельное размещение) | Сервисы LLM |
+| LM Studio (Самостоятельное размещение) | Сервисы LLM |
+| [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Сервисы LLM |
+| [302.AI](https://share.302.ai/rr1M3l) | Сервисы LLM |
+| [TokenPony](https://www.tokenpony.cn/3YPyf) | Сервисы LLM |
+| [SiliconFlow](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | Сервисы LLM |
+| [PPIO Cloud](https://ppio.com/user/register?invited_by=AIOONE) | Сервисы LLM |
+| ModelScope | Сервисы LLM |
+| OneAPI | Сервисы LLM |
+| Dify | Платформы LLMOps |
+| Приложения Alibaba Cloud Bailian | Платформы LLMOps |
+| Coze | Платформы LLMOps |
+| OpenAI Whisper | Сервисы распознавания речи |
+| SenseVoice | Сервисы распознавания речи |
+| OpenAI TTS | Сервисы синтеза речи |
+| Gemini TTS | Сервисы синтеза речи |
+| GPT-Sovits-Inference | Сервисы синтеза речи |
+| GPT-Sovits | Сервисы синтеза речи |
+| FishAudio | Сервисы синтеза речи |
+| Edge TTS | Сервисы синтеза речи |
+| Alibaba Cloud Bailian TTS | Сервисы синтеза речи |
+| Azure TTS | Сервисы синтеза речи |
+| Minimax TTS | Сервисы синтеза речи |
+| Volcano Engine TTS | Сервисы синтеза речи |
 
 ## ❤️ Вклад в проект
 
