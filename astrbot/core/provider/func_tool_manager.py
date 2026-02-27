@@ -234,6 +234,8 @@ class FunctionToolManager:
                     "MCP 服务初始化超时（20秒），部分服务可能未完全加载。"
                     "建议检查 MCP 服务器配置和网络连接。"
                 )
+                for task in pending:
+                    task.cancel()
 
             success_count = 0
             failed_services: list[str] = []
