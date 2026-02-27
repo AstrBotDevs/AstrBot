@@ -23,8 +23,17 @@
         </v-btn-toggle>
       </v-row>
 
-      <div v-if="mode === 'local'" class="px-2 pb-2">
+      <div v-if="mode === 'local'" class="px-2 pb-2 d-flex flex-column ga-2">
         <small style="color: grey;">{{ tm("skills.runtimeHint") }}</small>
+        <v-alert
+          v-if="runtime === 'sandbox' && !sandboxCache.ready"
+          type="info"
+          variant="tonal"
+          density="comfortable"
+          border="start"
+        >
+          {{ tm("skills.sandboxDiscoveryPending") }}
+        </v-alert>
       </div>
 
       <div v-if="mode === 'neo' && !neoEnabled" class="px-3 pb-3">
@@ -42,26 +51,57 @@
           <small class="text-grey">{{ tm("skills.emptyHint") }}</small>
         </div>
 
-        <v-row v-else>
-          <v-col v-for="skill in skills" :key="skill.name" cols="12" md="6" lg="4" xl="3">
+        <v-row v-else align="stretch">
+          <v-col
+            v-for="skill in skills"
+            :key="skill.name"
+            cols="12"
+            md="6"
+            lg="4"
+            xl="3"
+            class="d-flex"
+          >
             <item-card
               :item="skill"
               title-field="name"
               enabled-field="active"
               :loading="itemLoading[skill.name] || false"
               :show-edit-button="false"
+              :disable-toggle="isSandboxPresetSkill(skill)"
+              :disable-delete="isSandboxPresetSkill(skill)"
               @toggle-enabled="toggleSkill"
               @delete="confirmDelete"
             >
               <template #item-details="{ item }">
-                <div class="text-caption text-medium-emphasis mb-2 skill-description">
-                  <v-icon size="small" class="me-1">mdi-text</v-icon>
-                  {{ item.description || tm("skills.noDescription") }}
+                <div class="d-flex align-center mb-2 ga-2 flex-wrap">
+                  <v-chip
+                    size="x-small"
+                    variant="tonal"
+                    :color="sourceTypeColor(item.source_type)"
+                  >
+                    {{ sourceTypeLabel(item.source_type) }}
+                  </v-chip>
+                  <div class="text-caption text-medium-emphasis skill-description">
+                    <v-icon size="small" class="me-1">mdi-text</v-icon>
+                    {{ item.description || tm("skills.noDescription") }}
+                  </div>
                 </div>
-                <div class="text-caption text-medium-emphasis">
+                <div class="text-caption text-medium-emphasis skill-path">
                   <v-icon size="small" class="me-1">mdi-file-document</v-icon>
                   {{ tm("skills.path") }}: {{ item.path }}
                 </div>
+              </template>
+              <template #actions="{ item }">
+                <v-btn
+                  variant="tonal"
+                  color="primary"
+                  size="small"
+                  rounded="xl"
+                  :disabled="itemLoading[item.name] || false || isSandboxPresetSkill(item)"
+                  @click="downloadSkill(item)"
+                >
+                  {{ tm("skills.download") }}
+                </v-btn>
               </template>
             </item-card>
           </v-col>
@@ -288,6 +328,8 @@ export default {
     const mode = ref("local");
     const skills = ref([]);
     const loading = ref(false);
+    const runtime = ref("local");
+    const sandboxCache = reactive({ ready: false, count: 0, updated_at: null });
     const uploading = ref(false);
     const uploadDialog = ref(false);
     const uploadFile = ref(null);
@@ -357,9 +399,34 @@ export default {
 
     const normalizeSkillsPayload = (res) => {
       const payload = res?.data?.data || [];
-      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload)) {
+        runtime.value = "local";
+        sandboxCache.ready = false;
+        sandboxCache.count = 0;
+        sandboxCache.updated_at = null;
+        return payload;
+      }
+      runtime.value = payload.runtime || "local";
+      const cache = payload.sandbox_cache || {};
+      sandboxCache.ready = !!cache.ready;
+      sandboxCache.count = Number(cache.count || 0);
+      sandboxCache.updated_at = cache.updated_at || null;
       return payload.skills || [];
     };
+
+    const sourceTypeLabel = (sourceType) => {
+      if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
+      if (sourceType === "both") return tm("skills.sourceBoth");
+      return tm("skills.sourceLocalOnly");
+    };
+
+    const sourceTypeColor = (sourceType) => {
+      if (sourceType === "sandbox_only") return "indigo";
+      if (sourceType === "both") return "success";
+      return "primary";
+    };
+
+    const isSandboxPresetSkill = (skill) => skill?.source_type === "sandbox_only";
 
     const normalizeNeoItemsPayload = (res) => {
       const payload = res?.data?.data || [];
@@ -417,6 +484,10 @@ export default {
     };
 
     const toggleSkill = async (skill) => {
+      if (isSandboxPresetSkill(skill)) {
+        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        return;
+      }
       const nextActive = !skill.active;
       itemLoading[skill.name] = true;
       try {
@@ -435,6 +506,10 @@ export default {
     };
 
     const confirmDelete = (skill) => {
+      if (isSandboxPresetSkill(skill)) {
+        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        return;
+      }
       skillToDelete.value = skill;
       deleteDialog.value = true;
     };
@@ -454,6 +529,34 @@ export default {
         showMessage(tm("skills.deleteFailed"), "error");
       } finally {
         deleting.value = false;
+      }
+    };
+
+    const downloadSkill = async (skill) => {
+      if (isSandboxPresetSkill(skill)) {
+        showMessage(tm("skills.sandboxPresetReadonly"), "warning");
+        return;
+      }
+      itemLoading[skill.name] = true;
+      try {
+        const res = await axios.get("/api/skills/download", {
+          params: { name: skill.name },
+          responseType: "blob",
+        });
+        const blob = new Blob([res.data], { type: "application/zip" });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${skill.name}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        showMessage(tm("skills.downloadSuccess"), "success");
+      } catch (_err) {
+        showMessage(tm("skills.downloadFailed"), "error");
+      } finally {
+        itemLoading[skill.name] = false;
       }
     };
 
@@ -685,6 +788,8 @@ export default {
       mode,
       skills,
       loading,
+      runtime,
+      sandboxCache,
       uploadDialog,
       uploadFile,
       uploading,
@@ -707,6 +812,7 @@ export default {
       refreshCurrentMode,
       fetchNeoData,
       uploadSkill,
+      downloadSkill,
       toggleSkill,
       confirmDelete,
       deleteSkill,
@@ -719,6 +825,9 @@ export default {
       viewPayload,
       deleteCandidate,
       deleteRelease,
+      sourceTypeLabel,
+      sourceTypeColor,
+      isSandboxPresetSkill,
     };
   },
 };
@@ -730,6 +839,16 @@ export default {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  min-height: 20px;
+}
+
+.skill-path {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 40px;
+  word-break: break-all;
 }
 
 .payload-preview {

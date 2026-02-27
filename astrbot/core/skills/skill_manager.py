@@ -32,6 +32,10 @@ class SkillInfo:
     description: str
     path: str
     active: bool
+    source_type: str = "local_only"
+    source_label: str = "local"
+    local_exists: bool = True
+    sandbox_exists: bool = False
 
 
 def _parse_frontmatter_description(text: str) -> str:
@@ -164,6 +168,7 @@ class SkillManager:
             return {
                 "version": int(data.get("version", _SANDBOX_SKILLS_CACHE_VERSION)),
                 "skills": skills,
+                "updated_at": data.get("updated_at"),
             }
         except Exception:
             return {"version": _SANDBOX_SKILLS_CACHE_VERSION, "skills": []}
@@ -198,6 +203,17 @@ class SkillManager:
         }
         self._save_sandbox_skills_cache(cache)
 
+    def get_sandbox_skills_cache_status(self) -> dict[str, object]:
+        cache = self._load_sandbox_skills_cache()
+        skills = cache.get("skills", [])
+        count = len(skills) if isinstance(skills, list) else 0
+        return {
+            "exists": os.path.exists(self.sandbox_skills_cache_path),
+            "ready": count > 0,
+            "count": count,
+            "updated_at": cache.get("updated_at"),
+        }
+
     def list_skills(
         self,
         *,
@@ -217,15 +233,18 @@ class SkillManager:
         skills_by_name: dict[str, SkillInfo] = {}
 
         sandbox_cached_paths: dict[str, str] = {}
-        if runtime == "sandbox":
-            cache_for_paths = self._load_sandbox_skills_cache()
-            for item in cache_for_paths.get("skills", []):
-                if not isinstance(item, dict):
-                    continue
-                name = str(item.get("name", "") or "").strip()
-                path = str(item.get("path", "") or "").strip().replace("\\", "/")
-                if name and path and _SKILL_NAME_RE.match(name):
-                    sandbox_cached_paths[name] = path
+        sandbox_cached_descriptions: dict[str, str] = {}
+        cache_for_paths = self._load_sandbox_skills_cache()
+        for item in cache_for_paths.get("skills", []):
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "") or "").strip()
+            path = str(item.get("path", "") or "").strip().replace("\\", "/")
+            if not name or not _SKILL_NAME_RE.match(name):
+                continue
+            sandbox_cached_descriptions[name] = str(item.get("description", "") or "")
+            if path:
+                sandbox_cached_paths[name] = path
 
         for entry in sorted(Path(self.skills_root).iterdir()):
             if not entry.is_dir():
@@ -246,6 +265,11 @@ class SkillManager:
                 description = _parse_frontmatter_description(content)
             except Exception:
                 description = ""
+            sandbox_exists = (
+                runtime == "sandbox" and skill_name in sandbox_cached_descriptions
+            )
+            source_type = "both" if sandbox_exists else "local_only"
+            source_label = "synced" if sandbox_exists else "local"
             if runtime == "sandbox" and show_sandbox_path:
                 path_str = sandbox_cached_paths.get(skill_name) or (
                     f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
@@ -258,6 +282,10 @@ class SkillManager:
                 description=description,
                 path=path_str,
                 active=active,
+                source_type=source_type,
+                source_label=source_label,
+                local_exists=True,
+                sandbox_exists=sandbox_exists,
             )
 
         if runtime == "sandbox":
@@ -278,22 +306,22 @@ class SkillManager:
                     modified = True
                 if active_only and not active:
                     continue
-                description = str(item.get("description", "") or "")
+                description = sandbox_cached_descriptions.get(skill_name, "")
                 if show_sandbox_path:
-                    path_str = (
-                        f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
-                    )
+                    path_str = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
                 else:
-                    path_str = str(item.get("path", "") or "")
+                    path_str = sandbox_cached_paths.get(skill_name, "")
                     if not path_str:
-                        path_str = (
-                            f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
-                        )
+                        path_str = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
                 skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
                     description=description,
                     path=path_str.replace("\\", "/"),
                     active=active,
+                    source_type="sandbox_only",
+                    source_label="sandbox_preset",
+                    local_exists=False,
+                    sandbox_exists=True,
                 )
 
         if modified:
@@ -302,7 +330,27 @@ class SkillManager:
 
         return [skills_by_name[name] for name in sorted(skills_by_name)]
 
+    def is_sandbox_only_skill(self, name: str) -> bool:
+        skill_dir = Path(self.skills_root) / name
+        skill_md_exists = (skill_dir / "SKILL.md").exists()
+        if skill_md_exists:
+            return False
+        cache = self._load_sandbox_skills_cache()
+        skills = cache.get("skills", [])
+        if not isinstance(skills, list):
+            return False
+        for item in skills:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("name", "")).strip() == name:
+                return True
+        return False
+
     def set_skill_active(self, name: str, active: bool) -> None:
+        if self.is_sandbox_only_skill(name):
+            raise PermissionError(
+                "Sandbox preset skill cannot be enabled/disabled from local skill management."
+            )
         config = self._load_config()
         config.setdefault("skills", {})
         config["skills"][name] = {"active": bool(active)}
@@ -318,8 +366,7 @@ class SkillManager:
             item
             for item in skills
             if not (
-                isinstance(item, dict)
-                and str(item.get("name", "")).strip() == name
+                isinstance(item, dict) and str(item.get("name", "")).strip() == name
             )
         ]
 
@@ -328,6 +375,11 @@ class SkillManager:
             self._save_sandbox_skills_cache(cache)
 
     def delete_skill(self, name: str) -> None:
+        if self.is_sandbox_only_skill(name):
+            raise PermissionError(
+                "Sandbox preset skill cannot be deleted from local skill management."
+            )
+
         skill_dir = Path(self.skills_root) / name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)

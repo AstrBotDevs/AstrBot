@@ -1,9 +1,12 @@
 import os
+import re
+import shutil
 import traceback
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
-from quart import request
+from quart import request, send_file
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.computer.computer_client import (
@@ -37,6 +40,9 @@ def _to_bool(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
+_SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
 class SkillsRoute(Route):
     def __init__(self, context: RouteContext, core_lifecycle) -> None:
         super().__init__(context)
@@ -44,6 +50,7 @@ class SkillsRoute(Route):
         self.routes = {
             "/skills": ("GET", self.get_skills),
             "/skills/upload": ("POST", self.upload_skill),
+            "/skills/download": ("GET", self.download_skill),
             "/skills/update": ("POST", self.update_skill),
             "/skills/delete": ("POST", self.delete_skill),
             "/skills/neo/candidates": ("GET", self.get_neo_candidates),
@@ -116,7 +123,8 @@ class SkillsRoute(Route):
                 "provider_settings", {}
             )
             runtime = provider_settings.get("computer_use_runtime", "local")
-            skills = SkillManager().list_skills(
+            skill_mgr = SkillManager()
+            skills = skill_mgr.list_skills(
                 active_only=False, runtime=runtime, show_sandbox_path=False
             )
             return (
@@ -124,6 +132,8 @@ class SkillsRoute(Route):
                 .ok(
                     {
                         "skills": [skill.__dict__ for skill in skills],
+                        "runtime": runtime,
+                        "sandbox_cache": skill_mgr.get_sandbox_skills_cache_status(),
                     }
                 )
                 .__dict__
@@ -177,6 +187,53 @@ class SkillsRoute(Route):
                     os.remove(temp_path)
                 except Exception:
                     logger.warning(f"Failed to remove temp skill file: {temp_path}")
+
+    async def download_skill(self):
+        try:
+            name = str(request.args.get("name") or "").strip()
+            if not name:
+                return Response().error("Missing skill name").__dict__
+            if not _SKILL_NAME_RE.match(name):
+                return Response().error("Invalid skill name").__dict__
+
+            skill_mgr = SkillManager()
+            if skill_mgr.is_sandbox_only_skill(name):
+                return (
+                    Response()
+                    .error(
+                        "Sandbox preset skill cannot be downloaded from local skill files."
+                    )
+                    .__dict__
+                )
+
+            skill_dir = Path(skill_mgr.skills_root) / name
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_dir.is_dir() or not skill_md.exists():
+                return Response().error("Local skill not found").__dict__
+
+            export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
+            export_dir.mkdir(parents=True, exist_ok=True)
+            zip_base = export_dir / name
+            zip_path = zip_base.with_suffix(".zip")
+            if zip_path.exists():
+                zip_path.unlink()
+
+            shutil.make_archive(
+                str(zip_base),
+                "zip",
+                root_dir=str(skill_mgr.skills_root),
+                base_dir=name,
+            )
+
+            return await send_file(
+                str(zip_path),
+                as_attachment=True,
+                attachment_filename=f"{name}.zip",
+                conditional=True,
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
 
     async def update_skill(self):
         if DEMO_MODE:

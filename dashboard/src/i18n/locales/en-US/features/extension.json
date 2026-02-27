@@ -220,6 +220,9 @@
     "path": "Path",
     "uploadSuccess": "Upload succeeded",
     "uploadFailed": "Upload failed",
+    "download": "Download",
+    "downloadSuccess": "Download succeeded",
+    "downloadFailed": "Download failed",
     "loadFailed": "Failed to load Skills",
     "updateSuccess": "Updated successfully",
     "updateFailed": "Update failed",
@@ -253,7 +256,12 @@
     "neoPayloadFailed": "Failed to load payload",
     "runtimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
     "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills.",
-    "neoRuntimeRequired": "Neo Skills are available only when runtime is sandbox and sandbox booter is shipyard_neo."
+    "neoRuntimeRequired": "Neo Skills are available only when runtime is sandbox and sandbox booter is shipyard_neo.",
+    "sourceLocalOnly": "Local Skill",
+    "sourceSandboxOnly": "Sandbox Preset Skill",
+    "sourceBoth": "Local + Sandbox",
+    "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
+    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills."
   },
   "card": {
     "actions": {

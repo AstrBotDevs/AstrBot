@@ -220,6 +220,9 @@
     "path": "路径",
     "uploadSuccess": "上传成功",
     "uploadFailed": "上传失败",
+    "download": "下载",
+    "downloadSuccess": "下载成功",
+    "downloadFailed": "下载失败",
     "loadFailed": "加载 Skills 失败",
     "updateSuccess": "更新成功",
     "updateFailed": "更新失败",
@@ -256,7 +259,12 @@
     "neoPayloadFailed": "读取 Payload 失败",
     "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
     "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。",
-    "neoRuntimeRequired": "Neo Skills 仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。"
+    "neoRuntimeRequired": "Neo Skills 仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。",
+    "sourceLocalOnly": "本地 Skill",
+    "sourceSandboxOnly": "Sandbox 预置 Skill",
+    "sourceBoth": "本地 + Sandbox",
+    "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
+    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。"
   },
   "card": {
     "actions": {
