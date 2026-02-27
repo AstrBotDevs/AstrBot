@@ -11,6 +11,14 @@
   "titles": {
     "installedAstrBotPlugins": "Installed AstrBot Plugins"
   },
+  "failedPlugins": {
+    "title": "Failed to Load Plugins ({count})",
+    "hint": "These plugins failed to load. You can try reload or uninstall them directly.",
+    "columns": {
+      "plugin": "Plugin",
+      "error": "Error"
+    }
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."

@@ -11,6 +11,14 @@
   "titles": {
     "installedAstrBotPlugins": "已安装的 AstrBot 插件"
   },
+  "failedPlugins": {
+    "title": "加载失败插件（{count}）",
+    "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
+    "columns": {
+      "plugin": "插件",
+      "error": "错误"
+    }
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."

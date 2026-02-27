@@ -189,27 +189,14 @@ const viewChangelog = () => {
                     class="ml-2"
                     icon="mdi-update"
                     size="small"
+                    style="cursor: pointer"
+                    @click.stop="updateExtension"
                   ></v-icon>
                 </template>
                 <span
                   >{{ tm("card.status.hasUpdate") }}:
                   {{ extension.online_version }}</span
                 >
-              </v-tooltip>
-              <v-tooltip
-                location="top"
-                v-if="!extension.activated && !marketMode"
-              >
-                <template v-slot:activator="{ props: tooltipProps }">
-                  <v-icon
-                    v-bind="tooltipProps"
-                    color="error"
-                    class="ml-2"
-                    icon="mdi-cancel"
-                    size="small"
-                  ></v-icon>
-                </template>
-                <span>{{ tm("card.status.disabled") }}</span>
               </v-tooltip>
             </p>
 
@@ -299,6 +286,8 @@ const viewChangelog = () => {
                   color="warning"
                   label
                   size="small"
+                  style="cursor: pointer"
+                  @click="updateExtension"
                 >
                   <v-icon icon="mdi-arrow-up-bold" start></v-icon>
                   {{ extension.online_version }}
