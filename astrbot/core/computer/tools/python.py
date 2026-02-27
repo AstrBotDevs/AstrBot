@@ -83,7 +83,10 @@ class PythonTool(FunctionTool):
 @dataclass
 class LocalPythonTool(FunctionTool):
     name: str = "astrbot_execute_python"
-    description: str = "Execute codes in a Python environment."
+    description: str = (
+        "Execute code in a local Python environment. "
+        "In local_sandboxed runtime, writes are restricted to ~/.astrbot/workspace/<session>."
+    )
 
     parameters: dict = field(default_factory=lambda: param_schema)
 
@@ -92,7 +95,15 @@ class LocalPythonTool(FunctionTool):
     ) -> ToolExecResult:
         if permission_error := check_admin_permission(context, "Python execution"):
             return permission_error
-        sb = get_local_booter()
+        event = context.context.event
+        cfg = context.context.context.get_config(umo=event.unified_msg_origin)
+        runtime = str(
+            cfg.get("provider_settings", {}).get("computer_use_runtime", "local")
+        )
+        sb = get_local_booter(
+            event.unified_msg_origin,
+            sandboxed=runtime == "local_sandboxed",
+        )
         try:
             result = await sb.python.exec(code, silent=silent)
             return await handle_result(result, context.context.event)

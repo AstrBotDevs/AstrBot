@@ -15,7 +15,7 @@ from .booters.base import ComputerBooter
 from .booters.local import LocalBooter
 
 session_booter: dict[str, ComputerBooter] = {}
-local_booter: ComputerBooter | None = None
+local_booters: dict[tuple[str, bool], ComputerBooter] = {}
 
 
 async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
@@ -104,8 +104,8 @@ async def get_booter(
     return session_booter[session_id]
 
 
-def get_local_booter() -> ComputerBooter:
-    global local_booter
-    if local_booter is None:
-        local_booter = LocalBooter()
-    return local_booter
+def get_local_booter(session_id: str, sandboxed: bool = False) -> ComputerBooter:
+    key = (session_id, sandboxed)
+    if key not in local_booters:
+        local_booters[key] = LocalBooter(session_id=session_id, sandboxed=sandboxed)
+    return local_booters[key]

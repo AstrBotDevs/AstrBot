@@ -2772,8 +2772,8 @@ CONFIG_METADATA_3 = {
                     "provider_settings.computer_use_runtime": {
                         "description": "Computer Use Runtime",
                         "type": "string",
-                        "options": ["none", "local", "sandbox"],
-                        "labels": ["无", "本地", "沙箱"],
+                        "options": ["none", "local", "local_sandboxed", "sandbox"],
+                        "labels": ["无", "本地", "本地(沙箱增强)", "沙箱"],
                         "hint": "选择 Computer Use 运行环境。",
                     },
                     "provider_settings.computer_use_require_admin": {
