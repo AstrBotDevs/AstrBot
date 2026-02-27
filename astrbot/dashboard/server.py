@@ -323,12 +323,19 @@ class AstrBotDashboard:
 
     def check_port_in_use(self, host: str, port: int) -> bool:
         """跨平台检测端口是否被占用"""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as s:
+                # 设置 SO_REUSEADDR 避免 TIME_WAIT 导致误判
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if family == socket.AF_INET6:
+                    # 对于 IPv6，通常需要设置 IPV6_V6ONLY=0 以便同时监听 IPv4 (如果系统支持双栈)
+                    # 但这里主要是检测占用，只要能 bind 就说明没被占
+                    pass
                 s.bind((host, port))
                 return False
-            except OSError:
-                return True
+        except OSError:
+            return True
 
     def get_process_using_port(self, port: int) -> str:
         """获取占用端口的进程信息"""
@@ -353,7 +360,7 @@ class AstrBotDashboard:
     # 启动与运行
     # ------------------------------------------------------------------
 
-    def run(self) -> None:
+    async def run(self) -> None:
         """Run dashboard server (blocking)"""
         if not self.enable_webui:
             logger.warning(
@@ -455,9 +462,7 @@ class AstrBotDashboard:
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
-        return asyncio.run(
-            serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
-        )
+        await serve(self.app, config, shutdown_trigger=self.shutdown_trigger)
 
     @staticmethod
     def _build_bind(host: str, port: int) -> str:
