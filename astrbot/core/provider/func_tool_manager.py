@@ -212,14 +212,35 @@ class FunctionToolManager:
             open(mcp_json_file, encoding="utf-8"),
         )["mcpServers"]
 
+        # 收集所有初始化任务的 Future
+        init_futures: dict[str, asyncio.Future] = {}
+
         for name in mcp_server_json_obj:
             cfg = mcp_server_json_obj[name]
             if cfg.get("active", True):
                 event = asyncio.Event()
+                ready_future = asyncio.Future()
+                init_futures[name] = ready_future
                 asyncio.create_task(
-                    self._init_mcp_client_task_wrapper(name, cfg, event),
+                    self._init_mcp_client_task_wrapper(name, cfg, event, ready_future),
                 )
                 self.mcp_client_event[name] = event
+
+        # 等待所有 MCP 客户端初始化完成（或失败）
+        if init_futures:
+            logger.info(f"等待 {len(init_futures)} 个 MCP 服务初始化...")
+            results = await asyncio.gather(
+                *init_futures.values(), return_exceptions=True
+            )
+
+            success_count = 0
+            for name, result in zip(init_futures.keys(), results):
+                if isinstance(result, Exception):
+                    logger.error(f"MCP 服务 {name} 初始化失败: {result}")
+                else:
+                    success_count += 1
+
+            logger.info(f"MCP 服务初始化完成: {success_count}/{len(init_futures)} 成功")
 
     async def _init_mcp_client_task_wrapper(
         self,

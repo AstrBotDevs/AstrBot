@@ -274,8 +274,8 @@ class ProviderManager:
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
-        # 初始化 MCP Client 连接
-        asyncio.create_task(self.llm_tools.init_mcp_clients(), name="init_mcp_clients")
+        # 初始化 MCP Client 连接（等待完成以确保工具可用）
+        await self.llm_tools.init_mcp_clients()
 
     def dynamic_import_provider(self, type: str):
         """动态导入提供商适配器模块
