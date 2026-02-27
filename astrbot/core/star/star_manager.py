@@ -461,9 +461,19 @@ class PluginManager:
         for dir_name, info in self.failed_plugin_dict.items():
             if isinstance(info, dict):
                 error = info.get("error", "未知错误")
+                display_name = info.get("display_name") or info.get("name") or dir_name
+                version = info.get("version") or info.get("astrbot_version")
+                if version:
+                    lines.append(
+                        f"加载插件「{display_name}」(目录: {dir_name}, 版本: {version}) 时出现问题，原因：{error}。",
+                    )
+                else:
+                    lines.append(
+                        f"加载插件「{display_name}」(目录: {dir_name}) 时出现问题，原因：{error}。",
+                    )
             else:
                 error = str(info)
-            lines.append(f"加载 {dir_name} 插件时出现问题，原因 {error}。")
+                lines.append(f"加载插件目录 {dir_name} 时出现问题，原因：{error}。")
 
         self.failed_plugin_info = "\n".join(lines) + "\n"
 

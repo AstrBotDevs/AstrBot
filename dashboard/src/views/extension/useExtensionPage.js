@@ -509,68 +509,46 @@ export const useExtensionPage = () => {
       }
   };
 
+  const showReloadFeedback = (message, type) => {
+    clearReloadFeedback();
+    setReloadFeedback(message, type);
+    toast(message, type === "success" ? "success" : "error");
+  };
+
   const reloadFailedPlugin = async (dirName) => {
-    // Reset stale inline feedback before each retry attempt
+    if (!dirName) return;
     clearReloadFeedback();
 
-    if (!dirName) {
-      return;
-    }
     try {
       const res = await axios.post("/api/plugin/reload-failed", { dir_name: dirName });
       if (res.data.status === "error") {
-        const message = res.data.message || tm("messages.reloadFailed");
-        setReloadFeedback(message, "error");
-        toast(message, "error");
+        showReloadFeedback(res.data.message || tm("messages.reloadFailed"), "error");
         return;
       }
-      setReloadFeedback(res.data.message || tm("messages.reloadSuccess"), "success");
+      showReloadFeedback(res.data.message || tm("messages.reloadSuccess"), "success");
       await getExtensions();
     } catch (err) {
-      const message = resolveErrorMessage(err, tm("messages.reloadFailed"));
-      setReloadFeedback(message, "error");
-      toast(message, "error");
+      showReloadFeedback(
+        resolveErrorMessage(err, tm("messages.reloadFailed")),
+        "error",
+      );
     }
   };
 
-  const requestUninstall = (kind, id) => {
-    if (!id) return;
-    uninstallTarget.value = { kind, id };
+  const openUninstallDialog = (target) => {
+    if (!target?.id) return;
+    uninstallTarget.value = target;
     showUninstallDialog.value = true;
   };
 
-  const requestUninstallPlugin = (name) => {
-    requestUninstall("normal", name);
-  };
-
-  const requestUninstallFailedPlugin = (dirName) => {
-    requestUninstall("failed", dirName);
-  };
-
-  const performUninstall = async (target, options = {}) => {
-    if (!target?.id) return;
-
-    const { deleteConfig = false, deleteData = false } = options || {};
-    toast(`${tm("messages.uninstalling")} ${target.id}`, "primary");
-
+  const doUninstallNormal = async (
+    name,
+    { deleteConfig = false, deleteData = false } = {},
+  ) => {
+    toast(`${tm("messages.uninstalling")} ${name}`, "primary");
     try {
-      if (target.kind === "failed") {
-        const res = await axios.post("/api/plugin/uninstall-failed", {
-          dir_name: target.id,
-          delete_config: deleteConfig,
-          delete_data: deleteData,
-        });
-        if (res.data.status === "error") {
-          toast(res.data.message, "error");
-          return;
-        }
-        toast(res.data.message, "success");
-        await getExtensions();
-        return;
-      }
-
       const res = await axios.post("/api/plugin/uninstall", {
-        name: target.id,
+        name,
         delete_config: deleteConfig,
         delete_data: deleteData,
       });
@@ -586,13 +564,58 @@ export const useExtensionPage = () => {
     }
   };
 
-  const uninstallFailedPlugin = async (dirName, options = null) => {
-    if (!dirName) return;
-    if (!options || typeof options !== "object") {
-      requestUninstallFailedPlugin(dirName);
+  const doUninstallFailed = async (
+    dirName,
+    { deleteConfig = false, deleteData = false } = {},
+  ) => {
+    toast(`${tm("messages.uninstalling")} ${dirName}`, "primary");
+    try {
+      const res = await axios.post("/api/plugin/uninstall-failed", {
+        dir_name: dirName,
+        delete_config: deleteConfig,
+        delete_data: deleteData,
+      });
+      if (res.data.status === "error") {
+        toast(res.data.message, "error");
+        return;
+      }
+      toast(res.data.message, "success");
+      await getExtensions();
+    } catch (err) {
+      toast(resolveErrorMessage(err), "error");
+    }
+  };
+
+  const uninstallNormalPlugin = async (
+    name,
+    { skipConfirm = false, ...options } = {},
+  ) => {
+    if (!name) return;
+    if (!skipConfirm) {
+      openUninstallDialog({ kind: "normal", id: name });
       return;
     }
-    await performUninstall({ kind: "failed", id: dirName }, options);
+    await doUninstallNormal(name, options);
+  };
+
+  const uninstallFailedPlugin = async (
+    dirName,
+    { skipConfirm = false, ...options } = {},
+  ) => {
+    if (!dirName) return;
+    if (!skipConfirm) {
+      openUninstallDialog({ kind: "failed", id: dirName });
+      return;
+    }
+    await doUninstallFailed(dirName, options);
+  };
+
+  const requestUninstallPlugin = (name) => {
+    uninstallNormalPlugin(name);
+  };
+
+  const requestUninstallFailedPlugin = (dirName) => {
+    uninstallFailedPlugin(dirName);
   };
   
   const checkUpdate = () => {
@@ -624,23 +647,13 @@ export const useExtensionPage = () => {
     });
   };
   
-  const uninstallExtension = async (extensionName, optionsOrSkipConfirm = false) => {
+  const uninstallExtension = async (extensionName, options = null) => {
     if (!extensionName) return;
-
-    if (typeof optionsOrSkipConfirm === "boolean") {
-      if (!optionsOrSkipConfirm) {
-        requestUninstallPlugin(extensionName);
-        return;
-      }
-      await performUninstall({ kind: "normal", id: extensionName });
+    if (options && typeof options === "object") {
+      await uninstallNormalPlugin(extensionName, { ...options, skipConfirm: true });
       return;
     }
-
-    const options =
-      typeof optionsOrSkipConfirm === "object" && optionsOrSkipConfirm !== null
-        ? optionsOrSkipConfirm
-        : {};
-    await performUninstall({ kind: "normal", id: extensionName }, options);
+    await uninstallNormalPlugin(extensionName);
   };
   
   // 处理卸载确认对话框的确认事件
@@ -649,7 +662,11 @@ export const useExtensionPage = () => {
     if (!target) return;
 
     try {
-      await performUninstall(target, options);
+      if (target.kind === "normal") {
+        await doUninstallNormal(target.id, options);
+      } else {
+        await doUninstallFailed(target.id, options);
+      }
     } finally {
       uninstallTarget.value = null;
       showUninstallDialog.value = false;
