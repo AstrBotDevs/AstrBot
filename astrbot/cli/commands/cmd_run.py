@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import os
 import sys
@@ -37,7 +38,7 @@ def run(reload: bool, port: str) -> None:
 
         if not check_astrbot_root(astrbot_root):
             raise click.ClickException(
-                f"{astrbot_root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
+                t("msg-41ecc632", astrbot_root=astrbot_root),
             )
 
         os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
@@ -47,7 +48,7 @@ def run(reload: bool, port: str) -> None:
             os.environ["DASHBOARD_PORT"] = port
 
         if reload:
-            click.echo("启用插件自动重载")
+            click.echo(t("msg-0ccaca23"))
             os.environ["ASTRBOT_RELOAD"] = "1"
 
         lock_file = astrbot_root / "astrbot.lock"
@@ -55,8 +56,8 @@ def run(reload: bool, port: str) -> None:
         with lock.acquire():
             asyncio.run(run_astrbot(astrbot_root))
     except KeyboardInterrupt:
-        click.echo("AstrBot 已关闭...")
+        click.echo(t("msg-220914e7"))
     except Timeout:
-        raise click.ClickException("无法获取锁文件，请检查是否有其他实例正在运行")
+        raise click.ClickException(t("msg-eebc39e3"))
     except Exception as e:
-        raise click.ClickException(f"运行时出现错误: {e}\n{traceback.format_exc()}")
+        raise click.ClickException(t("msg-85f241d3", e=e, res=traceback.format_exc()))

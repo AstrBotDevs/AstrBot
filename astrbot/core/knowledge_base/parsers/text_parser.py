@@ -2,6 +2,7 @@
 
 支持解析 TXT 和 Markdown 文件。
 """
+from astrbot.core.lang import t
 
 from astrbot.core.knowledge_base.parsers.base import BaseParser, ParseResult
 
@@ -36,7 +37,7 @@ class TextParser(BaseParser):
             except UnicodeDecodeError:
                 continue
         else:
-            raise ValueError(f"无法解码文件: {file_name}")
+            raise ValueError(t("msg-70cbd40d", file_name=file_name))
 
         # 文本文件无多媒体资源
         return ParseResult(text=text, media=[])

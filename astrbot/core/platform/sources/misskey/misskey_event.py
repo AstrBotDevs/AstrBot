@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import re
 from collections.abc import AsyncGenerator
@@ -44,7 +45,7 @@ class MisskeyPlatformEvent(AstrMessageEvent):
         """发送消息，使用适配器的完整上传和发送逻辑"""
         try:
             logger.debug(
-                f"[MisskeyEvent] send 方法被调用，消息链包含 {len(message.chain)} 个组件",
+                t("msg-85cb7d49", res=len(message.chain)),
             )
 
             # 使用适配器的 send_by_session 方法，它包含文件上传逻辑
@@ -66,19 +67,19 @@ class MisskeyPlatformEvent(AstrMessageEvent):
             )
 
             logger.debug(
-                f"[MisskeyEvent] 检查适配器方法: hasattr(self.client, 'send_by_session') = {hasattr(self.client, 'send_by_session')}",
+                t("msg-252c2fca", res=hasattr(self.client, 'send_by_session')),
             )
 
             # 调用适配器的 send_by_session 方法
             if hasattr(self.client, "send_by_session"):
-                logger.debug("[MisskeyEvent] 调用适配器的 send_by_session 方法")
+                logger.debug(t("msg-44d7a060"))
                 await self.client.send_by_session(session, message)
             else:
                 # 回退到原来的简化发送逻辑
                 content, has_at = serialize_message_chain(message.chain)
 
                 if not content:
-                    logger.debug("[MisskeyEvent] 内容为空，跳过发送")
+                    logger.debug(t("msg-b6e08872"))
                     return
 
                 original_message_id = getattr(self.message_obj, "message_id", None)
@@ -118,13 +119,13 @@ class MisskeyPlatformEvent(AstrMessageEvent):
                         visible_user_ids=visible_user_ids,
                     )
                 elif hasattr(self.client, "create_note"):
-                    logger.debug("[MisskeyEvent] 创建新帖子")
+                    logger.debug(t("msg-8cfebc9c"))
                     await self.client.create_note(content)
 
             await super().send(message)
 
         except Exception as e:
-            logger.error(f"[MisskeyEvent] 发送失败: {e}")
+            logger.error(t("msg-ed0d2ed5", e=e))
 
     async def send_streaming(
         self,

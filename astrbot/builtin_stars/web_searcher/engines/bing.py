@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from . import USER_AGENT_BING, SearchEngine
 
 
@@ -27,4 +28,4 @@ class Bing(SearchEngine):
             except Exception as _:
                 self.base_url = base_url
                 continue
-        raise Exception("Bing search failed")
+        raise Exception(t("msg-e3b4d1e9"))

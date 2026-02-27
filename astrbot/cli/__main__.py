@@ -1,4 +1,5 @@
 """AstrBot CLI入口"""
+from astrbot.core.lang import t
 
 import sys
 
@@ -21,9 +22,9 @@ logo_tmpl = r"""
 @click.version_option(__version__, prog_name="AstrBot")
 def cli() -> None:
     """The AstrBot CLI"""
-    click.echo(logo_tmpl)
-    click.echo("Welcome to AstrBot CLI!")
-    click.echo(f"AstrBot CLI version: {__version__}")
+    click.echo(t("msg-fe494da6", logo_tmpl=logo_tmpl))
+    click.echo(t("msg-c8b2ff67"))
+    click.echo(t("msg-d79e1ff9", __version__=__version__))
 
 
 @click.command()
@@ -40,13 +41,13 @@ def help(command_name: str | None) -> None:
         command = cli.get_command(ctx, command_name)
         if command:
             # 显示特定命令的帮助信息
-            click.echo(command.get_help(ctx))
+            click.echo(t("msg-78b9c276", res=command.get_help(ctx)))
         else:
-            click.echo(f"Unknown command: {command_name}")
+            click.echo(t("msg-14dd710d", command_name=command_name))
             sys.exit(1)
     else:
         # 显示通用帮助信息
-        click.echo(cli.get_help(ctx))
+        click.echo(t("msg-78b9c276", res=cli.get_help(ctx)))
 
 
 cli.add_command(init)

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import logging
 from contextlib import AsyncExitStack
@@ -25,14 +26,14 @@ try:
     from mcp.client.sse import sse_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
+        t("msg-6a61ca88")
     )
 
 try:
     from mcp.client.streamable_http import streamablehttp_client
 except (ModuleNotFoundError, ImportError):
     logger.warning(
-        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+        t("msg-45995cdb"),
     )
 
 
@@ -61,7 +62,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         elif "type" in cfg:
             transport_type = cfg["type"]
         else:
-            raise Exception("MCP connection config missing transport or type field")
+            raise Exception(t("msg-2866b896"))
 
         async with aiohttp.ClientSession() as session:
             if transport_type == "streamable_http":
@@ -146,20 +147,20 @@ class MCPClient:
 
         def logging_callback(msg: str) -> None:
             # Handle MCP service error logs
-            print(f"MCP Server {name} Error: {msg}")
+            print(t("msg-3bf7776b", name=name, msg=msg))
             self.server_errlogs.append(msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
-                raise Exception(error_msg)
+                raise Exception(t("msg-10f72727", error_msg=error_msg))
 
             if "transport" in cfg:
                 transport_type = cfg["transport"]
             elif "type" in cfg:
                 transport_type = cfg["type"]
             else:
-                raise Exception("MCP connection config missing transport or type field")
+                raise Exception(t("msg-2866b896"))
 
             if transport_type != "streamable_http":
                 # SSE transport method
@@ -239,7 +240,7 @@ class MCPClient:
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
         if not self.session:
-            raise Exception("MCP Client is not initialized")
+            raise Exception(t("msg-19c9b509"))
         response = await self.session.list_tools()
         self.tools = response.tools
         return response
@@ -256,17 +257,17 @@ class MCPClient:
             # Check if already reconnecting (useful for logging)
             if self._reconnecting:
                 logger.debug(
-                    f"MCP Client {self._server_name} is already reconnecting, skipping"
+                    t("msg-5b9b4918", res=self._server_name)
                 )
                 return
 
             if not self._mcp_server_config or not self._server_name:
-                raise Exception("Cannot reconnect: missing connection configuration")
+                raise Exception(t("msg-c1008866"))
 
             self._reconnecting = True
             try:
                 logger.info(
-                    f"Attempting to reconnect to MCP server {self._server_name}..."
+                    t("msg-7c3fe178", res=self._server_name)
                 )
 
                 # Save old exit_stack for later cleanup (don't close it now to avoid cancel scope issues)
@@ -284,11 +285,11 @@ class MCPClient:
                 await self.list_tools_and_save()
 
                 logger.info(
-                    f"Successfully reconnected to MCP server {self._server_name}"
+                    t("msg-783f3b85", res=self._server_name)
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to reconnect to MCP server {self._server_name}: {e}"
+                    t("msg-da7361ff", res=self._server_name, e=e)
                 )
                 raise
             finally:
@@ -324,7 +325,7 @@ class MCPClient:
         )
         async def _call_with_retry():
             if not self.session:
-                raise ValueError("MCP session is not available for MCP function tools.")
+                raise ValueError(t("msg-c0fd612e"))
 
             try:
                 return await self.session.call_tool(
@@ -334,7 +335,7 @@ class MCPClient:
                 )
             except anyio.ClosedResourceError:
                 logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
+                    t("msg-8236c58c", tool_name=tool_name)
                 )
                 # Attempt to reconnect
                 await self._reconnect()
@@ -349,7 +350,7 @@ class MCPClient:
         try:
             await self.exit_stack.aclose()
         except Exception as e:
-            logger.debug(f"Error closing current exit stack: {e}")
+            logger.debug(t("msg-044046ec", e=e))
 
         # Don't close old exit stacks as they may be in different task contexts
         # They will be garbage collected naturally

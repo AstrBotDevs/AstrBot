@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import base64
 import json
 import os
@@ -116,7 +117,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     },
                 )
             else:
-                logger.debug(f"webchat 忽略: {comp.type}")
+                logger.debug(t("msg-6b37adcd", res=comp.type))
 
         return data
 

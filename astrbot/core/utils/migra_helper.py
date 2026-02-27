@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import traceback
 
 from astrbot.core import astrbot_config, logger
@@ -29,8 +30,8 @@ def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
                 conf["provider_settings"]["agent_runner_type"] = "dashscope"
             conf.save_config()
     except Exception as e:
-        logger.error(f"Migration for third party agent runner configs failed: {e!s}")
-        logger.error(traceback.format_exc())
+        logger.error(t("msg-497ddf83", e=e))
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
 
 def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
@@ -72,7 +73,7 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
                 continue
 
         migrated = True
-        logger.info(f"Migrating provider {provider.get('id')} to new structure")
+        logger.info(t("msg-e21f1509", res=provider.get('id')))
 
         # Extract source fields from provider
         source_fields = {}
@@ -116,7 +117,7 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
     if migrated:
         conf["provider_sources"] = provider_sources
         conf.save_config()
-        logger.info("Provider-source structure migration completed")
+        logger.info(t("msg-dd3339e6"))
 
 
 async def migra(
@@ -130,22 +131,22 @@ async def migra(
     try:
         await migrate_45_to_46(astrbot_config_mgr, umop_config_router)
     except Exception as e:
-        logger.error(f"Migration from version 4.5 to 4.6 failed: {e!s}")
-        logger.error(traceback.format_exc())
+        logger.error(t("msg-1cb6c174", e=e))
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
     # migration for webchat session
     try:
         await migrate_webchat_session(db)
     except Exception as e:
-        logger.error(f"Migration for webchat session failed: {e!s}")
-        logger.error(traceback.format_exc())
+        logger.error(t("msg-a899acc6", e=e))
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
     # migration for token_usage column
     try:
         await migrate_token_usage(db)
     except Exception as e:
-        logger.error(f"Migration for token_usage column failed: {e!s}")
-        logger.error(traceback.format_exc())
+        logger.error(t("msg-b9c52817", e=e))
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
     # migra third party agent runner configs
     _c = False
@@ -170,5 +171,5 @@ async def migra(
     try:
         _migra_provider_to_source_structure(astrbot_config)
     except Exception as e:
-        logger.error(f"Migration for provider-source structure failed: {e!s}")
-        logger.error(traceback.format_exc())
+        logger.error(t("msg-d9660ff5", e=e))
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))

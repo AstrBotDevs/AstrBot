@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import traceback
 
 from quart import request
@@ -66,8 +67,8 @@ class ToolsRoute(Route):
 
             return Response().ok(servers).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"获取 MCP 服务器列表失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-977490be", e=e)).__dict__
 
     async def add_mcp_server(self):
         try:
@@ -77,7 +78,7 @@ class ToolsRoute(Route):
 
             # 检查必填字段
             if not name:
-                return Response().error("服务器名称不能为空").__dict__
+                return Response().error(t("msg-50a07403")).__dict__
 
             # 移除特殊字段并检查配置是否有效
             has_valid_config = False
@@ -96,12 +97,12 @@ class ToolsRoute(Route):
                     has_valid_config = True
 
             if not has_valid_config:
-                return Response().error("必须提供有效的服务器配置").__dict__
+                return Response().error(t("msg-23d2bca3")).__dict__
 
             config = self.tool_mgr.load_mcp_config()
 
             if name in config["mcpServers"]:
-                return Response().error(f"服务器 {name} 已存在").__dict__
+                return Response().error(t("msg-31252516", name=name)).__dict__
 
             config["mcpServers"][name] = server_config
 
@@ -113,17 +114,17 @@ class ToolsRoute(Route):
                         timeout=30,
                     )
                 except TimeoutError:
-                    return Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
+                    return Response().error(t("msg-20b8309f", name=name)).__dict__
                 except Exception as e:
-                    logger.error(traceback.format_exc())
+                    logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                     return (
-                        Response().error(f"启用 MCP 服务器 {name} 失败: {e!s}").__dict__
+                        Response().error(t("msg-fff3d0c7", name=name, e=e)).__dict__
                     )
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
-            return Response().error("保存配置失败").__dict__
+            return Response().error(t("msg-7f1f7921")).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"添加 MCP 服务器失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-a7f06648", e=e)).__dict__
 
     async def update_mcp_server(self):
         try:
@@ -133,17 +134,17 @@ class ToolsRoute(Route):
             old_name = server_data.get("oldName") or name
 
             if not name:
-                return Response().error("服务器名称不能为空").__dict__
+                return Response().error(t("msg-50a07403")).__dict__
 
             config = self.tool_mgr.load_mcp_config()
 
             if old_name not in config["mcpServers"]:
-                return Response().error(f"服务器 {old_name} 不存在").__dict__
+                return Response().error(t("msg-278dc41b", old_name=old_name)).__dict__
 
             is_rename = name != old_name
 
             if name in config["mcpServers"] and is_rename:
-                return Response().error(f"服务器 {name} 已存在").__dict__
+                return Response().error(t("msg-31252516", name=name)).__dict__
 
             # 获取活动状态
             active = server_data.get(
@@ -202,16 +203,16 @@ class ToolsRoute(Route):
                             return (
                                 Response()
                                 .error(
-                                    f"启用前停用 MCP 服务器时 {old_name} 超时: {e!s}"
+                                    t("msg-f0441f4b", old_name=old_name, e=e)
                                 )
                                 .__dict__
                             )
                         except Exception as e:
-                            logger.error(traceback.format_exc())
+                            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                             return (
                                 Response()
                                 .error(
-                                    f"启用前停用 MCP 服务器时 {old_name} 失败: {e!s}"
+                                    t("msg-7c468a83", old_name=old_name, e=e)
                                 )
                                 .__dict__
                             )
@@ -223,13 +224,13 @@ class ToolsRoute(Route):
                         )
                     except TimeoutError:
                         return (
-                            Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
+                            Response().error(t("msg-20b8309f", name=name)).__dict__
                         )
                     except Exception as e:
-                        logger.error(traceback.format_exc())
+                        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                         return (
                             Response()
-                            .error(f"启用 MCP 服务器 {name} 失败: {e!s}")
+                            .error(t("msg-fff3d0c7", name=name, e=e))
                             .__dict__
                         )
                 # 如果要停用服务器
@@ -239,22 +240,22 @@ class ToolsRoute(Route):
                     except TimeoutError:
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {old_name} 超时。")
+                            .error(t("msg-8a4c8128", old_name=old_name))
                             .__dict__
                         )
                     except Exception as e:
-                        logger.error(traceback.format_exc())
+                        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {old_name} 失败: {e!s}")
+                            .error(t("msg-9ac9b2fc", old_name=old_name, e=e))
                             .__dict__
                         )
 
                 return Response().ok(None, f"成功更新 MCP 服务器 {name}").__dict__
-            return Response().error("保存配置失败").__dict__
+            return Response().error(t("msg-7f1f7921")).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新 MCP 服务器失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-b988392d", e=e)).__dict__
 
     async def delete_mcp_server(self):
         try:
@@ -262,12 +263,12 @@ class ToolsRoute(Route):
             name = server_data.get("name", "")
 
             if not name:
-                return Response().error("服务器名称不能为空").__dict__
+                return Response().error(t("msg-50a07403")).__dict__
 
             config = self.tool_mgr.load_mcp_config()
 
             if name not in config["mcpServers"]:
-                return Response().error(f"服务器 {name} 不存在").__dict__
+                return Response().error(t("msg-c81030a7", name=name)).__dict__
 
             del config["mcpServers"][name]
 
@@ -277,20 +278,20 @@ class ToolsRoute(Route):
                         await self.tool_mgr.disable_mcp_server(name, timeout=10)
                     except TimeoutError:
                         return (
-                            Response().error(f"停用 MCP 服务器 {name} 超时。").__dict__
+                            Response().error(t("msg-4cdbd30d", name=name)).__dict__
                         )
                     except Exception as e:
-                        logger.error(traceback.format_exc())
+                        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {name} 失败: {e!s}")
+                            .error(t("msg-1ed9a96e", name=name, e=e))
                             .__dict__
                         )
                 return Response().ok(None, f"成功删除 MCP 服务器 {name}").__dict__
-            return Response().error("保存配置失败").__dict__
+            return Response().error(t("msg-7f1f7921")).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除 MCP 服务器失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-a26f2c6a", e=e)).__dict__
 
     async def test_mcp_connection(self):
         """测试 MCP 服务器连接"""
@@ -299,17 +300,17 @@ class ToolsRoute(Route):
             config = server_data.get("mcp_server_config", None)
 
             if not isinstance(config, dict) or not config:
-                return Response().error("无效的 MCP 服务器配置").__dict__
+                return Response().error(t("msg-bbc84cc5")).__dict__
 
             if "mcpServers" in config:
                 keys = list(config["mcpServers"].keys())
                 if not keys:
-                    return Response().error("MCP 服务器配置不能为空").__dict__
+                    return Response().error(t("msg-aa0e3d0d")).__dict__
                 if len(keys) > 1:
-                    return Response().error("一次只能配置一个 MCP 服务器配置").__dict__
+                    return Response().error(t("msg-d69cbcf2")).__dict__
                 config = config["mcpServers"][keys[0]]
             elif not config:
-                return Response().error("MCP 服务器配置不能为空").__dict__
+                return Response().error(t("msg-aa0e3d0d")).__dict__
 
             tools_name = await self.tool_mgr.test_mcp_server_connection(config)
             return (
@@ -317,8 +318,8 @@ class ToolsRoute(Route):
             )
 
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"测试 MCP 连接失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-bd43f610", e=e)).__dict__
 
     async def get_tool_list(self):
         """获取所有注册的工具列表"""
@@ -350,8 +351,8 @@ class ToolsRoute(Route):
                 tools_dict.append(tool_info)
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"获取工具列表失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-057a3970", e=e)).__dict__
 
     async def toggle_tool(self):
         """启用或停用指定的工具"""
@@ -361,23 +362,23 @@ class ToolsRoute(Route):
             action = data.get("activate")  # True or False
 
             if not tool_name or action is None:
-                return Response().error("缺少必要参数: name 或 action").__dict__
+                return Response().error(t("msg-29415636")).__dict__
 
             if action:
                 try:
                     ok = self.tool_mgr.activate_llm_tool(tool_name, star_map=star_map)
                 except ValueError as e:
-                    return Response().error(f"启用工具失败: {e!s}").__dict__
+                    return Response().error(t("msg-75d85dc1", e=e)).__dict__
             else:
                 ok = self.tool_mgr.deactivate_llm_tool(tool_name)
 
             if ok:
                 return Response().ok(None, "操作成功。").__dict__
-            return Response().error(f"工具 {tool_name} 不存在或操作失败。").__dict__
+            return Response().error(t("msg-21a922b8", tool_name=tool_name)).__dict__
 
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"操作工具失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-20143f28", e=e)).__dict__
 
     async def sync_provider(self):
         """同步 MCP 提供者配置"""
@@ -389,9 +390,9 @@ class ToolsRoute(Route):
                     access_token = data.get("access_token", "")
                     await self.tool_mgr.sync_modelscope_mcp_servers(access_token)
                 case _:
-                    return Response().error(f"未知: {provider_name}").__dict__
+                    return Response().error(t("msg-295ab1fe", provider_name=provider_name)).__dict__
 
             return Response().ok(message="同步成功").__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"同步失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-fe38e872", e=e)).__dict__

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 
 from astrbot.core import logger
@@ -17,7 +18,7 @@ def path_Mapping(mappings, srcPath: str) -> str:
             from_, to_ = mapping.split(":")
         elif len(rule) > 4 or len(rule) == 1:
             # 切割后大于4个项目，或者只有1个项目，那肯定是错误的，只能是2，3，4个项目
-            logger.warning(f"路径映射规则错误: {mapping}")
+            logger.warning(t("msg-cf211d0f", mapping=mapping))
             continue
         # rule.len == 3 or 4
         elif os.path.exists(rule[0] + ":" + rule[1]):
@@ -34,7 +35,7 @@ def path_Mapping(mappings, srcPath: str) -> str:
                 to_ = rule[1] + ":" + rule[2]
             else:
                 # 这种情况下存在四个项目，说明规则也是错误的
-                logger.warning(f"路径映射规则错误: {mapping}")
+                logger.warning(t("msg-cf211d0f", mapping=mapping))
                 continue
 
         from_ = from_.removesuffix("/")
@@ -66,6 +67,6 @@ def path_Mapping(mappings, srcPath: str) -> str:
                 if not has_replaced_processed:
                     # 如果不是相对路径或不能处理，默认按照Linux路径处理
                     srcPath = srcPath.replace("\\", "/")
-            logger.info(f"路径映射: {url} -> {srcPath}")
+            logger.info(t("msg-ecea161e", url=url, srcPath=srcPath))
             return srcPath
     return srcPath

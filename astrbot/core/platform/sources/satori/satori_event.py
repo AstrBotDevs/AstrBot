@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -107,7 +108,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return None
 
         except Exception as e:
-            logger.error(f"Satori 消息发送异常: {e}")
+            logger.error(t("msg-c063ab8a", e=e))
             return None
 
     async def send(self, message: MessageChain) -> None:
@@ -154,9 +155,9 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 user_id,
             )
             if not result:
-                logger.error("Satori 消息发送失败")
+                logger.error(t("msg-9bc42a8d"))
         except Exception as e:
-            logger.error(f"Satori 消息发送异常: {e}")
+            logger.error(t("msg-c063ab8a", e=e))
 
         await super().send(message)
 
@@ -195,7 +196,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                     )
                                     await self.send(img_chain)
                             except Exception as e:
-                                logger.error(f"图片转换为base64失败: {e}")
+                                logger.error(t("msg-dbf77ca2", e=e))
                         else:
                             content_parts.append(str(component))
 
@@ -205,7 +206,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 await self.send(temp_chain)
 
         except Exception as e:
-            logger.error(f"Satori 流式消息发送异常: {e}")
+            logger.error(t("msg-8b6100fb", e=e))
 
         return await super().send_streaming(generator, use_fallback)
 
@@ -232,7 +233,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     if image_base64:
                         return f'<img src="data:image/jpeg;base64,{image_base64}"/>'
                 except Exception as e:
-                    logger.error(f"图片转换为base64失败: {e}")
+                    logger.error(t("msg-dbf77ca2", e=e))
 
             elif isinstance(component, File):
                 return (
@@ -245,7 +246,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     if record_base64:
                         return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
                 except Exception as e:
-                    logger.error(f"语音转换为base64失败: {e}")
+                    logger.error(t("msg-3c16c45c", e=e))
 
             elif isinstance(component, Reply):
                 return f'<reply id="{component.id}"/>'
@@ -256,7 +257,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     if video_path_url:
                         return f'<video src="{video_path_url}"/>'
                 except Exception as e:
-                    logger.error(f"视频文件转换失败: {e}")
+                    logger.error(t("msg-66994127", e=e))
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
@@ -265,7 +266,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return ""
 
         except Exception as e:
-            logger.error(f"转换消息组件失败: {e}")
+            logger.error(t("msg-30943570", e=e))
             return ""
 
     async def _convert_node_to_satori(self, node: Node) -> str:
@@ -298,7 +299,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return f"<message><author {author_attr_str}/>{content}</message>"
 
         except Exception as e:
-            logger.error(f"转换转发节点失败: {e}")
+            logger.error(t("msg-3e8181fc", e=e))
             return ""
 
     @classmethod
@@ -325,7 +326,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     if image_base64:
                         return f'<img src="data:image/jpeg;base64,{image_base64}"/>'
                 except Exception as e:
-                    logger.error(f"图片转换为base64失败: {e}")
+                    logger.error(t("msg-dbf77ca2", e=e))
 
             elif isinstance(component, File):
                 return (
@@ -338,7 +339,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     if record_base64:
                         return f'<audio src="data:audio/wav;base64,{record_base64}"/>'
                 except Exception as e:
-                    logger.error(f"语音转换为base64失败: {e}")
+                    logger.error(t("msg-3c16c45c", e=e))
 
             elif isinstance(component, Reply):
                 return f'<reply id="{component.id}"/>'
@@ -349,7 +350,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                     if video_path_url:
                         return f'<video src="{video_path_url}"/>'
                 except Exception as e:
-                    logger.error(f"视频文件转换失败: {e}")
+                    logger.error(t("msg-66994127", e=e))
 
             elif isinstance(component, Forward):
                 return f'<message id="{component.id}" forward/>'
@@ -358,7 +359,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return ""
 
         except Exception as e:
-            logger.error(f"转换消息组件失败: {e}")
+            logger.error(t("msg-30943570", e=e))
             return ""
 
     @classmethod
@@ -391,7 +392,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return f"<message><author {author_attr_str}/>{content}</message>"
 
         except Exception as e:
-            logger.error(f"转换转发节点失败: {e}")
+            logger.error(t("msg-3e8181fc", e=e))
             return ""
 
     async def _convert_nodes_to_satori(self, nodes: Nodes) -> str:
@@ -409,7 +410,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return ""
 
         except Exception as e:
-            logger.error(f"转换合并转发消息失败: {e}")
+            logger.error(t("msg-d626f831", e=e))
             return ""
 
     @classmethod
@@ -428,5 +429,5 @@ class SatoriPlatformEvent(AstrMessageEvent):
             return ""
 
         except Exception as e:
-            logger.error(f"转换合并转发消息失败: {e}")
+            logger.error(t("msg-d626f831", e=e))
             return ""

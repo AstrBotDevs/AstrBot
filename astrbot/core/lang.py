@@ -44,9 +44,9 @@ class Lang:
     @staticmethod
     def _validate_namespace(namespace: str) -> None:
         if not namespace:
-            raise ValueError("Namespace must not be empty.")
+            raise ValueError(t("msg-d103bc8e"))
         if "." in namespace:
-            raise ValueError("Namespace must not contain '.'.")
+            raise ValueError(t("msg-f66527da"))
 
     @staticmethod
     def _collect_files(base_dir: Path, files: list[str] | None) -> list[str]:
@@ -74,11 +74,11 @@ class Lang:
         self, base_dir: Path, locale: str, files: list[str] | None
     ) -> tuple[FluentLocalization, list[str]]:
         if not base_dir.exists() or not base_dir.is_dir():
-            raise ValueError(f"Locale directory does not exist: {base_dir}")
+            raise ValueError(t("msg-b3665aee", base_dir=base_dir))
 
         available_locales = [d.name for d in base_dir.iterdir() if d.is_dir()]
         if not available_locales:
-            raise ValueError(f"No locale directories found under: {base_dir}")
+            raise ValueError(t("msg-3fe89e6a", base_dir=base_dir))
 
         matched_locale = self._match_locale(available_locales, locale)
         merged_files = self._collect_files(base_dir, files)
@@ -161,9 +161,7 @@ class Lang:
         self._validate_namespace(namespace)
         with self._lock:
             if namespace in self.namespace_paths and not replace:
-                raise ValueError(
-                    f"Namespace '{namespace}' already exists. Set replace=True to overwrite."
-                )
+                raise ValueError(t("msg-c79b2c75", namespace=namespace))
 
             self.namespace_paths[namespace] = Path(path)
             if files is None:
@@ -176,9 +174,9 @@ class Lang:
         self._validate_namespace(namespace)
         with self._lock:
             if namespace == self.default_namespace:
-                raise ValueError("Default namespace cannot be unregistered.")
+                raise ValueError(t("msg-7db3fccf"))
             if namespace not in self.namespace_paths:
-                raise ValueError(f"Namespace '{namespace}' is not registered.")
+                raise ValueError(t("msg-3d066f64", namespace=namespace))
 
             self.namespace_paths.pop(namespace, None)
             self.namespace_files.pop(namespace, None)

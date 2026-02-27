@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import copy
 from sys import maxsize
 
@@ -82,7 +83,7 @@ class Main(Star):
                                 conversation=conversation,
                             )
                         except Exception as e:
-                            logger.error(f"LLM response failed: {e!s}")
+                            logger.error(t("msg-b48bf3fe", e=e))
                             # LLM 回复失败，使用原始预设回复
                             yield event.plain_result("想要问什么呢？😄")
 

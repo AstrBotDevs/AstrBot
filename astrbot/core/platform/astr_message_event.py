@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import abc
 import asyncio
 import hashlib
@@ -58,8 +59,7 @@ class AstrMessageEvent(abc.ABC):
                 message_type = MessageType(str(message_type))
             except (ValueError, TypeError, AttributeError):
                 logger.warning(
-                    f"Failed to convert message type {message_obj.type!r} to MessageType. "
-                    f"Falling back to FRIEND_MESSAGE."
+                    t("msg-b593f13f", res=message_obj.type)
                 )
                 message_type = MessageType.FRIEND_MESSAGE
         self.session = MessageSession(
@@ -225,7 +225,7 @@ class AstrMessageEvent(abc.ABC):
 
     def clear_extra(self) -> None:
         """清除额外的信息。"""
-        logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
+        logger.info(t("msg-98bb33b7", res=self.get_platform_name(), res_2=self._extras))
         self._extras.clear()
 
     def is_private_chat(self) -> bool:
@@ -301,7 +301,7 @@ class AstrMessageEvent(abc.ABC):
 
         """
         if isinstance(result, str):
-            result = MessageEventResult().message(result)
+            result = MessageEventResult().message(t("msg-0def44e2", result=result))
         # 兼容外部插件或调用方传入的 chain=None 的情况，确保为可迭代列表
         if isinstance(result, MessageEventResult) and result.chain is None:
             result.chain = []
@@ -361,7 +361,7 @@ class AstrMessageEvent(abc.ABC):
 
     def plain_result(self, text: str) -> MessageEventResult:
         """创建一个空的消息事件结果，只包含一条文本消息。"""
-        return MessageEventResult().message(text)
+        return MessageEventResult().message(t("msg-8e7dc862", text=text))
 
     def image_result(self, url_or_path: str) -> MessageEventResult:
         """创建一个空的消息事件结果，只包含一条图片消息。

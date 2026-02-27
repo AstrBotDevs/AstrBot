@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import base64
 import json
 from collections.abc import AsyncGenerator
@@ -188,11 +189,11 @@ class ProviderAnthropic(Provider):
                                     )
                                 except ValueError:
                                     logger.warning(
-                                        f"Failed to parse image data URI: {url[:50]}..."
+                                        t("msg-d6b1df6e", res=url[:50])
                                     )
                             else:
                                 logger.warning(
-                                    f"Unsupported image URL format for Anthropic: {url[:50]}..."
+                                    t("msg-6c2c0426", res=url[:50])
                                 )
                         else:
                             converted_content.append(part)
@@ -251,10 +252,10 @@ class ProviderAnthropic(Provider):
             raise
 
         assert isinstance(completion, Message)
-        logger.debug(f"completion: {completion}")
+        logger.debug(t("msg-999f7680", completion=completion))
 
         if len(completion.content) == 0:
-            raise Exception("API 返回的 completion 为空。")
+            raise Exception(t("msg-8d2c43ec"))
 
         llm_response = LLMResponse(role="assistant")
 
@@ -278,7 +279,7 @@ class ProviderAnthropic(Provider):
 
         # TODO(Soulter): 处理 end_turn 情况
         if not llm_response.completion_text and not llm_response.tools_call_args:
-            raise Exception(f"Anthropic API 返回的 completion 无法解析：{completion}。")
+            raise Exception(t("msg-26140afc", completion=completion))
 
         return llm_response
 
@@ -399,7 +400,7 @@ class ProviderAnthropic(Provider):
                             )
                         except json.JSONDecodeError:
                             # JSON 解析失败，跳过这个工具调用
-                            logger.warning(f"工具调用参数 JSON 解析失败: {tool_info}")
+                            logger.warning(t("msg-8e4c8c24", tool_info=tool_info))
 
                         # 清理缓冲区
                         del tool_use_buffer[event.index]
@@ -567,7 +568,7 @@ class ProviderAnthropic(Provider):
                 image_data, mime_type = await self.encode_image_bs64(image_url)
 
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning(t("msg-7fc6f623", image_url=image_url))
                 return None
 
             return {
@@ -605,7 +606,7 @@ class ProviderAnthropic(Provider):
                     if image_dict:
                         content.append(image_dict)
                 else:
-                    raise ValueError(f"不支持的额外内容块类型: {type(block)}")
+                    raise ValueError(t("msg-0b041916", res=type(block)))
 
         # 3. 图片内容
         if image_urls:

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 
 from astrbot.api import logger, sp
@@ -46,7 +47,7 @@ async def do_migration_v4(
     if not await check_migration_needed_v4(db_helper):
         return
 
-    logger.info("开始执行数据库迁移...")
+    logger.info(t("msg-a48f4752"))
 
     # 执行会话表迁移
     await migration_conversation_table(db_helper, platform_id_map)
@@ -66,4 +67,4 @@ async def do_migration_v4(
     # 标记迁移完成
     await sp.put_async("global", "global", "migration_done_v4", True)
 
-    logger.info("数据库迁移完成。")
+    logger.info(t("msg-45e31e8e"))

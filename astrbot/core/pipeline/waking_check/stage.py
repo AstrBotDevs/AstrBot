@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from collections.abc import AsyncGenerator, Callable
 
 from astrbot import logger
@@ -154,7 +155,7 @@ class WakingCheckStage(Stage):
             event.plugins_name = None
         else:
             event.plugins_name = enabled_plugins_name
-        logger.debug(f"enabled_plugins_name: {enabled_plugins_name}")
+        logger.debug(t("msg-df815938", enabled_plugins_name=enabled_plugins_name))
 
         for handler in star_handlers_registry.get_handlers_by_event_type(
             EventType.AdapterMessageEvent,
@@ -186,7 +187,7 @@ class WakingCheckStage(Stage):
                 except Exception as e:
                     await event.send(
                         MessageEventResult().message(
-                            f"插件 {star_map[handler.handler_module_path].name}: {e}",
+                            t("msg-51182733", res=star_map[handler.handler_module_path].name, e=e),
                         ),
                     )
                     event.stop_event()
@@ -200,11 +201,11 @@ class WakingCheckStage(Stage):
                     if self.no_permission_reply:
                         await event.send(
                             MessageChain().message(
-                                f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
+                                t("msg-e0dcf0b8", res=event.get_sender_id()),
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        t("msg-a3c3706f", res=star_map[handler.handler_module_path].name, res_2=event.get_sender_id()),
                     )
                     event.stop_event()
                     return

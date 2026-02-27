@@ -2,6 +2,7 @@
 Date: 2025-02-24 18:04:18
 LastEditTime: 2025-02-25 14:06:30
 """
+from astrbot.core.lang import t
 
 import asyncio
 import os
@@ -40,7 +41,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         self.is_emotion = provider_config.get("is_emotion", False)
 
     async def initialize(self) -> None:
-        logger.info("下载或者加载 SenseVoice 模型中，这可能需要一些时间 ...")
+        logger.info(t("msg-ee0daf96"))
 
         # 将模型加载放到线程池中执行
         self.model = await asyncio.get_event_loop().run_in_executor(
@@ -48,7 +49,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
             lambda: SenseVoiceSmall(self.model_name, quantize=True, batch_size=16),
         )
 
-        logger.info("SenseVoice 模型加载完成。")
+        logger.info(t("msg-cd6da7e9"))
 
     async def get_timestamped_path(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -77,12 +78,12 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
                 audio_url = path
 
             if not os.path.isfile(audio_url):
-                raise FileNotFoundError(f"文件不存在: {audio_url}")
+                raise FileNotFoundError(t("msg-28cbbf07", audio_url=audio_url))
 
             if audio_url.endswith((".amr", ".silk")) or is_tencent:
                 is_silk = await self._is_silk_file(audio_url)
                 if is_silk:
-                    logger.info("Converting silk file to wav ...")
+                    logger.info(t("msg-d98780e5"))
                     output_path = await self.get_timestamped_path() + ".wav"
                     await tencent_silk_to_wav(audio_url, output_path)
                     audio_url = output_path
@@ -97,7 +98,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
             )
 
             # res = self.model(audio_url, language="auto", use_itn=True)
-            logger.debug(f"SenseVoice识别到的文案：{res}")
+            logger.debug(t("msg-4e8f1d05", res=res))
             text = rich_transcription_postprocess(res[0])
             if self.is_emotion:
                 # 提取第二个匹配的值
@@ -106,8 +107,8 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
                     emotion = matches[1]
                     text = f"(当前的情绪：{emotion}) {text}"
                 else:
-                    logger.warning("未能提取到情绪信息")
+                    logger.warning(t("msg-55668aa2"))
             return text
         except Exception as e:
-            logger.error(f"处理音频文件时出错: {e}")
+            logger.error(t("msg-0cdbac9b", e=e))
             raise

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import json
 import os
 from contextlib import asynccontextmanager
@@ -121,7 +122,7 @@ class DocumentStorage:
         """
         if self.engine is None:
             logger.warning(
-                "Database connection is not initialized, returning empty result",
+                t("msg-c2dc1d2b"),
             )
             return []
 
@@ -278,7 +279,7 @@ class DocumentStorage:
         """
         if self.engine is None:
             logger.warning(
-                "Database connection is not initialized, skipping delete operation",
+                t("msg-51fa7426"),
             )
             return
 
@@ -307,7 +308,7 @@ class DocumentStorage:
 
         """
         if self.engine is None:
-            logger.warning("Database connection is not initialized, returning 0")
+            logger.warning(t("msg-43d1f69f"))
             return 0
 
         async with self.get_session() as session:

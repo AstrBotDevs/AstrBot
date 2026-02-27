@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import asyncio
 import copy
@@ -137,17 +138,17 @@ def _select_provider(
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if not provider:
-            logger.error("未找到指定的提供商: %s。", sel_provider)
+            logger.error(t("msg-8dcf5caa"), sel_provider)
         if not isinstance(provider, Provider):
             logger.error(
-                "选择的提供商类型无效(%s)，跳过 LLM 请求处理。", type(provider)
+                t("msg-61d46ee5"), type(provider)
             )
             return None
         return provider
     try:
         return plugin_context.get_using_provider(umo=event.unified_msg_origin)
     except ValueError as exc:
-        logger.error("Error occurred while selecting provider: %s", exc)
+        logger.error(t("msg-496864bc"), exc)
         return None
 
 
@@ -164,7 +165,7 @@ async def _get_session_conv(
         cid = await conv_mgr.new_conversation(umo, event.get_platform_id())
         conversation = await conv_mgr.get_conversation(umo, cid)
     if not conversation:
-        raise RuntimeError("无法创建新的对话。")
+        raise RuntimeError(t("msg-507853eb"))
     return conversation
 
 
@@ -190,7 +191,7 @@ async def _apply_kb(
                     f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
                 )
         except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while retrieving knowledge base: %s", exc)
+            logger.error(t("msg-66870b7e"), exc)
     else:
         if req.func_tool is None:
             req.func_tool = ToolSet()
@@ -219,7 +220,7 @@ async def _apply_file_extract(
         req.prompt = "总结一下文件里面讲了什么？"
     if config.file_extract_prov == "moonshotai":
         if not config.file_extract_msh_api_key:
-            logger.error("Moonshot AI API key for file extract is not set")
+            logger.error(t("msg-36dc1409"))
             return
         file_contents = await asyncio.gather(
             *[
@@ -231,7 +232,7 @@ async def _apply_file_extract(
             ]
         )
     else:
-        logger.error("Unsupported file extract provider: %s", config.file_extract_prov)
+        logger.error(t("msg-8534047e"), config.file_extract_prov)
         return
 
     for file_content, file_name in zip(file_contents, file_names):
@@ -419,18 +420,18 @@ async def _request_img_caption(
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
         raise ValueError(
-            f"Cannot get image caption because provider `{provider_id}` is not exist.",
+            t("msg-f2ea29f4", provider_id=provider_id),
         )
     if not isinstance(prov, Provider):
         raise ValueError(
-            f"Cannot get image caption because provider `{provider_id}` is not a valid Provider, it is {type(prov)}.",
+            t("msg-91a70615", provider_id=provider_id, res=type(prov)),
         )
 
     img_cap_prompt = cfg.get(
         "image_caption_prompt",
         "Please describe the image.",
     )
-    logger.debug("Processing image caption with provider: %s", provider_id)
+    logger.debug(t("msg-b1840df0"), provider_id)
     llm_resp = await prov.text_chat(
         prompt=img_cap_prompt,
         image_urls=image_urls,
@@ -457,7 +458,7 @@ async def _ensure_img_caption(
             )
             req.image_urls = []
     except Exception as exc:  # noqa: BLE001
-        logger.error("处理图片描述失败: %s", exc)
+        logger.error(t("msg-089421fc"), exc)
 
 
 def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
@@ -530,9 +531,9 @@ async def _process_quote_message(
                         f"[Image Caption in quoted message]: {llm_resp.completion_text}"
                     )
             else:
-                logger.warning("No provider found for image captioning in quote.")
+                logger.warning(t("msg-719d5e4d"))
         except BaseException as exc:
-            logger.error("处理引用图片失败: %s", exc)
+            logger.error(t("msg-e16a974b"), exc)
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -554,7 +555,7 @@ def _append_system_reminders(
     if cfg.get("group_name_display") and event.message_obj.group_id:
         if not event.message_obj.group:
             logger.error(
-                "Group name display enabled but group object is None. Group ID: %s",
+                t("msg-037dad2e"),
                 event.message_obj.group_id,
             )
         else:
@@ -569,7 +570,7 @@ def _append_system_reminders(
                 now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
                 current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
             except Exception as exc:  # noqa: BLE001
-                logger.error("时区设置错误: %s, 使用本地时区", exc)
+                logger.error(t("msg-58b47bcd"), exc)
         if not current_time:
             current_time = (
                 datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
@@ -628,7 +629,7 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["image"])
         if "image" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support image, using placeholder.", provider
+                t("msg-938af433"), provider
             )
             image_count = len(req.image_urls)
             placeholder = " ".join(["[图片]"] * image_count)
@@ -641,7 +642,7 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
         provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
         if "tool_use" not in provider_cfg:
             logger.debug(
-                "Provider %s does not support tool_use, clearing tools.", provider
+                t("msg-83d739f8"), provider
             )
             req.func_tool = None
 
@@ -715,8 +716,7 @@ def _sanitize_context_by_modalities(
 
     if removed_image_blocks or removed_tool_messages or removed_tool_calls:
         logger.debug(
-            "sanitize_context_by_modalities applied: "
-            "removed_image_blocks=%s, removed_tool_messages=%s, removed_tool_calls=%s",
+            t("msg-3dbad2d9"),
             removed_image_blocks,
             removed_tool_messages,
             removed_tool_calls,
@@ -776,7 +776,7 @@ async def _handle_webchat(
         if not title or "<None>" in title:
             return
         logger.info(
-            "Generated chatui title for session %s: %s", chatui_session_id, title
+            t("msg-4214b760"), chatui_session_id, title
         )
         await db_helper.update_platform_session(
             session_id=chatui_session_id,
@@ -791,7 +791,7 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
         )
     else:
         logger.warning(
-            "Unsupported llm_safety_mode strategy: %s.",
+            t("msg-cb6db56e"),
             config.safety_mode_strategy,
         )
 
@@ -805,7 +805,7 @@ def _apply_sandbox_tools(
         ep = config.sandbox_cfg.get("shipyard_endpoint", "")
         at = config.sandbox_cfg.get("shipyard_access_token", "")
         if not ep or not at:
-            logger.error("Shipyard sandbox configuration is incomplete.")
+            logger.error(t("msg-7ea2c5d3"))
             return
         os.environ["SHIPYARD_ENDPOINT"] = ep
         os.environ["SHIPYARD_ACCESS_TOKEN"] = at
@@ -834,13 +834,13 @@ def _get_compress_provider(
     provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
     if provider is None:
         logger.warning(
-            "未找到指定的上下文压缩模型 %s，将跳过压缩。",
+            t("msg-9248b273"),
             config.llm_compress_provider_id,
         )
         return None
     if not isinstance(provider, Provider):
         logger.warning(
-            "指定的上下文压缩模型 %s 不是对话模型，将跳过压缩。",
+            t("msg-16fe8ea5"),
             config.llm_compress_provider_id,
         )
         return None
@@ -853,7 +853,7 @@ def _get_fallback_chat_providers(
     fallback_ids = provider_settings.get("fallback_chat_models", [])
     if not isinstance(fallback_ids, list):
         logger.warning(
-            "fallback_chat_models setting is not a list, skip fallback providers."
+            t("msg-c6c9d989")
         )
         return []
 
@@ -868,11 +868,11 @@ def _get_fallback_chat_providers(
             continue
         fallback_provider = plugin_context.get_provider_by_id(fallback_id)
         if fallback_provider is None:
-            logger.warning("Fallback chat provider `%s` not found, skip.", fallback_id)
+            logger.warning(t("msg-614aebad"), fallback_id)
             continue
         if not isinstance(fallback_provider, Provider):
             logger.warning(
-                "Fallback chat provider `%s` is invalid type: %s, skip.",
+                t("msg-1a2e87dd"),
                 fallback_id,
                 type(fallback_provider),
             )
@@ -897,7 +897,7 @@ async def build_main_agent(
     """
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
-        logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
+        logger.info(t("msg-ee979399"))
         return None
 
     if req is None:
@@ -984,14 +984,14 @@ async def build_main_agent(
                         )
                         if remaining_limit <= 0 and fallback_images:
                             logger.warning(
-                                "Skip quoted fallback images due to limit=%d for umo=%s",
+                                t("msg-7a7b4529"),
                                 config.max_quoted_fallback_images,
                                 event.unified_msg_origin,
                             )
                             continue
                         if len(fallback_images) > remaining_limit:
                             logger.warning(
-                                "Truncate quoted fallback images for umo=%s, reply_id=%s from %d to %d",
+                                t("msg-46bcda31"),
                                 event.unified_msg_origin,
                                 getattr(comp, "id", None),
                                 len(fallback_images),
@@ -1006,7 +1006,7 @@ async def build_main_agent(
                             _append_quoted_image_attachment(req, image_ref)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
-                            "Failed to resolve fallback quoted images for umo=%s, reply_id=%s: %s",
+                            t("msg-cbceb923"),
                             event.unified_msg_origin,
                             getattr(comp, "id", None),
                             exc,
@@ -1026,7 +1026,7 @@ async def build_main_agent(
         try:
             await _apply_file_extract(event, req, config)
         except Exception as exc:  # noqa: BLE001
-            logger.error("Error occurred while applying file extract: %s", exc)
+            logger.error(t("msg-31483e80"), exc)
 
     if not req.prompt and not req.image_urls:
         if not event.get_group_id() and req.extra_user_content_parts:

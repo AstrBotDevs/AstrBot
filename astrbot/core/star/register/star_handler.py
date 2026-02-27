@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import re
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -96,11 +97,11 @@ def register_command(
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
             logger.warning(
-                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。",
+                t("msg-7ff2d46e", command_name=command_name),
             )
     # 裸指令
     elif command_name is None:
-        logger.warning("注册裸指令时未提供 command_name 参数。")
+        logger.warning(t("msg-b68436e1"))
     else:
         new_command = CommandFilter(command_name, alias, None)
         add_to_event_filters = True
@@ -213,7 +214,7 @@ def register_command_group(
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
         if sub_command is None:
-            logger.warning(f"{command_group_name} 指令组的子指令组 sub_command 未指定")
+            logger.warning(t("msg-1c183df2", command_group_name=command_group_name))
         else:
             new_group = CommandGroupFilter(
                 sub_command,
@@ -223,7 +224,7 @@ def register_command_group(
             command_group_name.parent_group.add_sub_command_filter(new_group)
     # 根指令组
     elif command_group_name is None:
-        logger.warning("根指令组的名称未指定")
+        logger.warning(t("msg-9210c7e8"))
     else:
         new_group = CommandGroupFilter(command_group_name, alias)
 
@@ -237,7 +238,7 @@ def register_command_group(
             handler_md.event_filters.append(new_group)
 
             return RegisteringCommandable(new_group)
-        raise ValueError("注册指令组失败。")
+        raise ValueError(t("msg-678858e7"))
 
     return decorator
 
@@ -563,7 +564,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
             type_name = arg.type_name
             if not type_name:
                 raise ValueError(
-                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 的参数 {arg.arg_name} 缺少类型注释。",
+                    t("msg-6c3915e0", res=awaitable.__module__, llm_tool_name=llm_tool_name, res_2=arg.arg_name),
                 )
             # parse type_name to handle cases like "list[string]"
             match = re.match(r"(\w+)\[(\w+)\]", type_name)
@@ -577,7 +578,7 @@ def register_llm_tool(name: str | None = None, **kwargs):
                 sub_type_name and sub_type_name not in SUPPORTED_TYPES
             ):
                 raise ValueError(
-                    f"LLM 函数工具 {awaitable.__module__}_{llm_tool_name} 不支持的参数类型：{arg.type_name}",
+                    t("msg-1255c964", res=awaitable.__module__, llm_tool_name=llm_tool_name, res_2=arg.type_name),
                 )
 
             arg_json_schema = {

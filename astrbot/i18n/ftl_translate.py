@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import argparse
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,7 +13,7 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
     """使用 DeepSeek API 翻译 i18n 字符串。"""
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
-        raise ValueError("未检测到环境变量 DEEPSEEK_API_KEY，请先设置。")
+        raise ValueError(t("msg-547c9cc5"))
 
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
@@ -36,7 +37,7 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"\n[Error] API 调用失败: {e}")
+        print(t("msg-8654e4be", e=e))
         return input_string
 
 
@@ -51,7 +52,7 @@ def translate_element(element: ast.TextElement, target_lang: str) -> str:
 def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int = 10):
     """读取、并发翻译并写回 FTL 文件。"""
     if not ftl_path.exists():
-        print(f"File not found: {ftl_path}")
+        print(t("msg-75f207ed", ftl_path=ftl_path))
         return
 
     content = ftl_path.read_text(encoding="utf-8")
@@ -60,7 +61,7 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
     # 收集所有需要翻译的 TextElement（跳过空文本）
     messages = [entry for entry in resource.body if isinstance(entry, ast.Message)]
     if not messages:
-        print(f"No messages found in {ftl_path}")
+        print(t("msg-dcfbbe82", ftl_path=ftl_path))
         return
 
     # 收集所有待翻译的 (element, ) 对，保留引用以便原地修改
@@ -72,7 +73,7 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
                     elements_to_translate.append(element)
 
     print(
-        f"共 {len(elements_to_translate)} 条文本，使用 {max_workers} 个并发线程翻译..."
+        t("msg-ccd5a28f", res=len(elements_to_translate), max_workers=max_workers)
     )
 
     # 并发翻译：future -> element 映射，翻译完成后原地写回
@@ -93,12 +94,12 @@ def process_ftl(ftl_path: Path, target_lang: str = "English", max_workers: int =
             try:
                 element.value = future.result()
             except Exception as e:
-                print(f"\n[Error] 翻译失败，保留原文: {e}")
+                print(t("msg-00b24d69", e=e))
 
     # 序列化并写回
     translated_content = serialize(resource)
     ftl_path.write_text(translated_content, encoding="utf-8")
-    print(f"\n翻译完成，已保存到 {ftl_path}")
+    print(t("msg-ebcdd595", ftl_path=ftl_path))
 
 
 def main():
@@ -117,8 +118,8 @@ def main():
     args = parser.parse_args()
 
     if "DEEPSEEK_API_KEY" not in os.environ:
-        print("错误: 请先设置 DEEPSEEK_API_KEY 环境变量。")
-        print("例如: export DEEPSEEK_API_KEY='sk-xxxxxx'")
+        print(t("msg-d6c66497"))
+        print(t("msg-09486085"))
         return
 
     process_ftl(Path(args.file), args.lang, args.workers)

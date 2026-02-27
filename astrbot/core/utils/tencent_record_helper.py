@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import base64
 import os
@@ -36,7 +37,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
         import pilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装，请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
+            t("msg-377ae139"),
         )
     # with wave.open(wav_path, 'rb') as wav:
     #     wav_data = wav.readframes(wav.getnframes())
@@ -70,7 +71,7 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         ff = FFmpeg()
         ff.convert(input_file=input_path, output_file=output_path)
     except Exception as e:
-        logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
+        logger.debug(t("msg-f4ab0713", e=e))
 
         p = await asyncio.create_subprocess_exec(
             "ffmpeg",
@@ -93,13 +94,13 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
             stderr=subprocess.PIPE,
         )
         stdout, stderr = await p.communicate()
-        logger.info(f"[FFmpeg] stdout: {stdout.decode().strip()}")
-        logger.debug(f"[FFmpeg] stderr: {stderr.decode().strip()}")
-        logger.info(f"[FFmpeg] return code: {p.returncode}")
+        logger.info(t("msg-33c88889", res=stdout.decode().strip()))
+        logger.debug(t("msg-2470430c", res=stderr.decode().strip()))
+        logger.info(t("msg-1321d5f7", res=p.returncode))
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         return output_path
-    raise RuntimeError("生成的WAV文件不存在或为空")
+    raise RuntimeError(t("msg-c39d210c"))
 
 
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
@@ -115,7 +116,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     try:
         import pilk
     except ImportError as e:
-        raise Exception("未安装 pilk: pip install pilk") from e
+        raise Exception(t("msg-6e04bdb8")) from e
 
     temp_dir = get_astrbot_temp_path()
     os.makedirs(temp_dir, exist_ok=True)

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import json
 import logging
 import time
@@ -70,8 +71,8 @@ class TraceSpan:
         if log_broker:
             log_broker.publish(payload)
         else:
-            logger.info(f"[trace] {payload}")
+            logger.info(t("msg-fffce1b9", payload=payload))
 
         trace_logger = _get_trace_logger()
         if trace_logger and trace_logger.handlers:
-            trace_logger.info(json.dumps(payload, ensure_ascii=False))
+            trace_logger.info(t("msg-78b9c276", res=json.dumps(payload, ensure_ascii=False)))

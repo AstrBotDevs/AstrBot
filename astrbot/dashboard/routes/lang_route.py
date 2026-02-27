@@ -16,9 +16,9 @@ class LangRoute(Route):
     async def set_Lang(self):
         data = await request.get_json()
         lang = data.get("lang")
-        logger.debug(f"[LangRoute] lang:{lang}")
+        logger.debug(t("msg-0d18aac8", lang=lang))
         if lang is None:
-            return Response().error("lang 为必填参数。").__dict__
+            return Response().error(t("msg-bf610e68")).__dict__
         try:
             t.load_locale(locale=lang.lower(), files=None)
         except ValueError as exc:

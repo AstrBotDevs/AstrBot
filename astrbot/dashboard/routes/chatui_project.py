@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from quart import g, request
 
 from astrbot.core.db import BaseDatabase
@@ -34,7 +35,7 @@ class ChatUIProjectRoute(Route):
         description = post_data.get("description")
 
         if not title:
-            return Response().error("Missing key: title").__dict__
+            return Response().error(t("msg-04827ead")).__dict__
 
         project = await self.db.create_chatui_project(
             creator=username,
@@ -82,17 +83,17 @@ class ChatUIProjectRoute(Route):
         """Get a specific ChatUI project."""
         project_id = request.args.get("project_id")
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error(t("msg-34fccfbb")).__dict__
 
         username = g.get("username", "guest")
 
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(t("msg-a7c08aee", project_id=project_id)).__dict__
 
         # Verify ownership
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         return (
             Response()
@@ -119,16 +120,16 @@ class ChatUIProjectRoute(Route):
         description = post_data.get("description")
 
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error(t("msg-34fccfbb")).__dict__
 
         username = g.get("username", "guest")
 
         # Verify ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(t("msg-a7c08aee", project_id=project_id)).__dict__
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         await self.db.update_chatui_project(
             project_id=project_id,
@@ -143,16 +144,16 @@ class ChatUIProjectRoute(Route):
         """Delete a ChatUI project."""
         project_id = request.args.get("project_id")
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error(t("msg-34fccfbb")).__dict__
 
         username = g.get("username", "guest")
 
         # Verify ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(t("msg-a7c08aee", project_id=project_id)).__dict__
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         await self.db.delete_chatui_project(project_id)
 
@@ -166,25 +167,25 @@ class ChatUIProjectRoute(Route):
         project_id = post_data.get("project_id")
 
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error(t("msg-dbf41bfc")).__dict__
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error(t("msg-34fccfbb")).__dict__
 
         username = g.get("username", "guest")
 
         # Verify project ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(t("msg-a7c08aee", project_id=project_id)).__dict__
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         # Verify session ownership
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(t("msg-d922dfa3", session_id=session_id)).__dict__
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         await self.db.add_session_to_project(session_id, project_id)
 
@@ -197,16 +198,16 @@ class ChatUIProjectRoute(Route):
         session_id = post_data.get("session_id")
 
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error(t("msg-dbf41bfc")).__dict__
 
         username = g.get("username", "guest")
 
         # Verify session ownership
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(t("msg-d922dfa3", session_id=session_id)).__dict__
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         await self.db.remove_session_from_project(session_id)
 
@@ -216,16 +217,16 @@ class ChatUIProjectRoute(Route):
         """Get all sessions in a project."""
         project_id = request.args.get("project_id")
         if not project_id:
-            return Response().error("Missing key: project_id").__dict__
+            return Response().error(t("msg-34fccfbb")).__dict__
 
         username = g.get("username", "guest")
 
         # Verify project ownership
         project = await self.db.get_chatui_project_by_id(project_id)
         if not project:
-            return Response().error(f"Project {project_id} not found").__dict__
+            return Response().error(t("msg-a7c08aee", project_id=project_id)).__dict__
         if project.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         sessions = await self.db.get_project_sessions(project_id)
 

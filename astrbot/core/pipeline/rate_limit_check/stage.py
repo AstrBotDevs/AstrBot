@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
@@ -72,13 +73,13 @@ class RateLimitStage(Stage):
                 match self.rl_strategy:
                     case RateLimitStrategy.STALL.value:
                         logger.info(
-                            f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。",
+                            t("msg-18092978", session_id=session_id, stall_duration=stall_duration),
                         )
                         await asyncio.sleep(stall_duration)
                         now = datetime.now()
                     case RateLimitStrategy.DISCARD.value:
                         logger.info(
-                            f"会话 {session_id} 被限流。根据限流策略，此请求已被丢弃，直到限额于 {stall_duration:.2f} 秒后重置。",
+                            t("msg-4962387a", session_id=session_id, stall_duration=stall_duration),
                         )
                         return event.stop_event()
 

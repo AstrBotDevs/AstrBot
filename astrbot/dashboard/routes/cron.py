@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import traceback
 from datetime import datetime
 
@@ -42,27 +43,27 @@ class CronRoute(Route):
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error(t("msg-fb5b419b")).__dict__
                 )
             job_type = request.args.get("type")
             jobs = await cron_mgr.list_jobs(job_type)
             data = [self._serialize_job(j) for j in jobs]
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:  # noqa: BLE001
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"Failed to list jobs: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-112659e5", e=e)).__dict__)
 
     async def create_job(self):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error(t("msg-fb5b419b")).__dict__
                 )
 
             payload = await request.json
             if not isinstance(payload, dict):
-                return jsonify(Response().error("Invalid payload").__dict__)
+                return jsonify(Response().error(t("msg-8bc87eb5")).__dict__)
 
             name = payload.get("name") or "active_agent_task"
             cron_expression = payload.get("cron_expression")
@@ -76,15 +77,15 @@ class CronRoute(Route):
             run_at = payload.get("run_at")
 
             if not session:
-                return jsonify(Response().error("session is required").__dict__)
+                return jsonify(Response().error(t("msg-29f616c2")).__dict__)
             if run_once and not run_at:
                 return jsonify(
-                    Response().error("run_at is required when run_once=true").__dict__
+                    Response().error(t("msg-ae7c99a4")).__dict__
                 )
             if (not run_once) and not cron_expression:
                 return jsonify(
                     Response()
-                    .error("cron_expression is required when run_once=false")
+                    .error(t("msg-4bb8c206"))
                     .__dict__
                 )
             if run_once and cron_expression:
@@ -95,7 +96,7 @@ class CronRoute(Route):
                     run_at_dt = datetime.fromisoformat(str(run_at))
                 except Exception:
                     return jsonify(
-                        Response().error("run_at must be ISO datetime").__dict__
+                        Response().error(t("msg-13fbf01e")).__dict__
                     )
 
             job_payload = {
@@ -120,20 +121,20 @@ class CronRoute(Route):
 
             return jsonify(Response().ok(data=self._serialize_job(job)).__dict__)
         except Exception as e:  # noqa: BLE001
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"Failed to create job: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-da14d97a", e=e)).__dict__)
 
     async def update_job(self, job_id: str):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error(t("msg-fb5b419b")).__dict__
                 )
 
             payload = await request.json
             if not isinstance(payload, dict):
-                return jsonify(Response().error("Invalid payload").__dict__)
+                return jsonify(Response().error(t("msg-8bc87eb5")).__dict__)
 
             updates = {
                 "name": payload.get("name"),
@@ -154,21 +155,21 @@ class CronRoute(Route):
 
             job = await cron_mgr.update_job(job_id, **updates)
             if not job:
-                return jsonify(Response().error("Job not found").__dict__)
+                return jsonify(Response().error(t("msg-804b6412")).__dict__)
             return jsonify(Response().ok(data=self._serialize_job(job)).__dict__)
         except Exception as e:  # noqa: BLE001
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"Failed to update job: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-94b2248d", e=e)).__dict__)
 
     async def delete_job(self, job_id: str):
         try:
             cron_mgr = self.core_lifecycle.cron_manager
             if cron_mgr is None:
                 return jsonify(
-                    Response().error("Cron manager not initialized").__dict__
+                    Response().error(t("msg-fb5b419b")).__dict__
                 )
             await cron_mgr.delete_job(job_id)
             return jsonify(Response().ok(message="deleted").__dict__)
         except Exception as e:  # noqa: BLE001
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"Failed to delete job: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-42c0ee7a", e=e)).__dict__)

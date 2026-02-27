@@ -1,4 +1,5 @@
 """日志系统，统一将标准 logging 输出转发到 loguru。"""
+from astrbot.core.lang import t
 
 import asyncio
 import logging
@@ -374,7 +375,7 @@ class LogManager:
                 trace=False,
             )
         except Exception as e:
-            logger.error(f"Failed to add file sink: {e}")
+            logger.error(t("msg-80a186b8", e=e))
 
     @classmethod
     def configure_trace_logger(cls, config: dict | None) -> None:

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from astrbot import logger
 
 from . import ContentSafetyStrategy
@@ -16,7 +17,7 @@ class StrategySelector:
             try:
                 from .baidu_aip import BaiduAipStrategy
             except ImportError:
-                logger.warning("使用百度内容审核应该先 pip install baidu-aip")
+                logger.warning(t("msg-27a700e0"))
                 return
             self.enabled_strategies.append(
                 BaiduAipStrategy(

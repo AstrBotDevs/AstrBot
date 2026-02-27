@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import logging
 import random
@@ -54,10 +55,10 @@ class NetworkRenderStrategy(RenderStrategy):
                             if ep.get("active") and ep.get("url")
                         ]
                         logger.info(
-                            f"Successfully got {len(self.endpoints)} official T2I endpoints.",
+                            t("msg-be0eeaa7", res=len(self.endpoints)),
                         )
         except Exception as e:
-            logger.error(f"Failed to get official endpoints: {e}")
+            logger.error(t("msg-3bee02f4", e=e))
 
     def _clean_url(self, url: str):
         url = url.removesuffix("/")
@@ -103,7 +104,7 @@ class NetworkRenderStrategy(RenderStrategy):
                         if resp.status == 200:
                             ret = await resp.json()
                             return f"{endpoint}/{ret['data']['id']}"
-                        raise Exception(f"HTTP {resp.status}")
+                        raise Exception(t("msg-829d3c71", res=resp.status))
                 else:
                     # download_image_by_url 失败时抛异常
                     return await download_image_by_url(
@@ -113,11 +114,11 @@ class NetworkRenderStrategy(RenderStrategy):
                     )
             except Exception as e:
                 last_exception = e
-                logger.warning(f"Endpoint {endpoint} failed: {e}, trying next...")
+                logger.warning(t("msg-05fb621f", endpoint=endpoint, e=e))
                 continue
         # 全部失败
-        logger.error(f"All endpoints failed: {last_exception}")
-        raise RuntimeError(f"All endpoints failed: {last_exception}")
+        logger.error(t("msg-9a836926", last_exception=last_exception))
+        raise RuntimeError(t("msg-9a836926", last_exception=last_exception))
 
     async def render(
         self,

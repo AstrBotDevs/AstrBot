@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import aiohttp
 
 from astrbot.api import star
@@ -85,4 +86,4 @@ class HelpCommand:
             msg_parts.append(notice)
         msg = "\n".join(msg_parts)
 
-        event.set_result(MessageEventResult().message(msg).use_t2i(False))
+        event.set_result(MessageEventResult().message(t("msg-c046b6e4", msg=msg)).use_t2i(False))

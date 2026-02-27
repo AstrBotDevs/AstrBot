@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -60,7 +61,7 @@ async def sync_command_configs() -> None:
 async def toggle_command(handler_full_name: str, enabled: bool) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError(t("msg-011581bb"))
 
     existing_cfg = await db_helper.get_command_config(handler_full_name)
     config = await db_helper.upsert_command_config(
@@ -95,16 +96,16 @@ async def rename_command(
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError(t("msg-011581bb"))
 
     new_fragment = new_fragment.strip()
     if not new_fragment:
-        raise ValueError("指令名不能为空。")
+        raise ValueError(t("msg-a0c37004"))
 
     # 校验主指令名
     candidate_full = _compose_command(descriptor.parent_signature, new_fragment)
     if _is_command_in_use(handler_full_name, candidate_full):
-        raise ValueError(f"指令名 '{candidate_full}' 已被其他指令占用。")
+        raise ValueError(t("msg-ae8b2307", candidate_full=candidate_full))
 
     # 校验别名
     if aliases:
@@ -114,7 +115,7 @@ async def rename_command(
                 continue
             alias_full = _compose_command(descriptor.parent_signature, alias)
             if _is_command_in_use(handler_full_name, alias_full):
-                raise ValueError(f"别名 '{alias_full}' 已被其他指令占用。")
+                raise ValueError(t("msg-247926a7", alias_full=alias_full))
 
     existing_cfg = await db_helper.get_command_config(handler_full_name)
     merged_extra = dict(existing_cfg.extra_data or {}) if existing_cfg else {}
@@ -146,15 +147,15 @@ async def update_command_permission(
 ) -> CommandDescriptor:
     descriptor = _build_descriptor_by_full_name(handler_full_name)
     if not descriptor:
-        raise ValueError("指定的处理函数不存在或不是指令。")
+        raise ValueError(t("msg-011581bb"))
 
     if permission_type not in ["admin", "member"]:
-        raise ValueError("权限类型必须为 admin 或 member。")
+        raise ValueError(t("msg-dbd19a23"))
 
     handler = descriptor.handler
     found_plugin = star_map.get(handler.handler_module_path)
     if not found_plugin:
-        raise ValueError("未找到指令所属插件")
+        raise ValueError(t("msg-9388ea1e"))
 
     # 1. Update Persistent Config (alter_cmd)
     alter_cmd_cfg = await sp.global_get("alter_cmd", {})
@@ -263,7 +264,7 @@ def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
             descriptors.append(desc)
         except Exception as e:
             logger.warning(
-                f"解析指令处理函数 {handler.handler_full_name} 失败，跳过该指令。原因: {e!s}"
+                t("msg-0dd9b70d", res=handler.handler_full_name, e=e)
             )
             continue
     return descriptors

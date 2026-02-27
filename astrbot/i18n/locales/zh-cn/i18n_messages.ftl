@@ -2332,6 +2332,11 @@ msg-44832296 = 正在启动 WebUI, 监听地址:{ $scheme }://{ $host }待翻译
 msg-3eed4a73 = 提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）
 msg-289a2fe8 = 错误：端口{ $port }已被占用{ "\u000A" }占用信息:{ "\u000A" }           { $process_info }{ "\u000A" }请确保：{ "\u000A" }1. 没有其他 AstrBot 实例正在运行{ "\u000A" }2. 端口{ $port }Not occupied by other programs{ "\u000A" }3. 如需使用其他端口，请修改配置文件
 msg-6d1dfba8 = 端口{ $port }已被占用
+msg-228fe31e = {"\u000A"} ✨✨✨{"\u000A"}  AstrBot v{VERSION} WebUI 已启动，可访问{"\u000A"}{"\u000A"}
+msg-3749e149 =    ➜  本地: {scheme}://localhost:{port}{"\u000A"}
+msg-3c2a1175 =    ➜  网络: {scheme}://{ip}:{port}{"\u000A"}
+msg-d1ba29cb =    ➜  默认用户名和密码: astrbot{"\u000A"} ✨✨✨{"\u000A"}
+msg-d5182f70 = 可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。
 msg-c0161c7c = { $display }
 msg-ac4f2855 = 当 dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。
 msg-3e87aaf8 = SSL certificate file does not exist:{ $cert_path }
@@ -3153,3 +3158,12 @@ msg-f5d43a54 = 正在为生成变更日志{ $version }...
 msg-e54756e8 = { "\u000A" }✓ 变更日志已生成：{ $changelog_file }
 msg-82be6c98 = { "\u000A" }预览：
 msg-321ac5b1 = { $changelog_content }
+
+### astrbot/core/pipeline/__init__.py
+msg-1c9fc93d = module {$__name__} has no attribute {$name}
+
+### astrbot/core/provider/sources/azure_tts_source.py
+msg-15c55ed8 = 无效的other[...]格式，应形如 other[{...}]
+
+### astrbot/cli/__main__.py
+msg-d79e1ff9 = AstrBot CLI version: {$__version__}

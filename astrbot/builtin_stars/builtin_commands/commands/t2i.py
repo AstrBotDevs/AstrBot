@@ -1,4 +1,5 @@
 """文本转图片命令"""
+from astrbot.core.lang import t
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -16,8 +17,8 @@ class T2ICommand:
         if config["t2i"]:
             config["t2i"] = False
             config.save_config()
-            event.set_result(MessageEventResult().message("已关闭文本转图片模式。"))
+            event.set_result(MessageEventResult().message(t("msg-855d5cf3")))
             return
         config["t2i"] = True
         config.save_config()
-        event.set_result(MessageEventResult().message("已开启文本转图片模式。"))
+        event.set_result(MessageEventResult().message(t("msg-64da24f4")))

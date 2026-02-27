@@ -20,16 +20,51 @@ def make_id(ftl_value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 导入注入：确保 from astrbot.core.lang import t 存在，
+# 且始终位于 from __future__ import annotations 之后
+# ---------------------------------------------------------------------------
+
+
+def ensure_t_import(source: str) -> str:
+    import_stmt = "from astrbot.core.lang import t"
+    future_stmt = "from __future__ import annotations"
+
+    # 已经存在，无需处理
+    if import_stmt in source:
+        return source
+
+    # 情况1：文件含有 from __future__ import annotations
+    # → 插到该行末尾的下一行
+    if future_stmt in source:
+        idx = source.index(future_stmt)
+        insert_pos = source.index("\n", idx) + 1  # 该行末尾换行符之后
+        return source[:insert_pos] + import_stmt + "\n" + source[insert_pos:]
+
+    # 情况2：文件以模块 docstring 开头（"""...""" 或 '''...'''）
+    # → 插到 docstring 结束后
+    stripped = source.lstrip()
+    if stripped.startswith('"""') or stripped.startswith("'''"):
+        quote = stripped[:3]
+        # 从 source 层面找 docstring 起始位置
+        doc_start = source.index(quote)
+        doc_end = source.index(quote, doc_start + 3) + 3
+        return source[:doc_end] + "\n" + import_stmt + source[doc_end:]
+
+    # 情况3：普通文件 → 插到文件开头
+    return import_stmt + "\n" + source
+
+
+# ---------------------------------------------------------------------------
 # 字符串表达式解析：提取 FTL 值 + 变量参数列表
 # 返回 (ftl_value, kwargs) 或 None
 #   ftl_value : FTL 格式字符串，如 "{$date}相反的你和我"
 #   kwargs    : [(参数名, 源码表达式)] 列表，如 [("date", "date")]
-# 纯字符串常量返回 ("原始字符串", [])，kwargs 为空表示无需替换
+# 纯字符串常量返回 ("原始字符串", [])
 # ---------------------------------------------------------------------------
 
 
 def flatten_str_concat(node):
-    """递归展开字符串拼接 "a" + "b" + ... → 合并后的字符串常量节点（仅当所有部分都是常量时）"""
+    """递归展开字符串拼接 "a" + "b" + ... → 合并后的字符串（仅当所有部分都是常量时）"""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
@@ -198,7 +233,6 @@ def is_click_echo_call(node: ast.Call) -> bool:
 def is_exception_call(node: ast.Call) -> bool:
     """判断是否为 XxxError(...) 或 XxxException(...) 的实例化"""
     func = node.func
-    # 支持 ValueError(...) 和 module.ValueError(...) 两种形式
     name = (
         func.id
         if isinstance(func, ast.Name)
@@ -237,10 +271,9 @@ def is_target_call(node: ast.Call) -> bool:
 
 def extract_and_rewrite(source: str):
     """
-    解析源码，找出所有含变量的目标调用，返回：
+    解析源码，找出所有目标调用，返回：
       ftl_entries : [(id, ftl_value), ...]
-      new_source  : 将含变量的第一个参数替换为 t("id", key=val) 后的源码
-    纯字符串（无变量）的调用保持原样不动。
+      new_source  : 将第一个参数替换为 t("id", key=val) 后的源码
     """
     try:
         tree = ast.parse(source)
@@ -280,10 +313,19 @@ def extract_and_rewrite(source: str):
             continue
 
         ftl_value, kwargs = result
-        # 保留原样的 \n 而不是直接换行
+        # 保留原样的换行符转义，避免 FTL 文件出现裸换行
         ftl_value = ftl_value.replace("\r", "\\r").replace("\n", "\\n")
 
         msg_id = make_id(ftl_value)
+
+        # 对 kwargs 按参数名去重，保留首次出现的顺序
+        seen_params: set = set()
+        deduped_kwargs = []
+        for p, s in kwargs:
+            if p not in seen_params:
+                seen_params.add(p)
+                deduped_kwargs.append((p, s))
+        kwargs = deduped_kwargs
 
         # 构造新的第一个参数：t("id", key=val, ...)
         kw_parts = ", ".join(f"{p}={s}" for p, s in kwargs)
@@ -344,7 +386,6 @@ def main():
     parser.add_argument("--rewrite", action="store_true", help="原地重写源文件")
     args = parser.parse_args()
 
-    # 使用 get_astrbot_path 获取项目根目录
     root_dir = Path(".")
     ftl_base_dir = Path(f"{root_dir}/astrbot/i18n/locales/zh-cn")
     ftl_base_dir.mkdir(parents=True, exist_ok=True)
@@ -366,6 +407,7 @@ def main():
         ".idea",
         ".vscode",
         "data",
+        "i18n",
     }
 
     all_files = []
@@ -374,7 +416,6 @@ def main():
         for file in files:
             if not file.endswith(".py"):
                 continue
-            # 跳过本脚本自身及引导文件
             if file in ("automatic_i18n.py", "runtime_bootstrap.py"):
                 continue
             all_files.append(Path(root) / file)
@@ -389,24 +430,7 @@ def main():
                 continue
 
             if args.rewrite:
-                import_stmt = "from astrbot.core.lang import t"
-                if import_stmt not in new_source:
-                    # 插入到模块 docstring 之后，否则插到文件开头
-                    if new_source.startswith('"""') or new_source.startswith("'''"):
-                        quote = new_source[:3]
-                        end_doc = new_source.find(quote, 3)
-                        if end_doc != -1:
-                            insert_pos = end_doc + 3
-                            new_source = (
-                                new_source[:insert_pos]
-                                + "\n"
-                                + import_stmt
-                                + new_source[insert_pos:]
-                            )
-                        else:
-                            new_source = import_stmt + "\n" + new_source
-                    else:
-                        new_source = import_stmt + "\n" + new_source
+                new_source = ensure_t_import(new_source)
                 file_path.write_text(new_source, encoding="utf-8")
                 tqdm.write(f"  [已重写] {file_path}")
 
@@ -416,7 +440,7 @@ def main():
         except Exception as e:
             tqdm.write(f"  [错误] 处理 {file_path} 失败：{e}")
 
-    # 将 FTL 条目追加写入统一的文件（跳过已存在的 msg_id）
+    # 将 FTL 条目追加写入统一文件（跳过已存在的 msg_id）
     if all_files_data:
         existing_content = (
             ftl_file.read_text(encoding="utf-8") if ftl_file.exists() else ""
@@ -430,7 +454,6 @@ def main():
                 if f"{msg_id} =" not in existing_content:
                     section_lines.append(f"{msg_id} = {ftl_value}")
 
-            # 只有有新条目时才写入 header
             if section_lines:
                 new_ftl_lines.append(f"\n{header}")
                 new_ftl_lines.extend(section_lines)

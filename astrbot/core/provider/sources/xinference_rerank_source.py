@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from typing import cast
 
 from xinference_client.client.restful.async_restful_client import (
@@ -39,10 +40,10 @@ class XinferenceRerankProvider(RerankProvider):
 
     async def initialize(self) -> None:
         if self.api_key:
-            logger.info("Xinference Rerank: Using API key for authentication.")
+            logger.info(t("msg-1ec1e6e4"))
             self.client = Client(self.base_url, api_key=self.api_key)
         else:
-            logger.info("Xinference Rerank: No API key provided.")
+            logger.info(t("msg-7bcb6e1b"))
             self.client = Client(self.base_url)
 
         try:
@@ -50,22 +51,22 @@ class XinferenceRerankProvider(RerankProvider):
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
-                        f"Model '{self.model_name}' is already running with UID: {uid}",
+                        t("msg-b0d1e564", res=self.model_name, uid=uid),
                     )
                     self.model_uid = uid
                     break
 
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
-                    logger.info(f"Launching {self.model_name} model...")
+                    logger.info(t("msg-16965859", res=self.model_name))
                     self.model_uid = await self.client.launch_model(
                         model_name=self.model_name,
                         model_type="rerank",
                     )
-                    logger.info("Model launched.")
+                    logger.info(t("msg-7b1dfdd3"))
                 else:
                     logger.warning(
-                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available.",
+                        t("msg-3fc7310e", res=self.model_name),
                     )
                     return
 
@@ -76,9 +77,9 @@ class XinferenceRerankProvider(RerankProvider):
                 )
 
         except Exception as e:
-            logger.error(f"Failed to initialize Xinference model: {e}")
+            logger.error(t("msg-15f19a42", e=e))
             logger.debug(
-                f"Xinference initialization failed with exception: {e}",
+                t("msg-01af1651", e=e),
                 exc_info=True,
             )
             self.model = None
@@ -90,16 +91,16 @@ class XinferenceRerankProvider(RerankProvider):
         top_n: int | None = None,
     ) -> list[RerankResult]:
         if not self.model:
-            logger.error("Xinference rerank model is not initialized.")
+            logger.error(t("msg-2607cc7a"))
             return []
         try:
             response = await self.model.rerank(documents, query, top_n)
             results = response.get("results", [])
-            logger.debug(f"Rerank API response: {response}")
+            logger.debug(t("msg-3d28173b", response=response))
 
             if not results:
                 logger.warning(
-                    f"Rerank API returned an empty list. Original response: {response}",
+                    t("msg-4c63e1bd", response=response),
                 )
 
             return [
@@ -110,15 +111,15 @@ class XinferenceRerankProvider(RerankProvider):
                 for result in results
             ]
         except Exception as e:
-            logger.error(f"Xinference rerank failed: {e}")
-            logger.debug(f"Xinference rerank failed with exception: {e}", exc_info=True)
+            logger.error(t("msg-cac71506", e=e))
+            logger.debug(t("msg-4135cf72", e=e), exc_info=True)
             return []
 
     async def terminate(self) -> None:
         """关闭客户端会话"""
         if self.client:
-            logger.info("Closing Xinference rerank client...")
+            logger.info(t("msg-ea2b36d0"))
             try:
                 await self.client.close()
             except Exception as e:
-                logger.error(f"Failed to close Xinference client: {e}", exc_info=True)
+                logger.error(t("msg-633a269f", e=e), exc_info=True)

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import random
 import re
 import time
@@ -163,30 +164,30 @@ class ResultDecorateStage(Stage):
         for handler in handlers:
             try:
                 logger.debug(
-                    f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    t("msg-7ec898fd", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
                 )
                 if is_stream:
                     logger.warning(
-                        "启用流式输出时，依赖发送消息前事件钩子的插件可能无法正常工作",
+                        t("msg-5e27dae6"),
                     )
                 await handler.handler(event)
 
                 if (result := event.get_result()) is None or not result.chain:
                     logger.debug(
-                        f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。",
+                        t("msg-caaaec29", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
                     )
             except BaseException:
-                logger.error(traceback.format_exc())
+                logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
             if event.is_stopped():
                 logger.info(
-                    f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+                    t("msg-add19f94", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
                 )
                 return
 
         # 流式输出不执行下面的逻辑
         if is_stream:
-            logger.info("流式输出已启用，跳过结果装饰阶段")
+            logger.info(t("msg-813a44bb"))
             return
 
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
@@ -231,7 +232,7 @@ class ResultDecorateStage(Stage):
                                     )
                                 except re.error:
                                     logger.error(
-                                        f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
+                                        t("msg-891aa43a", res=traceback.format_exc()),
                                     )
                                     split_response = re.findall(
                                         r".*?[。？！~…]+|.+$",
@@ -266,7 +267,7 @@ class ResultDecorateStage(Stage):
             )
             if should_tts and not tts_provider:
                 logger.warning(
-                    f"会话 {event.unified_msg_origin} 未配置文本转语音模型。",
+                    t("msg-82bb9025", res=event.unified_msg_origin),
                 )
 
             if (
@@ -283,12 +284,12 @@ class ResultDecorateStage(Stage):
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
-                            logger.info(f"TTS 请求: {comp.text}")
+                            logger.info(t("msg-fb1c757a", res=comp.text))
                             audio_path = await tts_provider.get_audio(comp.text)
-                            logger.info(f"TTS 结果: {audio_path}")
+                            logger.info(t("msg-06341d25", audio_path=audio_path))
                             if not audio_path:
                                 logger.error(
-                                    f"由于 TTS 音频文件未找到，消息段转语音失败: {comp.text}",
+                                    t("msg-2057f670", res=comp.text),
                                 )
                                 new_chain.append(comp)
                                 continue
@@ -309,7 +310,7 @@ class ResultDecorateStage(Stage):
                                     audio_path,
                                 )
                                 url = f"{callback_api_base}/api/file/{token}"
-                                logger.debug(f"已注册：{url}")
+                                logger.debug(t("msg-f26725cf", url=url))
 
                             new_chain.append(
                                 Record(
@@ -321,8 +322,8 @@ class ResultDecorateStage(Stage):
                             if dual_output:
                                 new_chain.append(comp)
                         except Exception:
-                            logger.error(traceback.format_exc())
-                            logger.error("TTS 失败，使用文本发送。")
+                            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+                            logger.error(t("msg-47716aec"))
                             new_chain.append(comp)
                     else:
                         new_chain.append(comp)
@@ -349,11 +350,11 @@ class ResultDecorateStage(Stage):
                             template_name=self.t2i_active_template,
                         )
                     except BaseException:
-                        logger.error("文本转图片失败，使用文本发送。")
+                        logger.error(t("msg-ffe054a9"))
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            t("msg-06c1aedc"),
                         )
                     if url:
                         if url.startswith("http"):
@@ -364,7 +365,7 @@ class ResultDecorateStage(Stage):
                         ):
                             token = await file_token_service.register_file(url)
                             url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
-                            logger.debug(f"已注册：{url}")
+                            logger.debug(t("msg-f26725cf", url=url))
                             result.chain = [Image.fromURL(url)]
                         else:
                             result.chain = [Image.fromFileSystem(url)]
