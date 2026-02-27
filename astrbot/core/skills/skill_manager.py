@@ -20,6 +20,7 @@ SKILLS_CONFIG_FILENAME = "skills.json"
 SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 SANDBOX_SKILLS_ROOT = "skills"
+SANDBOX_WORKSPACE_ROOT = "/workspace"
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -185,7 +186,7 @@ class SkillManager:
             description = str(item.get("description", "") or "")
             path = str(item.get("path", "") or "")
             if not path:
-                path = f"{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
+                path = f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
             deduped[name] = {
                 "name": name,
                 "description": description,
@@ -215,6 +216,17 @@ class SkillManager:
         modified = False
         skills_by_name: dict[str, SkillInfo] = {}
 
+        sandbox_cached_paths: dict[str, str] = {}
+        if runtime == "sandbox":
+            cache_for_paths = self._load_sandbox_skills_cache()
+            for item in cache_for_paths.get("skills", []):
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name", "") or "").strip()
+                path = str(item.get("path", "") or "").strip().replace("\\", "/")
+                if name and path and _SKILL_NAME_RE.match(name):
+                    sandbox_cached_paths[name] = path
+
         for entry in sorted(Path(self.skills_root).iterdir()):
             if not entry.is_dir():
                 continue
@@ -235,7 +247,9 @@ class SkillManager:
             except Exception:
                 description = ""
             if runtime == "sandbox" and show_sandbox_path:
-                path_str = f"{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                path_str = sandbox_cached_paths.get(skill_name) or (
+                    f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                )
             else:
                 path_str = str(skill_md)
             path_str = path_str.replace("\\", "/")
@@ -266,11 +280,15 @@ class SkillManager:
                     continue
                 description = str(item.get("description", "") or "")
                 if show_sandbox_path:
-                    path_str = f"{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                    path_str = (
+                        f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                    )
                 else:
                     path_str = str(item.get("path", "") or "")
                     if not path_str:
-                        path_str = f"{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                        path_str = (
+                            f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill_name}/SKILL.md"
+                        )
                 skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
                     description=description,
