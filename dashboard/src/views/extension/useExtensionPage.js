@@ -558,11 +558,16 @@ export const useExtensionPage = () => {
     showUninstallDialog.value = true;
   };
 
-  const performUninstall = async (
+  const uninstall = async (
     target,
-    { deleteConfig = false, deleteData = false } = {},
+    { deleteConfig = false, deleteData = false, skipConfirm = false } = {},
   ) => {
     if (!target?.id || !target?.kind) return;
+
+    if (!skipConfirm) {
+      requestUninstall(target);
+      return;
+    }
 
     const isFailed = target.kind === "failed";
     const endpoint = isFailed
@@ -586,18 +591,18 @@ export const useExtensionPage = () => {
       toast(res.data.message, "success");
       await getExtensions();
     } catch (err) {
-      toast(resolveErrorMessage(err), "error");
+      toast(resolveErrorMessage(err, tm("messages.operationFailed")), "error");
     }
   };
 
   const requestUninstallPlugin = (name) => {
     if (!name) return;
-    requestUninstall({ kind: "normal", id: name });
+    uninstall({ kind: "normal", id: name }, { skipConfirm: false });
   };
 
   const requestUninstallFailedPlugin = (dirName) => {
     if (!dirName) return;
-    requestUninstall({ kind: "failed", id: dirName });
+    uninstall({ kind: "failed", id: dirName }, { skipConfirm: false });
   };
   
   const checkUpdate = () => {
@@ -629,24 +634,23 @@ export const useExtensionPage = () => {
     });
   };
   
-  const uninstallExtension = async (extensionName, options = null) => {
+  const uninstallExtension = async (
+    extensionName,
+    optionsOrSkipConfirm = false,
+  ) => {
     if (!extensionName) return;
 
-    if (typeof options === "boolean") {
-      if (options) {
-        await performUninstall({ kind: "normal", id: extensionName });
-      } else {
-        requestUninstallPlugin(extensionName);
-      }
-      return;
+    if (typeof optionsOrSkipConfirm === "boolean") {
+      return uninstall(
+        { kind: "normal", id: extensionName },
+        { skipConfirm: optionsOrSkipConfirm },
+      );
     }
 
-    if (options && typeof options === "object") {
-      await performUninstall({ kind: "normal", id: extensionName }, options);
-      return;
-    }
-
-    requestUninstallPlugin(extensionName);
+    return uninstall(
+      { kind: "normal", id: extensionName },
+      { ...(optionsOrSkipConfirm || {}), skipConfirm: true },
+    );
   };
   
   // 处理卸载确认对话框的确认事件
@@ -655,7 +659,7 @@ export const useExtensionPage = () => {
     if (!target) return;
 
     try {
-      await performUninstall(target, options);
+      await uninstall(target, { ...(options || {}), skipConfirm: true });
     } finally {
       uninstallTarget.value = null;
       showUninstallDialog.value = false;
@@ -1194,79 +1198,42 @@ export const useExtensionPage = () => {
     return true;
   };
 
-  const installFromFile = async (ignoreVersionCheck) => {
-    toast(tm("messages.installing"), "primary");
-    const formData = new FormData();
-    formData.append("file", upload_file.value);
-    formData.append("ignore_version_check", String(ignoreVersionCheck));
-
-    try {
-      const res = await axios.post("/api/plugin/install-upload", formData, {
+  const performInstallRequest = async ({ source, ignoreVersionCheck }) => {
+    if (source === "file") {
+      const formData = new FormData();
+      formData.append("file", upload_file.value);
+      formData.append("ignore_version_check", String(ignoreVersionCheck));
+      return axios.post("/api/plugin/install-upload", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
-      loading_.value = false;
-
-      const canContinue = await handleInstallResponse(res.data);
-      if (!canContinue) return;
-
-      upload_file.value = null;
-      onLoadingDialogResult(1, res.data.message);
-      dialog.value = false;
-      await getExtensions();
-
-      viewReadme({
-        name: res.data.data.name,
-        repo: res.data.data.repo || null,
-      });
-
-      await checkAndPromptConflicts();
-    } catch (err) {
-      loading_.value = false;
-      const message = resolveErrorMessage(err, tm("messages.installFailed"));
-      onLoadingDialogResult(2, message, -1);
-      await refreshExtensionsAfterInstallFailure();
     }
+
+    return axios.post("/api/plugin/install", {
+      url: extension_url.value,
+      proxy: getSelectedGitHubProxy(),
+      ignore_version_check: ignoreVersionCheck,
+    });
   };
 
-  const installFromUrl = async (ignoreVersionCheck) => {
-    toast(
-      tm("messages.installingFromUrl") + " " + extension_url.value,
-      "primary",
-    );
-
-    try {
-      const res = await axios.post("/api/plugin/install", {
-        url: extension_url.value,
-        proxy: getSelectedGitHubProxy(),
-        ignore_version_check: ignoreVersionCheck,
-      });
-      loading_.value = false;
-
-      const canContinue = await handleInstallResponse(res.data, {
-        toastStatus: true,
-      });
-      if (!canContinue) return;
-
+  const finalizeSuccessfulInstall = async (resData, source) => {
+    if (source === "file") {
+      upload_file.value = null;
+    } else {
       extension_url.value = "";
-      onLoadingDialogResult(1, res.data.message);
-      dialog.value = false;
-      await getExtensions();
-
-      viewReadme({
-        name: res.data.data.name,
-        repo: res.data.data.repo || null,
-      });
-
-      await checkAndPromptConflicts();
-    } catch (err) {
-      loading_.value = false;
-      const message = resolveErrorMessage(err, tm("messages.installFailed"));
-      toast(message, "error");
-      onLoadingDialogResult(2, message, -1);
-      await refreshExtensionsAfterInstallFailure();
     }
+
+    onLoadingDialogResult(1, resData.message);
+    dialog.value = false;
+    await getExtensions();
+
+    viewReadme({
+      name: resData.data.name,
+      repo: resData.data.repo || null,
+    });
+
+    await checkAndPromptConflicts();
   };
   
   const newExtension = async (ignoreVersionCheck = false) => {
@@ -1283,12 +1250,33 @@ export const useExtensionPage = () => {
     loadingDialog.title = tm("status.loading");
     loadingDialog.show = true;
 
-    if (upload_file.value !== null) {
-      await installFromFile(ignoreVersionCheck);
-      return;
-    }
+    const source = upload_file.value !== null ? "file" : "url";
+    toast(
+      source === "file"
+        ? tm("messages.installing")
+        : tm("messages.installingFromUrl") + " " + extension_url.value,
+      "primary",
+    );
 
-    await installFromUrl(ignoreVersionCheck);
+    try {
+      const res = await performInstallRequest({ source, ignoreVersionCheck });
+      loading_.value = false;
+
+      const canContinue = await handleInstallResponse(res.data, {
+        toastStatus: source === "url",
+      });
+      if (!canContinue) return;
+
+      await finalizeSuccessfulInstall(res.data, source);
+    } catch (err) {
+      loading_.value = false;
+      const message = resolveErrorMessage(err, tm("messages.installFailed"));
+      if (source === "url") {
+        toast(message, "error");
+      }
+      onLoadingDialogResult(2, message, -1);
+      await refreshExtensionsAfterInstallFailure();
+    }
   };
   
   const normalizePlatformList = (platforms) => {

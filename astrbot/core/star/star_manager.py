@@ -31,6 +31,7 @@ from astrbot.core.utils.metrics import Metric
 from . import StarMetadata
 from .command_management import sync_command_configs
 from .context import Context
+from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
@@ -1043,18 +1044,6 @@ class PluginManager:
         )
         self._rebuild_failed_plugin_info()
 
-    def _format_plugin_error(self, key: str, **kwargs) -> str:
-        templates = {
-            "not_found_in_failed_list": "插件不存在于失败列表中。",
-            "reserved_plugin_cannot_uninstall": "该插件是 AstrBot 保留插件，无法卸载。",
-            "failed_plugin_dir_remove_error": (
-                "移除失败插件成功，但是删除插件文件夹失败: {error}。"
-                "您可以手动删除该文件夹，位于 addons/plugins/ 下。"
-            ),
-        }
-        template = templates.get(key, key)
-        return template.format(**kwargs)
-
     async def install_plugin(
         self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
     ):
@@ -1211,12 +1200,12 @@ class PluginManager:
             failed_info = self.failed_plugin_dict.get(dir_name)
             if not failed_info:
                 raise Exception(
-                    self._format_plugin_error("not_found_in_failed_list"),
+                    format_plugin_error("not_found_in_failed_list"),
                 )
 
             if isinstance(failed_info, dict) and failed_info.get("reserved"):
                 raise Exception(
-                    self._format_plugin_error("reserved_plugin_cannot_uninstall"),
+                    format_plugin_error("reserved_plugin_cannot_uninstall"),
                 )
 
             self._cleanup_plugin_state(dir_name)
@@ -1227,7 +1216,7 @@ class PluginManager:
                     remove_dir(plugin_path)
                 except Exception as e:
                     raise Exception(
-                        self._format_plugin_error(
+                        format_plugin_error(
                             "failed_plugin_dir_remove_error",
                             error=f"{e!s}",
                         ),

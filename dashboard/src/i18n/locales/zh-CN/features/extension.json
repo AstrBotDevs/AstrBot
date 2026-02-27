@@ -187,6 +187,7 @@
     "refreshing": "正在刷新插件列表...",
     "refreshSuccess": "插件列表已刷新！",
     "refreshFailed": "刷新插件列表时发生错误",
+    "operationFailed": "操作失败",
     "reloadSuccess": "重载成功",
     "reloadFailed": "重载失败",
     "updateSuccess": "更新成功!",
