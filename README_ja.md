@@ -70,91 +70,50 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 
 ## クイックスタート
 
-#### Docker デプロイ（推奨 🥳）
-
-Docker / Docker Compose を使用した AstrBot のデプロイを推奨します。
-
-公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
-
-#### uv デプロイ
+### ワンクリックデプロイ
 
 ```bash
 uv tool install astrbot
 astrbot
 ```
 
-#### デスクトップアプリのデプロイ（Tauri）
+> [uv](https://docs.astral.sh/uv/) のインストールが必要です。
 
-デスクトップアプリのリポジトリ [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+### Docker デプロイ
 
-マルチシステムアーキテクチャをサポートし、インストールしてすぐに使用可能。初心者や手軽さを求める人に最適なワンクリックデスクトップデプロイソリューションです。サーバー環境での使用は推奨されません。
+AstrBot のデプロイには Docker / Docker Compose の利用を推奨します。
 
-#### ランチャーによるワンクリックデプロイ（AstrBot Launcher）
+公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
 
-迅速なデプロイとマルチインスタンス対応、環境の隔離が可能。[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリにアクセスし、Releases ページから最新バージョンのシステム対応パッケージをダウンロードしてインストールしてください。
-
-#### 宝塔パネルデプロイ
-
-AstrBot は宝塔パネルと提携し、宝塔パネルに公開されています。
-
-公式ドキュメント [宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html) をご参照ください。
-
-#### 1Panel デプロイ
-
-AstrBot は 1Panel 公式により 1Panel パネルに公開されています。
-
-公式ドキュメント [1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html) をご参照ください。
-
-#### 雨云でのデプロイ
-
-For Chinese users:
+### 雨云でのデプロイ
 
 AstrBot は雨云公式によりクラウドアプリケーションプラットフォームに公開され、ワンクリックでデプロイ可能です。
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-#### Replit でのデプロイ
+### デスクトップクライアント（Tauri）
+
+デスクトップアプリのリポジトリ [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+
+マルチシステムアーキテクチャに対応し、インストーラーですぐ利用可能。初心者にも使いやすいワンクリックのデスクトップデプロイ方式です。サーバー用途には推奨されません。
+
+### ランチャーによるワンクリックデプロイ（AstrBot Launcher）
+
+高速デプロイとマルチインスタンスに対応し、環境分離も実現します。[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリの Releases ページから、最新バージョンの対応インストールパッケージを選んで導入してください。
+
+### Replit でのデプロイ
 
 コミュニティ貢献によるデプロイ方法。
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
-#### Windows ワンクリックインストーラーデプロイ
-
-公式ドキュメント [Windows ワンクリックインストーラーを使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/windows.html) をご参照ください。
-
-#### CasaOS デプロイ
-
-コミュニティ貢献によるデプロイ方法。
-
-公式ドキュメント [CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html) をご参照ください。
-
-#### 手動デプロイ
-
-まず uv をインストールします:
-
-```bash
-pip install uv
-```
-
-Git Clone で AstrBot をインストール:
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-または、公式ドキュメント [ソースコードから AstrBot をデプロイ](https://astrbot.app/deploy/astrbot/cli.html) をご参照ください。
-
-#### システムパッケージマネージャーでのインストール
-
-##### Arch Linux
+### AUR
 
 ```bash
 yay -S astrbot-git
-# または paru を使用
-paru -S astrbot-git
 ```
+
+**その他のデプロイ方法**：[宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html) | [1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html) | [CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html) | [手動デプロイ](https://astrbot.app/deploy/astrbot/cli.html)
 
 ## サポートされているメッセージプラットフォーム
 

@@ -70,91 +70,50 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
 
 ## 快速開始
 
-#### Docker 部署（推薦 🥳）
-
-推薦使用 Docker / Docker Compose 方式部署 AstrBot。
-
-請參閱官方文件 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
-
-#### uv 部署
+### 一鍵部署
 
 ```bash
 uv tool install astrbot
 astrbot
 ```
 
-#### 桌面應用部署（Tauri）
+> 需要安裝 [uv](https://docs.astral.sh/uv/)。
 
-桌面應用倉庫 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+### Docker 部署
 
-支援多系統架構，安裝包直接安裝，開箱即用，最適合新手和懶人的一鍵桌面部署方案，不推薦伺服器場景。
+推薦使用 Docker / Docker Compose 方式部署 AstrBot。
 
-#### 啟動器一鍵部署（AstrBot Launcher）
+請參閱官方文件 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
-快速部署和多開方案，實現環境隔離，進入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 倉庫，在 Releases 頁最新版本下找到對應的系統安裝包安裝即可。
-
-#### 寶塔面板部署
-
-AstrBot 與寶塔面板合作，已上架至寶塔面板。
-
-請參閱官方文件 [寶塔面板部署](https://astrbot.app/deploy/astrbot/btpanel.html)。
-
-#### 1Panel 部署
-
-AstrBot 已由 1Panel 官方上架至 1Panel 面板。
-
-請參閱官方文件 [1Panel 部署](https://astrbot.app/deploy/astrbot/1panel.html)。
-
-#### 在雨雲上部署
-
-For Chinese users:
+### 在雨雲上部署
 
 AstrBot 已由雨雲官方上架至雲端應用程式平台，可一鍵部署。
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-#### 在 Replit 上部署
+### 桌面客戶端（Tauri）
+
+桌面應用倉庫 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+
+支援多系統架構，安裝包直接安裝，開箱即用，最適合新手和懶人的一鍵桌面部署方案，不推薦伺服器場景。
+
+### 啟動器一鍵部署（AstrBot Launcher）
+
+快速部署和多開方案，實現環境隔離，進入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 倉庫，在 Releases 頁最新版本下找到對應的系統安裝包安裝即可。
+
+### 在 Replit 上部署
 
 社群貢獻的部署方式。
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
-#### Windows 一鍵安裝器部署
-
-請參閱官方文件 [使用 Windows 一鍵安裝器部署 AstrBot](https://astrbot.app/deploy/astrbot/windows.html)。
-
-#### CasaOS 部署
-
-社群貢獻的部署方式。
-
-請參閱官方文件 [CasaOS 部署](https://astrbot.app/deploy/astrbot/casaos.html)。
-
-#### 手動部署
-
-首先安裝 uv：
-
-```bash
-pip install uv
-```
-
-透過 Git Clone 安裝 AstrBot：
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-或者請參閱官方文件 [透過原始碼部署 AstrBot](https://astrbot.app/deploy/astrbot/cli.html)。
-
-#### 系統套件管理員安裝
-
-##### Arch Linux
+### AUR
 
 ```bash
 yay -S astrbot-git
-# 或者使用 paru
-paru -S astrbot-git
 ```
+
+**更多部署方式**：[寶塔面板](https://astrbot.app/deploy/astrbot/btpanel.html) | [1Panel](https://astrbot.app/deploy/astrbot/1panel.html) | [CasaOS](https://astrbot.app/deploy/astrbot/casaos.html) | [手動部署](https://astrbot.app/deploy/astrbot/cli.html)
 
 ## 支援的訊息平台
 

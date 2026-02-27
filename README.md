@@ -70,91 +70,50 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 
 ## Quick Start
 
-#### Docker Deployment (Recommended 🥳)
-
-We recommend deploying AstrBot using Docker or Docker Compose.
-
-Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
-
-#### uv Deployment
+### One-Click Deployment
 
 ```bash
 uv tool install astrbot
 astrbot
 ```
 
-#### System Package Manager Installation
+> Requires [uv](https://docs.astral.sh/uv/) to be installed.
 
-##### Arch Linux
+### Docker Deployment
 
-```bash
-yay -S astrbot-git
-# or use paru
-paru -S astrbot-git
-```
+We recommend deploying AstrBot using Docker / Docker Compose.
 
-#### Desktop Application (Tauri)
+Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
-Desktop repository: [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
-
-Supports multiple system architectures, direct installation, out-of-the-box experience. Ideal for beginners.
-
-#### AstrBot Launcher
-
-Quick deployment and multi-instance solution. Visit the [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) repository and find the latest release for your system.
-
-#### BT-Panel Deployment
-
-AstrBot has partnered with BT-Panel and is now available in their marketplace.
-
-Please refer to the official documentation: [BT-Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html).
-
-#### 1Panel Deployment
-
-AstrBot has been officially listed on the 1Panel marketplace.
-
-Please refer to the official documentation: [1Panel Deployment](https://astrbot.app/deploy/astrbot/1panel.html).
-
-#### Deploy on RainYun
-
-For Chinese users:
+### Deploy on RainYun
 
 AstrBot has been officially listed on RainYun's cloud application platform with one-click deployment.
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-#### Deploy on Replit
+### Desktop Application (Tauri)
+
+Desktop repository: [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
+
+Supports multiple system architectures, direct package installation, and out-of-the-box usage. A convenient one-click desktop deployment option for beginners.
+
+### One-Click Launcher Deployment (AstrBot Launcher)
+
+A quick deployment and multi-instance solution with environment isolation. Visit the [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) repository and install the package for your OS from the latest release.
+
+### Deploy on Replit
 
 Community-contributed deployment method.
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
-#### Windows One-Click Installer
-
-Please refer to the official documentation: [Deploy AstrBot with Windows One-Click Installer](https://astrbot.app/deploy/astrbot/windows.html).
-
-#### CasaOS Deployment
-
-Community-contributed deployment method.
-
-Please refer to the official documentation: [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html).
-
-#### Manual Deployment
-
-First, install uv:
+### AUR
 
 ```bash
-pip install uv
+yay -S astrbot-git
 ```
 
-Install AstrBot via Git Clone:
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-Or refer to the official documentation: [Deploy AstrBot from Source](https://astrbot.app/deploy/astrbot/cli.html).
+**More deployment methods**: [BT-Panel Deployment](https://astrbot.app/deploy/astrbot/btpanel.html) | [1Panel Deployment](https://astrbot.app/deploy/astrbot/1panel.html) | [CasaOS Deployment](https://astrbot.app/deploy/astrbot/casaos.html) | [Manual Deployment](https://astrbot.app/deploy/astrbot/cli.html)
 
 ## Supported Messaging Platforms
 

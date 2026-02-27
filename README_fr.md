@@ -70,91 +70,50 @@ AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègr
 
 ## Démarrage rapide
 
-#### Déploiement Docker (Recommandé 🥳)
-
-Nous recommandons de déployer AstrBot en utilisant Docker ou Docker Compose.
-
-Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
-
-#### Déploiement uv
+### Déploiement en un clic
 
 ```bash
 uv tool install astrbot
 astrbot
 ```
 
-#### Application de bureau (Tauri)
+> [uv](https://docs.astral.sh/uv/) doit être installé.
 
-Dépôt de l'application de bureau : [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
+### Déploiement Docker
 
-Prend en charge plusieurs architectures système, installation directe, prête à l'emploi. La solution de déploiement de bureau en un clic la plus adaptée aux débutants. Non recommandée pour les serveurs.
+Nous recommandons de déployer AstrBot avec Docker / Docker Compose.
 
-#### Déploiement en un clic avec le lanceur (AstrBot Launcher)
+Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
-Déploiement rapide et solution multi-instances, isolation de l'environnement. Accédez au dépôt [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher), trouvez le package d'installation correspondant à votre système sous la dernière version sur la page Releases.
-
-#### Déploiement BT-Panel
-
-AstrBot s'est associé à BT-Panel et est maintenant disponible sur leur marketplace.
-
-Veuillez consulter la documentation officielle : [Déploiement BT-Panel](https://astrbot.app/deploy/astrbot/btpanel.html).
-
-#### Déploiement 1Panel
-
-AstrBot a été officiellement listé sur le marketplace 1Panel.
-
-Veuillez consulter la documentation officielle : [Déploiement 1Panel](https://astrbot.app/deploy/astrbot/1panel.html).
-
-#### Déployer sur RainYun
-
-For Chinese users:
+### Déployer sur RainYun
 
 AstrBot a été officiellement listé sur la plateforme d'applications cloud de RainYun avec un déploiement en un clic.
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-#### Déployer sur Replit
+### Application de bureau (Tauri)
+
+Dépôt de l'application de bureau : [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
+
+Prend en charge plusieurs architectures système, installation directe, prête à l'emploi. Solution de déploiement bureau en un clic, particulièrement adaptée aux débutants. Non recommandée pour les serveurs.
+
+### Déploiement en un clic avec le lanceur (AstrBot Launcher)
+
+Solution de déploiement rapide et multi-instances avec isolation d'environnement. Accédez au dépôt [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) et installez le package correspondant à votre système depuis la dernière release.
+
+### Déployer sur Replit
 
 Méthode de déploiement contribuée par la communauté.
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
-#### Installateur Windows en un clic
-
-Veuillez consulter la documentation officielle : [Déployer AstrBot avec l'installateur Windows en un clic](https://astrbot.app/deploy/astrbot/windows.html).
-
-#### Déploiement CasaOS
-
-Méthode de déploiement contribuée par la communauté.
-
-Veuillez consulter la documentation officielle : [Déploiement CasaOS](https://astrbot.app/deploy/astrbot/casaos.html).
-
-#### Déploiement manuel
-
-Tout d'abord, installez uv :
-
-```bash
-pip install uv
-```
-
-Installez AstrBot via Git Clone :
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-Ou consultez la documentation officielle : [Déployer AstrBot depuis les sources](https://astrbot.app/deploy/astrbot/cli.html).
-
-#### Installation via le gestionnaire de paquets du système
-
-##### Arch Linux
+### AUR
 
 ```bash
 yay -S astrbot-git
-# ou utiliser paru
-paru -S astrbot-git
 ```
+
+**Autres méthodes de déploiement** : [Déploiement BT-Panel](https://astrbot.app/deploy/astrbot/btpanel.html) | [Déploiement 1Panel](https://astrbot.app/deploy/astrbot/1panel.html) | [Déploiement CasaOS](https://astrbot.app/deploy/astrbot/casaos.html) | [Déploiement manuel](https://astrbot.app/deploy/astrbot/cli.html)
 
 ## Plateformes de messagerie prises en charge
 
