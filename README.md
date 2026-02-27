@@ -2,9 +2,9 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">简体中文</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
 
@@ -165,8 +165,8 @@ Connect AstrBot to your favorite chat platform.
 | QQ | Official |
 | OneBot v11 protocol implementation | Official |
 | Telegram | Official |
-| WeChat Work Application & WeChat Work Intelligent Bot | Official |
-| WeChat Customer Service & WeChat Official Accounts | Official |
+| Wecom & Wecom AI Bot | Official |
+| WeChat Official Accounts | Official |
 | Feishu (Lark) | Official |
 | DingTalk | Official |
 | Slack | Official |
@@ -243,10 +243,6 @@ pre-commit install
 - Group 7: 743746109
 - Group 8: 1030353265
 - Developer Group: 975206796
-
-### Telegram Group
-
-<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
 
 ### Discord Server
 

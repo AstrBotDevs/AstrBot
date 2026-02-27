@@ -242,10 +242,6 @@ pre-commit install
 - 6 群：753075035
 - 開發者群：975206796
 
-### Telegram 群組
-
-<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
-
 ### Discord 群組
 
 <a href="https://discord.gg/hAVk6tgV36"><img alt="Discord_community" src="https://img.shields.io/badge/Discord-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
