@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import hashlib
 import json
 import sys
@@ -330,13 +331,19 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             return False
 
         compact = value.replace("\n", "").replace("\r", "")
-        if not compact or len(compact) % 4 != 0:
+        if not compact or len(compact) < 32 or len(compact) % 4 != 0:
             return False
 
         base64_chars = (
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
         )
-        return all(ch in base64_chars for ch in compact)
+        if any(ch not in base64_chars for ch in compact):
+            return False
+        try:
+            base64.b64decode(compact, validate=True)
+        except Exception:
+            return False
+        return True
 
     def _build_user_content(self, prompt: str, image_urls: list[str]) -> T.Any:
         if not image_urls:
@@ -360,10 +367,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             if not self._is_likely_base64_image(url):
                 skipped_invalid_images += 1
                 continue
+            compact_base64 = url.replace("\n", "").replace("\r", "")
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{url}"},
+                    "image_url": {"url": f"data:image/png;base64,{compact_base64}"},
                 },
             )
         if skipped_invalid_images:
