@@ -151,3 +151,7 @@ class DeerFlowAPIClient:
 
     async def close(self) -> None:
         await self.session.close()
+
+    @property
+    def is_closed(self) -> bool:
+        return self.session.closed

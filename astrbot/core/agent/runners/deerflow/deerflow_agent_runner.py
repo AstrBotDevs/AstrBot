@@ -3,6 +3,7 @@ import sys
 import typing as T
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -61,6 +62,48 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         return f"{err_type}: no detailed error message provided."
 
+    def _coerce_int_config(
+        self,
+        field_name: str,
+        value: T.Any,
+        default: int,
+        min_value: int | None = None,
+    ) -> int:
+        if isinstance(value, bool):
+            logger.warning(
+                f"DeerFlow config '{field_name}' should be numeric, got boolean. "
+                f"Fallback to {default}."
+            )
+            parsed = default
+        elif isinstance(value, int):
+            parsed = value
+        elif isinstance(value, str):
+            try:
+                parsed = int(value.strip())
+            except ValueError:
+                logger.warning(
+                    f"DeerFlow config '{field_name}' value '{value}' is not numeric. "
+                    f"Fallback to {default}."
+                )
+                parsed = default
+        else:
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"DeerFlow config '{field_name}' has unsupported type "
+                    f"{type(value).__name__}. Fallback to {default}."
+                )
+                parsed = default
+
+        if min_value is not None and parsed < min_value:
+            logger.warning(
+                f"DeerFlow config '{field_name}'={parsed} is below minimum {min_value}. "
+                f"Fallback to {min_value}."
+            )
+            parsed = min_value
+        return parsed
+
     @override
     async def reset(
         self,
@@ -97,23 +140,40 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         self.subagent_enabled = bool(
             provider_config.get("deerflow_subagent_enabled", False),
         )
-        self.max_concurrent_subagents = provider_config.get(
+        self.max_concurrent_subagents = self._coerce_int_config(
             "deerflow_max_concurrent_subagents",
-            3,
+            provider_config.get(
+                "deerflow_max_concurrent_subagents",
+                3,
+            ),
+            default=3,
+            min_value=1,
         )
-        if isinstance(self.max_concurrent_subagents, str):
-            self.max_concurrent_subagents = int(self.max_concurrent_subagents)
-        if self.max_concurrent_subagents < 1:
-            self.max_concurrent_subagents = 1
 
-        self.timeout = provider_config.get("timeout", 300)
-        if isinstance(self.timeout, str):
-            self.timeout = int(self.timeout)
-        self.recursion_limit = provider_config.get("deerflow_recursion_limit", 1000)
-        if isinstance(self.recursion_limit, str):
-            self.recursion_limit = int(self.recursion_limit)
+        self.timeout = self._coerce_int_config(
+            "timeout",
+            provider_config.get("timeout", 300),
+            default=300,
+            min_value=1,
+        )
+        self.recursion_limit = self._coerce_int_config(
+            "deerflow_recursion_limit",
+            provider_config.get("deerflow_recursion_limit", 1000),
+            default=1000,
+            min_value=1,
+        )
 
+        new_client_signature = (self.api_base, self.api_key, self.auth_header)
         old_client = getattr(self, "api_client", None)
+        old_signature = getattr(self, "_api_client_signature", None)
+        if (
+            isinstance(old_client, DeerFlowAPIClient)
+            and old_signature == new_client_signature
+            and not old_client.is_closed
+        ):
+            self.api_client = old_client
+            return
+
         if isinstance(old_client, DeerFlowAPIClient):
             try:
                 await old_client.close()
@@ -127,6 +187,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             api_key=self.api_key,
             auth_header=self.auth_header,
         )
+        self._api_client_signature = new_client_signature
 
     @override
     async def step(self):
@@ -162,8 +223,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     chain=err_chain,
                 ),
             )
-        finally:
-            await self.api_client.close()
 
     @override
     async def step_until_done(
@@ -559,7 +618,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
     async def _execute_deerflow_request(self):
         prompt = self.req.prompt or ""
-        session_id = self.req.session_id or "unknown"
+        session_id = self.req.session_id or f"deerflow-ephemeral-{uuid4()}"
         image_urls = self.req.image_urls or []
         system_prompt = self.req.system_prompt
 
