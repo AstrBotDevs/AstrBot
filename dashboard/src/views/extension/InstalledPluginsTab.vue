@@ -56,7 +56,7 @@ const {
   installCompat,
   versionCompatibilityDialog,
   showUninstallDialog,
-  pluginToUninstall,
+  uninstallTarget,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
@@ -100,11 +100,12 @@ const {
   toast,
   resetLoadingDialog,
   onLoadingDialogResult,
-  failedPluginsDict,
+  failedPluginItems,
   getExtensions,
-  handleReloadAllFailed,
+  reloadFailedPlugin,
   checkUpdate,
   uninstallExtension,
+  requestUninstallFailedPlugin,
   handleUninstallConfirm,
   updateExtension,
   showUpdateAllConfirm,
@@ -209,62 +210,89 @@ const {
                   {{ tm("buttons.updateAll") }}
                 </v-btn>
 
-                <v-dialog max-width="500px" v-if="extension_data.message">
-                  <template v-slot:activator="{ props }">
-                    <v-btn
-                      v-bind="props"
-                      icon
-                      size="small"
-                      color="error"
-                      class="ml-auto"
-                      variant="tonal"
-                    >
-                      <v-icon>mdi-alert-circle</v-icon>
-                    </v-btn>
-                  </template>
-                  <template v-slot:default="{ isActive }">
-                    <v-card class="rounded-lg">
-                      <v-card-title class="headline d-flex align-center">
-                        <v-icon color="error" class="mr-2"
-                          >mdi-alert-circle</v-icon
-                        >
-                        {{ tm("dialogs.error.title") }}
-                      </v-card-title>
-                      <v-card-text>
-                        <p class="text-body-1">
-                          {{ extension_data.message }}
-                        </p>
-                        <p class="text-caption mt-2">
-                          {{ tm("dialogs.error.checkConsole") }}
-                        </p>
-                      </v-card-text>
-                      <v-card-actions>
-                        <v-btn
-                            color="error"
-                            variant="tonal"
-                            prepend-icon="mdi-refresh"
-                            @click="handleReloadAllFailed"
-                        >
-                            尝试一键重载修复
-                        </v-btn>
-                        <v-spacer></v-spacer>
-                        <v-btn
-                          color="primary"
-                          @click="isActive.value = false"
-                          >{{ tm("buttons.close") }}</v-btn
-                        >
-                      </v-card-actions>
-                    </v-card>
-                  </template>
-                </v-dialog>
               </v-col>
             </v-row>
+
+            <v-card
+              v-if="failedPluginItems.length > 0"
+              class="mb-4 rounded-lg"
+              variant="tonal"
+              color="warning"
+            >
+              <v-card-title class="d-flex align-center">
+                <v-icon color="warning" class="mr-2">mdi-alert-circle</v-icon>
+                {{ tm("failedPlugins.title", { count: failedPluginItems.length }) }}
+              </v-card-title>
+              <v-card-text class="pt-0">
+                <div class="text-body-2 mb-3">
+                  {{ tm("failedPlugins.hint") }}
+                </div>
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>{{ tm("failedPlugins.columns.plugin") }}</th>
+                      <th>{{ tm("failedPlugins.columns.error") }}</th>
+                      <th class="text-right">{{ tm("buttons.actions") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="plugin in failedPluginItems" :key="plugin.dir_name">
+                      <td>
+                        <div class="font-weight-medium">
+                          {{ plugin.display_name }}
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ plugin.dir_name }}
+                        </div>
+                      </td>
+                      <td style="max-width: 520px">
+                        <div
+                          class="text-caption text-medium-emphasis"
+                          style="
+                            display: -webkit-box;
+                            -webkit-line-clamp: 2;
+                            line-clamp: 2;
+                            -webkit-box-orient: vertical;
+                            overflow: hidden;
+                          "
+                        >
+                          {{ plugin.error || tm("status.unknown") }}
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="primary"
+                          class="mr-2"
+                          prepend-icon="mdi-refresh"
+                          @click="reloadFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.reload") }}
+                        </v-btn>
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="error"
+                          prepend-icon="mdi-delete"
+                          :disabled="plugin.reserved"
+                          @click="requestUninstallFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.uninstall") }}
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </v-card-text>
+            </v-card>
 
             <v-fade-transition hide-on-leave>
               <!-- 表格视图 -->
               <div v-if="isListView">
                 <v-card class="rounded-lg overflow-hidden elevation-0">
                   <v-data-table
+                    class="plugin-list-table"
                     :headers="pluginHeaders"
                     :items="filteredPlugins"
                     :loading="loading_"
@@ -395,18 +423,35 @@ const {
                     <template v-slot:item.version="{ item }">
                       <div class="d-flex align-center">
                         <span class="text-body-2">{{ item.version }}</span>
-                        <v-icon
-                          v-if="item.has_update"
-                          color="warning"
-                          size="small"
-                          class="ml-1"
-                          >mdi-alert</v-icon
-                        >
-                        <v-tooltip v-if="item.has_update" activator="parent">
+                        <v-tooltip v-if="item.has_update" location="top">
+                          <template v-slot:activator="{ props: tooltipProps }">
+                            <v-icon
+                              v-bind="tooltipProps"
+                              color="warning"
+                              size="small"
+                              class="ml-1"
+                              style="cursor: pointer"
+                              @click.stop="updateExtension(item.name)"
+                              >mdi-alert</v-icon
+                            >
+                          </template>
                           <span
                             >{{ tm("messages.hasUpdate") }}
                             {{ item.online_version }}</span
                           >
+                        </v-tooltip>
+                        <v-tooltip v-if="item.has_update" location="top">
+                          <template v-slot:activator="{ props: tooltipProps }">
+                            <span
+                              v-bind="tooltipProps"
+                              class="ml-1 text-caption text-warning"
+                              style="cursor: pointer"
+                              @click.stop="updateExtension(item.name)"
+                            >
+                              {{ item.online_version }}
+                            </span>
+                          </template>
+                          <span>{{ tm("buttons.update") }}</span>
                         </v-tooltip>
                       </div>
                     </template>
@@ -416,7 +461,7 @@ const {
                     </template>
 
                     <template v-slot:item.actions="{ item }">
-                      <div class="table-action-row d-flex align-center flex-nowrap ga-2 py-1">
+                      <div class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1">
                         <v-btn
                           v-if="!item.activated"
                           size="small"
@@ -617,14 +662,27 @@ const {
 }
 
 .table-action-btn {
-  min-height: 34px;
-  font-size: 0.9rem;
+  min-height: 32px;
+  font-size: 0.86rem;
   font-weight: 600;
 }
 
 .table-action-row {
   overflow-x: auto;
+  overflow-y: hidden;
   white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.plugin-list-table :deep(td) {
+  vertical-align: top;
+}
+
+@media (max-width: 1400px) {
+  .table-action-btn {
+    min-width: 0;
+    padding: 0 8px;
+  }
 }
 
 .fab-button {
