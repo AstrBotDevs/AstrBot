@@ -2,6 +2,7 @@ import asyncio
 import sys
 import typing as T
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -26,6 +27,17 @@ else:
 
 class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     """DeerFlow Agent Runner via LangGraph HTTP API."""
+
+    @dataclass
+    class _StreamState:
+        streamed_text: str = ""
+        fallback_stream_text: str = ""
+        clarification_text: str = ""
+        task_failures: list[str] = field(default_factory=list)
+        seen_message_ids: set[str] = field(default_factory=set)
+        baseline_initialized: bool = False
+        run_values_messages: list[dict[str, T.Any]] = field(default_factory=list)
+        timed_out: bool = False
 
     def _format_exception(self, err: Exception) -> str:
         err_type = type(err).__name__
@@ -100,6 +112,15 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         self.recursion_limit = provider_config.get("deerflow_recursion_limit", 1000)
         if isinstance(self.recursion_limit, str):
             self.recursion_limit = int(self.recursion_limit)
+
+        old_client = getattr(self, "api_client", None)
+        if isinstance(old_client, DeerFlowAPIClient):
+            try:
+                await old_client.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to close previous DeerFlow API client cleanly: {e}"
+                )
 
         self.api_client = DeerFlowAPIClient(
             api_base=self.api_base,
@@ -371,14 +392,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         )
         return thread_id
 
-    async def _execute_deerflow_request(self):
-        prompt = self.req.prompt or ""
-        session_id = self.req.session_id or "unknown"
-        image_urls = self.req.image_urls or []
-        system_prompt = self.req.system_prompt
-
-        thread_id = await self._ensure_thread_id(session_id)
-
+    def _build_messages(
+        self,
+        prompt: str,
+        image_urls: list[str],
+        system_prompt: str | None,
+    ) -> list[dict[str, T.Any]]:
         messages: list[dict[str, T.Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -388,7 +407,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 "content": self._build_user_content(prompt, image_urls),
             },
         )
+        return messages
 
+    def _build_runtime_context(self, thread_id: str) -> dict[str, T.Any]:
         runtime_context: dict[str, T.Any] = {
             "thread_id": thread_id,
             "thinking_enabled": self.thinking_enabled,
@@ -399,128 +420,119 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             runtime_context["max_concurrent_subagents"] = self.max_concurrent_subagents
         if self.model_name:
             runtime_context["model_name"] = self.model_name
+        return runtime_context
 
-        payload: dict[str, T.Any] = {
+    def _build_payload(
+        self,
+        thread_id: str,
+        prompt: str,
+        image_urls: list[str],
+        system_prompt: str | None,
+    ) -> dict[str, T.Any]:
+        return {
             "assistant_id": self.assistant_id,
-            "input": {"messages": messages},
+            "input": {
+                "messages": self._build_messages(prompt, image_urls, system_prompt),
+            },
             "stream_mode": ["values", "messages-tuple", "custom"],
             # LangGraph 0.6+ prefers context instead of configurable.
-            "context": runtime_context,
+            "context": self._build_runtime_context(thread_id),
             "config": {
                 "recursion_limit": self.recursion_limit,
             },
         }
 
-        streamed_text = ""
-        fallback_stream_text = ""
-        clarification_text = ""
-        task_failures: list[str] = []
-        seen_message_ids: set[str] = set()
-        baseline_initialized = False
-        run_values_messages: list[dict[str, T.Any]] = []
-        timed_out = False
+    def _handle_values_event(
+        self,
+        data: T.Any,
+        state: _StreamState,
+    ) -> list[AgentResponse]:
+        responses: list[AgentResponse] = []
+        values_messages = self._extract_messages_from_values_data(data)
+        if not values_messages:
+            return responses
 
-        try:
-            async for event in self.api_client.stream_run(
-                thread_id=thread_id,
-                payload=payload,
-                timeout=self.timeout,
-            ):
-                event_type = event.get("event")
-                data = event.get("data")
+        if not state.baseline_initialized:
+            state.baseline_initialized = True
+            for msg in values_messages:
+                msg_id = self._get_message_id(msg)
+                if msg_id:
+                    state.seen_message_ids.add(msg_id)
+            return responses
 
-                if event_type == "values":
-                    values_messages = self._extract_messages_from_values_data(data)
-                    if values_messages:
-                        if not baseline_initialized:
-                            baseline_initialized = True
-                            for msg in values_messages:
-                                msg_id = self._get_message_id(msg)
-                                if msg_id:
-                                    seen_message_ids.add(msg_id)
-                            continue
-
-                        new_messages = self._extract_new_messages_from_values(
-                            values_messages,
-                            seen_message_ids,
-                        )
-                        if new_messages:
-                            run_values_messages.extend(new_messages)
-                            latest_text = self._extract_latest_ai_text(
-                                run_values_messages
-                            )
-                            latest_clarification = (
-                                self._extract_latest_clarification_text(
-                                    run_values_messages,
-                                )
-                            )
-                            if latest_clarification:
-                                clarification_text = latest_clarification
-                        else:
-                            latest_text = ""
-
-                        if self.streaming and latest_text:
-                            if latest_text.startswith(streamed_text):
-                                delta = latest_text[len(streamed_text) :]
-                                if delta:
-                                    streamed_text = latest_text
-                                    yield AgentResponse(
-                                        type="streaming_delta",
-                                        data=AgentResponseData(
-                                            chain=MessageChain().message(delta),
-                                        ),
-                                    )
-                            elif latest_text != streamed_text:
-                                streamed_text = latest_text
-                                yield AgentResponse(
-                                    type="streaming_delta",
-                                    data=AgentResponseData(
-                                        chain=MessageChain().message(latest_text),
-                                    ),
-                                )
-                    continue
-
-                if event_type in {"messages-tuple", "messages", "message"}:
-                    delta = self._extract_ai_delta_from_event_data(data)
-                    if delta:
-                        fallback_stream_text += delta
-                    if self.streaming and delta and not streamed_text:
-                        yield AgentResponse(
-                            type="streaming_delta",
-                            data=AgentResponseData(chain=MessageChain().message(delta)),
-                        )
-                    maybe_clarification = self._extract_clarification_from_event_data(
-                        data
-                    )
-                    if maybe_clarification:
-                        clarification_text = maybe_clarification
-                    continue
-
-                if event_type == "custom":
-                    task_failures.extend(
-                        self._extract_task_failures_from_custom_event(data),
-                    )
-                    continue
-
-                if event_type == "error":
-                    raise Exception(f"DeerFlow stream returned error event: {data}")
-
-                if event_type == "end":
-                    break
-        except (asyncio.TimeoutError, TimeoutError):
-            timed_out = True
-
-        # Clarification tool output should take precedence over partial AI/tool-call text.
-        if clarification_text:
-            final_text = clarification_text
+        new_messages = self._extract_new_messages_from_values(
+            values_messages,
+            state.seen_message_ids,
+        )
+        if new_messages:
+            state.run_values_messages.extend(new_messages)
+            latest_text = self._extract_latest_ai_text(state.run_values_messages)
+            latest_clarification = self._extract_latest_clarification_text(
+                state.run_values_messages,
+            )
+            if latest_clarification:
+                state.clarification_text = latest_clarification
         else:
-            final_text = self._extract_latest_ai_text(run_values_messages)
-            if not final_text:
-                final_text = streamed_text or fallback_stream_text
-            if not final_text:
-                final_text = self._build_task_failure_summary(task_failures)
+            latest_text = ""
 
-        if timed_out:
+        if self.streaming and latest_text:
+            if latest_text.startswith(state.streamed_text):
+                delta = latest_text[len(state.streamed_text) :]
+                if delta:
+                    state.streamed_text = latest_text
+                    responses.append(
+                        AgentResponse(
+                            type="streaming_delta",
+                            data=AgentResponseData(
+                                chain=MessageChain().message(delta),
+                            ),
+                        ),
+                    )
+            elif latest_text != state.streamed_text:
+                state.streamed_text = latest_text
+                responses.append(
+                    AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain().message(latest_text),
+                        ),
+                    ),
+                )
+        return responses
+
+    def _handle_message_event(
+        self,
+        data: T.Any,
+        state: _StreamState,
+    ) -> AgentResponse | None:
+        delta = self._extract_ai_delta_from_event_data(data)
+        if delta:
+            state.fallback_stream_text += delta
+
+        response: AgentResponse | None = None
+        if self.streaming and delta and not state.streamed_text:
+            response = AgentResponse(
+                type="streaming_delta",
+                data=AgentResponseData(chain=MessageChain().message(delta)),
+            )
+
+        maybe_clarification = self._extract_clarification_from_event_data(data)
+        if maybe_clarification:
+            state.clarification_text = maybe_clarification
+        return response
+
+    def _resolve_final_text(self, state: _StreamState) -> str:
+        # Clarification tool output should take precedence over partial AI/tool-call text.
+        if state.clarification_text:
+            final_text = state.clarification_text
+        else:
+            final_text = self._extract_latest_ai_text(state.run_values_messages)
+            if not final_text:
+                final_text = state.streamed_text or state.fallback_stream_text
+            if not final_text:
+                final_text = self._build_task_failure_summary(state.task_failures)
+
+        if state.timed_out:
             timeout_note = (
                 f"DeerFlow stream timed out after {self.timeout}s. "
                 "Returning partial result."
@@ -533,6 +545,58 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if not final_text:
             logger.warning("DeerFlow returned no text content in stream events.")
             final_text = "DeerFlow returned an empty response."
+        return final_text
+
+    async def _execute_deerflow_request(self):
+        prompt = self.req.prompt or ""
+        session_id = self.req.session_id or "unknown"
+        image_urls = self.req.image_urls or []
+        system_prompt = self.req.system_prompt
+
+        thread_id = await self._ensure_thread_id(session_id)
+        payload = self._build_payload(
+            thread_id=thread_id,
+            prompt=prompt,
+            image_urls=image_urls,
+            system_prompt=system_prompt,
+        )
+        state = self._StreamState()
+
+        try:
+            async for event in self.api_client.stream_run(
+                thread_id=thread_id,
+                payload=payload,
+                timeout=self.timeout,
+            ):
+                event_type = event.get("event")
+                data = event.get("data")
+
+                if event_type == "values":
+                    for response in self._handle_values_event(data, state):
+                        yield response
+                    continue
+
+                if event_type in {"messages-tuple", "messages", "message"}:
+                    response = self._handle_message_event(data, state)
+                    if response:
+                        yield response
+                    continue
+
+                if event_type == "custom":
+                    state.task_failures.extend(
+                        self._extract_task_failures_from_custom_event(data),
+                    )
+                    continue
+
+                if event_type == "error":
+                    raise Exception(f"DeerFlow stream returned error event: {data}")
+
+                if event_type == "end":
+                    break
+        except (asyncio.TimeoutError, TimeoutError):
+            state.timed_out = True
+
+        final_text = self._resolve_final_text(state)
 
         chain = MessageChain(chain=[Comp.Plain(final_text)])
         self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
