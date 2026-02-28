@@ -182,6 +182,8 @@ class ResultContentType(enum.Enum):
 
     LLM_RESULT = enum.auto()
     """调用 LLM 产生的结果"""
+    AGENT_RUNNER_ERROR = enum.auto()
+    """第三方 Agent Runner 返回的错误结果"""
     GENERAL_RESULT = enum.auto()
     """普通的消息结果"""
     STREAMING_RESULT = enum.auto()

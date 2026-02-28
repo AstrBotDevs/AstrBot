@@ -419,6 +419,19 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         joined = "\n".join([f"- {item}" for item in deduped[:5]])
         return f"DeerFlow subtasks failed:\n{joined}"
 
+    def _is_likely_base64_image(self, value: str) -> bool:
+        if " " in value:
+            return False
+
+        compact = value.replace("\n", "").replace("\r", "")
+        if not compact or len(compact) % 4 != 0:
+            return False
+
+        base64_chars = (
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+        )
+        return all(ch in base64_chars for ch in compact)
+
     def _build_user_content(self, prompt: str, image_urls: list[str]) -> T.Any:
         if not image_urls:
             return prompt
@@ -431,9 +444,23 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             url = image_url
             if not isinstance(url, str):
                 continue
-            if not url.startswith(("http://", "https://", "data:")):
-                url = f"data:image/png;base64,{url}"
-            content.append({"type": "image_url", "image_url": {"url": url}})
+            url = url.strip()
+            if not url:
+                continue
+            if url.startswith(("http://", "https://", "data:")):
+                content.append({"type": "image_url", "image_url": {"url": url}})
+                continue
+            if not self._is_likely_base64_image(url):
+                logger.warning(
+                    "Skip unsupported DeerFlow image input that is neither URL/data URI nor valid base64."
+                )
+                continue
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{url}"},
+                },
+            )
         return content
 
     async def _ensure_thread_id(self, session_id: str) -> str:

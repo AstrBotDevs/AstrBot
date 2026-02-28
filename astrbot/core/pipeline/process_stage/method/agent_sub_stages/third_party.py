@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
@@ -49,7 +50,7 @@ async def run_third_party_agent(
     runner: "BaseAgentRunner",
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
-) -> AsyncGenerator[MessageChain | None, None]:
+) -> AsyncGenerator["_ThirdPartyRunnerOutput", None]:
     """
     运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
@@ -59,13 +60,21 @@ async def run_third_party_agent(
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
-                yield resp.data["chain"]
+                yield _ThirdPartyRunnerOutput(
+                    chain=resp.data["chain"],
+                    is_error=False,
+                )
             elif resp.type == "llm_result":
                 if stream_to_general:
-                    yield resp.data["chain"]
+                    yield _ThirdPartyRunnerOutput(
+                        chain=resp.data["chain"],
+                        is_error=False,
+                    )
             elif resp.type == "err":
-                # Ensure caller can surface explicit runner errors.
-                yield resp.data["chain"]
+                yield _ThirdPartyRunnerOutput(
+                    chain=resp.data["chain"],
+                    is_error=True,
+                )
     except Exception as e:
         logger.error(f"Third party agent runner error: {e}")
         err_msg = custom_error_message
@@ -75,7 +84,24 @@ async def run_third_party_agent(
                 f"Error Type: {type(e).__name__} (3rd party)\n"
                 f"Error Message: {str(e)}"
             )
-        yield MessageChain().message(err_msg)
+        yield _ThirdPartyRunnerOutput(
+            chain=MessageChain().message(err_msg),
+            is_error=True,
+        )
+
+
+@dataclass
+class _ThirdPartyRunnerOutput:
+    chain: MessageChain | None
+    is_error: bool = False
+
+
+async def _iter_runner_output_chain(
+    output_stream: AsyncGenerator[_ThirdPartyRunnerOutput, None],
+) -> AsyncGenerator[MessageChain, None]:
+    async for output in output_stream:
+        if output.chain:
+            yield output.chain
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -197,17 +223,21 @@ class ThirdPartyAgentSubStage(Stage):
                 MessageEventResult()
                 .set_result_content_type(ResultContentType.STREAMING_RESULT)
                 .set_async_stream(
-                    run_third_party_agent(
-                        runner,
-                        stream_to_general=False,
-                        custom_error_message=custom_error_message,
-                    ),
+                    _iter_runner_output_chain(
+                        run_third_party_agent(
+                            runner,
+                            stream_to_general=False,
+                            custom_error_message=custom_error_message,
+                        ),
+                    )
                 ),
             )
             yield
             if runner.done():
                 final_resp = runner.get_final_llm_resp()
                 if final_resp and final_resp.result_chain:
+                    is_runner_error = final_resp.role == "err"
+                    event.set_extra("_third_party_runner_error", is_runner_error)
                     event.set_result(
                         MessageEventResult(
                             chain=final_resp.result_chain.chain or [],
@@ -216,27 +246,32 @@ class ThirdPartyAgentSubStage(Stage):
                     )
         else:
             # 非流式响应或转换为普通响应
-            fallback_chain: MessageChain | None = None
-            async for maybe_chain in run_third_party_agent(
+            fallback_output: _ThirdPartyRunnerOutput | None = None
+            async for output in run_third_party_agent(
                 runner,
                 stream_to_general=stream_to_general,
                 custom_error_message=custom_error_message,
             ):
-                if maybe_chain:
-                    fallback_chain = maybe_chain
+                if output.chain:
+                    fallback_output = output
                 yield
 
             final_resp = runner.get_final_llm_resp()
 
             if not final_resp or not final_resp.result_chain:
-                if fallback_chain:
+                if fallback_output and fallback_output.chain:
                     logger.warning(
                         "Agent Runner returned no final response, fallback to streamed error/result chain."
                     )
+                    content_type = (
+                        ResultContentType.AGENT_RUNNER_ERROR
+                        if fallback_output.is_error
+                        else ResultContentType.LLM_RESULT
+                    )
                     event.set_result(
                         MessageEventResult(
-                            chain=fallback_chain.chain or [],
-                            result_content_type=ResultContentType.LLM_RESULT,
+                            chain=fallback_output.chain.chain or [],
+                            result_content_type=content_type,
                         ),
                     )
                     yield
@@ -244,10 +279,15 @@ class ThirdPartyAgentSubStage(Stage):
                 logger.warning("Agent Runner 未返回最终结果。")
                 return
 
+            content_type = (
+                ResultContentType.AGENT_RUNNER_ERROR
+                if final_resp.role == "err"
+                else ResultContentType.LLM_RESULT
+            )
             event.set_result(
                 MessageEventResult(
                     chain=final_resp.result_chain.chain or [],
-                    result_content_type=ResultContentType.LLM_RESULT,
+                    result_content_type=content_type,
                 ),
             )
             yield
