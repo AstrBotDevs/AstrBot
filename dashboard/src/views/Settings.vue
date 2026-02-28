@@ -333,12 +333,53 @@ const loadApiKeys = async () => {
     }
 };
 
+const tryExecCommandCopy = (text) => {
+    let textArea = null;
+    try {
+        if (typeof document === 'undefined' || !document.body) return false;
+        textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.setAttribute('readonly', '');
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        textArea.style.pointerEvents = 'none';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        textArea.setSelectionRange(0, text.length);
+        return document.execCommand('copy');
+    } catch (_) {
+        return false;
+    } finally {
+        try {
+            if (textArea?.parentNode) {
+                textArea.parentNode.removeChild(textArea);
+            }
+        } catch (_) {
+            // ignore cleanup errors
+        }
+    }
+};
+
+const copyTextToClipboard = async (text) => {
+    if (!text) return false;
+    if (tryExecCommandCopy(text)) return true;
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false;
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (_) {
+        return false;
+    }
+};
+
 const copyCreatedApiKey = async () => {
     if (!createdApiKeyPlaintext.value) return;
-    try {
-        await navigator.clipboard.writeText(createdApiKeyPlaintext.value);
+    const ok = await copyTextToClipboard(createdApiKeyPlaintext.value);
+    if (ok) {
         showToast(tm('apiKey.messages.copySuccess'), 'success');
-    } catch (_) {
+    } else {
         showToast(tm('apiKey.messages.copyFailed'), 'error');
     }
 };

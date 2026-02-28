@@ -1089,6 +1089,12 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding 无需手动添加 /v1beta。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
@@ -1315,6 +1321,10 @@
       },
       "api_base": {
         "description": "API Base URL"
+      },
+      "proxy": {
+        "description": "代理地址",
+        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
       },
       "model": {
         "description": "模型 ID",

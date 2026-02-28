@@ -21,6 +21,17 @@
 
                             <v-textarea v-model="personaForm.system_prompt" :label="tm('form.systemPrompt')"
                                 :rules="systemPromptRules" variant="outlined" rows="16" class="mb-4" />
+
+                            <v-textarea
+                                v-model="personaForm.custom_error_message"
+                                :label="tm('form.customErrorMessage')"
+                                :hint="tm('form.customErrorMessageHelp')"
+                                variant="outlined"
+                                rows="4"
+                                persistent-hint
+                                clearable
+                                class="mb-4"
+                            />
                         </v-col>
 
                         <v-col cols="12" md="6" class="persona-panels-col">
@@ -360,6 +371,7 @@ export default {
             personaForm: {
                 persona_id: '',
                 system_prompt: '',
+                custom_error_message: '',
                 begin_dialogs: [],
                 tools: [],
                 skills: [],
@@ -480,6 +492,7 @@ export default {
             this.personaForm = {
                 persona_id: '',
                 system_prompt: '',
+                custom_error_message: '',
                 begin_dialogs: [],
                 tools: [],
                 skills: [],
@@ -494,6 +507,7 @@ export default {
             this.personaForm = {
                 persona_id: persona.persona_id,
                 system_prompt: persona.system_prompt,
+                custom_error_message: persona.custom_error_message || '',
                 begin_dialogs: [...(persona.begin_dialogs || [])],
                 tools: persona.tools === null ? null : [...(persona.tools || [])],
                 skills: persona.skills === null ? null : [...(persona.skills || [])],

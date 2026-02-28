@@ -2,8 +2,8 @@
 
 <div align="center">
 
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">中文</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_en.md">English</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh.md">简体中文</a> ｜
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README.md">English</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_zh-TW.md">繁體中文</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
@@ -33,11 +33,12 @@
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">ロードマップ</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue</a>
+<a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
 AstrBot は、主要なインスタントメッセージングアプリと統合できるオープンソースのオールインワン Agent チャットボットプラットフォームです。個人、開発者、チームに信頼性が高くスケーラブルな会話型 AI インフラストラクチャを提供します。パーソナル AI コンパニオン、インテリジェントカスタマーサービス、オートメーションアシスタント、エンタープライズナレッジベースなど、AstrBot を使用すると、IM プラットフォームのワークフロー内で本番環境対応の AI アプリケーションを迅速に構築できます。
 
-![521771166-00782c4c-4437-4d97-aabc-605e3738da5c (1)](https://github.com/user-attachments/assets/61e7b505-f7db-41aa-a75f-4ef8f079b8ba)
+![screenshot_1 5x_postspark_2026-02-27_22-37-45](https://github.com/user-attachments/assets/f17cdb90-52d7-4773-be2e-ff64b566af6b)
 
 ## 主な機能
 
@@ -70,157 +71,119 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 
 ## クイックスタート
 
-#### Docker デプロイ（推奨 🥳）
+### ワンクリックデプロイ
 
-Docker / Docker Compose を使用した AstrBot のデプロイを推奨します。
-
-公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
-
-#### uv デプロイ
+AstrBot を素早く試したいユーザーには、`uv` を使ったワンクリックデプロイをおすすめします ⚡️:
 
 ```bash
 uv tool install astrbot
+astrbot init # 初回のみ実行して環境を初期化します
 astrbot
 ```
 
-#### デスクトップアプリのデプロイ（Tauri）
+> [uv](https://docs.astral.sh/uv/) のインストールが必要です。
 
-デスクトップアプリのリポジトリ [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+### Docker デプロイ
 
-マルチシステムアーキテクチャをサポートし、インストールしてすぐに使用可能。初心者や手軽さを求める人に最適なワンクリックデスクトップデプロイソリューションです。サーバー環境での使用は推奨されません。
+より安定した本番向けのデプロイを求めるユーザーには、Docker / Docker Compose で AstrBot をデプロイすることをおすすめします。
 
-#### ランチャーによるワンクリックデプロイ（AstrBot Launcher）
+公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
 
-迅速なデプロイとマルチインスタンス対応、環境の隔離が可能。[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリにアクセスし、Releases ページから最新バージョンのシステム対応パッケージをダウンロードしてインストールしてください。
+### 雨云でのデプロイ
 
-#### 宝塔パネルデプロイ
-
-AstrBot は宝塔パネルと提携し、宝塔パネルに公開されています。
-
-公式ドキュメント [宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html) をご参照ください。
-
-#### 1Panel デプロイ
-
-AstrBot は 1Panel 公式により 1Panel パネルに公開されています。
-
-公式ドキュメント [1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html) をご参照ください。
-
-#### 雨云でのデプロイ
-
-AstrBot は雨云公式によりクラウドアプリケーションプラットフォームに公開され、ワンクリックでデプロイ可能です。
+サーバー管理をせずに AstrBot をワンクリックでデプロイしたいユーザーには、雨云のワンクリッククラウドデプロイサービスをおすすめします ☁️:
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-#### Replit でのデプロイ
+### デスクトップクライアント（Tauri）
+
+デスクトップで AstrBot を使いたいユーザーで、主に AstrBot ChatUI を利用し、AstrBot プラグインの利用頻度が低い場合は、AstrBot App の利用をおすすめします:
+
+デスクトップアプリのリポジトリ [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+
+マルチシステムアーキテクチャに対応し、インストーラーですぐ利用可能。初心者にも使いやすいワンクリックのデスクトップデプロイ方式です。サーバー用途には推奨されません。
+
+### ランチャーによるワンクリックデプロイ（AstrBot Launcher）
+
+高速デプロイと環境分離されたマルチインスタンス運用を求めるユーザーには、AstrBot Launcher の利用をおすすめします:
+
+[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリにアクセスし、最新リリースからお使いの OS 向けパッケージをインストールしてください。
+
+高速デプロイと環境分離されたマルチインスタンス運用を実現できます。
+
+### Replit でのデプロイ
 
 コミュニティ貢献によるデプロイ方法。
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
-#### Windows ワンクリックインストーラーデプロイ
-
-公式ドキュメント [Windows ワンクリックインストーラーを使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/windows.html) をご参照ください。
-
-#### CasaOS デプロイ
-
-コミュニティ貢献によるデプロイ方法。
-
-公式ドキュメント [CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html) をご参照ください。
-
-#### 手動デプロイ
-
-まず uv をインストールします:
-
-```bash
-pip install uv
-```
-
-Git Clone で AstrBot をインストール:
-
-```bash
-git clone https://github.com/AstrBotDevs/AstrBot && cd AstrBot
-uv run main.py
-```
-
-または、公式ドキュメント [ソースコードから AstrBot をデプロイ](https://astrbot.app/deploy/astrbot/cli.html) をご参照ください。
-
-#### システムパッケージマネージャーでのインストール
-
-##### Arch Linux
+### AUR
 
 ```bash
 yay -S astrbot-git
-# または paru を使用
-paru -S astrbot-git
 ```
+
+**その他のデプロイ方法**：[宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html) | [1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html) | [CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html) | [手動デプロイ](https://astrbot.app/deploy/astrbot/cli.html)
 
 ## サポートされているメッセージプラットフォーム
 
-**公式メンテナンス**
+AstrBot をよく使うチャットプラットフォームに接続できます。
 
-- QQ (公式プラットフォーム & OneBot)
-- Telegram
-- WeChat Work アプリケーション & WeChat Work インテリジェントボット
-- WeChat カスタマーサービス & WeChat 公式アカウント
-- Feishu (Lark)
-- DingTalk
-- Slack
-- Discord
-- Satori
-- Misskey
-- LINE
-- WhatsApp (近日対応予定)
-
-**コミュニティメンテナンス**
-
-- [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter)
-- [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter)
-- [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat)
+| プラットフォーム | 保守 |
+|---------|---------------|
+| QQ | 公式 |
+| OneBot v11 プロトコル実装 | 公式 |
+| Telegram | 公式 |
+| WeChat Work アプリケーション & WeChat Work インテリジェントボット | 公式 |
+| WeChat カスタマーサービス & WeChat 公式アカウント | 公式 |
+| Feishu (Lark) | 公式 |
+| DingTalk | 公式 |
+| Slack | 公式 |
+| Discord | 公式 |
+| LINE | 公式 |
+| Satori | 公式 |
+| Misskey | 公式 |
+| WhatsApp (近日対応予定) | 公式 |
+| [Matrix](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | コミュニティ |
+| [KOOK](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | コミュニティ |
+| [VoceChat](https://github.com/HikariFroya/astrbot_plugin_vocechat) | コミュニティ |
 
 
 ## サポートされているモデルサービス
 
-**大規模言語モデルサービス**
-
-- OpenAI および互換サービス
-- Anthropic
-- Google Gemini
-- Moonshot AI
-- 智谱 AI
-- DeepSeek
-- Ollama (セルフホスト)
-- LM Studio (セルフホスト)
-- [優云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74)
-- [302.AI](https://share.302.ai/rr1M3l)
-- [小馬算力](https://www.tokenpony.cn/3YPyf)
-- [硅基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot)
-- [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE)
-- ModelScope
-- OneAPI
-
-**LLMOps プラットフォーム**
-
-- Dify
-- Alibaba Cloud 百炼アプリケーション
-- Coze
-
-**音声認識サービス**
-
-- OpenAI Whisper
-- SenseVoice
-
-**音声合成サービス**
-
-- OpenAI TTS
-- Gemini TTS
-- GPT-Sovits-Inference
-- GPT-Sovits
-- FishAudio
-- Edge TTS
-- Alibaba Cloud 百炼 TTS
-- Azure TTS
-- Minimax TTS
-- Volcano Engine TTS
+| サービス | 種類 |
+|---------|---------------|
+| OpenAI および互換サービス | 大規模言語モデルサービス |
+| Anthropic | 大規模言語モデルサービス |
+| Google Gemini | 大規模言語モデルサービス |
+| Moonshot AI | 大規模言語モデルサービス |
+| 智谱 AI | 大規模言語モデルサービス |
+| DeepSeek | 大規模言語モデルサービス |
+| Ollama (セルフホスト) | 大規模言語モデルサービス |
+| LM Studio (セルフホスト) | 大規模言語モデルサービス |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | 大規模言語モデルサービス（APIゲートウェイ、全モデル対応） |
+| [優云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大規模言語モデルサービス |
+| [302.AI](https://share.302.ai/rr1M3l) | 大規模言語モデルサービス |
+| [小馬算力](https://www.tokenpony.cn/3YPyf) | 大規模言語モデルサービス |
+| [硅基流動](https://docs.siliconflow.cn/cn/usercases/use-siliconcloud-in-astrbot) | 大規模言語モデルサービス |
+| [PPIO 派欧云](https://ppio.com/user/register?invited_by=AIOONE) | 大規模言語モデルサービス |
+| ModelScope | 大規模言語モデルサービス |
+| OneAPI | 大規模言語モデルサービス |
+| Dify | LLMOps プラットフォーム |
+| Alibaba Cloud 百炼アプリケーション | LLMOps プラットフォーム |
+| Coze | LLMOps プラットフォーム |
+| OpenAI Whisper | 音声認識サービス |
+| SenseVoice | 音声認識サービス |
+| OpenAI TTS | 音声合成サービス |
+| Gemini TTS | 音声合成サービス |
+| GPT-Sovits-Inference | 音声合成サービス |
+| GPT-Sovits | 音声合成サービス |
+| FishAudio | 音声合成サービス |
+| Edge TTS | 音声合成サービス |
+| Alibaba Cloud 百炼 TTS | 音声合成サービス |
+| Azure TTS | 音声合成サービス |
+| Minimax TTS | 音声合成サービス |
+| Volcano Engine TTS | 音声合成サービス |
 
 ## ❤️ コントリビューション
 
@@ -249,10 +212,6 @@ pre-commit install
 - 5群: 822130018
 - 6群: 753075035
 - 開発者群: 975206796
-
-### Telegram グループ
-
-<a href="https://t.me/+hAsD2Ebl5as3NmY1"><img alt="Telegram_community" src="https://img.shields.io/badge/Telegram-AstrBot-purple?style=for-the-badge&color=76bad9"></a>
 
 ### Discord サーバー
 

@@ -47,8 +47,6 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
-else:
-    CronJobManager = Any
 
 
 class PlatformManagerProtocol(Protocol):
@@ -457,6 +455,9 @@ class Context:
             if platform.meta().id == session.platform_name:
                 await platform.send_by_session(session, message_chain)
                 return True
+        logger.warning(
+            f"cannot find platform for session {str(session)}, message not sent"
+        )
         return False
 
     def add_llm_tools(self, *tools: FunctionTool) -> None:
