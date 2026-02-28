@@ -46,6 +46,21 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
     _MAX_VALUES_HISTORY = 200
 
+    @dataclass(frozen=True)
+    class _RunnerConfig:
+        api_base: str
+        api_key: str
+        auth_header: str
+        proxy: str
+        assistant_id: str
+        model_name: str
+        thinking_enabled: bool
+        plan_mode: bool
+        subagent_enabled: bool
+        max_concurrent_subagents: int
+        timeout: int
+        recursion_limit: int
+
     @dataclass
     class _StreamState:
         latest_text: str = ""
@@ -131,75 +146,80 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if isinstance(api_client, DeerFlowAPIClient) and not api_client.is_closed:
             await api_client.close()
 
-    @override
-    async def reset(
-        self,
-        request: ProviderRequest,
-        run_context: ContextWrapper[TContext],
-        agent_hooks: BaseAgentRunHooks[TContext],
-        provider_config: dict,
-        **kwargs: T.Any,
-    ) -> None:
-        self.req = request
-        self.streaming = kwargs.get("streaming", False)
-        self.final_llm_resp = None
-        self._state = AgentState.IDLE
-        self.agent_hooks = agent_hooks
-        self.run_context = run_context
-
-        self.api_base = provider_config.get(
-            "deerflow_api_base", "http://127.0.0.1:2026"
-        )
-        if not isinstance(self.api_base, str) or not self.api_base.startswith(
+    def _parse_runner_config(self, provider_config: dict) -> _RunnerConfig:
+        api_base = provider_config.get("deerflow_api_base", "http://127.0.0.1:2026")
+        if not isinstance(api_base, str) or not api_base.startswith(
             ("http://", "https://"),
         ):
             raise ValueError(
                 "DeerFlow API Base URL format is invalid. It must start with http:// or https://.",
             )
-        self.api_key = provider_config.get("deerflow_api_key", "")
-        self.auth_header = provider_config.get("deerflow_auth_header", "")
+
         proxy = provider_config.get("proxy", "")
-        self.proxy = proxy.strip() if isinstance(proxy, str) else ""
-        self.assistant_id = provider_config.get("deerflow_assistant_id", "lead_agent")
-        self.model_name = provider_config.get("deerflow_model_name", "")
-        self.thinking_enabled = bool(
-            provider_config.get("deerflow_thinking_enabled", False),
-        )
-        self.plan_mode = bool(provider_config.get("deerflow_plan_mode", False))
-        self.subagent_enabled = bool(
-            provider_config.get("deerflow_subagent_enabled", False),
-        )
-        self.max_concurrent_subagents = self._coerce_int_config(
-            "deerflow_max_concurrent_subagents",
-            provider_config.get(
-                "deerflow_max_concurrent_subagents",
-                3,
+        normalized_proxy = proxy.strip() if isinstance(proxy, str) else ""
+
+        return self._RunnerConfig(
+            api_base=api_base,
+            api_key=provider_config.get("deerflow_api_key", ""),
+            auth_header=provider_config.get("deerflow_auth_header", ""),
+            proxy=normalized_proxy,
+            assistant_id=provider_config.get("deerflow_assistant_id", "lead_agent"),
+            model_name=provider_config.get("deerflow_model_name", ""),
+            thinking_enabled=bool(
+                provider_config.get("deerflow_thinking_enabled", False),
             ),
-            default=3,
-            min_value=1,
+            plan_mode=bool(provider_config.get("deerflow_plan_mode", False)),
+            subagent_enabled=bool(
+                provider_config.get("deerflow_subagent_enabled", False),
+            ),
+            max_concurrent_subagents=self._coerce_int_config(
+                "deerflow_max_concurrent_subagents",
+                provider_config.get("deerflow_max_concurrent_subagents", 3),
+                default=3,
+                min_value=1,
+            ),
+            timeout=self._coerce_int_config(
+                "timeout",
+                provider_config.get("timeout", 300),
+                default=300,
+                min_value=1,
+            ),
+            recursion_limit=self._coerce_int_config(
+                "deerflow_recursion_limit",
+                provider_config.get("deerflow_recursion_limit", 1000),
+                default=1000,
+                min_value=1,
+            ),
         )
 
-        self.timeout = self._coerce_int_config(
-            "timeout",
-            provider_config.get("timeout", 300),
-            default=300,
-            min_value=1,
-        )
-        self.recursion_limit = self._coerce_int_config(
-            "deerflow_recursion_limit",
-            provider_config.get("deerflow_recursion_limit", 1000),
-            default=1000,
-            min_value=1,
+    def _apply_runner_config(self, config: _RunnerConfig) -> None:
+        self.api_base = config.api_base
+        self.api_key = config.api_key
+        self.auth_header = config.auth_header
+        self.proxy = config.proxy
+        self.assistant_id = config.assistant_id
+        self.model_name = config.model_name
+        self.thinking_enabled = config.thinking_enabled
+        self.plan_mode = config.plan_mode
+        self.subagent_enabled = config.subagent_enabled
+        self.max_concurrent_subagents = config.max_concurrent_subagents
+        self.timeout = config.timeout
+        self.recursion_limit = config.recursion_limit
+
+    @staticmethod
+    def _build_client_signature(config: _RunnerConfig) -> tuple[str, str, str, str]:
+        return (
+            config.api_base,
+            config.api_key,
+            config.auth_header,
+            config.proxy,
         )
 
-        new_client_signature = (
-            self.api_base,
-            self.api_key,
-            self.auth_header,
-            self.proxy,
-        )
+    async def _refresh_api_client(self, config: _RunnerConfig) -> None:
+        new_client_signature = self._build_client_signature(config)
         old_client = getattr(self, "api_client", None)
         old_signature = getattr(self, "_api_client_signature", None)
+
         if (
             isinstance(old_client, DeerFlowAPIClient)
             and old_signature == new_client_signature
@@ -217,12 +237,32 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 )
 
         self.api_client = DeerFlowAPIClient(
-            api_base=self.api_base,
-            api_key=self.api_key,
-            auth_header=self.auth_header,
-            proxy=self.proxy,
+            api_base=config.api_base,
+            api_key=config.api_key,
+            auth_header=config.auth_header,
+            proxy=config.proxy,
         )
         self._api_client_signature = new_client_signature
+
+    @override
+    async def reset(
+        self,
+        request: ProviderRequest,
+        run_context: ContextWrapper[TContext],
+        agent_hooks: BaseAgentRunHooks[TContext],
+        provider_config: dict,
+        **kwargs: T.Any,
+    ) -> None:
+        self.req = request
+        self.streaming = kwargs.get("streaming", False)
+        self.final_llm_resp = None
+        self._state = AgentState.IDLE
+        self.agent_hooks = agent_hooks
+        self.run_context = run_context
+
+        config = self._parse_runner_config(provider_config)
+        self._apply_runner_config(config)
+        await self._refresh_api_client(config)
 
     @override
     async def step(self):
