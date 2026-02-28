@@ -123,6 +123,8 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    tool_call_approval: dict = field(default_factory=dict)
+    """Tool call approval configuration."""
 
 
 @dataclass(slots=True)
@@ -1103,6 +1105,7 @@ async def build_main_agent(
         run_context=AgentContextWrapper(
             context=astr_agent_ctx,
             tool_call_timeout=config.tool_call_timeout,
+            tool_call_approval=config.tool_call_approval,
         ),
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,

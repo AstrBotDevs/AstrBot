@@ -118,6 +118,15 @@ DEFAULT_CONFIG = {
         "max_agent_step": 30,
         "tool_call_timeout": 60,
         "tool_schema_mode": "full",
+        "tool_call_approval": {
+            "enable": False,
+            "strategy": "dynamic_code",
+            "timeout": 60,
+            "dynamic_code": {
+                "code_length": 6,
+                "case_sensitive": False,
+            },
+        },
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2344,6 +2353,31 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
+                    "tool_call_approval": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "strategy": {
+                                "type": "string",
+                            },
+                            "timeout": {
+                                "type": "int",
+                            },
+                            "dynamic_code": {
+                                "type": "object",
+                                "items": {
+                                    "code_length": {
+                                        "type": "int",
+                                    },
+                                    "case_sensitive": {
+                                        "type": "bool",
+                                    },
+                                },
+                            },
+                        },
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3087,6 +3121,50 @@ CONFIG_METADATA_3 = {
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_call_approval.enable": {
+                        "description": "启用工具调用确认",
+                        "type": "bool",
+                        "hint": "开启后，工具调用需要用户确认后才会执行。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_call_approval.strategy": {
+                        "description": "工具调用确认策略",
+                        "type": "string",
+                        "options": ["dynamic_code"],
+                        "labels": ["Dynamic Code（动态码）"],
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.tool_call_approval.enable": True,
+                        },
+                    },
+                    "provider_settings.tool_call_approval.timeout": {
+                        "description": "工具调用确认超时（秒）",
+                        "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.tool_call_approval.enable": True,
+                        },
+                    },
+                    "provider_settings.tool_call_approval.dynamic_code.code_length": {
+                        "description": "动态确认码长度",
+                        "type": "int",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.tool_call_approval.enable": True,
+                            "provider_settings.tool_call_approval.strategy": "dynamic_code",
+                        },
+                    },
+                    "provider_settings.tool_call_approval.dynamic_code.case_sensitive": {
+                        "description": "动态确认码区分大小写",
+                        "type": "bool",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.tool_call_approval.enable": True,
+                            "provider_settings.tool_call_approval.strategy": "dynamic_code",
                         },
                     },
                     "provider_settings.wake_prefix": {

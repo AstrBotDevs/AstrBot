@@ -41,6 +41,10 @@ from ..hooks import BaseAgentRunHooks
 from ..message import AssistantMessageSegment, Message, ToolCallMessageSegment
 from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
+from ..tool_call_approval import (
+    ToolCallApprovalContext,
+    request_tool_call_approval,
+)
 from ..tool_executor import BaseFunctionToolExecutor
 from .base import AgentResponse, AgentState, BaseAgentRunner
 
@@ -737,6 +741,41 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
+
+                approval_cfg = self.run_context.tool_call_approval
+                if approval_cfg.get("enable", False):
+                    event = getattr(self.run_context.context, "event", None)
+                    if event is None:
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content=(
+                                    f"error: tool call approval is enabled, but event context is unavailable for `{func_tool_name}`."
+                                ),
+                            ),
+                        )
+                        continue
+                    approval_result = await request_tool_call_approval(
+                        config=approval_cfg,
+                        ctx=ToolCallApprovalContext(
+                            event=event,
+                            tool_name=func_tool_name,
+                            tool_args=valid_params,
+                            tool_call_id=func_tool_id,
+                        ),
+                    )
+                    if not approval_result.approved:
+                        tool_call_result_blocks.append(
+                            ToolCallMessageSegment(
+                                role="tool",
+                                tool_call_id=func_tool_id,
+                                content=approval_result.to_tool_result_text(
+                                    func_tool_name
+                                ),
+                            ),
+                        )
+                        continue
 
                 try:
                     await self.agent_hooks.on_tool_start(
