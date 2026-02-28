@@ -170,6 +170,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             image_urls = []
         elif isinstance(image_urls, str):
             image_urls = [image_urls]
+        else:
+            try:
+                image_urls = list(image_urls)
+            except (TypeError, ValueError):
+                image_urls = [image_urls]
             
         # 获取当前事件中的图片
         event = run_context.context.event
