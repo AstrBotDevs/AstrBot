@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -11,6 +12,12 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.dashboard.server import AstrBotDashboard
+from tests.fixtures.helpers import (
+    MockPluginBuilder,
+    MockPluginConfig,
+    create_mock_updater_install,
+    create_mock_updater_update,
+)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -94,8 +101,15 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_plugins(app: Quart, authenticated_header: dict):
+async def test_plugins(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
+
     # 已经安装的插件
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
     assert response.status_code == 200
@@ -111,53 +125,79 @@ async def test_plugins(app: Quart, authenticated_header: dict):
     data = await response.get_json()
     assert data["status"] == "ok"
 
-    # 插件安装
-    response = await test_client.post(
-        "/api/plugin/install",
-        json={"url": "https://github.com/Soulter/astrbot_plugin_essential"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    exists = False
-    for md in star_registry:
-        if md.name == "astrbot_plugin_essential":
-            exists = True
-            break
-    assert exists is True, "插件 astrbot_plugin_essential 未成功载入"
+    # 使用 MockPluginBuilder 创建测试插件
+    plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    builder = MockPluginBuilder(plugin_store_path)
 
-    # 插件更新
-    response = await test_client.post(
-        "/api/plugin/update",
-        json={"name": "astrbot_plugin_essential"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
+    # 定义测试插件
+    test_plugin_name = "test_mock_plugin"
+    test_repo_url = f"https://github.com/test/{test_plugin_name}"
 
-    # 插件卸载
-    response = await test_client.post(
-        "/api/plugin/uninstall",
-        json={"name": "astrbot_plugin_essential"},
-        headers=authenticated_header,
+    # 创建 Mock 函数
+    mock_install = create_mock_updater_install(
+        builder,
+        repo_to_plugin={test_repo_url: test_plugin_name},
     )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    exists = False
-    for md in star_registry:
-        if md.name == "astrbot_plugin_essential":
-            exists = True
-            break
-    assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
-    exists = False
-    for md in star_handlers_registry:
-        if "astrbot_plugin_essential" in md.handler_module_path:
-            exists = True
-            break
-    assert exists is False, "插件 astrbot_plugin_essential 未成功卸载"
+    mock_update = create_mock_updater_update(builder)
+
+    # 设置 Mock
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager.updator, "install", mock_install
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager.updator, "update", mock_update
+    )
+
+    try:
+        # 插件安装
+        response = await test_client.post(
+            "/api/plugin/install",
+            json={"url": test_repo_url},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+
+        # 验证插件已注册
+        exists = any(md.name == test_plugin_name for md in star_registry)
+        assert exists is True, f"插件 {test_plugin_name} 未成功载入"
+
+        # 插件更新
+        response = await test_client.post(
+            "/api/plugin/update",
+            json={"name": test_plugin_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        # 验证更新标记文件
+        plugin_dir = builder.get_plugin_path(test_plugin_name)
+        assert (plugin_dir / ".updated").exists()
+
+        # 插件卸载
+        response = await test_client.post(
+            "/api/plugin/uninstall",
+            json={"name": test_plugin_name},
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+
+        # 验证插件已卸载
+        exists = any(md.name == test_plugin_name for md in star_registry)
+        assert exists is False, f"插件 {test_plugin_name} 未成功卸载"
+        exists = any(
+            test_plugin_name in md.handler_module_path for md in star_handlers_registry
+        )
+        assert exists is False, f"插件 {test_plugin_name} handler 未成功清理"
+
+    finally:
+        # 清理测试插件
+        builder.cleanup(test_plugin_name)
 
 
 @pytest.mark.asyncio
@@ -189,12 +229,41 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_check_update(app: Quart, authenticated_header: dict):
+async def test_check_update(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    """测试检查更新 API，使用 Mock 避免真实网络调用。"""
     test_client = app.test_client()
+
+    # Mock 更新检查和网络请求
+    async def mock_check_update(*args, **kwargs):
+        """Mock 更新检查，返回无新版本。"""
+        return None  # None 表示没有新版本
+
+    async def mock_get_dashboard_version(*args, **kwargs):
+        """Mock Dashboard 版本获取。"""
+        from astrbot.core.config.default import VERSION
+
+        return f"v{VERSION}"  # 返回当前版本
+
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+
     response = await test_client.get("/api/update/check", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "success"
+    assert data["data"]["has_new_version"] is False
 
 
 @pytest.mark.asyncio

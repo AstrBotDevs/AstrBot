@@ -203,7 +203,7 @@ async def test_open_chat_send_auto_session_id_and_username(
             "/api/v1/chat",
             json={
                 "message": "hello",
-                "username": "alice",
+                "username": "alice_auto_session",
                 "enable_streaming": False,
             },
             headers={"X-API-Key": raw_key},
@@ -217,16 +217,16 @@ async def test_open_chat_send_auto_session_id_and_username(
     created_session_id = send_data["data"]["session_id"]
     assert isinstance(created_session_id, str)
     uuid.UUID(created_session_id)
-    assert send_data["data"]["creator"] == "alice"
+    assert send_data["data"]["creator"] == "alice_auto_session"
     created_session = await core_lifecycle_td.db.get_platform_session_by_id(
         created_session_id
     )
     assert created_session is not None
-    assert created_session.creator == "alice"
+    assert created_session.creator == "alice_auto_session"
     assert created_session.platform_id == "webchat"
 
     await core_lifecycle_td.db.create_platform_session(
-        creator="bob",
+        creator="bob_auto_session",
         platform_id="webchat",
         session_id="open_api_existing_bob_session",
         is_group=0,
