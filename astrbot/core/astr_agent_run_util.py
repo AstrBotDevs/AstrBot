@@ -246,8 +246,9 @@ async def run_agent(
                 err_msg = custom_error_message
             else:
                 err_msg = (
-                    f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: "
-                    f"{e!s}\n\n请在平台日志查看和分享错误详情。\n"
+                    f"Error occurred during AI execution.\n"
+                    f"Error Type: {type(e).__name__}\n"
+                    f"Error Message: {str(e)}"
                 )
 
             error_llm_response = LLMResponse(

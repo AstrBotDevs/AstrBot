@@ -327,26 +327,50 @@ export const useExtensionPage = () => {
     return data;
   });
   
+  const sortPluginsByName = (plugins) => {
+    return plugins
+      .map((plugin, index) => ({ plugin, index }))
+      .sort((a, b) => {
+        const nameA = String(a.plugin?.name ?? "");
+        const nameB = String(b.plugin?.name ?? "");
+        const nameCompare = nameA.localeCompare(nameB, undefined, {
+          sensitivity: "base",
+        });
+        if (nameCompare !== 0) {
+          return nameCompare;
+        }
+        return a.index - b.index;
+      })
+      .map((item) => item.plugin);
+  };
+
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
-    if (!pluginSearch.value) {
-      return filteredExtensions.value;
+    const plugins = filteredExtensions.value;
+    let filtered = plugins;
+
+    if (pluginSearch.value) {
+      const search = pluginSearch.value.toLowerCase();
+      filtered = plugins.filter((plugin) => {
+        const pluginName = (plugin.name ?? "").toLowerCase();
+        const pluginDesc = (plugin.desc ?? "").toLowerCase();
+        const pluginAuthor = (plugin.author ?? "").toLowerCase();
+        const supportPlatforms = Array.isArray(plugin.support_platforms)
+          ? plugin.support_platforms.join(" ").toLowerCase()
+          : "";
+        const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
+
+        return (
+          pluginName.includes(search) ||
+          pluginDesc.includes(search) ||
+          pluginAuthor.includes(search) ||
+          supportPlatforms.includes(search) ||
+          astrbotVersion.includes(search)
+        );
+      });
     }
-  
-    const search = pluginSearch.value.toLowerCase();
-    return filteredExtensions.value.filter((plugin) => {
-      const supportPlatforms = Array.isArray(plugin.support_platforms)
-        ? plugin.support_platforms.join(" ").toLowerCase()
-        : "";
-      const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
-      return (
-        plugin.name?.toLowerCase().includes(search) ||
-        plugin.desc?.toLowerCase().includes(search) ||
-        plugin.author?.toLowerCase().includes(search) ||
-        supportPlatforms.includes(search) ||
-        astrbotVersion.includes(search)
-      );
-    });
+
+    return sortPluginsByName([...filtered]);
   });
   
   // 过滤后的插件市场数据（带搜索）

@@ -161,6 +161,7 @@ AstrBot をよく使うチャットプラットフォームに接続できます
 | DeepSeek | 大規模言語モデルサービス |
 | Ollama (セルフホスト) | 大規模言語モデルサービス |
 | LM Studio (セルフホスト) | 大規模言語モデルサービス |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | 大規模言語モデルサービス（APIゲートウェイ、全モデル対応） |
 | [優云智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大規模言語モデルサービス |
 | [302.AI](https://share.302.ai/rr1M3l) | 大規模言語モデルサービス |
 | [小馬算力](https://www.tokenpony.cn/3YPyf) | 大規模言語モデルサービス |

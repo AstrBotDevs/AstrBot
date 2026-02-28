@@ -73,8 +73,9 @@ async def run_third_party_agent(
         err_msg = custom_error_message
         if not err_msg:
             err_msg = (
-                f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
-                f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+                f"Error occurred during AI execution.\n"
+                f"Error Type: {type(e).__name__} (3rd party)\n"
+                f"Error Message: {str(e)}"
             )
         yield MessageChain().message(err_msg)
 >>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90

@@ -48,8 +48,6 @@ logger = logging.getLogger("astrbot")
 
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
-else:
-    CronJobManager = Any
 
 
 class PlatformManagerProtocol(Protocol):
