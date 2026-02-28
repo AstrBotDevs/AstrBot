@@ -27,6 +27,9 @@ def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
                     "id"
                 ]
                 conf["provider_settings"]["agent_runner_type"] = "dashscope"
+            elif p["type"] == "deerflow":
+                conf["provider_settings"]["deerflow_agent_runner_provider_id"] = p["id"]
+                conf["provider_settings"]["agent_runner_type"] = "deerflow"
             conf.save_config()
     except Exception as e:
         logger.error(f"Migration for third party agent runner configs failed: {e!s}")
@@ -153,7 +156,7 @@ async def migra(
     ids_map = {}
     for prov in providers:
         type_ = prov.get("type")
-        if type_ in ["dify", "coze", "dashscope"]:
+        if type_ in ["dify", "coze", "dashscope", "deerflow"]:
             prov["provider_type"] = "agent_runner"
             ids_map[prov["id"]] = {
                 "type": type_,

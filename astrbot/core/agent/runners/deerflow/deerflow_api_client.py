@@ -1,0 +1,153 @@
+import codecs
+import json
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from aiohttp import ClientResponse, ClientSession, ClientTimeout
+
+from astrbot.core import logger
+
+
+def _normalize_sse_newlines(text: str) -> str:
+    """Normalize CRLF/CR to LF so SSE block splitting works reliably."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _parse_sse_data_lines(data_lines: list[str]) -> Any:
+    raw_data = "\n".join(data_lines)
+    try:
+        return json.loads(raw_data)
+    except json.JSONDecodeError:
+        # Some LangGraph-compatible servers emit multiple JSON fragments
+        # in one SSE event using repeated data lines (e.g. tuple payloads).
+        parsed_lines: list[Any] = []
+        can_parse_all = True
+        for line in data_lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed_lines.append(json.loads(line))
+            except json.JSONDecodeError:
+                can_parse_all = False
+                break
+        if can_parse_all and parsed_lines:
+            return parsed_lines[0] if len(parsed_lines) == 1 else parsed_lines
+        return raw_data
+
+
+async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], None]:
+    """Parse SSE response blocks into event/data dictionaries."""
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    buffer = ""
+
+    async for chunk in resp.content.iter_chunked(8192):
+        buffer += _normalize_sse_newlines(decoder.decode(chunk))
+
+        while "\n\n" in buffer:
+            block, buffer = buffer.split("\n\n", 1)
+            if not block.strip():
+                continue
+
+            event_name = "message"
+            data_lines: list[str] = []
+
+            for line in block.splitlines():
+                if line.startswith("event:"):
+                    event_name = line[6:].strip()
+                elif line.startswith("data:"):
+                    data_lines.append(line[5:].lstrip())
+
+            if not data_lines:
+                continue
+
+            data = _parse_sse_data_lines(data_lines)
+
+            yield {"event": event_name, "data": data}
+
+    # flush any remaining buffered text
+    buffer += _normalize_sse_newlines(decoder.decode(b"", final=True))
+    if not buffer.strip():
+        return
+
+    event_name = "message"
+    data_lines = []
+    for line in buffer.splitlines():
+        if line.startswith("event:"):
+            event_name = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+    if not data_lines:
+        return
+
+    data = _parse_sse_data_lines(data_lines)
+    yield {"event": event_name, "data": data}
+
+
+class DeerFlowAPIClient:
+    def __init__(
+        self,
+        api_base: str = "http://127.0.0.1:2026",
+        api_key: str = "",
+        auth_header: str = "",
+    ) -> None:
+        self.api_base = api_base.rstrip("/")
+        self.session = ClientSession(trust_env=True)
+        self.headers: dict[str, str] = {}
+        if auth_header:
+            self.headers["Authorization"] = auth_header
+        elif api_key:
+            self.headers["Authorization"] = f"Bearer {api_key}"
+
+    async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
+        url = f"{self.api_base}/api/langgraph/threads"
+        payload = {"metadata": {}}
+        async with self.session.post(
+            url,
+            json=payload,
+            headers=self.headers,
+            timeout=timeout,
+        ) as resp:
+            if resp.status not in (200, 201):
+                text = await resp.text()
+                raise Exception(
+                    f"DeerFlow create thread failed: {resp.status}. {text}",
+                )
+            return await resp.json()
+
+    async def stream_run(
+        self,
+        thread_id: str,
+        payload: dict[str, Any],
+        timeout: float = 120,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        url = f"{self.api_base}/api/langgraph/threads/{thread_id}/runs/stream"
+        logger.debug(f"deerflow stream_run payload: {payload}")
+        # For long-running SSE streams, avoid aiohttp total timeout.
+        # Use socket read timeout so active heartbeats/chunks can keep the stream alive.
+        stream_timeout = ClientTimeout(
+            total=None,
+            connect=min(timeout, 30),
+            sock_connect=min(timeout, 30),
+            sock_read=timeout,
+        )
+        async with self.session.post(
+            url,
+            json=payload,
+            headers={
+                **self.headers,
+                "Accept": "text/event-stream",
+                "Content-Type": "application/json",
+            },
+            timeout=stream_timeout,
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise Exception(
+                    f"DeerFlow runs/stream request failed: {resp.status}. {text}",
+                )
+            async for event in _stream_sse(resp):
+                yield event
+
+    async def close(self) -> None:
+        await self.session.close()

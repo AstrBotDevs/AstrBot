@@ -12,6 +12,7 @@ THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
     "coze": "coze_conversation_id",
     "dashscope": "dashscope_conversation_id",
+    "deerflow": "deerflow_thread_id",
 }
 THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
 

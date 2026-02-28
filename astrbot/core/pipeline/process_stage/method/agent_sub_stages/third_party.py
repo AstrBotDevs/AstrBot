@@ -7,6 +7,9 @@ from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )
+from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
+    DeerFlowAgentRunner,
+)
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.message.components import Image
@@ -38,6 +41,7 @@ AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
     "coze": "coze_agent_runner_provider_id",
     "dashscope": "dashscope_agent_runner_provider_id",
+    "deerflow": "deerflow_agent_runner_provider_id",
 }
 
 
@@ -59,6 +63,9 @@ async def run_third_party_agent(
             elif resp.type == "llm_result":
                 if stream_to_general:
                     yield resp.data["chain"]
+            elif resp.type == "err":
+                # Ensure caller can surface explicit runner errors.
+                yield resp.data["chain"]
     except Exception as e:
         logger.error(f"Third party agent runner error: {e}")
         err_msg = custom_error_message
@@ -152,6 +159,8 @@ class ThirdPartyAgentSubStage(Stage):
             runner = CozeAgentRunner[AstrAgentContext]()
         elif self.runner_type == "dashscope":
             runner = DashscopeAgentRunner[AstrAgentContext]()
+        elif self.runner_type == "deerflow":
+            runner = DeerFlowAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
                 f"Unsupported third party agent runner type: {self.runner_type}",
@@ -207,16 +216,31 @@ class ThirdPartyAgentSubStage(Stage):
                     )
         else:
             # 非流式响应或转换为普通响应
-            async for _ in run_third_party_agent(
+            fallback_chain: MessageChain | None = None
+            async for maybe_chain in run_third_party_agent(
                 runner,
                 stream_to_general=stream_to_general,
                 custom_error_message=custom_error_message,
             ):
+                if maybe_chain:
+                    fallback_chain = maybe_chain
                 yield
 
             final_resp = runner.get_final_llm_resp()
 
             if not final_resp or not final_resp.result_chain:
+                if fallback_chain:
+                    logger.warning(
+                        "Agent Runner returned no final response, fallback to streamed error/result chain."
+                    )
+                    event.set_result(
+                        MessageEventResult(
+                            chain=fallback_chain.chain or [],
+                            result_content_type=ResultContentType.LLM_RESULT,
+                        ),
+                    )
+                    yield
+                    return
                 logger.warning("Agent Runner 未返回最终结果。")
                 return
 
