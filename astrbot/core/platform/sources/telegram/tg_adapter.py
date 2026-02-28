@@ -259,9 +259,7 @@ class TelegramPlatformAdapter(Platform):
 
         return result if result else None
 
-    async def start(
-        self, update: Update, context: "CallbackContext"
-    ) -> None:
+    async def start(self, update: Update, context: "CallbackContext") -> None:
         if not update.effective_chat:
             logger.warning(
                 "Received a start command without an effective chat, skipping /start reply.",
@@ -272,9 +270,7 @@ class TelegramPlatformAdapter(Platform):
             text=self.config["start_message"],
         )
 
-    async def message_handler(
-        self, update: Update, context: "CallbackContext"
-    ) -> None:
+    async def message_handler(self, update: Update, context: "CallbackContext") -> None:
         logger.debug(f"Telegram message: {update.message}")
 
         # Handle media group messages
