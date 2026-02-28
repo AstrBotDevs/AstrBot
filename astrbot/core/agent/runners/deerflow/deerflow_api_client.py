@@ -149,7 +149,20 @@ class DeerFlowAPIClient:
     ) -> AsyncGenerator[dict[str, Any], None]:
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads/{thread_id}/runs/stream"
-        logger.debug(f"deerflow stream_run payload: {payload}")
+        input_payload = payload.get("input")
+        message_count = 0
+        if isinstance(input_payload, dict) and isinstance(
+            input_payload.get("messages"), list
+        ):
+            message_count = len(input_payload["messages"])
+        # Log only a minimal summary to avoid exposing sensitive user content.
+        logger.debug(
+            "deerflow stream_run payload summary: thread_id=%s, keys=%s, message_count=%d, stream_mode=%s",
+            thread_id,
+            list(payload.keys()),
+            message_count,
+            payload.get("stream_mode"),
+        )
         # For long-running SSE streams, avoid aiohttp total timeout.
         # Use socket read timeout so active heartbeats/chunks can keep the stream alive.
         stream_timeout = ClientTimeout(
