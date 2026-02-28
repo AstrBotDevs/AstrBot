@@ -123,7 +123,7 @@ class WebChatAdapter(Platform):
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
                 logger.error(
-                    f"[WebChatAdapter] Failed to save proactive message: {e}",
+                    t("msg-7177ecf8", e=e),
                     exc_info=True,
                 )
 

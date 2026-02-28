@@ -1031,7 +1031,7 @@ class PluginManager:
             if os.path.exists(config_file):
                 try:
                     os.remove(config_file)
-                    logger.info(f"已删除插件 {plugin_label} 的配置文件")
+                    logger.info(t("msg-81022b43", plugin_label=plugin_label))
                 except Exception as e:
                     logger.warning(f"删除插件配置文件失败 ({plugin_label}): {e!s}")
 
