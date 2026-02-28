@@ -16,6 +16,11 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    resolve_event_conversation_persona_id,
+    resolve_persona_custom_error_message,
+    set_persona_custom_error_message_on_event,
+)
 
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
@@ -40,6 +45,7 @@ AGENT_RUNNER_TYPE_KEY = {
 async def run_third_party_agent(
     runner: "BaseAgentRunner",
     stream_to_general: bool = False,
+    custom_error_message: str | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """
     运行第三方 agent runner 并转换响应格式
@@ -55,12 +61,23 @@ async def run_third_party_agent(
                 if stream_to_general:
                     yield resp.data["chain"]
     except Exception as e:
+<<<<<<< HEAD
         logger.error(t("msg-5e551baf", e=e))
         err_msg = (
             f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
             f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
         )
         yield MessageChain().message(t("msg-34f164d4", err_msg=err_msg))
+=======
+        logger.error(f"Third party agent runner error: {e}")
+        err_msg = custom_error_message
+        if not err_msg:
+            err_msg = (
+                f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
+                f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+            )
+        yield MessageChain().message(err_msg)
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -77,6 +94,24 @@ class ThirdPartyAgentSubStage(Stage):
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
+
+    async def _resolve_persona_custom_error_message(
+        self, event: AstrMessageEvent
+    ) -> str | None:
+        try:
+            conversation_persona_id = await resolve_event_conversation_persona_id(
+                event,
+                self.ctx.plugin_manager.context.conversation_manager,
+            )
+            return await resolve_persona_custom_error_message(
+                event=event,
+                persona_manager=self.ctx.plugin_manager.context.persona_manager,
+                provider_settings=self.conf["provider_settings"],
+                conversation_persona_id=conversation_persona_id,
+            )
+        except Exception as e:
+            logger.debug("Failed to resolve persona custom error message: %s", e)
+            return None
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -112,6 +147,9 @@ class ThirdPartyAgentSubStage(Stage):
 
         if not req.prompt and not req.image_urls:
             return
+
+        custom_error_message = await self._resolve_persona_custom_error_message(event)
+        set_persona_custom_error_message_on_event(event, custom_error_message)
 
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
@@ -162,6 +200,7 @@ class ThirdPartyAgentSubStage(Stage):
                     run_third_party_agent(
                         runner,
                         stream_to_general=False,
+                        custom_error_message=custom_error_message,
                     ),
                 ),
             )
@@ -180,6 +219,7 @@ class ThirdPartyAgentSubStage(Stage):
             async for _ in run_third_party_agent(
                 runner,
                 stream_to_general=stream_to_general,
+                custom_error_message=custom_error_message,
             ):
                 yield
 

@@ -76,6 +76,10 @@ class WebChatQueueMgr:
         if task is not None:
             task.cancel()
 
+    def list_back_request_ids(self, conversation_id: str) -> list[str]:
+        """List active back-queue request IDs for a conversation."""
+        return list(self._conversation_back_requests.get(conversation_id, set()))
+
     def has_queue(self, conversation_id: str) -> bool:
         """Check if a queue exists for the given conversation ID"""
         return conversation_id in self.queues

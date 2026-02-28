@@ -24,6 +24,9 @@ from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -79,6 +82,11 @@ class FollowUpTicket:
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    def _get_persona_custom_error_message(self) -> str | None:
+        """Read persona-level custom error message from event extras when available."""
+        event = getattr(self.run_context.context, "event", None)
+        return extract_persona_custom_error_message_from_event(event)
+
     @override
     async def reset(
         self,
@@ -459,12 +467,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
             self._resolve_unconsumed_follow_ups()
+            custom_error_message = self._get_persona_custom_error_message()
+            error_text = custom_error_message or (
+                f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
+            )
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
+<<<<<<< HEAD
                     chain=MessageChain().message(
                         t("msg-508d6d17", res=llm_resp.completion_text or '未知错误'),
                     ),
+=======
+                    chain=MessageChain().message(error_text),
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
                 ),
             )
             return

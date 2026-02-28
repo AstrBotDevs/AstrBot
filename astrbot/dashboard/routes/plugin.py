@@ -59,6 +59,7 @@ class PluginRoute(Route):
             "/plugin/update": ("POST", self.update_plugin),
             "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
+            "/plugin/uninstall-failed": ("POST", self.uninstall_failed_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
             "/plugin/on": ("POST", self.on_plugin),
@@ -564,6 +565,34 @@ class PluginRoute(Route):
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
             logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(str(e)).__dict__
+
+    async def uninstall_failed_plugin(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.get_json()
+        dir_name = post_data.get("dir_name", "")
+        delete_config = post_data.get("delete_config", False)
+        delete_data = post_data.get("delete_data", False)
+        if not dir_name:
+            return Response().error("缺少失败插件目录名").__dict__
+
+        try:
+            logger.info(f"正在卸载失败插件 {dir_name}")
+            await self.plugin_manager.uninstall_failed_plugin(
+                dir_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+            logger.info(f"卸载失败插件 {dir_name} 成功")
+            return Response().ok(None, "卸载成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
 
     async def update_plugin(self):

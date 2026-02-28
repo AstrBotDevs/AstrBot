@@ -20,6 +20,9 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -362,12 +365,22 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
+<<<<<<< HEAD
             logger.error(t("msg-1b1af61e", e=e))
             await event.send(
                 MessageChain().message(
                     t("msg-ea02b899", e=e)
                 )
+=======
+            logger.error(f"Error occurred while processing agent: {e}")
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                event
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
             )
+            error_text = custom_error_message or (
+                f"Error occurred while processing agent request: {e}"
+            )
+            await event.send(MessageChain().message(error_text))
         finally:
             if follow_up_capture:
                 await finalize_follow_up_capture(

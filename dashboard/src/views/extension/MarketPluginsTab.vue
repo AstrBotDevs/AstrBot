@@ -56,7 +56,7 @@ const {
   installCompat,
   versionCompatibilityDialog,
   showUninstallDialog,
-  pluginToUninstall,
+  uninstallTarget,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
@@ -78,6 +78,7 @@ const {
   sortBy,
   sortOrder,
   randomPluginNames,
+  showRandomPlugins,
   normalizeStr,
   toPinyinText,
   toInitials,
@@ -92,6 +93,7 @@ const {
   randomPlugins,
   shufflePlugins,
   refreshRandomPlugins,
+  toggleRandomPluginsVisibility,
   displayItemsPerPage,
   totalPages,
   paginatedPlugins,
@@ -161,29 +163,50 @@ const currentSourceName = computed(() => {
 <template>
           <v-tab-item v-show="activeTab === 'market'">
             <div class="mb-6 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
-                <h2 class="text-h2 mb-0">{{ tm("tabs.market") }}</h2>
+              <div
+                class="d-flex align-center"
+                style="gap: 12px"
+              >
+                <div class="d-flex align-center" style="gap: 12px; min-width: 0">
+                  <h2 class="text-h2 mb-0">{{ tm("tabs.market") }}</h2>
 
-                <v-tooltip location="top" :text="tm('market.sourceManagement')">
-                  <template v-slot:activator="{ props }">
-                    <v-btn
-                      v-bind="props"
-                      variant="tonal"
-                      rounded="md"
-                      color="primary"
-                      class="text-none px-2"
-                      @click="openSourceManagerDialog"
-                    >
-                      <v-icon size="18" class="mr-1">mdi-source-branch</v-icon>
-                      <span class="text-truncate" style="max-width: 180px">
-                        {{ currentSourceName }}
-                      </span>
-                    </v-btn>
-                  </template>
-                </v-tooltip>
+                  <v-tooltip location="top" :text="tm('market.sourceManagement')">
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        variant="tonal"
+                        rounded="md"
+                        color="primary"
+                        class="text-none px-2"
+                        @click="openSourceManagerDialog"
+                      >
+                        <v-icon size="18" class="mr-1">mdi-source-branch</v-icon>
+                        <span class="text-truncate" style="max-width: 180px">
+                          {{ currentSourceName }}
+                        </span>
+                      </v-btn>
+                    </template>
+                  </v-tooltip>
+
+                  <v-btn
+                    color="primary"
+                    variant="tonal"
+                    rounded="md"
+                    class="text-none px-2"
+                    :prepend-icon="showRandomPlugins ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click="toggleRandomPluginsVisibility"
+                  >
+                    {{
+                      showRandomPlugins
+                        ? tm("market.hideRandomPlugins")
+                        : tm("market.showRandomPlugins")
+                    }}
+                  </v-btn>
+                </div>
 
                 <v-text-field
                   v-model="marketSearch"
+                  class="ml-auto"
                   density="compact"
                   :label="tm('search.marketPlaceholder')"
                   prepend-inner-icon="mdi-magnify"
@@ -191,7 +214,7 @@ const currentSourceName = computed(() => {
                   flat
                   hide-details
                   single-line
-                  style="min-width: 220px; max-width: 340px"
+                  style="width: 340px; min-width: 220px; max-width: 340px"
                 >
                 </v-text-field>
               </div>
@@ -237,41 +260,45 @@ const currentSourceName = computed(() => {
             </v-tooltip>
 
             <div class="mt-4">
-              <div
-                class="d-flex align-center mb-2"
-                style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
-              >
-                <h2>
-                  {{ tm("market.randomPlugins") }}
-                </h2>
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  prepend-icon="mdi-shuffle-variant"
-                  :disabled="pluginMarketData.length === 0"
-                  @click="refreshRandomPlugins"
-                >
-                  {{ tm("buttons.reshuffle") }}
-                </v-btn>
-              </div>
+              <v-expand-transition>
+                <div v-if="showRandomPlugins">
+                  <div
+                    class="d-flex align-center mb-2"
+                    style="justify-content: space-between; flex-wrap: wrap; gap: 8px"
+                  >
+                    <h2>
+                      {{ tm("market.randomPlugins") }}
+                    </h2>
+                    <v-btn
+                      color="primary"
+                      variant="tonal"
+                      prepend-icon="mdi-shuffle-variant"
+                      :disabled="pluginMarketData.length === 0"
+                      @click="refreshRandomPlugins"
+                    >
+                      {{ tm("buttons.reshuffle") }}
+                    </v-btn>
+                  </div>
 
-              <v-row class="mb-6" dense>
-                <v-col
-                  v-for="plugin in randomPlugins"
-                  :key="`random-${plugin.name}`"
-                  cols="12"
-                  md="6"
-                  lg="4"
-                  class="pb-2"
-                >
-                  <MarketPluginCard
-                    :plugin="plugin"
-                    :default-plugin-icon="defaultPluginIcon"
-                    :show-plugin-full-name="showPluginFullName"
-                    @install="handleInstallPlugin"
-                  />
-                </v-col>
-              </v-row>
+                  <v-row class="mb-6" dense>
+                    <v-col
+                      v-for="plugin in randomPlugins"
+                      :key="`random-${plugin.name}`"
+                      cols="12"
+                      md="6"
+                      lg="4"
+                      class="pb-2"
+                    >
+                      <MarketPluginCard
+                        :plugin="plugin"
+                        :default-plugin-icon="defaultPluginIcon"
+                        :show-plugin-full-name="showPluginFullName"
+                        @install="handleInstallPlugin"
+                      />
+                    </v-col>
+                  </v-row>
+                </div>
+              </v-expand-transition>
 
               <div
                 class="d-flex align-center mb-2"

@@ -15,6 +15,9 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
 
@@ -236,7 +239,16 @@ async def run_agent(
                     pass
             logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
-            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                astr_event
+            )
+            if custom_error_message:
+                err_msg = custom_error_message
+            else:
+                err_msg = (
+                    f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: "
+                    f"{e!s}\n\n请在平台日志查看和分享错误详情。\n"
+                )
 
             error_llm_response = LLMResponse(
                 role="err",

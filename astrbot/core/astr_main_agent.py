@@ -38,6 +38,10 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_persona,
+    set_persona_custom_error_message_on_event,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
@@ -284,6 +288,10 @@ async def _ensure_persona_and_skills(
         conversation_persona_id=req.conversation.persona_id,
         platform_name=event.get_platform_name(),
         provider_settings=cfg,
+    )
+
+    set_persona_custom_error_message_on_event(
+        event, extract_persona_custom_error_message_from_persona(persona)
     )
 
     if persona:

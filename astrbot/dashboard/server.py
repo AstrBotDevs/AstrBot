@@ -205,6 +205,10 @@ class AstrBotDashboard:
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:
+        if key := request.args.get("api_key"):
+            return key.strip()
+        if key := request.args.get("key"):
+            return key.strip()
         if key := request.headers.get("X-API-Key"):
             return key.strip()
         auth_header = request.headers.get("Authorization", "").strip()
@@ -218,6 +222,7 @@ class AstrBotDashboard:
     def _get_required_open_api_scope(path: str) -> str | None:
         scope_map = {
             "/api/v1/chat": "chat",
+            "/api/v1/chat/ws": "chat",
             "/api/v1/chat/sessions": "chat",
             "/api/v1/configs": "config",
             "/api/v1/file": "file",

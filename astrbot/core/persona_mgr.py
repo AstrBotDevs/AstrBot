@@ -5,6 +5,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.sentinels import NOT_GIVEN
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
@@ -13,6 +14,7 @@ DEFAULT_PERSONALITY = Personality(
     mood_imitation_dialogs=[],
     tools=None,
     skills=None,
+    custom_error_message=None,
     _begin_dialogs_processed=[],
     _mood_imitation_dialogs_processed="",
 )
@@ -127,19 +129,31 @@ class PersonaManager:
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
+        tools: list[str] | None | object = NOT_GIVEN,
+        skills: list[str] | None | object = NOT_GIVEN,
+        custom_error_message: str | None | object = NOT_GIVEN,
     ):
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:
+<<<<<<< HEAD
             raise ValueError(t("msg-1ea88f45", persona_id=persona_id))
+=======
+            raise ValueError(f"Persona with ID {persona_id} does not exist.")
+        update_kwargs = {}
+        if tools is not NOT_GIVEN:
+            update_kwargs["tools"] = tools
+        if skills is not NOT_GIVEN:
+            update_kwargs["skills"] = skills
+        if custom_error_message is not NOT_GIVEN:
+            update_kwargs["custom_error_message"] = custom_error_message
+
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
         persona = await self.db.update_persona(
             persona_id,
             system_prompt,
             begin_dialogs,
-            tools=tools,
-            skills=skills,
+            **update_kwargs,
         )
         if persona:
             for i, p in enumerate(self.personas):
@@ -299,6 +313,7 @@ class PersonaManager:
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
     ) -> Persona:
@@ -321,6 +336,7 @@ class PersonaManager:
             begin_dialogs,
             tools=tools,
             skills=skills,
+            custom_error_message=custom_error_message,
             folder_id=folder_id,
             sort_order=sort_order,
         )
@@ -347,6 +363,7 @@ class PersonaManager:
                 "mood_imitation_dialogs": [],  # deprecated
                 "tools": persona.tools,
                 "skills": persona.skills,
+                "custom_error_message": persona.custom_error_message,
             }
             for persona in self.personas
         ]
@@ -403,6 +420,7 @@ class PersonaManager:
             begin_dialogs=selected_default_persona["begin_dialogs"],
             tools=selected_default_persona["tools"] or None,
             skills=selected_default_persona["skills"] or None,
+            custom_error_message=selected_default_persona["custom_error_message"],
         )
 
         return v3_persona_config, personas_v3, selected_default_persona

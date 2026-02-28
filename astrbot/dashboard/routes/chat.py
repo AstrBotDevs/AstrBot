@@ -1,7 +1,6 @@
 from astrbot.core.lang import t
 import asyncio
 import json
-import mimetypes
 import os
 import re
 import uuid
@@ -15,6 +14,12 @@ from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.webchat.message_parts_helper import (
+    build_webchat_message_parts,
+    create_attachment_part_from_existing_file,
+    strip_message_parts_path_fields,
+    webchat_message_parts_have_content,
+)
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -167,83 +172,24 @@ class ChatRoute(Route):
         )
 
     async def _build_user_message_parts(self, message: str | list) -> list[dict]:
-        """构建用户消息的部分列表
-
-        Args:
-            message: 文本消息 (str) 或消息段列表 (list)
-        """
-        parts = []
-
-        if isinstance(message, list):
-            for part in message:
-                part_type = part.get("type")
-                if part_type == "plain":
-                    parts.append({"type": "plain", "text": part.get("text", "")})
-                elif part_type == "reply":
-                    parts.append(
-                        {
-                            "type": "reply",
-                            "message_id": part.get("message_id"),
-                            "selected_text": part.get("selected_text", ""),
-                        }
-                    )
-                elif attachment_id := part.get("attachment_id"):
-                    attachment = await self.db.get_attachment_by_id(attachment_id)
-                    if attachment:
-                        parts.append(
-                            {
-                                "type": attachment.type,
-                                "attachment_id": attachment.attachment_id,
-                                "filename": os.path.basename(attachment.path),
-                                "path": attachment.path,  # will be deleted
-                            }
-                        )
-            return parts
-
-        if message:
-            parts.append({"type": "plain", "text": message})
-
-        return parts
+        """构建用户消息的部分列表。"""
+        return await build_webchat_message_parts(
+            message,
+            get_attachment_by_id=self.db.get_attachment_by_id,
+            strict=False,
+        )
 
     async def _create_attachment_from_file(
         self, filename: str, attach_type: str
     ) -> dict | None:
-        """从本地文件创建 attachment 并返回消息部分
-
-        用于处理 bot 回复中的媒体文件
-
-        Args:
-            filename: 存储的文件名
-            attach_type: 附件类型 (image, record, file, video)
-        """
-        basename = os.path.basename(filename)
-        candidate_paths = [
-            os.path.join(self.attachments_dir, basename),
-            os.path.join(self.legacy_img_dir, basename),
-        ]
-        file_path = next((p for p in candidate_paths if os.path.exists(p)), None)
-        if not file_path:
-            return None
-
-        # guess mime type
-        mime_type, _ = mimetypes.guess_type(filename)
-        if not mime_type:
-            mime_type = "application/octet-stream"
-
-        # insert attachment
-        attachment = await self.db.insert_attachment(
-            path=file_path,
-            type=attach_type,
-            mime_type=mime_type,
+        """从本地文件创建 attachment 并返回消息部分。"""
+        return await create_attachment_part_from_existing_file(
+            filename,
+            attach_type=attach_type,
+            insert_attachment=self.db.insert_attachment,
+            attachments_dir=self.attachments_dir,
+            fallback_dirs=[self.legacy_img_dir],
         )
-        if not attachment:
-            return None
-
-        return {
-            "type": attach_type,
-            "attachment_id": attachment.attachment_id,
-            "filename": os.path.basename(file_path),
-        }
 
     def _extract_web_search_refs(
         self, accumulated_text: str, accumulated_parts: list
@@ -357,6 +303,7 @@ class ChatRoute(Route):
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
+<<<<<<< HEAD
         # 检查消息是否为空
         if isinstance(message, list):
             has_content = any(
@@ -372,6 +319,8 @@ class ChatRoute(Route):
         elif not message:
             return Response().error(t("msg-2c3fdeb9")).__dict__
 
+=======
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
         if not session_id:
             return Response().error(t("msg-9bc95e22")).__dict__
 
@@ -379,6 +328,12 @@ class ChatRoute(Route):
 
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
+        if not webchat_message_parts_have_content(message_parts):
+            return (
+                Response()
+                .error("Message content is empty (reply only is not allowed)")
+                .__dict__
+            )
 
         message_id = str(uuid.uuid4())
         back_queue = webchat_queue_mgr.get_or_create_back_queue(
@@ -584,10 +539,7 @@ class ChatRoute(Route):
             ),
         )
 
-        message_parts_for_storage = []
-        for part in message_parts:
-            part_copy = {k: v for k, v in part.items() if k != "path"}
-            message_parts_for_storage.append(part_copy)
+        message_parts_for_storage = strip_message_parts_path_fields(message_parts)
 
         await self.platform_history_mgr.insert(
             platform_id="webchat",

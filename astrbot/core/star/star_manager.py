@@ -32,6 +32,7 @@ from astrbot.core.utils.metrics import Metric
 from . import StarMetadata
 from .command_management import sync_command_configs
 from .context import Context
+from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
@@ -422,6 +423,68 @@ class PluginManager:
                 llm_tools.func_list.remove(tool)
                 logger.info(t("msg-3c492aa6", res=tool.name))
 
+    def _build_failed_plugin_record(
+        self,
+        *,
+        root_dir_name: str,
+        plugin_dir_path: str,
+        reserved: bool,
+        error: Exception | str,
+        error_trace: str,
+    ) -> dict:
+        record: dict = {
+            "name": root_dir_name,
+            "error": str(error),
+            "traceback": error_trace,
+            "reserved": reserved,
+        }
+        try:
+            metadata = self._load_plugin_metadata(plugin_path=plugin_dir_path)
+            if metadata:
+                record.update(
+                    {
+                        "name": metadata.name,
+                        "author": metadata.author,
+                        "desc": metadata.desc,
+                        "version": metadata.version,
+                        "repo": metadata.repo,
+                        "display_name": metadata.display_name,
+                        "support_platforms": metadata.support_platforms,
+                        "astrbot_version": metadata.astrbot_version,
+                    }
+                )
+        except Exception as metadata_error:
+            logger.debug(
+                f"读取失败插件 {root_dir_name} 元数据失败: {metadata_error!s}",
+            )
+
+        return record
+
+    def _rebuild_failed_plugin_info(self) -> None:
+        if not self.failed_plugin_dict:
+            self.failed_plugin_info = ""
+            return
+
+        lines = []
+        for dir_name, info in self.failed_plugin_dict.items():
+            if isinstance(info, dict):
+                error = info.get("error", "未知错误")
+                display_name = info.get("display_name") or info.get("name") or dir_name
+                version = info.get("version") or info.get("astrbot_version")
+                if version:
+                    lines.append(
+                        f"加载插件「{display_name}」(目录: {dir_name}, 版本: {version}) 时出现问题，原因：{error}。",
+                    )
+                else:
+                    lines.append(
+                        f"加载插件「{display_name}」(目录: {dir_name}) 时出现问题，原因：{error}。",
+                    )
+            else:
+                error = str(info)
+                lines.append(f"加载插件目录 {dir_name} 时出现问题，原因：{error}。")
+
+        self.failed_plugin_info = "\n".join(lines) + "\n"
+
     async def reload_failed_plugin(self, dir_name):
         """
         重新加载未注册（加载失败）的插件
@@ -442,8 +505,7 @@ class PluginManager:
             success, error = await self.load(specified_dir_name=dir_name)
             if success:
                 self.failed_plugin_dict.pop(dir_name, None)
-                if not self.failed_plugin_dict:
-                    self.failed_plugin_info = ""
+                self._rebuild_failed_plugin_info()
                 return success, None
             else:
                 return False, error
@@ -531,7 +593,7 @@ class PluginManager:
         if plugin_modules is None:
             return False, "未找到任何插件模块"
 
-        fail_rec = ""
+        has_load_error = False
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -571,6 +633,7 @@ class PluginManager:
                     )
                 except Exception as e:
                     error_trace = traceback.format_exc()
+<<<<<<< HEAD
                     logger.error(t("msg-b2ec4801", error_trace=error_trace))
                     logger.error(t("msg-db351291", root_dir_name=root_dir_name, e=e))
                     fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
@@ -578,6 +641,20 @@ class PluginManager:
                         "error": str(e),
                         "traceback": error_trace,
                     }
+=======
+                    logger.error(error_trace)
+                    logger.error(f"插件 {root_dir_name} 导入失败。原因：{e!s}")
+                    has_load_error = True
+                    self.failed_plugin_dict[root_dir_name] = (
+                        self._build_failed_plugin_record(
+                            root_dir_name=root_dir_name,
+                            plugin_dir_path=plugin_dir_path,
+                            reserved=reserved,
+                            error=e,
+                            error_trace=error_trace,
+                        )
+                    )
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
                     if path in star_map:
                         logger.info(t("msg-a3db5f45"))
                         metadata = star_map.pop(path)
@@ -852,6 +929,7 @@ class PluginManager:
                 logger.error(t("msg-db49f7a1", root_dir_name=root_dir_name))
                 errors = traceback.format_exc()
                 for line in errors.split("\n"):
+<<<<<<< HEAD
                     logger.error(t("msg-26039659", line=line))
                 logger.error(t("msg-4292f44d"))
                 fail_rec += f"加载 {root_dir_name} 插件时出现问题，原因 {e!s}。\n"
@@ -859,6 +937,20 @@ class PluginManager:
                     "error": str(e),
                     "traceback": errors,
                 }
+=======
+                    logger.error(f"| {line}")
+                logger.error("----------------------------------")
+                has_load_error = True
+                self.failed_plugin_dict[root_dir_name] = (
+                    self._build_failed_plugin_record(
+                        root_dir_name=root_dir_name,
+                        plugin_dir_path=plugin_dir_path,
+                        reserved=reserved,
+                        error=e,
+                        error_trace=errors,
+                    )
+                )
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
                 # 记录注册失败的插件名称，以便后续重载插件
                 if path in star_map:
                     logger.info(t("msg-a3db5f45"))
@@ -875,10 +967,10 @@ class PluginManager:
             logger.error(t("msg-d2048afe", e=e))
             logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
-        if not fail_rec:
-            return True, None
-        self.failed_plugin_info = fail_rec
-        return False, fail_rec
+        self._rebuild_failed_plugin_info()
+        if has_load_error:
+            return False, self.failed_plugin_info
+        return True, None
 
     async def _cleanup_failed_plugin_install(
         self,
@@ -923,6 +1015,73 @@ class PluginManager:
                     t("msg-7374541f", plugin_config_path=plugin_config_path, e=e),
                 )
 
+    def _cleanup_plugin_optional_artifacts(
+        self,
+        *,
+        root_dir_name: str,
+        plugin_label: str,
+        delete_config: bool,
+        delete_data: bool,
+    ) -> None:
+        if delete_config:
+            config_file = os.path.join(
+                self.plugin_config_path,
+                f"{root_dir_name}_config.json",
+            )
+            if os.path.exists(config_file):
+                try:
+                    os.remove(config_file)
+                    logger.info(f"已删除插件 {plugin_label} 的配置文件")
+                except Exception as e:
+                    logger.warning(f"删除插件配置文件失败 ({plugin_label}): {e!s}")
+
+        if delete_data:
+            data_base_dir = os.path.dirname(self.plugin_store_path)
+            for data_dir_name in ("plugin_data", "plugins_data"):
+                plugin_data_dir = os.path.join(
+                    data_base_dir,
+                    data_dir_name,
+                    root_dir_name,
+                )
+                if os.path.exists(plugin_data_dir):
+                    try:
+                        remove_dir(plugin_data_dir)
+                        logger.info(
+                            f"已删除插件 {plugin_label} 的持久化数据 ({data_dir_name})",
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"删除插件持久化数据失败 ({data_dir_name}, {plugin_label}): {e!s}",
+                        )
+
+    def _track_failed_install_dir(
+        self,
+        *,
+        dir_name: str,
+        plugin_path: str,
+        error: Exception,
+    ) -> None:
+        if (
+            not dir_name
+            or not plugin_path
+            or not os.path.isdir(plugin_path)
+            or dir_name in self.failed_plugin_dict
+        ):
+            return
+
+        for star in self.context.get_all_stars():
+            if star.root_dir_name == dir_name:
+                return
+
+        self.failed_plugin_dict[dir_name] = self._build_failed_plugin_record(
+            root_dir_name=dir_name,
+            plugin_dir_path=plugin_path,
+            reserved=False,
+            error=error,
+            error_trace=traceback.format_exc(),
+        )
+        self._rebuild_failed_plugin_info()
+
     async def install_plugin(
         self, repo_url: str, proxy: str = "", ignore_version_check: bool = False
     ):
@@ -952,10 +1111,8 @@ class PluginManager:
         async with self._pm_lock:
             plugin_path = ""
             dir_name = ""
-            cleanup_required = False
             try:
                 plugin_path = await self.updator.install(repo_url, proxy)
-                cleanup_required = True
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
@@ -1002,11 +1159,15 @@ class PluginManager:
                     }
 
                 return plugin_info
-            except Exception:
-                if cleanup_required and dir_name and plugin_path:
-                    await self._cleanup_failed_plugin_install(
-                        dir_name=dir_name,
-                        plugin_path=plugin_path,
+            except Exception as e:
+                self._track_failed_install_dir(
+                    dir_name=dir_name,
+                    plugin_path=plugin_path,
+                    error=e,
+                )
+                if dir_name and plugin_path:
+                    logger.warning(
+                        f"安装插件 {dir_name} 失败，插件安装目录：{plugin_path}",
                     )
                 raise
 
@@ -1059,6 +1220,7 @@ class PluginManager:
                     t("msg-d6f8142c", e=e),
                 )
 
+<<<<<<< HEAD
             # 删除插件配置文件
             if delete_config and root_dir_name:
                 config_file = os.path.join(
@@ -1071,34 +1233,88 @@ class PluginManager:
                         logger.info(t("msg-6313500c", plugin_name=plugin_name))
                     except Exception as e:
                         logger.warning(t("msg-f0f01b67", e=e))
+=======
+            self._cleanup_plugin_optional_artifacts(
+                root_dir_name=root_dir_name,
+                plugin_label=plugin_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
 
-            # 删除插件持久化数据
-            # 注意：需要检查两个可能的目录名（plugin_data 和 plugins_data）
-            # data/temp 目录可能被多个插件共享，不自动删除以防误删
-            if delete_data and root_dir_name:
-                data_base_dir = os.path.dirname(ppath)  # data/
-
-                # 删除 data/plugin_data 下的插件持久化数据（单数形式，新版本）
-                plugin_data_dir = os.path.join(
-                    data_base_dir, "plugin_data", root_dir_name
+    async def uninstall_failed_plugin(
+        self,
+        dir_name: str,
+        delete_config: bool = False,
+        delete_data: bool = False,
+    ) -> None:
+        """卸载加载失败的插件（按目录名）。"""
+        async with self._pm_lock:
+            failed_info = self.failed_plugin_dict.get(dir_name)
+            if not failed_info:
+                raise Exception(
+                    format_plugin_error("not_found_in_failed_list"),
                 )
+<<<<<<< HEAD
                 if os.path.exists(plugin_data_dir):
                     try:
                         remove_dir(plugin_data_dir)
                         logger.info(t("msg-c4008b30", plugin_name=plugin_name))
                     except Exception as e:
                         logger.warning(t("msg-88d1ee05", e=e))
+=======
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
 
-                # 删除 data/plugins_data 下的插件持久化数据（复数形式，旧版本兼容）
-                plugins_data_dir = os.path.join(
-                    data_base_dir, "plugins_data", root_dir_name
+            if isinstance(failed_info, dict) and failed_info.get("reserved"):
+                raise Exception(
+                    format_plugin_error("reserved_plugin_cannot_uninstall"),
                 )
+<<<<<<< HEAD
                 if os.path.exists(plugins_data_dir):
                     try:
                         remove_dir(plugins_data_dir)
                         logger.info(t("msg-ba805469", plugin_name=plugin_name))
                     except Exception as e:
                         logger.warning(t("msg-cf6eb821", e=e))
+=======
+
+            self._cleanup_plugin_state(dir_name)
+
+            plugin_path = os.path.join(self.plugin_store_path, dir_name)
+            if os.path.exists(plugin_path):
+                try:
+                    remove_dir(plugin_path)
+                except Exception as e:
+                    raise Exception(
+                        format_plugin_error(
+                            "failed_plugin_dir_remove_error",
+                            error=f"{e!s}",
+                        ),
+                    )
+            else:
+                logger.debug(
+                    "插件目录不存在，视为已部分卸载状态，继续清理失败插件记录和可选产物: %s",
+                    plugin_path,
+                )
+
+            plugin_label = dir_name
+            if isinstance(failed_info, dict):
+                plugin_label = (
+                    failed_info.get("display_name")
+                    or failed_info.get("name")
+                    or dir_name
+                )
+
+            self._cleanup_plugin_optional_artifacts(
+                root_dir_name=dir_name,
+                plugin_label=plugin_label,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+
+            self.failed_plugin_dict.pop(dir_name, None)
+            self._rebuild_failed_plugin_info()
+>>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
 
     async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str) -> None:
         """解绑并移除一个插件。
@@ -1294,7 +1510,6 @@ class PluginManager:
         dir_name = os.path.basename(zip_file_path).replace(".zip", "")
         dir_name = dir_name.removesuffix("-master").removesuffix("-main").lower()
         desti_dir = os.path.join(self.plugin_store_path, dir_name)
-        cleanup_required = False
 
         # 第一步：检查是否已安装同目录名的插件，先终止旧插件
         existing_plugin = None
@@ -1316,7 +1531,6 @@ class PluginManager:
 
         try:
             self.updator.unzip_file(zip_file_path, desti_dir)
-            cleanup_required = True
 
             # 第二步：解压后，读取新插件的 metadata.yaml，检查是否存在同名但不同目录的插件
             try:
@@ -1401,10 +1615,13 @@ class PluginManager:
                     )
 
             return plugin_info
-        except Exception:
-            if cleanup_required:
-                await self._cleanup_failed_plugin_install(
-                    dir_name=dir_name,
-                    plugin_path=desti_dir,
-                )
+        except Exception as e:
+            self._track_failed_install_dir(
+                dir_name=dir_name,
+                plugin_path=desti_dir,
+                error=e,
+            )
+            logger.warning(
+                f"安装插件 {dir_name} 失败，插件安装目录：{desti_dir}",
+            )
             raise
