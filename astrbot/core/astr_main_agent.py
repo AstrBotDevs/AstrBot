@@ -285,6 +285,13 @@ async def _ensure_persona_and_skills(
         provider_settings=cfg,
     )
 
+    custom_error_message = None
+    if persona:
+        raw_custom_error_message = persona.get("custom_error_message")
+        if isinstance(raw_custom_error_message, str):
+            custom_error_message = raw_custom_error_message.strip() or None
+    event.set_extra("persona_custom_error_message", custom_error_message)
+
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:

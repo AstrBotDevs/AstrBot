@@ -39,6 +39,7 @@ AGENT_RUNNER_TYPE_KEY = {
 async def run_third_party_agent(
     runner: "BaseAgentRunner",
     stream_to_general: bool = False,
+    custom_error_message: str | None = None,
 ) -> AsyncGenerator[MessageChain | None, None]:
     """
     运行第三方 agent runner 并转换响应格式
@@ -55,10 +56,12 @@ async def run_third_party_agent(
                     yield resp.data["chain"]
     except Exception as e:
         logger.error(f"Third party agent runner error: {e}")
-        err_msg = (
-            f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
-            f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
-        )
+        err_msg = custom_error_message
+        if not err_msg:
+            err_msg = (
+                f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
+                f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+            )
         yield MessageChain().message(err_msg)
 
 
@@ -112,6 +115,36 @@ class ThirdPartyAgentSubStage(Stage):
         if not req.prompt and not req.image_urls:
             return
 
+        custom_error_message = None
+        try:
+            conversation_persona_id = None
+            conv_mgr = self.ctx.plugin_manager.context.conversation_manager
+            curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+            if curr_cid:
+                conv = await conv_mgr.get_conversation(
+                    event.unified_msg_origin, curr_cid
+                )
+                if conv:
+                    conversation_persona_id = conv.persona_id
+            (
+                _,
+                persona,
+                _,
+                _,
+            ) = await self.ctx.plugin_manager.context.persona_manager.resolve_selected_persona(
+                umo=event.unified_msg_origin,
+                conversation_persona_id=conversation_persona_id,
+                platform_name=event.get_platform_name(),
+                provider_settings=self.conf["provider_settings"],
+            )
+            if persona:
+                raw_custom_error_message = persona.get("custom_error_message")
+                if isinstance(raw_custom_error_message, str):
+                    custom_error_message = raw_custom_error_message.strip() or None
+        except Exception as e:
+            logger.debug("Failed to resolve persona custom error message: %s", e)
+        event.set_extra("persona_custom_error_message", custom_error_message)
+
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
             return
@@ -161,6 +194,7 @@ class ThirdPartyAgentSubStage(Stage):
                     run_third_party_agent(
                         runner,
                         stream_to_general=False,
+                        custom_error_message=custom_error_message,
                     ),
                 ),
             )
@@ -179,6 +213,7 @@ class ThirdPartyAgentSubStage(Stage):
             async for _ in run_third_party_agent(
                 runner,
                 stream_to_general=stream_to_general,
+                custom_error_message=custom_error_message,
             ):
                 yield
 

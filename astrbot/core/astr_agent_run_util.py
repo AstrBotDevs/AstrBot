@@ -43,6 +43,13 @@ def _extract_chain_json_data(msg_chain: MessageChain) -> dict | None:
     return None
 
 
+def _get_persona_custom_error_message(astr_event) -> str | None:
+    raw_message = astr_event.get_extra("persona_custom_error_message")
+    if not isinstance(raw_message, str):
+        return None
+    return raw_message.strip() or None
+
+
 def _record_tool_call_name(
     tool_info: dict | None, tool_name_by_call_id: dict[str, str]
 ) -> None:
@@ -235,7 +242,14 @@ async def run_agent(
                     pass
             logger.error(traceback.format_exc())
 
-            err_msg = f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
+            custom_error_message = _get_persona_custom_error_message(astr_event)
+            if custom_error_message:
+                err_msg = custom_error_message
+            else:
+                err_msg = (
+                    f"\n\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n错误信息: "
+                    f"{e!s}\n\n请在平台日志查看和分享错误详情。\n"
+                )
 
             error_llm_response = LLMResponse(
                 role="err",

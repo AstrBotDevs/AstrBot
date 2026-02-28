@@ -366,10 +366,17 @@ class InternalAgentSubStage(Stage):
 
         except Exception as e:
             logger.error(f"Error occurred while processing agent: {e}")
+            custom_error_message = event.get_extra("persona_custom_error_message")
+            if isinstance(custom_error_message, str):
+                custom_error_message = custom_error_message.strip() or None
+            else:
+                custom_error_message = None
+
+            error_text = custom_error_message or (
+                f"Error occurred while processing agent request: {e}"
+            )
             await event.send(
-                MessageChain().message(
-                    f"Error occurred while processing agent request: {e}"
-                )
+                MessageChain().message(error_text)
             )
         finally:
             if follow_up_capture:
