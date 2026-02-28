@@ -59,12 +59,23 @@ class ProviderCommands:
         )
         for provider, result in zip(all_providers, results):
             if isinstance(result, BaseException):
+                logger.warning(
+                    "跨提供商查找模型时，提供商 %s 的 get_models() 失败: %s",
+                    provider.meta().id,
+                    result,
+                )
                 continue
             provider_id = provider.meta().id
             if exclude_provider_id and provider_id == exclude_provider_id:
                 continue
             if model_name in result:
                 return provider, provider_id
+        if results and all(isinstance(r, BaseException) for r in results):
+            logger.error(
+                "跨提供商查找模型 %s 时，所有 %d 个提供商的 get_models() 均失败，请检查配置或网络",
+                model_name,
+                len(all_providers),
+            )
         return None, None
 
     async def provider(
@@ -320,7 +331,7 @@ class ProviderCommands:
             models = []
             try:
                 models = await prov.get_models()
-            except BaseException:
+            except BaseException as e:
                 models = []
             if model_name in models:
                 prov.set_model(model_name)
