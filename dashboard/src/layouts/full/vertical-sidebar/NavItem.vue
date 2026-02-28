@@ -2,24 +2,18 @@
 import { useI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import { computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
 const props = defineProps({ item: Object, level: Number });
 const { t } = useI18n();
 const customizer = useCustomizerStore();
 const route = useRoute();
-const router = useRouter();
 
 const itemStyle = computed(() => {
   const lvl = props.level ?? 0;
   const indent = customizer.mini_sidebar ? '0px' : `${lvl * 24}px`;
   return { '--indent-padding': indent };
 });
-
-const handleGroupClick = () => {
-  if (!props.item || props.item.type === 'external' || !props.item.to) return;
-  router.push(props.item.to);
-};
 
 const isItemActive = computed(() => {
   if (!props.item || props.item.type === 'external' || !props.item.to) return false;
@@ -36,7 +30,7 @@ const isItemActive = computed(() => {
   <v-list-group v-if="item.children" :value="item.title" :class="{ 'group-bordered': customizer.mini_sidebar }">
     <template v-slot:activator="{ props }">
       <v-list-item v-bind="props" rounded class="mb-1" color="secondary" :prepend-icon="item.icon"
-        :style="{ '--indent-padding': '0px' }" @click="handleGroupClick">
+        :style="{ '--indent-padding': '0px' }">
         <v-list-item-title style="font-size: 14px; font-weight: 500; line-height: 1.2; word-break: break-word;">
           {{ t(item.title) }}
         </v-list-item-title>
