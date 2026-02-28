@@ -149,7 +149,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if not isinstance(self.api_base, str) or not self.api_base.startswith(
             ("http://", "https://"),
         ):
-            raise Exception(
+            raise ValueError(
                 "DeerFlow API Base URL format is invalid. It must start with http:// or https://.",
             )
         self.api_key = provider_config.get("deerflow_api_key", "")
@@ -523,7 +523,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             state.clarification_text = maybe_clarification
         return response
 
-    def _resolve_final_text(self, state: _StreamState) -> str:
+    def _resolve_final_text(self, state: _StreamState) -> tuple[str, bool]:
+        failures_only = False
         # Clarification tool output should take precedence over partial AI/tool-call text.
         if state.clarification_text:
             final_text = state.clarification_text
@@ -533,21 +534,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 final_text = state.streamed_text or state.fallback_stream_text
             if not final_text:
                 final_text = build_task_failure_summary(state.task_failures)
-
-        if state.timed_out:
-            timeout_note = (
-                f"DeerFlow stream timed out after {self.timeout}s. "
-                "Returning partial result."
-            )
-            if final_text:
-                final_text = f"{final_text}\n\n{timeout_note}"
-            else:
-                raise asyncio.TimeoutError(timeout_note)
+                failures_only = bool(final_text)
 
         if not final_text:
             logger.warning("DeerFlow returned no text content in stream events.")
             final_text = "DeerFlow returned an empty response."
-        return final_text
+        return final_text, failures_only
 
     async def _execute_deerflow_request(self):
         prompt = self.req.prompt or ""
@@ -598,10 +590,20 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         except (asyncio.TimeoutError, TimeoutError):
             state.timed_out = True
 
-        final_text = self._resolve_final_text(state)
+        final_text, failures_only = self._resolve_final_text(state)
+        if state.timed_out:
+            timeout_note = (
+                f"DeerFlow stream timed out after {self.timeout}s. "
+                "Returning partial result."
+            )
+            final_text = (
+                f"{final_text}\n\n{timeout_note}" if final_text else timeout_note
+            )
+        is_error = state.timed_out or failures_only
+        role = "err" if is_error else "assistant"
 
         chain = MessageChain(chain=[Comp.Plain(final_text)])
-        self.final_llm_resp = LLMResponse(role="assistant", result_chain=chain)
+        self.final_llm_resp = LLMResponse(role=role, result_chain=chain)
         self._transition_state(AgentState.DONE)
 
         try:

@@ -22,7 +22,7 @@ def extract_text(content: T.Any) -> str:
                 if item_type == "text" and isinstance(item.get("text"), str):
                     parts.append(item["text"])
                 elif "content" in item:
-                    parts.append(str(item["content"]))
+                    parts.append(extract_text(item["content"]))
         return "\n".join([p for p in parts if p]).strip()
     return str(content) if content is not None else ""
 
