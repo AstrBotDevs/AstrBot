@@ -1,11 +1,11 @@
-import argparse
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-
 from fluent.syntax import ast, parse, serialize
 from openai import OpenAI
+from pathlib import Path
 from tqdm import tqdm
+import argparse
+import os
+from loguru import logger
 
 
 def translate_string(input_string: str, target_lang: str = "English") -> str:
@@ -15,25 +15,39 @@ def translate_string(input_string: str, target_lang: str = "English") -> str:
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
     system_prompt = (
-        f"你是一个专业的软件i18n翻译器。请将以下文本翻译为{target_lang}，保持IT语境准确。\n\n"
-        "规则：\n\n"
-        "1. 必须原样保留所有代码占位符（如 {$var} 等）。\n\n"
-        "2. 只输出最终译文，绝对禁止包含任何解释、多余的引号或Markdown格式。"
-        "3. 如果原文为目标语言则直接返回原文"
+        "你是一个专业的软件国际化（i18n）翻译引擎。"
+
+        "任务：将用户提供的文本翻译为指定目标语言，保持 IT/软件语境的准确性。"
+
+        "【核心规则 - 按优先级严格执行】"
+
+        "1. 【占位符保护 - 最高优先级】"
+        "- 必须原样保留所有代码占位符，包括但不限于：{$var}, {{variable}}, %s, %d, {0}, {{count}}, #{name} 等"
+        "- 禁止翻译、修改、增删占位符的任何字符（包括括号、符号、变量名）"
+        "- 占位符在译文中的位置应符合目标语言的语法习惯"
+
+        "2. 【输出格式 - 严格限制】"
+        "- 只输出翻译后的纯文本"
+        "- 禁止输出：解释、说明、引号、Markdown格式、代码块标记、序号、前缀（如\"翻译：\"）"
+
+        "3. 【翻译质量】"
+        "- 使用软件/IT行业的标准术语"
+        "- 保持原文的语气和风格（正式/友好/简洁等）"
     )
 
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system_prompt + f"- 目标语言：{target_lang}"},
                 {"role": "user", "content": f"{input_string}"},
             ],
-            temperature=1.3,
+            temperature=0.1,
             stream=False,
         )
         return response.choices[0].message.content.strip()
-    except Exception:
+    except Exception as e:
+        logger.error(e)
         return input_string
 
 
@@ -97,10 +111,10 @@ def main():
     )
     parser.add_argument(
         "--file",
-        default="astrbot/i18n/locales/ja-jp/i18n_messages.ftl",
+        default="astrbot/i18n/locales/zh-cn/i18n_messages.ftl",
         help="待翻译的 FTL 文件路径",
     )
-    parser.add_argument("--lang", default="Japanese", help="目标语言（默认: Chinese）")
+    parser.add_argument("--lang", default="简体中文", help="目标语言（默认: Chinese）")
     parser.add_argument(
         "--workers", type=int, default=32, help="并发线程数（默认: 10）"
     )
@@ -110,4 +124,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print(f"{translate_string('测试', 'English')}")
     main()
