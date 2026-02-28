@@ -1,5 +1,4 @@
 """插件的重载、启停、安装、卸载等操作。"""
-from astrbot.core.lang import t
 
 import asyncio
 import functools
@@ -19,6 +18,7 @@ from astrbot.core import logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
+from astrbot.core.lang import t
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.astrbot_path import (
@@ -220,19 +220,25 @@ class PluginManager:
             if os.path.exists(requirements_path):
                 try:
                     logger.info(
-                        t("msg-ebd47311", root_dir_name=root_dir_name, import_exc=import_exc)
+                        t(
+                            "msg-ebd47311",
+                            root_dir_name=root_dir_name,
+                            import_exc=import_exc,
+                        )
                     )
                     pip_installer.prefer_installed_dependencies(
                         requirements_path=requirements_path
                     )
                     module = __import__(path, fromlist=[module_str])
-                    logger.info(
-                        t("msg-1b6e94f1", root_dir_name=root_dir_name)
-                    )
+                    logger.info(t("msg-1b6e94f1", root_dir_name=root_dir_name))
                     return module
                 except Exception as recover_exc:
                     logger.info(
-                        t("msg-81b7c9b9", root_dir_name=root_dir_name, recover_exc=recover_exc)
+                        t(
+                            "msg-81b7c9b9",
+                            root_dir_name=root_dir_name,
+                            recover_exc=recover_exc,
+                        )
                     )
 
             await self._check_plugin_dept_update(target_plugin=root_dir_name)
@@ -632,7 +638,7 @@ class PluginManager:
                                 or "The plugin is not compatible with the current AstrBot version."
                             )
 
-                    logger.info(t("msg-da764b29", metadata=metadata))
+                    logger.info(t("msg-da764b29", metadata=str(metadata)))
                     metadata.config = plugin_config
                     p_name = (metadata.name or "unknown").lower().replace("/", "_")
                     p_author = (metadata.author or "unknown").lower().replace("/", "_")
@@ -741,7 +747,9 @@ class PluginManager:
                         plugin_obj=obj,
                     )
                     if not metadata:
-                        raise Exception(t("msg-840994d1", plugin_dir_path=plugin_dir_path))
+                        raise Exception(
+                            t("msg-840994d1", plugin_dir_path=plugin_dir_path)
+                        )
 
                     if not ignore_version_check:
                         is_valid, error_message = (
@@ -809,7 +817,12 @@ class PluginManager:
                             )
 
                         logger.debug(
-                            t("msg-944ffff1", cmd_type=cmd_type, res=metadata.name, res_2=handler.handler_name),
+                            t(
+                                "msg-944ffff1",
+                                cmd_type=cmd_type,
+                                res=metadata.name,
+                                res_2=handler.handler_name,
+                            ),
                         )
 
                 metadata.star_handler_full_names = full_names
@@ -825,7 +838,11 @@ class PluginManager:
                 for handler in handlers:
                     try:
                         logger.info(
-                            t("msg-64edd12c", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
+                            t(
+                                "msg-64edd12c",
+                                res=star_map[handler.handler_module_path].name,
+                                res_2=handler.handler_name,
+                            ),
                         )
                         await handler.handler(metadata)
                     except Exception:
@@ -1068,9 +1085,7 @@ class PluginManager:
                 if os.path.exists(plugin_data_dir):
                     try:
                         remove_dir(plugin_data_dir)
-                        logger.info(
-                            t("msg-c4008b30", plugin_name=plugin_name)
-                        )
+                        logger.info(t("msg-c4008b30", plugin_name=plugin_name))
                     except Exception as e:
                         logger.warning(t("msg-88d1ee05", e=e))
 
@@ -1081,9 +1096,7 @@ class PluginManager:
                 if os.path.exists(plugins_data_dir):
                     try:
                         remove_dir(plugins_data_dir)
-                        logger.info(
-                            t("msg-ba805469", plugin_name=plugin_name)
-                        )
+                        logger.info(t("msg-ba805469", plugin_name=plugin_name))
                     except Exception as e:
                         logger.warning(t("msg-cf6eb821", e=e))
 
@@ -1106,7 +1119,12 @@ class PluginManager:
             plugin_module_path,
         ):
             logger.info(
-                t("msg-e1853811", plugin_name=plugin_name, res=handler.handler_name, res_2=len(star_handlers_registry)),
+                t(
+                    "msg-e1853811",
+                    plugin_name=plugin_name,
+                    res=handler.handler_name,
+                    res_2=len(star_handlers_registry),
+                ),
             )
             star_handlers_registry.remove(handler)
 
@@ -1139,7 +1157,11 @@ class PluginManager:
             )
             for adapter_name in unregistered_adapters:
                 logger.info(
-                    t("msg-95b20050", plugin_name=plugin_name, adapter_name=adapter_name),
+                    t(
+                        "msg-95b20050",
+                        plugin_name=plugin_name,
+                        adapter_name=adapter_name,
+                    ),
                 )
 
         if plugin is None:
@@ -1230,7 +1252,11 @@ class PluginManager:
         for handler in handlers:
             try:
                 logger.info(
-                    t("msg-4369864f", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
+                    t(
+                        "msg-4369864f",
+                        res=star_map[handler.handler_module_path].name,
+                        res_2=handler.handler_name,
+                    ),
                 )
                 await handler.handler(star_metadata)
             except Exception:
@@ -1302,12 +1328,18 @@ class PluginManager:
                             and star.root_dir_name != dir_name
                         ):
                             logger.warning(
-                                t("msg-4f3271db", res=star.name, res_2=star.root_dir_name)
+                                t(
+                                    "msg-4f3271db",
+                                    res=star.name,
+                                    res_2=star.root_dir_name,
+                                )
                             )
                             try:
                                 await self._terminate_plugin(star)
                             except Exception:
-                                logger.warning(t("msg-78b9c276", res=traceback.format_exc()))
+                                logger.warning(
+                                    t("msg-78b9c276", res=traceback.format_exc())
+                                )
                             if star.name and star.module_path:
                                 await self._unbind_plugin(star.name, star.module_path)
                             break  # 只处理第一个匹配的
