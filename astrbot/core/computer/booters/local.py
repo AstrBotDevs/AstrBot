@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import asyncio
 import os
@@ -48,7 +49,7 @@ def _ensure_safe_path(path: str) -> str:
         os.path.abspath(get_astrbot_temp_path()),
     ]
     if not any(abs_path.startswith(root) for root in allowed_roots):
-        raise PermissionError("Path is outside the allowed computer roots.")
+        raise PermissionError(t("msg-487d0c91"))
     return abs_path
 
 
@@ -64,7 +65,7 @@ class LocalShellComponent(ShellComponent):
         background: bool = False,
     ) -> dict[str, Any]:
         if not _is_safe_command(command):
-            raise PermissionError("Blocked unsafe shell command.")
+            raise PermissionError(t("msg-e5eb5377"))
 
         def _run() -> dict[str, Any]:
             run_env = os.environ.copy()
@@ -203,10 +204,10 @@ class LocalBooter(ComputerBooter):
         self._shell = LocalShellComponent()
 
     async def boot(self, session_id: str) -> None:
-        logger.info(f"Local computer booter initialized for session: {session_id}")
+        logger.info(t("msg-9e1e117f", session_id=session_id))
 
     async def shutdown(self) -> None:
-        logger.info("Local computer booter shutdown complete.")
+        logger.info(t("msg-2d7f95de"))
 
     @property
     def fs(self) -> FileSystemComponent:
@@ -222,12 +223,12 @@ class LocalBooter(ComputerBooter):
 
     async def upload_file(self, path: str, file_name: str) -> dict:
         raise NotImplementedError(
-            "LocalBooter does not support upload_file operation. Use shell instead."
+            t("msg-82a45196")
         )
 
     async def download_file(self, remote_path: str, local_path: str) -> None:
         raise NotImplementedError(
-            "LocalBooter does not support download_file operation. Use shell instead."
+            t("msg-0457524a")
         )
 
     async def available(self) -> bool:

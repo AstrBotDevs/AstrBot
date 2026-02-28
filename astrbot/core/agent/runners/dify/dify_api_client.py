@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import codecs
 import json
 from collections.abc import AsyncGenerator
@@ -19,7 +20,7 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
                 try:
                     yield json.loads(block[5:])
                 except json.JSONDecodeError:
-                    logger.warning(f"Drop invalid dify json data: {block[5:]}")
+                    logger.warning(t("msg-cd6cd7ac", res=block[5:]))
                     continue
     # flush any remaining text
     buffer += decoder.decode(b"", final=True)
@@ -27,7 +28,7 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict, None]:
         try:
             yield json.loads(buffer[5:])
         except json.JSONDecodeError:
-            logger.warning(f"Drop invalid dify json data: {buffer[5:]}")
+            logger.warning(t("msg-cd6cd7ac", res=buffer[5:]))
 
 
 class DifyAPIClient:
@@ -55,7 +56,7 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout")
-        logger.info(f"chat_messages payload: {payload}")
+        logger.info(t("msg-3654a12d", payload=payload))
         async with self.session.post(
             url,
             json=payload,
@@ -65,7 +66,7 @@ class DifyAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"Dify /chat-messages 接口请求失败：{resp.status}. {text}",
+                    t("msg-8e865c52", res=resp.status, text=text),
                 )
             async for event in _stream_sse(resp):
                 yield event
@@ -84,7 +85,7 @@ class DifyAPIClient:
         payload = locals()
         payload.pop("self")
         payload.pop("timeout")
-        logger.info(f"workflow_run payload: {payload}")
+        logger.info(t("msg-2d7534b8", payload=payload))
         async with self.session.post(
             url,
             json=payload,
@@ -94,7 +95,7 @@ class DifyAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"Dify /workflows/run 接口请求失败：{resp.status}. {text}",
+                    t("msg-89918ba5", res=resp.status, text=text),
                 )
             async for event in _stream_sse(resp):
                 yield event
@@ -143,7 +144,7 @@ class DifyAPIClient:
                     content_type=mime_type or "application/octet-stream",
                 )
         else:
-            raise ValueError("file_path 和 file_data 不能同时为 None")
+            raise ValueError(t("msg-8bf17938"))
 
         async with self.session.post(
             url,
@@ -152,7 +153,7 @@ class DifyAPIClient:
         ) as resp:
             if resp.status != 200 and resp.status != 201:
                 text = await resp.text()
-                raise Exception(f"Dify 文件上传失败：{resp.status}. {text}")
+                raise Exception(t("msg-b6ee8f38", res=resp.status, text=text))
             return await resp.json()  # {"id": "xxx", ...}
 
     async def close(self) -> None:

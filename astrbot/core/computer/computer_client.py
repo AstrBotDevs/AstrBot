@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import shutil
 import uuid
@@ -35,11 +36,11 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             os.remove(zip_path)
         shutil.make_archive(zip_base, "zip", skills_root)
         remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
-        logger.info("Uploading skills bundle to sandbox...")
+        logger.info(t("msg-7cb974b8"))
         await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
         upload_result = await booter.upload_file(zip_path, str(remote_zip))
         if not upload_result.get("success", False):
-            raise RuntimeError("Failed to upload skills bundle to sandbox.")
+            raise RuntimeError(t("msg-130cf3e3"))
         # Use -n flag to never overwrite existing files, fallback to Python if unzip unavailable
         await booter.shell.exec(
             f"unzip -n {remote_zip} -d {SANDBOX_SKILLS_ROOT} || "
@@ -56,7 +57,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
             try:
                 os.remove(zip_path)
             except Exception:
-                logger.warning(f"Failed to remove temp skills zip: {zip_path}")
+                logger.warning(t("msg-99188d69", zip_path=zip_path))
 
 
 async def get_booter(
@@ -91,13 +92,13 @@ async def get_booter(
 
             client = BoxliteBooter()
         else:
-            raise ValueError(f"Unknown booter type: {booter_type}")
+            raise ValueError(t("msg-3f3c81da", booter_type=booter_type))
 
         try:
             await client.boot(uuid_str)
             await _sync_skills_to_sandbox(client)
         except Exception as e:
-            logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            logger.error(t("msg-e20cc33a", session_id=session_id, e=e))
             raise e
 
         session_booter[session_id] = client

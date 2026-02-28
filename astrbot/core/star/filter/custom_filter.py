@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from abc import ABCMeta, abstractmethod
 
 from astrbot.core.config import AstrBotConfig
@@ -9,12 +10,12 @@ from . import HandlerFilter
 class CustomFilterMeta(ABCMeta):
     def __and__(cls, other):
         if not issubclass(other, CustomFilter):
-            raise TypeError("Operands must be subclasses of CustomFilter.")
+            raise TypeError(t("msg-8f3eeb6e"))
         return CustomFilterAnd(cls(), other())
 
     def __or__(cls, other):
         if not issubclass(other, CustomFilter):
-            raise TypeError("Operands must be subclasses of CustomFilter.")
+            raise TypeError(t("msg-8f3eeb6e"))
         return CustomFilterOr(cls(), other())
 
 
@@ -39,7 +40,7 @@ class CustomFilterOr(CustomFilter):
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter class can only operate with other CustomFilter.",
+                t("msg-732ada95"),
             )
         self.filter1 = filter1
         self.filter2 = filter2
@@ -53,7 +54,7 @@ class CustomFilterAnd(CustomFilter):
         super().__init__()
         if not isinstance(filter1, (CustomFilter, CustomFilterAnd, CustomFilterOr)):
             raise ValueError(
-                "CustomFilter lass can only operate with other CustomFilter.",
+                t("msg-51c0c77d"),
             )
         self.filter1 = filter1
         self.filter2 = filter2

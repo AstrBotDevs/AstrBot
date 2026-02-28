@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import abc
 import typing as T
 from enum import Enum, auto
@@ -61,5 +62,5 @@ class BaseAgentRunner(T.Generic[TContext]):
     def _transition_state(self, new_state: AgentState) -> None:
         """Transition the agent state."""
         if self._state != new_state:
-            logger.debug(f"Agent state transition: {self._state} -> {new_state}")
+            logger.debug(t("msg-24eb2b08", res=self._state, new_state=new_state))
             self._state = new_state

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import warnings
 
 from astrbot.core.star.star import StarMetadata, star_map
@@ -39,8 +40,7 @@ def register_star(
     if not _warned_register_star:
         _warned_register_star = True
         warnings.warn(
-            "The 'register_star' decorator is deprecated and will be removed in a future version.",
-            DeprecationWarning,
+            t("msg-64619f8e"),
             stacklevel=2,
         )
 

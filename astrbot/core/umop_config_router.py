@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import fnmatch
 
 from astrbot.core.utils.shared_preferences import SharedPreferences
@@ -64,7 +65,7 @@ class UmopConfigRouter:
         for part in new_routing:
             if not isinstance(part, str) or len(part.split(":")) != 3:
                 raise ValueError(
-                    "umop keys must be strings in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
+                    t("msg-dedcfded"),
                 )
 
         self.umop_to_conf_id = new_routing
@@ -83,7 +84,7 @@ class UmopConfigRouter:
         """
         if not isinstance(umo, str) or len(umo.split(":")) != 3:
             raise ValueError(
-                "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
+                t("msg-8e3a16f3"),
             )
 
         self.umop_to_conf_id[umo] = conf_id
@@ -101,7 +102,7 @@ class UmopConfigRouter:
 
         if not isinstance(umo, str) or len(umo.split(":")) != 3:
             raise ValueError(
-                "umop must be a string in the format [platform_id]:[message_type]:[session_id], with optional wildcards * or empty for all",
+                t("msg-8e3a16f3"),
             )
 
         if umo in self.umop_to_conf_id:

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import datetime
 import json
 
@@ -51,7 +52,7 @@ async def migration_conversation_table(
         page=1,
         page_size=10000000,
     )
-    logger.info(f"迁移 {total_cnt} 条旧的会话数据到新的表中...")
+    logger.info(t("msg-7805b529", total_cnt=total_cnt))
 
     async with db_helper.get_db() as dbsession:
         dbsession: AsyncSession
@@ -60,7 +61,7 @@ async def migration_conversation_table(
                 if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
                     progress = int((idx + 1) / total_cnt * 100)
                     if progress % 10 == 0:
-                        logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
+                        logger.info(t("msg-6f232b73", progress=progress, res=idx + 1, total_cnt=total_cnt))
                 try:
                     conv = db_helper_v3.get_conversation_by_user_id(
                         user_id=conversation.get("user_id", "unknown"),
@@ -68,7 +69,7 @@ async def migration_conversation_table(
                     )
                     if not conv:
                         logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
+                            t("msg-6b1def31", conversation=conversation),
                         )
                         continue
                     if ":" not in conv.user_id:
@@ -92,10 +93,10 @@ async def migration_conversation_table(
                     dbsession.add(conv_v2)
                 except Exception as e:
                     logger.error(
-                        f"迁移旧会话 {conversation.get('cid', 'unknown')} 失败: {e}",
+                        t("msg-b008c93f", res=conversation.get('cid', 'unknown'), e=e),
                         exc_info=True,
                     )
-    logger.info(f"成功迁移 {total_cnt} 条旧的会话数据到新表。")
+    logger.info(t("msg-6ac6313b", total_cnt=total_cnt))
 
 
 async def migration_platform_table(
@@ -110,13 +111,13 @@ async def migration_platform_table(
         - datetime.datetime(2023, 4, 10, tzinfo=datetime.timezone.utc)
     ).total_seconds()
     offset_sec = int(secs_from_2023_4_10_to_now)
-    logger.info(f"迁移旧平台数据，offset_sec: {offset_sec} 秒。")
+    logger.info(t("msg-6b72e89b", offset_sec=offset_sec))
     stats = db_helper_v3.get_base_stats(offset_sec=offset_sec)
-    logger.info(f"迁移 {len(stats.platform)} 条旧的平台数据到新的表中...")
+    logger.info(t("msg-bdc90b84", res=len(stats.platform)))
     platform_stats_v3 = stats.platform
 
     if not platform_stats_v3:
-        logger.info("没有找到旧平台数据，跳过迁移。")
+        logger.info(t("msg-e6caca5c"))
         return
 
     first_time_stamp = platform_stats_v3[0].timestamp
@@ -133,7 +134,7 @@ async def migration_platform_table(
             for bucket_idx, bucket_end in enumerate(range(start_time, end_time, 3600)):
                 if bucket_idx % 500 == 0:
                     progress = int((bucket_idx + 1) / total_buckets * 100)
-                    logger.info(f"进度: {progress}% ({bucket_idx + 1}/{total_buckets})")
+                    logger.info(t("msg-1e824a79", progress=progress, res=bucket_idx + 1, total_buckets=total_buckets))
                 cnt = 0
                 while (
                     idx < len(platform_stats_v3)
@@ -171,10 +172,10 @@ async def migration_platform_table(
                     )
                 except Exception:
                     logger.error(
-                        f"迁移平台统计数据失败: {platform_id}, {platform_type}, 时间戳: {bucket_end}",
+                        t("msg-813384e2", platform_id=platform_id, platform_type=platform_type, bucket_end=bucket_end),
                         exc_info=True,
                     )
-    logger.info(f"成功迁移 {len(platform_stats_v3)} 条旧的平台数据到新表。")
+    logger.info(t("msg-27ab191d", res=len(platform_stats_v3)))
 
 
 async def migration_webchat_data(
@@ -189,7 +190,7 @@ async def migration_webchat_data(
         page=1,
         page_size=10000000,
     )
-    logger.info(f"迁移 {total_cnt} 条旧的 WebChat 会话数据到新的表中...")
+    logger.info(t("msg-8e6280ed", total_cnt=total_cnt))
 
     async with db_helper.get_db() as dbsession:
         dbsession: AsyncSession
@@ -198,7 +199,7 @@ async def migration_webchat_data(
                 if total_cnt > 0 and (idx + 1) % max(1, total_cnt // 10) == 0:
                     progress = int((idx + 1) / total_cnt * 100)
                     if progress % 10 == 0:
-                        logger.info(f"进度: {progress}% ({idx + 1}/{total_cnt})")
+                        logger.info(t("msg-6f232b73", progress=progress, res=idx + 1, total_cnt=total_cnt))
                 try:
                     conv = db_helper_v3.get_conversation_by_user_id(
                         user_id=conversation.get("user_id", "unknown"),
@@ -206,7 +207,7 @@ async def migration_webchat_data(
                     )
                     if not conv:
                         logger.info(
-                            f"未找到该条旧会话对应的具体数据: {conversation}, 跳过。",
+                            t("msg-6b1def31", conversation=conversation),
                         )
                         continue
                     if ":" in conv.user_id:
@@ -226,11 +227,11 @@ async def migration_webchat_data(
 
                 except Exception:
                     logger.error(
-                        f"迁移旧 WebChat 会话 {conversation.get('cid', 'unknown')} 失败",
+                        t("msg-cad66fe1", res=conversation.get('cid', 'unknown')),
                         exc_info=True,
                     )
 
-    logger.info(f"成功迁移 {total_cnt} 条旧的 WebChat 会话数据到新表。")
+    logger.info(t("msg-63748a46", total_cnt=total_cnt))
 
 
 async def migration_persona_data(
@@ -242,13 +243,13 @@ async def migration_persona_data(
     """
     v3_persona_config: list[dict] = astrbot_config.get("persona", [])
     total_personas = len(v3_persona_config)
-    logger.info(f"迁移 {total_personas} 个 Persona 配置到新表中...")
+    logger.info(t("msg-dfc93fa4", total_personas=total_personas))
 
     for idx, persona in enumerate(v3_persona_config):
         if total_personas > 0 and (idx + 1) % max(1, total_personas // 10) == 0:
             progress = int((idx + 1) / total_personas * 100)
             if progress % 10 == 0:
-                logger.info(f"进度: {progress}% ({idx + 1}/{total_personas})")
+                logger.info(t("msg-ff85e45c", progress=progress, res=idx + 1, total_personas=total_personas))
         try:
             begin_dialogs = persona.get("begin_dialogs", [])
             mood_imitation_dialogs = persona.get("mood_imitation_dialogs", [])
@@ -270,10 +271,10 @@ async def migration_persona_data(
                 begin_dialogs=begin_dialogs,
             )
             logger.info(
-                f"迁移 Persona {persona['name']}({persona_new.system_prompt[:30]}...) 到新表成功。",
+                t("msg-c346311e", res=persona['name'], res_2=persona_new.system_prompt[:30]),
             )
         except Exception as e:
-            logger.error(f"解析 Persona 配置失败：{e}")
+            logger.error(t("msg-b6292b94", e=e))
 
 
 async def migration_preferences(
@@ -293,7 +294,7 @@ async def migration_preferences(
         value = sp_v3.get(key)
         if value is not None:
             await sp.put_async("global", "global", key, value)
-            logger.info(f"迁移全局偏好设置 {key} 成功，值: {value}")
+            logger.info(t("msg-90e5039e", key=key, value=value))
 
     # 2. umo scope migration
     session_conversation = sp_v3.get("session_conversation", default={})
@@ -305,9 +306,9 @@ async def migration_preferences(
             platform_id = get_platform_id(platform_id_map, session.platform_name)
             session.platform_id = platform_id
             await sp.put_async("umo", str(session), "sel_conv_id", conversation_id)
-            logger.info(f"迁移会话 {umo} 的对话数据到新表成功，平台 ID: {platform_id}")
+            logger.info(t("msg-d538da1c", umo=umo, platform_id=platform_id))
         except Exception as e:
-            logger.error(f"迁移会话 {umo} 的对话数据失败: {e}", exc_info=True)
+            logger.error(t("msg-ee03c001", umo=umo, e=e), exc_info=True)
 
     session_service_config = sp_v3.get("session_service_config", default={})
     for umo, config in session_service_config.items():
@@ -320,9 +321,9 @@ async def migration_preferences(
 
             await sp.put_async("umo", str(session), "session_service_config", config)
 
-            logger.info(f"迁移会话 {umo} 的服务配置到新表成功，平台 ID: {platform_id}")
+            logger.info(t("msg-5c4339cd", umo=umo, platform_id=platform_id))
         except Exception as e:
-            logger.error(f"迁移会话 {umo} 的服务配置失败: {e}", exc_info=True)
+            logger.error(t("msg-4ce2a0b2", umo=umo, e=e), exc_info=True)
 
     session_variables = sp_v3.get("session_variables", default={})
     for umo, variables in session_variables.items():
@@ -334,7 +335,7 @@ async def migration_preferences(
             session.platform_id = platform_id
             await sp.put_async("umo", str(session), "session_variables", variables)
         except Exception as e:
-            logger.error(f"迁移会话 {umo} 的变量失败: {e}", exc_info=True)
+            logger.error(t("msg-2e62dab9", umo=umo, e=e), exc_info=True)
 
     session_provider_perf = sp_v3.get("session_provider_perf", default={})
     for umo, perf in session_provider_perf.items():
@@ -353,7 +354,7 @@ async def migration_preferences(
                     provider_id,
                 )
             logger.info(
-                f"迁移会话 {umo} 的提供商偏好到新表成功，平台 ID: {platform_id}",
+                t("msg-afbf819e", umo=umo, platform_id=platform_id),
             )
         except Exception as e:
-            logger.error(f"迁移会话 {umo} 的提供商偏好失败: {e}", exc_info=True)
+            logger.error(t("msg-959bb068", umo=umo, e=e), exc_info=True)

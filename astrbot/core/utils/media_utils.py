@@ -2,6 +2,7 @@
 
 提供音视频格式转换、时长获取等功能。
 """
+from astrbot.core.lang import t
 
 import asyncio
 import os
@@ -42,19 +43,19 @@ async def get_media_duration(file_path: str) -> int | None:
         if process.returncode == 0 and stdout:
             duration_seconds = float(stdout.decode().strip())
             duration_ms = int(duration_seconds * 1000)
-            logger.debug(f"[Media Utils] 获取媒体时长: {duration_ms}ms")
+            logger.debug(t("msg-2f697658", duration_ms=duration_ms))
             return duration_ms
         else:
-            logger.warning(f"[Media Utils] 无法获取媒体文件时长: {file_path}")
+            logger.warning(t("msg-52dfbc26", file_path=file_path))
             return None
 
     except FileNotFoundError:
         logger.warning(
-            "[Media Utils] ffprobe未安装或不在PATH中，无法获取媒体时长。请安装ffmpeg: https://ffmpeg.org/"
+            t("msg-486d493a")
         )
         return None
     except Exception as e:
-        logger.warning(f"[Media Utils] 获取媒体时长时出错: {e}")
+        logger.warning(t("msg-0f9c647b", e=e))
         return None
 
 
@@ -112,25 +113,25 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
                 try:
                     os.remove(output_path)
                     logger.debug(
-                        f"[Media Utils] 已清理失败的opus输出文件: {output_path}"
+                        t("msg-aff4c5f8", output_path=output_path)
                     )
                 except OSError as e:
-                    logger.warning(f"[Media Utils] 清理失败的opus输出文件时出错: {e}")
+                    logger.warning(t("msg-82427384", e=e))
 
             error_msg = stderr.decode() if stderr else "未知错误"
-            logger.error(f"[Media Utils] ffmpeg转换音频失败: {error_msg}")
-            raise Exception(f"ffmpeg conversion failed: {error_msg}")
+            logger.error(t("msg-215a0cfc", error_msg=error_msg))
+            raise Exception(t("msg-8cce258e", error_msg=error_msg))
 
-        logger.debug(f"[Media Utils] 音频转换成功: {audio_path} -> {output_path}")
+        logger.debug(t("msg-f0cfcb92", audio_path=audio_path, output_path=output_path))
         return output_path
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换音频格式。请安装ffmpeg: https://ffmpeg.org/"
+            t("msg-ead1395b")
         )
-        raise Exception("ffmpeg not found")
+        raise Exception(t("msg-5df3a5ee"))
     except Exception as e:
-        logger.error(f"[Media Utils] 转换音频格式时出错: {e}")
+        logger.error(t("msg-6322d4d2", e=e))
         raise
 
 
@@ -187,27 +188,27 @@ async def convert_video_format(
                 try:
                     os.remove(output_path)
                     logger.debug(
-                        f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}"
+                        t("msg-e125b1a5", output_format=output_format, output_path=output_path)
                     )
                 except OSError as e:
                     logger.warning(
-                        f"[Media Utils] 清理失败的{output_format}输出文件时出错: {e}"
+                        t("msg-5cf417e3", output_format=output_format, e=e)
                     )
 
             error_msg = stderr.decode() if stderr else "未知错误"
-            logger.error(f"[Media Utils] ffmpeg转换视频失败: {error_msg}")
-            raise Exception(f"ffmpeg conversion failed: {error_msg}")
+            logger.error(t("msg-3766cbb8", error_msg=error_msg))
+            raise Exception(t("msg-8cce258e", error_msg=error_msg))
 
-        logger.debug(f"[Media Utils] 视频转换成功: {video_path} -> {output_path}")
+        logger.debug(t("msg-77f68449", video_path=video_path, output_path=output_path))
         return output_path
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换视频格式。请安装ffmpeg: https://ffmpeg.org/"
+            t("msg-3fb20b91")
         )
-        raise Exception("ffmpeg not found")
+        raise Exception(t("msg-5df3a5ee"))
     except Exception as e:
-        logger.error(f"[Media Utils] 转换视频格式时出错: {e}")
+        logger.error(t("msg-696c4a46", e=e))
         raise
 
 
@@ -253,13 +254,13 @@ async def convert_audio_format(
                 try:
                     os.remove(output_path)
                 except OSError as e:
-                    logger.warning(f"[Media Utils] 清理失败的音频输出文件时出错: {e}")
+                    logger.warning(t("msg-98cc8fb8", e=e))
             error_msg = stderr.decode() if stderr else "未知错误"
-            raise Exception(f"ffmpeg conversion failed: {error_msg}")
-        logger.debug(f"[Media Utils] 音频转换成功: {audio_path} -> {output_path}")
+            raise Exception(t("msg-8cce258e", error_msg=error_msg))
+        logger.debug(t("msg-f0cfcb92", audio_path=audio_path, output_path=output_path))
         return output_path
     except FileNotFoundError:
-        raise Exception("ffmpeg not found")
+        raise Exception(t("msg-5df3a5ee"))
 
 
 async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
@@ -310,9 +311,9 @@ async def extract_video_cover(
                 try:
                     os.remove(output_path)
                 except OSError as e:
-                    logger.warning(f"[Media Utils] 清理失败的视频封面文件时出错: {e}")
+                    logger.warning(t("msg-3c27d5e8", e=e))
             error_msg = stderr.decode() if stderr else "未知错误"
-            raise Exception(f"ffmpeg extract cover failed: {error_msg}")
+            raise Exception(t("msg-072774ab", error_msg=error_msg))
         return output_path
     except FileNotFoundError:
-        raise Exception("ffmpeg not found")
+        raise Exception(t("msg-5df3a5ee"))

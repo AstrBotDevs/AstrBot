@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import re
 
@@ -21,11 +22,7 @@ class ProviderCommands:
         """记录不可达原因到日志。"""
         meta = provider.meta()
         logger.warning(
-            "Provider reachability check failed: id=%s type=%s code=%s reason=%s",
-            meta.id,
-            provider_capability_type.name if provider_capability_type else "unknown",
-            err_code,
-            err_reason,
+            t("msg-7717d729", res=meta.id, res_2=provider_capability_type.name if provider_capability_type else 'unknown', err_code=err_code, err_reason=err_reason),
         )
 
     async def _test_provider_capability(self, provider):
@@ -74,7 +71,7 @@ class ProviderCommands:
                 if all_providers:
                     await event.send(
                         MessageEventResult().message(
-                            "正在进行提供商可达性测试，请稍候..."
+                            t("msg-f4cfd3ab")
                         )
                     )
                 check_results = await asyncio.gather(
@@ -178,13 +175,13 @@ class ProviderCommands:
             if not reachability_check_enabled:
                 ret += "\n已跳过提供商可达性检测，如需检测请在配置文件中开启。"
 
-            event.set_result(MessageEventResult().message(ret))
+            event.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)))
         elif idx == "tts":
             if idx2 is None:
-                event.set_result(MessageEventResult().message("请输入序号。"))
+                event.set_result(MessageEventResult().message(t("msg-f3d8988e")))
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(MessageEventResult().message(t("msg-284759bb")))
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
             id_ = provider.meta().id
@@ -193,13 +190,13 @@ class ProviderCommands:
                 provider_type=ProviderType.TEXT_TO_SPEECH,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(MessageEventResult().message(t("msg-092d9956", id_=id_)))
         elif idx == "stt":
             if idx2 is None:
-                event.set_result(MessageEventResult().message("请输入序号。"))
+                event.set_result(MessageEventResult().message(t("msg-f3d8988e")))
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(MessageEventResult().message(t("msg-284759bb")))
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
             id_ = provider.meta().id
@@ -208,10 +205,10 @@ class ProviderCommands:
                 provider_type=ProviderType.SPEECH_TO_TEXT,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(MessageEventResult().message(t("msg-092d9956", id_=id_)))
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(MessageEventResult().message("无效的提供商序号。"))
+                event.set_result(MessageEventResult().message(t("msg-284759bb")))
                 return
             provider = self.context.get_all_providers()[idx - 1]
             id_ = provider.meta().id
@@ -220,9 +217,9 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            event.set_result(MessageEventResult().message(f"成功切换到 {id_}。"))
+            event.set_result(MessageEventResult().message(t("msg-092d9956", id_=id_)))
         else:
-            event.set_result(MessageEventResult().message("无效的参数。"))
+            event.set_result(MessageEventResult().message(t("msg-bf9eb668")))
 
     async def model_ls(
         self,
@@ -233,7 +230,7 @@ class ProviderCommands:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(t("msg-4cdd042d")),
             )
             return
         # 定义正则表达式匹配 API 密钥
@@ -262,7 +259,7 @@ class ProviderCommands:
             )
 
             ret = "".join(parts)
-            message.set_result(MessageEventResult().message(ret).use_t2i(False))
+            message.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)).use_t2i(False))
         elif isinstance(idx_or_name, int):
             models = []
             try:
@@ -273,7 +270,7 @@ class ProviderCommands:
                 )
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
-                message.set_result(MessageEventResult().message("模型序号错误。"))
+                message.set_result(MessageEventResult().message(t("msg-cb218e86")))
             else:
                 try:
                     new_model = models[idx_or_name - 1]
@@ -284,20 +281,20 @@ class ProviderCommands:
                     )
                 message.set_result(
                     MessageEventResult().message(
-                        f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
+                        t("msg-1756f199", res=prov.meta().id, res_2=prov.get_model()),
                     ),
                 )
         else:
             prov.set_model(idx_or_name)
             message.set_result(
-                MessageEventResult().message(f"切换模型到 {prov.get_model()}。"),
+                MessageEventResult().message(t("msg-4d4f587f", res=prov.get_model())),
             )
 
     async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
         prov = self.context.get_using_provider(message.unified_msg_origin)
         if not prov:
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(t("msg-4cdd042d")),
             )
             return
 
@@ -313,17 +310,17 @@ class ProviderCommands:
             parts.append("\n使用 /key <idx> 切换 Key。")
 
             ret = "".join(parts)
-            message.set_result(MessageEventResult().message(ret).use_t2i(False))
+            message.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)).use_t2i(False))
         else:
             keys_data = prov.get_keys()
             if index > len(keys_data) or index < 1:
-                message.set_result(MessageEventResult().message("Key 序号错误。"))
+                message.set_result(MessageEventResult().message(t("msg-584ca956")))
             else:
                 try:
                     new_key = keys_data[index - 1]
                     prov.set_key(new_key)
                 except BaseException as e:
                     message.set_result(
-                        MessageEventResult().message(f"切换 Key 未知错误: {e!s}"),
+                        MessageEventResult().message(t("msg-f52481b8", e=e)),
                     )
-                message.set_result(MessageEventResult().message("切换 Key 成功。"))
+                message.set_result(MessageEventResult().message(t("msg-7a156524")))

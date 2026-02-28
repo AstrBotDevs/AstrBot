@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from astrbot.core import logger
 
 from .platform_metadata import PlatformMetadata
@@ -28,7 +29,7 @@ def register_platform_adapter(
     def decorator(cls):
         if adapter_name in platform_cls_map:
             raise ValueError(
-                f"平台适配器 {adapter_name} 已经注册过了，可能发生了适配器命名冲突。",
+                t("msg-eecf0aa8", adapter_name=adapter_name),
             )
 
         # 添加必备选项
@@ -57,7 +58,7 @@ def register_platform_adapter(
         )
         platform_registry.append(pm)
         platform_cls_map[adapter_name] = cls
-        logger.debug(f"平台适配器 {adapter_name} 已注册")
+        logger.debug(t("msg-614a55eb", adapter_name=adapter_name))
         return cls
 
     return decorator
@@ -86,6 +87,6 @@ def unregister_platform_adapters_by_module(module_path_prefix: str) -> list[str]
         platform_registry.remove(pm)
         if pm.name in platform_cls_map:
             del platform_cls_map[pm.name]
-        logger.debug(f"平台适配器 {pm.name} 已注销 (来自模块 {pm.module_path})")
+        logger.debug(t("msg-bb06a88d", res=pm.name, res_2=pm.module_path))
 
     return unregistered

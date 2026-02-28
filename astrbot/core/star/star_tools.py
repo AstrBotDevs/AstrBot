@@ -16,6 +16,7 @@
 首先需要构造一个 AstrBotMessage 对象, 使用 create_message 方法
 然后使用 create_event 方法提交事件到指定平台
 """
+from astrbot.core.lang import t
 
 import inspect
 import os
@@ -79,7 +80,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         return await cls._context.send_message(session, message_chain)
 
     @classmethod
@@ -100,7 +101,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
             adapter = next(
@@ -108,7 +109,7 @@ class StarTools:
                 None,
             )
             if adapter is None:
-                raise ValueError("未找到适配器: AiocqhttpAdapter")
+                raise ValueError(t("msg-ca30e638"))
             await AiocqhttpMessageEvent.send_message(
                 bot=adapter.bot,
                 message_chain=message_chain,
@@ -116,7 +117,7 @@ class StarTools:
                 session_id=id,
             )
         else:
-            raise ValueError(f"不支持的平台: {platform}")
+            raise ValueError(t("msg-77ca0ccb", platform=platform))
 
     @classmethod
     async def create_message(
@@ -180,7 +181,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         platforms = cls._context.platform_manager.get_insts()
         if platform == "aiocqhttp":
             adapter = next(
@@ -188,7 +189,7 @@ class StarTools:
                 None,
             )
             if adapter is None:
-                raise ValueError("未找到适配器: AiocqhttpAdapter")
+                raise ValueError(t("msg-ca30e638"))
             event = AiocqhttpMessageEvent(
                 message_str=abm.message_str,
                 message_obj=abm,
@@ -199,7 +200,7 @@ class StarTools:
             event.is_wake = is_wake
             adapter.commit_event(event)
         else:
-            raise ValueError(f"不支持的平台: {platform}")
+            raise ValueError(t("msg-77ca0ccb", platform=platform))
 
     @classmethod
     def activate_llm_tool(cls, name: str) -> bool:
@@ -211,7 +212,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         return cls._context.activate_llm_tool(name)
 
     @classmethod
@@ -223,7 +224,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         return cls._context.deactivate_llm_tool(name)
 
     @classmethod
@@ -244,7 +245,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         cls._context.register_llm_tool(name, func_args, desc, func_obj)
 
     @classmethod
@@ -257,7 +258,7 @@ class StarTools:
 
         """
         if cls._context is None:
-            raise ValueError("StarTools not initialized")
+            raise ValueError(t("msg-397b7bf9"))
         cls._context.unregister_llm_tool(name)
 
     @classmethod
@@ -288,17 +289,17 @@ class StarTools:
                 module = inspect.getmodule(frame)
 
             if not module:
-                raise RuntimeError("无法获取调用者模块信息")
+                raise RuntimeError(t("msg-3ed67eb2"))
 
             metadata = star_map.get(module.__name__, None)
 
             if not metadata:
-                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
+                raise RuntimeError(t("msg-e77ccce6", res=module.__name__))
 
             plugin_name = metadata.name
 
         if not plugin_name:
-            raise ValueError("无法获取插件名称")
+            raise ValueError(t("msg-76ac38ee"))
 
         data_dir = Path(
             os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name),
@@ -308,7 +309,7 @@ class StarTools:
             data_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             if isinstance(e, PermissionError):
-                raise RuntimeError(f"无法创建目录 {data_dir}：权限不足") from e
-            raise RuntimeError(f"无法创建目录 {data_dir}：{e!s}") from e
+                raise RuntimeError(t("msg-751bfd23", data_dir=data_dir, e=e)) from e
+            raise RuntimeError(t("msg-68979283", data_dir=data_dir, e=e)) from e
 
         return data_dir.resolve()

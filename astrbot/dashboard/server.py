@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import hashlib
 import logging
@@ -135,7 +136,7 @@ class AstrBotDashboard:
             route, view_handler, methods, _ = api
             if route == f"/{subpath}" and request.method in methods:
                 return await view_handler(*args, **kwargs)
-        return jsonify(Response().error("未找到该路由").__dict__)
+        return jsonify(Response().error(t("msg-e88807e2")).__dict__)
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
@@ -143,7 +144,7 @@ class AstrBotDashboard:
         if request.path.startswith("/api/v1"):
             raw_key = self._extract_raw_api_key()
             if not raw_key:
-                r = jsonify(Response().error("Missing API key").__dict__)
+                r = jsonify(Response().error(t("msg-06151c57")).__dict__)
                 r.status_code = 401
                 return r
             key_hash = hashlib.pbkdf2_hmac(
@@ -154,7 +155,7 @@ class AstrBotDashboard:
             ).hex()
             api_key = await self.db.get_active_api_key_by_hash(key_hash)
             if not api_key:
-                r = jsonify(Response().error("Invalid API key").__dict__)
+                r = jsonify(Response().error(t("msg-88dca3cc")).__dict__)
                 r.status_code = 401
                 return r
 
@@ -164,7 +165,7 @@ class AstrBotDashboard:
                 scopes = list(ALL_OPEN_API_SCOPES)
             required_scope = self._get_required_open_api_scope(request.path)
             if required_scope and "*" not in scopes and required_scope not in scopes:
-                r = jsonify(Response().error("Insufficient API key scope").__dict__)
+                r = jsonify(Response().error(t("msg-fd267dc8")).__dict__)
                 r.status_code = 403
                 return r
 
@@ -186,7 +187,7 @@ class AstrBotDashboard:
         # 声明 JWT
         token = request.headers.get("Authorization")
         if not token:
-            r = jsonify(Response().error("未授权").__dict__)
+            r = jsonify(Response().error(t("msg-076fb3a3")).__dict__)
             r.status_code = 401
             return r
         token = token.removeprefix("Bearer ")
@@ -194,11 +195,11 @@ class AstrBotDashboard:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
             g.username = payload["username"]
         except jwt.ExpiredSignatureError:
-            r = jsonify(Response().error("Token 过期").__dict__)
+            r = jsonify(Response().error(t("msg-6f214cc1")).__dict__)
             r.status_code = 401
             return r
         except jwt.InvalidTokenError:
-            r = jsonify(Response().error("Token 无效").__dict__)
+            r = jsonify(Response().error(t("msg-5041dc95")).__dict__)
             r.status_code = 401
             return r
 
@@ -238,7 +239,7 @@ class AstrBotDashboard:
             # result 为 0 表示端口被占用
             return result == 0
         except Exception as e:
-            logger.warning(f"检查端口 {port} 时发生错误: {e!s}")
+            logger.warning(t("msg-1241c883", port=port, e=e))
             # 如果出现异常，保守起见认为端口可能被占用
             return True
 
@@ -270,7 +271,7 @@ class AstrBotDashboard:
             jwt_secret = os.urandom(32).hex()
             self.config["dashboard"]["jwt_secret"] = jwt_secret
             self.config.save_config()
-            logger.info("Initialized random JWT secret for dashboard.")
+            logger.info(t("msg-7c3ba89d"))
         self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
     def run(self):
@@ -298,13 +299,13 @@ class AstrBotDashboard:
         scheme = "https" if ssl_enable else "http"
 
         if not enable:
-            logger.info("WebUI 已被禁用")
+            logger.info(t("msg-a3adcb66"))
             return None
 
-        logger.info(f"正在启动 WebUI, 监听地址: {scheme}://{host}:{port}")
+        logger.info(t("msg-44832296", scheme=scheme, host=host, port=port))
         if host == "0.0.0.0":
             logger.info(
-                "提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）",
+                t("msg-3eed4a73"),
             )
 
         if host not in ["localhost", "127.0.0.1"]:
@@ -318,15 +319,10 @@ class AstrBotDashboard:
         if self.check_port_in_use(port):
             process_info = self.get_process_using_port(port)
             logger.error(
-                f"错误：端口 {port} 已被占用\n"
-                f"占用信息: \n           {process_info}\n"
-                f"请确保：\n"
-                f"1. 没有其他 AstrBot 实例正在运行\n"
-                f"2. 端口 {port} 没有被其他程序占用\n"
-                f"3. 如需使用其他端口，请修改配置文件",
+                t("msg-289a2fe8", port=port, process_info=process_info),
             )
 
-            raise Exception(f"端口 {port} 已被占用")
+            raise Exception(t("msg-6d1dfba8", port=port))
 
         parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
         parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
@@ -340,7 +336,7 @@ class AstrBotDashboard:
                 "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
             )
 
-        logger.info(display)
+        logger.info(t("msg-c0161c7c", display=display))
 
         # 配置 Hypercorn
         config = HyperConfig()
@@ -366,12 +362,12 @@ class AstrBotDashboard:
             key_path = Path(key_file).expanduser()
             if not cert_file or not key_file:
                 raise ValueError(
-                    "dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。",
+                    t("msg-ac4f2855"),
                 )
             if not cert_path.is_file():
-                raise ValueError(f"SSL 证书文件不存在: {cert_path}")
+                raise ValueError(t("msg-3e87aaf8", cert_path=cert_path))
             if not key_path.is_file():
-                raise ValueError(f"SSL 私钥文件不存在: {key_path}")
+                raise ValueError(t("msg-5ccf0a9f", key_path=key_path))
 
             config.certfile = str(cert_path.resolve())
             config.keyfile = str(key_path.resolve())
@@ -379,7 +375,7 @@ class AstrBotDashboard:
             if ca_certs:
                 ca_path = Path(ca_certs).expanduser()
                 if not ca_path.is_file():
-                    raise ValueError(f"SSL CA 证书文件不存在: {ca_path}")
+                    raise ValueError(t("msg-5e4aa3eb", ca_path=ca_path))
                 config.ca_certs = str(ca_path.resolve())
 
         # 根据配置决定是否禁用访问日志
@@ -395,4 +391,4 @@ class AstrBotDashboard:
 
     async def shutdown_trigger(self) -> None:
         await self.shutdown_event.wait()
-        logger.info("AstrBot WebUI 已经被优雅地关闭")
+        logger.info(t("msg-cb049eb2"))

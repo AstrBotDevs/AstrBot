@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from astrbot.core import logger
 
 from .entities import ProviderMetaData, ProviderType
@@ -23,7 +24,7 @@ def register_provider_adapter(
     def decorator(cls):
         if provider_type_name in provider_cls_map:
             raise ValueError(
-                f"检测到大模型提供商适配器 {provider_type_name} 已经注册，可能发生了大模型提供商适配器类型命名冲突。",
+                t("msg-19ddffc0", provider_type_name=provider_type_name),
             )
 
         # 添加必备选项
@@ -47,7 +48,7 @@ def register_provider_adapter(
         )
         provider_registry.append(pm)
         provider_cls_map[provider_type_name] = pm
-        logger.debug(f"服务提供商 Provider {provider_type_name} 已注册")
+        logger.debug(t("msg-7e134b0d", provider_type_name=provider_type_name))
         return cls
 
     return decorator

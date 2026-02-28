@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import traceback
 
@@ -41,14 +42,14 @@ class SkillsRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
     async def upload_skill(self):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode")
+                .error(t("msg-1198c327"))
                 .__dict__
             )
 
@@ -57,10 +58,10 @@ class SkillsRoute(Route):
             files = await request.files
             file = files.get("file")
             if not file:
-                return Response().error("Missing file").__dict__
+                return Response().error(t("msg-52430f2b")).__dict__
             filename = os.path.basename(file.filename or "skill.zip")
             if not filename.lower().endswith(".zip"):
-                return Response().error("Only .zip files are supported").__dict__
+                return Response().error(t("msg-2ad598f3")).__dict__
 
             temp_dir = get_astrbot_temp_path()
             os.makedirs(temp_dir, exist_ok=True)
@@ -76,20 +77,20 @@ class SkillsRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
         finally:
             if temp_path and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
                 except Exception:
-                    logger.warning(f"Failed to remove temp skill file: {temp_path}")
+                    logger.warning(t("msg-a11f2e1c", temp_path=temp_path))
 
     async def update_skill(self):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode")
+                .error(t("msg-1198c327"))
                 .__dict__
             )
         try:
@@ -97,27 +98,27 @@ class SkillsRoute(Route):
             name = data.get("name")
             active = data.get("active", True)
             if not name:
-                return Response().error("Missing skill name").__dict__
+                return Response().error(t("msg-67367a6d")).__dict__
             SkillManager().set_skill_active(name, bool(active))
             return Response().ok({"name": name, "active": bool(active)}).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
     async def delete_skill(self):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode")
+                .error(t("msg-1198c327"))
                 .__dict__
             )
         try:
             data = await request.get_json()
             name = data.get("name")
             if not name:
-                return Response().error("Missing skill name").__dict__
+                return Response().error(t("msg-67367a6d")).__dict__
             SkillManager().delete_skill(name)
             return Response().ok({"name": name}).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__

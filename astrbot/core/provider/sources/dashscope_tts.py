@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import base64
 import logging
@@ -43,7 +44,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         model = self.get_model()
         if not model:
-            raise RuntimeError("Dashscope TTS model is not configured.")
+            raise RuntimeError(t("msg-f23d2372"))
 
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
@@ -55,7 +56,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
 
         if not audio_bytes:
             raise RuntimeError(
-                "Audio synthesis failed, returned empty content. The model may not be supported or the service is unavailable.",
+                t("msg-74a7cc0a"),
             )
 
         path = os.path.join(temp_dir, f"dashscope_tts_{uuid.uuid4()}{ext}")
@@ -66,7 +67,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     def _call_qwen_tts(self, model: str, text: str):
         if MultiModalConversation is None:
             raise RuntimeError(
-                "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models.",
+                t("msg-bc8619d3"),
             )
 
         kwargs = {
@@ -78,7 +79,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         }
         if not self.voice:
             logging.warning(
-                "No voice specified for Qwen TTS model, using default 'Cherry'.",
+                t("msg-95bbf71e"),
             )
         return MultiModalConversation.call(**kwargs)
 
@@ -92,7 +93,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
             raise RuntimeError(
-                f"Audio synthesis failed for model '{model}'. {response}",
+                t("msg-3c35d2d0", model=model, response=response),
             )
         ext = ".wav"
         return audio_bytes, ext
@@ -108,7 +109,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             try:
                 return base64.b64decode(data_b64)
             except (ValueError, TypeError):
-                logging.exception("Failed to decode base64 audio data.")
+                logging.exception(t("msg-16dc3b00"))
                 return None
 
         url = getattr(audio_obj, "url", None)
@@ -130,7 +131,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             ):
                 return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
-            logging.exception(f"Failed to download audio from URL {url}: {e}")
+            logging.exception(t("msg-26603085", url=url, e=e))
             return None
 
     async def _synthesize_with_cosyvoice(
@@ -154,7 +155,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
             resp = synthesizer.get_response()
             if resp and isinstance(resp, dict):
                 raise RuntimeError(
-                    f"Audio synthesis failed for model '{model}'. {resp}".strip(),
+                    t("msg-78b9c276", res=f"Audio synthesis failed for model '{model}'. {resp}".strip()),
                 )
         return audio_bytes, ".wav"
 

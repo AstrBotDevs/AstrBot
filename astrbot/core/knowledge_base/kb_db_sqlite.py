@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -167,7 +168,7 @@ class KBSQLiteDatabase:
     async def close(self) -> None:
         """关闭数据库连接"""
         await self.engine.dispose()
-        logger.info(f"知识库数据库已关闭: {self.db_path}")
+        logger.info(t("msg-b850e5d8", res=self.db_path))
 
     async def get_kb_by_id(self, kb_id: str) -> KnowledgeBase | None:
         """根据 ID 获取知识库"""

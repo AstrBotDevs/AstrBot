@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from pathlib import Path
 from uuid import uuid4
 
@@ -121,7 +122,7 @@ class OpenApiRoute(Route):
             existing = await self.db.get_platform_session_by_id(session_id)
             if existing and existing.creator == username:
                 return None
-            logger.error("Failed to create chat session %s: %s", session_id, e)
+            logger.error(t("msg-855e0b38", session_id=session_id, e=e))
             return f"Failed to create session: {e}"
 
         return None
@@ -132,9 +133,9 @@ class OpenApiRoute(Route):
             post_data.get("username")
         )
         if username_err:
-            return Response().error(username_err).__dict__
+            return Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
         if not effective_username:
-            return Response().error("Invalid username").__dict__
+            return Response().error(t("msg-bc3b3977")).__dict__
 
         raw_session_id = post_data.get("session_id", post_data.get("conversation_id"))
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
@@ -146,11 +147,11 @@ class OpenApiRoute(Route):
             session_id,
         )
         if ensure_session_err:
-            return Response().error(ensure_session_err).__dict__
+            return Response().error(t("msg-2cd6e70f", ensure_session_err=ensure_session_err)).__dict__
 
         config_id, resolve_err = self._resolve_chat_config_id(post_data)
         if resolve_err:
-            return Response().error(resolve_err).__dict__
+            return Response().error(t("msg-53632573", resolve_err=resolve_err)).__dict__
 
         original_username = g.get("username", "guest")
         g.username = effective_username
@@ -165,15 +166,12 @@ class OpenApiRoute(Route):
                     )
             except Exception as e:
                 logger.error(
-                    "Failed to update chat config route for %s with %s: %s",
-                    umo,
-                    config_id,
-                    e,
+                    t("msg-d4765667", umo=umo, config_id=config_id, e=e),
                     exc_info=True,
                 )
                 return (
                     Response()
-                    .error(f"Failed to update chat config route: {e}")
+                    .error(t("msg-7c7a9f55", e=e))
                     .__dict__
                 )
         try:
@@ -189,7 +187,7 @@ class OpenApiRoute(Route):
             request.args.get("username")
         )
         if username_err:
-            return Response().error(username_err).__dict__
+            return Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
 
         assert username is not None  # for type checker
 
@@ -197,7 +195,7 @@ class OpenApiRoute(Route):
             page = int(request.args.get("page", 1))
             page_size = int(request.args.get("page_size", 20))
         except ValueError:
-            return Response().error("page and page_size must be integers").__dict__
+            return Response().error(t("msg-74bff366")).__dict__
 
         if page < 1:
             page = 1
@@ -258,18 +256,18 @@ class OpenApiRoute(Route):
         if isinstance(message_payload, str):
             text = message_payload.strip()
             if not text:
-                raise ValueError("Message is empty")
+                raise ValueError(t("msg-1507569c"))
             return MessageChain(chain=[Plain(text=text)])
 
         if not isinstance(message_payload, list):
-            raise ValueError("message must be a string or list")
+            raise ValueError(t("msg-1389e46a"))
 
         components = []
         has_content = False
 
         for part in message_payload:
             if not isinstance(part, dict):
-                raise ValueError("message part must be an object")
+                raise ValueError(t("msg-697561eb"))
 
             part_type = str(part.get("type", "")).strip()
             if part_type == "plain":
@@ -282,7 +280,7 @@ class OpenApiRoute(Route):
             if part_type == "reply":
                 message_id = part.get("message_id")
                 if message_id is None:
-                    raise ValueError("reply part missing message_id")
+                    raise ValueError(t("msg-2c4bf283"))
                 components.append(
                     Reply(
                         id=str(message_id),
@@ -293,7 +291,7 @@ class OpenApiRoute(Route):
                 continue
 
             if part_type not in {"image", "record", "file", "video"}:
-                raise ValueError(f"unsupported message part type: {part_type}")
+                raise ValueError(t("msg-60ddb927", part_type=part_type))
 
             has_content = True
             file_path: Path | None = None
@@ -304,16 +302,16 @@ class OpenApiRoute(Route):
             if attachment_id:
                 attachment = await self.db.get_attachment_by_id(str(attachment_id))
                 if not attachment:
-                    raise ValueError(f"attachment not found: {attachment_id}")
+                    raise ValueError(t("msg-cf310369", attachment_id=attachment_id))
                 file_path = Path(attachment.path)
                 resolved_type = attachment.type
                 if not filename:
                     filename = file_path.name
             else:
-                raise ValueError(f"{part_type} part missing attachment_id")
+                raise ValueError(t("msg-58e0b84a", part_type=part_type))
 
             if not file_path.exists():
-                raise ValueError(f"file not found: {file_path!s}")
+                raise ValueError(t("msg-e565c4b5", file_path=file_path))
 
             file_path_str = str(file_path.resolve())
             if resolved_type == "image":
@@ -328,7 +326,7 @@ class OpenApiRoute(Route):
                 )
 
         if not components or not has_content:
-            raise ValueError("Message content is empty (reply only is not allowed)")
+            raise ValueError(t("msg-c6ec40ff"))
 
         return MessageChain(chain=components)
 
@@ -338,14 +336,14 @@ class OpenApiRoute(Route):
         umo = post_data.get("umo")
 
         if message_payload is None:
-            return Response().error("Missing key: message").__dict__
+            return Response().error(t("msg-2b00f931")).__dict__
         if not umo:
-            return Response().error("Missing key: umo").__dict__
+            return Response().error(t("msg-a29d9adb")).__dict__
 
         try:
             session = MessageSesion.from_str(str(umo))
         except Exception as e:
-            return Response().error(f"Invalid umo: {e}").__dict__
+            return Response().error(t("msg-4990e908", e=e)).__dict__
 
         platform_id = session.platform_name
         platform_inst = next(
@@ -359,7 +357,7 @@ class OpenApiRoute(Route):
         if not platform_inst:
             return (
                 Response()
-                .error(f"Bot not found or not running for platform: {platform_id}")
+                .error(t("msg-45ac857c", platform_id=platform_id))
                 .__dict__
             )
 
@@ -372,8 +370,8 @@ class OpenApiRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(f"Open API send_message failed: {e}", exc_info=True)
-            return Response().error(f"Failed to send message: {e}").__dict__
+            logger.error(t("msg-ec0f0bd2", e=e), exc_info=True)
+            return Response().error(t("msg-d04109ab", e=e)).__dict__
 
     async def get_bots(self):
         bot_ids = []

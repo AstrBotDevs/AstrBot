@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 from dataclasses import dataclass
 
@@ -55,8 +56,7 @@ async def _collect_text_and_images_from_forward_ids(
 
     if pending:
         logger.warning(
-            "quoted_message_parser: stop fetching nested forward messages after %d hops",
-            max_fetch,
+            t("msg-80530653", max_fetch=max_fetch),
         )
 
     return texts, normalize_and_dedupe_strings(image_refs)

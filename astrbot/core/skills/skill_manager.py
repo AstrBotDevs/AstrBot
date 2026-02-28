@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import json
 import os
@@ -183,54 +184,54 @@ class SkillManager:
     def install_skill_from_zip(self, zip_path: str, *, overwrite: bool = True) -> str:
         zip_path_obj = Path(zip_path)
         if not zip_path_obj.exists():
-            raise FileNotFoundError(f"Zip file not found: {zip_path}")
+            raise FileNotFoundError(t("msg-ed9670ad", zip_path=zip_path))
         if not zipfile.is_zipfile(zip_path):
-            raise ValueError("Uploaded file is not a valid zip archive.")
+            raise ValueError(t("msg-73f9cf65"))
 
         with zipfile.ZipFile(zip_path) as zf:
             names = [name.replace("\\", "/") for name in zf.namelist()]
             file_names = [name for name in names if name and not name.endswith("/")]
             if not file_names:
-                raise ValueError("Zip archive is empty.")
+                raise ValueError(t("msg-69eb5f95"))
 
             top_dirs = {
                 PurePosixPath(name).parts[0] for name in file_names if name.strip()
             }
-            print(top_dirs)
+            print(t("msg-9e9abb4c", top_dirs=top_dirs))
             if len(top_dirs) != 1:
-                raise ValueError("Zip archive must contain a single top-level folder.")
+                raise ValueError(t("msg-20b8533f"))
             skill_name = next(iter(top_dirs))
             if skill_name in {".", "..", ""} or not _SKILL_NAME_RE.match(skill_name):
-                raise ValueError("Invalid skill folder name.")
+                raise ValueError(t("msg-1db1caf7"))
 
             for name in names:
                 if not name:
                     continue
                 if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
-                    raise ValueError("Zip archive contains absolute paths.")
+                    raise ValueError(t("msg-d7814054"))
                 parts = PurePosixPath(name).parts
                 if ".." in parts:
-                    raise ValueError("Zip archive contains invalid relative paths.")
+                    raise ValueError(t("msg-179bd10e"))
                 if parts and parts[0] != skill_name:
                     raise ValueError(
-                        "Zip archive contains unexpected top-level entries."
+                        t("msg-90f2904e")
                     )
 
             if (
                 f"{skill_name}/SKILL.md" not in file_names
                 and f"{skill_name}/skill.md" not in file_names
             ):
-                raise ValueError("SKILL.md not found in the skill folder.")
+                raise ValueError(t("msg-95775a4d"))
 
             with tempfile.TemporaryDirectory(dir=get_astrbot_temp_path()) as tmp_dir:
                 zf.extractall(tmp_dir)
                 src_dir = Path(tmp_dir) / skill_name
                 if not src_dir.exists():
-                    raise ValueError("Skill folder not found after extraction.")
+                    raise ValueError(t("msg-a4117c0b"))
                 dest_dir = Path(self.skills_root) / skill_name
                 if dest_dir.exists():
                     if not overwrite:
-                        raise FileExistsError("Skill already exists.")
+                        raise FileExistsError(t("msg-94041ef2"))
                     shutil.rmtree(dest_dir)
                 shutil.move(str(src_dir), str(dest_dir))
 

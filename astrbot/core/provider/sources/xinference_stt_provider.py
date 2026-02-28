@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import uuid
 
@@ -42,10 +43,10 @@ class ProviderXinferenceSTT(STTProvider):
 
     async def initialize(self) -> None:
         if self.api_key:
-            logger.info("Xinference STT: Using API key for authentication.")
+            logger.info(t("msg-4e31e089"))
             self.client = Client(self.base_url, api_key=self.api_key)
         else:
-            logger.info("Xinference STT: No API key provided.")
+            logger.info(t("msg-e291704e"))
             self.client = Client(self.base_url)
 
         try:
@@ -53,35 +54,35 @@ class ProviderXinferenceSTT(STTProvider):
             for uid, model_spec in running_models.items():
                 if model_spec.get("model_name") == self.model_name:
                     logger.info(
-                        f"Model '{self.model_name}' is already running with UID: {uid}",
+                        t("msg-b0d1e564", res=self.model_name, uid=uid),
                     )
                     self.model_uid = uid
                     break
 
             if self.model_uid is None:
                 if self.launch_model_if_not_running:
-                    logger.info(f"Launching {self.model_name} model...")
+                    logger.info(t("msg-16965859", res=self.model_name))
                     self.model_uid = await self.client.launch_model(
                         model_name=self.model_name,
                         model_type="audio",
                     )
-                    logger.info("Model launched.")
+                    logger.info(t("msg-7b1dfdd3"))
                 else:
                     logger.warning(
-                        f"Model '{self.model_name}' is not running and auto-launch is disabled. Provider will not be available.",
+                        t("msg-3fc7310e", res=self.model_name),
                     )
                     return
 
         except Exception as e:
-            logger.error(f"Failed to initialize Xinference model: {e}")
+            logger.error(t("msg-15f19a42", e=e))
             logger.debug(
-                f"Xinference initialization failed with exception: {e}",
+                t("msg-01af1651", e=e),
                 exc_info=True,
             )
 
     async def get_text(self, audio_url: str) -> str:
         if not self.model_uid or self.client is None or self.client.session is None:
-            logger.error("Xinference STT model is not initialized.")
+            logger.error(t("msg-42ed8558"))
             return ""
 
         audio_bytes = None
@@ -99,18 +100,18 @@ class ProviderXinferenceSTT(STTProvider):
                             audio_bytes = await resp.read()
                         else:
                             logger.error(
-                                f"Failed to download audio from {audio_url}, status: {resp.status}",
+                                t("msg-bbc43272", audio_url=audio_url, res=resp.status),
                             )
                             return ""
             elif os.path.exists(audio_url):
                 with open(audio_url, "rb") as f:
                     audio_bytes = f.read()
             else:
-                logger.error(f"File not found: {audio_url}")
+                logger.error(t("msg-f4e53d3d", audio_url=audio_url))
                 return ""
 
             if not audio_bytes:
-                logger.error("Audio bytes are empty.")
+                logger.error(t("msg-ebab7cac"))
                 return ""
 
             # 2. Check for conversion
@@ -128,7 +129,7 @@ class ProviderXinferenceSTT(STTProvider):
             # 3. Perform conversion if needed
             if conversion_type:
                 logger.info(
-                    f"Audio requires conversion ({conversion_type}), using temporary files..."
+                    t("msg-7fd63838", conversion_type=conversion_type)
                 )
                 temp_dir = get_astrbot_temp_path()
                 os.makedirs(temp_dir, exist_ok=True)
@@ -147,10 +148,10 @@ class ProviderXinferenceSTT(STTProvider):
                     f.write(audio_bytes)
 
                 if conversion_type == "silk":
-                    logger.info("Converting silk to wav ...")
+                    logger.info(t("msg-d03c4ede"))
                     await tencent_silk_to_wav(input_path, output_path)
                 elif conversion_type == "amr":
-                    logger.info("Converting amr to wav ...")
+                    logger.info(t("msg-79486689"))
                     await convert_to_pcm_wav(input_path, output_path)
 
                 with open(output_path, "rb") as f:
@@ -183,17 +184,17 @@ class ProviderXinferenceSTT(STTProvider):
                 if resp.status == 200:
                     result = await resp.json()
                     text = result.get("text", "")
-                    logger.debug(f"Xinference STT result: {text}")
+                    logger.debug(t("msg-c4305a5b", text=text))
                     return text
                 error_text = await resp.text()
                 logger.error(
-                    f"Xinference STT transcription failed with status {resp.status}: {error_text}",
+                    t("msg-d4241bd5", res=resp.status, error_text=error_text),
                 )
                 return ""
 
         except Exception as e:
-            logger.error(f"Xinference STT failed: {e}")
-            logger.debug(f"Xinference STT failed with exception: {e}", exc_info=True)
+            logger.error(t("msg-8efe4ef1", e=e))
+            logger.debug(t("msg-b1554c7c", e=e), exc_info=True)
             return ""
         finally:
             # 5. Cleanup
@@ -201,15 +202,15 @@ class ProviderXinferenceSTT(STTProvider):
                 try:
                     if os.path.exists(temp_file):
                         os.remove(temp_file)
-                        logger.debug(f"Removed temporary file: {temp_file}")
+                        logger.debug(t("msg-9d33941a", temp_file=temp_file))
                 except Exception as e:
-                    logger.error(f"Failed to remove temporary file {temp_file}: {e}")
+                    logger.error(t("msg-7dc5bc44", temp_file=temp_file, e=e))
 
     async def terminate(self) -> None:
         """关闭客户端会话"""
         if self.client:
-            logger.info("Closing Xinference STT client...")
+            logger.info(t("msg-31904a1c"))
             try:
                 await self.client.close()
             except Exception as e:
-                logger.error(f"Failed to close Xinference client: {e}", exc_info=True)
+                logger.error(t("msg-633a269f", e=e), exc_info=True)

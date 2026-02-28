@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import json
 import mimetypes
@@ -70,7 +71,7 @@ class ChatRoute(Route):
     async def get_file(self):
         filename = request.args.get("filename")
         if not filename:
-            return Response().error("Missing key: filename").__dict__
+            return Response().error(t("msg-a4a521ff")).__dict__
 
         try:
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
@@ -87,7 +88,7 @@ class ChatRoute(Route):
                     real_imgs_dir = os.path.realpath(self.legacy_img_dir)
 
             if not real_file_path.startswith(real_imgs_dir):
-                return Response().error("Invalid file path").__dict__
+                return Response().error(t("msg-c9746528")).__dict__
 
             filename_ext = os.path.splitext(filename)[1].lower()
             if filename_ext == ".wav":
@@ -97,18 +98,18 @@ class ChatRoute(Route):
             return await send_file(real_file_path)
 
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response().error(t("msg-3c2f6dee")).__dict__
 
     async def get_attachment(self):
         """Get attachment file by attachment_id."""
         attachment_id = request.args.get("attachment_id")
         if not attachment_id:
-            return Response().error("Missing key: attachment_id").__dict__
+            return Response().error(t("msg-e5b19b36")).__dict__
 
         try:
             attachment = await self.db.get_attachment_by_id(attachment_id)
             if not attachment:
-                return Response().error("Attachment not found").__dict__
+                return Response().error(t("msg-cfa38c4d")).__dict__
 
             file_path = attachment.path
             real_file_path = os.path.realpath(file_path)
@@ -116,13 +117,13 @@ class ChatRoute(Route):
             return await send_file(real_file_path, mimetype=attachment.mime_type)
 
         except (FileNotFoundError, OSError):
-            return Response().error("File access error").__dict__
+            return Response().error(t("msg-3c2f6dee")).__dict__
 
     async def post_file(self):
         """Upload a file and create an attachment record, return attachment_id."""
         post_data = await request.files
         if "file" not in post_data:
-            return Response().error("Missing key: file").__dict__
+            return Response().error(t("msg-377a7406")).__dict__
 
         file = post_data["file"]
         filename = file.filename or f"{uuid.uuid4()!s}"
@@ -149,7 +150,7 @@ class ChatRoute(Route):
         )
 
         if not attachment:
-            return Response().error("Failed to create attachment").__dict__
+            return Response().error(t("msg-bae87336")).__dict__
 
         filename = os.path.basename(attachment.path)
 
@@ -341,13 +342,13 @@ class ChatRoute(Route):
         if post_data is None:
             post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error(t("msg-5c531303")).__dict__
         if "message" not in post_data and "files" not in post_data:
-            return Response().error("Missing key: message or files").__dict__
+            return Response().error(t("msg-1c3efd8f")).__dict__
 
         if "session_id" not in post_data and "conversation_id" not in post_data:
             return (
-                Response().error("Missing key: session_id or conversation_id").__dict__
+                Response().error(t("msg-04588d0f")).__dict__
             )
 
         message = post_data["message"]
@@ -365,14 +366,14 @@ class ChatRoute(Route):
             if not has_content:
                 return (
                     Response()
-                    .error("Message content is empty (reply only is not allowed)")
+                    .error(t("msg-c6ec40ff"))
                     .__dict__
                 )
         elif not message:
-            return Response().error("Message are both empty").__dict__
+            return Response().error(t("msg-2c3fdeb9")).__dict__
 
         if not session_id:
-            return Response().error("session_id is empty").__dict__
+            return Response().error(t("msg-9bc95e22")).__dict__
 
         webchat_conv_id = session_id
 
@@ -409,10 +410,10 @@ class ChatRoute(Route):
                         except asyncio.TimeoutError:
                             continue
                         except asyncio.CancelledError:
-                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+                            logger.debug(t("msg-344a401b", username=username))
                             client_disconnected = True
                         except Exception as e:
-                            logger.error(f"WebChat stream error: {e}")
+                            logger.error(t("msg-6b54abec", e=e))
 
                         if not result:
                             continue
@@ -421,7 +422,7 @@ class ChatRoute(Route):
                             "message_id" in result
                             and result["message_id"] != message_id
                         ):
-                            logger.warning("webchat stream message_id mismatch")
+                            logger.warning(t("msg-53509ecb"))
                             continue
 
                         result_text = result["data"]
@@ -445,7 +446,7 @@ class ChatRoute(Route):
                         except Exception as e:
                             if not client_disconnected:
                                 logger.debug(
-                                    f"[WebChat] 用户 {username} 断开聊天长连接。 {e}"
+                                    t("msg-1211e857", username=username, e=e)
                                 )
                             client_disconnected = True
 
@@ -453,7 +454,7 @@ class ChatRoute(Route):
                             if not client_disconnected:
                                 await asyncio.sleep(0.05)
                         except asyncio.CancelledError:
-                            logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+                            logger.debug(t("msg-344a401b", username=username))
                             client_disconnected = True
 
                         # 累积消息部分
@@ -531,7 +532,7 @@ class ChatRoute(Route):
                                 )
                             except Exception as e:
                                 logger.exception(
-                                    f"Failed to extract web search refs: {e}",
+                                    t("msg-be34e848", e=e),
                                     exc_info=True,
                                 )
 
@@ -563,7 +564,7 @@ class ChatRoute(Route):
                             agent_stats = {}
                             refs = {}
             except BaseException as e:
-                logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
+                logger.exception(t("msg-80bbd0ff", e=e), exc_info=True)
             finally:
                 webchat_queue_mgr.remove_back_queue(message_id)
 
@@ -615,18 +616,18 @@ class ChatRoute(Route):
         """Stop active agent runs for a session."""
         post_data = await request.json
         if post_data is None:
-            return Response().error("Missing JSON body").__dict__
+            return Response().error(t("msg-5c531303")).__dict__
 
         session_id = post_data.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error(t("msg-dbf41bfc")).__dict__
 
         username = g.get("username", "guest")
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(t("msg-d922dfa3", session_id=session_id)).__dict__
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         message_type = (
             MessageType.GROUP_MESSAGE.value
@@ -645,15 +646,15 @@ class ChatRoute(Route):
         """Delete a Platform session and all its related data."""
         session_id = request.args.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error(t("msg-dbf41bfc")).__dict__
         username = g.get("username", "guest")
 
         # 验证会话是否存在且属于当前用户
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(t("msg-d922dfa3", session_id=session_id)).__dict__
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         # 删除该会话下的所有对话
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
@@ -683,9 +684,7 @@ class ChatRoute(Route):
             await self.umop_config_router.delete_route(unified_msg_origin)
         except ValueError as exc:
             logger.warning(
-                "Failed to delete UMO route %s during session cleanup: %s",
-                unified_msg_origin,
-                exc,
+                t("msg-e800fd14", unified_msg_origin=unified_msg_origin, exc=exc),
             )
 
         # 清理队列（仅对 webchat）
@@ -721,16 +720,16 @@ class ChatRoute(Route):
                     os.remove(attachment.path)
                 except OSError as e:
                     logger.warning(
-                        f"Failed to delete attachment file {attachment.path}: {e}"
+                        t("msg-44c45099", res=attachment.path, e=e)
                     )
         except Exception as e:
-            logger.warning(f"Failed to get attachments: {e}")
+            logger.warning(t("msg-f033d8ea", e=e))
 
         # 批量删除数据库记录
         try:
             await self.db.delete_attachments(attachment_ids)
         except Exception as e:
-            logger.warning(f"Failed to delete attachments: {e}")
+            logger.warning(t("msg-e6f655bd", e=e))
 
     async def new_session(self):
         """Create a new Platform session (default: webchat)."""
@@ -795,7 +794,7 @@ class ChatRoute(Route):
         """Get session information and message history by session_id."""
         session_id = request.args.get("session_id")
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error(t("msg-dbf41bfc")).__dict__
 
         # 获取会话信息以确定 platform_id
         session = await self.db.get_platform_session_by_id(session_id)
@@ -840,18 +839,18 @@ class ChatRoute(Route):
         display_name = post_data.get("display_name")
 
         if not session_id:
-            return Response().error("Missing key: session_id").__dict__
+            return Response().error(t("msg-dbf41bfc")).__dict__
         if display_name is None:
-            return Response().error("Missing key: display_name").__dict__
+            return Response().error(t("msg-a6ef3b67")).__dict__
 
         username = g.get("username", "guest")
 
         # 验证会话是否存在且属于当前用户
         session = await self.db.get_platform_session_by_id(session_id)
         if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
+            return Response().error(t("msg-d922dfa3", session_id=session_id)).__dict__
         if session.creator != username:
-            return Response().error("Permission denied").__dict__
+            return Response().error(t("msg-c52a1454")).__dict__
 
         # 更新 display_name
         await self.db.update_platform_session(

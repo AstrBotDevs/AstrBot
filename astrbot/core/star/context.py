@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import logging
 from asyncio import Queue
@@ -133,7 +134,7 @@ class Context:
         """
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
-            raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+            raise ProviderNotFoundError(t("msg-60eb9e43", chat_provider_id=chat_provider_id))
         llm_resp = await prov.text_chat(
             prompt=prompt,
             image_urls=image_urls,
@@ -194,7 +195,7 @@ class Context:
 
         prov = await self.provider_manager.get_provider_by_id(chat_provider_id)
         if not prov or not isinstance(prov, Provider):
-            raise ProviderNotFoundError(f"Provider {chat_provider_id} not found")
+            raise ProviderNotFoundError(t("msg-60eb9e43", chat_provider_id=chat_provider_id))
 
         agent_hooks = kwargs.get("agent_hooks") or BaseAgentRunHooks[AstrAgentContext]()
         agent_context = kwargs.get("agent_context")
@@ -245,7 +246,7 @@ class Context:
             pass
         llm_resp = agent_runner.get_final_llm_resp()
         if not llm_resp:
-            raise Exception("Agent did not produce a final LLM response")
+            raise Exception(t("msg-da70a6fb"))
         return llm_resp
 
     async def get_current_chat_provider_id(self, umo: str) -> str:
@@ -262,7 +263,7 @@ class Context:
         """
         prov = self.get_using_provider(umo)
         if not prov:
-            raise ProviderNotFoundError("Provider not found")
+            raise ProviderNotFoundError(t("msg-141151fe"))
         return prov.meta().id
 
     def get_registered_star(self, star_name: str) -> StarMetadata | None:
@@ -324,7 +325,7 @@ class Context:
         prov = self.provider_manager.inst_map.get(provider_id)
         if provider_id and not prov:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                t("msg-a5cb19c6", provider_id=provider_id)
             )
         return prov
 
@@ -365,7 +366,7 @@ class Context:
             return None
         if not isinstance(prov, Provider):
             raise ValueError(
-                f"该会话来源的对话模型（提供商）的类型不正确: {type(prov)}"
+                t("msg-2a44300b", res=type(prov))
             )
         return prov
 
@@ -386,7 +387,7 @@ class Context:
             umo=umo,
         )
         if prov and not isinstance(prov, TTSProvider):
-            raise ValueError("返回的 Provider 不是 TTSProvider 类型")
+            raise ValueError(t("msg-37c286ea"))
         return prov
 
     def get_using_stt_provider(self, umo: str | None = None) -> STTProvider | None:
@@ -406,7 +407,7 @@ class Context:
             umo=umo,
         )
         if prov and not isinstance(prov, STTProvider):
-            raise ValueError("返回的 Provider 不是 STTProvider 类型")
+            raise ValueError(t("msg-ff775f3b"))
         return prov
 
     def get_config(self, umo: str | None = None) -> AstrBotConfig:
@@ -458,7 +459,7 @@ class Context:
                 await platform.send_by_session(session, message_chain)
                 return True
         logger.warning(
-            f"cannot find platform for session {str(session)}, message not sent"
+            t("msg-fd8c8295", res=str(session))
         )
         return False
 
@@ -489,7 +490,7 @@ class Context:
             else:
                 tool.handler_module_path = module_path
             logger.info(
-                f"plugin(module_path {module_path}) added LLM tool: {tool.name}"
+                t("msg-2b806a28", module_path=module_path, res=tool.name)
             )
 
             if tool.name in tool_name:

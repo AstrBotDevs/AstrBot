@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from typing import cast
 
 from google import genai
@@ -33,7 +34,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         proxy = provider_config.get("proxy", "")
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
-            logger.info(f"[Gemini Embedding] 使用代理: {proxy}")
+            logger.info(t("msg-173efb0e", proxy=proxy))
 
         self.client = genai.Client(api_key=api_key, http_options=http_options).aio
 
@@ -56,7 +57,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             assert result.embeddings[0].values is not None
             return result.embeddings[0].values
         except APIError as e:
-            raise Exception(f"Gemini Embedding API请求失败: {e.message}")
+            raise Exception(t("msg-58a99789", res=e.message))
 
     async def get_embeddings(self, text: list[str]) -> list[list[float]]:
         """批量获取文本的嵌入"""
@@ -76,7 +77,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 embeddings.append(embedding.values)
             return embeddings
         except APIError as e:
-            raise Exception(f"Gemini Embedding API批量请求失败: {e.message}")
+            raise Exception(t("msg-5c4ea38e", res=e.message))
 
     def get_dim(self) -> int:
         """获取向量的维度"""

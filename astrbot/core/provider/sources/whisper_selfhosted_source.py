@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import os
 import uuid
@@ -32,13 +33,13 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
 
     async def initialize(self) -> None:
         loop = asyncio.get_event_loop()
-        logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
+        logger.info(t("msg-27fda50a"))
         self.model = await loop.run_in_executor(
             None,
             whisper.load_model,
             self.model_name,
         )
-        logger.info("Whisper 模型加载完成。")
+        logger.info(t("msg-4e70f563"))
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
@@ -67,12 +68,12 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             audio_url = path
 
         if not os.path.exists(audio_url):
-            raise FileNotFoundError(f"文件不存在: {audio_url}")
+            raise FileNotFoundError(t("msg-28cbbf07", audio_url=audio_url))
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
             is_silk = await self._is_silk_file(audio_url)
             if is_silk:
-                logger.info("Converting silk file to wav ...")
+                logger.info(t("msg-d98780e5"))
                 temp_dir = get_astrbot_temp_path()
                 output_path = os.path.join(
                     temp_dir,
@@ -82,7 +83,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
                 audio_url = output_path
 
         if not self.model:
-            raise RuntimeError("Whisper 模型未初始化")
+            raise RuntimeError(t("msg-e3e1215c"))
 
         result = await loop.run_in_executor(None, self.model.transcribe, audio_url)
         return cast(str, result["text"])

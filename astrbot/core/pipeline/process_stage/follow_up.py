@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import asyncio
 from dataclasses import dataclass
@@ -185,9 +186,7 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
         )
     )
     logger.info(
-        "Captured follow-up message for active agent run, umo=%s, order_seq=%s",
-        event.unified_msg_origin,
-        order_seq,
+        t("msg-12767505", res=event.unified_msg_origin, order_seq=order_seq),
     )
     return FollowUpCapture(
         umo=event.unified_msg_origin,

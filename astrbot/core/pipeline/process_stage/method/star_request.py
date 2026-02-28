@@ -1,4 +1,5 @@
 """本地 Agent 模式的 AstrBot 插件调用 Stage"""
+from astrbot.core.lang import t
 
 import traceback
 from collections.abc import AsyncGenerator
@@ -38,10 +39,10 @@ class StarRequestSubStage(Stage):
             md = star_map.get(handler.handler_module_path)
             if not md:
                 logger.warning(
-                    f"Cannot find plugin for given handler module path: {handler.handler_module_path}",
+                    t("msg-f0144031", res=handler.handler_module_path),
                 )
                 continue
-            logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
+            logger.debug(t("msg-1e8939dd", res=md.name, res_2=handler.handler_name))
             try:
                 wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
@@ -49,8 +50,8 @@ class StarRequestSubStage(Stage):
                 event.clear_result()  # 清除上一个 handler 的结果
             except Exception as e:
                 traceback_text = traceback.format_exc()
-                logger.error(traceback_text)
-                logger.error(f"Star {handler.handler_full_name} handle error: {e}")
+                logger.error(t("msg-6be73b5e", traceback_text=traceback_text))
+                logger.error(t("msg-d919bd27", res=handler.handler_full_name, e=e))
 
                 await call_event_hook(
                     event,
@@ -63,7 +64,7 @@ class StarRequestSubStage(Stage):
 
                 if not event.is_stopped() and event.is_at_or_wake_command:
                     ret = f":(\n\n在调用插件 {md.name} 的处理函数 {handler.handler_name} 时出现异常：{e}"
-                    event.set_result(MessageEventResult().message(ret))
+                    event.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)))
                     yield
                     event.clear_result()
 

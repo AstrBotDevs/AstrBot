@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import os
 from typing import Any, cast
@@ -95,7 +96,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                 else:
                     # disable passive sending, just store the chunks in
                     logger.debug(
-                        f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
+                        t("msg-fa7f7afc", res=len(plain_chunks))
                     )
                     self.message_out["cached_xml"] = plain_chunks
             elif isinstance(comp, Image):
@@ -105,12 +106,12 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                     try:
                         response = self.client.media.upload("image", f)
                     except Exception as e:
-                        logger.error(f"微信公众平台上传图片失败: {e}")
+                        logger.error(t("msg-59231e07", e=e))
                         await self.send(
-                            MessageChain().message(f"微信公众平台上传图片失败: {e}"),
+                            MessageChain().message(t("msg-59231e07", e=e)),
                         )
                         return
-                    logger.debug(f"微信公众平台上传图片返回: {response}")
+                    logger.debug(t("msg-d3968fc5", response=response))
 
                     if active_send_mode:
                         self.client.message.send_image(
@@ -136,14 +137,14 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         try:
                             response = self.client.media.upload("voice", f)
                         except Exception as e:
-                            logger.error(f"微信公众平台上传语音失败: {e}")
+                            logger.error(t("msg-7834b934", e=e))
                             await self.send(
                                 MessageChain().message(
-                                    f"微信公众平台上传语音失败: {e}"
+                                    t("msg-7834b934", e=e)
                                 ),
                             )
                             return
-                        logger.info(f"微信公众平台上传语音返回: {response}")
+                        logger.info(t("msg-4901d769", response=response))
 
                         if active_send_mode:
                             self.client.message.send_voice(
@@ -168,10 +169,10 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         try:
                             os.remove(record_path_amr)
                         except OSError as e:
-                            logger.warning(f"删除临时音频文件失败: {e}")
+                            logger.warning(t("msg-15e6381b", e=e))
 
             else:
-                logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
+                logger.warning(t("msg-60815f02", res=comp.type))
 
         await super().send(message)
 

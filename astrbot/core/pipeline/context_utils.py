@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import inspect
 import traceback
 import typing as T
@@ -36,7 +37,7 @@ async def call_handler(
     try:
         ready_to_call = handler(event, *args, **kwargs)
     except TypeError:
-        logger.error("处理函数参数不匹配，请检查 handler 的定义。", exc_info=True)
+        logger.error(t("msg-49f260d3"), exc_info=True)
 
     if not ready_to_call:
         return
@@ -60,7 +61,7 @@ async def call_handler(
                 # 如果这个异步生成器没有执行到 yield 分支
                 yield
         except Exception as e:
-            logger.error(f"Previous Error: {trace_}")
+            logger.error(t("msg-d7b4aa84", trace_=trace_))
             raise e
     elif inspect.iscoroutine(ready_to_call):
         # 如果只是一个协程, 直接执行
@@ -93,15 +94,15 @@ async def call_event_hook(
         try:
             assert inspect.iscoroutinefunction(handler.handler)
             logger.debug(
-                f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                t("msg-eb8619cb", res=hook_type.name, res_2=star_map[handler.handler_module_path].name, res_3=handler.handler_name),
             )
             await handler.handler(event, *args, **kwargs)
         except BaseException:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
         if event.is_stopped():
             logger.info(
-                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+                t("msg-add19f94", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
             )
             return True
 

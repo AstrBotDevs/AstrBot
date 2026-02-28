@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import json
 
 from astrbot import logger
@@ -21,7 +22,7 @@ async def persist_agent_history(
     try:
         history = json.loads(req.conversation.history or "[]")
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to parse conversation history: %s", exc)
+        logger.warning(t("msg-5e287ce4", exc=exc))
     history.append({"role": "user", "content": "Output your last task result below."})
     history.append({"role": "assistant", "content": summary_note})
     await conversation_manager.update_conversation(

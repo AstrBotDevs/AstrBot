@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import json
 import os
 import uuid
@@ -127,14 +128,14 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
                                         yield audio
                                 except json.JSONDecodeError:
                                     logger.warning(
-                                        "Failed to parse JSON data from SSE message",
+                                        t("msg-77c88c8a"),
                                     )
                                     continue
                         except ValueError:
                             buffer = buffer[-1024:]
 
         except aiohttp.ClientError as e:
-            raise Exception(f"MiniMax TTS API请求失败: {e!s}")
+            raise Exception(t("msg-7873b87b", e=e))
 
     async def _audio_play(self, audio_stream: AsyncIterator[str]) -> bytes:
         """解码数据流到 audio 比特流"""

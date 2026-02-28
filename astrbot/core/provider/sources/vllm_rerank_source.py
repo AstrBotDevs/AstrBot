@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import aiohttp
 
 from astrbot import logger
@@ -54,7 +55,7 @@ class VLLMRerankProvider(RerankProvider):
 
             if not results:
                 logger.warning(
-                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}",
+                    t("msg-6f160342", response_data=response_data),
                 )
 
             return [

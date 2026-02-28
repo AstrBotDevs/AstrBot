@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import uuid
 
@@ -74,7 +75,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             audio_url = path
 
         if not os.path.exists(audio_url):
-            raise FileNotFoundError(f"文件不存在: {audio_url}")
+            raise FileNotFoundError(t("msg-28cbbf07", audio_url=audio_url))
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
             file_format = await self._get_audio_format(audio_url)
@@ -89,12 +90,12 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 if file_format == "silk":
                     logger.info(
-                        "Converting silk file to wav using tencent_silk_to_wav..."
+                        t("msg-b335b8db")
                     )
                     await tencent_silk_to_wav(audio_url, output_path)
                 elif file_format == "amr":
                     logger.info(
-                        "Converting amr file to wav using convert_to_pcm_wav..."
+                        t("msg-68b5660f")
                     )
                     await convert_to_pcm_wav(audio_url, output_path)
 
@@ -110,7 +111,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             try:
                 os.remove(audio_url)
             except Exception as e:
-                logger.error(f"Failed to remove temp file {audio_url}: {e}")
+                logger.error(t("msg-cad3735e", audio_url=audio_url, e=e))
         return result.text
 
     async def terminate(self):

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import asyncio
 import logging
@@ -131,7 +132,7 @@ class QQOfficialPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
+        raise NotImplementedError(t("msg-8af45ba1"))
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
@@ -235,7 +236,7 @@ class QQOfficialPlatformAdapter(Platform):
             if isinstance(message, botpy.message.Message):
                 abm.group_id = message.channel_id
         else:
-            raise ValueError(f"Unknown message type: {message_type}")
+            raise ValueError(t("msg-8ebd1249", message_type=message_type))
         abm.self_id = "qq_official"
         return abm
 
@@ -247,4 +248,4 @@ class QQOfficialPlatformAdapter(Platform):
 
     async def terminate(self) -> None:
         await self.client.close()
-        logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")
+        logger.info(t("msg-c165744d"))

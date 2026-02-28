@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -20,7 +21,7 @@ class AgentRequestSubStage(Stage):
         for bwp in self.bot_wake_prefixs:
             if self.prov_wake_prefix.startswith(bwp):
                 logger.info(
-                    f"识别 LLM 聊天额外唤醒前缀 {self.prov_wake_prefix} 以机器人唤醒前缀 {bwp} 开头，已自动去除。",
+                    t("msg-3267978a", res=self.prov_wake_prefix, bwp=bwp),
                 )
                 self.prov_wake_prefix = self.prov_wake_prefix[len(bwp) :]
 
@@ -34,13 +35,13 @@ class AgentRequestSubStage(Stage):
     async def process(self, event: AstrMessageEvent) -> AsyncGenerator[None, None]:
         if not self.ctx.astrbot_config["provider_settings"]["enable"]:
             logger.debug(
-                "This pipeline does not enable AI capability, skip processing."
+                t("msg-97a4d573")
             )
             return
 
         if not await SessionServiceManager.should_process_llm_request(event):
             logger.debug(
-                f"The session {event.unified_msg_origin} has disabled AI capability, skipping processing."
+                t("msg-f1a11d2b", res=event.unified_msg_origin)
             )
             return
 
