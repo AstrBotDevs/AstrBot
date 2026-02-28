@@ -603,22 +603,23 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if not values_messages:
             return responses
 
+        new_messages: list[dict[str, T.Any]] = []
         if not state.baseline_initialized:
             state.baseline_initialized = True
             for idx, msg in enumerate(values_messages):
                 if not isinstance(msg, dict):
                     continue
+                new_messages.append(msg)
                 msg_id = get_message_id(msg)
                 if msg_id:
                     self._remember_seen_message_id(state, msg_id)
                     continue
                 state.no_id_message_fingerprints[idx] = self._fingerprint_message(msg)
-            return responses
-
-        new_messages = self._extract_new_messages_from_values(
-            values_messages,
-            state,
-        )
+        else:
+            new_messages = self._extract_new_messages_from_values(
+                values_messages,
+                state,
+            )
         latest_text = ""
         if new_messages:
             state.run_values_messages.extend(new_messages)
@@ -675,28 +676,30 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             state.clarification_text = maybe_clarification
         return response
 
-    def _resolve_final_output(self, state: _StreamState) -> tuple[MessageChain, bool]:
-        failures_only = False
-        final_chain = MessageChain()
-
-        # Clarification tool output should take precedence over partial AI/tool-call text.
+    def _select_final_chain(self, state: _StreamState) -> tuple[MessageChain, bool]:
         if state.clarification_text:
-            final_chain = MessageChain(chain=[Comp.Plain(state.clarification_text)])
-        else:
-            latest_ai_message = extract_latest_ai_message(state.run_values_messages)
-            if latest_ai_message:
-                final_chain = self._build_chain_from_ai_content(
-                    latest_ai_message.get("content"),
-                )
+            return MessageChain(chain=[Comp.Plain(state.clarification_text)]), False
 
-            if not final_chain.chain and state.latest_text:
-                final_chain = MessageChain(chain=[Comp.Plain(state.latest_text)])
+        latest_ai_message = extract_latest_ai_message(state.run_values_messages)
+        if latest_ai_message:
+            chain_from_values = self._build_chain_from_ai_content(
+                latest_ai_message.get("content"),
+            )
+            if chain_from_values.chain:
+                return chain_from_values, False
 
-            if not final_chain.chain:
-                failure_text = build_task_failure_summary(state.task_failures)
-                if failure_text:
-                    final_chain = MessageChain(chain=[Comp.Plain(failure_text)])
-                    failures_only = True
+        if state.latest_text:
+            return MessageChain(chain=[Comp.Plain(state.latest_text)]), False
+
+        failure_text = build_task_failure_summary(state.task_failures)
+        if failure_text:
+            return MessageChain(chain=[Comp.Plain(failure_text)]), True
+
+        return MessageChain(), False
+
+    def _resolve_final_output(self, state: _StreamState) -> tuple[MessageChain, bool]:
+        # Clarification and values/message-derived output share a single selection path.
+        final_chain, failures_only = self._select_final_chain(state)
 
         if not final_chain.chain:
             logger.warning("DeerFlow returned no text content in stream events.")
