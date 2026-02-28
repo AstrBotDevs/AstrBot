@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import typing as T
+from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from uuid import uuid4
@@ -29,6 +30,8 @@ else:
 class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     """DeerFlow Agent Runner via LangGraph HTTP API."""
 
+    _MAX_VALUES_HISTORY = 200
+
     @dataclass
     class _StreamState:
         streamed_text: str = ""
@@ -36,6 +39,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         clarification_text: str = ""
         task_failures: list[str] = field(default_factory=list)
         seen_message_ids: set[str] = field(default_factory=set)
+        seen_message_order: deque[str] = field(default_factory=deque)
         baseline_initialized: bool = False
         run_values_messages: list[dict[str, T.Any]] = field(default_factory=list)
         timed_out: bool = False
@@ -331,18 +335,28 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     def _extract_new_messages_from_values(
         self,
         values_messages: list[T.Any],
-        seen_message_ids: set[str],
+        state: _StreamState,
     ) -> list[dict[str, T.Any]]:
         new_messages: list[dict[str, T.Any]] = []
         for msg in values_messages:
             if not isinstance(msg, dict):
                 continue
             msg_id = self._get_message_id(msg)
-            if not msg_id or msg_id in seen_message_ids:
+            if not msg_id or msg_id in state.seen_message_ids:
                 continue
-            seen_message_ids.add(msg_id)
+            self._remember_seen_message_id(state, msg_id)
             new_messages.append(msg)
         return new_messages
+
+    def _remember_seen_message_id(self, state: _StreamState, msg_id: str) -> None:
+        if not msg_id or msg_id in state.seen_message_ids:
+            return
+
+        state.seen_message_ids.add(msg_id)
+        state.seen_message_order.append(msg_id)
+        while len(state.seen_message_order) > self._MAX_VALUES_HISTORY:
+            dropped = state.seen_message_order.popleft()
+            state.seen_message_ids.discard(dropped)
 
     def _extract_event_message_obj(self, data: T.Any) -> dict[str, T.Any] | None:
         msg_obj = data
@@ -552,16 +566,19 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             state.baseline_initialized = True
             for msg in values_messages:
                 msg_id = self._get_message_id(msg)
-                if msg_id:
-                    state.seen_message_ids.add(msg_id)
+                self._remember_seen_message_id(state, msg_id)
             return responses
 
         new_messages = self._extract_new_messages_from_values(
             values_messages,
-            state.seen_message_ids,
+            state,
         )
         if new_messages:
             state.run_values_messages.extend(new_messages)
+            if len(state.run_values_messages) > self._MAX_VALUES_HISTORY:
+                state.run_values_messages = state.run_values_messages[
+                    -self._MAX_VALUES_HISTORY :
+                ]
             latest_text = self._extract_latest_ai_text(state.run_values_messages)
             latest_clarification = self._extract_latest_clarification_text(
                 state.run_values_messages,
