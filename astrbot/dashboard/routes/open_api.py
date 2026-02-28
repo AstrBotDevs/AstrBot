@@ -481,7 +481,7 @@ class OpenApiRoute(Route):
                                 "type": "message_saved",
                                 "data": {
                                     "id": saved_record.id,
-                                    "created_at": saved_record.created_at.astimezone().isoformat(),
+                                    "created_at": saved_record.created_at.replace(tzinfo=timezone.utc).isoformat(),
                                 },
                                 "session_id": session_id,
                             }
@@ -579,8 +579,8 @@ class OpenApiRoute(Route):
                     "creator": session.creator,
                     "display_name": session.display_name,
                     "is_group": session.is_group,
-                    "created_at": session.created_at.astimezone().isoformat(),
-                    "updated_at": session.updated_at.astimezone().isoformat(),
+                    "created_at": session.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                    "updated_at": session.updated_at.replace(tzinfo=timezone.utc).isoformat(),
                 }
             )
 

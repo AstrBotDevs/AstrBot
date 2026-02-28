@@ -51,8 +51,8 @@ class ChatUIProjectRoute(Route):
                     "title": project.title,
                     "emoji": project.emoji,
                     "description": project.description,
-                    "created_at": project.created_at.astimezone().isoformat(),
-                    "updated_at": project.updated_at.astimezone().isoformat(),
+                    "created_at": project.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                    "updated_at": project.updated_at.replace(tzinfo=timezone.utc).isoformat(),
                 }
             )
             .__dict__
@@ -70,8 +70,8 @@ class ChatUIProjectRoute(Route):
                 "title": project.title,
                 "emoji": project.emoji,
                 "description": project.description,
-                "created_at": project.created_at.astimezone().isoformat(),
-                "updated_at": project.updated_at.astimezone().isoformat(),
+                "created_at": project.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                "updated_at": project.updated_at.replace(tzinfo=timezone.utc).isoformat(),
             }
             for project in projects
         ]
@@ -102,8 +102,8 @@ class ChatUIProjectRoute(Route):
                     "title": project.title,
                     "emoji": project.emoji,
                     "description": project.description,
-                    "created_at": project.created_at.astimezone().isoformat(),
-                    "updated_at": project.updated_at.astimezone().isoformat(),
+                    "created_at": project.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                    "updated_at": project.updated_at.replace(tzinfo=timezone.utc).isoformat(),
                 }
             )
             .__dict__
@@ -236,8 +236,8 @@ class ChatUIProjectRoute(Route):
                 "creator": session.creator,
                 "display_name": session.display_name,
                 "is_group": session.is_group,
-                "created_at": session.created_at.astimezone().isoformat(),
-                "updated_at": session.updated_at.astimezone().isoformat(),
+                "created_at": session.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                "updated_at": session.updated_at.replace(tzinfo=timezone.utc).isoformat(),
             }
             for session in sessions
         ]

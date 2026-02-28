@@ -58,8 +58,9 @@ class ConversationManager:
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
         """将 ConversationV2 对象转换为 Conversation 对象"""
-        created_at = int(conv_v2.created_at.timestamp())
-        updated_at = int(conv_v2.updated_at.timestamp())
+        from datetime import timezone
+        created_at = int(conv_v2.created_at.replace(tzinfo=timezone.utc).timestamp()) if conv_v2.created_at else 0
+        updated_at = int(conv_v2.updated_at.replace(tzinfo=timezone.utc).timestamp()) if conv_v2.updated_at else 0
         return Conversation(
             platform_id=conv_v2.platform_id,
             user_id=conv_v2.user_id,

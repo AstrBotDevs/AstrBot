@@ -621,7 +621,7 @@ class LiveChatRoute(Route):
                                 "type": "message_saved",
                                 "data": {
                                     "id": saved_record.id,
-                                    "created_at": saved_record.created_at.astimezone().isoformat(),
+                                    "created_at": saved_record.created_at.replace(tzinfo=timezone.utc).isoformat(),
                                 },
                             },
                         )

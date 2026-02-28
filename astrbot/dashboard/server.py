@@ -70,7 +70,19 @@ class AstrBotDashboard:
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        cast(DefaultJSONProvider, self.app.json).sort_keys = False
+        
+        from datetime import datetime, timezone
+        class AstrBotJSONProvider(DefaultJSONProvider):
+            def default(self, obj):
+                if isinstance(obj, datetime):
+                    if obj.tzinfo is None:
+                        # 默认为 UTC
+                        return obj.replace(tzinfo=timezone.utc).isoformat()
+                    return obj.isoformat()
+                return super().default(obj)
+                
+        self.app.json = AstrBotJSONProvider(self.app)
+        self.app.json.sort_keys = False
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
