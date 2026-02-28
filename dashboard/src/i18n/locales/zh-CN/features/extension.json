@@ -8,6 +8,17 @@
     "skills": "Skills",
     "handlersOperation": "管理行为"
   },
+  "titles": {
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
+  },
+  "failedPlugins": {
+    "title": "加载失败插件（{count}）",
+    "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
+    "columns": {
+      "plugin": "插件",
+      "error": "错误"
+    }
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
@@ -106,6 +117,8 @@
     "sourceExists": "该插件源已存在",
     "installPlugin": "安装插件",
     "randomPlugins": "🎲 随机插件",
+    "showRandomPlugins": "显示随机插件",
+    "hideRandomPlugins": "隐藏随机插件",
     "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {
@@ -174,7 +187,9 @@
     "refreshing": "正在刷新插件列表...",
     "refreshSuccess": "插件列表已刷新！",
     "refreshFailed": "刷新插件列表时发生错误",
+    "operationFailed": "操作失败",
     "reloadSuccess": "重载成功",
+    "reloadFailed": "重载失败",
     "updateSuccess": "更新成功!",
     "addSuccess": "添加成功!",
     "saveSuccess": "保存成功!",

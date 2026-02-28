@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.18.1"
+VERSION = "4.18.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -425,7 +425,15 @@ CONFIG_METADATA_2 = {
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
                     },
-                    # LINE's config is located in line_adapter.py
+                    "Line": {
+                        "id": "line",
+                        "type": "line",
+                        "enable": False,
+                        "channel_access_token": "",
+                        "channel_secret": "",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
+                    },
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
@@ -1463,6 +1471,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_embedding",
                         "provider": "openai",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.openai_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1476,6 +1485,7 @@ CONFIG_METADATA_2 = {
                         "type": "gemini_embedding",
                         "provider": "google",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.gemini_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -2192,9 +2202,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "proxy": {
-                        "description": "代理地址",
+                        "description": "provider_group.provider.proxy.description",
                         "type": "string",
-                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
+                        "hint": "provider_group.provider.proxy.hint",
                     },
                     "model": {
                         "description": "模型 ID",
