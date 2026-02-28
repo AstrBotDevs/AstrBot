@@ -305,6 +305,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             return prompt
 
         content: list[dict[str, T.Any]] = []
+        skipped_invalid_images = 0
         if prompt:
             content.append({"type": "text", "text": prompt})
 
@@ -319,15 +320,18 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 content.append({"type": "image_url", "image_url": {"url": url}})
                 continue
             if not self._is_likely_base64_image(url):
-                logger.warning(
-                    "Skip unsupported DeerFlow image input that is neither URL/data URI nor valid base64."
-                )
+                skipped_invalid_images += 1
                 continue
             content.append(
                 {
                     "type": "image_url",
                     "image_url": {"url": f"data:image/png;base64,{url}"},
                 },
+            )
+        if skipped_invalid_images:
+            logger.debug(
+                "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
+                skipped_invalid_images,
             )
         return content
 

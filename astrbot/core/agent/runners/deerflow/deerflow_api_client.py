@@ -92,17 +92,26 @@ class DeerFlowAPIClient:
         auth_header: str = "",
     ) -> None:
         self.api_base = api_base.rstrip("/")
-        self.session = ClientSession(trust_env=True)
+        self._session: ClientSession | None = None
+        self._closed = False
         self.headers: dict[str, str] = {}
         if auth_header:
             self.headers["Authorization"] = auth_header
         elif api_key:
             self.headers["Authorization"] = f"Bearer {api_key}"
 
+    def _get_session(self) -> ClientSession:
+        if self._closed:
+            raise RuntimeError("DeerFlowAPIClient is already closed.")
+        if self._session is None or self._session.closed:
+            self._session = ClientSession(trust_env=True)
+        return self._session
+
     async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
+        session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads"
         payload = {"metadata": {}}
-        async with self.session.post(
+        async with session.post(
             url,
             json=payload,
             headers=self.headers,
@@ -121,6 +130,7 @@ class DeerFlowAPIClient:
         payload: dict[str, Any],
         timeout: float = 120,
     ) -> AsyncGenerator[dict[str, Any], None]:
+        session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads/{thread_id}/runs/stream"
         logger.debug(f"deerflow stream_run payload: {payload}")
         # For long-running SSE streams, avoid aiohttp total timeout.
@@ -131,7 +141,7 @@ class DeerFlowAPIClient:
             sock_connect=min(timeout, 30),
             sock_read=timeout,
         )
-        async with self.session.post(
+        async with session.post(
             url,
             json=payload,
             headers={
@@ -150,12 +160,16 @@ class DeerFlowAPIClient:
                 yield event
 
     async def close(self) -> None:
-        if not self.session.closed:
-            await self.session.close()
+        self._closed = True
+        session = self._session
+        if session is not None and not session.closed:
+            await session.close()
+        self._session = None
 
     def __del__(self) -> None:
-        session = getattr(self, "session", None)
-        if session is None or session.closed:
+        session = getattr(self, "_session", None)
+        closed = bool(getattr(self, "_closed", False))
+        if closed or session is None or session.closed:
             return
         logger.warning(
             "DeerFlowAPIClient garbage collected with unclosed session; "
@@ -164,4 +178,4 @@ class DeerFlowAPIClient:
 
     @property
     def is_closed(self) -> bool:
-        return self.session.closed
+        return self._closed
