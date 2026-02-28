@@ -32,6 +32,8 @@
 <a href="https://blog.astrbot.app/">博客</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路线图</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">问题提交</a>
+<a href="mailto:community@astrbot.app">Email</a>
+
 </div>
 
 AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack、等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
@@ -71,8 +73,11 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 ### 一键部署
 
+对于想快速体验 AstrBot 的用户，我们推荐使用 `uv` 一键部署方式 ⚡️：
+
 ```bash
 uv tool install astrbot
+astrbot init # 仅首次执行此命令以初始化环境
 astrbot
 ```
 
@@ -80,17 +85,19 @@ astrbot
 
 ### Docker 部署
 
-推荐使用 Docker / Docker Compose 方式部署 AstrBot。
+对于希望获得更稳定、更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
 
 请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
 
 ### 在 雨云 上部署
 
-AstrBot 已由雨云官方上架至云应用平台，可一键部署。
+对于希望一键部署 AstrBot 且不想自行管理服务器的用户，我们推荐使用雨云的一键云部署服务 ☁️：
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### 桌面客户端（Tauri）
+
+对于希望在桌面部署 AstrBot、以 AstrBot ChatUI 为主要使用方式、较少使用 AstrBot 插件的用户，我们推荐使用 AstrBot App：
 
 桌面应用仓库 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
@@ -98,7 +105,11 @@ AstrBot 已由雨云官方上架至云应用平台，可一键部署。
 
 ### 启动器一键部署（AstrBot Launcher）
 
-快速部署和多开方案，实现环境隔离，进入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 仓库，在 Releases 页最新版本下找到对应的系统安装包安装即可。
+对于希望快速部署并实现环境隔离多开的用户，我们推荐使用 AstrBot Launcher：
+
+进入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 仓库，在 Releases 页最新版本下找到对应的系统安装包安装即可。
+
+一个快速部署和多开方案，实现环境隔离。
 
 ### 在 Replit 上部署
 

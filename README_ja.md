@@ -33,6 +33,7 @@
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">ロードマップ</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue</a>
+<a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
 AstrBot は、主要なインスタントメッセージングアプリと統合できるオープンソースのオールインワン Agent チャットボットプラットフォームです。個人、開発者、チームに信頼性が高くスケーラブルな会話型 AI インフラストラクチャを提供します。パーソナル AI コンパニオン、インテリジェントカスタマーサービス、オートメーションアシスタント、エンタープライズナレッジベースなど、AstrBot を使用すると、IM プラットフォームのワークフロー内で本番環境対応の AI アプリケーションを迅速に構築できます。
@@ -72,8 +73,11 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 
 ### ワンクリックデプロイ
 
+AstrBot を素早く試したいユーザーには、`uv` を使ったワンクリックデプロイをおすすめします ⚡️:
+
 ```bash
 uv tool install astrbot
+astrbot init # 初回のみ実行して環境を初期化します
 astrbot
 ```
 
@@ -81,17 +85,19 @@ astrbot
 
 ### Docker デプロイ
 
-AstrBot のデプロイには Docker / Docker Compose の利用を推奨します。
+より安定した本番向けのデプロイを求めるユーザーには、Docker / Docker Compose で AstrBot をデプロイすることをおすすめします。
 
 公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
 
 ### 雨云でのデプロイ
 
-AstrBot は雨云公式によりクラウドアプリケーションプラットフォームに公開され、ワンクリックでデプロイ可能です。
+サーバー管理をせずに AstrBot をワンクリックでデプロイしたいユーザーには、雨云のワンクリッククラウドデプロイサービスをおすすめします ☁️:
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### デスクトップクライアント（Tauri）
+
+デスクトップで AstrBot を使いたいユーザーで、主に AstrBot ChatUI を利用し、AstrBot プラグインの利用頻度が低い場合は、AstrBot App の利用をおすすめします:
 
 デスクトップアプリのリポジトリ [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
@@ -99,7 +105,11 @@ AstrBot は雨云公式によりクラウドアプリケーションプラット
 
 ### ランチャーによるワンクリックデプロイ（AstrBot Launcher）
 
-高速デプロイとマルチインスタンスに対応し、環境分離も実現します。[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリの Releases ページから、最新バージョンの対応インストールパッケージを選んで導入してください。
+高速デプロイと環境分離されたマルチインスタンス運用を求めるユーザーには、AstrBot Launcher の利用をおすすめします:
+
+[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリにアクセスし、最新リリースからお使いの OS 向けパッケージをインストールしてください。
+
+高速デプロイと環境分離されたマルチインスタンス運用を実現できます。
 
 ### Replit でのデプロイ
 

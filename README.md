@@ -33,6 +33,7 @@
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">Roadmap</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">Issue Tracker</a>
+<a href="mailto:community@astrbot.app">Email Support</a>
 </div>
 
 AstrBot is an open-source all-in-one Agent chatbot platform that integrates with mainstream instant messaging apps. It provides reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether you're building a personal AI companion, intelligent customer service, automation assistant, or enterprise knowledge base, AstrBot enables you to quickly build production-ready AI applications within your IM platform workflows.
@@ -72,8 +73,11 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 
 ### One-Click Deployment
 
+For users who want to quickly experience AstrBot, we recommend using the one-click deployment method with `uv` ⚡️:
+
 ```bash
 uv tool install astrbot
+astrbot init # Only execute this command for the first time to initialize the environment
 astrbot
 ```
 
@@ -81,17 +85,19 @@ astrbot
 
 ### Docker Deployment
 
-We recommend deploying AstrBot using Docker / Docker Compose.
+For users who want a more stable and production-ready deployment, we recommend using Docker / Docker Compose to deploy AstrBot.
 
 Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
 ### Deploy on RainYun
 
-AstrBot has been officially listed on RainYun's cloud application platform with one-click deployment.
+For users who want to deploy AstrBot with one-click and don't want to manage the server, we recommend using RainYun's one-click cloud deployment service ☁️:
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### Desktop Application (Tauri)
+
+For users who want to deploy AstrBot on their desktop, primarily using AstrBot ChatUI, rarely use AstrBot plugins, we recommend using the AstrBot App:
 
 Desktop repository: [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
 
@@ -99,7 +105,11 @@ Supports multiple system architectures, direct package installation, and out-of-
 
 ### One-Click Launcher Deployment (AstrBot Launcher)
 
-A quick deployment and multi-instance solution with environment isolation. Visit the [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) repository and install the package for your OS from the latest release.
+For users who want a quick deployment and multi-instance solution with environment isolation, we recommend using the AstrBot Launcher:
+
+Visit the [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) repository and install the package for your OS from the latest release.
+
+A quick deployment and multi-instance solution with environment isolation. 
 
 ### Deploy on Replit
 

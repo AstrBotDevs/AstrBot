@@ -33,6 +33,7 @@
 <a href="https://blog.astrbot.app/">Blog</a> ｜
 <a href="https://astrbot.featurebase.app/roadmap">路線圖</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/issues">問題回報</a>
+<a href="mailto:community@astrbot.app">Email</a>
 </div>
 
 AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主流即時通訊軟體，為個人、開發者和團隊打造可靠、可擴展的對話式智慧基礎設施。無論是個人 AI 夥伴、智慧客服、自動化助手，還是企業知識庫，AstrBot 都能在您的即時通訊軟體平台的工作流程中快速構建生產可用的 AI 應用程式。
@@ -72,8 +73,11 @@ AstrBot 是一個開源的一站式 Agent 聊天機器人平台，可接入主�
 
 ### 一鍵部署
 
+對於想快速體驗 AstrBot 的使用者，我們推薦使用 `uv` 一鍵部署方式 ⚡️：
+
 ```bash
 uv tool install astrbot
+astrbot init # 僅首次執行此命令以初始化環境
 astrbot
 ```
 
@@ -81,17 +85,19 @@ astrbot
 
 ### Docker 部署
 
-推薦使用 Docker / Docker Compose 方式部署 AstrBot。
+對於希望獲得更穩定、更適合正式環境部署方式的使用者，我們推薦使用 Docker / Docker Compose 部署 AstrBot。
 
 請參閱官方文件 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
 ### 在雨雲上部署
 
-AstrBot 已由雨雲官方上架至雲端應用程式平台，可一鍵部署。
+對於希望一鍵部署 AstrBot 且不想自行管理伺服器的使用者，我們推薦使用雨雲的一鍵雲端部署服務 ☁️：
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### 桌面客戶端（Tauri）
+
+對於希望在桌面部署 AstrBot、以 AstrBot ChatUI 為主要使用方式、較少使用 AstrBot 外掛的使用者，我們推薦使用 AstrBot App：
 
 桌面應用倉庫 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
 
@@ -99,7 +105,11 @@ AstrBot 已由雨雲官方上架至雲端應用程式平台，可一鍵部署。
 
 ### 啟動器一鍵部署（AstrBot Launcher）
 
-快速部署和多開方案，實現環境隔離，進入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 倉庫，在 Releases 頁最新版本下找到對應的系統安裝包安裝即可。
+對於希望快速部署並實現環境隔離多開的使用者，我們推薦使用 AstrBot Launcher：
+
+進入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 倉庫，在 Releases 頁最新版本下找到對應的系統安裝包安裝即可。
+
+一個快速部署和多開方案，實現環境隔離。
 
 ### 在 Replit 上部署
 
