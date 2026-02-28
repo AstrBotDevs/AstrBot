@@ -9,7 +9,6 @@ from typing import Any
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
@@ -132,6 +131,83 @@ class ProviderOpenAIOfficial(Provider):
                 if isinstance(item, dict) and item.get("type") == "image_url":
                     return True
         return False
+
+    async def _fallback_to_text_only_and_retry(
+        self,
+        payloads: dict,
+        context_query: list,
+        chosen_key: str,
+        available_api_keys: list[str],
+        func_tool: ToolSet | None,
+        reason: str,
+        *,
+        image_fallback_used: bool = False,
+    ) -> tuple:
+        logger.warning(
+            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
+            reason,
+        )
+        new_contexts = await self._remove_image_from_context(context_query)
+        payloads["messages"] = new_contexts
+        return (
+            False,
+            chosen_key,
+            available_api_keys,
+            payloads,
+            new_contexts,
+            func_tool,
+            image_fallback_used,
+        )
+
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
+        """创建带代理的 HTTP 客户端"""
+        proxy = provider_config.get("proxy", "")
+        return create_proxy_client("OpenAI", proxy)
+
+    def __init__(self, provider_config, provider_settings) -> None:
+        super().__init__(provider_config, provider_settings)
+        self.chosen_api_key = None
+        self.api_keys: list = super().get_keys()
+        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
+        self.timeout = provider_config.get("timeout", 120)
+        self.custom_headers = provider_config.get("custom_headers", {})
+        if isinstance(self.timeout, str):
+            self.timeout = int(self.timeout)
+
+        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
+            self.custom_headers = None
+        else:
+            for key in self.custom_headers:
+                self.custom_headers[key] = str(self.custom_headers[key])
+
+        if "api_version" in provider_config:
+            # Using Azure OpenAI API
+            self.client = AsyncAzureOpenAI(
+                api_key=self.chosen_api_key,
+                api_version=provider_config.get("api_version", None),
+                default_headers=self.custom_headers,
+                base_url=provider_config.get("api_base", ""),
+                timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
+            )
+        else:
+            # Using OpenAI Official API
+            self.client = AsyncOpenAI(
+                api_key=self.chosen_api_key,
+                base_url=provider_config.get("api_base", None),
+                default_headers=self.custom_headers,
+                timeout=self.timeout,
+                http_client=self._create_http_client(provider_config),
+            )
+
+        self.default_params = inspect.signature(
+            self.client.chat.completions.create,
+        ).parameters.keys()
+
+        model = provider_config.get("model", "unknown")
+        self.set_model(model)
+
+        self.reasoning_key = "reasoning_content"
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
@@ -284,85 +360,7 @@ class ProviderOpenAIOfficial(Provider):
             output=completion_tokens,
         )
 
-    async def _fallback_to_text_only_and_retry(
-        self,
-        payloads: dict,
-        context_query: list,
-        chosen_key: str,
-        available_api_keys: list[str],
-        func_tool: ToolSet | None,
-        reason: str,
-        *,
-        image_fallback_used: bool = False,
-    ) -> tuple:
-        logger.warning(
-            "检测到图片请求失败（%s），已移除图片并重试（保留文本内容）。",
-            reason,
-        )
-        new_contexts = await self._remove_image_from_context(context_query)
-        payloads["messages"] = new_contexts
-        return (
-            False,
-            chosen_key,
-            available_api_keys,
-            payloads,
-            new_contexts,
-            func_tool,
-            image_fallback_used,
-        )
-
-    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
-        proxy = provider_config.get("proxy", "")
-        return create_proxy_client("OpenAI", proxy)
-
-    def __init__(self, provider_config, provider_settings) -> None:
-        super().__init__(provider_config, provider_settings)
-        self.chosen_api_key = None
-        self.api_keys: list = super().get_keys()
-        self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
-        self.timeout = provider_config.get("timeout", 120)
-        self.custom_headers = provider_config.get("custom_headers", {})
-        if isinstance(self.timeout, str):
-            self.timeout = int(self.timeout)
-
-        if not isinstance(self.custom_headers, dict) or not self.custom_headers:
-            self.custom_headers = None
-        else:
-            for key in self.custom_headers:
-                self.custom_headers[key] = str(self.custom_headers[key])
-
-        if "api_version" in provider_config:
-            # Using Azure OpenAI API
-            self.client = AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=provider_config.get("api_version", None),
-                default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
-        else:
-            # Using OpenAI Official API
-            self.client = AsyncOpenAI(
-                api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
-                default_headers=self.custom_headers,
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
-
-        self.default_params = inspect.signature(
-            self.client.chat.completions.create,
-        ).parameters.keys()
-
-        model = provider_config.get("model", "unknown")
-        self.set_model(model)
-
-        self.reasoning_key = "reasoning_content"
-
-    @staticmethod
-    def _normalize_content(raw_content: Any, strip: bool = True) -> str:
+    def _normalize_content(self, raw_content: Any, strip: bool = True) -> str:
         """Normalize content from various formats to plain string.
 
         Some LLM providers return content as list[dict] format
