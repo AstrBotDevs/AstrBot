@@ -1,10 +1,14 @@
 import asyncio
 import re
+from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
+
+if TYPE_CHECKING:
+    from astrbot.core.provider.provider import Provider
 
 
 class ProviderCommands:
@@ -43,6 +47,25 @@ class ProviderCommands:
                 provider, provider_capability_type, err_code, err_reason
             )
             return False, err_code, err_reason
+
+    async def _find_provider_for_model(
+        self, model_name: str, exclude_provider_id: str | None = None
+    ) -> tuple["Provider" | None, str | None]:
+        """在所有 LLM 提供商中查找包含指定模型的提供商。返回 (provider, provider_id) 或 (None, None)。"""
+        all_providers = self.context.get_all_providers()
+        results = await asyncio.gather(
+            *[p.get_models() for p in all_providers],
+            return_exceptions=True,
+        )
+        for provider, result in zip(all_providers, results):
+            if isinstance(result, BaseException):
+                continue
+            provider_id = provider.meta().id
+            if exclude_provider_id and provider_id == exclude_provider_id:
+                continue
+            if model_name in result:
+                return provider, provider_id
+        return None, None
 
     async def provider(
         self,
@@ -258,7 +281,7 @@ class ProviderCommands:
             curr_model = prov.get_model() or "无"
             parts.append(f"\n当前模型: [{curr_model}]")
             parts.append(
-                "\nTips: 使用 /model <模型名/编号>，即可实时更换模型。如目标模型不存在于上表，请输入模型名。"
+                "\nTips: 使用 /model <模型名/编号> 切换模型。输入模型名时可自动跨提供商查找并切换；跨提供商也可使用 /provider 切换。"
             )
 
             ret = "".join(parts)
@@ -278,20 +301,58 @@ class ProviderCommands:
                 try:
                     new_model = models[idx_or_name - 1]
                     prov.set_model(new_model)
+                    message.set_result(
+                        MessageEventResult().message(
+                            f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
+                        ),
+                    )
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message("切换模型未知错误: " + str(e)),
                     )
+        else:
+            # 字符串：模型名，需智能解析是否跨提供商
+            model_name = idx_or_name
+            umo = message.unified_msg_origin
+            curr_provider_id = prov.meta().id
+
+            # 1. 检查当前提供商
+            models = []
+            try:
+                models = await prov.get_models()
+            except BaseException:
+                models = []
+            if model_name in models:
+                prov.set_model(model_name)
                 message.set_result(
                     MessageEventResult().message(
-                        f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
+                        f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{model_name}]",
                     ),
                 )
-        else:
-            prov.set_model(idx_or_name)
-            message.set_result(
-                MessageEventResult().message(f"切换模型到 {prov.get_model()}。"),
+                return
+
+            # 2. 在其他提供商中查找
+            target_prov, target_id = await self._find_provider_for_model(
+                model_name, exclude_provider_id=curr_provider_id
             )
+            if target_prov and target_id:
+                await self.context.provider_manager.set_provider(
+                    provider_id=target_id,
+                    provider_type=ProviderType.CHAT_COMPLETION,
+                    umo=umo,
+                )
+                target_prov.set_model(model_name)
+                message.set_result(
+                    MessageEventResult().message(
+                        f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
+                    ),
+                )
+            else:
+                message.set_result(
+                    MessageEventResult().message(
+                        f"模型 [{model_name}] 未在任何已配置的提供商中找到。请使用 /provider 切换到目标提供商，或确认模型名正确。",
+                    ),
+                )
 
     async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
         prov = self.context.get_using_provider(message.unified_msg_origin)
