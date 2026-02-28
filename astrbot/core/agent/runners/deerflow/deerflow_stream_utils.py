@@ -77,6 +77,20 @@ def extract_latest_ai_text(messages: Iterable[T.Any]) -> str:
     return ""
 
 
+def extract_latest_ai_message(messages: Iterable[T.Any]) -> dict[str, T.Any] | None:
+    if isinstance(messages, (list, tuple)):
+        iterable = reversed(messages)
+    else:
+        iterable = reversed(list(messages))
+
+    for msg in iterable:
+        if not isinstance(msg, dict):
+            continue
+        if is_ai_message(msg):
+            return msg
+    return None
+
+
 def is_clarification_tool_message(message: dict[str, T.Any]) -> bool:
     msg_type = str(message.get("type", "")).lower()
     tool_name = str(message.get("name", "")).lower()

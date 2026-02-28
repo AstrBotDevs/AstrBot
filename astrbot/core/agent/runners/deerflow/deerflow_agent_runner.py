@@ -26,10 +26,12 @@ from .deerflow_stream_utils import (
     build_task_failure_summary,
     extract_ai_delta_from_event_data,
     extract_clarification_from_event_data,
+    extract_latest_ai_message,
     extract_latest_ai_text,
     extract_latest_clarification_text,
     extract_messages_from_values_data,
     extract_task_failures_from_custom_event,
+    extract_text,
     get_message_id,
 )
 
@@ -423,6 +425,92 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         )
         return messages
 
+    def _image_component_from_url(self, url: T.Any) -> Comp.Image | None:
+        if not isinstance(url, str):
+            return None
+
+        normalized = url.strip()
+        if not normalized:
+            return None
+
+        if normalized.startswith(("http://", "https://")):
+            try:
+                return Comp.Image.fromURL(normalized)
+            except Exception:
+                return None
+
+        if not normalized.startswith("data:"):
+            return None
+
+        header, sep, payload = normalized.partition(",")
+        if not sep:
+            return None
+        if ";base64" not in header.lower():
+            return None
+
+        compact_payload = payload.replace("\n", "").replace("\r", "").strip()
+        if not compact_payload:
+            return None
+        try:
+            base64.b64decode(compact_payload, validate=True)
+        except Exception:
+            return None
+        return Comp.Image.fromBase64(compact_payload)
+
+    def _append_components_from_content(
+        self,
+        content: T.Any,
+        components: list[Comp.BaseMessageComponent],
+    ) -> None:
+        if isinstance(content, str):
+            if content:
+                components.append(Comp.Plain(content))
+            return
+
+        if isinstance(content, list):
+            for item in content:
+                self._append_components_from_content(item, components)
+            return
+
+        if not isinstance(content, dict):
+            return
+
+        item_type = str(content.get("type", "")).lower()
+        if item_type == "text" and isinstance(content.get("text"), str):
+            text = content["text"]
+            if text:
+                components.append(Comp.Plain(text))
+            return
+
+        if item_type == "image_url":
+            image_payload = content.get("image_url")
+            image_url: T.Any = image_payload
+            if isinstance(image_payload, dict):
+                image_url = image_payload.get("url")
+            image_comp = self._image_component_from_url(image_url)
+            if image_comp is not None:
+                components.append(image_comp)
+            return
+
+        if "content" in content:
+            self._append_components_from_content(content.get("content"), components)
+            return
+
+        kwargs = content.get("kwargs")
+        if isinstance(kwargs, dict) and "content" in kwargs:
+            self._append_components_from_content(kwargs.get("content"), components)
+
+    def _build_chain_from_ai_content(self, content: T.Any) -> MessageChain:
+        components: list[Comp.BaseMessageComponent] = []
+        self._append_components_from_content(content, components)
+        if components:
+            return MessageChain(chain=components)
+
+        fallback_text = extract_text(content)
+        if fallback_text:
+            return MessageChain(chain=[Comp.Plain(fallback_text)])
+        return MessageChain()
+
     def _build_runtime_context(self, thread_id: str) -> dict[str, T.Any]:
         runtime_context: dict[str, T.Any] = {
             "thread_id": thread_id,
@@ -538,23 +626,35 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             state.clarification_text = maybe_clarification
         return response
 
-    def _resolve_final_text(self, state: _StreamState) -> tuple[str, bool]:
+    def _resolve_final_output(self, state: _StreamState) -> tuple[MessageChain, bool]:
         failures_only = False
+        final_chain = MessageChain()
+
         # Clarification tool output should take precedence over partial AI/tool-call text.
         if state.clarification_text:
-            final_text = state.clarification_text
+            final_chain = MessageChain(chain=[Comp.Plain(state.clarification_text)])
         else:
-            final_text = extract_latest_ai_text(state.run_values_messages)
-            if not final_text:
-                final_text = state.latest_text
-            if not final_text:
-                final_text = build_task_failure_summary(state.task_failures)
-                failures_only = bool(final_text)
+            latest_ai_message = extract_latest_ai_message(state.run_values_messages)
+            if latest_ai_message:
+                final_chain = self._build_chain_from_ai_content(
+                    latest_ai_message.get("content"),
+                )
 
-        if not final_text:
+            if not final_chain.chain and state.latest_text:
+                final_chain = MessageChain(chain=[Comp.Plain(state.latest_text)])
+
+            if not final_chain.chain:
+                failure_text = build_task_failure_summary(state.task_failures)
+                if failure_text:
+                    final_chain = MessageChain(chain=[Comp.Plain(failure_text)])
+                    failures_only = True
+
+        if not final_chain.chain:
             logger.warning("DeerFlow returned no text content in stream events.")
-            final_text = "DeerFlow returned an empty response."
-        return final_text, failures_only
+            final_chain = MessageChain(
+                chain=[Comp.Plain("DeerFlow returned an empty response.")],
+            )
+        return final_chain, failures_only
 
     async def _execute_deerflow_request(self):
         prompt = self.req.prompt or ""
@@ -605,20 +705,38 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         except (asyncio.TimeoutError, TimeoutError):
             state.timed_out = True
 
-        final_text, failures_only = self._resolve_final_text(state)
+        final_chain, failures_only = self._resolve_final_output(state)
         if state.timed_out:
             timeout_note = (
                 f"DeerFlow stream timed out after {self.timeout}s. "
                 "Returning partial result."
             )
-            final_text = (
-                f"{final_text}\n\n{timeout_note}" if final_text else timeout_note
-            )
+            if final_chain.chain and isinstance(final_chain.chain[-1], Comp.Plain):
+                last_text = final_chain.chain[-1].text
+                final_chain.chain[-1].text = (
+                    f"{last_text}\n\n{timeout_note}" if last_text else timeout_note
+                )
+            else:
+                final_chain.chain.append(Comp.Plain(timeout_note))
+
+        if self.streaming:
+            non_plain_components = [
+                component
+                for component in final_chain.chain
+                if not isinstance(component, Comp.Plain)
+            ]
+            if non_plain_components:
+                yield AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(
+                        chain=MessageChain(chain=non_plain_components),
+                    ),
+                )
+
         is_error = state.timed_out or failures_only
         role = "err" if is_error else "assistant"
 
-        chain = MessageChain(chain=[Comp.Plain(final_text)])
-        self.final_llm_resp = LLMResponse(role=role, result_chain=chain)
+        self.final_llm_resp = LLMResponse(role=role, result_chain=final_chain)
         self._transition_state(AgentState.DONE)
 
         try:
@@ -628,7 +746,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         yield AgentResponse(
             type="llm_result",
-            data=AgentResponseData(chain=chain),
+            data=AgentResponseData(chain=final_chain),
         )
 
     @override
