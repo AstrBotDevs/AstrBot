@@ -85,6 +85,12 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], No
 
 
 class DeerFlowAPIClient:
+    """HTTP client for DeerFlow LangGraph API.
+
+    Lifecycle is explicitly managed by callers (runner/stage). `__del__` is only a
+    fallback diagnostic and must not be relied on for cleanup.
+    """
+
     def __init__(
         self,
         api_base: str = "http://127.0.0.1:2026",
@@ -106,6 +112,17 @@ class DeerFlowAPIClient:
         if self._session is None or self._session.closed:
             self._session = ClientSession(trust_env=True)
         return self._session
+
+    async def __aenter__(self) -> "DeerFlowAPIClient":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> None:
+        await self.close()
 
     async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
         session = self._get_session()
@@ -173,7 +190,7 @@ class DeerFlowAPIClient:
             return
         logger.warning(
             "DeerFlowAPIClient garbage collected with unclosed session; "
-            "explicit close() should be called by runner lifecycle."
+            "explicit close() should be called by runner lifecycle (or `async with`)."
         )
 
     @property

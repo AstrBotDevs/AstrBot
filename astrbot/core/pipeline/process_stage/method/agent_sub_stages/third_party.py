@@ -45,6 +45,7 @@ AGENT_RUNNER_TYPE_KEY = {
     "dashscope": "dashscope_agent_runner_provider_id",
     "deerflow": "deerflow_agent_runner_provider_id",
 }
+THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 
 
 async def run_third_party_agent(
@@ -247,7 +248,7 @@ class ThirdPartyAgentSubStage(Stage):
                     ):
                         if runner_output.is_error:
                             stream_has_runner_error = True
-                            event.set_extra("_third_party_runner_error", True)
+                            event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
                         if runner_output.chain:
                             yield runner_output.chain
 
@@ -263,7 +264,10 @@ class ThirdPartyAgentSubStage(Stage):
                         is_runner_error = (
                             stream_has_runner_error or final_resp.role == "err"
                         )
-                        event.set_extra("_third_party_runner_error", is_runner_error)
+                        event.set_extra(
+                            THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
+                            is_runner_error,
+                        )
                         event.set_result(
                             MessageEventResult(
                                 chain=final_resp.result_chain.chain or [],
@@ -300,7 +304,10 @@ class ThirdPartyAgentSubStage(Stage):
                             if fallback_is_error
                             else ResultContentType.LLM_RESULT
                         )
-                        event.set_extra("_third_party_runner_error", fallback_is_error)
+                        event.set_extra(
+                            THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
+                            fallback_is_error,
+                        )
                         event.set_result(
                             MessageEventResult(
                                 chain=merged_chain,
@@ -318,7 +325,7 @@ class ThirdPartyAgentSubStage(Stage):
                     else ResultContentType.LLM_RESULT
                 )
                 event.set_extra(
-                    "_third_party_runner_error",
+                    THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY,
                     final_resp.role == "err",
                 )
                 event.set_result(
