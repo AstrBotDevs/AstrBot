@@ -302,8 +302,9 @@ class ProviderCommands:
             try:
                 models = await prov.get_models()
             except BaseException as e:
+                err_msg = api_key_pattern.sub("key=***", str(e))
                 message.set_result(
-                    MessageEventResult().message("获取模型列表失败: " + str(e)),
+                    MessageEventResult().message("获取模型列表失败: " + err_msg),
                 )
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
@@ -318,9 +319,11 @@ class ProviderCommands:
                         ),
                     )
                 except BaseException as e:
+                    err_msg = api_key_pattern.sub("key=***", str(e))
                     message.set_result(
-                        MessageEventResult().message("切换模型未知错误: " + str(e)),
+                        MessageEventResult().message("切换模型未知错误: " + err_msg),
                     )
+                    return
         else:
             # 字符串：模型名，需智能解析是否跨提供商
             model_name = idx_or_name
@@ -331,7 +334,7 @@ class ProviderCommands:
             models = []
             try:
                 models = await prov.get_models()
-            except BaseException as e:
+            except BaseException:
                 models = []
             if model_name in models:
                 prov.set_model(model_name)
