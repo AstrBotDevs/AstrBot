@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
@@ -50,6 +49,16 @@ THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
 
 
+def _coerce_positive_int(value: object, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        return default
+    return coerced if coerced > 0 else default
+
+
 def _set_runner_error_extra(event: "AstrMessageEvent", is_error: bool) -> None:
     event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_error)
 
@@ -91,7 +100,7 @@ async def run_third_party_agent(
     runner: "BaseAgentRunner",
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
-) -> AsyncGenerator["_ThirdPartyRunnerOutput", None]:
+) -> AsyncGenerator[tuple[MessageChain, bool], None]:
     """
     运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
@@ -101,21 +110,12 @@ async def run_third_party_agent(
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
-                yield _ThirdPartyRunnerOutput(
-                    chain=resp.data["chain"],
-                    is_error=False,
-                )
+                yield resp.data["chain"], False
             elif resp.type == "llm_result":
                 if stream_to_general:
-                    yield _ThirdPartyRunnerOutput(
-                        chain=resp.data["chain"],
-                        is_error=False,
-                    )
+                    yield resp.data["chain"], False
             elif resp.type == "err":
-                yield _ThirdPartyRunnerOutput(
-                    chain=resp.data["chain"],
-                    is_error=True,
-                )
+                yield resp.data["chain"], True
     except Exception as e:
         logger.error(f"Third party agent runner error: {e}")
         err_msg = custom_error_message
@@ -125,16 +125,26 @@ async def run_third_party_agent(
                 f"Error Type: {type(e).__name__} (3rd party)\n"
                 f"Error Message: {str(e)}"
             )
-        yield _ThirdPartyRunnerOutput(
-            chain=MessageChain().message(err_msg),
-            is_error=True,
-        )
+        yield MessageChain().message(err_msg), True
 
 
-@dataclass
-class _ThirdPartyRunnerOutput:
-    chain: MessageChain
-    is_error: bool = False
+async def _consume_runner_and_aggregate(
+    runner: "BaseAgentRunner",
+    *,
+    stream_to_general: bool,
+    custom_error_message: str | None,
+) -> AsyncGenerator[tuple[MessageChain, bool, list, bool], None]:
+    merged_chain: list = []
+    has_intermediate_error = False
+    async for chain, is_error in run_third_party_agent(
+        runner,
+        stream_to_general=stream_to_general,
+        custom_error_message=custom_error_message,
+    ):
+        merged_chain.extend(chain.chain or [])
+        if is_error:
+            has_intermediate_error = True
+        yield chain, is_error, merged_chain, has_intermediate_error
 
 
 async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
@@ -151,8 +161,15 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
 
 
 class _RunnerLifecycle:
-    def __init__(self, runner: "BaseAgentRunner") -> None:
+    def __init__(
+        self,
+        runner: "BaseAgentRunner",
+        stream_consumption_close_timeout_sec: int,
+    ) -> None:
         self._runner = runner
+        self._stream_consumption_close_timeout_sec = (
+            stream_consumption_close_timeout_sec
+        )
         self._closed = False
         self._stream_started = False
         self._stream_consumed = False
@@ -196,22 +213,34 @@ class _RunnerLifecycle:
         if (
             self._idle_task
             and not self._idle_task.done()
-            and (not self._stream_started or self._stream_consumed or self._closed)
+            and (self._stream_consumed or self._closed)
         ):
             self._idle_task.cancel()
 
-        if not self._stream_started:
+        defer_close_to_watchdog = (
+            self._stream_started
+            and not self._stream_consumed
+            and self._idle_task is not None
+            and not self._idle_task.done()
+            and not self._closed
+        )
+        if defer_close_to_watchdog:
+            return
+
+        if not self._closed:
             await self.close_once()
 
     async def _close_if_never_consumed(self) -> None:
         try:
-            await asyncio.sleep(STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC)
+            await asyncio.sleep(self._stream_consumption_close_timeout_sec)
         except asyncio.CancelledError:
             return
 
         if not self._stream_consumed:
             logger.warning(
-                "Third-party runner stream was never consumed; closing runner to avoid resource leak.",
+                "Third-party runner stream was never consumed in %ss; closing runner "
+                "to avoid resource leak.",
+                self._stream_consumption_close_timeout_sec,
             )
             await self.close_once()
 
@@ -230,6 +259,13 @@ class ThirdPartyAgentSubStage(Stage):
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
+        self.stream_consumption_close_timeout_sec: int = _coerce_positive_int(
+            settings.get(
+                "third_party_stream_consumption_close_timeout_sec",
+                STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC,
+            ),
+            STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC,
+        )
 
     async def _resolve_persona_custom_error_message(
         self, event: AstrMessageEvent
@@ -258,20 +294,25 @@ class ThirdPartyAgentSubStage(Stage):
         custom_error_message: str | None,
     ) -> AsyncGenerator[None, None]:
         stream_has_runner_error = False
+        merged_chain: list = []
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
-            nonlocal stream_has_runner_error
+            nonlocal merged_chain, stream_has_runner_error
             lifecycle.mark_stream_consumed()
             try:
-                async for runner_output in run_third_party_agent(
+                async for (
+                    chain,
+                    is_error,
+                    merged_chain,
+                    stream_has_runner_error,
+                ) in _consume_runner_and_aggregate(
                     runner,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
                 ):
-                    if runner_output.is_error:
-                        stream_has_runner_error = True
+                    if is_error:
                         _set_runner_error_extra(event, True)
-                    yield runner_output.chain
+                    yield chain
             finally:
                 # Streaming runner cleanup must happen after consumer
                 # finishes iterating to avoid tearing down active streams.
@@ -293,7 +334,7 @@ class ThirdPartyAgentSubStage(Stage):
                     is_runner_error,
                     _,
                 ) = _resolve_final_result(
-                    merged_chain=[],
+                    merged_chain=merged_chain,
                     final_resp=final_resp,
                     has_intermediate_error=stream_has_runner_error,
                 )
@@ -315,14 +356,16 @@ class ThirdPartyAgentSubStage(Stage):
     ) -> AsyncGenerator[None, None]:
         merged_chain: list = []
         has_intermediate_error = False
-        async for output in run_third_party_agent(
+        async for (
+            _,
+            _,
+            merged_chain,
+            has_intermediate_error,
+        ) in _consume_runner_and_aggregate(
             runner,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
         ):
-            merged_chain.extend(output.chain.chain or [])
-            if output.is_error:
-                has_intermediate_error = True
             yield
 
         final_resp = runner.get_final_llm_resp()
@@ -421,7 +464,10 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
 
-        lifecycle = _RunnerLifecycle(runner)
+        lifecycle = _RunnerLifecycle(
+            runner,
+            stream_consumption_close_timeout_sec=self.stream_consumption_close_timeout_sec,
+        )
 
         try:
             await lifecycle.reset(
