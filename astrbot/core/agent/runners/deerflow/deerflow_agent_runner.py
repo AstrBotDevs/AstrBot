@@ -46,7 +46,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if isinstance(err, (asyncio.TimeoutError, TimeoutError)):
             timeout_text = (
                 f"{self.timeout}s"
-                if isinstance(getattr(self, "timeout", None), int | float)
+                if isinstance(getattr(self, "timeout", None), (int, float))
                 else "configured timeout"
             )
             return (
@@ -169,9 +169,19 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     async def step_until_done(
         self, max_step: int = 30
     ) -> T.AsyncGenerator[AgentResponse, None]:
-        while not self.done():
+        if max_step <= 0:
+            raise ValueError("max_step must be greater than 0")
+
+        step_count = 0
+        while not self.done() and step_count < max_step:
+            step_count += 1
             async for resp in self.step():
                 yield resp
+
+        if not self.done():
+            raise RuntimeError(
+                f"DeerFlow agent reached max_step ({max_step}) without completion."
+            )
 
     def _extract_text(self, content: T.Any) -> str:
         if isinstance(content, str):
