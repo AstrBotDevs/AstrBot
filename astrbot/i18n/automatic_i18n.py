@@ -28,18 +28,18 @@ def make_id(ftl_value: str) -> str:
 def ensure_t_import(source: str) -> str:
     import_stmt = "from astrbot.core.lang import t"
     future_stmt = "from __future__ import annotations"
-    
+
     # 已经存在，无需处理
     if import_stmt in source:
         return source
-    
+
     # 情况1：文件含有 from __future__ import annotations
     # → 插到该行末尾的下一行
     if future_stmt in source:
         idx = source.index(future_stmt)
         insert_pos = source.index("\n", idx) + 1  # 该行末尾换行符之后
         return source[:insert_pos] + import_stmt + "\n" + source[insert_pos:]
-    
+
     # 情况2：文件以模块 docstring 开头（"""...""" 或 '''...'''）
     # → 插到 docstring 结束后
     stripped = source.lstrip()
@@ -49,7 +49,7 @@ def ensure_t_import(source: str) -> str:
         doc_start = source.index(quote)
         doc_end = source.index(quote, doc_start + 3) + 3
         return source[:doc_end] + "\n" + import_stmt + source[doc_end:]
-    
+
     # 情况3：普通文件 → 插到文件开头
     return import_stmt + "\n" + source
 
@@ -79,39 +79,39 @@ def extract_string_expr(node):
     # 纯字符串常量
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value, []
-    
+
     # 多行字符串拼接："aaa" "bbb" 或 "aaa" + "bbb"（全部为常量时合并处理）
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         merged = flatten_str_concat(node)
         if merged is not None:
             return merged, []
-    
+
     # f-string
     if isinstance(node, ast.JoinedStr):
         return parse_fstring(node)
-    
+
     # "..." % var 或 "..." % (var1, var2)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
         return parse_percent_format(node)
-    
+
     # "...".format(...)
     if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "format"
-            and isinstance(node.func.value, ast.Constant)
-            and isinstance(node.func.value.value, str)
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+        and isinstance(node.func.value, ast.Constant)
+        and isinstance(node.func.value.value, str)
     ):
         return parse_str_format(node)
-    
+
     # 裸变量：logger.info(var) → "{$var}"
     if isinstance(node, ast.Name):
         return "{$" + node.id + "}", [(node.id, node.id)]
-    
+
     # 裸函数调用：logger.info(get_msg()) → "{$res}"
     if isinstance(node, ast.Call):
         return "{$res}", [("res", ast.unparse(node))]
-    
+
     return None
 
 
@@ -119,7 +119,7 @@ def parse_fstring(node: ast.JoinedStr):
     res_counter = [0]
     parts = []
     kwargs = []
-    
+
     for value in node.values:
         if isinstance(value, ast.Constant):
             parts.append(str(value.value))
@@ -127,21 +127,21 @@ def parse_fstring(node: ast.JoinedStr):
             param, src = get_param_and_src(value.value, res_counter)
             parts.append("{$" + param + "}")
             kwargs.append((param, src))
-    
+
     return "".join(parts), kwargs
 
 
 def parse_percent_format(node: ast.BinOp):
     if not (isinstance(node.left, ast.Constant) and isinstance(node.left.value, str)):
         return None
-    
+
     template = node.left.value
     right = node.right
     arg_nodes = list(right.elts) if isinstance(right, ast.Tuple) else [right]
-    
+
     res_counter = [0]
     kwargs = []
-    
+
     def replacer(m):
         fmt_letter = m.group(0)[-1]
         if fmt_letter == "%":
@@ -151,7 +151,7 @@ def parse_percent_format(node: ast.BinOp):
             kwargs.append((param, src))
             return "{$" + param + "}"
         return m.group(0)
-    
+
     ftl_value = re.sub(r"%(?:\(\w+\))?[-+0-9*.]*[sdfrx%]", replacer, template)
     return ftl_value, kwargs
 
@@ -159,18 +159,18 @@ def parse_percent_format(node: ast.BinOp):
 def parse_str_format(node: ast.Call):
     template = node.func.value.value
     res_counter = [0]
-    
+
     # 命名占位符映射：占位符名 → (参数名, 源码表达式)
     kw_map = {}
     for kw in node.keywords:
         if kw.arg:
             kw_map[kw.arg] = (kw.arg, ast.unparse(kw.value))
-    
+
     # 位置参数列表
     pos_args = [get_param_and_src(a, res_counter, "val") for a in node.args]
-    
+
     kwargs = []
-    
+
     def replacer(m):
         field = m.group(1).split(":")[0].strip()
         if field == "" or field.isdigit():
@@ -180,7 +180,7 @@ def parse_str_format(node: ast.Call):
             param, src = kw_map.get(field, (field, field))
         kwargs.append((param, src))
         return "{$" + param + "}"
-    
+
     ftl_value = re.sub(r"\{([^{}]*)\}", replacer, template)
     return ftl_value, kwargs
 
@@ -207,10 +207,10 @@ def is_logger_call(node: ast.Call) -> bool:
     """判断是否为 logger.info / warning / warn / error / debug / critical / exception"""
     func = node.func
     return (
-            isinstance(func, ast.Attribute)
-            and func.attr
-            in ("info", "warning", "warn", "error", "debug", "critical", "exception")
-            and isinstance(func.value, ast.Name)
+        isinstance(func, ast.Attribute)
+        and func.attr
+        in ("info", "warning", "warn", "error", "debug", "critical", "exception")
+        and isinstance(func.value, ast.Name)
     )
 
 
@@ -223,10 +223,10 @@ def is_click_echo_call(node: ast.Call) -> bool:
     """判断是否为 click.echo(...)"""
     func = node.func
     return (
-            isinstance(func, ast.Attribute)
-            and func.attr == "echo"
-            and isinstance(func.value, ast.Name)
-            and func.value.id == "click"
+        isinstance(func, ast.Attribute)
+        and func.attr == "echo"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "click"
     )
 
 
@@ -256,11 +256,11 @@ def is_message_call(node: ast.Call) -> bool:
 
 def is_target_call(node: ast.Call) -> bool:
     return (
-            is_logger_call(node)
-            or is_print_call(node)
-            or is_click_echo_call(node)
-            or is_exception_call(node)
-            or is_message_call(node)
+        is_logger_call(node)
+        or is_print_call(node)
+        or is_click_echo_call(node)
+        or is_exception_call(node)
+        or is_message_call(node)
     )
 
 
@@ -280,17 +280,23 @@ def extract_and_rewrite(source: str):
     except Exception as e:
         print(f"Error parsing source: {e}")
         return [], source
-    
+
     # 收集替换信息：(起始偏移, 结束偏移, 新文本, msg_id, ftl_value)
     replacements = []
-    
+
     # 预计算每行的字符偏移量
     line_offsets = []
     offset = 0
     for line in source.splitlines(keepends=True):
         line_offsets.append(offset)
         offset += len(line)
-    
+
+    # 建立父节点映射，用于查找 raise ... from cause 中的 cause
+    parent_map = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parent_map[id(child)] = parent
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -298,22 +304,45 @@ def extract_and_rewrite(source: str):
             continue
         if not node.args:
             continue
-        
+
         # 第一个参数已经是 t(...) 调用，说明已处理过，跳过
         first = node.args[0]
         if (
-                isinstance(first, ast.Call)
-                and isinstance(first.func, ast.Name)
-                and first.func.id == "t"
+            isinstance(first, ast.Call)
+            and isinstance(first.func, ast.Name)
+            and first.func.id == "t"
         ):
             continue
-        
+
         result = extract_string_expr(node.args[0])
         if result is None:
             continue
-        
+
         ftl_value, kwargs = result
-        
+
+        # 处理 raise Exception("msg {e}") from e 语法
+        # cause 是异常链变量，需要作为参数注入，同时把字符串里的 {varname} 替换为 {$varname}
+        raise_cause = None
+        parent = parent_map.get(id(node))
+        if isinstance(parent, ast.Raise) and parent.cause is not None:
+            cause = parent.cause
+            if isinstance(cause, ast.Name):
+                raise_cause = (cause.id, cause.id)
+            elif isinstance(cause, ast.Attribute):
+                raise_cause = (cause.attr, ast.unparse(cause))
+
+        if raise_cause:
+            param, src_expr = raise_cause
+            # 把字符串里的 {param} 替换为 {$param}（FTL 格式）
+            import re as _re
+
+            ftl_value = _re.sub(
+                r"\{" + re.escape(param) + r"\}", "{$" + param + "}", ftl_value
+            )
+            # 如果 kwargs 里还没有这个参数才追加
+            if not any(p == param for p, _ in kwargs):
+                kwargs = list(kwargs) + [raise_cause]
+
         # logging 多参数形式：logger.warning("msg %s %s", var1, var2)
         # 此时 kwargs 为空（第一个参数是纯字符串），但 args[1:] 是实际变量
         # 需要把 %s/%d 等占位符与 args[1:] 对应起来
@@ -322,30 +351,34 @@ def extract_and_rewrite(source: str):
             res_counter = [0]
             extra_kwargs = []
             import re as _re
-            
+
             def _replacer(m):
                 fmt_letter = m.group(0)[-1]
                 if fmt_letter == "%":
                     return "%"
                 if extra_args:
                     arg_node_extra = extra_args.pop(0)
-                    param, src = get_param_and_src(arg_node_extra, res_counter, fmt_letter)
+                    param, src = get_param_and_src(
+                        arg_node_extra, res_counter, fmt_letter
+                    )
                     extra_kwargs.append((param, src))
                     return "{$" + param + "}"
                 return m.group(0)
-            
-            ftl_value = _re.sub(r"%(?:\(\w+\))?[-+0-9*.]*[sdfrx%]", _replacer, ftl_value)
+
+            ftl_value = _re.sub(
+                r"%(?:\(\w+\))?[-+0-9*.]*[sdfrx%]", _replacer, ftl_value
+            )
             kwargs = extra_kwargs
             # 重写时需要把 args[1:] 也一并删除，记录需要删除的尾部参数范围
             extra_arg_nodes = node.args[1:]
         else:
             extra_arg_nodes = []
-        
+
         # 保留原样的换行符转义，避免 FTL 文件出现裸换行
         ftl_value = ftl_value.replace("\r", "\\r").replace("\n", "\\n")
-        
+
         msg_id = make_id(ftl_value)
-        
+
         # 对 kwargs 按参数名去重，保留首次出现的顺序
         seen_params: set = set()
         deduped_kwargs = []
@@ -354,17 +387,17 @@ def extract_and_rewrite(source: str):
                 seen_params.add(p)
                 deduped_kwargs.append((p, s))
         kwargs = deduped_kwargs
-        
+
         # 构造新的第一个参数：t("id", key=val, ...)
         kw_parts = ", ".join(f"{p}={s}" for p, s in kwargs)
         t_call = f't("{msg_id}", {kw_parts})' if kw_parts else f't("{msg_id}")'
-        
+
         # 用 get_source_segment 精确获取原始参数文本（正确处理中文字符偏移）
         arg_node = node.args[0]
         original_arg = ast.get_source_segment(source, arg_node)
         if original_arg is None:
             continue
-        
+
         # 在源码中定位原始参数的精确位置
         approx = line_offsets[arg_node.lineno - 1] + arg_node.col_offset
         window_start = max(0, approx - 4)
@@ -372,7 +405,7 @@ def extract_and_rewrite(source: str):
         if pos == -1:
             continue
         arg_end = pos + len(original_arg)
-        
+
         # 如果有 logging 多参数，替换范围从第一个参数起始到最后一个参数结束
         # 即把 "msg %s", var1, var2 整体替换为 t("id", var1=var1, var2=var2)
         # 策略：从第一个参数结束后的逗号开始，用 get_source_segment 逐个定位每个
@@ -388,7 +421,7 @@ def extract_and_rewrite(source: str):
                     found_all = False
                     break
                 # 从上一个参数结束后找逗号，再从逗号后找当前参数文本
-                comma = source.find(',', search_from)
+                comma = source.find(",", search_from)
                 if comma == -1:
                     found_all = False
                     break
@@ -398,22 +431,22 @@ def extract_and_rewrite(source: str):
                     break
                 last_end_pos = found + len(extra_seg)
                 search_from = last_end_pos
-            
+
             if found_all and last_end_pos > arg_end:
                 replacements.append((pos, last_end_pos, t_call, msg_id, ftl_value))
                 continue
-        
+
         replacements.append((pos, arg_end, t_call, msg_id, ftl_value))
-    
+
     # 从后往前替换，保证偏移量不受影响
     replacements.sort(key=lambda x: x[0], reverse=True)
-    
+
     new_source = source
     ftl_entries_map = {}
     for start, end, new_text, msg_id, ftl_value in replacements:
         new_source = new_source[:start] + new_text + new_source[end:]
         ftl_entries_map[msg_id] = ftl_value
-    
+
     # 按出现顺序返回 FTL 条目（去重）
     ordered_ftl = []
     seen = set()
@@ -421,7 +454,7 @@ def extract_and_rewrite(source: str):
         if msg_id not in seen:
             ordered_ftl.append((msg_id, ftl_value))
             seen.add(msg_id)
-    
+
     return ordered_ftl, new_source
 
 
@@ -433,32 +466,41 @@ def extract_and_rewrite(source: str):
 def main():
     import argparse
     import os
-    
+
     try:
         from tqdm import tqdm
     except ImportError:
+
         def tqdm(iterable, **kwargs):
             return iterable
-    
+
     parser = argparse.ArgumentParser(description="提取 i18n 消息并重写日志/异常调用")
     parser.add_argument("--rewrite", action="store_true", help="原地重写源文件")
     args = parser.parse_args()
-    
+
     root_dir = Path(".")
     ftl_base_dir = Path(f"{root_dir}/astrbot/i18n/locales/zh-cn")
     ftl_base_dir.mkdir(parents=True, exist_ok=True)
-    
+
     ftl_file = ftl_base_dir / "i18n_messages.ftl"
-    
+
     # 所有生成的 FTL 条目，按文件分组：rel_path -> [(msg_id, ftl_value)]
     all_files_data = {}
-    
+
     # 遍历时跳过的目录
     exclude_dirs = {
-        ".git", "__pycache__", ".venv", "venv", "tests",
-        ".pytest_cache", ".ruff_cache", ".idea", ".vscode", "data",
+        ".git",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "tests",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".idea",
+        ".vscode",
+        "data",
     }
-    
+
     all_files = []
     for root, dirs, files in os.walk(root_dir):
         dirs[:] = [d for d in dirs if d not in exclude_dirs]
@@ -468,33 +510,33 @@ def main():
             if file in ("automatic_i18n.py", "runtime_bootstrap.py"):
                 continue
             all_files.append(Path(root) / file)
-    
+
     pbar = tqdm(all_files, desc="Processing files")
     for file_path in pbar:
         try:
             source = file_path.read_text(encoding="utf-8")
             ftl_entries, new_source = extract_and_rewrite(source)
-            
+
             if not ftl_entries:
                 continue
-            
+
             if args.rewrite:
                 new_source = ensure_t_import(new_source)
                 file_path.write_text(new_source, encoding="utf-8")
                 tqdm.write(f"  [已重写] {file_path}")
-            
+
             rel_path = str(file_path.relative_to(root_dir))
             all_files_data[rel_path] = ftl_entries
-        
+
         except Exception as e:
             tqdm.write(f"  [错误] 处理 {file_path} 失败：{e}")
-    
+
     # 将 FTL 条目追加写入统一文件（跳过已存在的 msg_id）
     if all_files_data:
         existing_content = (
             ftl_file.read_text(encoding="utf-8") if ftl_file.exists() else ""
         )
-        
+
         new_ftl_lines = []
         for rel_path, entries in all_files_data.items():
             header = f"### {rel_path}"
@@ -502,11 +544,11 @@ def main():
             for msg_id, ftl_value in entries:
                 if f"{msg_id} =" not in existing_content:
                     section_lines.append(f"{msg_id} = {ftl_value}")
-            
+
             if section_lines:
                 new_ftl_lines.append(f"\n{header}")
                 new_ftl_lines.extend(section_lines)
-        
+
         if new_ftl_lines:
             with open(ftl_file, "a", encoding="utf-8") as f:
                 f.write("\n".join(new_ftl_lines) + "\n")
