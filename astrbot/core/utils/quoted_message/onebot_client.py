@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, Protocol
 
 from astrbot import logger
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -17,6 +18,10 @@ def _unwrap_action_response(ret: dict[str, Any] | None) -> dict[str, Any]:
     return ret
 
 
+class CallAction(Protocol):
+    def __call__(self, action: str, **params: Any) -> Awaitable[Any] | Any: ...
+
+
 class OneBotClient:
     def __init__(
         self,
@@ -27,7 +32,7 @@ class OneBotClient:
         self._settings = settings
 
     @staticmethod
-    def _resolve_call_action(event: AstrMessageEvent):
+    def _resolve_call_action(event: AstrMessageEvent) -> CallAction | None:
         bot = getattr(event, "bot", None)
         api = getattr(bot, "api", None)
         call_action = getattr(api, "call_action", None)

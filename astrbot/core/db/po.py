@@ -126,6 +126,8 @@ class Persona(TimestampMixin, SQLModel, table=True):
     """None means use ALL tools for default, empty list means no tools, otherwise a list of tool names."""
     skills: list | None = Field(default=None, sa_type=JSON)
     """None means use ALL skills for default, empty list means no skills, otherwise a list of skill names."""
+    custom_error_message: str | None = Field(default=None, sa_type=Text)
+    """Optional custom error message sent to end users when the agent request fails."""
     folder_id: str | None = Field(default=None, max_length=36)
     """所属文件夹ID，NULL 表示在根目录"""
     sort_order: int = Field(default=0)
@@ -472,6 +474,8 @@ class Personality(TypedDict):
     """工具列表。None 表示使用所有工具，空列表表示不使用任何工具"""
     skills: list[str] | None
     """Skills 列表。None 表示使用所有 Skills，空列表表示不使用任何 Skills"""
+    custom_error_message: str | None
+    """可选的人格自定义报错回复信息。配置后将优先发送给最终用户。"""
 
     # cache
     _begin_dialogs_processed: list[dict]
