@@ -59,7 +59,7 @@ const {
   installCompat,
   versionCompatibilityDialog,
   showUninstallDialog,
-  pluginToUninstall,
+  uninstallTarget,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
