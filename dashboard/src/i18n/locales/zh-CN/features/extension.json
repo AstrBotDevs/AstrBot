@@ -233,6 +233,7 @@
     "neoSkillKey": "skill_key 过滤",
     "neoStatus": "候选状态",
     "neoStage": "发布阶段",
+    "neoFilterHint": "筛选候选与发布记录",
     "neoAll": "全部",
     "neoCandidates": "Neo Candidates",
     "neoReleases": "Neo Releases",

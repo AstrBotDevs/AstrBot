@@ -233,6 +233,7 @@
     "neoSkillKey": "Filter by skill_key",
     "neoStatus": "Candidate Status",
     "neoStage": "Release Stage",
+    "neoFilterHint": "Filter candidates and release records",
     "neoAll": "All",
     "neoCandidates": "Neo Candidates",
     "neoReleases": "Neo Releases",

@@ -113,7 +113,7 @@
           <div class="d-flex flex-wrap justify-space-between align-center ga-2 mb-3">
             <div>
               <div class="text-subtitle-1 font-weight-bold">Neo Skills</div>
-              <div class="text-caption text-medium-emphasis">筛选候选与发布记录</div>
+              <div class="text-caption text-medium-emphasis">{{ tm("skills.neoFilterHint") }}</div>
             </div>
             <v-btn color="primary" prepend-icon="mdi-refresh" variant="flat" @click="fetchNeoData">
               {{ tm("skills.refresh") }}
