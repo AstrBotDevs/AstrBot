@@ -36,6 +36,9 @@ def mock_context():
     ctx.conversation_manager = MagicMock()
     ctx.persona_manager = MagicMock()
     ctx.persona_manager.personas_v3 = []
+    ctx.persona_manager.resolve_selected_persona = AsyncMock(
+        return_value=(None, None, None, False)
+    )
     ctx.get_llm_tool_manager.return_value = MagicMock()
     ctx.subagent_orchestrator = None
     return ctx
@@ -469,17 +472,16 @@ class TestEnsurePersonaAndSkills:
     async def test_ensure_persona_from_session(self, mock_event, mock_context):
         """Test applying persona from session service config."""
         module = ama
-        mock_context.persona_manager.personas_v3 = [
-            {"name": "test-persona", "prompt": "You are helpful."}
-        ]
+        persona = {"name": "test-persona", "prompt": "You are helpful."}
+        mock_context.persona_manager.personas_v3 = [persona]
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("test-persona", persona, "test-persona", False)
+        )
         mock_event.trace = MagicMock(record=MagicMock())
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
 
-        with patch("astrbot.core.astr_main_agent.sp") as mock_sp:
-            mock_sp.get_async = AsyncMock(return_value={"persona_id": "test-persona"})
-
-            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
 
@@ -487,16 +489,15 @@ class TestEnsurePersonaAndSkills:
     async def test_ensure_persona_from_conversation(self, mock_event, mock_context):
         """Test applying persona from conversation setting."""
         module = ama
-        mock_context.persona_manager.personas_v3 = [
-            {"name": "conv-persona", "prompt": "Custom persona."}
-        ]
+        persona = {"name": "conv-persona", "prompt": "Custom persona."}
+        mock_context.persona_manager.personas_v3 = [persona]
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("conv-persona", persona, None, False)
+        )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
 
-        with patch("astrbot.core.astr_main_agent.sp") as mock_sp:
-            mock_sp.get_async = AsyncMock(return_value={})
-
-            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert "Custom persona." in req.system_prompt
 
@@ -505,13 +506,13 @@ class TestEnsurePersonaAndSkills:
         """Test that [%None] persona is explicitly set to no persona."""
         module = ama
         mock_context.persona_manager.personas_v3 = []
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("[%None]", None, None, False)
+        )
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="[%None]")
 
-        with patch("astrbot.core.astr_main_agent.sp") as mock_sp:
-            mock_sp.get_async = AsyncMock(return_value={})
-
-            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert "Persona Instructions" not in req.system_prompt
 
@@ -523,6 +524,9 @@ class TestEnsurePersonaAndSkills:
         mock_skill.name = "test_skill"
         mock_skill.to_prompt.return_value = "Skill description"
         mock_context.persona_manager.personas_v3 = []
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
 
         with patch("astrbot.core.astr_main_agent.SkillManager") as mock_skill_mgr_cls:
             mock_skill_mgr = MagicMock()
@@ -543,19 +547,18 @@ class TestEnsurePersonaAndSkills:
         mock_tool = MagicMock()
         mock_tool.name = "test_tool"
         mock_tool.active = True
-        mock_context.persona_manager.personas_v3 = [
-            {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
-        ]
+        persona = {"name": "persona", "prompt": "Test", "tools": ["test_tool"]}
+        mock_context.persona_manager.personas_v3 = [persona]
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("persona", persona, None, False)
+        )
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.get_func.return_value = mock_tool
 
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="persona")
 
-        with patch("astrbot.core.astr_main_agent.sp") as mock_sp:
-            mock_sp.get_async = AsyncMock(return_value={})
-
-            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert req.func_tool is not None
 
