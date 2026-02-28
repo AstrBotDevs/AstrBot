@@ -96,10 +96,14 @@ class DeerFlowAPIClient:
         api_base: str = "http://127.0.0.1:2026",
         api_key: str = "",
         auth_header: str = "",
+        proxy: str | None = None,
     ) -> None:
         self.api_base = api_base.rstrip("/")
         self._session: ClientSession | None = None
         self._closed = False
+        self.proxy = proxy.strip() if isinstance(proxy, str) else None
+        if self.proxy == "":
+            self.proxy = None
         self.headers: dict[str, str] = {}
         if auth_header:
             self.headers["Authorization"] = auth_header
@@ -133,6 +137,7 @@ class DeerFlowAPIClient:
             json=payload,
             headers=self.headers,
             timeout=timeout,
+            proxy=self.proxy,
         ) as resp:
             if resp.status not in (200, 201):
                 text = await resp.text()
@@ -180,6 +185,7 @@ class DeerFlowAPIClient:
                 "Content-Type": "application/json",
             },
             timeout=stream_timeout,
+            proxy=self.proxy,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()

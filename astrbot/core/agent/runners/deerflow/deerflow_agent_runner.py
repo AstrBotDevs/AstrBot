@@ -45,8 +45,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
     @dataclass
     class _StreamState:
-        streamed_text: str = ""
-        fallback_stream_text: str = ""
+        latest_text: str = ""
+        prev_text_for_streaming: str = ""
         clarification_text: str = ""
         task_failures: list[str] = field(default_factory=list)
         seen_message_ids: set[str] = field(default_factory=set)
@@ -54,6 +54,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         # Fallback tracking for backends that omit message ids in values events.
         no_id_message_fingerprints: dict[int, str] = field(default_factory=dict)
         baseline_initialized: bool = False
+        has_values_text: bool = False
         run_values_messages: list[dict[str, T.Any]] = field(default_factory=list)
         timed_out: bool = False
 
@@ -154,6 +155,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             )
         self.api_key = provider_config.get("deerflow_api_key", "")
         self.auth_header = provider_config.get("deerflow_auth_header", "")
+        proxy = provider_config.get("proxy", "")
+        self.proxy = proxy.strip() if isinstance(proxy, str) else ""
         self.assistant_id = provider_config.get("deerflow_assistant_id", "lead_agent")
         self.model_name = provider_config.get("deerflow_model_name", "")
         self.thinking_enabled = bool(
@@ -186,7 +189,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             min_value=1,
         )
 
-        new_client_signature = (self.api_base, self.api_key, self.auth_header)
+        new_client_signature = (
+            self.api_base,
+            self.api_key,
+            self.auth_header,
+            self.proxy,
+        )
         old_client = getattr(self, "api_client", None)
         old_signature = getattr(self, "_api_client_signature", None)
         if (
@@ -209,6 +217,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             api_base=self.api_base,
             api_key=self.api_key,
             auth_header=self.auth_header,
+            proxy=self.proxy,
         )
         self._api_client_signature = new_client_signature
 
@@ -230,6 +239,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         try:
             async for response in self._execute_deerflow_request():
                 yield response
+        except asyncio.CancelledError:
+            # Let caller manage cancellation semantics.
+            raise
         except Exception as e:
             err_msg = self._format_exception(e)
             logger.error(f"DeerFlow request failed: {err_msg}", exc_info=True)
@@ -462,6 +474,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             values_messages,
             state,
         )
+        latest_text = ""
         if new_messages:
             state.run_values_messages.extend(new_messages)
             if len(state.run_values_messages) > self._MAX_VALUES_HISTORY:
@@ -469,34 +482,28 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     -self._MAX_VALUES_HISTORY :
                 ]
             latest_text = extract_latest_ai_text(state.run_values_messages)
+            if latest_text:
+                state.latest_text = latest_text
+                state.has_values_text = True
             latest_clarification = extract_latest_clarification_text(
                 state.run_values_messages,
             )
             if latest_clarification:
                 state.clarification_text = latest_clarification
-        else:
-            latest_text = ""
 
         if self.streaming and latest_text:
-            if latest_text.startswith(state.streamed_text):
-                delta = latest_text[len(state.streamed_text) :]
-                if delta:
-                    state.streamed_text = latest_text
-                    responses.append(
-                        AgentResponse(
-                            type="streaming_delta",
-                            data=AgentResponseData(
-                                chain=MessageChain().message(delta),
-                            ),
-                        ),
-                    )
-            elif latest_text != state.streamed_text:
-                state.streamed_text = latest_text
+            if latest_text.startswith(state.prev_text_for_streaming):
+                delta = latest_text[len(state.prev_text_for_streaming) :]
+            else:
+                delta = latest_text
+
+            if delta:
+                state.prev_text_for_streaming = latest_text
                 responses.append(
                     AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
-                            chain=MessageChain().message(latest_text),
+                            chain=MessageChain().message(delta),
                         ),
                     ),
                 )
@@ -508,11 +515,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         state: _StreamState,
     ) -> AgentResponse | None:
         delta = extract_ai_delta_from_event_data(data)
-        if delta:
-            state.fallback_stream_text += delta
 
         response: AgentResponse | None = None
-        if self.streaming and delta and not state.streamed_text:
+        if delta and not state.has_values_text:
+            state.latest_text += delta
+        if self.streaming and delta and not state.has_values_text:
             response = AgentResponse(
                 type="streaming_delta",
                 data=AgentResponseData(chain=MessageChain().message(delta)),
@@ -531,7 +538,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         else:
             final_text = extract_latest_ai_text(state.run_values_messages)
             if not final_text:
-                final_text = state.streamed_text or state.fallback_stream_text
+                final_text = state.latest_text
             if not final_text:
                 final_text = build_task_failure_summary(state.task_failures)
                 failures_only = bool(final_text)

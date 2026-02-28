@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import typing as T
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -146,6 +147,44 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
             await close_result
     except Exception as e:
         logger.warning(f"Failed to close third-party runner cleanly: {e}")
+
+
+@asynccontextmanager
+async def _runner_session(
+    runner: "BaseAgentRunner",
+    *,
+    request: ProviderRequest,
+    run_context: AgentContextWrapper,
+    agent_hooks: T.Any,
+    provider_config: dict,
+    streaming: bool,
+):
+    runner_closed = False
+    defer_close = False
+
+    async def close_runner_once() -> None:
+        nonlocal runner_closed
+        if runner_closed:
+            return
+        runner_closed = True
+        await _close_runner_if_supported(runner)
+
+    def defer_runner_close() -> None:
+        nonlocal defer_close
+        defer_close = True
+
+    await runner.reset(
+        request=request,
+        run_context=run_context,
+        agent_hooks=agent_hooks,
+        provider_config=provider_config,
+        streaming=streaming,
+    )
+    try:
+        yield close_runner_once, defer_runner_close
+    finally:
+        if not defer_close:
+            await close_runner_once()
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -345,44 +384,30 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
 
-        runner_closed = False
-
-        async def _close_runner_once() -> None:
-            nonlocal runner_closed
-            if runner_closed:
-                return
-            runner_closed = True
-            await _close_runner_if_supported(runner)
-
-        try:
-            await runner.reset(
-                request=req,
-                run_context=AgentContextWrapper(
-                    context=astr_agent_ctx,
-                    tool_call_timeout=60,
-                ),
-                agent_hooks=MAIN_AGENT_HOOKS,
-                provider_config=self.prov_cfg,
-                streaming=streaming_response,
-            )
-        except Exception:
-            await _close_runner_once()
-            raise
-
-        if streaming_response and not stream_to_general:
-            try:
+        async with _runner_session(
+            runner=runner,
+            request=req,
+            run_context=AgentContextWrapper(
+                context=astr_agent_ctx,
+                tool_call_timeout=60,
+            ),
+            agent_hooks=MAIN_AGENT_HOOKS,
+            provider_config=self.prov_cfg,
+            streaming=streaming_response,
+        ) as (close_runner_once, defer_runner_close):
+            if streaming_response and not stream_to_general:
+                stream_started = False
                 async for _ in self._handle_streaming_runner(
                     runner=runner,
                     event=event,
                     custom_error_message=custom_error_message,
-                    close_runner_once=_close_runner_once,
+                    close_runner_once=close_runner_once,
                 ):
+                    if not stream_started:
+                        defer_runner_close()
+                        stream_started = True
                     yield
-            except Exception:
-                await _close_runner_once()
-                raise
-        else:
-            try:
+            else:
                 async for _ in self._handle_non_streaming_runner(
                     runner=runner,
                     event=event,
@@ -390,8 +415,6 @@ class ThirdPartyAgentSubStage(Stage):
                     custom_error_message=custom_error_message,
                 ):
                     yield
-            finally:
-                await _close_runner_once()
 
         asyncio.create_task(
             Metric.upload(
