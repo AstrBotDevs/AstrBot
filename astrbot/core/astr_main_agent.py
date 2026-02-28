@@ -37,6 +37,10 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Reply
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_persona,
+    set_persona_custom_error_message_on_event,
+)
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
@@ -285,12 +289,9 @@ async def _ensure_persona_and_skills(
         provider_settings=cfg,
     )
 
-    custom_error_message = None
-    if persona:
-        raw_custom_error_message = persona.get("custom_error_message")
-        if isinstance(raw_custom_error_message, str):
-            custom_error_message = raw_custom_error_message.strip() or None
-    event.set_extra("persona_custom_error_message", custom_error_message)
+    set_persona_custom_error_message_on_event(
+        event, extract_persona_custom_error_message_from_persona(persona)
+    )
 
     if persona:
         # Inject persona system prompt

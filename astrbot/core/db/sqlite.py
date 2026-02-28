@@ -32,8 +32,8 @@ from astrbot.core.db.po import (
 from astrbot.core.db.po import (
     Stats as DeprecatedStats,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
-NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 

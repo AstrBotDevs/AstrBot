@@ -15,6 +15,11 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    resolve_event_conversation_persona_id,
+    resolve_persona_custom_error_message,
+    set_persona_custom_error_message_on_event,
+)
 
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
@@ -80,6 +85,24 @@ class ThirdPartyAgentSubStage(Stage):
             "unsupported_streaming_strategy"
         ]
 
+    async def _resolve_persona_custom_error_message(
+        self, event: AstrMessageEvent
+    ) -> str | None:
+        try:
+            conversation_persona_id = await resolve_event_conversation_persona_id(
+                event,
+                self.ctx.plugin_manager.context.conversation_manager,
+            )
+            return await resolve_persona_custom_error_message(
+                event=event,
+                persona_manager=self.ctx.plugin_manager.context.persona_manager,
+                provider_settings=self.conf["provider_settings"],
+                conversation_persona_id=conversation_persona_id,
+            )
+        except Exception as e:
+            logger.debug("Failed to resolve persona custom error message: %s", e)
+            return None
+
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
@@ -115,35 +138,8 @@ class ThirdPartyAgentSubStage(Stage):
         if not req.prompt and not req.image_urls:
             return
 
-        custom_error_message = None
-        try:
-            conversation_persona_id = None
-            conv_mgr = self.ctx.plugin_manager.context.conversation_manager
-            curr_cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
-            if curr_cid:
-                conv = await conv_mgr.get_conversation(
-                    event.unified_msg_origin, curr_cid
-                )
-                if conv:
-                    conversation_persona_id = conv.persona_id
-            (
-                _,
-                persona,
-                _,
-                _,
-            ) = await self.ctx.plugin_manager.context.persona_manager.resolve_selected_persona(
-                umo=event.unified_msg_origin,
-                conversation_persona_id=conversation_persona_id,
-                platform_name=event.get_platform_name(),
-                provider_settings=self.conf["provider_settings"],
-            )
-            if persona:
-                raw_custom_error_message = persona.get("custom_error_message")
-                if isinstance(raw_custom_error_message, str):
-                    custom_error_message = raw_custom_error_message.strip() or None
-        except Exception as e:
-            logger.debug("Failed to resolve persona custom error message: %s", e)
-        event.set_extra("persona_custom_error_message", custom_error_message)
+        custom_error_message = await self._resolve_persona_custom_error_message(event)
+        set_persona_custom_error_message_on_event(event, custom_error_message)
 
         # call event hook
         if await call_event_hook(event, EventType.OnLLMRequestEvent, req):

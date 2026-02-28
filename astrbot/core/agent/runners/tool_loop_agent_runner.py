@@ -23,6 +23,9 @@ from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
@@ -80,16 +83,8 @@ class FollowUpTicket:
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
-        try:
-            event = getattr(self.run_context.context, "event", None)
-            if event is None or not hasattr(event, "get_extra"):
-                return None
-            raw_message = event.get_extra("persona_custom_error_message")
-            if not isinstance(raw_message, str):
-                return None
-            return raw_message.strip() or None
-        except Exception:
-            return None
+        event = getattr(self.run_context.context, "event", None)
+        return extract_persona_custom_error_message_from_event(event)
 
     @override
     async def reset(

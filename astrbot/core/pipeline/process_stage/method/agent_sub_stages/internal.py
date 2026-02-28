@@ -19,6 +19,9 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -366,18 +369,13 @@ class InternalAgentSubStage(Stage):
 
         except Exception as e:
             logger.error(f"Error occurred while processing agent: {e}")
-            custom_error_message = event.get_extra("persona_custom_error_message")
-            if isinstance(custom_error_message, str):
-                custom_error_message = custom_error_message.strip() or None
-            else:
-                custom_error_message = None
-
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                event
+            )
             error_text = custom_error_message or (
                 f"Error occurred while processing agent request: {e}"
             )
-            await event.send(
-                MessageChain().message(error_text)
-            )
+            await event.send(MessageChain().message(error_text))
         finally:
             if follow_up_capture:
                 await finalize_follow_up_capture(

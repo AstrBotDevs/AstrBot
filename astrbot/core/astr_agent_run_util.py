@@ -14,6 +14,9 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
 
@@ -41,13 +44,6 @@ def _extract_chain_json_data(msg_chain: MessageChain) -> dict | None:
     if isinstance(first_comp, Json) and isinstance(first_comp.data, dict):
         return first_comp.data
     return None
-
-
-def _get_persona_custom_error_message(astr_event) -> str | None:
-    raw_message = astr_event.get_extra("persona_custom_error_message")
-    if not isinstance(raw_message, str):
-        return None
-    return raw_message.strip() or None
 
 
 def _record_tool_call_name(
@@ -242,7 +238,9 @@ async def run_agent(
                     pass
             logger.error(traceback.format_exc())
 
-            custom_error_message = _get_persona_custom_error_message(astr_event)
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                astr_event
+            )
             if custom_error_message:
                 err_msg = custom_error_message
             else:

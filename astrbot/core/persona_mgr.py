@@ -4,6 +4,7 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.sentinels import NOT_GIVEN
 
 DEFAULT_PERSONALITY = Personality(
     prompt="You are a helpful and friendly assistant.",
@@ -16,8 +17,6 @@ DEFAULT_PERSONALITY = Personality(
     _begin_dialogs_processed=[],
     _mood_imitation_dialogs_processed="",
 )
-
-NOT_GIVEN = object()
 
 
 class PersonaManager:
