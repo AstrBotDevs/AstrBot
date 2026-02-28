@@ -61,7 +61,13 @@ def is_ai_message(message: dict[str, T.Any]) -> bool:
 
 def extract_latest_ai_text(messages: Iterable[T.Any]) -> str:
     # Scan backwards to get the latest assistant/ai message text.
-    for msg in reversed(list(messages)):
+    if isinstance(messages, (list, tuple)):
+        iterable = reversed(messages)
+    else:
+        # Fallback for generic iterables (e.g. generators).
+        iterable = reversed(list(messages))
+
+    for msg in iterable:
         if not isinstance(msg, dict):
             continue
         if is_ai_message(msg):
@@ -78,7 +84,12 @@ def is_clarification_tool_message(message: dict[str, T.Any]) -> bool:
 
 
 def extract_latest_clarification_text(messages: Iterable[T.Any]) -> str:
-    for msg in reversed(list(messages)):
+    if isinstance(messages, (list, tuple)):
+        iterable = reversed(messages)
+    else:
+        iterable = reversed(list(messages))
+
+    for msg in iterable:
         if not isinstance(msg, dict):
             continue
         if is_clarification_tool_message(msg):
