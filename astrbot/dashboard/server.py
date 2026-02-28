@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import jwt
+from datetime import datetime, timezone
 import psutil
 from flask.json.provider import DefaultJSONProvider
 from hypercorn.asyncio import serve
@@ -71,7 +72,6 @@ class AstrBotDashboard:
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
         
-        from datetime import datetime, timezone
         class AstrBotJSONProvider(DefaultJSONProvider):
             def default(self, obj):
                 if isinstance(obj, datetime):

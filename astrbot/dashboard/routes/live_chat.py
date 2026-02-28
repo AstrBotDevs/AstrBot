@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 import wave
+from datetime import timezone
 from typing import Any
 
 import jwt

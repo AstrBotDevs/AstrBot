@@ -6,6 +6,7 @@
 
 import json
 from collections.abc import Awaitable, Callable
+from datetime import timezone
 
 from astrbot.core import sp
 from astrbot.core.agent.message import AssistantMessageSegment, UserMessageSegment
@@ -58,7 +59,6 @@ class ConversationManager:
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
         """将 ConversationV2 对象转换为 Conversation 对象"""
-        from datetime import timezone
         created_at = int(conv_v2.created_at.replace(tzinfo=timezone.utc).timestamp()) if conv_v2.created_at else 0
         updated_at = int(conv_v2.updated_at.replace(tzinfo=timezone.utc).timestamp()) if conv_v2.updated_at else 0
         return Conversation(
