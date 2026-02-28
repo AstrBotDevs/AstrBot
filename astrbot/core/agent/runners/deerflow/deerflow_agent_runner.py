@@ -146,6 +146,14 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if isinstance(api_client, DeerFlowAPIClient) and not api_client.is_closed:
             await api_client.close()
 
+    async def _notify_agent_done_hook(self) -> None:
+        if not self.final_llm_resp:
+            return
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
     def _parse_runner_config(self, provider_config: dict) -> _RunnerConfig:
         api_base = provider_config.get("deerflow_api_base", "http://127.0.0.1:2026")
         if not isinstance(api_base, str) or not api_base.startswith(
@@ -295,6 +303,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 completion_text=f"DeerFlow request failed: {err_msg}",
                 result_chain=err_chain,
             )
+            await self._notify_agent_done_hook()
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
@@ -778,11 +787,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         self.final_llm_resp = LLMResponse(role=role, result_chain=final_chain)
         self._transition_state(AgentState.DONE)
-
-        try:
-            await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
-        except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+        await self._notify_agent_done_hook()
 
         yield AgentResponse(
             type="llm_result",
