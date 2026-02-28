@@ -29,9 +29,9 @@ from astrbot.core.pipeline.scheduler import PipelineContext, PipelineScheduler
 from astrbot.core.platform.manager import PlatformManager
 from astrbot.core.platform_message_history_mgr import PlatformMessageHistoryManager
 from astrbot.core.provider.manager import ProviderManager
-from astrbot.core.star import PluginManager
 from astrbot.core.star.context import Context
 from astrbot.core.star.star_handler import EventType, star_handlers_registry, star_map
+from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
