@@ -3,7 +3,7 @@ import os
 import re
 import sys
 import uuid
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import apscheduler.schedulers.asyncio as _apscheduler_asyncio_import
 import telegram.ext as _telegram_ext_import
@@ -42,6 +42,9 @@ if sys.version_info >= (3, 12):
     from typing import override
 else:
     from typing_extensions import override
+
+if TYPE_CHECKING:
+    from telegram.ext import CallbackContext, ExtBot
 
 
 @register_platform_adapter("telegram", "telegram 适配器")
@@ -257,7 +260,7 @@ class TelegramPlatformAdapter(Platform):
         return result if result else None
 
     async def start(
-        self, update: Update, context: telegram_ext.CallbackContext
+        self, update: Update, context: "CallbackContext"
     ) -> None:
         if not update.effective_chat:
             logger.warning(
@@ -270,7 +273,7 @@ class TelegramPlatformAdapter(Platform):
         )
 
     async def message_handler(
-        self, update: Update, context: telegram_ext.CallbackContext
+        self, update: Update, context: "CallbackContext"
     ) -> None:
         logger.debug(f"Telegram message: {update.message}")
 
@@ -287,7 +290,7 @@ class TelegramPlatformAdapter(Platform):
     async def convert_message(
         self,
         update: Update,
-        context: telegram_ext.CallbackContext,
+        context: "CallbackContext",
         get_reply=True,
     ) -> AstrBotMessage | None:
         """转换 Telegram 的消息对象为 AstrBotMessage 对象。
@@ -466,7 +469,7 @@ class TelegramPlatformAdapter(Platform):
         return message
 
     async def handle_media_group_message(
-        self, update: Update, context: telegram_ext.CallbackContext
+        self, update: Update, context: "CallbackContext"
     ):
         """Handle messages that are part of a media group (album).
 
@@ -582,7 +585,7 @@ class TelegramPlatformAdapter(Platform):
         )
         self.commit_event(message_event)
 
-    def get_client(self) -> telegram_ext.ExtBot:
+    def get_client(self) -> "ExtBot":
         return self.client
 
     async def terminate(self) -> None:
