@@ -94,16 +94,8 @@ async def run_third_party_agent(
 
 @dataclass
 class _ThirdPartyRunnerOutput:
-    chain: MessageChain | None
+    chain: MessageChain
     is_error: bool = False
-
-
-async def _iter_runner_output_chain(
-    output_stream: AsyncGenerator[_ThirdPartyRunnerOutput, None],
-) -> AsyncGenerator[_ThirdPartyRunnerOutput, None]:
-    async for output in output_stream:
-        if output.chain:
-            yield output
 
 
 async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
@@ -239,18 +231,15 @@ class ThirdPartyAgentSubStage(Stage):
 
                 async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
                     nonlocal stream_has_runner_error
-                    async for runner_output in _iter_runner_output_chain(
-                        run_third_party_agent(
-                            runner,
-                            stream_to_general=False,
-                            custom_error_message=custom_error_message,
-                        ),
+                    async for runner_output in run_third_party_agent(
+                        runner,
+                        stream_to_general=False,
+                        custom_error_message=custom_error_message,
                     ):
                         if runner_output.is_error:
                             stream_has_runner_error = True
                             event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
-                        if runner_output.chain:
-                            yield runner_output.chain
+                        yield runner_output.chain
 
                 event.set_result(
                     MessageEventResult()
@@ -276,15 +265,14 @@ class ThirdPartyAgentSubStage(Stage):
                         )
             else:
                 # 非流式响应或转换为普通响应
-                fallback_chains: list[MessageChain] = []
+                merged_chain: list = []
                 fallback_is_error = False
                 async for output in run_third_party_agent(
                     runner,
                     stream_to_general=stream_to_general,
                     custom_error_message=custom_error_message,
                 ):
-                    if output.chain:
-                        fallback_chains.append(output.chain)
+                    merged_chain.extend(output.chain.chain or [])
                     if output.is_error:
                         fallback_is_error = True
                     yield
@@ -292,13 +280,10 @@ class ThirdPartyAgentSubStage(Stage):
                 final_resp = runner.get_final_llm_resp()
 
                 if not final_resp or not final_resp.result_chain:
-                    if fallback_chains:
+                    if merged_chain:
                         logger.warning(
                             "Agent Runner returned no final response, fallback to streamed error/result chain."
                         )
-                        merged_chain: list = []
-                        for chain in fallback_chains:
-                            merged_chain.extend(chain.chain or [])
                         content_type = (
                             ResultContentType.AGENT_RUNNER_ERROR
                             if fallback_is_error
