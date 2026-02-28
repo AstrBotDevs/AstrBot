@@ -125,5 +125,8 @@
       "confirm": "confirm",
       "cancel": "cancel"
     }
+  },
+  "sslValidation": {
+    "required": "When WebUI HTTPS is enabled, SSL certificate file path and private key file path must be configured"
   }
 }

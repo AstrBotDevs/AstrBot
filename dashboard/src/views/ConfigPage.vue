@@ -500,8 +500,32 @@ export default {
         this.save_message_success = "error";
       });
     },
+    validateSslConfig() {
+      const dashboard = this.config_data?.dashboard;
+      if (!dashboard || !dashboard.ssl) return true;
+
+      const ssl = dashboard.ssl;
+      if (!ssl.enable) return true;
+
+      const certFile = (ssl.cert_file || '').trim();
+      const keyFile = (ssl.key_file || '').trim();
+
+      if (!certFile || !keyFile) {
+        return this.tm('sslValidation.required');
+      }
+      return true;
+    },
     updateConfig() {
       if (!this.fetched) return;
+
+      // 前端验证 SSL 配置
+      const sslValidation = this.validateSslConfig();
+      if (sslValidation !== true) {
+        this.save_message = sslValidation;
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+        return Promise.resolve({ success: false });
+      }
 
       const postData = {
         config: JSON.parse(JSON.stringify(this.config_data)),

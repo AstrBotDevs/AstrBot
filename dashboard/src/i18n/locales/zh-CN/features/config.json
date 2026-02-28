@@ -125,5 +125,8 @@
       "confirm": "确定",
       "cancel": "取消"
     }
+  },
+  "sslValidation": {
+    "required": "启用 WebUI HTTPS 时，必须配置 SSL 证书文件路径和私钥文件路径"
   }
 }
