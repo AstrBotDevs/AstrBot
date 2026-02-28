@@ -160,6 +160,7 @@ yay -S astrbot-git
 | DeepSeek | 大型模型服務 |
 | Ollama（本機部署） | 大型模型服務 |
 | LM Studio（本機部署） | 大型模型服務 |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | 大型模型服務（API 閘道，支援所有模型） |
 | [優雲智算](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | 大型模型服務 |
 | [302.AI](https://share.302.ai/rr1M3l) | 大型模型服務 |
 | [小馬算力](https://www.tokenpony.cn/3YPyf) | 大型模型服務 |

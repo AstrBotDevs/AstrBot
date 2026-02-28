@@ -160,6 +160,7 @@ yay -S astrbot-git
 | DeepSeek | Сервисы LLM |
 | Ollama (Самостоятельное размещение) | Сервисы LLM |
 | LM Studio (Самостоятельное размещение) | Сервисы LLM |
+| [AIHubMix](https://aihubmix.com/?aff=4bfH) | Сервисы LLM (API-шлюз, поддерживает все модели) |
 | [CompShare](https://www.compshare.cn/?ytag=GPU_YY-gh_astrbot&referral_code=FV7DcGowN4hB5UuXKgpE74) | Сервисы LLM |
 | [302.AI](https://share.302.ai/rr1M3l) | Сервисы LLM |
 | [TokenPony](https://www.tokenpony.cn/3YPyf) | Сервисы LLM |
