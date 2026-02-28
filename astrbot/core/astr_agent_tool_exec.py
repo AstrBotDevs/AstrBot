@@ -11,7 +11,6 @@ from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
-from astrbot.core.message.components import Image
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
@@ -27,6 +26,7 @@ from astrbot.core.astr_main_agent_resources import (
     SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
@@ -175,7 +175,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 image_urls = list(image_urls)
             except (TypeError, ValueError):
                 image_urls = [image_urls]
-            
+
         # 获取当前事件中的图片
         event = run_context.context.event
         if event.message_obj and event.message_obj.message:
