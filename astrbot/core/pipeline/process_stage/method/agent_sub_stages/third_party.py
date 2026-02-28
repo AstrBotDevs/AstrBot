@@ -272,31 +272,38 @@ class ThirdPartyAgentSubStage(Stage):
                         )
             else:
                 # 非流式响应或转换为普通响应
-                fallback_output: _ThirdPartyRunnerOutput | None = None
+                fallback_chains: list[MessageChain] = []
+                fallback_is_error = False
                 async for output in run_third_party_agent(
                     runner,
                     stream_to_general=stream_to_general,
                     custom_error_message=custom_error_message,
                 ):
                     if output.chain:
-                        fallback_output = output
+                        fallback_chains.append(output.chain)
+                    if output.is_error:
+                        fallback_is_error = True
                     yield
 
                 final_resp = runner.get_final_llm_resp()
 
                 if not final_resp or not final_resp.result_chain:
-                    if fallback_output and fallback_output.chain:
+                    if fallback_chains:
                         logger.warning(
                             "Agent Runner returned no final response, fallback to streamed error/result chain."
                         )
+                        merged_chain: list = []
+                        for chain in fallback_chains:
+                            merged_chain.extend(chain.chain or [])
                         content_type = (
                             ResultContentType.AGENT_RUNNER_ERROR
-                            if fallback_output.is_error
+                            if fallback_is_error
                             else ResultContentType.LLM_RESULT
                         )
+                        event.set_extra("_third_party_runner_error", fallback_is_error)
                         event.set_result(
                             MessageEventResult(
-                                chain=fallback_output.chain.chain or [],
+                                chain=merged_chain,
                                 result_content_type=content_type,
                             ),
                         )
@@ -309,6 +316,10 @@ class ThirdPartyAgentSubStage(Stage):
                     ResultContentType.AGENT_RUNNER_ERROR
                     if final_resp.role == "err"
                     else ResultContentType.LLM_RESULT
+                )
+                event.set_extra(
+                    "_third_party_runner_error",
+                    final_resp.role == "err",
                 )
                 event.set_result(
                     MessageEventResult(

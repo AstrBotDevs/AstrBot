@@ -53,21 +53,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         run_values_messages: list[dict[str, T.Any]] = field(default_factory=list)
         timed_out: bool = False
 
-    def __del__(self) -> None:
-        """Best-effort cleanup when runner is garbage collected."""
-        api_client = getattr(self, "api_client", None)
-        if not isinstance(api_client, DeerFlowAPIClient) or api_client.is_closed:
-            return
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-
-        if loop.is_closed():
-            return
-        loop.create_task(api_client.close())
-
     def _format_exception(self, err: Exception) -> str:
         err_type = type(err).__name__
         detail = str(err).strip()

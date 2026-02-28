@@ -248,6 +248,13 @@ class MessageEventResult(MessageChain):
         """是否为 LLM 结果。"""
         return self.result_content_type == ResultContentType.LLM_RESULT
 
+    def is_model_result(self) -> bool:
+        """Whether result comes from model execution (including runner errors)."""
+        return self.result_content_type in (
+            ResultContentType.LLM_RESULT,
+            ResultContentType.AGENT_RUNNER_ERROR,
+        )
+
 
 # 为了兼容旧版代码，保留 CommandResult 的别名
 CommandResult = MessageEventResult

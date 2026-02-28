@@ -1,8 +1,6 @@
-import asyncio
 import codecs
 import json
 from collections.abc import AsyncGenerator
-from contextlib import suppress
 from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
@@ -159,17 +157,10 @@ class DeerFlowAPIClient:
         session = getattr(self, "session", None)
         if session is None or session.closed:
             return
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-
-        if loop.is_closed():
-            return
-
-        with suppress(RuntimeError):
-            loop.create_task(self.close())
+        logger.warning(
+            "DeerFlowAPIClient garbage collected with unclosed session; "
+            "explicit close() should be called by runner lifecycle."
+        )
 
     @property
     def is_closed(self) -> bool:
