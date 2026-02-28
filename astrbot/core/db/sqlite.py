@@ -32,8 +32,8 @@ from astrbot.core.db.po import (
 from astrbot.core.db.po import (
     Stats as DeprecatedStats,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
-NOT_GIVEN = T.TypeVar("NOT_GIVEN")
 TxResult = T.TypeVar("TxResult")
 CRON_FIELD_NOT_SET = object()
 
@@ -58,6 +58,7 @@ class SQLiteDatabase(BaseDatabase):
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
+            await self._ensure_persona_custom_error_message_column(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -91,6 +92,16 @@ class SQLiteDatabase(BaseDatabase):
 
         if "skills" not in columns:
             await conn.execute(text("ALTER TABLE personas ADD COLUMN skills JSON"))
+
+    async def _ensure_persona_custom_error_message_column(self, conn) -> None:
+        """确保 personas 表有 custom_error_message 列。"""
+        result = await conn.execute(text("PRAGMA table_info(personas)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "custom_error_message" not in columns:
+            await conn.execute(
+                text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
+            )
 
     # ====
     # Platform Statistics
@@ -675,6 +686,7 @@ class SQLiteDatabase(BaseDatabase):
         begin_dialogs=None,
         tools=None,
         skills=None,
+        custom_error_message=None,
         folder_id=None,
         sort_order=0,
     ):
@@ -688,6 +700,7 @@ class SQLiteDatabase(BaseDatabase):
                     begin_dialogs=begin_dialogs or [],
                     tools=tools,
                     skills=skills,
+                    custom_error_message=custom_error_message,
                     folder_id=folder_id,
                     sort_order=sort_order,
                 )
@@ -719,6 +732,7 @@ class SQLiteDatabase(BaseDatabase):
         begin_dialogs=None,
         tools=NOT_GIVEN,
         skills=NOT_GIVEN,
+        custom_error_message=NOT_GIVEN,
     ):
         """Update a persona's system prompt or begin dialogs."""
         async with self.get_db() as session:
@@ -734,6 +748,8 @@ class SQLiteDatabase(BaseDatabase):
                     values["tools"] = tools
                 if skills is not NOT_GIVEN:
                     values["skills"] = skills
+                if custom_error_message is not NOT_GIVEN:
+                    values["custom_error_message"] = custom_error_message
                 if not values:
                     return None
                 query = query.values(**values)
