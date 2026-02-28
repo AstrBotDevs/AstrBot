@@ -1,6 +1,8 @@
+import asyncio
 import codecs
 import json
 from collections.abc import AsyncGenerator
+from contextlib import suppress
 from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
@@ -150,7 +152,24 @@ class DeerFlowAPIClient:
                 yield event
 
     async def close(self) -> None:
-        await self.session.close()
+        if not self.session.closed:
+            await self.session.close()
+
+    def __del__(self) -> None:
+        session = getattr(self, "session", None)
+        if session is None or session.closed:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        if loop.is_closed():
+            return
+
+        with suppress(RuntimeError):
+            loop.create_task(self.close())
 
     @property
     def is_closed(self) -> bool:

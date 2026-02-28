@@ -2,7 +2,6 @@ import asyncio
 import sys
 import typing as T
 from collections import deque
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -20,6 +19,16 @@ from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .deerflow_api_client import DeerFlowAPIClient
+from .deerflow_stream_utils import (
+    build_task_failure_summary,
+    extract_ai_delta_from_event_data,
+    extract_clarification_from_event_data,
+    extract_latest_ai_text,
+    extract_latest_clarification_text,
+    extract_messages_from_values_data,
+    extract_task_failures_from_custom_event,
+    get_message_id,
+)
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -43,6 +52,21 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         baseline_initialized: bool = False
         run_values_messages: list[dict[str, T.Any]] = field(default_factory=list)
         timed_out: bool = False
+
+    def __del__(self) -> None:
+        """Best-effort cleanup when runner is garbage collected."""
+        api_client = getattr(self, "api_client", None)
+        if not isinstance(api_client, DeerFlowAPIClient) or api_client.is_closed:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        if loop.is_closed():
+            return
+        loop.create_task(api_client.close())
 
     def _format_exception(self, err: Exception) -> str:
         err_type = type(err).__name__
@@ -107,6 +131,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             )
             parsed = min_value
         return parsed
+
+    async def close(self) -> None:
+        """Explicit cleanup hook for long-lived workers."""
+        api_client = getattr(self, "api_client", None)
+        if isinstance(api_client, DeerFlowAPIClient) and not api_client.is_closed:
+            await api_client.close()
 
     @override
     async def reset(
@@ -246,92 +276,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 f"DeerFlow agent reached max_step ({max_step}) without completion."
             )
 
-    def _extract_text(self, content: T.Any) -> str:
-        if isinstance(content, str):
-            return content
-        if isinstance(content, dict):
-            if isinstance(content.get("text"), str):
-                return content["text"]
-            if "content" in content:
-                return self._extract_text(content.get("content"))
-            if "kwargs" in content and isinstance(content["kwargs"], dict):
-                return self._extract_text(content["kwargs"].get("content"))
-        if isinstance(content, list):
-            parts: list[str] = []
-            for item in content:
-                if isinstance(item, str):
-                    parts.append(item)
-                elif isinstance(item, dict):
-                    item_type = item.get("type")
-                    if item_type == "text" and isinstance(item.get("text"), str):
-                        parts.append(item["text"])
-                    elif "content" in item:
-                        parts.append(str(item["content"]))
-            return "\n".join([p for p in parts if p]).strip()
-        return str(content) if content is not None else ""
-
-    def _extract_messages_from_values_data(self, data: T.Any) -> list[T.Any]:
-        """Extract messages list from possible values event payload shapes."""
-        candidates: list[T.Any] = []
-        if isinstance(data, dict):
-            candidates.append(data)
-            if isinstance(data.get("values"), dict):
-                candidates.append(data["values"])
-        elif isinstance(data, list):
-            candidates.extend([x for x in data if isinstance(x, dict)])
-
-        for item in candidates:
-            messages = item.get("messages")
-            if isinstance(messages, list):
-                return messages
-        return []
-
-    def _is_ai_message(self, message: dict[str, T.Any]) -> bool:
-        role = str(message.get("role", "")).lower()
-        if role in {"assistant", "ai"}:
-            return True
-
-        msg_type = str(message.get("type", "")).lower()
-        if msg_type in {"ai", "assistant", "aimessage", "aimessagechunk"}:
-            return True
-        if "ai" in msg_type and all(
-            token not in msg_type for token in ("human", "tool", "system")
-        ):
-            return True
-        return False
-
-    def _extract_latest_ai_text(self, messages: Iterable[T.Any]) -> str:
-        # Scan backwards to get the latest assistant/ai message text.
-        for msg in reversed(list(messages)):
-            if not isinstance(msg, dict):
-                continue
-            if self._is_ai_message(msg):
-                text = self._extract_text(msg.get("content"))
-                if text:
-                    return text
-        return ""
-
-    def _is_clarification_tool_message(self, message: dict[str, T.Any]) -> bool:
-        msg_type = str(message.get("type", "")).lower()
-        tool_name = str(message.get("name", "")).lower()
-        return msg_type == "tool" and tool_name == "ask_clarification"
-
-    def _extract_latest_clarification_text(self, messages: Iterable[T.Any]) -> str:
-        for msg in reversed(list(messages)):
-            if not isinstance(msg, dict):
-                continue
-            if self._is_clarification_tool_message(msg):
-                text = self._extract_text(msg.get("content"))
-                if text:
-                    return text
-        return ""
-
-    def _get_message_id(self, message: T.Any) -> str:
-        if not isinstance(message, dict):
-            return ""
-        msg_id = message.get("id")
-        return msg_id if isinstance(msg_id, str) else ""
-
     def _extract_new_messages_from_values(
         self,
         values_messages: list[T.Any],
@@ -341,7 +285,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         for msg in values_messages:
             if not isinstance(msg, dict):
                 continue
-            msg_id = self._get_message_id(msg)
+            msg_id = get_message_id(msg)
             if not msg_id or msg_id in state.seen_message_ids:
                 continue
             self._remember_seen_message_id(state, msg_id)
@@ -357,81 +301,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         while len(state.seen_message_order) > self._MAX_VALUES_HISTORY:
             dropped = state.seen_message_order.popleft()
             state.seen_message_ids.discard(dropped)
-
-    def _extract_event_message_obj(self, data: T.Any) -> dict[str, T.Any] | None:
-        msg_obj = data
-        if isinstance(data, (list, tuple)) and data:
-            msg_obj = data[0]
-        if isinstance(msg_obj, dict) and isinstance(msg_obj.get("data"), dict):
-            # Some servers wrap message body in {"data": {...}}
-            msg_obj = msg_obj["data"]
-        return msg_obj if isinstance(msg_obj, dict) else None
-
-    def _extract_ai_delta_from_event_data(self, data: T.Any) -> str:
-        # LangGraph messages-tuple events usually carry either:
-        # - {"type": "ai", "content": "..."}
-        # - [message_obj, metadata]
-        msg_obj = self._extract_event_message_obj(data)
-        if not msg_obj:
-            return ""
-        if self._is_ai_message(msg_obj):
-            return self._extract_text(msg_obj.get("content"))
-        return ""
-
-    def _extract_clarification_from_event_data(self, data: T.Any) -> str:
-        msg_obj = self._extract_event_message_obj(data)
-        if not msg_obj:
-            return ""
-        if self._is_clarification_tool_message(msg_obj):
-            return self._extract_text(msg_obj.get("content"))
-        return ""
-
-    def _iter_custom_event_items(self, data: T.Any) -> list[dict[str, T.Any]]:
-        items: list[dict[str, T.Any]] = []
-        if isinstance(data, dict):
-            return [data]
-        if isinstance(data, list):
-            for item in data:
-                if isinstance(item, dict):
-                    items.append(item)
-                elif isinstance(item, (list, tuple)):
-                    for nested in item:
-                        if isinstance(nested, dict):
-                            items.append(nested)
-        return items
-
-    def _extract_task_failures_from_custom_event(self, data: T.Any) -> list[str]:
-        failures: list[str] = []
-        for item in self._iter_custom_event_items(data):
-            event_type = str(item.get("type", "")).lower()
-            if event_type not in {"task_failed", "task_timed_out"}:
-                continue
-
-            task_id = str(item.get("task_id", "")).strip()
-            error_text = self._extract_text(item.get("error")).strip()
-            if task_id and error_text:
-                failures.append(f"{task_id}: {error_text}")
-            elif error_text:
-                failures.append(error_text)
-            elif task_id:
-                failures.append(f"{task_id}: unknown error")
-            else:
-                failures.append("unknown task failure")
-        return failures
-
-    def _build_task_failure_summary(self, failures: list[str]) -> str:
-        if not failures:
-            return ""
-        deduped: list[str] = []
-        seen: set[str] = set()
-        for failure in failures:
-            if failure not in seen:
-                seen.add(failure)
-                deduped.append(failure)
-        if len(deduped) == 1:
-            return f"DeerFlow subtask failed: {deduped[0]}"
-        joined = "\n".join([f"- {item}" for item in deduped[:5]])
-        return f"DeerFlow subtasks failed:\n{joined}"
 
     def _is_likely_base64_image(self, value: str) -> bool:
         if " " in value:
@@ -558,14 +427,14 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         state: _StreamState,
     ) -> list[AgentResponse]:
         responses: list[AgentResponse] = []
-        values_messages = self._extract_messages_from_values_data(data)
+        values_messages = extract_messages_from_values_data(data)
         if not values_messages:
             return responses
 
         if not state.baseline_initialized:
             state.baseline_initialized = True
             for msg in values_messages:
-                msg_id = self._get_message_id(msg)
+                msg_id = get_message_id(msg)
                 self._remember_seen_message_id(state, msg_id)
             return responses
 
@@ -579,8 +448,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 state.run_values_messages = state.run_values_messages[
                     -self._MAX_VALUES_HISTORY :
                 ]
-            latest_text = self._extract_latest_ai_text(state.run_values_messages)
-            latest_clarification = self._extract_latest_clarification_text(
+            latest_text = extract_latest_ai_text(state.run_values_messages)
+            latest_clarification = extract_latest_clarification_text(
                 state.run_values_messages,
             )
             if latest_clarification:
@@ -618,7 +487,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         data: T.Any,
         state: _StreamState,
     ) -> AgentResponse | None:
-        delta = self._extract_ai_delta_from_event_data(data)
+        delta = extract_ai_delta_from_event_data(data)
         if delta:
             state.fallback_stream_text += delta
 
@@ -629,7 +498,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 data=AgentResponseData(chain=MessageChain().message(delta)),
             )
 
-        maybe_clarification = self._extract_clarification_from_event_data(data)
+        maybe_clarification = extract_clarification_from_event_data(data)
         if maybe_clarification:
             state.clarification_text = maybe_clarification
         return response
@@ -639,11 +508,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if state.clarification_text:
             final_text = state.clarification_text
         else:
-            final_text = self._extract_latest_ai_text(state.run_values_messages)
+            final_text = extract_latest_ai_text(state.run_values_messages)
             if not final_text:
                 final_text = state.streamed_text or state.fallback_stream_text
             if not final_text:
-                final_text = self._build_task_failure_summary(state.task_failures)
+                final_text = build_task_failure_summary(state.task_failures)
 
         if state.timed_out:
             timeout_note = (
@@ -697,7 +566,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
                 if event_type == "custom":
                     state.task_failures.extend(
-                        self._extract_task_failures_from_custom_event(data),
+                        extract_task_failures_from_custom_event(data),
                     )
                     continue
 

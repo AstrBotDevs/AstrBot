@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -98,10 +99,23 @@ class _ThirdPartyRunnerOutput:
 
 async def _iter_runner_output_chain(
     output_stream: AsyncGenerator[_ThirdPartyRunnerOutput, None],
-) -> AsyncGenerator[MessageChain, None]:
+) -> AsyncGenerator[_ThirdPartyRunnerOutput, None]:
     async for output in output_stream:
         if output.chain:
-            yield output.chain
+            yield output
+
+
+async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
+    close_callable = getattr(runner, "close", None)
+    if not callable(close_callable):
+        return
+
+    try:
+        close_result = close_callable()
+        if inspect.isawaitable(close_result):
+            await close_result
+    except Exception as e:
+        logger.warning(f"Failed to close third-party runner cleanly: {e}")
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -206,91 +220,105 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
 
-        await runner.reset(
-            request=req,
-            run_context=AgentContextWrapper(
-                context=astr_agent_ctx,
-                tool_call_timeout=60,
-            ),
-            agent_hooks=MAIN_AGENT_HOOKS,
-            provider_config=self.prov_cfg,
-            streaming=streaming_response,
-        )
+        try:
+            await runner.reset(
+                request=req,
+                run_context=AgentContextWrapper(
+                    context=astr_agent_ctx,
+                    tool_call_timeout=60,
+                ),
+                agent_hooks=MAIN_AGENT_HOOKS,
+                provider_config=self.prov_cfg,
+                streaming=streaming_response,
+            )
 
-        if streaming_response and not stream_to_general:
-            # 流式响应
-            event.set_result(
-                MessageEventResult()
-                .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                .set_async_stream(
-                    _iter_runner_output_chain(
+            if streaming_response and not stream_to_general:
+                # 流式响应
+                stream_has_runner_error = False
+
+                async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
+                    nonlocal stream_has_runner_error
+                    async for runner_output in _iter_runner_output_chain(
                         run_third_party_agent(
                             runner,
                             stream_to_general=False,
                             custom_error_message=custom_error_message,
                         ),
-                    )
-                ),
-            )
-            yield
-            if runner.done():
-                final_resp = runner.get_final_llm_resp()
-                if final_resp and final_resp.result_chain:
-                    is_runner_error = final_resp.role == "err"
-                    event.set_extra("_third_party_runner_error", is_runner_error)
-                    event.set_result(
-                        MessageEventResult(
-                            chain=final_resp.result_chain.chain or [],
-                            result_content_type=ResultContentType.STREAMING_FINISH,
-                        ),
-                    )
-        else:
-            # 非流式响应或转换为普通响应
-            fallback_output: _ThirdPartyRunnerOutput | None = None
-            async for output in run_third_party_agent(
-                runner,
-                stream_to_general=stream_to_general,
-                custom_error_message=custom_error_message,
-            ):
-                if output.chain:
-                    fallback_output = output
+                    ):
+                        if runner_output.is_error:
+                            stream_has_runner_error = True
+                            event.set_extra("_third_party_runner_error", True)
+                        if runner_output.chain:
+                            yield runner_output.chain
+
+                event.set_result(
+                    MessageEventResult()
+                    .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                    .set_async_stream(_stream_runner_chain()),
+                )
                 yield
-
-            final_resp = runner.get_final_llm_resp()
-
-            if not final_resp or not final_resp.result_chain:
-                if fallback_output and fallback_output.chain:
-                    logger.warning(
-                        "Agent Runner returned no final response, fallback to streamed error/result chain."
-                    )
-                    content_type = (
-                        ResultContentType.AGENT_RUNNER_ERROR
-                        if fallback_output.is_error
-                        else ResultContentType.LLM_RESULT
-                    )
-                    event.set_result(
-                        MessageEventResult(
-                            chain=fallback_output.chain.chain or [],
-                            result_content_type=content_type,
-                        ),
-                    )
+                if runner.done():
+                    final_resp = runner.get_final_llm_resp()
+                    if final_resp and final_resp.result_chain:
+                        is_runner_error = (
+                            stream_has_runner_error or final_resp.role == "err"
+                        )
+                        event.set_extra("_third_party_runner_error", is_runner_error)
+                        event.set_result(
+                            MessageEventResult(
+                                chain=final_resp.result_chain.chain or [],
+                                result_content_type=ResultContentType.STREAMING_FINISH,
+                            ),
+                        )
+            else:
+                # 非流式响应或转换为普通响应
+                fallback_output: _ThirdPartyRunnerOutput | None = None
+                async for output in run_third_party_agent(
+                    runner,
+                    stream_to_general=stream_to_general,
+                    custom_error_message=custom_error_message,
+                ):
+                    if output.chain:
+                        fallback_output = output
                     yield
-                    return
-                logger.warning("Agent Runner 未返回最终结果。")
-                return
 
-            content_type = (
-                ResultContentType.AGENT_RUNNER_ERROR
-                if final_resp.role == "err"
-                else ResultContentType.LLM_RESULT
-            )
-            event.set_result(
-                MessageEventResult(
-                    chain=final_resp.result_chain.chain or [],
-                    result_content_type=content_type,
-                ),
-            )
-            yield
+                final_resp = runner.get_final_llm_resp()
+
+                if not final_resp or not final_resp.result_chain:
+                    if fallback_output and fallback_output.chain:
+                        logger.warning(
+                            "Agent Runner returned no final response, fallback to streamed error/result chain."
+                        )
+                        content_type = (
+                            ResultContentType.AGENT_RUNNER_ERROR
+                            if fallback_output.is_error
+                            else ResultContentType.LLM_RESULT
+                        )
+                        event.set_result(
+                            MessageEventResult(
+                                chain=fallback_output.chain.chain or [],
+                                result_content_type=content_type,
+                            ),
+                        )
+                        yield
+                        return
+                    logger.warning("Agent Runner 未返回最终结果。")
+                    return
+
+                content_type = (
+                    ResultContentType.AGENT_RUNNER_ERROR
+                    if final_resp.role == "err"
+                    else ResultContentType.LLM_RESULT
+                )
+                event.set_result(
+                    MessageEventResult(
+                        chain=final_resp.result_chain.chain or [],
+                        result_content_type=content_type,
+                    ),
+                )
+                yield
+        finally:
+            await _close_runner_if_supported(runner)
 
         asyncio.create_task(
             Metric.upload(
