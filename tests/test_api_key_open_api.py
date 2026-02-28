@@ -186,7 +186,7 @@ async def test_open_chat_send_auto_session_id_and_username(
             "/api/v1/chat",
             json={
                 "message": "hello",
-                "username": "alice",
+                "username": "alice_auto_session",
                 "enable_streaming": False,
             },
             headers={"X-API-Key": raw_key},
@@ -200,16 +200,16 @@ async def test_open_chat_send_auto_session_id_and_username(
     created_session_id = send_data["data"]["session_id"]
     assert isinstance(created_session_id, str)
     uuid.UUID(created_session_id)
-    assert send_data["data"]["creator"] == "alice"
+    assert send_data["data"]["creator"] == "alice_auto_session"
     created_session = await core_lifecycle_td.db.get_platform_session_by_id(
         created_session_id
     )
     assert created_session is not None
-    assert created_session.creator == "alice"
+    assert created_session.creator == "alice_auto_session"
     assert created_session.platform_id == "webchat"
 
     await core_lifecycle_td.db.create_platform_session(
-        creator="bob",
+        creator="bob_auto_session",
         platform_id="webchat",
         session_id="open_api_existing_bob_session",
         is_group=0,
@@ -251,14 +251,15 @@ async def test_open_chat_sessions_pagination(
 
     create_res = await test_client.post(
         "/api/apikey/create",
-        json={"name": "chat-scope-key", "scopes": ["chat"]},
+        json={"name": "chat-scope-key-pagination", "scopes": ["chat"]},
         headers=authenticated_header,
     )
     create_data = await create_res.get_json()
     assert create_data["status"] == "ok"
     raw_key = create_data["data"]["api_key"]
 
-    creator = "alice"
+    # Use unique session IDs to avoid conflicts with other tests
+    creator = "alice_pagination"
     for idx in range(3):
         await core_lifecycle_td.db.create_platform_session(
             creator=creator,
@@ -268,7 +269,7 @@ async def test_open_chat_sessions_pagination(
             is_group=0,
         )
     await core_lifecycle_td.db.create_platform_session(
-        creator="bob",
+        creator="bob_pagination",
         platform_id="webchat",
         session_id="open_api_paginated_bob",
         display_name="Open API Session Bob",
@@ -276,7 +277,7 @@ async def test_open_chat_sessions_pagination(
     )
 
     page_1_res = await test_client.get(
-        "/api/v1/chat/sessions?page=1&page_size=2&username=alice",
+        "/api/v1/chat/sessions?page=1&page_size=2&username=alice_pagination",
         headers={"X-API-Key": raw_key},
     )
     assert page_1_res.status_code == 200
@@ -286,10 +287,10 @@ async def test_open_chat_sessions_pagination(
     assert page_1_data["data"]["page_size"] == 2
     assert page_1_data["data"]["total"] == 3
     assert len(page_1_data["data"]["sessions"]) == 2
-    assert all(item["creator"] == "alice" for item in page_1_data["data"]["sessions"])
+    assert all(item["creator"] == "alice_pagination" for item in page_1_data["data"]["sessions"])
 
     page_2_res = await test_client.get(
-        "/api/v1/chat/sessions?page=2&page_size=2&username=alice",
+        "/api/v1/chat/sessions?page=2&page_size=2&username=alice_pagination",
         headers={"X-API-Key": raw_key},
     )
     assert page_2_res.status_code == 200
