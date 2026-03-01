@@ -196,11 +196,28 @@ class DeerFlowAPIClient:
                 yield event
 
     async def close(self) -> None:
-        self._closed = True
         session = self._session
-        if session is not None and not session.closed:
+        if session is None:
+            self._closed = True
+            return
+
+        if session.closed:
+            self._session = None
+            self._closed = True
+            return
+
+        try:
             await session.close()
+        except Exception as e:
+            logger.warning(
+                "Failed to close DeerFlowAPIClient session cleanly: %s",
+                e,
+                exc_info=True,
+            )
+            raise
+
         self._session = None
+        self._closed = True
 
     def __del__(self) -> None:
         session = getattr(self, "_session", None)

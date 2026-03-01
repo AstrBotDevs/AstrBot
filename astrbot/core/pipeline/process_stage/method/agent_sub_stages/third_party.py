@@ -27,6 +27,7 @@ from astrbot.core.persona_error_reply import (
 
 if TYPE_CHECKING:
     from astrbot.core.agent.runners.base import BaseAgentRunner
+    from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -46,6 +47,11 @@ AGENT_RUNNER_TYPE_KEY = {
 }
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
+RUNNER_NO_RESULT_FALLBACK_MESSAGE = "Agent Runner did not return any result."
+RUNNER_NO_FINAL_RESPONSE_LOG = (
+    "Agent Runner returned no final response, fallback to streamed error/result chain."
+)
+RUNNER_NO_RESULT_LOG = "Agent Runner 未返回最终结果。"
 
 
 def _coerce_positive_int(value: object, default: int) -> int:
@@ -56,6 +62,42 @@ def _coerce_positive_int(value: object, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return coerced if coerced > 0 else default
+
+
+def _resolve_runner_final_result(
+    merged_chain: list,
+    has_intermediate_error: bool,
+    final_resp: "LLMResponse | None",
+) -> tuple[list, bool, ResultContentType]:
+    if not final_resp or not final_resp.result_chain:
+        if merged_chain:
+            logger.warning(RUNNER_NO_FINAL_RESPONSE_LOG)
+            is_runner_error = has_intermediate_error
+            result_content_type = (
+                ResultContentType.AGENT_RUNNER_ERROR
+                if is_runner_error
+                else ResultContentType.LLM_RESULT
+            )
+            return merged_chain, is_runner_error, result_content_type
+
+        logger.warning(RUNNER_NO_RESULT_LOG)
+        fallback_error_chain = MessageChain().message(
+            RUNNER_NO_RESULT_FALLBACK_MESSAGE,
+        )
+        return (
+            fallback_error_chain.chain or [],
+            True,
+            ResultContentType.AGENT_RUNNER_ERROR,
+        )
+
+    final_chain = final_resp.result_chain.chain or []
+    is_runner_error = has_intermediate_error or final_resp.role == "err"
+    result_content_type = (
+        ResultContentType.AGENT_RUNNER_ERROR
+        if is_runner_error
+        else ResultContentType.LLM_RESULT
+    )
+    return final_chain, is_runner_error, result_content_type
 
 
 async def run_third_party_agent(
@@ -183,23 +225,11 @@ class ThirdPartyAgentSubStage(Stage):
 
         if runner.done():
             final_resp = runner.get_final_llm_resp()
-            if not final_resp or not final_resp.result_chain:
-                if merged_chain:
-                    logger.warning(
-                        "Agent Runner returned no final response, fallback to streamed error/result chain."
-                    )
-                    final_chain = merged_chain
-                    is_runner_error = stream_has_runner_error
-                else:
-                    logger.warning("Agent Runner 未返回最终结果。")
-                    fallback_error_chain = MessageChain().message(
-                        "Agent Runner did not return any result.",
-                    )
-                    final_chain = fallback_error_chain.chain or []
-                    is_runner_error = True
-            else:
-                final_chain = final_resp.result_chain.chain or []
-                is_runner_error = stream_has_runner_error or final_resp.role == "err"
+            final_chain, is_runner_error, _ = _resolve_runner_final_result(
+                merged_chain=merged_chain,
+                has_intermediate_error=stream_has_runner_error,
+                final_resp=final_resp,
+            )
 
             event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
             event.set_result(
@@ -231,34 +261,13 @@ class ThirdPartyAgentSubStage(Stage):
             yield
 
         final_resp = runner.get_final_llm_resp()
-        if not final_resp or not final_resp.result_chain:
-            if merged_chain:
-                logger.warning(
-                    "Agent Runner returned no final response, fallback to streamed error/result chain."
-                )
-                final_chain = merged_chain
-                is_runner_error = has_intermediate_error
-                result_content_type = (
-                    ResultContentType.AGENT_RUNNER_ERROR
-                    if is_runner_error
-                    else ResultContentType.LLM_RESULT
-                )
-            else:
-                logger.warning("Agent Runner 未返回最终结果。")
-                fallback_error_chain = MessageChain().message(
-                    "Agent Runner did not return any result.",
-                )
-                final_chain = fallback_error_chain.chain or []
-                is_runner_error = True
-                result_content_type = ResultContentType.AGENT_RUNNER_ERROR
-        else:
-            final_chain = final_resp.result_chain.chain or []
-            is_runner_error = has_intermediate_error or final_resp.role == "err"
-            result_content_type = (
-                ResultContentType.AGENT_RUNNER_ERROR
-                if is_runner_error
-                else ResultContentType.LLM_RESULT
+        final_chain, is_runner_error, result_content_type = (
+            _resolve_runner_final_result(
+                merged_chain=merged_chain,
+                has_intermediate_error=has_intermediate_error,
+                final_resp=final_resp,
             )
+        )
 
         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
         event.set_result(
