@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
@@ -60,17 +59,11 @@ RUNNER_NO_FINAL_RESPONSE_LOG = (
 RUNNER_NO_RESULT_LOG = "Agent Runner did not return final result."
 
 
-@dataclass(frozen=True)
-class RunnerChunk:
-    chain: MessageChain
-    is_error: bool
-
-
 async def run_third_party_agent(
     runner: "BaseAgentRunner",
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
-) -> AsyncGenerator[RunnerChunk, None]:
+) -> AsyncGenerator[tuple[MessageChain, bool], None]:
     """
     运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
@@ -80,12 +73,12 @@ async def run_third_party_agent(
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
-                yield RunnerChunk(chain=resp.data["chain"], is_error=False)
+                yield resp.data["chain"], False
             elif resp.type == "llm_result":
                 if stream_to_general:
-                    yield RunnerChunk(chain=resp.data["chain"], is_error=False)
+                    yield resp.data["chain"], False
             elif resp.type == "err":
-                yield RunnerChunk(chain=resp.data["chain"], is_error=True)
+                yield resp.data["chain"], True
     except Exception as e:
         logger.error(f"Third party agent runner error: {e}")
         err_msg = custom_error_message
@@ -95,12 +88,11 @@ async def run_third_party_agent(
                 f"Error Type: {type(e).__name__} (3rd party)\n"
                 f"Error Message: {str(e)}"
             )
-        yield RunnerChunk(chain=MessageChain().message(err_msg), is_error=True)
+        yield MessageChain().message(err_msg), True
 
 
 class _RunnerResultAggregator:
-    def __init__(self, event: "AstrMessageEvent") -> None:
-        self._event = event
+    def __init__(self) -> None:
         self.merged_chain: list = []
         self.has_error = False
 
@@ -108,7 +100,6 @@ class _RunnerResultAggregator:
         self.merged_chain.extend(chain.chain or [])
         if is_error:
             self.has_error = True
-            self._event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
 
     def finalize(
         self,
@@ -146,7 +137,13 @@ def _start_stream_watchdog(
                 "Third-party runner stream was never consumed in %ss; closing runner to avoid resource leak.",
                 timeout_sec,
             )
-            await close_runner_once()
+            try:
+                await close_runner_once()
+            except Exception:
+                logger.warning(
+                    "Exception while closing third-party runner from stream watchdog.",
+                    exc_info=True,
+                )
 
     return asyncio.create_task(_watchdog())
 
@@ -162,57 +159,6 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
             await close_result
     except Exception as e:
         logger.warning(f"Failed to close third-party runner cleanly: {e}")
-
-
-class _RunnerLifecycle:
-    def __init__(
-        self,
-        *,
-        runner: "BaseAgentRunner",
-        streaming_used: bool,
-        timeout_sec: int,
-    ) -> None:
-        self._runner = runner
-        self._streaming_used = streaming_used
-        self._timeout_sec = timeout_sec
-        self._runner_closed = False
-        self._stream_consumed = False
-        self._watchdog_task: asyncio.Task[None] | None = None
-
-    async def __aenter__(
-        self,
-    ) -> tuple[Callable[[], Awaitable[None]], Callable[[], None]]:
-        return self.close_runner_once, self.mark_stream_consumed
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        if (
-            self._watchdog_task
-            and not self._watchdog_task.done()
-            and (self._stream_consumed or self._runner_closed)
-        ):
-            self._watchdog_task.cancel()
-        if not self._streaming_used:
-            await self.close_runner_once()
-
-    async def start_watchdog_if_needed(self) -> None:
-        if self._watchdog_task is not None or not self._streaming_used:
-            return
-        self._watchdog_task = _start_stream_watchdog(
-            timeout_sec=self._timeout_sec,
-            is_stream_consumed=lambda: self._stream_consumed,
-            close_runner_once=self.close_runner_once,
-        )
-
-    async def close_runner_once(self) -> None:
-        if self._runner_closed:
-            return
-        self._runner_closed = True
-        await _close_runner_if_supported(self._runner)
-
-    def mark_stream_consumed(self) -> None:
-        self._stream_consumed = True
-        if self._watchdog_task and not self._watchdog_task.done():
-            self._watchdog_task.cancel()
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -267,18 +213,20 @@ class ThirdPartyAgentSubStage(Stage):
         close_runner_once: Callable[[], Awaitable[None]],
         mark_stream_consumed: Callable[[], None],
     ) -> AsyncGenerator[None, None]:
-        aggregator = _RunnerResultAggregator(event)
+        aggregator = _RunnerResultAggregator()
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
             mark_stream_consumed()
             try:
-                async for chunk in run_third_party_agent(
+                async for chain, is_error in run_third_party_agent(
                     runner,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
                 ):
-                    aggregator.add_chunk(chunk.chain, chunk.is_error)
-                    yield chunk.chain
+                    aggregator.add_chunk(chain, is_error)
+                    if is_error:
+                        event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
+                    yield chain
             finally:
                 # Streaming runner cleanup must happen after consumer
                 # finishes iterating to avoid tearing down active streams.
@@ -311,13 +259,15 @@ class ThirdPartyAgentSubStage(Stage):
         stream_to_general: bool,
         custom_error_message: str | None,
     ) -> AsyncGenerator[None, None]:
-        aggregator = _RunnerResultAggregator(event)
-        async for chunk in run_third_party_agent(
+        aggregator = _RunnerResultAggregator()
+        async for chain, is_error in run_third_party_agent(
             runner,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
         ):
-            aggregator.add_chunk(chunk.chain, chunk.is_error)
+            aggregator.add_chunk(chain, is_error)
+            if is_error:
+                event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
             yield
 
         final_chain, is_runner_error = aggregator.finalize(runner.get_final_llm_resp())
@@ -406,13 +356,24 @@ class ThirdPartyAgentSubStage(Stage):
         )
         streaming_used = streaming_response and not stream_to_general
 
-        lifecycle = _RunnerLifecycle(
-            runner=runner,
-            streaming_used=streaming_used,
-            timeout_sec=self.stream_consumption_close_timeout_sec,
-        )
+        runner_closed = False
+        stream_consumed = False
+        stream_watchdog_task: asyncio.Task[None] | None = None
 
-        async with lifecycle as (close_runner_once, mark_stream_consumed):
+        async def close_runner_once() -> None:
+            nonlocal runner_closed
+            if runner_closed:
+                return
+            runner_closed = True
+            await _close_runner_if_supported(runner)
+
+        def mark_stream_consumed() -> None:
+            nonlocal stream_consumed
+            stream_consumed = True
+            if stream_watchdog_task and not stream_watchdog_task.done():
+                stream_watchdog_task.cancel()
+
+        try:
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
@@ -425,7 +386,11 @@ class ThirdPartyAgentSubStage(Stage):
             )
 
             if streaming_used:
-                await lifecycle.start_watchdog_if_needed()
+                stream_watchdog_task = _start_stream_watchdog(
+                    timeout_sec=self.stream_consumption_close_timeout_sec,
+                    is_stream_consumed=lambda: stream_consumed,
+                    close_runner_once=close_runner_once,
+                )
                 async for _ in self._handle_streaming_response(
                     runner=runner,
                     event=event,
@@ -442,6 +407,15 @@ class ThirdPartyAgentSubStage(Stage):
                     custom_error_message=custom_error_message,
                 ):
                     yield
+        finally:
+            if (
+                stream_watchdog_task
+                and not stream_watchdog_task.done()
+                and (stream_consumed or runner_closed)
+            ):
+                stream_watchdog_task.cancel()
+            if not streaming_used:
+                await close_runner_once()
 
         asyncio.create_task(
             Metric.upload(
