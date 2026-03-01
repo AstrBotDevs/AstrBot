@@ -46,6 +46,7 @@ class _ModelListCache:
         if not cached:
             return None
         if time.monotonic() - cached.timestamp > ttl_seconds:
+            self._cache.pop(provider_id, None)
             return None
         return list(cached.models)
 
@@ -60,6 +61,14 @@ class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self._model_cache = _ModelListCache()
+        set_change_callback = getattr(
+            self.context.provider_manager,
+            "set_provider_change_callback",
+            None,
+        )
+        if callable(set_change_callback):
+            set_change_callback(self._on_provider_manager_changed)
+            return
         register_change_hook = getattr(
             self.context.provider_manager,
             "register_provider_change_hook",
@@ -105,21 +114,13 @@ class ProviderCommands:
             )
             return default
 
-    def _set_model_and_invalidate(self, provider: Provider, model_name: str) -> None:
-        provider.set_model(model_name)
-        self.invalidate_provider_models_cache(provider.meta().id)
-
-    def _set_key_and_invalidate(self, provider: Provider, key: str) -> None:
-        provider.set_key(key)
-        self.invalidate_provider_models_cache(provider.meta().id)
-
     def _resolve_model_name(
         self,
         model_name: str,
         models: Sequence[str],
     ) -> str | None:
         """Resolve model name with precedence:
-        exact > case-insensitive > suffix > reverse suffix.
+        exact > case-insensitive > provider-qualified suffix.
         """
         requested = model_name.strip()
         if not requested:
@@ -132,45 +133,16 @@ class ProviderCommands:
             if candidate == requested or candidate.casefold() == requested_norm:
                 return candidate
 
-        # suffix / reverse suffix match
-        def _match_suffix(req: str, cand: str) -> bool:
-            return (
-                cand.endswith(f"/{req}")
-                or cand.endswith(f":{req}")
-                or req.endswith(f"/{cand}")
-                or req.endswith(f":{cand}")
-            )
+        # provider-qualified suffix match:
+        # e.g. candidate `openai/gpt-4o` should match requested `gpt-4o`.
+        def _match_qualified_suffix(req: str, cand: str) -> bool:
+            return cand.endswith(f"/{req}") or cand.endswith(f":{req}")
 
         for candidate in models:
-            if _match_suffix(requested_norm, candidate.casefold()):
+            if _match_qualified_suffix(requested_norm, candidate.casefold()):
                 return candidate
 
         return None
-
-    def _get_lookup_max_concurrency(self, umo: str | None) -> int:
-        concurrency = int(
-            self._get_numeric_provider_setting(
-                umo,
-                MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
-                MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
-                int,
-            )
-        )
-        return min(
-            max(concurrency, 1),
-            MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND,
-        )
-
-    def _get_model_cache_ttl_seconds(self, umo: str | None) -> float:
-        ttl = float(
-            self._get_numeric_provider_setting(
-                umo,
-                MODEL_LIST_CACHE_TTL_KEY,
-                MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
-                float,
-            )
-        )
-        return max(ttl, 0.0)
 
     async def _get_provider_models(
         self,
@@ -180,7 +152,13 @@ class ProviderCommands:
         umo: str | None = None,
     ) -> list[str]:
         provider_id = provider.meta().id
-        ttl_seconds = self._get_model_cache_ttl_seconds(umo)
+        raw_ttl = self._get_numeric_provider_setting(
+            umo,
+            MODEL_LIST_CACHE_TTL_KEY,
+            MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
+            float,
+        )
+        ttl_seconds = max(float(raw_ttl), 0.0)
         if use_cache:
             cached = self._model_cache.get_models(provider_id, ttl_seconds=ttl_seconds)
             if cached is not None:
@@ -245,7 +223,16 @@ class ProviderCommands:
             return None, None
 
         failed_provider_errors: list[tuple[str, str]] = []
-        max_concurrency = self._get_lookup_max_concurrency(umo)
+        raw_concurrency = self._get_numeric_provider_setting(
+            umo,
+            MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
+            MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
+            int,
+        )
+        max_concurrency = min(
+            max(int(raw_concurrency), 1),
+            MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND,
+        )
         for start in range(0, len(all_providers), max_concurrency):
             batch_providers = all_providers[start : start + max_concurrency]
             batch_results = await asyncio.gather(
@@ -483,6 +470,8 @@ class ProviderCommands:
 
         try:
             models = await self._get_provider_models(prov, umo=umo)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             err_msg = safe_error("", e)
             logger.warning(
@@ -499,7 +488,8 @@ class ProviderCommands:
 
         matched_model_name = self._resolve_model_name(model_name, models)
         if matched_model_name is not None:
-            self._set_model_and_invalidate(prov, matched_model_name)
+            prov.set_model(matched_model_name)
+            self.invalidate_provider_models_cache(prov.meta().id)
             message.set_result(
                 MessageEventResult().message(
                     f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{matched_model_name}]",
@@ -526,12 +516,15 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            self._set_model_and_invalidate(target_prov, matched_target_model_name)
+            target_prov.set_model(matched_target_model_name)
+            self.invalidate_provider_models_cache(target_prov.meta().id)
             message.set_result(
                 MessageEventResult().message(
                     f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
                 ),
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             message.set_result(
                 MessageEventResult().message(
@@ -558,6 +551,8 @@ class ProviderCommands:
                 models = await self._get_provider_models(
                     prov, umo=message.unified_msg_origin
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 message.set_result(
                     MessageEventResult()
@@ -583,6 +578,8 @@ class ProviderCommands:
                 models = await self._get_provider_models(
                     prov, umo=message.unified_msg_origin
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 message.set_result(
                     MessageEventResult().message(safe_error("获取模型列表失败: ", e)),
@@ -593,7 +590,8 @@ class ProviderCommands:
             else:
                 try:
                     new_model = models[idx_or_name - 1]
-                    self._set_model_and_invalidate(prov, new_model)
+                    prov.set_model(new_model)
+                    self.invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
@@ -637,7 +635,8 @@ class ProviderCommands:
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    self._set_key_and_invalidate(prov, new_key)
+                    prov.set_key(new_key)
+                    self.invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(MessageEventResult().message("切换 Key 成功。"))
                 except Exception as e:
                     message.set_result(
