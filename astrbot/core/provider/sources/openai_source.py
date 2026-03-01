@@ -315,7 +315,7 @@ class ProviderOpenAIOfficial(Provider):
                 if not choice.delta or not choice.delta.tool_calls:
                     continue
                 for tool_call in choice.delta.tool_calls:
-                    if getattr(tool_call, "type", None) in (None, ""):
+                    if hasattr(tool_call, "type") and tool_call.type in (None, ""):
                         tool_call.type = "function"
 
             try:
@@ -326,8 +326,8 @@ class ProviderOpenAIOfficial(Provider):
                     exc_info=True,
                 )
                 logger.warning(f"Saving chunk state error: {e}")
-                
-            if not chunk.choices or len(chunk.choices) == 0:
+
+            if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
             # logger.debug(f"chunk delta: {delta}")
