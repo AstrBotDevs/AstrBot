@@ -1,0 +1,107 @@
+from types import SimpleNamespace
+
+import mcp
+import pytest
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.message.components import Image
+
+
+class _DummyEvent:
+    def __init__(self, message_components: list[object] | None = None) -> None:
+        self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+        self.message_obj = SimpleNamespace(message=message_components or [])
+
+    def get_extra(self, _key: str):
+        return None
+
+
+class _DummyTool:
+    def __init__(self) -> None:
+        self.name = "transfer_to_subagent"
+        self.agent = SimpleNamespace(name="subagent")
+
+
+def _build_run_context(message_components: list[object] | None = None):
+    event = _DummyEvent(message_components=message_components)
+    ctx = SimpleNamespace(event=event, context=SimpleNamespace())
+    return ContextWrapper(context=ctx)
+
+
+@pytest.mark.asyncio
+async def test_prepare_handoff_image_urls_normalizes_filters_and_appends_event_image(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/event_image.png"
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
+
+    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
+    tool_args = {
+        "image_urls": (
+            " https://example.com/a.png ",
+            "/tmp/not_an_image.txt",
+            "/tmp/local.webp",
+            123,
+        )
+    }
+
+    image_urls = await FunctionToolExecutor._prepare_handoff_image_urls(
+        run_context,
+        tool_args,
+    )
+
+    assert image_urls == [
+        "https://example.com/a.png",
+        "/tmp/local.webp",
+        "/tmp/event_image.png",
+    ]
+    assert tool_args["image_urls"] == image_urls
+
+
+@pytest.mark.asyncio
+async def test_do_handoff_background_reports_prepared_image_urls(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_prepare(cls, run_context, tool_args):
+        tool_args["image_urls"] = ["prepared://image.png"]
+        return tool_args["image_urls"]
+
+    async def _fake_execute_handoff(cls, tool, run_context, **tool_args):
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="ok")]
+        )
+
+    async def _fake_wake(cls, run_context, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_prepare_handoff_image_urls",
+        classmethod(_fake_prepare),
+    )
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_execute_handoff",
+        classmethod(_fake_execute_handoff),
+    )
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_wake_main_agent_for_background_result",
+        classmethod(_fake_wake),
+    )
+
+    run_context = _build_run_context()
+    await FunctionToolExecutor._do_handoff_background(
+        tool=_DummyTool(),
+        run_context=run_context,
+        task_id="task-id",
+        input="hello",
+        image_urls="https://example.com/raw.png",
+    )
+
+    assert captured["tool_args"]["image_urls"] == ["prepared://image.png"]

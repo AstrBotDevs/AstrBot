@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+import os
 import traceback
 import typing as T
 import uuid
@@ -36,9 +37,87 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    _ALLOWED_IMAGE_EXTENSIONS = {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".svg",
+        ".heic",
+    }
+
+    @classmethod
+    def _is_supported_image_ref(cls, image_ref: str) -> bool:
+        if not image_ref:
+            return False
+        lowered = image_ref.lower()
+        if lowered.startswith(("http://", "https://", "base64://")):
+            return True
+        file_path = image_ref[8:] if lowered.startswith("file:///") else image_ref
+        ext = os.path.splitext(file_path)[1].lower()
+        return ext in cls._ALLOWED_IMAGE_EXTENSIONS
+
+    @classmethod
+    async def _prepare_handoff_image_urls(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        tool_args: dict[str, T.Any],
+    ) -> list[str]:
+        image_urls = tool_args.get("image_urls")
+        if image_urls is None:
+            candidates: list[T.Any] = []
+        elif isinstance(image_urls, str):
+            candidates = [image_urls]
+        else:
+            try:
+                candidates = list(image_urls)
+            except (TypeError, ValueError):
+                candidates = [image_urls]
+
+        normalized = normalize_and_dedupe_strings(candidates)
+        sanitized = [item for item in normalized if cls._is_supported_image_ref(item)]
+        dropped_count = len(normalized) - len(sanitized)
+        if dropped_count > 0:
+            logger.warning(
+                "Dropped %d invalid image_urls entries in handoff tool args.",
+                dropped_count,
+            )
+
+        # Merge current event image attachments so sub-agent behavior matches main-agent flow.
+        event = getattr(run_context.context, "event", None)
+        message_obj = getattr(event, "message_obj", None)
+        message = getattr(message_obj, "message", None)
+        if message:
+            for idx, component in enumerate(message):
+                if not isinstance(component, Image):
+                    continue
+                try:
+                    path = await component.convert_to_file_path()
+                    if (
+                        path
+                        and cls._is_supported_image_ref(path)
+                        and path not in sanitized
+                    ):
+                        sanitized.append(path)
+                except Exception as e:
+                    logger.error(
+                        "Failed to convert handoff image component at index %d: %s",
+                        idx,
+                        e,
+                        exc_info=True,
+                    )
+
+        tool_args["image_urls"] = sanitized
+        return sanitized
+
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
         """执行函数调用。
@@ -165,29 +244,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         **tool_args,
     ):
         input_ = tool_args.get("input")
-        image_urls = tool_args.get("image_urls")
-        if image_urls is None:
-            image_urls = []
-        elif isinstance(image_urls, str):
-            image_urls = [image_urls]
-        else:
-            try:
-                image_urls = list(image_urls)
-            except (TypeError, ValueError):
-                image_urls = [image_urls]
-
-        # 获取当前事件中的图片
-        event = run_context.context.event
-        if event.message_obj and event.message_obj.message:
-            for component in event.message_obj.message:
-                if isinstance(component, Image):
-                    try:
-                        # 调用组件的 convert_to_file_path 异步方法
-                        path = await component.convert_to_file_path()
-                        if path and path not in image_urls:
-                            image_urls.append(path)
-                    except Exception as e:
-                        logger.error(f"转换图片失败: {e}")
+        image_urls = await cls._prepare_handoff_image_urls(run_context, tool_args)
 
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
@@ -286,8 +343,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         """Run the subagent handoff and, on completion, wake the main agent."""
         result_text = ""
+        prepared_tool_args = dict(tool_args)
         try:
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
+            await cls._prepare_handoff_image_urls(run_context, prepared_tool_args)
+            async for r in cls._execute_handoff(
+                tool, run_context, **prepared_tool_args
+            ):
                 if isinstance(r, mcp.types.CallToolResult):
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
@@ -304,7 +365,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             task_id=task_id,
             tool_name=tool.name,
             result_text=result_text,
-            tool_args=tool_args,
+            tool_args=prepared_tool_args,
             note=(
                 event.get_extra("background_note")
                 or f"Background task for subagent '{tool.agent.name}' finished."
