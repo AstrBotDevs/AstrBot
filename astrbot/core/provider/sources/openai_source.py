@@ -307,10 +307,21 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
+            # 兼容非标准返回处理 补全tool_call.type字段
+            if chunk.choices:
+                for choice in chunk.choices:
+                    if choice.delta and choice.delta.tool_calls:
+                        for tool_call in choice.delta.tool_calls:
+                            if tool_call.type is None:
+                                tool_call.type = "function"
+
             try:
                 state.handle_chunk(chunk)
             except Exception as e:
-                logger.warning("Saving chunk state error: " + str(e))
+                logger.warning(
+                    f"Saving chunk state error: {type(e).__name__}: {e}. Chunk data: {chunk}",
+                    exc_info=True,
+                )
             if len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta

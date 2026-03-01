@@ -258,6 +258,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         )
                         break
 
+                    # 如果回复为空且无工具调用 且不是最后一个回退渠道 则引发fallback(仅适配非流)
+                    if (
+                        not resp.completion_text
+                        and not resp.tools_call_args
+                        and not is_last_candidate
+                        and not has_stream_output
+                    ):
+                        logger.warning("Chat Model %s returns empty response, trying fallback to next provider.", candidate_id)
+                        break
+                    
                     yield resp
                     return
 
