@@ -214,10 +214,10 @@ class DeerFlowAPIClient:
                 e,
                 exc_info=True,
             )
-            raise
-
-        self._session = None
-        self._closed = True
+        finally:
+            # Cleanup is best-effort and should not make teardown paths fail loudly.
+            self._session = None
+            self._closed = True
 
     def __del__(self) -> None:
         session = getattr(self, "_session", None)

@@ -16,6 +16,7 @@ from astrbot.core.provider.entities import (
     LLMResponse,
     ProviderRequest,
 )
+from astrbot.core.utils.config_number import coerce_int_config
 
 from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
@@ -98,48 +99,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         return f"{err_type}: no detailed error message provided."
 
-    def _coerce_int_config(
-        self,
-        field_name: str,
-        value: T.Any,
-        default: int,
-        min_value: int | None = None,
-    ) -> int:
-        if isinstance(value, bool):
-            logger.warning(
-                f"DeerFlow config '{field_name}' should be numeric, got boolean. "
-                f"Fallback to {default}."
-            )
-            parsed = default
-        elif isinstance(value, int):
-            parsed = value
-        elif isinstance(value, str):
-            try:
-                parsed = int(value.strip())
-            except ValueError:
-                logger.warning(
-                    f"DeerFlow config '{field_name}' value '{value}' is not numeric. "
-                    f"Fallback to {default}."
-                )
-                parsed = default
-        else:
-            try:
-                parsed = int(value)
-            except (TypeError, ValueError):
-                logger.warning(
-                    f"DeerFlow config '{field_name}' has unsupported type "
-                    f"{type(value).__name__}. Fallback to {default}."
-                )
-                parsed = default
-
-        if min_value is not None and parsed < min_value:
-            logger.warning(
-                f"DeerFlow config '{field_name}'={parsed} is below minimum {min_value}. "
-                f"Fallback to {min_value}."
-            )
-            parsed = min_value
-        return parsed
-
     async def close(self) -> None:
         """Explicit cleanup hook for long-lived workers."""
         api_client = getattr(self, "api_client", None)
@@ -180,23 +139,26 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             subagent_enabled=bool(
                 provider_config.get("deerflow_subagent_enabled", False),
             ),
-            max_concurrent_subagents=self._coerce_int_config(
-                "deerflow_max_concurrent_subagents",
+            max_concurrent_subagents=coerce_int_config(
                 provider_config.get("deerflow_max_concurrent_subagents", 3),
                 default=3,
                 min_value=1,
+                field_name="deerflow_max_concurrent_subagents",
+                source="DeerFlow config",
             ),
-            timeout=self._coerce_int_config(
-                "timeout",
+            timeout=coerce_int_config(
                 provider_config.get("timeout", 300),
                 default=300,
                 min_value=1,
+                field_name="timeout",
+                source="DeerFlow config",
             ),
-            recursion_limit=self._coerce_int_config(
-                "deerflow_recursion_limit",
+            recursion_limit=coerce_int_config(
                 provider_config.get("deerflow_recursion_limit", 1000),
                 default=1000,
                 min_value=1,
+                field_name="deerflow_recursion_limit",
+                source="DeerFlow config",
             ),
         )
 

@@ -34,6 +34,7 @@ from astrbot.core.provider.entities import (
     ProviderRequest,
 )
 from astrbot.core.star.star_handler import EventType
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.metrics import Metric
 
 from .....astr_agent_context import AgentContextWrapper, AstrAgentContext
@@ -52,16 +53,6 @@ RUNNER_NO_FINAL_RESPONSE_LOG = (
     "Agent Runner returned no final response, fallback to streamed error/result chain."
 )
 RUNNER_NO_RESULT_LOG = "Agent Runner 未返回最终结果。"
-
-
-def _coerce_positive_int(value: object, default: int) -> int:
-    if isinstance(value, bool):
-        return default
-    try:
-        coerced = int(value)
-    except (TypeError, ValueError):
-        return default
-    return coerced if coerced > 0 else default
 
 
 def _resolve_runner_final_result(
@@ -159,12 +150,15 @@ class ThirdPartyAgentSubStage(Stage):
         self.unsupported_streaming_strategy: str = settings[
             "unsupported_streaming_strategy"
         ]
-        self.stream_consumption_close_timeout_sec: int = _coerce_positive_int(
+        self.stream_consumption_close_timeout_sec: int = coerce_int_config(
             settings.get(
                 "third_party_stream_consumption_close_timeout_sec",
                 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC,
             ),
-            STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC,
+            default=STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC,
+            min_value=1,
+            field_name="third_party_stream_consumption_close_timeout_sec",
+            source="Third-party runner config",
         )
 
     async def _resolve_persona_custom_error_message(
