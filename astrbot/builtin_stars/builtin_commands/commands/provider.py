@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from astrbot import logger
 from astrbot.api import star
@@ -23,12 +23,11 @@ _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND = 16
 @dataclass
 class _ModelCacheEntry:
     timestamp: float
-    models: tuple[str, ...]
+    models: list[str]
 
 
 class _ModelListCache:
-    def __init__(self, context: star.Context) -> None:
-        self._context = context
+    def __init__(self) -> None:
         self._cache: dict[str, _ModelCacheEntry] = {}
 
     def invalidate(self, provider_id: str | None = None) -> None:
@@ -37,48 +36,21 @@ class _ModelListCache:
             return
         self._cache.pop(provider_id, None)
 
-    def _get_ttl_seconds(self, umo: str | None, default_ttl: float) -> float:
-        ttl = default_ttl
-        if not umo:
-            return max(ttl, 0.0)
-        try:
-            cfg = self._context.get_config(umo).get("provider_settings", {})
-            configured_ttl = cfg.get(_MODEL_LIST_CACHE_TTL_CONFIG_KEY)
-            if configured_ttl is not None:
-                ttl = float(configured_ttl)
-        except Exception as e:
-            logger.debug(
-                "读取 %s 失败，回退默认值 %.1f: %s",
-                _MODEL_LIST_CACHE_TTL_CONFIG_KEY,
-                default_ttl,
-                safe_error("", e),
-            )
-            ttl = default_ttl
-        return max(ttl, 0.0)
+    def get_models(self, provider_id: str, *, ttl_seconds: float) -> list[str] | None:
+        if ttl_seconds <= 0:
+            return None
+        cached = self._cache.get(provider_id)
+        if not cached:
+            return None
+        if time.monotonic() - cached.timestamp > ttl_seconds:
+            return None
+        return list(cached.models)
 
-    async def get_models(
-        self,
-        provider: Provider,
-        *,
-        use_cache: bool = True,
-        umo: str | None = None,
-        default_ttl: float = 30.0,
-    ) -> list[str]:
-        provider_id = provider.meta().id
-        now = time.monotonic()
-        ttl_seconds = self._get_ttl_seconds(umo, default_ttl)
-        if use_cache and ttl_seconds > 0:
-            cached = self._cache.get(provider_id)
-            if cached and now - cached.timestamp <= ttl_seconds:
-                return list(cached.models)
-
-        models = tuple(await provider.get_models())
-        if use_cache and ttl_seconds > 0:
-            self._cache[provider_id] = _ModelCacheEntry(
-                timestamp=now,
-                models=models,
-            )
-        return list(models)
+    def set_models(self, provider_id: str, models: list[str]) -> None:
+        self._cache[provider_id] = _ModelCacheEntry(
+            timestamp=time.monotonic(),
+            models=list(models),
+        )
 
 
 class ProviderCommands:
@@ -87,11 +59,51 @@ class ProviderCommands:
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self._model_cache = _ModelListCache(context)
+        self._model_cache = _ModelListCache()
+        register_change_hook = getattr(
+            self.context.provider_manager,
+            "register_provider_change_hook",
+            None,
+        )
+        if callable(register_change_hook):
+            register_change_hook(self._on_provider_manager_changed)
 
     def invalidate_provider_models_cache(self, provider_id: str | None = None) -> None:
         """Public hook for cache invalidation on external provider config changes."""
         self._model_cache.invalidate(provider_id)
+
+    def _on_provider_manager_changed(
+        self,
+        provider_id: str,
+        provider_type: ProviderType,
+        umo: str | None,
+    ) -> None:
+        if provider_type == ProviderType.CHAT_COMPLETION:
+            self.invalidate_provider_models_cache(provider_id)
+
+    def _get_provider_setting(
+        self,
+        umo: str | None,
+        key: str,
+        cast: Callable[[Any], Any],
+        default: Any,
+    ) -> Any:
+        if not umo:
+            return default
+        try:
+            cfg = self.context.get_config(umo).get("provider_settings", {})
+            raw = cfg.get(key)
+            if raw is None:
+                return default
+            return cast(raw)
+        except Exception as e:
+            logger.debug(
+                "读取 %s 失败，回退默认值 %r: %s",
+                key,
+                default,
+                safe_error("", e),
+            )
+            return default
 
     @staticmethod
     def _normalize_model_name(model_name: str) -> str:
@@ -102,56 +114,50 @@ class ProviderCommands:
         model_name: str,
         models: Sequence[str],
     ) -> str | None:
+        """Resolve model name with precedence:
+        exact > case-insensitive > suffix > reverse suffix.
+        """
         norm_name = self._normalize_model_name(model_name)
         if not norm_name:
             return None
 
-        def is_exact(candidate: str) -> bool:
-            return candidate == model_name
-
-        def is_case_insensitive(norm_candidate: str) -> bool:
-            return norm_candidate == norm_name
-
-        def is_suffix_match(norm_candidate: str) -> bool:
-            return norm_candidate.endswith(f"/{norm_name}") or norm_candidate.endswith(
-                f":{norm_name}"
-            )
-
-        def is_reverse_suffix_match(norm_candidate: str) -> bool:
-            return norm_name.endswith(f"/{norm_candidate}") or norm_name.endswith(
-                f":{norm_candidate}"
-            )
-
         for candidate in models:
             norm_candidate = self._normalize_model_name(candidate)
-            if is_exact(candidate):
+            # exact match
+            if candidate == model_name:
                 return candidate
-            if is_case_insensitive(norm_candidate):
+            # case-insensitive match
+            if norm_candidate == norm_name:
                 return candidate
-            if is_suffix_match(norm_candidate):
+            # suffix match: provider model is longer
+            if norm_candidate.endswith(f"/{norm_name}") or norm_candidate.endswith(
+                f":{norm_name}"
+            ):
                 return candidate
-            if is_reverse_suffix_match(norm_candidate):
+            # reverse suffix match: requested model is longer
+            if norm_name.endswith(f"/{norm_candidate}") or norm_name.endswith(
+                f":{norm_candidate}"
+            ):
                 return candidate
         return None
 
     def _get_lookup_max_concurrency(self, umo: str | None) -> int:
-        concurrency = self._MODEL_LOOKUP_MAX_CONCURRENCY
-        if not umo:
-            return min(max(concurrency, 1), _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
-        try:
-            cfg = self.context.get_config(umo).get("provider_settings", {})
-            configured_concurrency = cfg.get(_MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY)
-            if configured_concurrency is not None:
-                concurrency = int(configured_concurrency)
-        except Exception as e:
-            logger.debug(
-                "读取 %s 失败，回退默认值 %d: %s",
-                _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY,
-                self._MODEL_LOOKUP_MAX_CONCURRENCY,
-                safe_error("", e),
-            )
-            concurrency = self._MODEL_LOOKUP_MAX_CONCURRENCY
+        concurrency = self._get_provider_setting(
+            umo,
+            _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY,
+            int,
+            self._MODEL_LOOKUP_MAX_CONCURRENCY,
+        )
         return min(max(concurrency, 1), _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
+
+    def _get_model_cache_ttl_seconds(self, umo: str | None) -> float:
+        ttl = self._get_provider_setting(
+            umo,
+            _MODEL_LIST_CACHE_TTL_CONFIG_KEY,
+            float,
+            self._MODEL_LIST_CACHE_TTL_SECONDS,
+        )
+        return max(float(ttl), 0.0)
 
     async def _get_provider_models(
         self,
@@ -160,12 +166,17 @@ class ProviderCommands:
         use_cache: bool = True,
         umo: str | None = None,
     ) -> list[str]:
-        return await self._model_cache.get_models(
-            provider,
-            use_cache=use_cache,
-            umo=umo,
-            default_ttl=self._MODEL_LIST_CACHE_TTL_SECONDS,
-        )
+        provider_id = provider.meta().id
+        ttl_seconds = self._get_model_cache_ttl_seconds(umo)
+        if use_cache:
+            cached = self._model_cache.get_models(provider_id, ttl_seconds=ttl_seconds)
+            if cached is not None:
+                return cached
+
+        models = list(await provider.get_models())
+        if use_cache and ttl_seconds > 0:
+            self._model_cache.set_models(provider_id, models)
+        return models
 
     def _log_reachability_failure(
         self,
@@ -209,7 +220,7 @@ class ProviderCommands:
         all_providers = [
             p
             for p in self.context.get_all_providers()
-            if not exclude_provider_id or p.meta().id != exclude_provider_id
+            if exclude_provider_id is None or p.meta().id != exclude_provider_id
         ]
         if not all_providers:
             return None, None
