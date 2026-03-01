@@ -19,11 +19,12 @@ from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
     DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     DatabaseClearError,
+    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
     PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     AstrBotImporter,
     ImportResult,
+    _load_platform_stats_invalid_count_warn_limit,
     _get_major_version,
-    _resolve_platform_stats_invalid_count_warn_limit,
 )
 from astrbot.core.config.default import VERSION
 from astrbot.core.db.po import (
@@ -395,23 +396,32 @@ class TestAstrBotImporter:
         assert is_valid_dt is True
         assert normalized_dt == "2025-12-13T21:00:00+00:00"
 
-    def test_resolve_platform_stats_invalid_count_warn_limit(self):
-        """测试非法/合法告警阈值配置解析"""
-        value, valid = _resolve_platform_stats_invalid_count_warn_limit(None)
-        assert valid is True
-        assert value == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+    def test_load_platform_stats_invalid_count_warn_limit(self, monkeypatch):
+        """测试告警阈值环境变量解析"""
+        monkeypatch.delenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, raising=False)
+        assert (
+            _load_platform_stats_invalid_count_warn_limit()
+            == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+        )
 
-        value, valid = _resolve_platform_stats_invalid_count_warn_limit("10")
-        assert valid is True
-        assert value == 10
+        monkeypatch.setenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, "10")
+        assert _load_platform_stats_invalid_count_warn_limit() == 10
 
-        value, valid = _resolve_platform_stats_invalid_count_warn_limit("-1")
-        assert valid is False
-        assert value == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+        with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
+            monkeypatch.setenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, "-1")
+            assert (
+                _load_platform_stats_invalid_count_warn_limit()
+                == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+            )
+            assert warning_mock.call_count == 1
 
-        value, valid = _resolve_platform_stats_invalid_count_warn_limit("bad")
-        assert valid is False
-        assert value == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+        with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
+            monkeypatch.setenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, "bad")
+            assert (
+                _load_platform_stats_invalid_count_warn_limit()
+                == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+            )
+            assert warning_mock.call_count == 1
 
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
         """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""

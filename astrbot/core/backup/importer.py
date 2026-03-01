@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,34 +68,23 @@ PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (
 )
 
 
-def _resolve_platform_stats_invalid_count_warn_limit(
-    raw_value: str | None,
-) -> tuple[int, bool]:
-    """Resolve warn limit value and return whether the input was valid."""
-    if raw_value is None:
-        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT, True
-    try:
-        value = int(raw_value)
-    except (TypeError, ValueError):
-        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT, False
-    if value < 0:
-        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT, False
-    return value, True
-
-
 def _load_platform_stats_invalid_count_warn_limit() -> int:
     raw_value = os.getenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV)
-    resolved_value, is_valid = _resolve_platform_stats_invalid_count_warn_limit(
-        raw_value
-    )
-    if raw_value is not None and not is_valid:
+    if raw_value is None:
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+    try:
+        value = int(raw_value)
+        if value < 0:
+            raise ValueError("negative")
+        return value
+    except (TypeError, ValueError):
         logger.warning(
             "Invalid env %s=%r, fallback to default %d",
             PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
             raw_value,
             DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
         )
-    return resolved_value
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
 
 
 # Warning limit per _merge_platform_stats_rows invocation; configurable by env.
@@ -210,6 +200,11 @@ class AstrBotImporter:
         self.kb_manager = kb_manager
         self.config_path = config_path
         self.kb_root_dir = kb_root_dir
+        self._main_table_preprocessors: dict[
+            str, Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
+        ] = {
+            "platform_stats": self._merge_platform_stats_rows,
+        }
 
     def pre_check(self, zip_path: str) -> ImportPreCheckResult:
         """预检查备份文件
@@ -543,14 +538,7 @@ class AstrBotImporter:
                     if not model_class:
                         logger.warning(f"未知的表: {table_name}")
                         continue
-                    normalized_rows = rows
-                    if table_name == "platform_stats":
-                        normalized_rows = self._merge_platform_stats_rows(rows)
-                        duplicate_count = len(rows) - len(normalized_rows)
-                        if duplicate_count > 0:
-                            logger.warning(
-                                f"检测到 platform_stats 重复键 {duplicate_count} 条，已在导入前聚合"
-                            )
+                    normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
                     count = 0
                     for row in normalized_rows:
@@ -568,6 +556,20 @@ class AstrBotImporter:
 
         return imported
 
+    def _preprocess_main_table_rows(
+        self, table_name: str, rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        preprocessor = self._main_table_preprocessors.get(table_name)
+        if preprocessor is None:
+            return rows
+        normalized_rows = preprocessor(rows)
+        duplicate_count = len(rows) - len(normalized_rows)
+        if duplicate_count > 0:
+            logger.warning(
+                f"检测到 {table_name} 重复键 {duplicate_count} 条，已在导入前聚合"
+            )
+        return normalized_rows
+
     def _merge_platform_stats_rows(
         self, rows: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
@@ -579,8 +581,23 @@ class AstrBotImporter:
         - Invalid count warnings are rate-limited per function invocation.
         """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
-        result: list[dict[str, Any]] = []
+        non_mergeable: list[dict[str, Any]] = []
         invalid_count_warned = 0
+
+        def parse_count(raw_count: Any, key: tuple[str, str, str]) -> int:
+            nonlocal invalid_count_warned
+            try:
+                return int(raw_count)
+            except (TypeError, ValueError):
+                if invalid_count_warned < PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
+                    logger.warning(
+                        "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                        raw_count,
+                        key,
+                    )
+                    invalid_count_warned += 1
+                return 0
+
         for row in rows:
             normalized_row = dict(row)
             normalized_timestamp, is_timestamp_valid = (
@@ -597,56 +614,37 @@ class AstrBotImporter:
                 repr(platform_id),
                 repr(platform_type),
             )
-            count, invalid_count_warned = self._parse_platform_stats_count(
-                normalized_row.get("count", 0), invalid_count_warned, key_for_log
-            )
+            count = parse_count(normalized_row.get("count", 0), key_for_log)
             normalized_row["count"] = count
 
-            # Invalid timestamps should never be merged.
             if not is_timestamp_valid:
-                result.append(normalized_row)
+                non_mergeable.append(normalized_row)
                 continue
 
             if not isinstance(platform_id, str) or not isinstance(platform_type, str):
-                result.append(normalized_row)
+                non_mergeable.append(normalized_row)
                 continue
 
             key = (normalized_timestamp, platform_id, platform_type)
             existing = merged.get(key)
             if existing is None:
                 merged[key] = normalized_row
-                result.append(normalized_row)
             else:
                 existing["count"] += count
 
-        return result
+        return [*non_mergeable, *merged.values()]
 
-    def _parse_platform_stats_count(
-        self,
-        raw_count: Any,
-        invalid_count_warned: int,
-        key: tuple[str, str, str],
-    ) -> tuple[int, int]:
-        """Safe int parse with per-call rate-limited warning."""
-        try:
-            return int(raw_count), invalid_count_warned
-        except (TypeError, ValueError):
-            if invalid_count_warned < PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
-                logger.warning(
-                    "platform_stats count 非法，已按 0 处理: "
-                    f"value={raw_count!r}, key={key}"
-                )
-                invalid_count_warned += 1
-            return 0, invalid_count_warned
+    def _to_utc_iso(self, dt: datetime) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat()
 
     def _normalize_platform_stats_timestamp(self, value: Any) -> tuple[str, bool]:
         if isinstance(value, datetime):
-            dt = value
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            else:
-                dt = dt.astimezone(timezone.utc)
-            return dt.isoformat(), True
+            return self._to_utc_iso(value), True
+
         if isinstance(value, str):
             timestamp = value.strip()
             if not timestamp:
@@ -654,16 +652,13 @@ class AstrBotImporter:
             if timestamp.endswith("Z"):
                 timestamp = f"{timestamp[:-1]}+00:00"
             try:
-                dt = datetime.fromisoformat(timestamp)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                else:
-                    dt = dt.astimezone(timezone.utc)
-                return dt.isoformat(), True
+                return self._to_utc_iso(datetime.fromisoformat(timestamp)), True
             except ValueError:
-                return value.strip(), False
+                return timestamp, False
+
         if value is None:
             return "", False
+
         return str(value), False
 
     async def _import_knowledge_bases(
