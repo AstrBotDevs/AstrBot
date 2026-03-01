@@ -343,7 +343,8 @@ class TestAstrBotImporter:
             },
         ]
 
-        merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+        merged_rows = importer._merge_platform_stats_rows(rows)
+        duplicate_count = len(rows) - len(merged_rows)
 
         assert duplicate_count == 2
         assert len(merged_rows) == 2
@@ -409,7 +410,8 @@ class TestAstrBotImporter:
                     "count": "bad-count",
                 },
             ]
-            merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+            merged_rows = importer._merge_platform_stats_rows(rows)
+            duplicate_count = len(rows) - len(merged_rows)
             assert duplicate_count == 1
             assert len(merged_rows) == 1
             assert merged_rows[0]["count"] == 5
@@ -431,9 +433,8 @@ class TestAstrBotImporter:
                     "count": 7,
                 },
             ]
-            merged_rows, duplicate_count = importer._merge_platform_stats_rows(
-                rows_existing_invalid
-            )
+            merged_rows = importer._merge_platform_stats_rows(rows_existing_invalid)
+            duplicate_count = len(rows_existing_invalid) - len(merged_rows)
             assert duplicate_count == 1
             assert len(merged_rows) == 1
             assert merged_rows[0]["count"] == 7
@@ -471,9 +472,8 @@ class TestAstrBotImporter:
                     "count": "still-bad",
                 },
             ]
-            merged_rows, duplicate_count = importer._merge_platform_stats_rows(
-                single_invalid_row
-            )
+            merged_rows = importer._merge_platform_stats_rows(single_invalid_row)
+            duplicate_count = len(single_invalid_row) - len(merged_rows)
             assert duplicate_count == 0
             assert len(merged_rows) == 1
             assert merged_rows[0]["count"] == 0
@@ -503,7 +503,8 @@ class TestAstrBotImporter:
             },
         ]
 
-        merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+        merged_rows = importer._merge_platform_stats_rows(rows)
+        duplicate_count = len(rows) - len(merged_rows)
 
         assert duplicate_count == 0
         assert len(merged_rows) == 3
