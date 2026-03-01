@@ -5,6 +5,7 @@ import copy
 import datetime
 import json
 import os
+import platform
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
@@ -265,6 +266,22 @@ def _apply_local_env_tools(req: ProviderRequest) -> None:
         req.func_tool = ToolSet()
     req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
+    req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
+
+
+def _build_local_mode_prompt() -> str:
+    system_name = platform.system() or "Unknown"
+    shell_hint = (
+        "The runtime shell is Windows Command Prompt (cmd.exe). "
+        "Use cmd-compatible commands and do not assume Unix commands like cat/ls/grep are available."
+        if system_name.lower() == "windows"
+        else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
+    )
+    return (
+        "You have access to the host local environment and can execute shell commands and Python code. "
+        f"Current operating system: {system_name}. "
+        f"{shell_hint}"
+    )
 
 
 async def _ensure_persona_and_skills(

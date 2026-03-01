@@ -113,6 +113,7 @@ DEFAULT_CONFIG = {
         "dify_agent_runner_provider_id": "",
         "coze_agent_runner_provider_id": "",
         "dashscope_agent_runner_provider_id": "",
+        "deerflow_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
@@ -128,7 +129,7 @@ DEFAULT_CONFIG = {
         "proactive_capability": {
             "add_cron_tools": True,
         },
-        "computer_use_runtime": "local",
+        "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard",
@@ -1252,6 +1253,25 @@ CONFIG_METADATA_2 = {
                         "timeout": 60,
                         "proxy": "",
                     },
+                    "DeerFlow": {
+                        "id": "deerflow",
+                        "provider": "deerflow",
+                        "type": "deerflow",
+                        "provider_type": "agent_runner",
+                        "enable": True,
+                        "deerflow_api_base": "http://127.0.0.1:2026",
+                        "deerflow_api_key": "",
+                        "deerflow_auth_header": "",
+                        "deerflow_assistant_id": "lead_agent",
+                        "deerflow_model_name": "",
+                        "deerflow_thinking_enabled": False,
+                        "deerflow_plan_mode": False,
+                        "deerflow_subagent_enabled": False,
+                        "deerflow_max_concurrent_subagents": 3,
+                        "deerflow_recursion_limit": 1000,
+                        "timeout": 300,
+                        "proxy": "",
+                    },
                     "FastGPT": {
                         "id": "fastgpt",
                         "provider": "fastgpt",
@@ -2258,6 +2278,55 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn",
                     },
+                    "deerflow_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                        "hint": "DeerFlow API 网关地址，默认为 http://127.0.0.1:2026",
+                    },
+                    "deerflow_api_key": {
+                        "description": "DeerFlow API Key",
+                        "type": "string",
+                        "hint": "可选。若 DeerFlow 网关配置了 Bearer 鉴权，则在此填写。",
+                    },
+                    "deerflow_auth_header": {
+                        "description": "Authorization Header",
+                        "type": "string",
+                        "hint": "可选。自定义 Authorization 请求头，优先级高于 DeerFlow API Key。",
+                    },
+                    "deerflow_assistant_id": {
+                        "description": "Assistant ID",
+                        "type": "string",
+                        "hint": "LangGraph assistant_id，默认为 lead_agent。",
+                    },
+                    "deerflow_model_name": {
+                        "description": "模型名称覆盖",
+                        "type": "string",
+                        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。",
+                    },
+                    "deerflow_thinking_enabled": {
+                        "description": "启用思考模式",
+                        "type": "bool",
+                    },
+                    "deerflow_plan_mode": {
+                        "description": "启用计划模式",
+                        "type": "bool",
+                        "hint": "对应 DeerFlow 的 is_plan_mode。",
+                    },
+                    "deerflow_subagent_enabled": {
+                        "description": "启用子智能体",
+                        "type": "bool",
+                        "hint": "对应 DeerFlow 的 subagent_enabled。",
+                    },
+                    "deerflow_max_concurrent_subagents": {
+                        "description": "子智能体最大并发数",
+                        "type": "int",
+                        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
+                    },
+                    "deerflow_recursion_limit": {
+                        "description": "递归深度上限",
+                        "type": "int",
+                        "hint": "对应 LangGraph recursion_limit。",
+                    },
                     "auto_save_history": {
                         "description": "由 Coze 管理对话记录",
                         "type": "bool",
@@ -2333,6 +2402,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "dashscope_agent_runner_provider_id": {
+                        "type": "string",
+                    },
+                    "deerflow_agent_runner_provider_id": {
                         "type": "string",
                     },
                     "max_agent_step": {
@@ -2543,7 +2615,7 @@ CONFIG_METADATA_3 = {
         "metadata": {
             "agent_runner": {
                 "description": "Agent 执行方式",
-                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器，不需要修改此节。",
+                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify、Coze、DeerFlow 等第三方 Agent 执行器，不需要修改此节。",
                 "type": "object",
                 "items": {
                     "provider_settings.enable": {
@@ -2554,8 +2626,14 @@ CONFIG_METADATA_3 = {
                     "provider_settings.agent_runner_type": {
                         "description": "执行器",
                         "type": "string",
-                        "options": ["local", "dify", "coze", "dashscope"],
-                        "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"],
+                        "options": ["local", "dify", "coze", "dashscope", "deerflow"],
+                        "labels": [
+                            "内置 Agent",
+                            "Dify",
+                            "Coze",
+                            "阿里云百炼应用",
+                            "DeerFlow",
+                        ],
                         "condition": {
                             "provider_settings.enable": True,
                         },
@@ -2584,6 +2662,15 @@ CONFIG_METADATA_3 = {
                         "_special": "select_agent_runner_provider:dashscope",
                         "condition": {
                             "provider_settings.agent_runner_type": "dashscope",
+                            "provider_settings.enable": True,
+                        },
+                    },
+                    "provider_settings.deerflow_agent_runner_provider_id": {
+                        "description": "DeerFlow Agent 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_agent_runner_provider:deerflow",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "deerflow",
                             "provider_settings.enable": True,
                         },
                     },
