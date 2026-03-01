@@ -73,7 +73,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         image_urls_raw: T.Any,
     ) -> list[str]:
-        candidates: list[T.Any] = []
+        candidates: list[str] = []
         if image_urls_raw is None:
             pass
         elif isinstance(image_urls_raw, str):
@@ -81,7 +81,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         elif isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
             image_urls_raw, (str, bytes, bytearray)
         ):
-            candidates.extend(image_urls_raw)
+            non_string_count = 0
+            for item in image_urls_raw:
+                if isinstance(item, str):
+                    candidates.append(item)
+                else:
+                    non_string_count += 1
+            if non_string_count > 0:
+                logger.warning(
+                    "Dropped %d non-string image_urls entries in handoff tool args.",
+                    non_string_count,
+                )
         else:
             logger.warning(
                 "Unsupported image_urls type in handoff tool args: %s",
