@@ -14,6 +14,8 @@ from astrbot.core.provider.entities import ProviderType
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
+_MODEL_LIST_CACHE_TTL_CONFIG_KEY = "model_list_cache_ttl_seconds"
+
 _SECRET_PATTERNS = [
     re.compile(
         r"(?i)\b(api_?key|key|access_?token|token|secret|auth_?token|session_?id|password)\s*=\s*[^&'\" ]+"
@@ -35,6 +37,7 @@ def redact_secrets(text: str) -> str:
 class _ModelCacheEntry:
     timestamp: float
     models: tuple[str, ...]
+    normalized_models: tuple[tuple[str, str], ...]
 
 
 class ProviderCommands:
@@ -51,36 +54,31 @@ class ProviderCommands:
             return
         self._provider_models_cache.pop(provider_id, None)
 
-    def _update_provider_and_invalidate(
-        self,
-        provider: Provider,
-        *,
-        model_name: str | None = None,
-        key: str | None = None,
-    ) -> None:
-        if model_name is not None:
-            provider.set_model(model_name)
-        if key is not None:
-            provider.set_key(key)
-        self._invalidate_provider_models_cache(provider.meta().id)
-
     @staticmethod
-    def _safe_err(prefix: str, e: Exception) -> str:
+    def _format_safe_error(prefix: str, e: Exception) -> str:
         return prefix + redact_secrets(str(e))
 
     @staticmethod
     def _normalize_model_name(model_name: str) -> str:
         return model_name.strip().casefold()
 
-    def _resolve_model_name(self, model_name: str, models: list[str]) -> str | None:
+    def _build_normalized_model_index(
+        self, models: tuple[str, ...]
+    ) -> tuple[tuple[str, str], ...]:
+        return tuple((model, self._normalize_model_name(model)) for model in models)
+
+    def _resolve_model_name(
+        self,
+        model_name: str,
+        normalized_models: tuple[tuple[str, str], ...],
+    ) -> str | None:
         normalized_model_name = self._normalize_model_name(model_name)
         if not normalized_model_name:
             return None
-        if model_name in models:
-            return model_name
 
-        for candidate in models:
-            normalized_candidate = self._normalize_model_name(candidate)
+        for candidate, normalized_candidate in normalized_models:
+            if candidate == model_name:
+                return candidate
             if normalized_candidate == normalized_model_name:
                 return candidate
             if normalized_candidate.endswith(
@@ -99,17 +97,42 @@ class ProviderCommands:
             return ttl
         try:
             cfg = self.context.get_config(umo).get("provider_settings", {})
-            configured_ttl = cfg.get("model_list_cache_ttl_seconds")
+            configured_ttl = cfg.get(_MODEL_LIST_CACHE_TTL_CONFIG_KEY)
             if configured_ttl is not None:
                 ttl = float(configured_ttl)
         except Exception as e:
             logger.debug(
                 "读取 model_list_cache_ttl_seconds 失败，回退默认值 %.1f: %s",
                 self._MODEL_LIST_CACHE_TTL_SECONDS,
-                redact_secrets(str(e)),
+                self._format_safe_error("", e),
             )
             ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
         return max(ttl, 0.0)
+
+    async def _get_provider_model_entry(
+        self,
+        provider: Provider,
+        *,
+        use_cache: bool = True,
+        umo: str | None = None,
+    ) -> _ModelCacheEntry:
+        provider_id = provider.meta().id
+        now = time.monotonic()
+        ttl_seconds = self._get_model_cache_ttl_seconds(umo)
+        if use_cache and ttl_seconds > 0:
+            cached = self._provider_models_cache.get(provider_id)
+            if cached and now - cached.timestamp <= ttl_seconds:
+                return cached
+
+        models = tuple(await provider.get_models())
+        entry = _ModelCacheEntry(
+            timestamp=now,
+            models=models,
+            normalized_models=self._build_normalized_model_index(models),
+        )
+        if use_cache and ttl_seconds > 0:
+            self._provider_models_cache[provider_id] = entry
+        return entry
 
     async def _get_provider_models(
         self,
@@ -118,21 +141,12 @@ class ProviderCommands:
         use_cache: bool = True,
         umo: str | None = None,
     ) -> list[str]:
-        provider_id = provider.meta().id
-        now = time.monotonic()
-        ttl_seconds = self._get_model_cache_ttl_seconds(umo)
-        if use_cache and ttl_seconds > 0:
-            cached = self._provider_models_cache.get(provider_id)
-            if cached and now - cached.timestamp <= ttl_seconds:
-                return list(cached.models)
-
-        models = list(await provider.get_models())
-        if use_cache and ttl_seconds > 0:
-            self._provider_models_cache[provider_id] = _ModelCacheEntry(
-                timestamp=now,
-                models=tuple(models),
-            )
-        return models
+        entry = await self._get_provider_model_entry(
+            provider,
+            use_cache=use_cache,
+            umo=umo,
+        )
+        return list(entry.models)
 
     def _log_reachability_failure(
         self,
@@ -161,7 +175,7 @@ class ProviderCommands:
             return True, None, None
         except Exception as e:
             err_code = "TEST_FAILED"
-            err_reason = redact_secrets(str(e))
+            err_reason = self._format_safe_error("", e)
             self._log_reachability_failure(
                 provider, provider_capability_type, err_code, err_reason
             )
@@ -186,12 +200,12 @@ class ProviderCommands:
 
         async def _fetch_models(
             provider: Provider,
-        ) -> tuple[Provider, list[str] | None, Exception | None]:
+        ) -> tuple[Provider, _ModelCacheEntry | None, Exception | None]:
             async with semaphore:
                 try:
                     return (
                         provider,
-                        await self._get_provider_models(provider, umo=umo),
+                        await self._get_provider_model_entry(provider, umo=umo),
                         None,
                     )
                 except Exception as e:
@@ -201,14 +215,18 @@ class ProviderCommands:
             *[_fetch_models(provider) for provider in all_providers]
         )
         failed_provider_errors: list[tuple[str, str]] = []
-        for provider, models, error in results:
+        for provider, model_entry, error in results:
             provider_id = provider.meta().id
             if error is not None:
-                failed_provider_errors.append((provider_id, self._safe_err("", error)))
+                failed_provider_errors.append(
+                    (provider_id, self._format_safe_error("", error))
+                )
                 continue
-            if models is None:
+            if model_entry is None:
                 continue
-            matched_model_name = self._resolve_model_name(model_name, models)
+            matched_model_name = self._resolve_model_name(
+                model_name, model_entry.normalized_models
+            )
             if matched_model_name is not None:
                 return provider, matched_model_name
 
@@ -288,7 +306,7 @@ class ProviderCommands:
                         p,
                         None,
                         reachable.__class__.__name__,
-                        redact_secrets(str(reachable)),
+                        self._format_safe_error("", reachable),
                     )
                     reachable_flag = False
                     error_code = reachable.__class__.__name__
@@ -426,9 +444,9 @@ class ProviderCommands:
         curr_provider_id = prov.meta().id
 
         try:
-            models = await self._get_provider_models(prov, umo=umo)
+            model_entry = await self._get_provider_model_entry(prov, umo=umo)
         except Exception as e:
-            err_msg = self._safe_err("", e)
+            err_msg = self._format_safe_error("", e)
             logger.warning(
                 "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
                 curr_provider_id,
@@ -436,14 +454,17 @@ class ProviderCommands:
             )
             message.set_result(
                 MessageEventResult().message(
-                    self._safe_err("获取当前提供商模型列表失败: ", e)
+                    self._format_safe_error("获取当前提供商模型列表失败: ", e)
                 )
             )
             return
 
-        matched_model_name = self._resolve_model_name(model_name, models)
+        matched_model_name = self._resolve_model_name(
+            model_name, model_entry.normalized_models
+        )
         if matched_model_name is not None:
-            self._update_provider_and_invalidate(prov, model_name=matched_model_name)
+            prov.set_model(matched_model_name)
+            self._invalidate_provider_models_cache(curr_provider_id)
             message.set_result(
                 MessageEventResult().message(
                     f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{matched_model_name}]",
@@ -470,9 +491,8 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            self._update_provider_and_invalidate(
-                target_prov, model_name=matched_target_model_name
-            )
+            target_prov.set_model(matched_target_model_name)
+            self._invalidate_provider_models_cache(target_id)
             message.set_result(
                 MessageEventResult().message(
                     f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
@@ -481,7 +501,7 @@ class ProviderCommands:
         except Exception as e:
             message.set_result(
                 MessageEventResult().message(
-                    self._safe_err("跨提供商切换并设置模型失败: ", e)
+                    self._format_safe_error("跨提供商切换并设置模型失败: ", e)
                 ),
             )
 
@@ -507,7 +527,7 @@ class ProviderCommands:
             except Exception as e:
                 message.set_result(
                     MessageEventResult()
-                    .message(self._safe_err("获取模型列表失败: ", e))
+                    .message(self._format_safe_error("获取模型列表失败: ", e))
                     .use_t2i(False),
                 )
                 return
@@ -532,7 +552,7 @@ class ProviderCommands:
             except Exception as e:
                 message.set_result(
                     MessageEventResult().message(
-                        self._safe_err("获取模型列表失败: ", e)
+                        self._format_safe_error("获取模型列表失败: ", e)
                     ),
                 )
                 return
@@ -541,7 +561,8 @@ class ProviderCommands:
             else:
                 try:
                     new_model = models[idx_or_name - 1]
-                    self._update_provider_and_invalidate(prov, model_name=new_model)
+                    prov.set_model(new_model)
+                    self._invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
@@ -550,7 +571,7 @@ class ProviderCommands:
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            self._safe_err("切换模型未知错误: ", e)
+                            self._format_safe_error("切换模型未知错误: ", e)
                         ),
                     )
                     return
@@ -585,12 +606,13 @@ class ProviderCommands:
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    self._update_provider_and_invalidate(prov, key=new_key)
+                    prov.set_key(new_key)
+                    self._invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(MessageEventResult().message("切换 Key 成功。"))
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            self._safe_err("切换 Key 未知错误: ", e)
+                            self._format_safe_error("切换 Key 未知错误: ", e)
                         ),
                     )
                     return
