@@ -316,9 +316,11 @@ class ProviderOpenAIOfficial(Provider):
                 if not choice.delta or not choice.delta.tool_calls:
                     continue
                 for tool_call in choice.delta.tool_calls:
-                    if hasattr(tool_call, "type") and tool_call.type in (None, ""):
+                    # 使用 getattr 处理 type 字段可能完全缺失的情况
+                    tool_type = getattr(tool_call, "type", None)
+                    if tool_type is None or tool_type == "":
                         logger.debug(
-                            f"[{self.get_model()}] tool_call.type is empty in chunk {chunk_index} "
+                            f"[{self.get_model()}] tool_call.type is missing or empty in chunk {chunk_index} "
                             f"(provider: {self.provider_config.get('id', 'unknown')}), "
                             f"manually set to 'function'"
                         )
