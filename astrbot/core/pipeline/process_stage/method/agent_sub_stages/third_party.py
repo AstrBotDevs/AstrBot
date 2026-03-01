@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
@@ -56,50 +57,20 @@ RUNNER_NO_RESULT_FALLBACK_MESSAGE = "Agent Runner did not return any result."
 RUNNER_NO_FINAL_RESPONSE_LOG = (
     "Agent Runner returned no final response, fallback to streamed error/result chain."
 )
-RUNNER_NO_RESULT_LOG = "Agent Runner 未返回最终结果。"
+RUNNER_NO_RESULT_LOG = "Agent Runner did not return final result."
 
 
-def _resolve_runner_final_result(
-    merged_chain: list,
-    has_intermediate_error: bool,
-    final_resp: "LLMResponse | None",
-) -> tuple[list, bool, ResultContentType]:
-    if not final_resp or not final_resp.result_chain:
-        if merged_chain:
-            logger.warning(RUNNER_NO_FINAL_RESPONSE_LOG)
-            is_runner_error = has_intermediate_error
-            result_content_type = (
-                ResultContentType.AGENT_RUNNER_ERROR
-                if is_runner_error
-                else ResultContentType.LLM_RESULT
-            )
-            return merged_chain, is_runner_error, result_content_type
-
-        logger.warning(RUNNER_NO_RESULT_LOG)
-        fallback_error_chain = MessageChain().message(
-            RUNNER_NO_RESULT_FALLBACK_MESSAGE,
-        )
-        return (
-            fallback_error_chain.chain or [],
-            True,
-            ResultContentType.AGENT_RUNNER_ERROR,
-        )
-
-    final_chain = final_resp.result_chain.chain or []
-    is_runner_error = has_intermediate_error or final_resp.role == "err"
-    result_content_type = (
-        ResultContentType.AGENT_RUNNER_ERROR
-        if is_runner_error
-        else ResultContentType.LLM_RESULT
-    )
-    return final_chain, is_runner_error, result_content_type
+@dataclass(frozen=True)
+class RunnerChunk:
+    chain: MessageChain
+    is_error: bool
 
 
 async def run_third_party_agent(
     runner: "BaseAgentRunner",
     stream_to_general: bool = False,
     custom_error_message: str | None = None,
-) -> AsyncGenerator[tuple[MessageChain, bool], None]:
+) -> AsyncGenerator[RunnerChunk, None]:
     """
     运行第三方 agent runner 并转换响应格式
     类似于 run_agent 函数，但专门处理第三方 agent runner
@@ -109,12 +80,12 @@ async def run_third_party_agent(
             if resp.type == "streaming_delta":
                 if stream_to_general:
                     continue
-                yield resp.data["chain"], False
+                yield RunnerChunk(chain=resp.data["chain"], is_error=False)
             elif resp.type == "llm_result":
                 if stream_to_general:
-                    yield resp.data["chain"], False
+                    yield RunnerChunk(chain=resp.data["chain"], is_error=False)
             elif resp.type == "err":
-                yield resp.data["chain"], True
+                yield RunnerChunk(chain=resp.data["chain"], is_error=True)
     except Exception as e:
         logger.error(f"Third party agent runner error: {e}")
         err_msg = custom_error_message
@@ -124,7 +95,7 @@ async def run_third_party_agent(
                 f"Error Type: {type(e).__name__} (3rd party)\n"
                 f"Error Message: {str(e)}"
             )
-        yield MessageChain().message(err_msg), True
+        yield RunnerChunk(chain=MessageChain().message(err_msg), is_error=True)
 
 
 class _RunnerResultAggregator:
@@ -143,11 +114,35 @@ class _RunnerResultAggregator:
         self,
         final_resp: "LLMResponse | None",
     ) -> tuple[list, bool, ResultContentType]:
-        return _resolve_runner_final_result(
-            merged_chain=self.merged_chain,
-            has_intermediate_error=self.has_error,
-            final_resp=final_resp,
+        if not final_resp or not final_resp.result_chain:
+            if self.merged_chain:
+                logger.warning(RUNNER_NO_FINAL_RESPONSE_LOG)
+                is_runner_error = self.has_error
+                result_content_type = (
+                    ResultContentType.AGENT_RUNNER_ERROR
+                    if is_runner_error
+                    else ResultContentType.LLM_RESULT
+                )
+                return self.merged_chain, is_runner_error, result_content_type
+
+            logger.warning(RUNNER_NO_RESULT_LOG)
+            fallback_error_chain = MessageChain().message(
+                RUNNER_NO_RESULT_FALLBACK_MESSAGE,
+            )
+            return (
+                fallback_error_chain.chain or [],
+                True,
+                ResultContentType.AGENT_RUNNER_ERROR,
+            )
+
+        final_chain = final_resp.result_chain.chain or []
+        is_runner_error = self.has_error or final_resp.role == "err"
+        result_content_type = (
+            ResultContentType.AGENT_RUNNER_ERROR
+            if is_runner_error
+            else ResultContentType.LLM_RESULT
         )
+        return final_chain, is_runner_error, result_content_type
 
 
 def _start_stream_watchdog(
@@ -242,13 +237,13 @@ class ThirdPartyAgentSubStage(Stage):
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
             mark_stream_consumed()
             try:
-                async for chain, is_err in run_third_party_agent(
+                async for chunk in run_third_party_agent(
                     runner,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
                 ):
-                    aggregator.add_chunk(chain, is_err)
-                    yield chain
+                    aggregator.add_chunk(chunk.chain, chunk.is_error)
+                    yield chunk.chain
             finally:
                 # Streaming runner cleanup must happen after consumer
                 # finishes iterating to avoid tearing down active streams.
@@ -282,12 +277,12 @@ class ThirdPartyAgentSubStage(Stage):
         custom_error_message: str | None,
     ) -> AsyncGenerator[None, None]:
         aggregator = _RunnerResultAggregator(event)
-        async for chain, is_err in run_third_party_agent(
+        async for chunk in run_third_party_agent(
             runner,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
         ):
-            aggregator.add_chunk(chain, is_err)
+            aggregator.add_chunk(chunk.chain, chunk.is_error)
             yield
 
         final_chain, is_runner_error, result_content_type = aggregator.finalize(
@@ -300,6 +295,7 @@ class ThirdPartyAgentSubStage(Stage):
                 result_content_type=result_content_type,
             ),
         )
+        # Second yield keeps scheduler progress consistent after final result update.
         yield
 
     async def process(

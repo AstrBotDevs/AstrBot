@@ -129,6 +129,37 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 
+    async def _finish_with_result(
+        self, chain: MessageChain, role: str
+    ) -> AgentResponse:
+        self.final_llm_resp = LLMResponse(
+            role=role,
+            result_chain=chain,
+        )
+        self._transition_state(AgentState.DONE)
+        await self._notify_agent_done_hook()
+        return AgentResponse(
+            type="llm_result",
+            data=AgentResponseData(chain=chain),
+        )
+
+    async def _finish_with_error(self, err_msg: str) -> AgentResponse:
+        err_text = f"DeerFlow request failed: {err_msg}"
+        err_chain = MessageChain().message(err_text)
+        self.final_llm_resp = LLMResponse(
+            role="err",
+            completion_text=err_text,
+            result_chain=err_chain,
+        )
+        self._transition_state(AgentState.ERROR)
+        await self._notify_agent_done_hook()
+        return AgentResponse(
+            type="err",
+            data=AgentResponseData(
+                chain=err_chain,
+            ),
+        )
+
     def _parse_runner_config(self, provider_config: dict) -> _RunnerConfig:
         api_base = provider_config.get("deerflow_api_base", "http://127.0.0.1:2026")
         if not isinstance(api_base, str) or not api_base.startswith(
@@ -269,20 +300,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         except Exception as e:
             err_msg = self._format_exception(e)
             logger.error(f"DeerFlow request failed: {err_msg}", exc_info=True)
-            self._transition_state(AgentState.ERROR)
-            err_chain = MessageChain().message(f"DeerFlow request failed: {err_msg}")
-            self.final_llm_resp = LLMResponse(
-                role="err",
-                completion_text=f"DeerFlow request failed: {err_msg}",
-                result_chain=err_chain,
-            )
-            await self._notify_agent_done_hook()
-            yield AgentResponse(
-                type="err",
-                data=AgentResponseData(
-                    chain=err_chain,
-                ),
-            )
+            yield await self._finish_with_error(err_msg)
 
     @override
     async def step_until_done(
@@ -618,17 +636,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
-        self.final_llm_resp = LLMResponse(
-            role=final_result.role,
-            result_chain=final_result.chain,
-        )
-        self._transition_state(AgentState.DONE)
-        await self._notify_agent_done_hook()
-
-        yield AgentResponse(
-            type="llm_result",
-            data=AgentResponseData(chain=final_result.chain),
-        )
+        yield await self._finish_with_result(final_result.chain, final_result.role)
 
     @override
     def done(self) -> bool:
