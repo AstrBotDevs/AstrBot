@@ -1,5 +1,6 @@
 import asyncio
 import re
+import time
 from typing import TYPE_CHECKING
 
 from astrbot import logger
@@ -10,10 +11,33 @@ from astrbot.core.provider.entities import ProviderType
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
+_API_KEY_PATTERN = re.compile(r"key=[^&'\" ]+")
+
 
 class ProviderCommands:
+    _MODEL_LIST_CACHE_TTL_SECONDS = 30.0
+
     def __init__(self, context: star.Context) -> None:
         self.context = context
+        self._provider_models_cache: dict[str, tuple[float, list[str]]] = {}
+
+    @staticmethod
+    def _mask_sensitive_text(value: str) -> str:
+        return _API_KEY_PATTERN.sub("key=***", value)
+
+    async def _get_provider_models(
+        self, provider: "Provider", *, use_cache: bool = True
+    ) -> list[str]:
+        provider_id = provider.meta().id
+        now = time.monotonic()
+        if use_cache:
+            cached = self._provider_models_cache.get(provider_id)
+            if cached and now - cached[0] <= self._MODEL_LIST_CACHE_TTL_SECONDS:
+                return list(cached[1])
+
+        models = list(await provider.get_models())
+        self._provider_models_cache[provider_id] = (now, models)
+        return list(models)
 
     def _log_reachability_failure(
         self,
@@ -52,22 +76,27 @@ class ProviderCommands:
         self, model_name: str, exclude_provider_id: str | None = None
     ) -> tuple["Provider" | None, str | None]:
         """在所有 LLM 提供商中查找包含指定模型的提供商。返回 (provider, provider_id) 或 (None, None)。"""
-        all_providers = self.context.get_all_providers()
+        all_providers = [
+            p
+            for p in self.context.get_all_providers()
+            if not exclude_provider_id or p.meta().id != exclude_provider_id
+        ]
+        if not all_providers:
+            return None, None
         results = await asyncio.gather(
-            *[p.get_models() for p in all_providers],
+            *[self._get_provider_models(p) for p in all_providers],
             return_exceptions=True,
         )
         for provider, result in zip(all_providers, results):
             if isinstance(result, BaseException):
+                masked_error = self._mask_sensitive_text(str(result))
                 logger.warning(
                     "跨提供商查找模型时，提供商 %s 的 get_models() 失败: %s",
                     provider.meta().id,
-                    result,
+                    masked_error,
                 )
                 continue
             provider_id = provider.meta().id
-            if exclude_provider_id and provider_id == exclude_provider_id:
-                continue
             if model_name in result:
                 return provider, provider_id
         if results and all(isinstance(r, BaseException) for r in results):
@@ -270,15 +299,13 @@ class ProviderCommands:
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )
             return
-        # 定义正则表达式匹配 API 密钥
-        api_key_pattern = re.compile(r"key=[^&'\" ]+")
 
         if idx_or_name is None:
             models = []
             try:
-                models = await prov.get_models()
+                models = await self._get_provider_models(prov)
             except BaseException as e:
-                err_msg = api_key_pattern.sub("key=***", str(e))
+                err_msg = self._mask_sensitive_text(str(e))
                 message.set_result(
                     MessageEventResult()
                     .message("获取模型列表失败: " + err_msg)
@@ -300,9 +327,9 @@ class ProviderCommands:
         elif isinstance(idx_or_name, int):
             models = []
             try:
-                models = await prov.get_models()
+                models = await self._get_provider_models(prov)
             except BaseException as e:
-                err_msg = api_key_pattern.sub("key=***", str(e))
+                err_msg = self._mask_sensitive_text(str(e))
                 message.set_result(
                     MessageEventResult().message("获取模型列表失败: " + err_msg),
                 )
@@ -319,7 +346,7 @@ class ProviderCommands:
                         ),
                     )
                 except BaseException as e:
-                    err_msg = api_key_pattern.sub("key=***", str(e))
+                    err_msg = self._mask_sensitive_text(str(e))
                     message.set_result(
                         MessageEventResult().message("切换模型未知错误: " + err_msg),
                     )
@@ -333,9 +360,20 @@ class ProviderCommands:
             # 1. 检查当前提供商
             models = []
             try:
-                models = await prov.get_models()
-            except BaseException:
-                models = []
+                models = await self._get_provider_models(prov)
+            except BaseException as e:
+                err_msg = self._mask_sensitive_text(str(e))
+                logger.warning(
+                    "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
+                    curr_provider_id,
+                    err_msg,
+                )
+                message.set_result(
+                    MessageEventResult().message(
+                        "获取当前提供商模型列表失败: " + err_msg
+                    ),
+                )
+                return
             if model_name in models:
                 prov.set_model(model_name)
                 message.set_result(
