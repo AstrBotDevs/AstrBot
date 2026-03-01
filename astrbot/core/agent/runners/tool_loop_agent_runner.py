@@ -15,16 +15,16 @@ from mcp.types import (
     TextResourceContents,
 )
 
+import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.exceptions import LLMEmptyResponseError
 from astrbot.core.message.components import Json
-import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
-from astrbot.core.exceptions import LLMEmptyResponseError
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
