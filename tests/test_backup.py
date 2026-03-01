@@ -377,17 +377,30 @@ class TestAstrBotImporter:
         assert aiocq_row is not None
         assert aiocq_row["timestamp"] == "2025-12-13T21:00:00+00:00"
 
-    def test_normalize_platform_stats_timestamp_treats_naive_as_utc(self):
-        """测试 naive timestamp 会统一转为显式 UTC 偏移"""
+    def test_merge_platform_stats_rows_normalizes_naive_timestamp_to_utc(self):
+        """测试 platform_stats 合并前会将 naive timestamp 标准化为 UTC 偏移"""
         importer = AstrBotImporter(main_db=MagicMock())
 
-        normalized = importer._normalize_platform_stats_timestamp("2025-12-13T21:00:00")
-        assert normalized == "2025-12-13T21:00:00+00:00"
+        rows = [
+            {
+                "timestamp": "2025-12-13T21:00:00",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 1,
+            },
+            {
+                "timestamp": datetime(2025, 12, 13, 22, 0, 0),
+                "platform_id": "telegram",
+                "platform_type": "unknown",
+                "count": 1,
+            },
+        ]
 
-        normalized_dt = importer._normalize_platform_stats_timestamp(
-            datetime(2025, 12, 13, 21, 0, 0)
-        )
-        assert normalized_dt == "2025-12-13T21:00:00+00:00"
+        merged_rows = importer._merge_platform_stats_rows(rows)
+        assert len(merged_rows) == 2
+        by_platform = {row["platform_id"]: row for row in merged_rows}
+        assert by_platform["webchat"]["timestamp"] == "2025-12-13T21:00:00+00:00"
+        assert by_platform["telegram"]["timestamp"] == "2025-12-13T22:00:00+00:00"
 
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
         """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""

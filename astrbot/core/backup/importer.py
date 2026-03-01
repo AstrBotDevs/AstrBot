@@ -549,34 +549,72 @@ class AstrBotImporter:
         non_mergeable: list[dict[str, Any]] = []
         invalid_count_warned = 0
 
-        for row in rows:
-            normalized_row, normalized_timestamp, is_timestamp_valid = (
-                self._normalize_platform_stats_row(row)
-            )
+        def normalize_timestamp(value: Any) -> str | None:
+            if isinstance(value, datetime):
+                return self._to_utc_iso(value)
+            if isinstance(value, str):
+                timestamp = value.strip()
+                if not timestamp:
+                    return None
+                if timestamp.endswith("Z"):
+                    timestamp = f"{timestamp[:-1]}+00:00"
+                try:
+                    return self._to_utc_iso(datetime.fromisoformat(timestamp))
+                except ValueError:
+                    return None
+            return None
 
-            platform_id = normalized_row.get("platform_id")
-            platform_type = normalized_row.get("platform_type")
+        def build_key(row: dict[str, Any]) -> tuple[str, str, str] | None:
+            normalized_timestamp = normalize_timestamp(row.get("timestamp"))
+            if normalized_timestamp is not None:
+                row["timestamp"] = normalized_timestamp
+            platform_id = row.get("platform_id")
+            platform_type = row.get("platform_type")
+            if (
+                normalized_timestamp is None
+                or not isinstance(platform_id, str)
+                or not isinstance(platform_type, str)
+            ):
+                return None
+            return (normalized_timestamp, platform_id, platform_type)
+
+        def parse_count(
+            raw_count: Any,
+            key_for_log: tuple[Any, Any, Any],
+            warned_count: int,
+        ) -> tuple[int, int]:
+            if warned_count >= PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
+                try:
+                    return int(raw_count), warned_count
+                except (TypeError, ValueError):
+                    return 0, warned_count
+            try:
+                return int(raw_count), warned_count
+            except (TypeError, ValueError):
+                logger.warning(
+                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                    raw_count,
+                    key_for_log,
+                )
+                return 0, warned_count + 1
+
+        for row in rows:
+            normalized_row = dict(row)
+            key = build_key(normalized_row)
             key_for_log = (
-                normalized_timestamp if is_timestamp_valid else "<invalid_timestamp>",
-                repr(platform_id),
-                repr(platform_type),
+                normalized_row.get("timestamp"),
+                repr(normalized_row.get("platform_id")),
+                repr(normalized_row.get("platform_type")),
             )
-            count, invalid_count_warned = self._parse_platform_stats_count(
-                normalized_row.get("count", 0),
-                key_for_log,
-                invalid_count_warned,
+            count, invalid_count_warned = parse_count(
+                normalized_row.get("count", 0), key_for_log, invalid_count_warned
             )
             normalized_row["count"] = count
 
-            if not is_timestamp_valid:
+            if key is None:
                 non_mergeable.append(normalized_row)
                 continue
 
-            if not isinstance(platform_id, str) or not isinstance(platform_type, str):
-                non_mergeable.append(normalized_row)
-                continue
-
-            key = (normalized_timestamp, platform_id, platform_type)
             existing = merged.get(key)
             if existing is None:
                 merged[key] = normalized_row
@@ -585,70 +623,12 @@ class AstrBotImporter:
 
         return [*non_mergeable, *merged.values()]
 
-    def _parse_platform_stats_count(
-        self,
-        raw_count: Any,
-        key_for_log: tuple[str, str, str],
-        warned_count: int,
-    ) -> tuple[int, int]:
-        if warned_count >= PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
-            try:
-                return int(raw_count), warned_count
-            except (TypeError, ValueError):
-                return 0, warned_count
-        try:
-            return int(raw_count), warned_count
-        except (TypeError, ValueError):
-            logger.warning(
-                "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
-                raw_count,
-                key_for_log,
-            )
-            return 0, warned_count + 1
-
-    def _normalize_platform_stats_row(
-        self, row: dict[str, Any]
-    ) -> tuple[dict[str, Any], str, bool]:
-        normalized_row = dict(row)
-        raw_timestamp = normalized_row.get("timestamp")
-        normalized_timestamp = self._normalize_platform_stats_timestamp(raw_timestamp)
-        if normalized_timestamp is None:
-            if isinstance(raw_timestamp, str):
-                normalized_row["timestamp"] = raw_timestamp.strip()
-            elif raw_timestamp is None:
-                normalized_row["timestamp"] = ""
-            else:
-                normalized_row["timestamp"] = str(raw_timestamp)
-            return normalized_row, normalized_row["timestamp"], False
-        normalized_row["timestamp"] = normalized_timestamp
-        return normalized_row, normalized_timestamp, True
-
     def _to_utc_iso(self, dt: datetime) -> str:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         else:
             dt = dt.astimezone(timezone.utc)
         return dt.isoformat()
-
-    def _normalize_platform_stats_timestamp(self, value: Any) -> str | None:
-        if isinstance(value, datetime):
-            return self._to_utc_iso(value)
-
-        if isinstance(value, str):
-            timestamp = value.strip()
-            if not timestamp:
-                return None
-            if timestamp.endswith("Z"):
-                timestamp = f"{timestamp[:-1]}+00:00"
-            try:
-                return self._to_utc_iso(datetime.fromisoformat(timestamp))
-            except ValueError:
-                return None
-
-        if value is None:
-            return None
-
-        return None
 
     async def _import_knowledge_bases(
         self,
