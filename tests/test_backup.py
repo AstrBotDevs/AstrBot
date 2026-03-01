@@ -562,6 +562,46 @@ class TestAstrBotImporter:
         assert duplicate_count == 0
         assert len(merged_rows) == 4
 
+    def test_merge_platform_stats_rows_preserves_input_order(self):
+        """测试 platform_stats 聚合后仍保持输入顺序（按首次出现位置）"""
+        importer = AstrBotImporter(main_db=MagicMock())
+        rows = [
+            {
+                "id": 1,
+                "timestamp": "2025-12-13T20:00:00Z",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 2,
+            },
+            {
+                "id": 2,
+                "timestamp": "",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 3,
+            },
+            {
+                "id": 3,
+                "timestamp": "2025-12-13T20:00:00+00:00",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 5,
+            },
+            {
+                "id": 4,
+                "timestamp": "2025-12-13T21:00:00+00:00",
+                "platform_id": "telegram",
+                "platform_type": "unknown",
+                "count": 7,
+            },
+        ]
+
+        merged_rows = importer._merge_platform_stats_rows(rows)
+
+        assert len(merged_rows) == 3
+        assert [row["id"] for row in merged_rows] == [1, 2, 4]
+        assert merged_rows[0]["count"] == 7
+
     @pytest.mark.asyncio
     async def test_import_file_not_exists(self, mock_main_db, tmp_path):
         """测试导入不存在的文件"""

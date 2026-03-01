@@ -525,8 +525,10 @@ class AstrBotImporter:
     def _preprocess_main_table_rows(
         self, table_name: str, rows: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        if table_name == "platform_stats":
-            normalized_rows = self._merge_platform_stats_rows(rows)
+        preprocessors = {"platform_stats": self._merge_platform_stats_rows}
+        preprocessor = preprocessors.get(table_name)
+        if preprocessor is not None:
+            normalized_rows = preprocessor(rows)
             duplicate_count = len(rows) - len(normalized_rows)
             if duplicate_count > 0:
                 logger.warning(
@@ -546,9 +548,44 @@ class AstrBotImporter:
         - Invalid count warnings are rate-limited per function invocation.
         """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
-        non_mergeable: list[dict[str, Any]] = []
-        invalid_count_warned = 0
-        suppression_warned = False
+        result: list[dict[str, Any]] = []
+        invalid_count_warnings = 0
+
+        def log_invalid_count(
+            raw_count: Any, key_for_log: tuple[Any, Any, Any]
+        ) -> None:
+            nonlocal invalid_count_warnings
+
+            limit = PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+            if limit <= 0:
+                if invalid_count_warnings == 0:
+                    logger.warning(
+                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                        limit,
+                    )
+                    invalid_count_warnings = 1
+                return
+
+            if invalid_count_warnings < limit:
+                logger.warning(
+                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                    raw_count,
+                    key_for_log,
+                )
+                invalid_count_warnings += 1
+                if invalid_count_warnings == limit:
+                    logger.warning(
+                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                        limit,
+                    )
+                    invalid_count_warnings += 1
+
+        def parse_count(raw_count: Any, key_for_log: tuple[Any, Any, Any]) -> int:
+            try:
+                return int(raw_count)
+            except (TypeError, ValueError):
+                log_invalid_count(raw_count, key_for_log)
+                return 0
 
         for row in rows:
             normalized_row = dict(row)
@@ -568,39 +605,31 @@ class AstrBotImporter:
             else:
                 normalized_row["timestamp"] = str(raw_timestamp)
 
-            key = self._build_platform_stats_key(
-                normalized_timestamp, platform_id, platform_type
-            )
             key_for_log = (
                 normalized_row.get("timestamp"),
                 repr(platform_id),
                 repr(platform_type),
             )
-            count, is_valid_count = self._parse_platform_stats_count_value(
-                normalized_row.get("count", 0)
-            )
-            if not is_valid_count:
-                invalid_count_warned, suppression_warned = (
-                    self._log_invalid_platform_stats_count(
-                        normalized_row.get("count", 0),
-                        key_for_log,
-                        invalid_count_warned,
-                        suppression_warned,
-                    )
-                )
+            count = parse_count(normalized_row.get("count", 0), key_for_log)
             normalized_row["count"] = count
 
-            if key is None:
-                non_mergeable.append(normalized_row)
+            if (
+                normalized_timestamp is None
+                or not isinstance(platform_id, str)
+                or not isinstance(platform_type, str)
+            ):
+                result.append(normalized_row)
                 continue
 
+            key = (normalized_timestamp, platform_id, platform_type)
             existing = merged.get(key)
             if existing is None:
                 merged[key] = normalized_row
+                result.append(normalized_row)
             else:
                 existing["count"] += count
 
-        return [*non_mergeable, *merged.values()]
+        return result
 
     def _normalize_platform_stats_timestamp(self, value: Any) -> str | None:
         if isinstance(value, datetime):
@@ -616,58 +645,6 @@ class AstrBotImporter:
             except ValueError:
                 return None
         return None
-
-    def _build_platform_stats_key(
-        self,
-        normalized_timestamp: str | None,
-        platform_id: Any,
-        platform_type: Any,
-    ) -> tuple[str, str, str] | None:
-        if (
-            normalized_timestamp is None
-            or not isinstance(platform_id, str)
-            or not isinstance(platform_type, str)
-        ):
-            return None
-        return (normalized_timestamp, platform_id, platform_type)
-
-    def _parse_platform_stats_count_value(self, raw_count: Any) -> tuple[int, bool]:
-        try:
-            return int(raw_count), True
-        except (TypeError, ValueError):
-            return 0, False
-
-    def _log_invalid_platform_stats_count(
-        self,
-        raw_count: Any,
-        key_for_log: tuple[Any, Any, Any],
-        warned_count: int,
-        suppression_warned: bool,
-    ) -> tuple[int, bool]:
-        if warned_count < PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
-            logger.warning(
-                "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
-                raw_count,
-                key_for_log,
-            )
-            warned_count += 1
-            if (
-                warned_count >= PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-                and not suppression_warned
-            ):
-                logger.warning(
-                    "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
-                )
-                suppression_warned = True
-            return warned_count, suppression_warned
-        if not suppression_warned:
-            logger.warning(
-                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
-            )
-            suppression_warned = True
-        return warned_count, suppression_warned
 
     def _to_utc_iso(self, dt: datetime) -> str:
         if dt.tzinfo is None:
