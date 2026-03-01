@@ -306,12 +306,36 @@ class ProviderOpenAIOfficial(Provider):
 
         state = ChatCompletionStreamState()
 
+        chunk_index = 0
         async for chunk in stream:
+            # 兼容处理：部分非标准聚合平台（如通过newapi适配层转接的 Gemini）在流式返回 tool_calls 时，
+            # 可能会缺失 type 字段。由于 openai SDK 的 ChatCompletionStreamState.handle_chunk
+            # 内部有 assert tool.type == "function" 的断言，缺少该字段会导致 AssertionError。
+            # 因此，若检测到 tool_call 且 type 为空，在此处手动补全为 "function"。
+            for choice in chunk.choices or []:
+                if not choice.delta or not choice.delta.tool_calls:
+                    continue
+                for tool_call in choice.delta.tool_calls:
+                    # 使用 getattr 处理 type 字段可能完全缺失的情况
+                    tool_type = getattr(tool_call, "type", None)
+                    if tool_type is None or tool_type == "":
+                        logger.debug(
+                            f"[{self.get_model()}] tool_call.type is missing or empty in chunk {chunk_index} "
+                            f"(provider: {self.provider_config.get('id', 'unknown')}), "
+                            f"manually set to 'function'"
+                        )
+                        tool_call.type = "function"
+            chunk_index += 1
+
             try:
                 state.handle_chunk(chunk)
             except Exception as e:
-                logger.warning("Saving chunk state error: " + str(e))
-            if len(chunk.choices) == 0:
+                logger.warning(
+                    f"[{self.get_model()}] Saving chunk state error: {e} "
+                    f"(provider: {self.provider_config.get('id', 'unknown')})"
+                )
+
+            if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
             # logger.debug(f"chunk delta: {delta}")
