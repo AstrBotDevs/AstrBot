@@ -22,6 +22,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .route import Response, Route, RouteContext
 
@@ -486,7 +487,9 @@ class ChatRoute(Route):
                                     "type": "message_saved",
                                     "data": {
                                         "id": saved_record.id,
-                                        "created_at": saved_record.created_at.astimezone().isoformat(),
+                                        "created_at": to_utc_isoformat(
+                                            saved_record.created_at
+                                        ),
                                     },
                                 }
                                 try:
@@ -718,8 +721,8 @@ class ChatRoute(Route):
                     "creator": session.creator,
                     "display_name": session.display_name,
                     "is_group": session.is_group,
-                    "created_at": session.created_at.astimezone().isoformat(),
-                    "updated_at": session.updated_at.astimezone().isoformat(),
+                    "created_at": to_utc_isoformat(session.created_at),
+                    "updated_at": to_utc_isoformat(session.updated_at),
                 }
             )
 
