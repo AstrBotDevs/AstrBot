@@ -444,6 +444,36 @@ class TestAstrBotImporter:
             assert merged_rows[0]["count"] == 0
             assert warning_mock.call_count == 1
 
+    def test_merge_platform_stats_rows_keeps_invalid_timestamps_distinct(self):
+        """测试空/非法 timestamp 不参与聚合，避免误合并"""
+        importer = AstrBotImporter(main_db=MagicMock())
+        rows = [
+            {
+                "timestamp": "",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 2,
+            },
+            {
+                "timestamp": "not-a-datetime",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 3,
+            },
+            {
+                "timestamp": "not-a-datetime",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 4,
+            },
+        ]
+
+        merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+
+        assert duplicate_count == 0
+        assert len(merged_rows) == 3
+        assert [row["count"] for row in merged_rows] == [2, 3, 4]
+
     @pytest.mark.asyncio
     async def test_import_file_not_exists(self, mock_main_db, tmp_path):
         """测试导入不存在的文件"""

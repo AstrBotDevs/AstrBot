@@ -61,6 +61,7 @@ def _get_major_version(version_str: str) -> str:
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
+# Warning limit per _merge_platform_stats_rows invocation.
 PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
 
 
@@ -524,8 +525,14 @@ class AstrBotImporter:
     def _merge_platform_stats_rows(
         self, rows: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], int]:
+        """Merge duplicate platform_stats rows by normalized timestamp/platform key.
+
+        Note:
+        - Invalid/empty timestamps are kept as distinct rows to avoid accidental merging.
+        - Invalid count warnings are rate-limited per function invocation.
+        """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
-        timestamp_cache: dict[str, str] = {}
+        timestamp_cache: dict[str, tuple[str, bool]] = {}
         invalid_count_warned = 0
         duplicate_count = 0
 
@@ -542,21 +549,27 @@ class AstrBotImporter:
                     invalid_count_warned += 1
                 return 0
 
-        for row in rows:
+        for row_index, row in enumerate(rows):
             raw_timestamp = row.get("timestamp")
             if isinstance(raw_timestamp, str):
-                normalized_timestamp = timestamp_cache.get(raw_timestamp)
-                if normalized_timestamp is None:
-                    normalized_timestamp = self._normalize_platform_stats_timestamp(
+                timestamp_result = timestamp_cache.get(raw_timestamp)
+                if timestamp_result is None:
+                    timestamp_result = self._normalize_platform_stats_timestamp(
                         raw_timestamp
                     )
-                    timestamp_cache[raw_timestamp] = normalized_timestamp
+                    timestamp_cache[raw_timestamp] = timestamp_result
             else:
-                normalized_timestamp = self._normalize_platform_stats_timestamp(
+                timestamp_result = self._normalize_platform_stats_timestamp(
                     raw_timestamp
                 )
+            normalized_timestamp, is_timestamp_valid = timestamp_result
+            timestamp_for_key = (
+                normalized_timestamp
+                if is_timestamp_valid
+                else f"__invalid_timestamp_row_{row_index}"
+            )
             key = (
-                normalized_timestamp,
+                timestamp_for_key,
                 str(row.get("platform_id")),
                 str(row.get("platform_type")),
             )
@@ -575,28 +588,28 @@ class AstrBotImporter:
             existing["count"] = existing_count + incoming_count
         return list(merged.values()), duplicate_count
 
-    def _normalize_platform_stats_timestamp(self, value: Any) -> str:
+    def _normalize_platform_stats_timestamp(self, value: Any) -> tuple[str, bool]:
         if isinstance(value, datetime):
             dt = value
             if dt.tzinfo is not None:
                 dt = dt.astimezone(timezone.utc)
-            return dt.isoformat()
+            return dt.isoformat(), True
         if isinstance(value, str):
             timestamp = value.strip()
             if not timestamp:
-                return ""
+                return "", False
             if timestamp.endswith("Z"):
                 timestamp = f"{timestamp[:-1]}+00:00"
             try:
                 dt = datetime.fromisoformat(timestamp)
                 if dt.tzinfo is not None:
                     dt = dt.astimezone(timezone.utc)
-                return dt.isoformat()
+                return dt.isoformat(), True
             except ValueError:
-                return value.strip()
+                return value.strip(), False
         if value is None:
-            return ""
-        return str(value)
+            return "", False
+        return str(value), False
 
     async def _import_knowledge_bases(
         self,
