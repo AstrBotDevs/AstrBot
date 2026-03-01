@@ -26,5 +26,13 @@ def redact_sensitive_text(text: str) -> str:
     return redacted
 
 
-def safe_error(prefix: str, error: Exception | BaseException | str) -> str:
-    return prefix + redact_sensitive_text(str(error))
+def safe_error(
+    prefix: str,
+    error: Exception | BaseException | str,
+    *,
+    redact: bool = True,
+) -> str:
+    text = str(error)
+    if redact:
+        text = redact_sensitive_text(text)
+    return prefix + text

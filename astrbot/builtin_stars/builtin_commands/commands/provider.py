@@ -16,16 +16,11 @@ if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
 
-@dataclass(frozen=True)
-class _ModelLookupConfig:
-    list_cache_ttl_seconds: float = 30.0
-    max_concurrency_default: int = 4
-    max_concurrency_upper_bound: int = 16
-    list_cache_ttl_key: str = "model_list_cache_ttl_seconds"
-    max_concurrency_key: str = "model_lookup_max_concurrency"
-
-
-_MODEL_LOOKUP_CONFIG = _ModelLookupConfig()
+MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT = 30.0
+MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT = 4
+MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND = 16
+MODEL_LIST_CACHE_TTL_KEY = "model_list_cache_ttl_seconds"
+MODEL_LOOKUP_MAX_CONCURRENCY_KEY = "model_lookup_max_concurrency"
 
 
 @dataclass
@@ -65,7 +60,6 @@ class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self._model_cache = _ModelListCache()
-        self._cfg = _MODEL_LOOKUP_CONFIG
         register_change_hook = getattr(
             self.context.provider_manager,
             "register_provider_change_hook",
@@ -87,7 +81,13 @@ class ProviderCommands:
         if provider_type == ProviderType.CHAT_COMPLETION:
             self.invalidate_provider_models_cache(provider_id)
 
-    def _get_int_provider_setting(self, umo: str | None, key: str, default: int) -> int:
+    def _get_numeric_provider_setting(
+        self,
+        umo: str | None,
+        key: str,
+        default: int | float,
+        cast: type[int] | type[float],
+    ) -> int | float:
         if not umo:
             return default
         try:
@@ -95,27 +95,7 @@ class ProviderCommands:
             raw = cfg.get(key)
             if raw is None:
                 return default
-            return int(raw)
-        except Exception as e:
-            logger.debug(
-                "读取 %s 失败，回退默认值 %r: %s",
-                key,
-                default,
-                safe_error("", e),
-            )
-            return default
-
-    def _get_float_provider_setting(
-        self, umo: str | None, key: str, default: float
-    ) -> float:
-        if not umo:
-            return default
-        try:
-            cfg = self.context.get_config(umo).get("provider_settings", {})
-            raw = cfg.get(key)
-            if raw is None:
-                return default
-            return float(raw)
+            return cast(raw)
         except Exception as e:
             logger.debug(
                 "读取 %s 失败，回退默认值 %r: %s",
@@ -168,18 +148,27 @@ class ProviderCommands:
         return None
 
     def _get_lookup_max_concurrency(self, umo: str | None) -> int:
-        concurrency = self._get_int_provider_setting(
-            umo,
-            self._cfg.max_concurrency_key,
-            self._cfg.max_concurrency_default,
+        concurrency = int(
+            self._get_numeric_provider_setting(
+                umo,
+                MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
+                MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
+                int,
+            )
         )
-        return min(max(concurrency, 1), self._cfg.max_concurrency_upper_bound)
+        return min(
+            max(concurrency, 1),
+            MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND,
+        )
 
     def _get_model_cache_ttl_seconds(self, umo: str | None) -> float:
-        ttl = self._get_float_provider_setting(
-            umo,
-            self._cfg.list_cache_ttl_key,
-            self._cfg.list_cache_ttl_seconds,
+        ttl = float(
+            self._get_numeric_provider_setting(
+                umo,
+                MODEL_LIST_CACHE_TTL_KEY,
+                MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
+                float,
+            )
         )
         return max(ttl, 0.0)
 
@@ -241,11 +230,17 @@ class ProviderCommands:
         exclude_provider_id: str | None = None,
         umo: str | None = None,
     ) -> tuple[Provider | None, str | None]:
-        all_providers = [
-            p
-            for p in self.context.get_all_providers()
-            if exclude_provider_id is None or p.meta().id != exclude_provider_id
-        ]
+        all_providers = []
+        for provider in self.context.get_all_providers():
+            provider_meta = provider.meta()
+            if provider_meta.provider_type != ProviderType.CHAT_COMPLETION:
+                continue
+            if (
+                exclude_provider_id is not None
+                and provider_meta.id == exclude_provider_id
+            ):
+                continue
+            all_providers.append(provider)
         if not all_providers:
             return None, None
 
@@ -341,6 +336,8 @@ class ProviderCommands:
                 id_ = meta.id
                 error_code = None
 
+                if isinstance(reachable, asyncio.CancelledError):
+                    raise reachable
                 if isinstance(reachable, Exception):
                     # 异常情况下兜底处理，避免单个 provider 导致列表失败
                     self._log_reachability_failure(
