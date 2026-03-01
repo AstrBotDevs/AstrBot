@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypeVar
 
 from astrbot import logger
@@ -22,6 +23,13 @@ MODEL_LIST_CACHE_TTL_KEY = "model_list_cache_ttl_seconds"
 MODEL_LOOKUP_MAX_CONCURRENCY_KEY = "model_lookup_max_concurrency"
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class _ModelLookupConfig:
+    umo: str | None
+    cache_ttl_seconds: float
+    max_concurrency: int
 
 
 class ProviderCommands:
@@ -124,20 +132,26 @@ class ProviderCommands:
             )
             return default
 
-    def _get_ttl_setting(self, umo: str | None) -> float:
-        return self._get_provider_setting(
-            umo,
-            MODEL_LIST_CACHE_TTL_KEY,
-            MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
-            float,
+    def _get_model_lookup_config(self, umo: str | None) -> _ModelLookupConfig:
+        ttl = self._get_provider_setting(
+            umo=umo,
+            key=MODEL_LIST_CACHE_TTL_KEY,
+            default=MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
+            cast=float,
         )
-
-    def _get_lookup_concurrency(self, umo: str | None) -> int:
-        return self._get_provider_setting(
-            umo,
-            MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
-            MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
-            int,
+        raw_concurrency = self._get_provider_setting(
+            umo=umo,
+            key=MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
+            default=MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
+            cast=int,
+        )
+        return _ModelLookupConfig(
+            umo=umo,
+            cache_ttl_seconds=max(float(ttl), 0.0),
+            max_concurrency=min(
+                max(int(raw_concurrency), 1),
+                MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND,
+            ),
         )
 
     def _resolve_model_name(
@@ -181,11 +195,12 @@ class ProviderCommands:
         self,
         provider: Provider,
         *,
+        config: _ModelLookupConfig,
         use_cache: bool = True,
-        umo: str | None = None,
     ) -> list[str]:
         provider_id = provider.meta().id
-        ttl_seconds = max(float(self._get_ttl_setting(umo)), 0.0)
+        ttl_seconds = config.cache_ttl_seconds
+        umo = config.umo
         if use_cache:
             cached = self._get_cached_models(
                 provider_id,
@@ -236,8 +251,9 @@ class ProviderCommands:
     async def _find_provider_for_model(
         self,
         model_name: str,
+        *,
         exclude_provider_id: str | None = None,
-        umo: str | None = None,
+        config: _ModelLookupConfig,
     ) -> tuple[Provider | None, str | None]:
         all_providers = []
         for provider in self.context.get_all_providers():
@@ -254,34 +270,48 @@ class ProviderCommands:
             return None, None
 
         failed_provider_errors: list[tuple[str, str]] = []
-        raw_concurrency = self._get_lookup_concurrency(umo)
-        max_concurrency = min(
-            max(int(raw_concurrency), 1),
-            MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND,
-        )
-        for start in range(0, len(all_providers), max_concurrency):
-            batch_providers = all_providers[start : start + max_concurrency]
-            batch_results = await asyncio.gather(
-                *[
-                    self._get_provider_models(
+        semaphore = asyncio.Semaphore(config.max_concurrency)
+
+        async def fetch_and_match(
+            provider: Provider,
+        ) -> tuple[Provider | None, str | None]:
+            async with semaphore:
+                try:
+                    models = await self._get_provider_models(
                         provider,
+                        config=config,
                         use_cache=False,
-                        umo=umo,
                     )
-                    for provider in batch_providers
-                ],
-                return_exceptions=True,
-            )
-            for provider, result in zip(batch_providers, batch_results, strict=False):
-                if isinstance(result, asyncio.CancelledError):
-                    raise result
-                provider_id = provider.meta().id
-                if isinstance(result, Exception):
-                    failed_provider_errors.append((provider_id, safe_error("", result)))
-                    continue
-                matched_model_name = self._resolve_model_name(model_name, result)
-                if matched_model_name is not None:
-                    return provider, matched_model_name
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    failed_provider_errors.append(
+                        (provider.meta().id, safe_error("", e))
+                    )
+                    return None, None
+
+            matched_model_name = self._resolve_model_name(model_name, models)
+            if matched_model_name is None:
+                return None, None
+            return provider, matched_model_name
+
+        results = await asyncio.gather(
+            *(fetch_and_match(provider) for provider in all_providers),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+            if isinstance(result, Exception):
+                logger.debug(
+                    "跨提供商查找模型 %s 发生异常: %s",
+                    model_name,
+                    safe_error("", result),
+                )
+                continue
+            provider, matched_model_name = result
+            if provider is not None and matched_model_name is not None:
+                return provider, matched_model_name
 
         if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
             failed_ids = ",".join(
@@ -496,10 +526,11 @@ class ProviderCommands:
             return
 
         umo = message.unified_msg_origin
+        config = self._get_model_lookup_config(umo)
         curr_provider_id = prov.meta().id
 
         try:
-            models = await self._get_provider_models(prov, umo=umo)
+            models = await self._get_provider_models(prov, config=config)
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -526,7 +557,9 @@ class ProviderCommands:
             return
 
         target_prov, matched_target_model_name = await self._find_provider_for_model(
-            model_name, exclude_provider_id=curr_provider_id, umo=umo
+            model_name,
+            exclude_provider_id=curr_provider_id,
+            config=config,
         )
 
         if target_prov is None or matched_target_model_name is None:
@@ -571,13 +604,12 @@ class ProviderCommands:
                 MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
             )
             return
+        config = self._get_model_lookup_config(message.unified_msg_origin)
 
         if idx_or_name is None:
             models = []
             try:
-                models = await self._get_provider_models(
-                    prov, umo=message.unified_msg_origin
-                )
+                models = await self._get_provider_models(prov, config=config)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -602,9 +634,7 @@ class ProviderCommands:
         elif isinstance(idx_or_name, int):
             models = []
             try:
-                models = await self._get_provider_models(
-                    prov, umo=message.unified_msg_origin
-                )
+                models = await self._get_provider_models(prov, config=config)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
