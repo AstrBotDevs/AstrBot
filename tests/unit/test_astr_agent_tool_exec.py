@@ -172,6 +172,59 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 
 
 @pytest.mark.asyncio
+async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    def _boom(_items):
+        raise RuntimeError("normalize should not be called")
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.normalize_and_dedupe_strings", _boom
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=["https://example.com/raw.png"],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
 async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_file(
     monkeypatch: pytest.MonkeyPatch,
 ):

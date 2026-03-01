@@ -247,7 +247,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
         if image_urls_prepared:
-            image_urls = normalize_and_dedupe_strings(tool_args.get("image_urls"))
+            prepared_image_urls = tool_args.get("image_urls")
+            if isinstance(prepared_image_urls, list):
+                image_urls = prepared_image_urls
+            else:
+                logger.debug(
+                    "Expected prepared handoff image_urls as list[str], got %s.",
+                    type(prepared_image_urls).__name__,
+                )
+                image_urls = []
         else:
             image_urls = await cls._collect_handoff_image_urls(
                 run_context,
