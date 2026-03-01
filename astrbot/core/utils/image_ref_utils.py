@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
+from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 ALLOWED_IMAGE_EXTENSIONS = {
@@ -37,10 +39,27 @@ def resolve_file_url_path(image_ref: str) -> str:
     return path or image_ref
 
 
+def _is_path_within_roots(path: str, roots: Sequence[str]) -> bool:
+    try:
+        candidate = Path(path).resolve(strict=False)
+    except Exception:
+        return False
+
+    for root in roots:
+        try:
+            root_path = Path(root).resolve(strict=False)
+            candidate.relative_to(root_path)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def is_supported_image_ref(
     image_ref: str,
     *,
-    allow_extensionless_existing_local_file: bool = True,
+    allow_extensionless_existing_local_file: bool = False,
+    extensionless_local_roots: Sequence[str] | None = None,
 ) -> bool:
     if not image_ref:
         return False
@@ -57,5 +76,11 @@ def is_supported_image_ref(
         return True
     if not allow_extensionless_existing_local_file:
         return False
+    if not extensionless_local_roots:
+        return False
     # Keep support for extension-less temp files returned by image converters.
-    return ext == "" and os.path.exists(file_path)
+    return (
+        ext == ""
+        and os.path.exists(file_path)
+        and _is_path_within_roots(file_path, extensionless_local_roots)
+    )

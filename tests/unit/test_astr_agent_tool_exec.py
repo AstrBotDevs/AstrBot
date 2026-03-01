@@ -137,8 +137,10 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 ):
     captured: dict = {}
 
-    async def _fake_execute_handoff(cls, tool, run_context, tool_args):
-        tool_args["image_urls"] = ["https://example.com/raw.png"]
+    async def _fake_execute_handoff(
+        cls, tool, run_context, image_urls_prepared=False, **tool_args
+    ):
+        assert image_urls_prepared is True
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
@@ -178,6 +180,9 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+    )
+    monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
     )
 
@@ -199,7 +204,34 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+    )
+    monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
+    )
+
+    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+        run_context,
+        [],
+    )
+
+    assert image_urls == []
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_image_urls_filters_extensionless_file_outside_temp_root(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/var/tmp/astrbot-handoff-image"
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
     )
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])

@@ -37,48 +37,31 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
-from astrbot.core.utils.image_ref_utils import (
-    ALLOWED_IMAGE_EXTENSIONS,
-    is_supported_image_ref,
-)
+from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    _ALLOWED_IMAGE_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
-
-    @classmethod
-    def _is_supported_image_ref(cls, image_ref: str) -> bool:
-        return is_supported_image_ref(image_ref)
-
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
-        candidates: list[str] = []
         if image_urls_raw is None:
-            pass
-        elif isinstance(image_urls_raw, str):
-            candidates.append(image_urls_raw)
-        elif isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
+            return []
+
+        if isinstance(image_urls_raw, str):
+            return [image_urls_raw]
+
+        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
             image_urls_raw, (str, bytes, bytearray)
         ):
-            non_string_count = 0
-            for item in image_urls_raw:
-                if isinstance(item, str):
-                    candidates.append(item)
-                else:
-                    non_string_count += 1
-            if non_string_count > 0:
-                logger.debug(
-                    "Dropped %d non-string image_urls entries in handoff tool args.",
-                    non_string_count,
-                )
-        else:
-            logger.debug(
-                "Unsupported image_urls type in handoff tool args: %s",
-                type(image_urls_raw).__name__,
-            )
-        return candidates
+            return [item for item in image_urls_raw if isinstance(item, str)]
+
+        logger.debug(
+            "Unsupported image_urls type in handoff tool args: %s",
+            type(image_urls_raw).__name__,
+        )
+        return []
 
     @classmethod
     async def _collect_image_urls_from_message(
@@ -116,7 +99,16 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         candidates.extend(await cls._collect_image_urls_from_message(run_context))
 
         normalized = normalize_and_dedupe_strings(candidates)
-        sanitized = [item for item in normalized if cls._is_supported_image_ref(item)]
+        extensionless_local_roots = (get_astrbot_temp_path(),)
+        sanitized = [
+            item
+            for item in normalized
+            if is_supported_image_ref(
+                item,
+                allow_extensionless_existing_local_file=True,
+                extensionless_local_roots=extensionless_local_roots,
+            )
+        ]
         dropped_count = len(normalized) - len(sanitized)
         if dropped_count > 0:
             logger.debug(
@@ -145,7 +137,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 ):
                     yield r
                 return
-            async for r in cls._execute_handoff(tool, run_context, tool_args):
+            async for r in cls._execute_handoff(tool, run_context, **tool_args):
                 yield r
             return
 
@@ -248,13 +240,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
-        tool_args: dict[str, T.Any],
+        *,
+        image_urls_prepared: bool = False,
+        **tool_args: T.Any,
     ):
+        tool_args = dict(tool_args)
         input_ = tool_args.get("input")
-        image_urls = await cls._collect_handoff_image_urls(
-            run_context,
-            tool_args.get("image_urls"),
-        )
+        if image_urls_prepared:
+            image_urls = normalize_and_dedupe_strings(tool_args.get("image_urls"))
+        else:
+            image_urls = await cls._collect_handoff_image_urls(
+                run_context,
+                tool_args.get("image_urls"),
+            )
         tool_args["image_urls"] = image_urls
 
         # Build handoff toolset from registered tools plus runtime computer tools.
@@ -354,8 +352,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         """Run the subagent handoff and, on completion, wake the main agent."""
         result_text = ""
+        tool_args = dict(tool_args)
+        tool_args["image_urls"] = await cls._collect_handoff_image_urls(
+            run_context,
+            tool_args.get("image_urls"),
+        )
         try:
-            async for r in cls._execute_handoff(tool, run_context, tool_args):
+            async for r in cls._execute_handoff(
+                tool,
+                run_context,
+                image_urls_prepared=True,
+                **tool_args,
+            ):
                 if isinstance(r, mcp.types.CallToolResult):
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):
