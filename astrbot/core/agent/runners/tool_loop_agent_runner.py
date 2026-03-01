@@ -245,6 +245,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # 此处不应判断整个消息链是否为空 因为消息链包含整个对话流 而空回复可能发生在任何阶段
                     if (
                         not resp.completion_text
+                        and not resp.reasoning_content
                         and not resp.tools_call_args
                         and not is_last_candidate
                     ):
