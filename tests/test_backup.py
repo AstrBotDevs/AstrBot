@@ -470,7 +470,13 @@ class TestAstrBotImporter:
                 ],
             ]
             importer._merge_platform_stats_rows(many_invalid_rows)
-            assert warning_mock.call_count == PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+            assert (
+                warning_mock.call_count == PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT + 1
+            )
+            assert any(
+                "告警已达到上限" in str(call.args[0])
+                for call in warning_mock.call_args_list
+            )
 
             warning_mock.reset_mock()
 
