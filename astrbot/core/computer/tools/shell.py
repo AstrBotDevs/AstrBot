@@ -20,7 +20,7 @@ class ExecuteShellTool(FunctionTool):
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The bash command to execute. Equal to 'cd {working_dir} && {your_command}'.",
+                    "description": "The shell command to execute in the current runtime shell (for example, cmd.exe on Windows). Equal to 'cd {working_dir} && {your_command}'.",
                 },
                 "background": {
                     "type": "boolean",
