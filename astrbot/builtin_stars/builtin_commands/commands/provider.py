@@ -31,12 +31,26 @@ class ProviderCommands:
             return
         self._provider_models_cache.pop(provider_id, None)
 
+    def _invalidate_cache_for(self, provider: "Provider") -> None:
+        self._invalidate_provider_models_cache(provider.meta().id)
+
+    def _set_model_and_invalidate(self, provider: "Provider", model_name: str) -> None:
+        provider.set_model(model_name)
+        self._invalidate_cache_for(provider)
+
+    def _set_key_and_invalidate(self, provider: "Provider", key: str) -> None:
+        provider.set_key(key)
+        self._invalidate_cache_for(provider)
+
     @staticmethod
     def _mask_sensitive_text(value: str) -> str:
         return _API_KEY_PATTERN.sub("key=***", value)
 
     def _safe_err(self, e: BaseException) -> str:
         return self._mask_sensitive_text(str(e))
+
+    def _format_err(self, prefix: str, e: BaseException) -> str:
+        return f"{prefix}{self._safe_err(e)}"
 
     async def _get_provider_models(
         self, provider: "Provider", *, use_cache: bool = True
@@ -96,18 +110,38 @@ class ProviderCommands:
         ]
         if not all_providers:
             return None
-        results = await asyncio.gather(
-            *[self._get_provider_models(p) for p in all_providers],
-            return_exceptions=True,
-        )
+
+        async def _fetch_models(
+            provider: "Provider",
+        ) -> tuple["Provider", list[str] | None, BaseException | None]:
+            try:
+                return provider, await self._get_provider_models(provider), None
+            except BaseException as e:
+                return provider, None, e
+
+        tasks = [
+            asyncio.create_task(_fetch_models(provider)) for provider in all_providers
+        ]
         failed_provider_errors: list[tuple[str, str]] = []
-        for provider, result in zip(all_providers, results):
-            if isinstance(result, BaseException):
-                masked_error = self._safe_err(result)
+        matched_provider: Provider | None = None
+        for task in asyncio.as_completed(tasks):
+            provider, models, error = await task
+            if error is not None:
+                masked_error = self._safe_err(error)
                 failed_provider_errors.append((provider.meta().id, masked_error))
                 continue
-            if model_name in result:
-                return provider
+
+            if models is not None and model_name in models:
+                matched_provider = provider
+                break
+
+        if matched_provider is not None:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            return matched_provider
+
         if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
             failed_ids = ",".join(
                 provider_id for provider_id, _ in failed_provider_errors
@@ -334,13 +368,14 @@ class ProviderCommands:
                 err_msg,
             )
             message.set_result(
-                MessageEventResult().message("获取当前提供商模型列表失败: " + err_msg),
+                MessageEventResult().message(
+                    self._format_err("获取当前提供商模型列表失败: ", e)
+                )
             )
             return
 
         if model_name in models:
-            prov.set_model(model_name)
-            self._invalidate_provider_models_cache(curr_provider_id)
+            self._set_model_and_invalidate(prov, model_name)
             message.set_result(
                 MessageEventResult().message(
                     f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{model_name}]",
@@ -375,17 +410,17 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            target_prov.set_model(model_name)
-            self._invalidate_provider_models_cache(target_id)
+            self._set_model_and_invalidate(target_prov, model_name)
             message.set_result(
                 MessageEventResult().message(
                     f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
                 ),
             )
         except BaseException as e:
-            err_msg = self._safe_err(e)
             message.set_result(
-                MessageEventResult().message("跨提供商切换并设置模型失败: " + err_msg),
+                MessageEventResult().message(
+                    self._format_err("跨提供商切换并设置模型失败: ", e)
+                ),
             )
 
     async def model_ls(
@@ -406,10 +441,9 @@ class ProviderCommands:
             try:
                 models = await self._get_provider_models(prov)
             except BaseException as e:
-                err_msg = self._safe_err(e)
                 message.set_result(
                     MessageEventResult()
-                    .message("获取模型列表失败: " + err_msg)
+                    .message(self._format_err("获取模型列表失败: ", e))
                     .use_t2i(False),
                 )
                 return
@@ -430,9 +464,10 @@ class ProviderCommands:
             try:
                 models = await self._get_provider_models(prov)
             except BaseException as e:
-                err_msg = self._safe_err(e)
                 message.set_result(
-                    MessageEventResult().message("获取模型列表失败: " + err_msg),
+                    MessageEventResult().message(
+                        self._format_err("获取模型列表失败: ", e)
+                    ),
                 )
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
@@ -440,17 +475,17 @@ class ProviderCommands:
             else:
                 try:
                     new_model = models[idx_or_name - 1]
-                    prov.set_model(new_model)
-                    self._invalidate_provider_models_cache(prov.meta().id)
+                    self._set_model_and_invalidate(prov, new_model)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
                         ),
                     )
                 except BaseException as e:
-                    err_msg = self._safe_err(e)
                     message.set_result(
-                        MessageEventResult().message("切换模型未知错误: " + err_msg),
+                        MessageEventResult().message(
+                            self._format_err("切换模型未知错误: ", e)
+                        ),
                     )
                     return
         else:
@@ -484,10 +519,11 @@ class ProviderCommands:
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    prov.set_key(new_key)
-                    self._invalidate_provider_models_cache(prov.meta().id)
+                    self._set_key_and_invalidate(prov, new_key)
                 except BaseException as e:
                     message.set_result(
-                        MessageEventResult().message(f"切换 Key 未知错误: {e!s}"),
+                        MessageEventResult().message(
+                            self._format_err("切换 Key 未知错误: ", e)
+                        ),
                     )
                 message.set_result(MessageEventResult().message("切换 Key 成功。"))
