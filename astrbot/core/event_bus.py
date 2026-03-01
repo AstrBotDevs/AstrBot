@@ -39,11 +39,13 @@ class EventBus:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
-            self._print_event(event, conf_info["name"])
-            scheduler = self.pipeline_scheduler_mapping.get(conf_info["id"])
+            conf_id = conf_info["id"]
+            conf_name = conf_info.get("name") or conf_id
+            self._print_event(event, conf_name)
+            scheduler = self.pipeline_scheduler_mapping.get(conf_id)
             if not scheduler:
                 logger.error(
-                    t("msg-da466871", res=conf_info['id'])
+                    t("msg-da466871", res=conf_id)
                 )
                 continue
             asyncio.create_task(scheduler.execute(event))
