@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from astrbot.core import logger
 
 
@@ -15,10 +16,7 @@ def coerce_int_config(
     if isinstance(value, bool):
         if warn:
             logger.warning(
-                "%s %s should be numeric, got boolean. Fallback to %s.",
-                source,
-                label,
-                default,
+                t("msg-c5d2510a", source=source, label=label, default=default),
             )
         parsed = default
     elif isinstance(value, int):
@@ -29,11 +27,7 @@ def coerce_int_config(
         except ValueError:
             if warn:
                 logger.warning(
-                    "%s %s value '%s' is not numeric. Fallback to %s.",
-                    source,
-                    label,
-                    value,
-                    default,
+                    t("msg-6040637c", source=source, label=label, value=value, default=default),
                 )
             parsed = default
     else:
@@ -42,23 +36,14 @@ def coerce_int_config(
         except (TypeError, ValueError):
             if warn:
                 logger.warning(
-                    "%s %s has unsupported type %s. Fallback to %s.",
-                    source,
-                    label,
-                    type(value).__name__,
-                    default,
+                    t("msg-19aad160", source=source, label=label, res=type(value).__name__, default=default),
                 )
             parsed = default
 
     if min_value is not None and parsed < min_value:
         if warn:
             logger.warning(
-                "%s %s=%s is below minimum %s. Fallback to %s.",
-                source,
-                label,
-                parsed,
-                min_value,
-                min_value,
+                t("msg-21ec4bb0", source=source, label=label, parsed=parsed, min_value=min_value),
             )
         parsed = min_value
     return parsed

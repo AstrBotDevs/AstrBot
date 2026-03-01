@@ -778,9 +778,7 @@ async def _handle_webchat(
         )
     except Exception as e:
         logger.exception(
-            "Failed to generate webchat title for session %s: %s",
-            chatui_session_id,
-            e,
+            t("msg-7a34e35a", chatui_session_id=chatui_session_id, e=e),
         )
         return
     if llm_resp and llm_resp.completion_text:

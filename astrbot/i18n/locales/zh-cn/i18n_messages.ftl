@@ -3154,3 +3154,52 @@ msg-76945a59 = {$error_text}
 
 ### astrbot/core/star/star_manager.py
 msg-d64cbb23 = 读取插件 {$root_dir_name} 元数据失败: {$metadata_error}
+
+### astrbot/core/astr_main_agent.py
+msg-7a34e35a = 为会话 {$chatui_session_id} 生成网页聊天标题失败: {$e}
+
+### astrbot/core/pipeline/process_stage/method/agent_sub_stages/third_party.py
+msg-67c22b5b = {$RUNNER_NO_FINAL_RESPONSE_LOG}
+msg-e9587c7e = {$RUNNER_NO_RESULT_LOG}
+msg-cdb7e5b6 = {$RUNNER_NO_RESULT_FALLBACK_MESSAGE}
+msg-13ea140b = 第三方运行器流在 {$timeout_sec} 秒内未被消费；关闭运行器以避免资源泄漏。
+msg-87a7a566 = 从流监控器关闭第三方运行器时发生异常。
+msg-966b8ef7 = 无法干净地关闭第三方运行器: {$e}
+
+### astrbot/core/utils/config_number.py
+msg-c5d2510a = {$source} {$label} 应为数值，但获取到布尔值。回退至 {$default}。
+msg-6040637c = {$source} {$label} 值 '{$value}' 不是数值。回退至 {$default}。
+msg-19aad160 = {$source} {$label} 具有不支持的类型 {$res}。回退至 {$default}。
+msg-21ec4bb0 = {$source} {$label}={$parsed} 低于最小值 {$min_value}。回退至 {$min_value}。
+
+### astrbot/core/agent/runners/deerflow/deerflow_api_client.py
+msg-8f689453 = DeerFlow SSE 解析器缓冲区超过 {$SSE_MAX_BUFFER_CHARS} 个字符仍未找到分隔符；刷新超大块以防止无限制内存增长。
+msg-d1db013a = DeerFlowAPIClient 已关闭。
+msg-8b9e7967 = DeerFlow 创建线程失败: {$res}。{$text}
+msg-93a10841 = deerflow stream_run 负载摘要: thread_id={$thread_id}, keys={$res}, message数={$message_count}, 流模式={$res_2}
+msg-9a9d9119 = DeerFlow runs/stream 请求失败: {$res}。{$text}
+msg-7746c84c = 无法干净地关闭 DeerFlowAPIClient 会话: {$e}
+msg-e15f3d95 = DeerFlowAPIClient 在会话未关闭的情况下被垃圾回收；运行器生命周期应调用显式 close()（或使用 `async with`）。
+
+### astrbot/core/agent/runners/deerflow/deerflow_content_mapper.py
+msg-3958eaa0 = 跳过 DeerFlow 图像输入，因为值不是字符串: {$res}
+msg-582f6f32 = 跳过 DeerFlow 图像输入，因为值为空。
+msg-935c7c66 = 跳过 DeerFlow 图像输入，因为它既不是 URL/数据 URI 也不是有效的 base64。
+msg-764cafe0 = 所有 {$skipped_invalid_images} 个提供的 DeerFlow 图像输入因无效或不受支持而被拒绝。
+msg-7d6f7e4d = {$skipped_invalid_images} 个 DeerFlow 图像输入因无效或不受支持而被拒绝。
+msg-67438dc2 = 跳过 {$skipped_invalid_images} 个既不是 URL/数据 URI 也不是有效 base64 的 DeerFlow 图像输入。
+
+### astrbot/core/agent/runners/deerflow/deerflow_agent_runner.py
+msg-d5533e66 = 运行器关闭期间关闭 DeerFlowAPIClient 失败: {$e}
+msg-6ac10910 = {$err_text}
+msg-e4ca153b = DeerFlow API 基础 URL 格式无效。必须以 http:// 或 https:// 开头。
+msg-d6691163 = 无法干净地关闭先前的 DeerFlow API 客户端: {$e}
+msg-940b0a9f = DeerFlow 请求失败: {$err_msg}
+msg-20f437c9 = max_step 必须大于 0
+msg-adeda135 = DeerFlow 代理在未完成的情况下达到 max_step ({$max_step})。
+msg-7449f8a7 = DeerFlow 创建线程返回无效负载: {$thread}
+msg-3bde4a11 = {$delta}
+msg-6c9836cd = {$delta_text}
+msg-e6e01cca = DeerFlow 在流事件中未返回文本内容。
+msg-1a5b13c5 = DeerFlow 流返回错误事件: {$data}
+msg-298cca9c = DeerFlow 流在 thread_id={$thread_id} 时 {$res} 秒后超时；返回部分结果。

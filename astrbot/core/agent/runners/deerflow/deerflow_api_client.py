@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import codecs
 import json
 from collections.abc import AsyncGenerator
@@ -72,9 +73,7 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], No
 
         if len(buffer) > SSE_MAX_BUFFER_CHARS:
             logger.warning(
-                "DeerFlow SSE parser buffer exceeded %d chars without delimiter; "
-                "flushing oversized block to prevent unbounded memory growth.",
-                SSE_MAX_BUFFER_CHARS,
+                t("msg-8f689453", SSE_MAX_BUFFER_CHARS=SSE_MAX_BUFFER_CHARS),
             )
             parsed = _parse_sse_block(buffer)
             if parsed is not None:
@@ -123,7 +122,7 @@ class DeerFlowAPIClient:
 
     def _get_session(self) -> ClientSession:
         if self._closed:
-            raise RuntimeError("DeerFlowAPIClient is already closed.")
+            raise RuntimeError(t("msg-d1db013a"))
         if self._session is None or self._session.closed:
             self._session = ClientSession(trust_env=True)
         return self._session
@@ -153,7 +152,7 @@ class DeerFlowAPIClient:
             if resp.status not in (200, 201):
                 text = await resp.text()
                 raise Exception(
-                    f"DeerFlow create thread failed: {resp.status}. {text}",
+                    t("msg-8b9e7967", res=resp.status, text=text),
                 )
             return await resp.json()
 
@@ -173,11 +172,7 @@ class DeerFlowAPIClient:
             message_count = len(input_payload["messages"])
         # Log only a minimal summary to avoid exposing sensitive user content.
         logger.debug(
-            "deerflow stream_run payload summary: thread_id=%s, keys=%s, message_count=%d, stream_mode=%s",
-            thread_id,
-            list(payload.keys()),
-            message_count,
-            payload.get("stream_mode"),
+            t("msg-93a10841", thread_id=thread_id, res=list(payload.keys()), message_count=message_count, res_2=payload.get('stream_mode')),
         )
         # For long-running SSE streams, avoid aiohttp total timeout.
         # Use socket read timeout so active heartbeats/chunks can keep the stream alive.
@@ -201,7 +196,7 @@ class DeerFlowAPIClient:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(
-                    f"DeerFlow runs/stream request failed: {resp.status}. {text}",
+                    t("msg-9a9d9119", res=resp.status, text=text),
                 )
             async for event in _stream_sse(resp):
                 yield event
@@ -221,8 +216,7 @@ class DeerFlowAPIClient:
             await session.close()
         except Exception as e:
             logger.warning(
-                "Failed to close DeerFlowAPIClient session cleanly: %s",
-                e,
+                t("msg-7746c84c", e=e),
                 exc_info=True,
             )
         finally:
@@ -236,8 +230,7 @@ class DeerFlowAPIClient:
         if closed or session is None or session.closed:
             return
         logger.warning(
-            "DeerFlowAPIClient garbage collected with unclosed session; "
-            "explicit close() should be called by runner lifecycle (or `async with`)."
+            t("msg-e15f3d95")
         )
 
     @property

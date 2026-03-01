@@ -108,12 +108,12 @@ class _RunnerResultAggregator:
     ) -> tuple[list, bool]:
         if not final_resp or not final_resp.result_chain:
             if self.merged_chain:
-                logger.warning(RUNNER_NO_FINAL_RESPONSE_LOG)
+                logger.warning(t("msg-67c22b5b", RUNNER_NO_FINAL_RESPONSE_LOG=RUNNER_NO_FINAL_RESPONSE_LOG))
                 return self.merged_chain, self.has_error
 
-            logger.warning(RUNNER_NO_RESULT_LOG)
+            logger.warning(t("msg-e9587c7e", RUNNER_NO_RESULT_LOG=RUNNER_NO_RESULT_LOG))
             fallback_error_chain = MessageChain().message(
-                RUNNER_NO_RESULT_FALLBACK_MESSAGE,
+                t("msg-cdb7e5b6", RUNNER_NO_RESULT_FALLBACK_MESSAGE=RUNNER_NO_RESULT_FALLBACK_MESSAGE),
             )
             return fallback_error_chain.chain or [], True
 
@@ -135,14 +135,13 @@ def _start_stream_watchdog(
             return
         if not is_stream_consumed():
             logger.warning(
-                "Third-party runner stream was never consumed in %ss; closing runner to avoid resource leak.",
-                timeout_sec,
+                t("msg-13ea140b", timeout_sec=timeout_sec),
             )
             try:
                 await close_runner_once()
             except Exception:
                 logger.warning(
-                    "Exception while closing third-party runner from stream watchdog.",
+                    t("msg-87a7a566"),
                     exc_info=True,
                 )
 
@@ -159,7 +158,7 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
         if inspect.isawaitable(close_result):
             await close_result
     except Exception as e:
-        logger.warning(f"Failed to close third-party runner cleanly: {e}")
+        logger.warning(t("msg-966b8ef7", e=e))
 
 
 class ThirdPartyAgentSubStage(Stage):
