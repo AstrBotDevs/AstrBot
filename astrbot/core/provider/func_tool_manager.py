@@ -437,7 +437,6 @@ class FunctionToolManager:
             shutdown_event = asyncio.Event()
 
         ready_event = asyncio.Event()
-        self.mcp_client_event[name] = shutdown_event
 
         init_task = asyncio.create_task(
             self._init_mcp_client_task_wrapper(
@@ -449,13 +448,14 @@ class FunctionToolManager:
         except asyncio.TimeoutError:
             init_task.cancel()
             await asyncio.gather(init_task, return_exceptions=True)
-            self.mcp_client_event.pop(name, None)
             raise TimeoutError(f"MCP 服务 {name} 初始化超时（{timeout} 秒）")
 
         # 如果初始化期间 task 已结束并带有异常，向上抛出
         if init_task.done() and init_task.exception() is not None:
-            self.mcp_client_event.pop(name, None)
             raise init_task.exception()
+
+        # 初始化成功后再注册，避免失败时暴露无效的 event
+        self.mcp_client_event[name] = shutdown_event
 
     async def disable_mcp_server(
         self,
