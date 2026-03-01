@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import json
-import os
 import traceback
 import typing as T
 import uuid
@@ -39,36 +38,19 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.image_ref_utils import (
+    ALLOWED_IMAGE_EXTENSIONS,
+    is_supported_image_ref,
+)
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    _ALLOWED_IMAGE_EXTENSIONS = {
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".webp",
-        ".bmp",
-        ".tif",
-        ".tiff",
-        ".svg",
-        ".heic",
-    }
+    _ALLOWED_IMAGE_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
 
     @classmethod
     def _is_supported_image_ref(cls, image_ref: str) -> bool:
-        if not image_ref:
-            return False
-        lowered = image_ref.lower()
-        if lowered.startswith(("http://", "https://", "base64://")):
-            return True
-        file_path = image_ref[8:] if lowered.startswith("file:///") else image_ref
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext in cls._ALLOWED_IMAGE_EXTENSIONS:
-            return True
-        # Keep support for extension-less temp files returned by image converters.
-        return ext == "" and os.path.exists(file_path)
+        return is_supported_image_ref(image_ref)
 
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
@@ -87,12 +69,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 else:
                     non_string_count += 1
             if non_string_count > 0:
-                logger.warning(
+                logger.debug(
                     "Dropped %d non-string image_urls entries in handoff tool args.",
                     non_string_count,
                 )
         else:
-            logger.warning(
+            logger.debug(
                 "Unsupported image_urls type in handoff tool args: %s",
                 type(image_urls_raw).__name__,
             )
@@ -137,8 +119,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         sanitized = [item for item in normalized if cls._is_supported_image_ref(item)]
         dropped_count = len(normalized) - len(sanitized)
         if dropped_count > 0:
-            logger.warning(
-                "Dropped %d invalid image_urls entries in handoff tool args.",
+            logger.debug(
+                "Dropped %d invalid image_urls entries in handoff image inputs.",
                 dropped_count,
             )
         return sanitized

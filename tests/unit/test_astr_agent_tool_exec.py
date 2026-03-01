@@ -77,6 +77,61 @@ async def test_collect_handoff_image_urls_skips_failed_event_image_conversion(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("image_refs", "expected_supported_refs"),
+    [
+        pytest.param(
+            (
+                "https://example.com/valid.png",
+                "base64://iVBORw0KGgoAAAANSUhEUgAAAAUA",
+                "file:///tmp/photo.heic",
+                "file://localhost/tmp/vector.svg",
+                "file://fileserver/share/image.webp",
+                "file:///tmp/not-image.txt",
+                "mailto:user@example.com",
+                "random-string-without-scheme-or-extension",
+            ),
+            {
+                "https://example.com/valid.png",
+                "base64://iVBORw0KGgoAAAANSUhEUgAAAAUA",
+                "file:///tmp/photo.heic",
+                "file://localhost/tmp/vector.svg",
+                "file://fileserver/share/image.webp",
+            },
+            id="mixed_supported_and_unsupported_refs",
+        ),
+    ],
+)
+async def test_collect_handoff_image_urls_filters_supported_schemes_and_extensions(
+    image_refs: tuple[str, ...],
+    expected_supported_refs: set[str],
+):
+    run_context = _build_run_context([])
+    result = await FunctionToolExecutor._collect_handoff_image_urls(
+        run_context, image_refs
+    )
+    assert set(result) == expected_supported_refs
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_image_urls_collects_event_image_when_args_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/event_only.png"
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
+
+    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+        run_context,
+        None,
+    )
+
+    assert image_urls == ["/tmp/event_only.png"]
+
+
+@pytest.mark.asyncio
 async def test_do_handoff_background_reports_prepared_image_urls(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -123,7 +178,7 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.os.path.exists", lambda _: True
+        "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
     )
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
@@ -133,3 +188,24 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
     )
 
     assert image_urls == ["/tmp/astrbot-handoff-image"]
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_image_urls_filters_extensionless_missing_event_file(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/astrbot-handoff-missing-image"
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
+    monkeypatch.setattr(
+        "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
+    )
+
+    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+        run_context,
+        [],
+    )
+
+    assert image_urls == []
