@@ -1,6 +1,24 @@
 {
   "network": {
     "title": "Network",
+    "proxy": {
+      "title": "Proxy",
+      "subtitle": "Configure proxy for network requests"
+    },
+    "server": {
+      "title": "Server Address",
+      "subtitle": "Configure backend API URL",
+      "label": "API Base URL",
+      "placeholder": "e.g. http://localhost:6185",
+      "hint": "Empty for default (relative path)",
+      "save": "Save & Reload",
+      "presets": "Presets",
+      "preset": {
+        "add": "Add Preset",
+        "name": "Name",
+        "url": "URL"
+      }
+    },
     "githubProxy": {
       "title": "GitHub Proxy Address",
       "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
@@ -26,12 +44,31 @@
       "reset": "Reset to Default"
     }
   },
+  "style": {
+    "title": "Theme",
+    "color": {
+      "title": "Theme Colors",
+      "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
+      "primary": "Primary Color",
+      "secondary": "Secondary Color"
+    }
+  },
+  "reset": {
+    "title": "Reset to Default",
+    "subtitle": "Reset theme colors to default settings",
+    "button": "Reset"
+  },
   "system": {
     "title": "System",
     "restart": {
       "title": "Restart",
       "subtitle": "Restart AstrBot",
       "button": "Restart"
+    },
+    "logout": {
+      "title": "Log Out",
+      "subtitle": "Log out of the current account",
+      "button": "Log Out"
     },
     "migration": {
       "title": "Data Migration to v4.0.0",
@@ -55,6 +92,10 @@
     }
   },
   "backup": {
+    "title": "Backup",
+    "subtitle": "Manage data backups",
+    "operate": "Backup Operations",
+    "open": "Open Backup Manager",
     "dialog": {
       "title": "Backup Manager"
     },
@@ -135,11 +176,12 @@
     "subtitle": "Create API keys for external developers to call open HTTP APIs.",
     "name": "Key Name",
     "expiresInDays": "Expiration",
-    "expiryOptions": {
-      "day1": "1 day",
-      "day7": "7 days",
-      "day30": "30 days",
-      "day90": "90 days",
+    "expiry": {
+      "7days": "7 days",
+      "30days": "30 days",
+      "90days": "90 days",
+      "180days": "180 days",
+      "365days": "365 days",
       "permanent": "Permanent"
     },
     "permanentWarning": "Permanent API keys are high risk. Store them securely and use only when necessary.",

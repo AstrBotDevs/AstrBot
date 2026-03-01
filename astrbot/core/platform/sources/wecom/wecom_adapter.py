@@ -407,7 +407,7 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
-            resp: Response = await asyncio.get_event_loop().run_in_executor(
+            resp = await asyncio.get_event_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 media_id,

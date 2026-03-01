@@ -34,8 +34,13 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
     for name, path in paths.items():
         path.mkdir(parents=True, exist_ok=True)
         click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
-
-    await check_dashboard(astrbot_root / "data")
+    if click.confirm(
+        "是否需要集成式 WebUI？（个人电脑推荐，服务器不推荐）",
+        default=True,
+    ):
+        await check_dashboard(astrbot_root / "data")
+    else:
+        click.echo("你可以使用在线面版（v4.14.4+），填写后端地址的方式来控制。")
 
 
 @click.command()

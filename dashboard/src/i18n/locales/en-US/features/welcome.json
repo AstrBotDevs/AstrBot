@@ -12,6 +12,8 @@
   "onboard": {
     "title": "Quick Onboarding",
     "subtitle": "Complete initialization directly on the welcome page.",
+    "step0Title": "Configure Backend URL",
+    "step0Desc": "Configure the backend API URL for AstrBot.",
     "step1Title": "Configure Platform Bot",
     "step1Desc": "Connect AstrBot to IM platforms like QQ, Lark, Slack, Telegram, etc.",
     "step2Title": "Configure AI Model",

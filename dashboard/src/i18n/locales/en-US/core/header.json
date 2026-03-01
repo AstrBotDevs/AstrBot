@@ -10,7 +10,8 @@
     "theme": {
       "light": "Light Mode",
       "dark": "Dark Mode"
-    }
+    },
+    "logout": "Log Out"
   },
   "updateDialog": {
     "title": "Update AstrBot",
