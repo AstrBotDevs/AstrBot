@@ -299,7 +299,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
-            max_steps=30,
+            max_steps=ctx.get_config().get("provider_settings", {}).get("max_agent_step", 30),
             run_hooks=tool.agent.run_hooks,
             stream=ctx.get_config().get("provider_settings", {}).get("stream", False),
         )
