@@ -242,7 +242,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 async for resp in self._iter_llm_responses(include_model=idx == 0):
                     if resp.is_chunk:
-                        has_stream_output = True
+                        if (
+                            resp.completion_text
+                            or resp.reasoning_content
+                            or resp.tools_call_ids
+                            or (resp.result_chain and resp.result_chain.chain)
+                        ):
+                            has_stream_output = True
                         yield resp
                         continue
 
@@ -254,20 +260,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         last_err_response = resp
                         logger.warning(
                             "Chat Model %s returns error response, trying fallback to next provider.",
-                            candidate_id,
-                        )
-                        break
-
-                    # 如果回复为空且无任何有效产出 且不是最后一个回退渠道 则引发fallback(仅适配非流)
-                    if (
-                        not resp.completion_text
-                        and not resp.tools_call_args
-                        and not resp.reasoning_content
-                        and not is_last_candidate
-                        and not has_stream_output
-                    ):
-                        logger.warning(
-                            "Chat Model %s returns empty response, trying fallback to next provider.",
                             candidate_id,
                         )
                         break
