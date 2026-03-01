@@ -263,7 +263,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         not resp.completion_text
                         and not resp.tools_call_args
                         and not resp.reasoning_content
-                        and not resp.result_chain
                         and not is_last_candidate
                         and not has_stream_output
                     ):
