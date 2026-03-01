@@ -73,6 +73,9 @@ class ProviderManager:
         self.curr_tts_provider_inst: TTSProvider | None = None
         """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
+        self._provider_change_callback: (
+            Callable[[str, ProviderType, str | None], None] | None
+        ) = None
         self._provider_change_hooks: list[
             Callable[[str, ProviderType, str | None], None]
         ] = []
@@ -82,9 +85,8 @@ class ProviderManager:
         cb: Callable[[str, ProviderType, str | None], None] | None,
     ) -> None:
         # Backward-compatible single-callback setter.
-        self._provider_change_hooks.clear()
-        if cb is not None:
-            self._provider_change_hooks.append(cb)
+        # This callback coexists with register_provider_change_hook subscriptions.
+        self._provider_change_callback = cb
 
     def register_provider_change_hook(
         self,
@@ -99,9 +101,19 @@ class ProviderManager:
         provider_type: ProviderType,
         umo: str | None,
     ) -> None:
-        if not self._provider_change_hooks:
-            return
+        if self._provider_change_callback is not None:
+            try:
+                self._provider_change_callback(provider_id, provider_type, umo)
+            except Exception as e:
+                logger.warning(
+                    "调用 provider 变更回调失败: provider_id=%s, type=%s, err=%s",
+                    provider_id,
+                    provider_type,
+                    safe_error("", e),
+                )
         for hook in list(self._provider_change_hooks):
+            if hook is self._provider_change_callback:
+                continue
             try:
                 hook(provider_id, provider_type, umo)
             except Exception as e:

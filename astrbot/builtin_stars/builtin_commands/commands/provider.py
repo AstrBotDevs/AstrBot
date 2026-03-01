@@ -228,6 +228,7 @@ class ProviderCommands:
         *,
         exclude_provider_id: str | None = None,
         config: _ModelLookupConfig,
+        use_cache: bool = True,
     ) -> tuple[Provider | None, str | None]:
         all_providers = []
         for provider in self.context.get_all_providers():
@@ -251,7 +252,7 @@ class ProviderCommands:
                     return await self._get_provider_models(
                         provider,
                         config=config,
-                        use_cache=False,
+                        use_cache=use_cache,
                     )
                 except asyncio.CancelledError:
                     raise
