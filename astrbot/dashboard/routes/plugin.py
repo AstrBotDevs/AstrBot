@@ -571,7 +571,7 @@ class PluginRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode")
+                .error(t("msg-1198c327"))
                 .__dict__
             )
 
@@ -580,19 +580,19 @@ class PluginRoute(Route):
         delete_config = post_data.get("delete_config", False)
         delete_data = post_data.get("delete_data", False)
         if not dir_name:
-            return Response().error("缺少失败插件目录名").__dict__
+            return Response().error(t("msg-83c7ffba")).__dict__
 
         try:
-            logger.info(f"正在卸载失败插件 {dir_name}")
+            logger.info(t("msg-2e306f45", dir_name=dir_name))
             await self.plugin_manager.uninstall_failed_plugin(
                 dir_name,
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
-            logger.info(f"卸载失败插件 {dir_name} 成功")
+            logger.info(t("msg-44e9819e", dir_name=dir_name))
             return Response().ok(None, "卸载成功").__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
     async def update_plugin(self):

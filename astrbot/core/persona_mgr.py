@@ -1,9 +1,9 @@
-from astrbot.core.lang import t
 from astrbot import logger
 from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
+from astrbot.core.lang import t
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
 
@@ -136,10 +136,7 @@ class PersonaManager:
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:
-<<<<<<< HEAD
             raise ValueError(t("msg-1ea88f45", persona_id=persona_id))
-=======
-            raise ValueError(f"Persona with ID {persona_id} does not exist.")
         update_kwargs = {}
         if tools is not NOT_GIVEN:
             update_kwargs["tools"] = tools
@@ -148,7 +145,6 @@ class PersonaManager:
         if custom_error_message is not NOT_GIVEN:
             update_kwargs["custom_error_message"] = custom_error_message
 
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
         persona = await self.db.update_persona(
             persona_id,
             system_prompt,
@@ -377,7 +373,7 @@ class PersonaManager:
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        t("msg-08ecfd42", res=persona_cfg['name']),
+                        t("msg-08ecfd42", res=persona_cfg["name"]),
                     )
                     begin_dialogs = []
                 user_turn = True

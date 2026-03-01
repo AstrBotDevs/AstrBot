@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import hashlib
 import logging
@@ -19,6 +18,7 @@ from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.lang import t
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import get_local_ip_addresses
 
@@ -257,15 +257,18 @@ class AstrBotDashboard:
                         process = psutil.Process(conn.pid)
                         # 获取详细信息
                         proc_info = [
-                            f"进程名: {process.name()}",
-                            f"PID: {process.pid}",
-                            f"执行路径: {process.exe()}",
-                            f"工作目录: {process.cwd()}",
-                            f"启动命令: {' '.join(process.cmdline())}",
+                            t("msg-cbf13328", process_name=process.name()),
+                            t("msg-baf82821", process_pid=process.pid),
+                            t("msg-c160ccf4", process_exe=process.exe()),
+                            t("msg-cfe052ba", process_cwd=process.cwd()),
+                            t(
+                                "msg-01ee16c6",
+                                process_cmdline=" ".join(process.cmdline()),
+                            ),
                         ]
                         return "\n           ".join(proc_info)
                     except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                        return f"无法获取进程详细信息(可能需要管理员权限): {e!s}"
+                        return t("msg-50aec749", e=e)
             return "未找到占用进程"
         except Exception as e:
             return f"获取进程信息失败: {e!s}"
@@ -329,17 +332,15 @@ class AstrBotDashboard:
 
             raise Exception(t("msg-6d1dfba8", port=port))
 
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI 已启动，可访问\n\n"]
-        parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
+        parts = [t("msg-228fe31e", VERSION=VERSION)]
+        parts.append(t("msg-3749e149", scheme=scheme, port=port))
         for ip in ip_addr:
-            parts.append(f"   ➜  网络: {scheme}://{ip}:{port}\n")
-        parts.append("   ➜  默认用户名和密码: astrbot\n ✨✨✨\n")
+            parts.append(t("msg-3c2a1175", scheme=scheme, ip=ip, port=port))
+        parts.append(t("msg-d1ba29cb"))
         display = "".join(parts)
 
         if not ip_addr:
-            display += (
-                "可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。\n"
-            )
+            display += t("msg-d5182f70")
 
         logger.info(t("msg-c0161c7c", display=display))
 

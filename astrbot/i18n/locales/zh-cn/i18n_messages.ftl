@@ -2477,13 +2477,24 @@ msg-fd267dc8 = API密钥权限不足
 msg-076fb3a3 = 未授权
 msg-6f214cc1 = 令牌已过期
 msg-5041dc95 = Token 无效
-msg-1241c883 = 检查端口 {$port} 发生错误： {$e} 
+msg-1241c883 = 检查端口 {$port} 发生错误： {$e}
+msg-cbf13328 = 进程名: {$process_name}
+msg-baf82821 = PID: {$process_pid}
+msg-c160ccf4 = 执行路径: {$process_exe}
+msg-cfe052ba = 工作目录: {$process_cwd}
+msg-01ee16c6 = 启动命令: {$process_cmdline}
+msg-50aec749 = 无法获取进程详细信息(可能需要管理员权限): {$e}
 msg-7c3ba89d = 已为仪表板初始化随机JWT密钥。
 msg-a3adcb66 = WebUI 已被禁用
 msg-44832296 = 正在启动 WebUI，监听地址： {$scheme} // {$host} ： {$port} 
 msg-3eed4a73 = 提示: WebUI 将监听所有网络接口，请注意安全。（可在 data/cmd_config.json 中配置 dashboard.host 以修改 host）
 msg-289a2fe8 = {"\u000a"}错误：端口 {$port} 已被占用{"\u000a"}占用信息: {"\u000a"} {$process_info} 请确保：{"\u000a"}1. 没有其他 AstrBot 实例正在运行{"\u000a"}2. 端口 {$port} 未被其他程序占用{"\u000a"}3. 如需使用其他端口，请修改配置文件
 msg-6d1dfba8 = 端口 {$port} 已被占用
+msg-228fe31e = {"\u000a"} ✨✨✨{"\u000a"}  AstrBot v{$VERSION} WebUI 已启动，可访问{"\u000a"}{"\u000a"}
+msg-3749e149 =    ➜  本地: {$scheme}://localhost:{$port}{"\u000a"}
+msg-3c2a1175 =    ➜  网络: {$scheme}://{$ip}:{$port}{"\u000a"}
+msg-d1ba29cb =    ➜  默认用户名和密码: astrbot{"\u000a"} ✨✨✨{"\u000a"}
+msg-d5182f70 = 可在 data/cmd_config.json 中配置 dashboard.host 以便远程访问。{"\u000a"}
 msg-c0161c7c = {$display}
 msg-ac4f2855 = dashboard.ssl.enable 为 true 时，必须配置 cert_file 和 key_file。
 msg-3e87aaf8 = SSL 证书文件不存在: {$cert_path}
@@ -3121,3 +3132,25 @@ msg-321ac5b1 =  {$changelog_content}
 
 ### astrbot\core\pipeline\__init__.py
 msg-1c9fc93d = 模块 {$__name__} 没有成员 {$name}
+
+### astrbot/core/pipeline/process_stage/method/agent_sub_stages/internal.py
+msg-76945a59 = {$error_text}
+
+### astrbot/core/pipeline/process_stage/method/agent_sub_stages/third_party.py
+msg-371b6b3d = 解析人格自定义错误消息失败: {$e}
+
+### astrbot/core/platform/sources/webchat/message_parts_helper.py
+msg-697561eb = 消息部分必须是对象
+msg-2c4bf283 = 回复部分缺少 message_id
+msg-60ddb927 = 不支持的消息部分类型: {$part_type}
+msg-6fa997ae = {$part_type} 部分缺少路径
+msg-e565c4b5 = 文件未找到: {$file_path}
+msg-1389e46a = 消息必须是字符串或列表
+msg-58e0b84a = {$part_type} 部分缺少 attachment_id
+msg-cf310369 = 附件未找到: {$attachment_id}
+
+### astrbot/core/agent/runners/tool_loop_agent_runner.py
+msg-76945a59 = {$error_text}
+
+### astrbot/core/star/star_manager.py
+msg-d64cbb23 = 读取插件 {$root_dir_name} 元数据失败: {$metadata_error}

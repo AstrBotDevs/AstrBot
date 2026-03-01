@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -10,6 +9,7 @@ from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.lang import t
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -61,15 +61,7 @@ async def run_third_party_agent(
                 if stream_to_general:
                     yield resp.data["chain"]
     except Exception as e:
-<<<<<<< HEAD
         logger.error(t("msg-5e551baf", e=e))
-        err_msg = (
-            f"\nAstrBot 请求失败。\n错误类型: {type(e).__name__}\n"
-            f"错误信息: {e!s}\n\n请在平台日志查看和分享错误详情。\n"
-        )
-        yield MessageChain().message(t("msg-34f164d4", err_msg=err_msg))
-=======
-        logger.error(f"Third party agent runner error: {e}")
         err_msg = custom_error_message
         if not err_msg:
             err_msg = (
@@ -77,8 +69,7 @@ async def run_third_party_agent(
                 f"Error Type: {type(e).__name__} (3rd party)\n"
                 f"Error Message: {str(e)}"
             )
-        yield MessageChain().message(err_msg)
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
+        yield MessageChain().message(t("msg-34f164d4", err_msg=err_msg))
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -111,7 +102,7 @@ class ThirdPartyAgentSubStage(Stage):
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
-            logger.debug("Failed to resolve persona custom error message: %s", e)
+            logger.debug(t("msg-371b6b3d", e=e))
             return None
 
     async def process(
@@ -132,9 +123,7 @@ class ThirdPartyAgentSubStage(Stage):
             logger.error(t("msg-f9d76893"))
             return
         if not self.prov_cfg:
-            logger.error(
-                t("msg-0f856470", res=self.prov_id)
-            )
+            logger.error(t("msg-0f856470", res=self.prov_id))
             return
 
         # make provider request

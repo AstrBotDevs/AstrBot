@@ -1,5 +1,4 @@
 """本地 Agent 模式的 LLM 调用 Stage"""
-from astrbot.core.lang import t
 
 import asyncio
 import base64
@@ -14,6 +13,7 @@ from astrbot.core.astr_main_agent import (
     MainAgentBuildResult,
     build_main_agent,
 )
+from astrbot.core.lang import t
 from astrbot.core.message.components import File, Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -172,7 +172,11 @@ class InternalAgentSubStage(Stage):
                 ) = await prepare_follow_up_capture(follow_up_capture)
                 if follow_up_consumed_marked:
                     logger.info(
-                        t("msg-4d2645f7", res=event.unified_msg_origin, res_2=follow_up_capture.ticket.seq),
+                        t(
+                            "msg-4d2645f7",
+                            res=event.unified_msg_origin,
+                            res_2=follow_up_capture.ticket.seq,
+                        ),
                     )
                     return
 
@@ -255,9 +259,7 @@ class InternalAgentSubStage(Stage):
                         )
 
                         if not tts_provider:
-                            logger.warning(
-                                t("msg-dae92399")
-                            )
+                            logger.warning(t("msg-dae92399"))
 
                         # 使用 run_live_agent，总是使用流式响应
                         event.set_result(
@@ -365,17 +367,9 @@ class InternalAgentSubStage(Stage):
                         unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
-<<<<<<< HEAD
-            logger.error(t("msg-1b1af61e", e=e))
-            await event.send(
-                MessageChain().message(
-                    t("msg-ea02b899", e=e)
-                )
-=======
             logger.error(f"Error occurred while processing agent: {e}")
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
             )
             error_text = custom_error_message or (
                 f"Error occurred while processing agent request: {e}"

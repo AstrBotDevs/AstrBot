@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import json
 import os
@@ -13,6 +12,7 @@ from quart import g, make_response, request, send_file
 from astrbot.core import logger, sp
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.lang import t
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.webchat.message_parts_helper import (
     build_webchat_message_parts,
@@ -293,9 +293,7 @@ class ChatRoute(Route):
             return Response().error(t("msg-1c3efd8f")).__dict__
 
         if "session_id" not in post_data and "conversation_id" not in post_data:
-            return (
-                Response().error(t("msg-04588d0f")).__dict__
-            )
+            return Response().error(t("msg-04588d0f")).__dict__
 
         message = post_data["message"]
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
@@ -303,24 +301,6 @@ class ChatRoute(Route):
         selected_model = post_data.get("selected_model")
         enable_streaming = post_data.get("enable_streaming", True)
 
-<<<<<<< HEAD
-        # 检查消息是否为空
-        if isinstance(message, list):
-            has_content = any(
-                part.get("type") in ("plain", "image", "record", "file", "video")
-                for part in message
-            )
-            if not has_content:
-                return (
-                    Response()
-                    .error(t("msg-c6ec40ff"))
-                    .__dict__
-                )
-        elif not message:
-            return Response().error(t("msg-2c3fdeb9")).__dict__
-
-=======
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
         if not session_id:
             return Response().error(t("msg-9bc95e22")).__dict__
 
@@ -331,7 +311,7 @@ class ChatRoute(Route):
         if not webchat_message_parts_have_content(message_parts):
             return (
                 Response()
-                .error("Message content is empty (reply only is not allowed)")
+                .error(t("msg-c6ec40ff"))
                 .__dict__
             )
 
@@ -400,9 +380,7 @@ class ChatRoute(Route):
                                 yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
                         except Exception as e:
                             if not client_disconnected:
-                                logger.debug(
-                                    t("msg-1211e857", username=username, e=e)
-                                )
+                                logger.debug(t("msg-1211e857", username=username, e=e))
                             client_disconnected = True
 
                         try:
@@ -671,9 +649,7 @@ class ChatRoute(Route):
                 try:
                     os.remove(attachment.path)
                 except OSError as e:
-                    logger.warning(
-                        t("msg-44c45099", res=attachment.path, e=e)
-                    )
+                    logger.warning(t("msg-44c45099", res=attachment.path, e=e))
         except Exception as e:
             logger.warning(t("msg-f033d8ea", e=e))
 

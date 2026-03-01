@@ -1,11 +1,7 @@
-<<<<<<< HEAD
 from astrbot.core.lang import t
-from pathlib import Path
-=======
 import asyncio
 import hashlib
 import json
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
 from uuid import uuid4
 
 from quart import g, request, websocket
@@ -145,7 +141,9 @@ class OpenApiRoute(Route):
             post_data.get("username")
         )
         if username_err:
-            return Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
+            return (
+                Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
+            )
         if not effective_username:
             return Response().error(t("msg-bc3b3977")).__dict__
 
@@ -159,7 +157,11 @@ class OpenApiRoute(Route):
             session_id,
         )
         if ensure_session_err:
-            return Response().error(t("msg-2cd6e70f", ensure_session_err=ensure_session_err)).__dict__
+            return (
+                Response()
+                .error(t("msg-2cd6e70f", ensure_session_err=ensure_session_err))
+                .__dict__
+            )
 
         config_id, resolve_err = self._resolve_chat_config_id(post_data)
         if resolve_err:
@@ -181,11 +183,7 @@ class OpenApiRoute(Route):
                     t("msg-d4765667", umo=umo, config_id=config_id, e=e),
                     exc_info=True,
                 )
-                return (
-                    Response()
-                    .error(t("msg-7c7a9f55", e=e))
-                    .__dict__
-                )
+                return Response().error(t("msg-7c7a9f55", e=e)).__dict__
         try:
             return await self.chat_route.chat(post_data=post_data)
         finally:
@@ -262,10 +260,7 @@ class OpenApiRoute(Route):
                 )
         except Exception as e:
             logger.error(
-                "Failed to update chat config route for %s with %s: %s",
-                umo,
-                config_id,
-                e,
+                t("msg-d4765667", umo=umo, config_id=config_id, e=e),
                 exc_info=True,
             )
             return f"Failed to update chat config route: {e}"
@@ -377,7 +372,7 @@ class OpenApiRoute(Route):
                     continue
 
                 if "message_id" in result and result["message_id"] != message_id:
-                    logger.warning("openapi ws stream message_id mismatch")
+                    logger.warning(t("msg-ba0964a1"))
                     continue
 
                 result_text = result.get("data", "")
@@ -465,7 +460,7 @@ class OpenApiRoute(Route):
                         )
                     except Exception as e:
                         logger.exception(
-                            f"Open API WS failed to extract web search refs: {e}",
+                            t("msg-ca769cde", e=e),
                             exc_info=True,
                         )
 
@@ -494,7 +489,7 @@ class OpenApiRoute(Route):
                     agent_stats = {}
                     refs = {}
         except Exception as e:
-            logger.exception(f"Open API WS chat failed: {e}", exc_info=True)
+            logger.exception(t("msg-0f97a5df", e=e), exc_info=True)
             await self._send_chat_ws_error(
                 f"Failed to process message: {e}", "PROCESSING_ERROR"
             )
@@ -531,7 +526,7 @@ class OpenApiRoute(Route):
 
                 await self._handle_chat_ws_send(message)
         except Exception as e:
-            logger.debug("Open API WS connection closed: %s", e)
+            logger.debug(t("msg-d6873ba9", e=e))
 
     async def upload_file(self):
         return await self.chat_route.post_file()
@@ -541,7 +536,9 @@ class OpenApiRoute(Route):
             request.args.get("username")
         )
         if username_err:
-            return Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
+            return (
+                Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
+            )
 
         assert username is not None  # for type checker
 
@@ -606,92 +603,12 @@ class OpenApiRoute(Route):
     async def _build_message_chain_from_payload(
         self,
         message_payload: str | list,
-<<<<<<< HEAD
-    ) -> MessageChain:
-        if isinstance(message_payload, str):
-            text = message_payload.strip()
-            if not text:
-                raise ValueError(t("msg-1507569c"))
-            return MessageChain(chain=[Plain(text=text)])
-
-        if not isinstance(message_payload, list):
-            raise ValueError(t("msg-1389e46a"))
-
-        components = []
-        has_content = False
-
-        for part in message_payload:
-            if not isinstance(part, dict):
-                raise ValueError(t("msg-697561eb"))
-
-            part_type = str(part.get("type", "")).strip()
-            if part_type == "plain":
-                text = str(part.get("text", ""))
-                if text:
-                    has_content = True
-                    components.append(Plain(text=text))
-                continue
-
-            if part_type == "reply":
-                message_id = part.get("message_id")
-                if message_id is None:
-                    raise ValueError(t("msg-2c4bf283"))
-                components.append(
-                    Reply(
-                        id=str(message_id),
-                        message_str=str(part.get("selected_text", "")),
-                        chain=[],
-                    )
-                )
-                continue
-
-            if part_type not in {"image", "record", "file", "video"}:
-                raise ValueError(t("msg-60ddb927", part_type=part_type))
-
-            has_content = True
-            file_path: Path | None = None
-            resolved_type = part_type
-            filename = str(part.get("filename", "")).strip()
-
-            attachment_id = part.get("attachment_id")
-            if attachment_id:
-                attachment = await self.db.get_attachment_by_id(str(attachment_id))
-                if not attachment:
-                    raise ValueError(t("msg-cf310369", attachment_id=attachment_id))
-                file_path = Path(attachment.path)
-                resolved_type = attachment.type
-                if not filename:
-                    filename = file_path.name
-            else:
-                raise ValueError(t("msg-58e0b84a", part_type=part_type))
-
-            if not file_path.exists():
-                raise ValueError(t("msg-e565c4b5", file_path=file_path))
-
-            file_path_str = str(file_path.resolve())
-            if resolved_type == "image":
-                components.append(Image.fromFileSystem(file_path_str))
-            elif resolved_type == "record":
-                components.append(Record.fromFileSystem(file_path_str))
-            elif resolved_type == "video":
-                components.append(Video.fromFileSystem(file_path_str))
-            else:
-                components.append(
-                    File(name=filename or file_path.name, file=file_path_str)
-                )
-
-        if not components or not has_content:
-            raise ValueError(t("msg-c6ec40ff"))
-
-        return MessageChain(chain=components)
-=======
     ):
         return await build_message_chain_from_payload(
             message_payload,
             get_attachment_by_id=self.db.get_attachment_by_id,
             strict=True,
         )
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
 
     async def send_message(self):
         post_data = await request.json or {}
@@ -718,11 +635,7 @@ class OpenApiRoute(Route):
             None,
         )
         if not platform_inst:
-            return (
-                Response()
-                .error(t("msg-45ac857c", platform_id=platform_id))
-                .__dict__
-            )
+            return Response().error(t("msg-45ac857c", platform_id=platform_id)).__dict__
 
         try:
             message_chain = await self._build_message_chain_from_payload(

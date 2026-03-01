@@ -138,7 +138,7 @@ class PersonaRoute(Route):
 
             if custom_error_message is not None:
                 if not isinstance(custom_error_message, str):
-                    return Response().error("自定义报错回复信息必须是字符串").__dict__
+                    return Response().error(t("msg-eca21159")).__dict__
                 custom_error_message = custom_error_message.strip() or None
 
             # 验证 begin_dialogs 格式
@@ -212,7 +212,7 @@ class PersonaRoute(Route):
                 if custom_error_message is not None and not isinstance(
                     custom_error_message, str
                 ):
-                    return Response().error("自定义报错回复信息必须是字符串").__dict__
+                    return Response().error(t("msg-eca21159")).__dict__
                 if isinstance(custom_error_message, str):
                     custom_error_message = custom_error_message.strip() or None
 

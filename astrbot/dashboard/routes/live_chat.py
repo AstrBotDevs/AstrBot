@@ -296,7 +296,7 @@ class LiveChatRoute(Route):
             pass
         except Exception as e:
             logger.error(
-                f"[Live Chat] chat subscription forward failed ({chat_session_id}): {e}",
+                t("msg-8cffeb57", chat_session_id=chat_session_id, e=e),
                 exc_info=True,
             )
         finally:
@@ -602,7 +602,7 @@ class LiveChatRoute(Route):
                         )
                     except Exception as e:
                         logger.exception(
-                            f"[Live Chat] Failed to extract web search refs: {e}",
+                            t("msg-78381f26", e=e),
                             exc_info=True,
                         )
 
@@ -637,7 +637,7 @@ class LiveChatRoute(Route):
                     break
 
         except Exception as e:
-            logger.error(f"[Live Chat] 处理 chat 消息失败: {e}", exc_info=True)
+            logger.error(t("msg-56fe3df0", e=e), exc_info=True)
             await self._send_chat_payload(
                 session,
                 {

@@ -1,4 +1,3 @@
-from astrbot.core.lang import t
 import asyncio
 import copy
 import sys
@@ -20,6 +19,7 @@ from astrbot import logger
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
+from astrbot.core.lang import t
 from astrbot.core.message.components import Json
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -234,7 +234,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             is_last_candidate = idx == total_candidates - 1
             if idx > 0:
                 logger.warning(
-                    t("msg-ec018aef", res=self.provider.provider_config.get('id', '<unknown>'), candidate_id=candidate_id),
+                    t(
+                        "msg-ec018aef",
+                        res=self.provider.provider_config.get("id", "<unknown>"),
+                        candidate_id=candidate_id,
+                    ),
                 )
             self.provider = candidate
             has_stream_output = False
@@ -290,7 +294,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         roles = []
         for message in self.run_context.messages:
             roles.append(message.role)
-        logger.debug(t("msg-81b2aeae", tag=tag, res=len(roles), res_2=','.join(roles)))
+        logger.debug(t("msg-81b2aeae", tag=tag, res=len(roles), res_2=",".join(roles)))
 
     def follow_up(
         self,
@@ -474,13 +478,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
-<<<<<<< HEAD
-                    chain=MessageChain().message(
-                        t("msg-508d6d17", res=llm_resp.completion_text or '未知错误'),
-                    ),
-=======
-                    chain=MessageChain().message(error_text),
->>>>>>> 9214d48a2d9d411c784cf0ee9f852aaf08d45a90
+                    chain=MessageChain().message(t("msg-76945a59", error_text=error_text)),
                 ),
             )
             return
@@ -503,9 +501,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if llm_resp.completion_text:
                 parts.append(TextPart(text=llm_resp.completion_text))
             if len(parts) == 0:
-                logger.warning(
-                    t("msg-ed80313d")
-                )
+                logger.warning(t("msg-ed80313d"))
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
             # call the on_agent_done hook
@@ -614,9 +610,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         self.run_context.messages.append(
                             Message(role="user", content=image_parts)
                         )
-                        logger.debug(
-                            t("msg-970947ae", res=len(cached_images))
-                        )
+                        logger.debug(t("msg-970947ae", res=len(cached_images)))
 
             self.req.append_tool_calls_result(tool_calls_result)
 
@@ -632,9 +626,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
         if not self.done():
-            logger.warning(
-                t("msg-6b326889", max_step=max_step)
-            )
+            logger.warning(t("msg-6b326889", max_step=max_step))
             # 拔掉所有工具
             if self.req:
                 self.req.func_tool = None
@@ -702,7 +694,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 else:
                     func_tool = req.func_tool.get_tool(func_tool_name)
 
-                logger.info(t("msg-a27ad3d1", func_tool_name=func_tool_name, func_tool_args=func_tool_args))
+                logger.info(
+                    t(
+                        "msg-a27ad3d1",
+                        func_tool_name=func_tool_name,
+                        func_tool_args=func_tool_args,
+                    )
+                )
 
                 if not func_tool:
                     logger.warning(t("msg-812ad241", func_tool_name=func_tool_name))
@@ -717,7 +715,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 # 获取实际的 handler 函数
                 if func_tool.handler:
                     logger.debug(
-                        t("msg-20b4f143", func_tool_name=func_tool_name, res=func_tool.parameters),
+                        t(
+                            "msg-20b4f143",
+                            func_tool_name=func_tool_name,
+                            res=func_tool.parameters,
+                        ),
                     )
                     if func_tool.parameters and func_tool.parameters.get("properties"):
                         expected_params = set(func_tool.parameters["properties"].keys())
@@ -734,7 +736,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     if ignored_params:
                         logger.warning(
-                            t("msg-78f6833c", func_tool_name=func_tool_name, ignored_params=ignored_params),
+                            t(
+                                "msg-78f6833c",
+                                func_tool_name=func_tool_name,
+                                ignored_params=ignored_params,
+                            ),
                         )
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
@@ -828,9 +834,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         # Tool 直接请求发送消息给用户
                         # 这里我们将直接结束 Agent Loop
                         # 发送消息逻辑在 ToolExecutor 中处理了
-                        logger.warning(
-                            t("msg-ec868b73", func_tool_name=func_tool_name)
-                        )
+                        logger.warning(t("msg-ec868b73", func_tool_name=func_tool_name))
                         self._transition_state(AgentState.DONE)
                         self.stats.end_time = time.time()
                         _append_tool_call_result(
@@ -880,7 +884,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ],
                 )
             )
-            logger.info(t("msg-a1493b6d", func_tool_name=func_tool_name, last_tcr_content=last_tcr_content))
+            logger.info(
+                t(
+                    "msg-a1493b6d",
+                    func_tool_name=func_tool_name,
+                    last_tcr_content=last_tcr_content,
+                )
+            )
 
         # 处理函数调用响应
         if tool_call_result_blocks:
