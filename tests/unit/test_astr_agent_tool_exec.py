@@ -30,7 +30,7 @@ def _build_run_context(message_components: list[object] | None = None):
 
 
 @pytest.mark.asyncio
-async def test_prepare_handoff_image_urls_normalizes_filters_and_appends_event_image(
+async def test_collect_handoff_image_urls_normalizes_filters_and_appends_event_image(
     monkeypatch: pytest.MonkeyPatch,
 ):
     async def _fake_convert_to_file_path(self):
@@ -46,7 +46,7 @@ async def test_prepare_handoff_image_urls_normalizes_filters_and_appends_event_i
         123,
     )
 
-    image_urls = await FunctionToolExecutor._prepare_handoff_image_urls(
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
         run_context,
         image_urls_input,
     )
@@ -59,7 +59,7 @@ async def test_prepare_handoff_image_urls_normalizes_filters_and_appends_event_i
 
 
 @pytest.mark.asyncio
-async def test_prepare_handoff_image_urls_skips_failed_event_image_conversion(
+async def test_collect_handoff_image_urls_skips_failed_event_image_conversion(
     monkeypatch: pytest.MonkeyPatch,
 ):
     async def _fake_convert_to_file_path(self):
@@ -68,7 +68,7 @@ async def test_prepare_handoff_image_urls_skips_failed_event_image_conversion(
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._prepare_handoff_image_urls(
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
         run_context,
         ["https://example.com/a.png"],
     )
@@ -82,11 +82,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 ):
     captured: dict = {}
 
-    async def _unexpected_prepare(cls, run_context, image_urls):
-        raise AssertionError("background path should not pre-prepare image urls")
-
-    async def _fake_execute_handoff(cls, tool, run_context, tool_args):
-        tool_args["image_urls"] = ["prepared://image.png"]
+    async def _fake_execute_handoff(cls, tool, run_context, **tool_args):
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
@@ -94,11 +90,6 @@ async def test_do_handoff_background_reports_prepared_image_urls(
     async def _fake_wake(cls, run_context, **kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr(
-        FunctionToolExecutor,
-        "_prepare_handoff_image_urls",
-        classmethod(_unexpected_prepare),
-    )
     monkeypatch.setattr(
         FunctionToolExecutor,
         "_execute_handoff",
@@ -119,4 +110,4 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         image_urls="https://example.com/raw.png",
     )
 
-    assert captured["tool_args"]["image_urls"] == ["prepared://image.png"]
+    assert captured["tool_args"]["image_urls"] == "https://example.com/raw.png"
