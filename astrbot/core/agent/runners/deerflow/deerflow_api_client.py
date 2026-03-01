@@ -36,6 +36,23 @@ def _parse_sse_data_lines(data_lines: list[str]) -> Any:
         return raw_data
 
 
+def _parse_sse_block(block: str) -> dict[str, Any] | None:
+    if not block.strip():
+        return None
+
+    event_name = "message"
+    data_lines: list[str] = []
+    for line in block.splitlines():
+        if line.startswith("event:"):
+            event_name = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+
+    if not data_lines:
+        return None
+    return {"event": event_name, "data": _parse_sse_data_lines(data_lines)}
+
+
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], None]:
     """Parse SSE response blocks into event/data dictionaries."""
     # Use a forgiving decoder at network boundaries so malformed bytes do not abort stream parsing.
@@ -47,42 +64,22 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], No
 
         while "\n\n" in buffer:
             block, buffer = buffer.split("\n\n", 1)
-            if not block.strip():
-                continue
-
-            event_name = "message"
-            data_lines: list[str] = []
-
-            for line in block.splitlines():
-                if line.startswith("event:"):
-                    event_name = line[6:].strip()
-                elif line.startswith("data:"):
-                    data_lines.append(line[5:].lstrip())
-
-            if not data_lines:
-                continue
-
-            data = _parse_sse_data_lines(data_lines)
-
-            yield {"event": event_name, "data": data}
+            parsed = _parse_sse_block(block)
+            if parsed is not None:
+                yield parsed
 
     # flush any remaining buffered text
     buffer += _normalize_sse_newlines(decoder.decode(b"", final=True))
-    if not buffer.strip():
-        return
+    while "\n\n" in buffer:
+        block, buffer = buffer.split("\n\n", 1)
+        parsed = _parse_sse_block(block)
+        if parsed is not None:
+            yield parsed
 
-    event_name = "message"
-    data_lines = []
-    for line in buffer.splitlines():
-        if line.startswith("event:"):
-            event_name = line[6:].strip()
-        elif line.startswith("data:"):
-            data_lines.append(line[5:].lstrip())
-    if not data_lines:
-        return
-
-    data = _parse_sse_data_lines(data_lines)
-    yield {"event": event_name, "data": data}
+    if buffer.strip():
+        parsed = _parse_sse_block(buffer)
+        if parsed is not None:
+            yield parsed
 
 
 class DeerFlowAPIClient:
