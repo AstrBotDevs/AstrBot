@@ -73,22 +73,25 @@ class ProviderManager:
         self.curr_tts_provider_inst: TTSProvider | None = None
         """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
-        self._on_provider_changed: (
-            Callable[[str, ProviderType, str | None], None] | None
-        ) = None
+        self._provider_change_hooks: list[
+            Callable[[str, ProviderType, str | None], None]
+        ] = []
 
     def set_provider_change_callback(
         self,
         cb: Callable[[str, ProviderType, str | None], None] | None,
     ) -> None:
-        self._on_provider_changed = cb
+        # Backward-compatible single-callback setter.
+        self._provider_change_hooks.clear()
+        if cb is not None:
+            self._provider_change_hooks.append(cb)
 
     def register_provider_change_hook(
         self,
         hook: Callable[[str, ProviderType, str | None], None],
     ) -> None:
-        # Backward-compatible wrapper for older call sites.
-        self.set_provider_change_callback(hook)
+        if hook not in self._provider_change_hooks:
+            self._provider_change_hooks.append(hook)
 
     def _notify_provider_changed(
         self,
@@ -96,17 +99,18 @@ class ProviderManager:
         provider_type: ProviderType,
         umo: str | None,
     ) -> None:
-        if not self._on_provider_changed:
+        if not self._provider_change_hooks:
             return
-        try:
-            self._on_provider_changed(provider_id, provider_type, umo)
-        except Exception as e:
-            logger.warning(
-                "调用 provider 变更回调失败: provider_id=%s, type=%s, err=%s",
-                provider_id,
-                provider_type,
-                safe_error("", e),
-            )
+        for hook in list(self._provider_change_hooks):
+            try:
+                hook(provider_id, provider_type, umo)
+            except Exception as e:
+                logger.warning(
+                    "调用 provider 变更钩子失败: provider_id=%s, type=%s, err=%s",
+                    provider_id,
+                    provider_type,
+                    safe_error("", e),
+                )
 
     @property
     def persona_configs(self) -> list:

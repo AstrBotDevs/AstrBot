@@ -263,7 +263,11 @@ class ProviderCommands:
             batch_providers = all_providers[start : start + max_concurrency]
             batch_results = await asyncio.gather(
                 *[
-                    self._get_provider_models(provider, umo=umo)
+                    self._get_provider_models(
+                        provider,
+                        use_cache=False,
+                        umo=umo,
+                    )
                     for provider in batch_providers
                 ],
                 return_exceptions=True,
