@@ -81,7 +81,7 @@ export default {
   data() {
     return {
       autoScrollEnabled: true,
-      logLangLocale: 'zh-CN',
+      logLangLocale: localStorage.getItem('logLangLocale') || 'zh-CN',
       logLanguageItems: [
         { value: 'zh-CN', title: '🇨🇳 简体中文' },
         { value: 'en-US', title: '🇺🇸 English' },
@@ -133,7 +133,9 @@ export default {
           response?.data?.code ? response.data.code === 200 :
           true;
 
-        if (!ok) {
+        if (ok) {
+          localStorage.setItem('logLangLocale', langLocale);
+        } else {
           console.error('Failed to set language on server:', response?.data?.message);
           this.logLangLocale = previousLocale;
         }
