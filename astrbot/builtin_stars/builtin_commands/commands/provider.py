@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 _SECRET_PATTERNS = [
     re.compile(
-        r"(?i)\b(api_?key|access_?token|token|secret|auth_?token|session_?id|password)\s*=\s*[^&'\" ]+"
+        r"(?i)\b(api_?key|key|access_?token|token|secret|auth_?token|session_?id|password)\s*=\s*[^&'\" ]+"
     ),
     re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._\-]+"),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]+"),
@@ -39,6 +39,7 @@ class _ModelCacheEntry:
 
 class ProviderCommands:
     _MODEL_LIST_CACHE_TTL_SECONDS = 30.0
+    _MODEL_LOOKUP_MAX_CONCURRENCY = 4
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -50,23 +51,47 @@ class ProviderCommands:
             return
         self._provider_models_cache.pop(provider_id, None)
 
-    def _invalidate_cache_for(self, provider: Provider) -> None:
+    def _update_provider_and_invalidate(
+        self,
+        provider: Provider,
+        *,
+        model_name: str | None = None,
+        key: str | None = None,
+    ) -> None:
+        if model_name is not None:
+            provider.set_model(model_name)
+        if key is not None:
+            provider.set_key(key)
         self._invalidate_provider_models_cache(provider.meta().id)
 
-    def _set_model_and_invalidate(self, provider: Provider, model_name: str) -> None:
-        provider.set_model(model_name)
-        self._invalidate_cache_for(provider)
-
-    def _set_key_and_invalidate(self, provider: Provider, key: str) -> None:
-        provider.set_key(key)
-        self._invalidate_cache_for(provider)
+    @staticmethod
+    def _safe_err(prefix: str, e: Exception) -> str:
+        return prefix + redact_secrets(str(e))
 
     @staticmethod
-    def _mask_sensitive_text(value: str) -> str:
-        return redact_secrets(value)
+    def _normalize_model_name(model_name: str) -> str:
+        return model_name.strip().casefold()
 
-    def _format_safe_err(self, prefix: str, e: Exception) -> str:
-        return f"{prefix}{self._mask_sensitive_text(str(e))}"
+    def _resolve_model_name(self, model_name: str, models: list[str]) -> str | None:
+        normalized_model_name = self._normalize_model_name(model_name)
+        if not normalized_model_name:
+            return None
+        if model_name in models:
+            return model_name
+
+        for candidate in models:
+            normalized_candidate = self._normalize_model_name(candidate)
+            if normalized_candidate == normalized_model_name:
+                return candidate
+            if normalized_candidate.endswith(
+                f"/{normalized_model_name}"
+            ) or normalized_candidate.endswith(f":{normalized_model_name}"):
+                return candidate
+            if normalized_model_name.endswith(
+                f"/{normalized_candidate}"
+            ) or normalized_model_name.endswith(f":{normalized_candidate}"):
+                return candidate
+        return None
 
     def _get_model_cache_ttl_seconds(self, umo: str | None = None) -> float:
         ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
@@ -81,7 +106,7 @@ class ProviderCommands:
             logger.debug(
                 "读取 model_list_cache_ttl_seconds 失败，回退默认值 %.1f: %s",
                 self._MODEL_LIST_CACHE_TTL_SECONDS,
-                self._mask_sensitive_text(str(e)),
+                redact_secrets(str(e)),
             )
             ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
         return max(ttl, 0.0)
@@ -136,7 +161,7 @@ class ProviderCommands:
             return True, None, None
         except Exception as e:
             err_code = "TEST_FAILED"
-            err_reason = self._mask_sensitive_text(str(e))
+            err_reason = redact_secrets(str(e))
             self._log_reachability_failure(
                 provider, provider_capability_type, err_code, err_reason
             )
@@ -147,7 +172,7 @@ class ProviderCommands:
         model_name: str,
         exclude_provider_id: str | None = None,
         umo: str | None = None,
-    ) -> Provider | None:
+    ) -> tuple[Provider | None, str | None]:
         """在所有 LLM 提供商中查找包含指定模型的提供商。"""
         all_providers = [
             p
@@ -155,20 +180,37 @@ class ProviderCommands:
             if not exclude_provider_id or p.meta().id != exclude_provider_id
         ]
         if not all_providers:
-            return None
-        failed_provider_errors: list[tuple[str, str]] = []
-        for provider in all_providers:
-            provider_id = provider.meta().id
-            try:
-                models = await self._get_provider_models(provider, umo=umo)
-            except Exception as e:
-                failed_provider_errors.append(
-                    (provider_id, self._format_safe_err("", e))
-                )
-                continue
+            return None, None
 
-            if model_name in models:
-                return provider
+        semaphore = asyncio.Semaphore(self._MODEL_LOOKUP_MAX_CONCURRENCY)
+
+        async def _fetch_models(
+            provider: Provider,
+        ) -> tuple[Provider, list[str] | None, Exception | None]:
+            async with semaphore:
+                try:
+                    return (
+                        provider,
+                        await self._get_provider_models(provider, umo=umo),
+                        None,
+                    )
+                except Exception as e:
+                    return provider, None, e
+
+        results = await asyncio.gather(
+            *[_fetch_models(provider) for provider in all_providers]
+        )
+        failed_provider_errors: list[tuple[str, str]] = []
+        for provider, models, error in results:
+            provider_id = provider.meta().id
+            if error is not None:
+                failed_provider_errors.append((provider_id, self._safe_err("", error)))
+                continue
+            if models is None:
+                continue
+            matched_model_name = self._resolve_model_name(model_name, models)
+            if matched_model_name is not None:
+                return provider, matched_model_name
 
         if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
             failed_ids = ",".join(
@@ -190,7 +232,7 @@ class ProviderCommands:
                     for provider_id, error in failed_provider_errors
                 ),
             )
-        return None
+        return None, None
 
     async def provider(
         self,
@@ -246,7 +288,7 @@ class ProviderCommands:
                         p,
                         None,
                         reachable.__class__.__name__,
-                        self._mask_sensitive_text(str(reachable)),
+                        redact_secrets(str(reachable)),
                     )
                     reachable_flag = False
                     error_code = reachable.__class__.__name__
@@ -386,7 +428,7 @@ class ProviderCommands:
         try:
             models = await self._get_provider_models(prov, umo=umo)
         except Exception as e:
-            err_msg = self._format_safe_err("", e)
+            err_msg = self._safe_err("", e)
             logger.warning(
                 "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
                 curr_provider_id,
@@ -394,25 +436,26 @@ class ProviderCommands:
             )
             message.set_result(
                 MessageEventResult().message(
-                    self._format_safe_err("获取当前提供商模型列表失败: ", e)
+                    self._safe_err("获取当前提供商模型列表失败: ", e)
                 )
             )
             return
 
-        if model_name in models:
-            self._set_model_and_invalidate(prov, model_name)
+        matched_model_name = self._resolve_model_name(model_name, models)
+        if matched_model_name is not None:
+            self._update_provider_and_invalidate(prov, model_name=matched_model_name)
             message.set_result(
                 MessageEventResult().message(
-                    f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{model_name}]",
+                    f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{matched_model_name}]",
                 ),
             )
             return
 
-        target_prov = await self._find_provider_for_model(
+        target_prov, matched_target_model_name = await self._find_provider_for_model(
             model_name, exclude_provider_id=curr_provider_id, umo=umo
         )
 
-        if not target_prov:
+        if target_prov is None or matched_target_model_name is None:
             message.set_result(
                 MessageEventResult().message(
                     f"模型 [{model_name}] 未在任何已配置的提供商中找到，或所有提供商模型列表获取失败，请检查配置或网络后重试。",
@@ -427,16 +470,18 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            self._set_model_and_invalidate(target_prov, model_name)
+            self._update_provider_and_invalidate(
+                target_prov, model_name=matched_target_model_name
+            )
             message.set_result(
                 MessageEventResult().message(
-                    f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
+                    f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
                 ),
             )
         except Exception as e:
             message.set_result(
                 MessageEventResult().message(
-                    self._format_safe_err("跨提供商切换并设置模型失败: ", e)
+                    self._safe_err("跨提供商切换并设置模型失败: ", e)
                 ),
             )
 
@@ -462,7 +507,7 @@ class ProviderCommands:
             except Exception as e:
                 message.set_result(
                     MessageEventResult()
-                    .message(self._format_safe_err("获取模型列表失败: ", e))
+                    .message(self._safe_err("获取模型列表失败: ", e))
                     .use_t2i(False),
                 )
                 return
@@ -487,7 +532,7 @@ class ProviderCommands:
             except Exception as e:
                 message.set_result(
                     MessageEventResult().message(
-                        self._format_safe_err("获取模型列表失败: ", e)
+                        self._safe_err("获取模型列表失败: ", e)
                     ),
                 )
                 return
@@ -496,7 +541,7 @@ class ProviderCommands:
             else:
                 try:
                     new_model = models[idx_or_name - 1]
-                    self._set_model_and_invalidate(prov, new_model)
+                    self._update_provider_and_invalidate(prov, model_name=new_model)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
@@ -505,7 +550,7 @@ class ProviderCommands:
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            self._format_safe_err("切换模型未知错误: ", e)
+                            self._safe_err("切换模型未知错误: ", e)
                         ),
                     )
                     return
@@ -540,12 +585,12 @@ class ProviderCommands:
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    self._set_key_and_invalidate(prov, new_key)
+                    self._update_provider_and_invalidate(prov, key=new_key)
                     message.set_result(MessageEventResult().message("切换 Key 成功。"))
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            self._format_safe_err("切换 Key 未知错误: ", e)
+                            self._safe_err("切换 Key 未知错误: ", e)
                         ),
                     )
                     return
