@@ -17,10 +17,13 @@ from astrbot.core.backup import (
 )
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
+    DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
+    DatabaseClearError,
     PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     AstrBotImporter,
     ImportResult,
     _get_major_version,
+    _resolve_platform_stats_invalid_count_warn_limit,
 )
 from astrbot.core.config.default import VERSION
 from astrbot.core.db.po import (
@@ -392,6 +395,24 @@ class TestAstrBotImporter:
         assert is_valid_dt is True
         assert normalized_dt == "2025-12-13T21:00:00+00:00"
 
+    def test_resolve_platform_stats_invalid_count_warn_limit(self):
+        """测试非法/合法告警阈值配置解析"""
+        value, valid = _resolve_platform_stats_invalid_count_warn_limit(None)
+        assert valid is True
+        assert value == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+
+        value, valid = _resolve_platform_stats_invalid_count_warn_limit("10")
+        assert valid is True
+        assert value == 10
+
+        value, valid = _resolve_platform_stats_invalid_count_warn_limit("-1")
+        assert valid is False
+        assert value == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+
+        value, valid = _resolve_platform_stats_invalid_count_warn_limit("bad")
+        assert valid is False
+        assert value == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
         """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""
         importer = AstrBotImporter(main_db=MagicMock())
@@ -510,6 +531,42 @@ class TestAstrBotImporter:
         assert len(merged_rows) == 3
         assert [row["count"] for row in merged_rows] == [2, 3, 4]
 
+    def test_merge_platform_stats_rows_keeps_non_string_platform_keys_distinct(self):
+        """测试非字符串 platform_id/platform_type 不参与聚合"""
+        importer = AstrBotImporter(main_db=MagicMock())
+        rows = [
+            {
+                "timestamp": "2025-12-13T20:00:00+00:00",
+                "platform_id": None,
+                "platform_type": "unknown",
+                "count": 2,
+            },
+            {
+                "timestamp": "2025-12-13T20:00:00Z",
+                "platform_id": None,
+                "platform_type": "unknown",
+                "count": 3,
+            },
+            {
+                "timestamp": "2025-12-13T20:00:00+00:00",
+                "platform_id": "webchat",
+                "platform_type": 1,
+                "count": 4,
+            },
+            {
+                "timestamp": "2025-12-13T20:00:00Z",
+                "platform_id": "webchat",
+                "platform_type": 1,
+                "count": 5,
+            },
+        ]
+
+        merged_rows = importer._merge_platform_stats_rows(rows)
+        duplicate_count = len(rows) - len(merged_rows)
+
+        assert duplicate_count == 0
+        assert len(merged_rows) == 4
+
     @pytest.mark.asyncio
     async def test_import_file_not_exists(self, mock_main_db, tmp_path):
         """测试导入不存在的文件"""
@@ -585,13 +642,14 @@ class TestAstrBotImporter:
 
         importer = AstrBotImporter(main_db=mock_main_db)
         importer._clear_main_db = AsyncMock(
-            side_effect=RuntimeError("清空表 platform_stats 失败: db locked")
+            side_effect=DatabaseClearError("清空表 platform_stats 失败: db locked")
         )
         importer._import_main_database = AsyncMock(return_value={})
 
         result = await importer.import_all(str(zip_path), mode="replace")
 
         assert result.success is False
+        assert any("清空主数据库失败" in err for err in result.errors)
         assert any("清空表 platform_stats 失败" in err for err in result.errors)
         importer._import_main_database.assert_not_awaited()
 

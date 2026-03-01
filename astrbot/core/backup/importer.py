@@ -61,8 +61,46 @@ def _get_major_version(version_str: str) -> str:
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
-# Warning limit per _merge_platform_stats_rows invocation.
-PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
+DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
+PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV = (
+    "ASTRBOT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT"
+)
+
+
+def _resolve_platform_stats_invalid_count_warn_limit(
+    raw_value: str | None,
+) -> tuple[int, bool]:
+    """Resolve warn limit value and return whether the input was valid."""
+    if raw_value is None:
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT, True
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT, False
+    if value < 0:
+        return DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT, False
+    return value, True
+
+
+def _load_platform_stats_invalid_count_warn_limit() -> int:
+    raw_value = os.getenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV)
+    resolved_value, is_valid = _resolve_platform_stats_invalid_count_warn_limit(
+        raw_value
+    )
+    if raw_value is not None and not is_valid:
+        logger.warning(
+            "Invalid env %s=%r, fallback to default %d",
+            PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
+            raw_value,
+            DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
+        )
+    return resolved_value
+
+
+# Warning limit per _merge_platform_stats_rows invocation; configurable by env.
+PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = (
+    _load_platform_stats_invalid_count_warn_limit()
+)
 
 
 @dataclass
@@ -138,6 +176,10 @@ class ImportResult:
             "warnings": self.warnings,
             "errors": self.errors,
         }
+
+
+class DatabaseClearError(RuntimeError):
+    """Raised when clearing the main database in replace mode fails."""
 
 
 class AstrBotImporter:
@@ -344,6 +386,9 @@ class AstrBotImporter:
 
                     imported = await self._import_main_database(main_data)
                     result.imported_tables.update(imported)
+                except DatabaseClearError as e:
+                    result.add_error(f"清空主数据库失败: {e}")
+                    return result
                 except Exception as e:
                     result.add_error(f"导入主数据库失败: {e}")
                     return result
@@ -454,7 +499,9 @@ class AstrBotImporter:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
                     except Exception as e:
-                        raise RuntimeError(f"清空表 {table_name} 失败: {e}") from e
+                        raise DatabaseClearError(
+                            f"清空表 {table_name} 失败: {e}"
+                        ) from e
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -528,6 +575,7 @@ class AstrBotImporter:
 
         Note:
         - Invalid/empty timestamps are kept as distinct rows to avoid accidental merging.
+        - Non-string platform_id/platform_type are kept as distinct rows.
         - Invalid count warnings are rate-limited per function invocation.
         """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -542,12 +590,12 @@ class AstrBotImporter:
             )
             normalized_row["timestamp"] = normalized_timestamp
 
-            platform_id = str(normalized_row.get("platform_id"))
-            platform_type = str(normalized_row.get("platform_type"))
+            platform_id = normalized_row.get("platform_id")
+            platform_type = normalized_row.get("platform_type")
             key_for_log = (
                 normalized_timestamp if is_timestamp_valid else "<invalid_timestamp>",
-                platform_id,
-                platform_type,
+                repr(platform_id),
+                repr(platform_type),
             )
             count, invalid_count_warned = self._parse_platform_stats_count(
                 normalized_row.get("count", 0), invalid_count_warned, key_for_log
@@ -556,6 +604,10 @@ class AstrBotImporter:
 
             # Invalid timestamps should never be merged.
             if not is_timestamp_valid:
+                result.append(normalized_row)
+                continue
+
+            if not isinstance(platform_id, str) or not isinstance(platform_type, str):
                 result.append(normalized_row)
                 continue
 
