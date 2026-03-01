@@ -106,7 +106,14 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         """Explicit cleanup hook for long-lived workers."""
         api_client = getattr(self, "api_client", None)
         if isinstance(api_client, DeerFlowAPIClient) and not api_client.is_closed:
-            await api_client.close()
+            try:
+                await api_client.close()
+            except Exception as e:
+                logger.warning(
+                    "Failed to close DeerFlowAPIClient during runner shutdown: %s",
+                    e,
+                    exc_info=True,
+                )
 
     async def _notify_agent_done_hook(self) -> None:
         if not self.final_llm_resp:
