@@ -521,7 +521,6 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 ]
             latest_text = extract_latest_ai_text(state.run_values_messages)
             if latest_text:
-                state.latest_text = latest_text
                 state.has_values_text = True
             latest_clarification = extract_latest_clarification_text(
                 state.run_values_messages,
