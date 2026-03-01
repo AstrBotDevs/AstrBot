@@ -525,14 +525,14 @@ class AstrBotImporter:
     def _preprocess_main_table_rows(
         self, table_name: str, rows: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        preprocessors = {"platform_stats": self._merge_platform_stats_rows}
-        preprocessor = preprocessors.get(table_name)
-        if preprocessor is not None:
-            normalized_rows = preprocessor(rows)
+        if table_name == "platform_stats":
+            normalized_rows = self._merge_platform_stats_rows(rows)
             duplicate_count = len(rows) - len(normalized_rows)
             if duplicate_count > 0:
-                logger.warning(
-                    f"检测到 {table_name} 重复键 {duplicate_count} 条，已在导入前聚合"
+                logger.info(
+                    "检测到 %s 重复键 %d 条，已在导入前聚合",
+                    table_name,
+                    duplicate_count,
                 )
             return normalized_rows
         return rows
@@ -551,85 +551,120 @@ class AstrBotImporter:
         result: list[dict[str, Any]] = []
         invalid_count_warnings = 0
 
-        def log_invalid_count(
-            raw_count: Any, key_for_log: tuple[Any, Any, Any]
-        ) -> None:
-            nonlocal invalid_count_warnings
-
-            limit = PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-            if limit <= 0:
-                if invalid_count_warnings == 0:
-                    logger.warning(
-                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                        limit,
-                    )
-                    invalid_count_warnings = 1
-                return
-
-            if invalid_count_warnings < limit:
-                logger.warning(
-                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
-                    raw_count,
-                    key_for_log,
-                )
-                invalid_count_warnings += 1
-                if invalid_count_warnings == limit:
-                    logger.warning(
-                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                        limit,
-                    )
-                    invalid_count_warnings += 1
-
-        def parse_count(raw_count: Any, key_for_log: tuple[Any, Any, Any]) -> int:
-            try:
-                return int(raw_count)
-            except (TypeError, ValueError):
-                log_invalid_count(raw_count, key_for_log)
-                return 0
-
         for row in rows:
-            normalized_row = dict(row)
-            raw_timestamp = normalized_row.get("timestamp")
-            normalized_timestamp = self._normalize_platform_stats_timestamp(
-                raw_timestamp
+            merge_key, normalized_row, key_for_log = self._normalize_platform_stats_row(
+                row
             )
-            platform_id = normalized_row.get("platform_id")
-            platform_type = normalized_row.get("platform_type")
-
-            if normalized_timestamp is not None:
-                normalized_row["timestamp"] = normalized_timestamp
-            elif isinstance(raw_timestamp, str):
-                normalized_row["timestamp"] = raw_timestamp.strip()
-            elif raw_timestamp is None:
-                normalized_row["timestamp"] = ""
-            else:
-                normalized_row["timestamp"] = str(raw_timestamp)
-
-            key_for_log = (
-                normalized_row.get("timestamp"),
-                repr(platform_id),
-                repr(platform_type),
+            count, invalid_count_warnings = self._parse_platform_stats_count(
+                normalized_row.get("count", 0),
+                key_for_log,
+                invalid_count_warnings,
             )
-            count = parse_count(normalized_row.get("count", 0), key_for_log)
             normalized_row["count"] = count
 
-            if (
-                normalized_timestamp is None
-                or not isinstance(platform_id, str)
-                or not isinstance(platform_type, str)
-            ):
+            if merge_key is None:
                 result.append(normalized_row)
                 continue
 
-            key = (normalized_timestamp, platform_id, platform_type)
-            existing = merged.get(key)
+            existing = merged.get(merge_key)
             if existing is None:
-                merged[key] = normalized_row
+                merged[merge_key] = normalized_row
                 result.append(normalized_row)
             else:
                 existing["count"] += count
 
         return result
+
+    def _normalize_platform_stats_row(
+        self, row: dict[str, Any]
+    ) -> tuple[tuple[str, str, str] | None, dict[str, Any], tuple[Any, Any, Any]]:
+        normalized_row = dict(row)
+        raw_timestamp = normalized_row.get("timestamp")
+        normalized_timestamp = self._normalize_platform_stats_timestamp(raw_timestamp)
+        platform_id = normalized_row.get("platform_id")
+        platform_type = normalized_row.get("platform_type")
+
+        if normalized_timestamp is not None:
+            normalized_row["timestamp"] = normalized_timestamp
+        elif isinstance(raw_timestamp, str):
+            normalized_row["timestamp"] = raw_timestamp.strip()
+        elif raw_timestamp is None:
+            normalized_row["timestamp"] = ""
+        else:
+            normalized_row["timestamp"] = str(raw_timestamp)
+
+        key_for_log = (
+            normalized_row.get("timestamp"),
+            repr(platform_id),
+            repr(platform_type),
+        )
+
+        if (
+            normalized_timestamp is None
+            or not isinstance(platform_id, str)
+            or not isinstance(platform_type, str)
+        ):
+            return None, normalized_row, key_for_log
+        return (
+            (normalized_timestamp, platform_id, platform_type),
+            normalized_row,
+            key_for_log,
+        )
+
+    def _parse_platform_stats_count(
+        self,
+        raw_count: Any,
+        key_for_log: tuple[Any, Any, Any],
+        invalid_count_warnings: int,
+    ) -> tuple[int, int]:
+        try:
+            return int(raw_count), invalid_count_warnings
+        except (TypeError, ValueError):
+            next_warnings = self._log_platform_stats_invalid_count(
+                raw_count,
+                key_for_log,
+                invalid_count_warnings,
+            )
+            return 0, next_warnings
+
+    def _log_platform_stats_invalid_count(
+        self,
+        raw_count: Any,
+        key_for_log: tuple[Any, Any, Any],
+        invalid_count_warnings: int,
+    ) -> int:
+        """Rate-limit invalid count warnings.
+
+        Behavior:
+        - limit <= 0: log the suppression message once.
+        - limit > 0: log invalid values up to the limit, then one suppression message.
+        """
+        limit = PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+
+        if limit <= 0:
+            if invalid_count_warnings == 0:
+                logger.warning(
+                    "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                    limit,
+                )
+                return 1
+            return invalid_count_warnings
+
+        if invalid_count_warnings < limit:
+            logger.warning(
+                "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                raw_count,
+                key_for_log,
+            )
+            invalid_count_warnings += 1
+            if invalid_count_warnings == limit:
+                logger.warning(
+                    "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                    limit,
+                )
+                return invalid_count_warnings + 1
+
+        return invalid_count_warnings
 
     def _normalize_platform_stats_timestamp(self, value: Any) -> str | None:
         if isinstance(value, datetime):
