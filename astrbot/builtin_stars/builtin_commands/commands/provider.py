@@ -105,9 +105,43 @@ class ProviderCommands:
             )
             return default
 
+    def _get_int_provider_setting(self, umo: str | None, key: str, default: int) -> int:
+        return int(self._get_provider_setting(umo, key, int, default))
+
+    def _get_float_provider_setting(
+        self, umo: str | None, key: str, default: float
+    ) -> float:
+        return float(self._get_provider_setting(umo, key, float, default))
+
+    def _set_model_and_invalidate(self, provider: Provider, model_name: str) -> None:
+        provider.set_model(model_name)
+        self.invalidate_provider_models_cache(provider.meta().id)
+
+    def _set_key_and_invalidate(self, provider: Provider, key: str) -> None:
+        provider.set_key(key)
+        self.invalidate_provider_models_cache(provider.meta().id)
+
     @staticmethod
     def _normalize_model_name(model_name: str) -> str:
         return model_name.strip().casefold()
+
+    def _match_exact_or_ci(self, requested: str, candidate: str) -> bool:
+        if candidate == requested:
+            return True
+        return self._normalize_model_name(candidate) == self._normalize_model_name(
+            requested
+        )
+
+    def _match_suffix_either_side(self, requested: str, candidate: str) -> bool:
+        req = self._normalize_model_name(requested)
+        cand = self._normalize_model_name(candidate)
+        if not req or not cand:
+            return False
+        if cand.endswith(f"/{req}") or cand.endswith(f":{req}"):
+            return True
+        if req.endswith(f"/{cand}") or req.endswith(f":{cand}"):
+            return True
+        return False
 
     def _resolve_model_name(
         self,
@@ -121,43 +155,33 @@ class ProviderCommands:
         if not norm_name:
             return None
 
+        # exact / case-insensitive match
         for candidate in models:
-            norm_candidate = self._normalize_model_name(candidate)
-            # exact match
-            if candidate == model_name:
+            if self._match_exact_or_ci(model_name, candidate):
                 return candidate
-            # case-insensitive match
-            if norm_candidate == norm_name:
+
+        # suffix / reverse suffix match
+        for candidate in models:
+            if self._match_suffix_either_side(model_name, candidate):
                 return candidate
-            # suffix match: provider model is longer
-            if norm_candidate.endswith(f"/{norm_name}") or norm_candidate.endswith(
-                f":{norm_name}"
-            ):
-                return candidate
-            # reverse suffix match: requested model is longer
-            if norm_name.endswith(f"/{norm_candidate}") or norm_name.endswith(
-                f":{norm_candidate}"
-            ):
-                return candidate
+
         return None
 
     def _get_lookup_max_concurrency(self, umo: str | None) -> int:
-        concurrency = self._get_provider_setting(
+        concurrency = self._get_int_provider_setting(
             umo,
             _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY,
-            int,
             self._MODEL_LOOKUP_MAX_CONCURRENCY,
         )
         return min(max(concurrency, 1), _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
 
     def _get_model_cache_ttl_seconds(self, umo: str | None) -> float:
-        ttl = self._get_provider_setting(
+        ttl = self._get_float_provider_setting(
             umo,
             _MODEL_LIST_CACHE_TTL_CONFIG_KEY,
-            float,
             self._MODEL_LIST_CACHE_TTL_SECONDS,
         )
-        return max(float(ttl), 0.0)
+        return max(ttl, 0.0)
 
     async def _get_provider_models(
         self,
@@ -478,8 +502,7 @@ class ProviderCommands:
 
         matched_model_name = self._resolve_model_name(model_name, models)
         if matched_model_name is not None:
-            prov.set_model(matched_model_name)
-            self.invalidate_provider_models_cache(curr_provider_id)
+            self._set_model_and_invalidate(prov, matched_model_name)
             message.set_result(
                 MessageEventResult().message(
                     f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{matched_model_name}]",
@@ -506,8 +529,7 @@ class ProviderCommands:
                 provider_type=ProviderType.CHAT_COMPLETION,
                 umo=umo,
             )
-            target_prov.set_model(matched_target_model_name)
-            self.invalidate_provider_models_cache(target_id)
+            self._set_model_and_invalidate(target_prov, matched_target_model_name)
             message.set_result(
                 MessageEventResult().message(
                     f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
@@ -574,8 +596,7 @@ class ProviderCommands:
             else:
                 try:
                     new_model = models[idx_or_name - 1]
-                    prov.set_model(new_model)
-                    self.invalidate_provider_models_cache(prov.meta().id)
+                    self._set_model_and_invalidate(prov, new_model)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
@@ -619,8 +640,7 @@ class ProviderCommands:
             else:
                 try:
                     new_key = keys_data[index - 1]
-                    prov.set_key(new_key)
-                    self.invalidate_provider_models_cache(prov.meta().id)
+                    self._set_key_and_invalidate(prov, new_key)
                     message.set_result(MessageEventResult().message("切换 Key 成功。"))
                 except Exception as e:
                     message.set_result(

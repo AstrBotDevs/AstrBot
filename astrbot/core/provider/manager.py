@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.error_redaction import safe_error
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
@@ -97,7 +98,7 @@ class ProviderManager:
                     "调用 provider 变更钩子失败: provider_id=%s, type=%s, err=%s",
                     provider_id,
                     provider_type,
-                    e,
+                    safe_error("", e),
                 )
 
     @property
