@@ -667,6 +667,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 if event_type == "end":
                     break
         except (asyncio.TimeoutError, TimeoutError):
+            logger.warning(
+                "DeerFlow stream timed out after %ss for thread_id=%s; returning partial result.",
+                self.timeout,
+                thread_id,
+            )
             state.timed_out = True
 
         final_result = self._build_final_result(state)

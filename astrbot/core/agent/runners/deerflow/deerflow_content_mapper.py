@@ -33,21 +33,33 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
 
     content: list[dict[str, Any]] = []
     skipped_invalid_images = 0
+    any_valid_image = False
     if prompt:
         content.append({"type": "text", "text": prompt})
 
     for image_url in image_urls:
         url = image_url
         if not isinstance(url, str):
+            skipped_invalid_images += 1
+            logger.debug(
+                "Skipped DeerFlow image input because value is not a string: %r",
+                type(image_url).__name__,
+            )
             continue
         url = url.strip()
         if not url:
+            skipped_invalid_images += 1
+            logger.debug("Skipped DeerFlow image input because value is empty.")
             continue
         if url.startswith(("http://", "https://", "data:")):
             content.append({"type": "image_url", "image_url": {"url": url}})
+            any_valid_image = True
             continue
         if not is_likely_base64_image(url):
             skipped_invalid_images += 1
+            logger.debug(
+                "Skipped DeerFlow image input because it is neither URL/data URI nor valid base64."
+            )
             continue
         compact_base64 = url.replace("\n", "").replace("\r", "")
         content.append(
@@ -56,8 +68,25 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
                 "image_url": {"url": f"data:image/png;base64,{compact_base64}"},
             },
         )
+        any_valid_image = True
 
     if skipped_invalid_images:
+        note_text = (
+            "Note: some images could not be processed and were ignored."
+            if any_valid_image
+            else "Note: none of the provided images could be processed."
+        )
+        content.insert(0, {"type": "text", "text": note_text})
+        if not any_valid_image:
+            logger.warning(
+                "All %d provided DeerFlow image inputs were rejected as invalid or unsupported.",
+                skipped_invalid_images,
+            )
+        else:
+            logger.info(
+                "%d DeerFlow image input(s) were rejected as invalid or unsupported.",
+                skipped_invalid_images,
+            )
         logger.debug(
             "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
             skipped_invalid_images,

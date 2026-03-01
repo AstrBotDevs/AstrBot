@@ -132,7 +132,6 @@ class _RunnerResultAggregator:
 
 def _start_stream_watchdog(
     *,
-    runner: "BaseAgentRunner",
     timeout_sec: int,
     is_stream_consumed: Callable[[], bool],
     close_runner_once: Callable[[], Awaitable[None]],
@@ -199,7 +198,6 @@ class _RunnerLifecycle:
         if self._watchdog_task is not None or not self._streaming_used:
             return
         self._watchdog_task = _start_stream_watchdog(
-            runner=self._runner,
             timeout_sec=self._timeout_sec,
             is_stream_consumed=lambda: self._stream_consumed,
             close_runner_once=self.close_runner_once,
