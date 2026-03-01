@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.api import star
@@ -15,9 +15,17 @@ from astrbot.core.utils.error_redaction import safe_error
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
-_MODEL_LIST_CACHE_TTL_CONFIG_KEY = "model_list_cache_ttl_seconds"
-_MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY = "model_lookup_max_concurrency"
-_MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND = 16
+
+@dataclass(frozen=True)
+class _ModelLookupConfig:
+    list_cache_ttl_seconds: float = 30.0
+    max_concurrency_default: int = 4
+    max_concurrency_upper_bound: int = 16
+    list_cache_ttl_key: str = "model_list_cache_ttl_seconds"
+    max_concurrency_key: str = "model_lookup_max_concurrency"
+
+
+_MODEL_LOOKUP_CONFIG = _ModelLookupConfig()
 
 
 @dataclass
@@ -54,12 +62,10 @@ class _ModelListCache:
 
 
 class ProviderCommands:
-    _MODEL_LIST_CACHE_TTL_SECONDS = 30.0
-    _MODEL_LOOKUP_MAX_CONCURRENCY = 4
-
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self._model_cache = _ModelListCache()
+        self._cfg = _MODEL_LOOKUP_CONFIG
         register_change_hook = getattr(
             self.context.provider_manager,
             "register_provider_change_hook",
@@ -81,13 +87,7 @@ class ProviderCommands:
         if provider_type == ProviderType.CHAT_COMPLETION:
             self.invalidate_provider_models_cache(provider_id)
 
-    def _get_provider_setting(
-        self,
-        umo: str | None,
-        key: str,
-        cast: Callable[[Any], Any],
-        default: Any,
-    ) -> Any:
+    def _get_int_provider_setting(self, umo: str | None, key: str, default: int) -> int:
         if not umo:
             return default
         try:
@@ -95,7 +95,7 @@ class ProviderCommands:
             raw = cfg.get(key)
             if raw is None:
                 return default
-            return cast(raw)
+            return int(raw)
         except Exception as e:
             logger.debug(
                 "读取 %s 失败，回退默认值 %r: %s",
@@ -105,13 +105,25 @@ class ProviderCommands:
             )
             return default
 
-    def _get_int_provider_setting(self, umo: str | None, key: str, default: int) -> int:
-        return int(self._get_provider_setting(umo, key, int, default))
-
     def _get_float_provider_setting(
         self, umo: str | None, key: str, default: float
     ) -> float:
-        return float(self._get_provider_setting(umo, key, float, default))
+        if not umo:
+            return default
+        try:
+            cfg = self.context.get_config(umo).get("provider_settings", {})
+            raw = cfg.get(key)
+            if raw is None:
+                return default
+            return float(raw)
+        except Exception as e:
+            logger.debug(
+                "读取 %s 失败，回退默认值 %r: %s",
+                key,
+                default,
+                safe_error("", e),
+            )
+            return default
 
     def _set_model_and_invalidate(self, provider: Provider, model_name: str) -> None:
         provider.set_model(model_name)
@@ -121,28 +133,6 @@ class ProviderCommands:
         provider.set_key(key)
         self.invalidate_provider_models_cache(provider.meta().id)
 
-    @staticmethod
-    def _normalize_model_name(model_name: str) -> str:
-        return model_name.strip().casefold()
-
-    def _match_exact_or_ci(self, requested: str, candidate: str) -> bool:
-        if candidate == requested:
-            return True
-        return self._normalize_model_name(candidate) == self._normalize_model_name(
-            requested
-        )
-
-    def _match_suffix_either_side(self, requested: str, candidate: str) -> bool:
-        req = self._normalize_model_name(requested)
-        cand = self._normalize_model_name(candidate)
-        if not req or not cand:
-            return False
-        if cand.endswith(f"/{req}") or cand.endswith(f":{req}"):
-            return True
-        if req.endswith(f"/{cand}") or req.endswith(f":{cand}"):
-            return True
-        return False
-
     def _resolve_model_name(
         self,
         model_name: str,
@@ -151,18 +141,28 @@ class ProviderCommands:
         """Resolve model name with precedence:
         exact > case-insensitive > suffix > reverse suffix.
         """
-        norm_name = self._normalize_model_name(model_name)
-        if not norm_name:
+        requested = model_name.strip()
+        if not requested:
             return None
+
+        requested_norm = requested.casefold()
 
         # exact / case-insensitive match
         for candidate in models:
-            if self._match_exact_or_ci(model_name, candidate):
+            if candidate == requested or candidate.casefold() == requested_norm:
                 return candidate
 
         # suffix / reverse suffix match
+        def _match_suffix(req: str, cand: str) -> bool:
+            return (
+                cand.endswith(f"/{req}")
+                or cand.endswith(f":{req}")
+                or req.endswith(f"/{cand}")
+                or req.endswith(f":{cand}")
+            )
+
         for candidate in models:
-            if self._match_suffix_either_side(model_name, candidate):
+            if _match_suffix(requested_norm, candidate.casefold()):
                 return candidate
 
         return None
@@ -170,16 +170,16 @@ class ProviderCommands:
     def _get_lookup_max_concurrency(self, umo: str | None) -> int:
         concurrency = self._get_int_provider_setting(
             umo,
-            _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY,
-            self._MODEL_LOOKUP_MAX_CONCURRENCY,
+            self._cfg.max_concurrency_key,
+            self._cfg.max_concurrency_default,
         )
-        return min(max(concurrency, 1), _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
+        return min(max(concurrency, 1), self._cfg.max_concurrency_upper_bound)
 
     def _get_model_cache_ttl_seconds(self, umo: str | None) -> float:
         ttl = self._get_float_provider_setting(
             umo,
-            _MODEL_LIST_CACHE_TTL_CONFIG_KEY,
-            self._MODEL_LIST_CACHE_TTL_SECONDS,
+            self._cfg.list_cache_ttl_key,
+            self._cfg.list_cache_ttl_seconds,
         )
         return max(ttl, 0.0)
 
