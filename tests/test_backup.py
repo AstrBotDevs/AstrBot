@@ -5,7 +5,7 @@ import os
 import re
 import zipfile
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -308,6 +308,69 @@ class TestAstrBotImporter:
         assert isinstance(result["created_at"], datetime)
         assert isinstance(result["updated_at"], datetime)
 
+    def test_merge_platform_stats_rows(self):
+        """测试 platform_stats 重复键会在导入前聚合"""
+        importer = AstrBotImporter(main_db=MagicMock())
+        rows = [
+            {
+                "id": 1,
+                "timestamp": "2025-12-13T20:00:00Z",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 14,
+            },
+            {
+                "id": 80,
+                "timestamp": "2025-12-13T20:00:00+00:00",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 3,
+            },
+            {
+                "id": 2,
+                "timestamp": "2025-12-13T21:00:00",
+                "platform_id": "aiocqhttp",
+                "platform_type": "unknown",
+                "count": 1,
+            },
+        ]
+
+        merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+
+        assert duplicate_count == 1
+        assert len(merged_rows) == 2
+        first = merged_rows[0]
+        assert first["timestamp"] == "2025-12-13T20:00:00Z"
+        assert first["platform_id"] == "webchat"
+        assert first["platform_type"] == "unknown"
+        assert first["count"] == 17
+
+    def test_merge_platform_stats_rows_warns_on_invalid_count(self):
+        """测试 platform_stats count 非法时会告警并按 0 处理"""
+        importer = AstrBotImporter(main_db=MagicMock())
+        rows = [
+            {
+                "timestamp": "2025-12-13T20:00:00+00:00",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 5,
+            },
+            {
+                "timestamp": "2025-12-13T20:00:00Z",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": "bad-count",
+            },
+        ]
+
+        with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
+            merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+
+        assert duplicate_count == 1
+        assert len(merged_rows) == 1
+        assert merged_rows[0]["count"] == 5
+        assert warning_mock.called
+
     @pytest.mark.asyncio
     async def test_import_file_not_exists(self, mock_main_db, tmp_path):
         """测试导入不存在的文件"""
@@ -364,6 +427,32 @@ class TestAstrBotImporter:
 
         assert result.success is False
         assert any("主版本不兼容" in err for err in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_import_replace_fails_when_clear_main_db_fails(
+        self, mock_main_db, tmp_path
+    ):
+        """测试 replace 模式下主库清空失败会直接终止导入"""
+        zip_path = tmp_path / "valid_backup.zip"
+        manifest = {
+            "version": "1.1",
+            "astrbot_version": VERSION,
+            "tables": {"platform_stats": 0},
+        }
+        main_data = {"platform_stats": []}
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("databases/main_db.json", json.dumps(main_data))
+
+        importer = AstrBotImporter(main_db=mock_main_db)
+        importer._clear_main_db = AsyncMock(
+            side_effect=RuntimeError("清空表 platform_stats 失败: db locked")
+        )
+
+        result = await importer.import_all(str(zip_path), mode="replace")
+
+        assert result.success is False
+        assert any("清空表 platform_stats 失败" in err for err in result.errors)
 
 
 class TestSecureFilename:

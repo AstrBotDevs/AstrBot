@@ -12,7 +12,7 @@ import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -452,7 +452,7 @@ class AstrBotImporter:
                         await session.execute(delete(model_class))
                         logger.debug(f"已清空表 {table_name}")
                     except Exception as e:
-                        logger.warning(f"清空表 {table_name} 失败: {e}")
+                        raise RuntimeError(f"清空表 {table_name} 失败: {e}") from e
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -494,9 +494,18 @@ class AstrBotImporter:
                     if not model_class:
                         logger.warning(f"未知的表: {table_name}")
                         continue
+                    normalized_rows = rows
+                    if table_name == "platform_stats":
+                        normalized_rows, duplicate_count = (
+                            self._merge_platform_stats_rows(rows)
+                        )
+                        if duplicate_count > 0:
+                            logger.warning(
+                                f"检测到 platform_stats 重复键 {duplicate_count} 条，已在导入前聚合"
+                            )
 
                     count = 0
-                    for row in rows:
+                    for row in normalized_rows:
                         try:
                             # 转换 datetime 字符串为 datetime 对象
                             row = self._convert_datetime_fields(row, model_class)
@@ -510,6 +519,86 @@ class AstrBotImporter:
                     logger.debug(f"导入表 {table_name}: {count} 条记录")
 
         return imported
+
+    def _merge_platform_stats_rows(
+        self, rows: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], int]:
+        merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+        timestamp_cache: dict[str, str] = {}
+        invalid_count_warned = 0
+        invalid_count_warn_limit = 5
+        duplicate_count = 0
+        for row in rows:
+            raw_timestamp = row.get("timestamp")
+            if isinstance(raw_timestamp, str):
+                normalized_timestamp = timestamp_cache.get(raw_timestamp)
+                if normalized_timestamp is None:
+                    normalized_timestamp = self._normalize_platform_stats_timestamp(
+                        raw_timestamp
+                    )
+                    timestamp_cache[raw_timestamp] = normalized_timestamp
+            else:
+                normalized_timestamp = self._normalize_platform_stats_timestamp(
+                    raw_timestamp
+                )
+            key = (
+                normalized_timestamp,
+                str(row.get("platform_id")),
+                str(row.get("platform_type")),
+            )
+            existing = merged.get(key)
+            if existing is None:
+                merged[key] = dict(row)
+                continue
+            duplicate_count += 1
+            existing_raw_count = existing.get("count", 0)
+            try:
+                existing_count = int(existing_raw_count)
+            except (TypeError, ValueError):
+                existing_count = 0
+                if invalid_count_warned < invalid_count_warn_limit:
+                    logger.warning(
+                        "platform_stats count 非法，已按 0 处理: "
+                        f"value={existing_raw_count!r}, key={key}"
+                    )
+                    invalid_count_warned += 1
+
+            incoming_raw_count = row.get("count", 0)
+            try:
+                incoming_count = int(incoming_raw_count)
+            except (TypeError, ValueError):
+                incoming_count = 0
+                if invalid_count_warned < invalid_count_warn_limit:
+                    logger.warning(
+                        "platform_stats count 非法，已按 0 处理: "
+                        f"value={incoming_raw_count!r}, key={key}"
+                    )
+                    invalid_count_warned += 1
+            existing["count"] = existing_count + incoming_count
+        return list(merged.values()), duplicate_count
+
+    def _normalize_platform_stats_timestamp(self, value: Any) -> str:
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc)
+            return dt.isoformat()
+        if isinstance(value, str):
+            timestamp = value.strip()
+            if not timestamp:
+                return ""
+            if timestamp.endswith("Z"):
+                timestamp = f"{timestamp[:-1]}+00:00"
+            try:
+                dt = datetime.fromisoformat(timestamp)
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone(timezone.utc)
+                return dt.isoformat()
+            except ValueError:
+                return value.strip()
+        if value is None:
+            return ""
+        return str(value)
 
     async def _import_knowledge_bases(
         self,
