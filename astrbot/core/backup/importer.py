@@ -61,6 +61,7 @@ def _get_major_version(version_str: str) -> str:
 
 CMD_CONFIG_FILE_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
 KB_PATH = get_astrbot_knowledge_base_path()
+PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = 5
 
 
 @dataclass
@@ -526,8 +527,21 @@ class AstrBotImporter:
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
         timestamp_cache: dict[str, str] = {}
         invalid_count_warned = 0
-        invalid_count_warn_limit = 5
         duplicate_count = 0
+
+        def parse_count(raw_count: Any, key: tuple[str, str, str]) -> int:
+            nonlocal invalid_count_warned
+            try:
+                return int(raw_count)
+            except (TypeError, ValueError):
+                if invalid_count_warned < PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
+                    logger.warning(
+                        "platform_stats count 非法，已按 0 处理: "
+                        f"value={raw_count!r}, key={key}"
+                    )
+                    invalid_count_warned += 1
+                return 0
+
         for row in rows:
             raw_timestamp = row.get("timestamp")
             if isinstance(raw_timestamp, str):
@@ -548,32 +562,13 @@ class AstrBotImporter:
             )
             existing = merged.get(key)
             if existing is None:
-                merged[key] = dict(row)
+                normalized_row = dict(row)
+                normalized_row["timestamp"] = normalized_timestamp
+                merged[key] = normalized_row
                 continue
             duplicate_count += 1
-            existing_raw_count = existing.get("count", 0)
-            try:
-                existing_count = int(existing_raw_count)
-            except (TypeError, ValueError):
-                existing_count = 0
-                if invalid_count_warned < invalid_count_warn_limit:
-                    logger.warning(
-                        "platform_stats count 非法，已按 0 处理: "
-                        f"value={existing_raw_count!r}, key={key}"
-                    )
-                    invalid_count_warned += 1
-
-            incoming_raw_count = row.get("count", 0)
-            try:
-                incoming_count = int(incoming_raw_count)
-            except (TypeError, ValueError):
-                incoming_count = 0
-                if invalid_count_warned < invalid_count_warn_limit:
-                    logger.warning(
-                        "platform_stats count 非法，已按 0 处理: "
-                        f"value={incoming_raw_count!r}, key={key}"
-                    )
-                    invalid_count_warned += 1
+            existing_count = parse_count(existing.get("count", 0), key)
+            incoming_count = parse_count(row.get("count", 0), key)
             existing["count"] = existing_count + incoming_count
         return list(merged.values()), duplicate_count
 

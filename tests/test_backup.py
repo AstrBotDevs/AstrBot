@@ -17,6 +17,7 @@ from astrbot.core.backup import (
 )
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
+    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     AstrBotImporter,
     ImportResult,
     _get_major_version,
@@ -339,37 +340,91 @@ class TestAstrBotImporter:
 
         assert duplicate_count == 1
         assert len(merged_rows) == 2
-        first = merged_rows[0]
-        assert first["timestamp"] == "2025-12-13T20:00:00Z"
-        assert first["platform_id"] == "webchat"
-        assert first["platform_type"] == "unknown"
-        assert first["count"] == 17
+        webchat_row = next(
+            (
+                r
+                for r in merged_rows
+                if r.get("timestamp") == "2025-12-13T20:00:00+00:00"
+                and r.get("platform_id") == "webchat"
+                and r.get("platform_type") == "unknown"
+            ),
+            None,
+        )
+        assert webchat_row is not None
+        assert webchat_row["timestamp"] == "2025-12-13T20:00:00+00:00"
+        assert webchat_row["platform_id"] == "webchat"
+        assert webchat_row["platform_type"] == "unknown"
+        assert webchat_row["count"] == 17
 
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
-        """测试 platform_stats count 非法时会告警并按 0 处理"""
+        """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""
         importer = AstrBotImporter(main_db=MagicMock())
-        rows = [
-            {
-                "timestamp": "2025-12-13T20:00:00+00:00",
-                "platform_id": "webchat",
-                "platform_type": "unknown",
-                "count": 5,
-            },
-            {
-                "timestamp": "2025-12-13T20:00:00Z",
-                "platform_id": "webchat",
-                "platform_type": "unknown",
-                "count": "bad-count",
-            },
-        ]
-
         with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
+            rows = [
+                {
+                    "timestamp": "2025-12-13T20:00:00+00:00",
+                    "platform_id": "webchat",
+                    "platform_type": "unknown",
+                    "count": 5,
+                },
+                {
+                    "timestamp": "2025-12-13T20:00:00Z",
+                    "platform_id": "webchat",
+                    "platform_type": "unknown",
+                    "count": "bad-count",
+                },
+            ]
             merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
+            assert duplicate_count == 1
+            assert len(merged_rows) == 1
+            assert merged_rows[0]["count"] == 5
+            assert warning_mock.call_count == 1
 
-        assert duplicate_count == 1
-        assert len(merged_rows) == 1
-        assert merged_rows[0]["count"] == 5
-        assert warning_mock.called
+            warning_mock.reset_mock()
+
+            rows_existing_invalid = [
+                {
+                    "timestamp": "2025-12-13T21:00:00+00:00",
+                    "platform_id": "webchat",
+                    "platform_type": "unknown",
+                    "count": "bad-count",
+                },
+                {
+                    "timestamp": "2025-12-13T21:00:00Z",
+                    "platform_id": "webchat",
+                    "platform_type": "unknown",
+                    "count": 7,
+                },
+            ]
+            merged_rows, duplicate_count = importer._merge_platform_stats_rows(
+                rows_existing_invalid
+            )
+            assert duplicate_count == 1
+            assert len(merged_rows) == 1
+            assert merged_rows[0]["count"] == 7
+            assert warning_mock.call_count == 1
+
+            warning_mock.reset_mock()
+
+            many_invalid_rows = [
+                {
+                    "timestamp": "2025-12-13T22:00:00+00:00",
+                    "platform_id": "webchat",
+                    "platform_type": "unknown",
+                    "count": 1,
+                },
+                *[
+                    {
+                        "timestamp": "2025-12-13T22:00:00Z",
+                        "platform_id": "webchat",
+                        "platform_type": "unknown",
+                        "count": "bad-count",
+                    }
+                    for _ in range(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT + 5)
+                ],
+            ]
+            importer._merge_platform_stats_rows(many_invalid_rows)
+            assert warning_mock.call_count == PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
 
     @pytest.mark.asyncio
     async def test_import_file_not_exists(self, mock_main_db, tmp_path):
@@ -448,11 +503,13 @@ class TestAstrBotImporter:
         importer._clear_main_db = AsyncMock(
             side_effect=RuntimeError("清空表 platform_stats 失败: db locked")
         )
+        importer._import_main_database = AsyncMock(return_value={})
 
         result = await importer.import_all(str(zip_path), mode="replace")
 
         assert result.success is False
         assert any("清空表 platform_stats 失败" in err for err in result.errors)
+        importer._import_main_database.assert_not_awaited()
 
 
 class TestSecureFilename:
