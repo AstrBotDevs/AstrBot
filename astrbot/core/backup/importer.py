@@ -564,6 +564,9 @@ class AstrBotImporter:
             if existing is None:
                 normalized_row = dict(row)
                 normalized_row["timestamp"] = normalized_timestamp
+                normalized_row["count"] = parse_count(
+                    normalized_row.get("count", 0), key
+                )
                 merged[key] = normalized_row
                 continue
             duplicate_count += 1

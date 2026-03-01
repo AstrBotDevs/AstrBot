@@ -426,6 +426,24 @@ class TestAstrBotImporter:
             importer._merge_platform_stats_rows(many_invalid_rows)
             assert warning_mock.call_count == PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
 
+            warning_mock.reset_mock()
+
+            single_invalid_row = [
+                {
+                    "timestamp": "2025-12-13T23:00:00+00:00",
+                    "platform_id": "telegram",
+                    "platform_type": "unknown",
+                    "count": "still-bad",
+                },
+            ]
+            merged_rows, duplicate_count = importer._merge_platform_stats_rows(
+                single_invalid_row
+            )
+            assert duplicate_count == 0
+            assert len(merged_rows) == 1
+            assert merged_rows[0]["count"] == 0
+            assert warning_mock.call_count == 1
+
     @pytest.mark.asyncio
     async def test_import_file_not_exists(self, mock_main_db, tmp_path):
         """测试导入不存在的文件"""
