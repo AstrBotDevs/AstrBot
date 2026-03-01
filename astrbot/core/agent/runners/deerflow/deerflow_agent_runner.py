@@ -443,6 +443,48 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             },
         }
 
+    def _update_text_and_maybe_stream(
+        self,
+        *,
+        state: _StreamState,
+        new_full_text: str | None = None,
+        delta_text: str | None = None,
+    ) -> list[AgentResponse]:
+        if new_full_text:
+            state.latest_text = new_full_text
+            if not self.streaming:
+                return []
+
+            if new_full_text.startswith(state.prev_text_for_streaming):
+                delta = new_full_text[len(state.prev_text_for_streaming) :]
+            else:
+                delta = new_full_text
+
+            if not delta:
+                return []
+
+            state.prev_text_for_streaming = new_full_text
+            return [
+                AgentResponse(
+                    type="streaming_delta",
+                    data=AgentResponseData(chain=MessageChain().message(delta)),
+                )
+            ]
+
+        if delta_text:
+            state.latest_text += delta_text
+            if self.streaming:
+                return [
+                    AgentResponse(
+                        type="streaming_delta",
+                        data=AgentResponseData(
+                            chain=MessageChain().message(delta_text)
+                        ),
+                    )
+                ]
+
+        return []
+
     def _handle_values_event(
         self,
         data: T.Any,
@@ -487,22 +529,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             if latest_clarification:
                 state.clarification_text = latest_clarification
 
-        if self.streaming and latest_text:
-            if latest_text.startswith(state.prev_text_for_streaming):
-                delta = latest_text[len(state.prev_text_for_streaming) :]
-            else:
-                delta = latest_text
-
-            if delta:
-                state.prev_text_for_streaming = latest_text
-                responses.append(
-                    AgentResponse(
-                        type="streaming_delta",
-                        data=AgentResponseData(
-                            chain=MessageChain().message(delta),
-                        ),
-                    ),
-                )
+        responses.extend(
+            self._update_text_and_maybe_stream(
+                state=state,
+                new_full_text=latest_text or None,
+            )
+        )
         return responses
 
     def _handle_message_event(
@@ -512,19 +544,19 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     ) -> AgentResponse | None:
         delta = extract_ai_delta_from_event_data(data)
 
-        response: AgentResponse | None = None
+        responses: list[AgentResponse] = []
         if delta and not state.has_values_text:
-            state.latest_text += delta
-        if self.streaming and delta and not state.has_values_text:
-            response = AgentResponse(
-                type="streaming_delta",
-                data=AgentResponseData(chain=MessageChain().message(delta)),
+            responses.extend(
+                self._update_text_and_maybe_stream(
+                    state=state,
+                    delta_text=delta,
+                )
             )
 
         maybe_clarification = extract_clarification_from_event_data(data)
         if maybe_clarification:
             state.clarification_text = maybe_clarification
-        return response
+        return responses[0] if responses else None
 
     def _build_final_result(self, state: _StreamState) -> _FinalResult:
         failures_only = False
@@ -570,6 +602,24 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         role = "err" if (state.timed_out or failures_only) else "assistant"
         return self._FinalResult(chain=final_chain, role=role)
+
+    def _emit_non_plain_components_at_end(
+        self,
+        final_chain: MessageChain,
+    ) -> AgentResponse | None:
+        non_plain_components = [
+            component
+            for component in final_chain.chain
+            if not isinstance(component, Comp.Plain)
+        ]
+        if not non_plain_components:
+            return None
+        return AgentResponse(
+            type="streaming_delta",
+            data=AgentResponseData(
+                chain=MessageChain(chain=non_plain_components),
+            ),
+        )
 
     async def _execute_deerflow_request(self):
         prompt = self.req.prompt or ""
@@ -623,18 +673,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         final_result = self._build_final_result(state)
 
         if self.streaming:
-            non_plain_components = [
-                component
-                for component in final_result.chain.chain
-                if not isinstance(component, Comp.Plain)
-            ]
-            if non_plain_components:
-                yield AgentResponse(
-                    type="streaming_delta",
-                    data=AgentResponseData(
-                        chain=MessageChain(chain=non_plain_components),
-                    ),
-                )
+            extra_response = self._emit_non_plain_components_at_end(final_result.chain)
+            if extra_response:
+                yield extra_response
 
         yield await self._finish_with_result(final_result.chain, final_result.role)
 

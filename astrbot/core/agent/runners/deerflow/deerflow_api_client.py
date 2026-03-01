@@ -7,6 +7,8 @@ from aiohttp import ClientResponse, ClientSession, ClientTimeout
 
 from astrbot.core import logger
 
+SSE_MAX_BUFFER_CHARS = 1_048_576
+
 
 def _normalize_sse_newlines(text: str) -> str:
     """Normalize CRLF/CR to LF so SSE block splitting works reliably."""
@@ -67,6 +69,17 @@ async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], No
             parsed = _parse_sse_block(block)
             if parsed is not None:
                 yield parsed
+
+        if len(buffer) > SSE_MAX_BUFFER_CHARS:
+            logger.warning(
+                "DeerFlow SSE parser buffer exceeded %d chars without delimiter; "
+                "flushing oversized block to prevent unbounded memory growth.",
+                SSE_MAX_BUFFER_CHARS,
+            )
+            parsed = _parse_sse_block(buffer)
+            if parsed is not None:
+                yield parsed
+            buffer = ""
 
     # flush any remaining buffered text
     buffer += _normalize_sse_newlines(decoder.decode(b"", final=True))

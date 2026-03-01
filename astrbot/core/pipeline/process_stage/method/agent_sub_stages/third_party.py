@@ -113,36 +113,21 @@ class _RunnerResultAggregator:
     def finalize(
         self,
         final_resp: "LLMResponse | None",
-    ) -> tuple[list, bool, ResultContentType]:
+    ) -> tuple[list, bool]:
         if not final_resp or not final_resp.result_chain:
             if self.merged_chain:
                 logger.warning(RUNNER_NO_FINAL_RESPONSE_LOG)
-                is_runner_error = self.has_error
-                result_content_type = (
-                    ResultContentType.AGENT_RUNNER_ERROR
-                    if is_runner_error
-                    else ResultContentType.LLM_RESULT
-                )
-                return self.merged_chain, is_runner_error, result_content_type
+                return self.merged_chain, self.has_error
 
             logger.warning(RUNNER_NO_RESULT_LOG)
             fallback_error_chain = MessageChain().message(
                 RUNNER_NO_RESULT_FALLBACK_MESSAGE,
             )
-            return (
-                fallback_error_chain.chain or [],
-                True,
-                ResultContentType.AGENT_RUNNER_ERROR,
-            )
+            return fallback_error_chain.chain or [], True
 
         final_chain = final_resp.result_chain.chain or []
         is_runner_error = self.has_error or final_resp.role == "err"
-        result_content_type = (
-            ResultContentType.AGENT_RUNNER_ERROR
-            if is_runner_error
-            else ResultContentType.LLM_RESULT
-        )
-        return final_chain, is_runner_error, result_content_type
+        return final_chain, is_runner_error
 
 
 def _start_stream_watchdog(
@@ -178,6 +163,58 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
             await close_result
     except Exception as e:
         logger.warning(f"Failed to close third-party runner cleanly: {e}")
+
+
+class _RunnerLifecycle:
+    def __init__(
+        self,
+        *,
+        runner: "BaseAgentRunner",
+        streaming_used: bool,
+        timeout_sec: int,
+    ) -> None:
+        self._runner = runner
+        self._streaming_used = streaming_used
+        self._timeout_sec = timeout_sec
+        self._runner_closed = False
+        self._stream_consumed = False
+        self._watchdog_task: asyncio.Task[None] | None = None
+
+    async def __aenter__(
+        self,
+    ) -> tuple[Callable[[], Awaitable[None]], Callable[[], None]]:
+        return self.close_runner_once, self.mark_stream_consumed
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if (
+            self._watchdog_task
+            and not self._watchdog_task.done()
+            and (self._stream_consumed or self._runner_closed)
+        ):
+            self._watchdog_task.cancel()
+        if not self._streaming_used:
+            await self.close_runner_once()
+
+    async def start_watchdog_if_needed(self) -> None:
+        if self._watchdog_task is not None or not self._streaming_used:
+            return
+        self._watchdog_task = _start_stream_watchdog(
+            runner=self._runner,
+            timeout_sec=self._timeout_sec,
+            is_stream_consumed=lambda: self._stream_consumed,
+            close_runner_once=self.close_runner_once,
+        )
+
+    async def close_runner_once(self) -> None:
+        if self._runner_closed:
+            return
+        self._runner_closed = True
+        await _close_runner_if_supported(self._runner)
+
+    def mark_stream_consumed(self) -> None:
+        self._stream_consumed = True
+        if self._watchdog_task and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -257,7 +294,7 @@ class ThirdPartyAgentSubStage(Stage):
         yield
 
         if runner.done():
-            final_chain, is_runner_error, _ = aggregator.finalize(
+            final_chain, is_runner_error = aggregator.finalize(
                 runner.get_final_llm_resp()
             )
             event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
@@ -285,10 +322,13 @@ class ThirdPartyAgentSubStage(Stage):
             aggregator.add_chunk(chunk.chain, chunk.is_error)
             yield
 
-        final_chain, is_runner_error, result_content_type = aggregator.finalize(
-            runner.get_final_llm_resp()
-        )
+        final_chain, is_runner_error = aggregator.finalize(runner.get_final_llm_resp())
         event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
+        result_content_type = (
+            ResultContentType.AGENT_RUNNER_ERROR
+            if is_runner_error
+            else ResultContentType.LLM_RESULT
+        )
         event.set_result(
             MessageEventResult(
                 chain=final_chain,
@@ -368,24 +408,13 @@ class ThirdPartyAgentSubStage(Stage):
         )
         streaming_used = streaming_response and not stream_to_general
 
-        runner_closed = False
-        stream_consumed = False
-        stream_watchdog_task: asyncio.Task[None] | None = None
+        lifecycle = _RunnerLifecycle(
+            runner=runner,
+            streaming_used=streaming_used,
+            timeout_sec=self.stream_consumption_close_timeout_sec,
+        )
 
-        async def close_runner_once() -> None:
-            nonlocal runner_closed
-            if runner_closed:
-                return
-            runner_closed = True
-            await _close_runner_if_supported(runner)
-
-        def mark_stream_consumed() -> None:
-            nonlocal stream_consumed
-            stream_consumed = True
-            if stream_watchdog_task and not stream_watchdog_task.done():
-                stream_watchdog_task.cancel()
-
-        try:
+        async with lifecycle as (close_runner_once, mark_stream_consumed):
             await runner.reset(
                 request=req,
                 run_context=AgentContextWrapper(
@@ -398,12 +427,7 @@ class ThirdPartyAgentSubStage(Stage):
             )
 
             if streaming_used:
-                stream_watchdog_task = _start_stream_watchdog(
-                    runner=runner,
-                    timeout_sec=self.stream_consumption_close_timeout_sec,
-                    is_stream_consumed=lambda: stream_consumed,
-                    close_runner_once=close_runner_once,
-                )
+                await lifecycle.start_watchdog_if_needed()
                 async for _ in self._handle_streaming_response(
                     runner=runner,
                     event=event,
@@ -420,15 +444,6 @@ class ThirdPartyAgentSubStage(Stage):
                     custom_error_message=custom_error_message,
                 ):
                     yield
-        finally:
-            if (
-                stream_watchdog_task
-                and not stream_watchdog_task.done()
-                and (stream_consumed or runner_closed)
-            ):
-                stream_watchdog_task.cancel()
-            if not streaming_used:
-                await close_runner_once()
 
         asyncio.create_task(
             Metric.upload(
