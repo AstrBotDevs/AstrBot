@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 _MODEL_LIST_CACHE_TTL_CONFIG_KEY = "model_list_cache_ttl_seconds"
 _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY = "model_lookup_max_concurrency"
+_MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND = 16
 
 
 @dataclass
@@ -80,87 +81,6 @@ class _ModelListCache:
         return list(models)
 
 
-class _ProviderModelLookup:
-    def __init__(self, context: star.Context) -> None:
-        self._context = context
-
-    def _get_max_concurrency(self, umo: str | None, default: int) -> int:
-        concurrency = default
-        if not umo:
-            return max(concurrency, 1)
-        try:
-            cfg = self._context.get_config(umo).get("provider_settings", {})
-            configured_concurrency = cfg.get(_MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY)
-            if configured_concurrency is not None:
-                concurrency = int(configured_concurrency)
-        except Exception as e:
-            logger.debug(
-                "读取 %s 失败，回退默认值 %d: %s",
-                _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY,
-                default,
-                safe_error("", e),
-            )
-            concurrency = default
-        return max(concurrency, 1)
-
-    async def find_provider_for_model(
-        self,
-        model_name: str,
-        *,
-        exclude_provider_id: str | None,
-        umo: str | None,
-        default_max_concurrency: int,
-        get_models: Callable[..., Awaitable[list[str]]],
-        resolve_name: Callable[[str, Sequence[str]], str | None],
-    ) -> tuple[Provider | None, str | None]:
-        all_providers = [
-            p
-            for p in self._context.get_all_providers()
-            if not exclude_provider_id or p.meta().id != exclude_provider_id
-        ]
-        if not all_providers:
-            return None, None
-
-        failed_provider_errors: list[tuple[str, str]] = []
-        max_concurrency = self._get_max_concurrency(umo, default_max_concurrency)
-        for start in range(0, len(all_providers), max_concurrency):
-            batch_providers = all_providers[start : start + max_concurrency]
-            batch_results = await asyncio.gather(
-                *[get_models(provider, umo=umo) for provider in batch_providers],
-                return_exceptions=True,
-            )
-            for provider, result in zip(batch_providers, batch_results, strict=False):
-                provider_id = provider.meta().id
-                if isinstance(result, Exception):
-                    failed_provider_errors.append((provider_id, safe_error("", result)))
-                    continue
-                matched_model_name = resolve_name(model_name, result)
-                if matched_model_name is not None:
-                    return provider, matched_model_name
-
-        if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
-            failed_ids = ",".join(
-                provider_id for provider_id, _ in failed_provider_errors
-            )
-            logger.error(
-                "跨提供商查找模型 %s 时，所有 %d 个提供商的 get_models() 均失败: %s。请检查配置或网络",
-                model_name,
-                len(all_providers),
-                failed_ids,
-            )
-        elif failed_provider_errors:
-            logger.debug(
-                "跨提供商查找模型 %s 时有 %d 个提供商获取模型失败: %s",
-                model_name,
-                len(failed_provider_errors),
-                ",".join(
-                    f"{provider_id}({error})"
-                    for provider_id, error in failed_provider_errors
-                ),
-            )
-        return None, None
-
-
 class ProviderCommands:
     _MODEL_LIST_CACHE_TTL_SECONDS = 30.0
     _MODEL_LOOKUP_MAX_CONCURRENCY = 4
@@ -168,14 +88,10 @@ class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
         self._model_cache = _ModelListCache(context)
-        self._model_lookup = _ProviderModelLookup(context)
-
-    def _invalidate_provider_models_cache(self, provider_id: str | None = None) -> None:
-        self._model_cache.invalidate(provider_id)
 
     def invalidate_provider_models_cache(self, provider_id: str | None = None) -> None:
         """Public hook for cache invalidation on external provider config changes."""
-        self._invalidate_provider_models_cache(provider_id)
+        self._model_cache.invalidate(provider_id)
 
     @staticmethod
     def _normalize_model_name(model_name: str) -> str:
@@ -186,25 +102,56 @@ class ProviderCommands:
         model_name: str,
         models: Sequence[str],
     ) -> str | None:
-        normalized_model_name = self._normalize_model_name(model_name)
-        if not normalized_model_name:
+        norm_name = self._normalize_model_name(model_name)
+        if not norm_name:
             return None
 
+        def is_exact(candidate: str) -> bool:
+            return candidate == model_name
+
+        def is_case_insensitive(norm_candidate: str) -> bool:
+            return norm_candidate == norm_name
+
+        def is_suffix_match(norm_candidate: str) -> bool:
+            return norm_candidate.endswith(f"/{norm_name}") or norm_candidate.endswith(
+                f":{norm_name}"
+            )
+
+        def is_reverse_suffix_match(norm_candidate: str) -> bool:
+            return norm_name.endswith(f"/{norm_candidate}") or norm_name.endswith(
+                f":{norm_candidate}"
+            )
+
         for candidate in models:
-            normalized_candidate = self._normalize_model_name(candidate)
-            if candidate == model_name:
+            norm_candidate = self._normalize_model_name(candidate)
+            if is_exact(candidate):
                 return candidate
-            if normalized_candidate == normalized_model_name:
+            if is_case_insensitive(norm_candidate):
                 return candidate
-            if normalized_candidate.endswith(
-                f"/{normalized_model_name}"
-            ) or normalized_candidate.endswith(f":{normalized_model_name}"):
+            if is_suffix_match(norm_candidate):
                 return candidate
-            if normalized_model_name.endswith(
-                f"/{normalized_candidate}"
-            ) or normalized_model_name.endswith(f":{normalized_candidate}"):
+            if is_reverse_suffix_match(norm_candidate):
                 return candidate
         return None
+
+    def _get_lookup_max_concurrency(self, umo: str | None) -> int:
+        concurrency = self._MODEL_LOOKUP_MAX_CONCURRENCY
+        if not umo:
+            return min(max(concurrency, 1), _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
+        try:
+            cfg = self.context.get_config(umo).get("provider_settings", {})
+            configured_concurrency = cfg.get(_MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY)
+            if configured_concurrency is not None:
+                concurrency = int(configured_concurrency)
+        except Exception as e:
+            logger.debug(
+                "读取 %s 失败，回退默认值 %d: %s",
+                _MODEL_LOOKUP_MAX_CONCURRENCY_CONFIG_KEY,
+                self._MODEL_LOOKUP_MAX_CONCURRENCY,
+                safe_error("", e),
+            )
+            concurrency = self._MODEL_LOOKUP_MAX_CONCURRENCY
+        return min(max(concurrency, 1), _MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
 
     async def _get_provider_models(
         self,
@@ -259,14 +206,57 @@ class ProviderCommands:
         exclude_provider_id: str | None = None,
         umo: str | None = None,
     ) -> tuple[Provider | None, str | None]:
-        return await self._model_lookup.find_provider_for_model(
-            model_name,
-            exclude_provider_id=exclude_provider_id,
-            umo=umo,
-            default_max_concurrency=self._MODEL_LOOKUP_MAX_CONCURRENCY,
-            get_models=self._get_provider_models,
-            resolve_name=self._resolve_model_name,
-        )
+        all_providers = [
+            p
+            for p in self.context.get_all_providers()
+            if not exclude_provider_id or p.meta().id != exclude_provider_id
+        ]
+        if not all_providers:
+            return None, None
+
+        failed_provider_errors: list[tuple[str, str]] = []
+        max_concurrency = self._get_lookup_max_concurrency(umo)
+        for start in range(0, len(all_providers), max_concurrency):
+            batch_providers = all_providers[start : start + max_concurrency]
+            batch_results = await asyncio.gather(
+                *[
+                    self._get_provider_models(provider, umo=umo)
+                    for provider in batch_providers
+                ],
+                return_exceptions=True,
+            )
+            for provider, result in zip(batch_providers, batch_results, strict=False):
+                if isinstance(result, asyncio.CancelledError):
+                    raise result
+                provider_id = provider.meta().id
+                if isinstance(result, Exception):
+                    failed_provider_errors.append((provider_id, safe_error("", result)))
+                    continue
+                matched_model_name = self._resolve_model_name(model_name, result)
+                if matched_model_name is not None:
+                    return provider, matched_model_name
+
+        if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
+            failed_ids = ",".join(
+                provider_id for provider_id, _ in failed_provider_errors
+            )
+            logger.error(
+                "跨提供商查找模型 %s 时，所有 %d 个提供商的 get_models() 均失败: %s。请检查配置或网络",
+                model_name,
+                len(all_providers),
+                failed_ids,
+            )
+        elif failed_provider_errors:
+            logger.debug(
+                "跨提供商查找模型 %s 时有 %d 个提供商获取模型失败: %s",
+                model_name,
+                len(failed_provider_errors),
+                ",".join(
+                    f"{provider_id}({error})"
+                    for provider_id, error in failed_provider_errors
+                ),
+            )
+        return None, None
 
     async def provider(
         self,
@@ -478,7 +468,7 @@ class ProviderCommands:
         matched_model_name = self._resolve_model_name(model_name, models)
         if matched_model_name is not None:
             prov.set_model(matched_model_name)
-            self._invalidate_provider_models_cache(curr_provider_id)
+            self.invalidate_provider_models_cache(curr_provider_id)
             message.set_result(
                 MessageEventResult().message(
                     f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{matched_model_name}]",
@@ -506,7 +496,7 @@ class ProviderCommands:
                 umo=umo,
             )
             target_prov.set_model(matched_target_model_name)
-            self._invalidate_provider_models_cache(target_id)
+            self.invalidate_provider_models_cache(target_id)
             message.set_result(
                 MessageEventResult().message(
                     f"检测到模型 [{matched_target_model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
@@ -574,7 +564,7 @@ class ProviderCommands:
                 try:
                     new_model = models[idx_or_name - 1]
                     prov.set_model(new_model)
-                    self._invalidate_provider_models_cache(prov.meta().id)
+                    self.invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
@@ -619,7 +609,7 @@ class ProviderCommands:
                 try:
                     new_key = keys_data[index - 1]
                     prov.set_key(new_key)
-                    self._invalidate_provider_models_cache(prov.meta().id)
+                    self.invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(MessageEventResult().message("切换 Key 成功。"))
                 except Exception as e:
                     message.set_result(

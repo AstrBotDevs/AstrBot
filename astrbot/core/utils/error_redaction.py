@@ -2,6 +2,14 @@ import re
 
 _SECRET_PATTERNS = [
     re.compile(
+        r"(?i)\"(api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password)\"\s*:\s*\"[^\"]+\""
+    ),
+    re.compile(r"(?i)\"authorization\"\s*:\s*\"bearer\s+[^\"]+\""),
+    re.compile(
+        r"(?i)'(api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password)'\s*:\s*'[^']+'"
+    ),
+    re.compile(r"(?i)'authorization'\s*:\s*'bearer\s+[^']+'"),
+    re.compile(
         r"(?i)\b(api_?key|access_?token|auth_?token|refresh_?token|session_?id|secret|password)\s*=\s*[^&'\" ]+"
     ),
     re.compile(r"(?i)([?&](?:api_?key|key|access_?token|auth_?token))=[^&'\" ]+"),
