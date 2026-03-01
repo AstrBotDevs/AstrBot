@@ -328,6 +328,13 @@ class TestAstrBotImporter:
                 "count": 3,
             },
             {
+                "id": 81,
+                "timestamp": "2025-12-13T20:00:00",
+                "platform_id": "webchat",
+                "platform_type": "unknown",
+                "count": 2,
+            },
+            {
                 "id": 2,
                 "timestamp": "2025-12-13T21:00:00",
                 "platform_id": "aiocqhttp",
@@ -338,7 +345,7 @@ class TestAstrBotImporter:
 
         merged_rows, duplicate_count = importer._merge_platform_stats_rows(rows)
 
-        assert duplicate_count == 1
+        assert duplicate_count == 2
         assert len(merged_rows) == 2
         webchat_row = next(
             (
@@ -354,7 +361,35 @@ class TestAstrBotImporter:
         assert webchat_row["timestamp"] == "2025-12-13T20:00:00+00:00"
         assert webchat_row["platform_id"] == "webchat"
         assert webchat_row["platform_type"] == "unknown"
-        assert webchat_row["count"] == 17
+        assert webchat_row["count"] == 19
+
+        aiocq_row = next(
+            (
+                r
+                for r in merged_rows
+                if r.get("platform_id") == "aiocqhttp"
+                and r.get("platform_type") == "unknown"
+            ),
+            None,
+        )
+        assert aiocq_row is not None
+        assert aiocq_row["timestamp"] == "2025-12-13T21:00:00+00:00"
+
+    def test_normalize_platform_stats_timestamp_treats_naive_as_utc(self):
+        """测试 naive timestamp 会统一转为显式 UTC 偏移"""
+        importer = AstrBotImporter(main_db=MagicMock())
+
+        normalized, is_valid = importer._normalize_platform_stats_timestamp(
+            "2025-12-13T21:00:00"
+        )
+        assert is_valid is True
+        assert normalized == "2025-12-13T21:00:00+00:00"
+
+        normalized_dt, is_valid_dt = importer._normalize_platform_stats_timestamp(
+            datetime(2025, 12, 13, 21, 0, 0)
+        )
+        assert is_valid_dt is True
+        assert normalized_dt == "2025-12-13T21:00:00+00:00"
 
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
         """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""

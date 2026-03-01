@@ -536,37 +536,13 @@ class AstrBotImporter:
         invalid_count_warned = 0
         duplicate_count = 0
 
-        def parse_count(raw_count: Any, key: tuple[str, str, str]) -> int:
-            nonlocal invalid_count_warned
-            try:
-                return int(raw_count)
-            except (TypeError, ValueError):
-                if invalid_count_warned < PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
-                    logger.warning(
-                        "platform_stats count 非法，已按 0 处理: "
-                        f"value={raw_count!r}, key={key}"
-                    )
-                    invalid_count_warned += 1
-                return 0
-
         for row_index, row in enumerate(rows):
-            raw_timestamp = row.get("timestamp")
-            if isinstance(raw_timestamp, str):
-                timestamp_result = timestamp_cache.get(raw_timestamp)
-                if timestamp_result is None:
-                    timestamp_result = self._normalize_platform_stats_timestamp(
-                        raw_timestamp
-                    )
-                    timestamp_cache[raw_timestamp] = timestamp_result
-            else:
-                timestamp_result = self._normalize_platform_stats_timestamp(
-                    raw_timestamp
-                )
+            timestamp_result = self._normalize_platform_stats_timestamp_cached(
+                row.get("timestamp"), timestamp_cache
+            )
             normalized_timestamp, is_timestamp_valid = timestamp_result
-            timestamp_for_key = (
-                normalized_timestamp
-                if is_timestamp_valid
-                else f"__invalid_timestamp_row_{row_index}"
+            timestamp_for_key = self._platform_stats_key_timestamp(
+                normalized_timestamp, is_timestamp_valid, row_index
             )
             key = (
                 timestamp_for_key,
@@ -577,21 +553,73 @@ class AstrBotImporter:
             if existing is None:
                 normalized_row = dict(row)
                 normalized_row["timestamp"] = normalized_timestamp
-                normalized_row["count"] = parse_count(
-                    normalized_row.get("count", 0), key
+                normalized_row["count"], invalid_count_warned = (
+                    self._parse_platform_stats_count(
+                        normalized_row.get("count", 0), key, invalid_count_warned
+                    )
                 )
                 merged[key] = normalized_row
                 continue
             duplicate_count += 1
-            existing_count = parse_count(existing.get("count", 0), key)
-            incoming_count = parse_count(row.get("count", 0), key)
+            existing_count, invalid_count_warned = self._parse_platform_stats_count(
+                existing.get("count", 0), key, invalid_count_warned
+            )
+            incoming_count, invalid_count_warned = self._parse_platform_stats_count(
+                row.get("count", 0), key, invalid_count_warned
+            )
             existing["count"] = existing_count + incoming_count
         return list(merged.values()), duplicate_count
+
+    def _parse_platform_stats_count(
+        self,
+        raw_count: Any,
+        key: tuple[str, str, str],
+        warned_count: int,
+    ) -> tuple[int, int]:
+        """Parse count and rate-limit invalid-value warnings per merge invocation."""
+        try:
+            return int(raw_count), warned_count
+        except (TypeError, ValueError):
+            if warned_count < PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT:
+                logger.warning(
+                    "platform_stats count 非法，已按 0 处理: "
+                    f"value={raw_count!r}, key={key}"
+                )
+                warned_count += 1
+            return 0, warned_count
+
+    def _normalize_platform_stats_timestamp_cached(
+        self,
+        raw_timestamp: Any,
+        cache: dict[str, tuple[str, bool]],
+    ) -> tuple[str, bool]:
+        """Normalize timestamp with a cache for repeated string values."""
+        if isinstance(raw_timestamp, str):
+            cached = cache.get(raw_timestamp)
+            if cached is not None:
+                return cached
+            result = self._normalize_platform_stats_timestamp(raw_timestamp)
+            cache[raw_timestamp] = result
+            return result
+        return self._normalize_platform_stats_timestamp(raw_timestamp)
+
+    def _platform_stats_key_timestamp(
+        self,
+        normalized_timestamp: str,
+        is_valid: bool,
+        row_index: int,
+    ) -> str:
+        """Build key timestamp value; keep invalid timestamps distinct by row index."""
+        if is_valid:
+            return normalized_timestamp
+        return f"__invalid_timestamp_row_{row_index}"
 
     def _normalize_platform_stats_timestamp(self, value: Any) -> tuple[str, bool]:
         if isinstance(value, datetime):
             dt = value
-            if dt.tzinfo is not None:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
                 dt = dt.astimezone(timezone.utc)
             return dt.isoformat(), True
         if isinstance(value, str):
@@ -602,7 +630,9 @@ class AstrBotImporter:
                 timestamp = f"{timestamp[:-1]}+00:00"
             try:
                 dt = datetime.fromisoformat(timestamp)
-                if dt.tzinfo is not None:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
                     dt = dt.astimezone(timezone.utc)
                 return dt.isoformat(), True
             except ValueError:
