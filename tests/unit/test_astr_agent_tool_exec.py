@@ -82,7 +82,8 @@ async def test_do_handoff_background_reports_prepared_image_urls(
 ):
     captured: dict = {}
 
-    async def _fake_execute_handoff(cls, tool, run_context, **tool_args):
+    async def _fake_execute_handoff(cls, tool, run_context, tool_args):
+        tool_args["image_urls"] = ["https://example.com/raw.png"]
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
@@ -110,4 +111,25 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         image_urls="https://example.com/raw.png",
     )
 
-    assert captured["tool_args"]["image_urls"] == "https://example.com/raw.png"
+    assert captured["tool_args"]["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
+async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_file(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def _fake_convert_to_file_path(self):
+        return "/tmp/astrbot-handoff-image"
+
+    monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.os.path.exists", lambda _: True
+    )
+
+    run_context = _build_run_context([Image(file="file:///tmp/original.png")])
+    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+        run_context,
+        [],
+    )
+
+    assert image_urls == ["/tmp/astrbot-handoff-image"]
