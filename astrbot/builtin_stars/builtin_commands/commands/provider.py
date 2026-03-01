@@ -11,7 +11,11 @@ from astrbot.core.provider.entities import ProviderType
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
-_API_KEY_PATTERN = re.compile(r"key=[^&'\" ]+")
+_API_KEY_PATTERN = re.compile(r"(?i)(api_?key|key)=[^&'\" ]+")
+
+
+class _AllProvidersModelFetchFailedError(RuntimeError):
+    pass
 
 
 class ProviderCommands:
@@ -19,7 +23,7 @@ class ProviderCommands:
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self._provider_models_cache: dict[str, tuple[float, list[str]]] = {}
+        self._provider_models_cache: dict[str, tuple[float, tuple[str, ...]]] = {}
 
     def _invalidate_provider_models_cache(self, provider_id: str | None = None) -> None:
         if provider_id is None:
@@ -30,6 +34,9 @@ class ProviderCommands:
     @staticmethod
     def _mask_sensitive_text(value: str) -> str:
         return _API_KEY_PATTERN.sub("key=***", value)
+
+    def _safe_err(self, e: BaseException) -> str:
+        return self._mask_sensitive_text(str(e))
 
     async def _get_provider_models(
         self, provider: "Provider", *, use_cache: bool = True
@@ -42,8 +49,8 @@ class ProviderCommands:
                 return list(cached[1])
 
         models = list(await provider.get_models())
-        self._provider_models_cache[provider_id] = (now, models)
-        return list(models)
+        self._provider_models_cache[provider_id] = (now, tuple(models))
+        return models
 
     def _log_reachability_failure(
         self,
@@ -80,15 +87,15 @@ class ProviderCommands:
 
     async def _find_provider_for_model(
         self, model_name: str, exclude_provider_id: str | None = None
-    ) -> tuple["Provider" | None, str | None]:
-        """在所有 LLM 提供商中查找包含指定模型的提供商。返回 (provider, provider_id) 或 (None, None)。"""
+    ) -> "Provider | None":
+        """在所有 LLM 提供商中查找包含指定模型的提供商。"""
         all_providers = [
             p
             for p in self.context.get_all_providers()
             if not exclude_provider_id or p.meta().id != exclude_provider_id
         ]
         if not all_providers:
-            return None, None
+            return None
         results = await asyncio.gather(
             *[self._get_provider_models(p) for p in all_providers],
             return_exceptions=True,
@@ -96,12 +103,11 @@ class ProviderCommands:
         failed_provider_errors: list[tuple[str, str]] = []
         for provider, result in zip(all_providers, results):
             if isinstance(result, BaseException):
-                masked_error = self._mask_sensitive_text(str(result))
+                masked_error = self._safe_err(result)
                 failed_provider_errors.append((provider.meta().id, masked_error))
                 continue
-            provider_id = provider.meta().id
             if model_name in result:
-                return provider, provider_id
+                return provider
         if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
             failed_ids = ",".join(
                 provider_id for provider_id, _ in failed_provider_errors
@@ -111,6 +117,9 @@ class ProviderCommands:
                 model_name,
                 len(all_providers),
                 failed_ids,
+            )
+            raise _AllProvidersModelFetchFailedError(
+                f"all providers failed to fetch models: {failed_ids}"
             )
         elif failed_provider_errors:
             logger.debug(
@@ -122,7 +131,7 @@ class ProviderCommands:
                     for provider_id, error in failed_provider_errors
                 ),
             )
-        return None, None
+        return None
 
     async def provider(
         self,
@@ -304,6 +313,81 @@ class ProviderCommands:
         else:
             event.set_result(MessageEventResult().message("无效的参数。"))
 
+    async def _switch_model_by_name(
+        self, message: AstrMessageEvent, model_name: str, prov: "Provider"
+    ) -> None:
+        model_name = model_name.strip()
+        if not model_name:
+            message.set_result(MessageEventResult().message("模型名不能为空。"))
+            return
+
+        umo = message.unified_msg_origin
+        curr_provider_id = prov.meta().id
+
+        try:
+            models = await self._get_provider_models(prov)
+        except BaseException as e:
+            err_msg = self._safe_err(e)
+            logger.warning(
+                "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
+                curr_provider_id,
+                err_msg,
+            )
+            message.set_result(
+                MessageEventResult().message("获取当前提供商模型列表失败: " + err_msg),
+            )
+            return
+
+        if model_name in models:
+            prov.set_model(model_name)
+            self._invalidate_provider_models_cache(curr_provider_id)
+            message.set_result(
+                MessageEventResult().message(
+                    f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{model_name}]",
+                ),
+            )
+            return
+
+        try:
+            target_prov = await self._find_provider_for_model(
+                model_name, exclude_provider_id=curr_provider_id
+            )
+        except _AllProvidersModelFetchFailedError:
+            message.set_result(
+                MessageEventResult().message(
+                    "跨提供商查询模型失败：所有提供商的模型列表均获取失败，请检查提供商配置或网络后重试。",
+                ),
+            )
+            return
+
+        if not target_prov:
+            message.set_result(
+                MessageEventResult().message(
+                    f"模型 [{model_name}] 未在任何已配置的提供商中找到。请使用 /provider 切换到目标提供商，或确认模型名正确。",
+                ),
+            )
+            return
+
+        target_id = target_prov.meta().id
+        try:
+            await self.context.provider_manager.set_provider(
+                provider_id=target_id,
+                provider_type=ProviderType.CHAT_COMPLETION,
+                umo=umo,
+            )
+            target_prov.set_model(model_name)
+            self._invalidate_provider_models_cache(target_id)
+            message.set_result(
+                MessageEventResult().message(
+                    f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
+                ),
+            )
+        except BaseException as e:
+            err_msg = self._safe_err(e)
+            message.set_result(
+                MessageEventResult().message("跨提供商切换并设置模型失败: " + err_msg),
+            )
+
     async def model_ls(
         self,
         message: AstrMessageEvent,
@@ -322,7 +406,7 @@ class ProviderCommands:
             try:
                 models = await self._get_provider_models(prov)
             except BaseException as e:
-                err_msg = self._mask_sensitive_text(str(e))
+                err_msg = self._safe_err(e)
                 message.set_result(
                     MessageEventResult()
                     .message("获取模型列表失败: " + err_msg)
@@ -346,7 +430,7 @@ class ProviderCommands:
             try:
                 models = await self._get_provider_models(prov)
             except BaseException as e:
-                err_msg = self._mask_sensitive_text(str(e))
+                err_msg = self._safe_err(e)
                 message.set_result(
                     MessageEventResult().message("获取模型列表失败: " + err_msg),
                 )
@@ -364,78 +448,13 @@ class ProviderCommands:
                         ),
                     )
                 except BaseException as e:
-                    err_msg = self._mask_sensitive_text(str(e))
+                    err_msg = self._safe_err(e)
                     message.set_result(
                         MessageEventResult().message("切换模型未知错误: " + err_msg),
                     )
                     return
         else:
-            # 字符串：模型名，需智能解析是否跨提供商
-            model_name = idx_or_name.strip()
-            umo = message.unified_msg_origin
-            curr_provider_id = prov.meta().id
-            if not model_name:
-                message.set_result(MessageEventResult().message("模型名不能为空。"))
-                return
-
-            # 1. 检查当前提供商
-            models = []
-            try:
-                models = await self._get_provider_models(prov)
-            except BaseException as e:
-                err_msg = self._mask_sensitive_text(str(e))
-                logger.warning(
-                    "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
-                    curr_provider_id,
-                    err_msg,
-                )
-                message.set_result(
-                    MessageEventResult().message(
-                        "获取当前提供商模型列表失败: " + err_msg
-                    ),
-                )
-                return
-            if model_name in models:
-                prov.set_model(model_name)
-                self._invalidate_provider_models_cache(curr_provider_id)
-                message.set_result(
-                    MessageEventResult().message(
-                        f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{model_name}]",
-                    ),
-                )
-                return
-
-            # 2. 在其他提供商中查找
-            target_prov, target_id = await self._find_provider_for_model(
-                model_name, exclude_provider_id=curr_provider_id
-            )
-            if target_prov and target_id:
-                try:
-                    await self.context.provider_manager.set_provider(
-                        provider_id=target_id,
-                        provider_type=ProviderType.CHAT_COMPLETION,
-                        umo=umo,
-                    )
-                    target_prov.set_model(model_name)
-                    self._invalidate_provider_models_cache(target_id)
-                    message.set_result(
-                        MessageEventResult().message(
-                            f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
-                        ),
-                    )
-                except BaseException as e:
-                    err_msg = self._mask_sensitive_text(str(e))
-                    message.set_result(
-                        MessageEventResult().message(
-                            "跨提供商切换并设置模型失败: " + err_msg
-                        ),
-                    )
-            else:
-                message.set_result(
-                    MessageEventResult().message(
-                        f"模型 [{model_name}] 未在任何已配置的提供商中找到。请使用 /provider 切换到目标提供商，或确认模型名正确。",
-                    ),
-                )
+            await self._switch_model_by_name(message, idx_or_name, prov)
 
     async def key(self, message: AstrMessageEvent, index: int | None = None) -> None:
         prov = self.context.get_using_provider(message.unified_msg_origin)
