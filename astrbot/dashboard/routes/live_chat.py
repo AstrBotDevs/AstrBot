@@ -5,7 +5,6 @@ import re
 import time
 import uuid
 import wave
-from datetime import timezone
 from typing import Any
 
 import jwt
@@ -22,6 +21,7 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .route import Route, RouteContext
 
@@ -622,7 +622,9 @@ class LiveChatRoute(Route):
                                 "type": "message_saved",
                                 "data": {
                                     "id": saved_record.id,
-                                    "created_at": saved_record.created_at.replace(tzinfo=timezone.utc).isoformat(),
+                                    "created_at": to_utc_isoformat(
+                                        saved_record.created_at
+                                    ),
                                 },
                             },
                         )
