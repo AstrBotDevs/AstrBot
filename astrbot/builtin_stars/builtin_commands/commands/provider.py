@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from astrbot import logger
 from astrbot.api import star
@@ -21,8 +21,7 @@ MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT = 4
 MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND = 16
 MODEL_LIST_CACHE_TTL_KEY = "model_list_cache_ttl_seconds"
 MODEL_LOOKUP_MAX_CONCURRENCY_KEY = "model_lookup_max_concurrency"
-
-T = TypeVar("T")
+MODEL_CACHE_MAX_ENTRIES = 512
 
 
 @dataclass(frozen=True)
@@ -34,7 +33,7 @@ class _ModelLookupConfig:
 
 class _ModelCache:
     def __init__(self) -> None:
-        self._store: dict[tuple[str, str | None], tuple[float, tuple[str, ...]]] = {}
+        self._store: dict[tuple[str, str | None], tuple[float, list[str]]] = {}
 
     def get(self, provider_id: str, umo: str | None, ttl: float) -> list[str] | None:
         if ttl <= 0:
@@ -46,14 +45,26 @@ class _ModelCache:
         if time.monotonic() - timestamp > ttl:
             self._store.pop((provider_id, umo), None)
             return None
-        return list(models)
+        return models
 
     def set(
         self, provider_id: str, umo: str | None, models: list[str], ttl: float
     ) -> None:
         if ttl <= 0:
             return
-        self._store[(provider_id, umo)] = (time.monotonic(), tuple(models))
+        self._store[(provider_id, umo)] = (time.monotonic(), list(models))
+        self._evict_if_needed()
+
+    def _evict_if_needed(self) -> None:
+        if len(self._store) <= MODEL_CACHE_MAX_ENTRIES:
+            return
+        # Drop oldest entries first when cache grows too large.
+        overflow = len(self._store) - MODEL_CACHE_MAX_ENTRIES
+        for key, _ in sorted(
+            self._store.items(),
+            key=lambda item: item[1][0],
+        )[:overflow]:
+            self._store.pop(key, None)
 
     def invalidate(
         self, provider_id: str | None = None, *, umo: str | None = None
@@ -109,50 +120,58 @@ class ProviderCommands:
         if provider_type == ProviderType.CHAT_COMPLETION:
             self.invalidate_provider_models_cache(provider_id, umo=umo)
 
-    def _get_provider_setting(
-        self,
-        umo: str | None,
-        key: str,
-        default: T,
-        cast: Callable[[object], T],
-    ) -> T:
+    def _get_provider_settings(self, umo: str | None) -> dict:
         if not umo:
-            return default
+            return {}
         try:
-            cfg = self.context.get_config(umo).get("provider_settings", {})
-            raw = cfg.get(key)
-            if raw is None:
-                return default
-            return cast(raw)
+            return self.context.get_config(umo).get("provider_settings", {}) or {}
+        except Exception as e:
+            logger.debug(
+                "读取 provider_settings 失败，使用默认值: %s",
+                safe_error("", e),
+            )
+            return {}
+
+    def _get_model_cache_ttl(self, umo: str | None) -> float:
+        settings = self._get_provider_settings(umo)
+        raw = settings.get(
+            MODEL_LIST_CACHE_TTL_KEY,
+            MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
+        )
+        try:
+            return max(float(raw), 0.0)
         except Exception as e:
             logger.debug(
                 "读取 %s 失败，回退默认值 %r: %s",
-                key,
-                default,
+                MODEL_LIST_CACHE_TTL_KEY,
+                MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
                 safe_error("", e),
             )
-            return default
+            return MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT
+
+    def _get_model_lookup_concurrency(self, umo: str | None) -> int:
+        settings = self._get_provider_settings(umo)
+        raw = settings.get(
+            MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
+            MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
+        )
+        try:
+            value = int(raw)
+        except Exception as e:
+            logger.debug(
+                "读取 %s 失败，回退默认值 %r: %s",
+                MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
+                MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
+                safe_error("", e),
+            )
+            value = MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT
+        return min(max(value, 1), MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND)
 
     def _get_model_lookup_config(self, umo: str | None) -> _ModelLookupConfig:
-        ttl = self._get_provider_setting(
-            umo=umo,
-            key=MODEL_LIST_CACHE_TTL_KEY,
-            default=MODEL_LIST_CACHE_TTL_SECONDS_DEFAULT,
-            cast=float,
-        )
-        raw_concurrency = self._get_provider_setting(
-            umo=umo,
-            key=MODEL_LOOKUP_MAX_CONCURRENCY_KEY,
-            default=MODEL_LOOKUP_MAX_CONCURRENCY_DEFAULT,
-            cast=int,
-        )
         return _ModelLookupConfig(
             umo=umo,
-            cache_ttl_seconds=max(float(ttl), 0.0),
-            max_concurrency=min(
-                max(int(raw_concurrency), 1),
-                MODEL_LOOKUP_MAX_CONCURRENCY_UPPER_BOUND,
-            ),
+            cache_ttl_seconds=self._get_model_cache_ttl(umo),
+            max_concurrency=self._get_model_lookup_concurrency(umo),
         )
 
     def _resolve_model_name(
@@ -296,39 +315,41 @@ class ProviderCommands:
 
         semaphore = asyncio.Semaphore(config.max_concurrency)
 
-        async def fetch_models(provider: Provider) -> list[str] | Exception:
+        async def fetch_models(
+            provider: Provider,
+        ) -> tuple[Provider, list[str] | None, str | None]:
             async with semaphore:
                 try:
-                    return await self._get_provider_models(
+                    models = await self._get_provider_models(
                         provider,
                         config=config,
                         use_cache=use_cache,
                     )
+                    return provider, models, None
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    return e
+                    err = safe_error("", e)
+                    logger.debug(
+                        "跨提供商查找模型 %s 获取 %s 模型列表失败: %s",
+                        model_name,
+                        provider.meta().id,
+                        err,
+                    )
+                    return provider, None, err
 
         results = await asyncio.gather(
-            *(fetch_models(provider) for provider in all_providers),
-            return_exceptions=True,
+            *(fetch_models(provider) for provider in all_providers)
         )
         failed_provider_errors: list[tuple[str, str]] = []
-        for provider, result in zip(all_providers, results, strict=False):
-            if isinstance(result, asyncio.CancelledError):
-                raise result
-            if isinstance(result, Exception):
-                err = safe_error("", result)
+        for provider, models, err in results:
+            if err is not None:
                 failed_provider_errors.append((provider.meta().id, err))
-                logger.debug(
-                    "跨提供商查找模型 %s 获取 %s 模型列表失败: %s",
-                    model_name,
-                    provider.meta().id,
-                    err,
-                )
+                continue
+            if models is None:
                 continue
 
-            matched_model_name = self._resolve_model_name(model_name, result)
+            matched_model_name = self._resolve_model_name(model_name, models)
             if matched_model_name is not None:
                 return provider, matched_model_name
 
