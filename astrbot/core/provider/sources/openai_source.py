@@ -316,6 +316,7 @@ class ProviderOpenAIOfficial(Provider):
                     continue
                 for tool_call in choice.delta.tool_calls:
                     if hasattr(tool_call, "type") and tool_call.type in (None, ""):
+                        logger.warning(f"tool_call.type is empty, manually set to 'function'")
                         tool_call.type = "function"
 
             try:

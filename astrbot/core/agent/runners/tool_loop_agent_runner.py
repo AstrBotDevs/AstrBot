@@ -517,6 +517,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 logger.warning(
                     "LLM returned empty assistant message with no tool calls."
                 )
+                # 若所有fallback使用完毕后依然为空回复 则显示执行报错 避免静默
+                raise RuntimeError("LLM returned empty assistant message with no tool calls.")
+            
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
             # call the on_agent_done hook
