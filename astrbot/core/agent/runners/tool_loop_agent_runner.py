@@ -221,6 +221,42 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         else:
             yield await self.provider.text_chat(**payload)
 
+    def _is_empty_llm_response(self, resp: LLMResponse) -> bool:
+        """Check if an LLM response is effectively empty.
+
+        This heuristic checks:
+        - completion_text is empty or whitespace only
+        - reasoning_content is empty or whitespace only
+        - tools_call_args is empty (no tool calls)
+        - result_chain has no meaningful content (Plain components with non-empty text,
+          or any non-Plain components like images, voice, etc.)
+
+        Returns True if the response contains no meaningful content.
+        """
+        completion_text_stripped = (resp.completion_text or "").strip()
+        reasoning_content_stripped = (resp.reasoning_content or "").strip()
+
+        # Check result_chain for meaningful non-empty content (e.g., images, non-empty text)
+        has_result_chain_content = False
+        if resp.result_chain and resp.result_chain.chain:
+            for comp in resp.result_chain.chain:
+                # Skip empty Plain components
+                if isinstance(comp, Comp.Plain):
+                    if comp.text and comp.text.strip():
+                        has_result_chain_content = True
+                        break
+                else:
+                    # Non-Plain components (e.g., images, voice) are considered valid content
+                    has_result_chain_content = True
+                    break
+
+        return (
+            not completion_text_stripped
+            and not reasoning_content_stripped
+            and not resp.tools_call_args
+            and not has_result_chain_content
+        )
+
     async def _iter_llm_responses_with_fallback(
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
@@ -243,29 +279,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             has_stream_output = False
             try:
                 async for resp in self._iter_llm_responses(include_model=idx == 0):
+                    # 对于流式 chunk，不立即检查是否为空，因为单个 chunk 可能只是元数据/心跳
+                    # 流式响应的最终结果会在 resp.is_chunk=False 时返回
+                    if resp.is_chunk:
+                        has_stream_output = True
+                        yield resp
+                        continue
+
                     # 如果回复为空且无工具调用 且不是最后一个回退渠道 则引发fallback
                     # 此处不应判断整个消息链是否为空 因为消息链包含整个对话流 而空回复可能发生在任何阶段
-                    # 规范化检查：去除空白字符后判断是否为空，同时检查 result_chain 中是否有非文本内容
-                    completion_text_stripped = (resp.completion_text or "").strip()
-                    reasoning_content_stripped = (resp.reasoning_content or "").strip()
-                    # 检查 result_chain 是否包含有意义的非空内容（如图片、非空文本等）
-                    has_result_chain_content = False
-                    if resp.result_chain and resp.result_chain.chain:
-                        for comp in resp.result_chain.chain:
-                            # 跳过空的 Plain 组件
-                            if isinstance(comp, Comp.Plain):
-                                if comp.text and comp.text.strip():
-                                    has_result_chain_content = True
-                                    break
-                            else:
-                                # 非 Plain 组件（如图片、语音等）视为有效内容
-                                has_result_chain_content = True
-                                break
+                    # 使用辅助函数检查是否为空回复
                     if (
-                        not completion_text_stripped
-                        and not reasoning_content_stripped
-                        and not resp.tools_call_args
-                        and not has_result_chain_content
+                        self._is_empty_llm_response(resp)
                         and not is_last_candidate
                     ):
                         logger.warning(
@@ -273,11 +298,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             candidate_id,
                         )
                         break
-
-                    if resp.is_chunk:
-                        has_stream_output = True
-                        yield resp
-                        continue
 
                     if (
                         resp.role == "err"
@@ -538,7 +558,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "LLM returned empty assistant message with no tool calls."
                 )
                 # 若所有fallback使用完毕后依然为空回复 则显示执行报错 避免静默
-                raise LLMEmptyResponseError("LLM returned empty assistant message with no tool calls.")
+                base_msg = "LLM returned empty assistant message with no tool calls."
+                model_id = getattr(self.run_context, "model_id", None)
+                provider_id = getattr(self.run_context, "provider_id", None)
+                run_id = getattr(self.run_context, "run_id", None)
+
+                ctx_parts = []
+                if model_id is not None:
+                    ctx_parts.append(f"model_id={model_id}")
+                if provider_id is not None:
+                    ctx_parts.append(f"provider_id={provider_id}")
+                if run_id is not None:
+                    ctx_parts.append(f"run_id={run_id}")
+
+                if ctx_parts:
+                    base_msg = f"{base_msg} Context: " + ", ".join(ctx_parts) + "."
+
+                raise LLMEmptyResponseError(base_msg)
             
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
