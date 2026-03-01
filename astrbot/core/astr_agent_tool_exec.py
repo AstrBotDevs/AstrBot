@@ -5,6 +5,8 @@ import json
 import traceback
 import typing as T
 import uuid
+from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 
 import mcp
 
@@ -27,6 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
@@ -35,10 +38,86 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
+from astrbot.core.utils.image_ref_utils import is_supported_image_ref
+from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    @classmethod
+    def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
+        if image_urls_raw is None:
+            return []
+
+        if isinstance(image_urls_raw, str):
+            return [image_urls_raw]
+
+        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
+            image_urls_raw, (str, bytes, bytearray)
+        ):
+            return [item for item in image_urls_raw if isinstance(item, str)]
+
+        logger.debug(
+            "Unsupported image_urls type in handoff tool args: %s",
+            type(image_urls_raw).__name__,
+        )
+        return []
+
+    @classmethod
+    async def _collect_image_urls_from_message(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> list[str]:
+        urls: list[str] = []
+        event = getattr(run_context.context, "event", None)
+        message_obj = getattr(event, "message_obj", None)
+        message = getattr(message_obj, "message", None)
+        if message:
+            for idx, component in enumerate(message):
+                if not isinstance(component, Image):
+                    continue
+                try:
+                    path = await component.convert_to_file_path()
+                    if path:
+                        urls.append(path)
+                except Exception as e:
+                    logger.error(
+                        "Failed to convert handoff image component at index %d: %s",
+                        idx,
+                        e,
+                        exc_info=True,
+                    )
+        return urls
+
+    @classmethod
+    async def _collect_handoff_image_urls(
+        cls,
+        run_context: ContextWrapper[AstrAgentContext],
+        image_urls_raw: T.Any,
+    ) -> list[str]:
+        candidates: list[str] = []
+        candidates.extend(cls._collect_image_urls_from_args(image_urls_raw))
+        candidates.extend(await cls._collect_image_urls_from_message(run_context))
+
+        normalized = normalize_and_dedupe_strings(candidates)
+        extensionless_local_roots = (get_astrbot_temp_path(),)
+        sanitized = [
+            item
+            for item in normalized
+            if is_supported_image_ref(
+                item,
+                allow_extensionless_existing_local_file=True,
+                extensionless_local_roots=extensionless_local_roots,
+            )
+        ]
+        dropped_count = len(normalized) - len(sanitized)
+        if dropped_count > 0:
+            logger.debug(
+                "Dropped %d invalid image_urls entries in handoff image inputs.",
+                dropped_count,
+            )
+        return sanitized
+
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
         """执行函数调用。
@@ -162,10 +241,28 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
-        **tool_args,
+        *,
+        image_urls_prepared: bool = False,
+        **tool_args: T.Any,
     ):
+        tool_args = dict(tool_args)
         input_ = tool_args.get("input")
-        image_urls = tool_args.get("image_urls")
+        if image_urls_prepared:
+            prepared_image_urls = tool_args.get("image_urls")
+            if isinstance(prepared_image_urls, list):
+                image_urls = prepared_image_urls
+            else:
+                logger.debug(
+                    "Expected prepared handoff image_urls as list[str], got %s.",
+                    type(prepared_image_urls).__name__,
+                )
+                image_urls = []
+        else:
+            image_urls = await cls._collect_handoff_image_urls(
+                run_context,
+                tool_args.get("image_urls"),
+            )
+        tool_args["image_urls"] = image_urls
 
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
@@ -264,8 +361,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ) -> None:
         """Run the subagent handoff and, on completion, wake the main agent."""
         result_text = ""
+        tool_args = dict(tool_args)
+        tool_args["image_urls"] = await cls._collect_handoff_image_urls(
+            run_context,
+            tool_args.get("image_urls"),
+        )
         try:
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
+            async for r in cls._execute_handoff(
+                tool,
+                run_context,
+                image_urls_prepared=True,
+                **tool_args,
+            ):
                 if isinstance(r, mcp.types.CallToolResult):
                     for content in r.content:
                         if isinstance(content, mcp.types.TextContent):

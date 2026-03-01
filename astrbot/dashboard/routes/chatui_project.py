@@ -2,6 +2,7 @@ from astrbot.core.lang import t
 from quart import g, request
 
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
 
 from .route import Response, Route, RouteContext
 
@@ -52,8 +53,8 @@ class ChatUIProjectRoute(Route):
                     "title": project.title,
                     "emoji": project.emoji,
                     "description": project.description,
-                    "created_at": project.created_at.astimezone().isoformat(),
-                    "updated_at": project.updated_at.astimezone().isoformat(),
+                    "created_at": to_utc_isoformat(project.created_at),
+                    "updated_at": to_utc_isoformat(project.updated_at),
                 }
             )
             .__dict__
@@ -71,8 +72,8 @@ class ChatUIProjectRoute(Route):
                 "title": project.title,
                 "emoji": project.emoji,
                 "description": project.description,
-                "created_at": project.created_at.astimezone().isoformat(),
-                "updated_at": project.updated_at.astimezone().isoformat(),
+                "created_at": to_utc_isoformat(project.created_at),
+                "updated_at": to_utc_isoformat(project.updated_at),
             }
             for project in projects
         ]
@@ -103,8 +104,8 @@ class ChatUIProjectRoute(Route):
                     "title": project.title,
                     "emoji": project.emoji,
                     "description": project.description,
-                    "created_at": project.created_at.astimezone().isoformat(),
-                    "updated_at": project.updated_at.astimezone().isoformat(),
+                    "created_at": to_utc_isoformat(project.created_at),
+                    "updated_at": to_utc_isoformat(project.updated_at),
                 }
             )
             .__dict__
@@ -237,8 +238,8 @@ class ChatUIProjectRoute(Route):
                 "creator": session.creator,
                 "display_name": session.display_name,
                 "is_group": session.is_group,
-                "created_at": session.created_at.astimezone().isoformat(),
-                "updated_at": session.updated_at.astimezone().isoformat(),
+                "created_at": to_utc_isoformat(session.created_at),
+                "updated_at": to_utc_isoformat(session.updated_at),
             }
             for session in sessions
         ]

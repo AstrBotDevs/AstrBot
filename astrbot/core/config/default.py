@@ -129,7 +129,7 @@ DEFAULT_CONFIG = {
         "proactive_capability": {
             "add_cron_tools": True,
         },
-        "computer_use_runtime": "local",
+        "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
             "booter": "shipyard",

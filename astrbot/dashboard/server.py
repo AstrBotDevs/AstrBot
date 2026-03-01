@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import socket
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -20,6 +21,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.lang import t
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
@@ -44,6 +46,13 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+class AstrBotJSONProvider(DefaultJSONProvider):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return to_utc_isoformat(obj)
+        return super().default(obj)
 
 
 class AstrBotDashboard:
@@ -71,7 +80,8 @@ class AstrBotDashboard:
         self.app.config["MAX_CONTENT_LENGTH"] = (
             128 * 1024 * 1024
         )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-        cast(DefaultJSONProvider, self.app.json).sort_keys = False
+        self.app.json = AstrBotJSONProvider(self.app)
+        self.app.json.sort_keys = False
         self.app.before_request(self.auth_middleware)
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
