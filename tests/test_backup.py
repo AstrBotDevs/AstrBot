@@ -17,13 +17,10 @@ from astrbot.core.backup import (
 )
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.backup.importer import (
-    DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     DatabaseClearError,
-    PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV,
     PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT,
     AstrBotImporter,
     ImportResult,
-    _load_platform_stats_invalid_count_warn_limit,
     _get_major_version,
 )
 from astrbot.core.config.default import VERSION
@@ -384,44 +381,13 @@ class TestAstrBotImporter:
         """测试 naive timestamp 会统一转为显式 UTC 偏移"""
         importer = AstrBotImporter(main_db=MagicMock())
 
-        normalized, is_valid = importer._normalize_platform_stats_timestamp(
-            "2025-12-13T21:00:00"
-        )
-        assert is_valid is True
+        normalized = importer._normalize_platform_stats_timestamp("2025-12-13T21:00:00")
         assert normalized == "2025-12-13T21:00:00+00:00"
 
-        normalized_dt, is_valid_dt = importer._normalize_platform_stats_timestamp(
+        normalized_dt = importer._normalize_platform_stats_timestamp(
             datetime(2025, 12, 13, 21, 0, 0)
         )
-        assert is_valid_dt is True
         assert normalized_dt == "2025-12-13T21:00:00+00:00"
-
-    def test_load_platform_stats_invalid_count_warn_limit(self, monkeypatch):
-        """测试告警阈值环境变量解析"""
-        monkeypatch.delenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, raising=False)
-        assert (
-            _load_platform_stats_invalid_count_warn_limit()
-            == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-        )
-
-        monkeypatch.setenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, "10")
-        assert _load_platform_stats_invalid_count_warn_limit() == 10
-
-        with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
-            monkeypatch.setenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, "-1")
-            assert (
-                _load_platform_stats_invalid_count_warn_limit()
-                == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-            )
-            assert warning_mock.call_count == 1
-
-        with patch("astrbot.core.backup.importer.logger.warning") as warning_mock:
-            monkeypatch.setenv(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT_ENV, "bad")
-            assert (
-                _load_platform_stats_invalid_count_warn_limit()
-                == DEFAULT_PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
-            )
-            assert warning_mock.call_count == 1
 
     def test_merge_platform_stats_rows_warns_on_invalid_count(self):
         """测试 platform_stats count 非法时会告警并按 0 处理（含上限）"""
