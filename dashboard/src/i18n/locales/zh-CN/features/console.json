@@ -14,5 +14,8 @@
   },
   "debugHint": {
     "text": "Debug 日志需要在「配置文件 → 系统 → 控制台日志级别」中开启"
+  },
+  "loggingLocalization": {
+    "button": "日志语言"
   }
 }
