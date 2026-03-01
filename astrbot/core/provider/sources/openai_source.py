@@ -321,6 +321,10 @@ class ProviderOpenAIOfficial(Provider):
             try:
                 state.handle_chunk(chunk)
             except Exception as e:
+                logger.debug(
+                    f"Saving chunk state error: {type(e).__name__}: {e}.",
+                    exc_info=True,
+                )
                 logger.warning(f"Saving chunk state error: {e}")
             if len(chunk.choices) == 0:
                 continue
