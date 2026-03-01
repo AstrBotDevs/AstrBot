@@ -289,10 +289,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # 如果回复为空且无工具调用 且不是最后一个回退渠道 则引发fallback
                     # 此处不应判断整个消息链是否为空 因为消息链包含整个对话流 而空回复可能发生在任何阶段
                     # 使用辅助函数检查是否为空回复
-                    if (
-                        self._is_empty_llm_response(resp)
-                        and not is_last_candidate
-                    ):
+                    if self._is_empty_llm_response(resp) and not is_last_candidate:
                         logger.warning(
                             "Chat Model %s returns empty response, trying fallback to next provider.",
                             candidate_id,
@@ -575,7 +572,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     base_msg = f"{base_msg} Context: " + ", ".join(ctx_parts) + "."
 
                 raise LLMEmptyResponseError(base_msg)
-            
+
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
             # call the on_agent_done hook
