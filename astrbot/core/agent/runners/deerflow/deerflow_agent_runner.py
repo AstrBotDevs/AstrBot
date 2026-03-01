@@ -21,6 +21,7 @@ from ...hooks import BaseAgentRunHooks
 from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
+from .constants import DEERFLOW_SESSION_PREFIX, DEERFLOW_THREAD_ID_KEY
 from .deerflow_api_client import DeerFlowAPIClient
 from .deerflow_content_mapper import (
     build_chain_from_ai_content,
@@ -79,6 +80,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         has_values_text: bool = False
         run_values_messages: list[dict[str, T.Any]] = field(default_factory=list)
         timed_out: bool = False
+
+    @dataclass(frozen=True)
+    class _FinalResult:
+        chain: MessageChain
+        role: str
 
     def _format_exception(self, err: Exception) -> str:
         err_type = type(err).__name__
@@ -172,7 +178,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             ),
         )
 
-    def _apply_runner_config(self, config: _RunnerConfig) -> None:
+    async def _load_config_and_client(self, provider_config: dict) -> None:
+        config = self._parse_runner_config(provider_config)
+
         self.api_base = config.api_base
         self.api_key = config.api_key
         self.auth_header = config.auth_header
@@ -186,17 +194,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         self.timeout = config.timeout
         self.recursion_limit = config.recursion_limit
 
-    @staticmethod
-    def _build_client_signature(config: _RunnerConfig) -> tuple[str, str, str, str]:
-        return (
+        new_client_signature = (
             config.api_base,
             config.api_key,
             config.auth_header,
             config.proxy,
         )
-
-    async def _refresh_api_client(self, config: _RunnerConfig) -> None:
-        new_client_signature = self._build_client_signature(config)
         old_client = getattr(self, "api_client", None)
         old_signature = getattr(self, "_api_client_signature", None)
 
@@ -240,9 +243,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         self.agent_hooks = agent_hooks
         self.run_context = run_context
 
-        config = self._parse_runner_config(provider_config)
-        self._apply_runner_config(config)
-        await self._refresh_api_client(config)
+        await self._load_config_and_client(provider_config)
 
     @override
     async def step(self):
@@ -349,14 +350,11 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             dropped = state.seen_message_order.popleft()
             state.seen_message_ids.discard(dropped)
 
-    def _build_user_content(self, prompt: str, image_urls: list[str]) -> T.Any:
-        return build_user_content(prompt, image_urls)
-
     async def _ensure_thread_id(self, session_id: str) -> str:
         thread_id = await sp.get_async(
             scope="umo",
             scope_id=session_id,
-            key="deerflow_thread_id",
+            key=DEERFLOW_THREAD_ID_KEY,
             default="",
         )
         if thread_id:
@@ -372,7 +370,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         await sp.put_async(
             scope="umo",
             scope_id=session_id,
-            key="deerflow_thread_id",
+            key=DEERFLOW_THREAD_ID_KEY,
             value=thread_id,
         )
         return thread_id
@@ -389,16 +387,10 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         messages.append(
             {
                 "role": "user",
-                "content": self._build_user_content(prompt, image_urls),
+                "content": build_user_content(prompt, image_urls),
             },
         )
         return messages
-
-    def _image_component_from_url(self, url: T.Any) -> Comp.Image | None:
-        return image_component_from_url(url)
-
-    def _build_chain_from_ai_content(self, content: T.Any) -> MessageChain:
-        return build_chain_from_ai_content(content, self._image_component_from_url)
 
     def _build_runtime_context(self, thread_id: str) -> dict[str, T.Any]:
         runtime_context: dict[str, T.Any] = {
@@ -516,41 +508,54 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             state.clarification_text = maybe_clarification
         return response
 
-    def _select_final_chain(self, state: _StreamState) -> tuple[MessageChain, bool]:
+    def _build_final_result(self, state: _StreamState) -> _FinalResult:
+        failures_only = False
+
         if state.clarification_text:
-            return MessageChain(chain=[Comp.Plain(state.clarification_text)]), False
+            final_chain = MessageChain(chain=[Comp.Plain(state.clarification_text)])
+        else:
+            final_chain = MessageChain()
+            latest_ai_message = extract_latest_ai_message(state.run_values_messages)
+            if latest_ai_message:
+                final_chain = build_chain_from_ai_content(
+                    latest_ai_message.get("content"),
+                    image_component_from_url,
+                )
 
-        latest_ai_message = extract_latest_ai_message(state.run_values_messages)
-        if latest_ai_message:
-            chain_from_values = self._build_chain_from_ai_content(
-                latest_ai_message.get("content"),
-            )
-            if chain_from_values.chain:
-                return chain_from_values, False
+            if not final_chain.chain and state.latest_text:
+                final_chain = MessageChain(chain=[Comp.Plain(state.latest_text)])
 
-        if state.latest_text:
-            return MessageChain(chain=[Comp.Plain(state.latest_text)]), False
-
-        failure_text = build_task_failure_summary(state.task_failures)
-        if failure_text:
-            return MessageChain(chain=[Comp.Plain(failure_text)]), True
-
-        return MessageChain(), False
-
-    def _resolve_final_output(self, state: _StreamState) -> tuple[MessageChain, bool]:
-        # Clarification and values/message-derived output share a single selection path.
-        final_chain, failures_only = self._select_final_chain(state)
+            if not final_chain.chain:
+                failure_text = build_task_failure_summary(state.task_failures)
+                if failure_text:
+                    final_chain = MessageChain(chain=[Comp.Plain(failure_text)])
+                    failures_only = True
 
         if not final_chain.chain:
             logger.warning("DeerFlow returned no text content in stream events.")
             final_chain = MessageChain(
                 chain=[Comp.Plain("DeerFlow returned an empty response.")],
             )
-        return final_chain, failures_only
+
+        if state.timed_out:
+            timeout_note = (
+                f"DeerFlow stream timed out after {self.timeout}s. "
+                "Returning partial result."
+            )
+            if final_chain.chain and isinstance(final_chain.chain[-1], Comp.Plain):
+                last_text = final_chain.chain[-1].text
+                final_chain.chain[-1].text = (
+                    f"{last_text}\n\n{timeout_note}" if last_text else timeout_note
+                )
+            else:
+                final_chain.chain.append(Comp.Plain(timeout_note))
+
+        role = "err" if (state.timed_out or failures_only) else "assistant"
+        return self._FinalResult(chain=final_chain, role=role)
 
     async def _execute_deerflow_request(self):
         prompt = self.req.prompt or ""
-        session_id = self.req.session_id or f"deerflow-ephemeral-{uuid4()}"
+        session_id = self.req.session_id or f"{DEERFLOW_SESSION_PREFIX}-{uuid4()}"
         image_urls = self.req.image_urls or []
         system_prompt = self.req.system_prompt
 
@@ -597,24 +602,12 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         except (asyncio.TimeoutError, TimeoutError):
             state.timed_out = True
 
-        final_chain, failures_only = self._resolve_final_output(state)
-        if state.timed_out:
-            timeout_note = (
-                f"DeerFlow stream timed out after {self.timeout}s. "
-                "Returning partial result."
-            )
-            if final_chain.chain and isinstance(final_chain.chain[-1], Comp.Plain):
-                last_text = final_chain.chain[-1].text
-                final_chain.chain[-1].text = (
-                    f"{last_text}\n\n{timeout_note}" if last_text else timeout_note
-                )
-            else:
-                final_chain.chain.append(Comp.Plain(timeout_note))
+        final_result = self._build_final_result(state)
 
         if self.streaming:
             non_plain_components = [
                 component
-                for component in final_chain.chain
+                for component in final_result.chain.chain
                 if not isinstance(component, Comp.Plain)
             ]
             if non_plain_components:
@@ -625,16 +618,16 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     ),
                 )
 
-        is_error = state.timed_out or failures_only
-        role = "err" if is_error else "assistant"
-
-        self.final_llm_resp = LLMResponse(role=role, result_chain=final_chain)
+        self.final_llm_resp = LLMResponse(
+            role=final_result.role,
+            result_chain=final_result.chain,
+        )
         self._transition_state(AgentState.DONE)
         await self._notify_agent_done_hook()
 
         yield AgentResponse(
             type="llm_result",
-            data=AgentResponseData(chain=final_chain),
+            data=AgentResponseData(chain=final_result.chain),
         )
 
     @override

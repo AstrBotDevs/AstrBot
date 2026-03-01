@@ -8,6 +8,10 @@ from astrbot.core.agent.runners.coze.coze_agent_runner import CozeAgentRunner
 from astrbot.core.agent.runners.dashscope.dashscope_agent_runner import (
     DashscopeAgentRunner,
 )
+from astrbot.core.agent.runners.deerflow.constants import (
+    DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
+    DEERFLOW_PROVIDER_TYPE,
+)
 from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
     DeerFlowAgentRunner,
 )
@@ -44,7 +48,7 @@ AGENT_RUNNER_TYPE_KEY = {
     "dify": "dify_agent_runner_provider_id",
     "coze": "coze_agent_runner_provider_id",
     "dashscope": "dashscope_agent_runner_provider_id",
-    "deerflow": "deerflow_agent_runner_provider_id",
+    DEERFLOW_PROVIDER_TYPE: DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
 }
 THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY = "_third_party_runner_error"
 STREAM_CONSUMPTION_CLOSE_TIMEOUT_SEC = 30
@@ -123,58 +127,49 @@ async def run_third_party_agent(
         yield MessageChain().message(err_msg), True
 
 
-def _mark_runner_error(event: "AstrMessageEvent") -> None:
-    event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
+class _RunnerResultAggregator:
+    def __init__(self, event: "AstrMessageEvent") -> None:
+        self._event = event
+        self.merged_chain: list = []
+        self.has_error = False
 
+    def add_chunk(self, chain: MessageChain, is_error: bool) -> None:
+        self.merged_chain.extend(chain.chain or [])
+        if is_error:
+            self.has_error = True
+            self._event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
 
-def _set_runner_error_flag(event: "AstrMessageEvent", is_error: bool) -> None:
-    event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_error)
-
-
-class _RunnerLifecycleGuard:
-    def __init__(
+    def finalize(
         self,
-        runner: "BaseAgentRunner",
-        stream_consumption_close_timeout_sec: int,
-    ) -> None:
-        self._runner = runner
-        self._timeout = stream_consumption_close_timeout_sec
-        self._closed = False
-        self._watchdog_task: asyncio.Task[None] | None = None
-
-    async def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        await _close_runner_if_supported(self._runner)
-        if self._watchdog_task and not self._watchdog_task.done():
-            self._watchdog_task.cancel()
-
-    async def start_streaming_watchdog(self) -> None:
-        self._watchdog_task = asyncio.create_task(
-            self._close_if_stream_never_consumed()
+        final_resp: "LLMResponse | None",
+    ) -> tuple[list, bool, ResultContentType]:
+        return _resolve_runner_final_result(
+            merged_chain=self.merged_chain,
+            has_intermediate_error=self.has_error,
+            final_resp=final_resp,
         )
 
-    def mark_stream_consumed(self) -> None:
-        if self._watchdog_task and not self._watchdog_task.done():
-            self._watchdog_task.cancel()
 
-    async def finalize(self, streaming_used: bool) -> None:
-        if not streaming_used:
-            await self.close()
-
-    async def _close_if_stream_never_consumed(self) -> None:
+def _start_stream_watchdog(
+    *,
+    runner: "BaseAgentRunner",
+    timeout_sec: int,
+    is_stream_consumed: Callable[[], bool],
+    close_runner_once: Callable[[], Awaitable[None]],
+) -> asyncio.Task[None]:
+    async def _watchdog() -> None:
         try:
-            await asyncio.sleep(self._timeout)
+            await asyncio.sleep(timeout_sec)
         except asyncio.CancelledError:
             return
-
-        if not self._closed:
+        if not is_stream_consumed():
             logger.warning(
                 "Third-party runner stream was never consumed in %ss; closing runner to avoid resource leak.",
-                self._timeout,
+                timeout_sec,
             )
-            await self.close()
+            await close_runner_once()
+
+    return asyncio.create_task(_watchdog())
 
 
 async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
@@ -242,11 +237,9 @@ class ThirdPartyAgentSubStage(Stage):
         close_runner_once: Callable[[], Awaitable[None]],
         mark_stream_consumed: Callable[[], None],
     ) -> AsyncGenerator[None, None]:
-        merged_chain: list = []
-        has_error = False
+        aggregator = _RunnerResultAggregator(event)
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
-            nonlocal has_error
             mark_stream_consumed()
             try:
                 async for chain, is_err in run_third_party_agent(
@@ -254,10 +247,7 @@ class ThirdPartyAgentSubStage(Stage):
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
                 ):
-                    merged_chain.extend(chain.chain or [])
-                    if is_err:
-                        has_error = True
-                        _mark_runner_error(event)
+                    aggregator.add_chunk(chain, is_err)
                     yield chain
             finally:
                 # Streaming runner cleanup must happen after consumer
@@ -272,14 +262,10 @@ class ThirdPartyAgentSubStage(Stage):
         yield
 
         if runner.done():
-            final_resp = runner.get_final_llm_resp()
-            final_chain, is_runner_error, _ = _resolve_runner_final_result(
-                merged_chain=merged_chain,
-                has_intermediate_error=has_error,
-                final_resp=final_resp,
+            final_chain, is_runner_error, _ = aggregator.finalize(
+                runner.get_final_llm_resp()
             )
-
-            _set_runner_error_flag(event, is_runner_error)
+            event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
             event.set_result(
                 MessageEventResult(
                     chain=final_chain,
@@ -295,29 +281,19 @@ class ThirdPartyAgentSubStage(Stage):
         stream_to_general: bool,
         custom_error_message: str | None,
     ) -> AsyncGenerator[None, None]:
-        merged_chain: list = []
-        has_error = False
+        aggregator = _RunnerResultAggregator(event)
         async for chain, is_err in run_third_party_agent(
             runner,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
         ):
-            merged_chain.extend(chain.chain or [])
-            if is_err:
-                has_error = True
-                _mark_runner_error(event)
+            aggregator.add_chunk(chain, is_err)
             yield
 
-        final_resp = runner.get_final_llm_resp()
-        final_chain, is_runner_error, result_content_type = (
-            _resolve_runner_final_result(
-                merged_chain=merged_chain,
-                has_intermediate_error=has_error,
-                final_resp=final_resp,
-            )
+        final_chain, is_runner_error, result_content_type = aggregator.finalize(
+            runner.get_final_llm_resp()
         )
-
-        _set_runner_error_flag(event, is_runner_error)
+        event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
         event.set_result(
             MessageEventResult(
                 chain=final_chain,
@@ -374,7 +350,7 @@ class ThirdPartyAgentSubStage(Stage):
             runner = CozeAgentRunner[AstrAgentContext]()
         elif self.runner_type == "dashscope":
             runner = DashscopeAgentRunner[AstrAgentContext]()
-        elif self.runner_type == "deerflow":
+        elif self.runner_type == DEERFLOW_PROVIDER_TYPE:
             runner = DeerFlowAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
@@ -396,10 +372,22 @@ class ThirdPartyAgentSubStage(Stage):
         )
         streaming_used = streaming_response and not stream_to_general
 
-        lifecycle_guard = _RunnerLifecycleGuard(
-            runner=runner,
-            stream_consumption_close_timeout_sec=self.stream_consumption_close_timeout_sec,
-        )
+        runner_closed = False
+        stream_consumed = False
+        stream_watchdog_task: asyncio.Task[None] | None = None
+
+        async def close_runner_once() -> None:
+            nonlocal runner_closed
+            if runner_closed:
+                return
+            runner_closed = True
+            await _close_runner_if_supported(runner)
+
+        def mark_stream_consumed() -> None:
+            nonlocal stream_consumed
+            stream_consumed = True
+            if stream_watchdog_task and not stream_watchdog_task.done():
+                stream_watchdog_task.cancel()
 
         try:
             await runner.reset(
@@ -414,13 +402,18 @@ class ThirdPartyAgentSubStage(Stage):
             )
 
             if streaming_used:
-                await lifecycle_guard.start_streaming_watchdog()
+                stream_watchdog_task = _start_stream_watchdog(
+                    runner=runner,
+                    timeout_sec=self.stream_consumption_close_timeout_sec,
+                    is_stream_consumed=lambda: stream_consumed,
+                    close_runner_once=close_runner_once,
+                )
                 async for _ in self._handle_streaming_response(
                     runner=runner,
                     event=event,
                     custom_error_message=custom_error_message,
-                    close_runner_once=lifecycle_guard.close,
-                    mark_stream_consumed=lifecycle_guard.mark_stream_consumed,
+                    close_runner_once=close_runner_once,
+                    mark_stream_consumed=mark_stream_consumed,
                 ):
                     yield
             else:
@@ -432,7 +425,14 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield
         finally:
-            await lifecycle_guard.finalize(streaming_used=streaming_used)
+            if (
+                stream_watchdog_task
+                and not stream_watchdog_task.done()
+                and (stream_consumed or runner_closed)
+            ):
+                stream_watchdog_task.cancel()
+            if not streaming_used:
+                await close_runner_once()
 
         asyncio.create_task(
             Metric.upload(

@@ -2,6 +2,10 @@ import datetime
 
 from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.agent.runners.deerflow.constants import (
+    DEERFLOW_PROVIDER_TYPE,
+    DEERFLOW_THREAD_ID_KEY,
+)
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.active_event_registry import active_event_registry
@@ -12,7 +16,7 @@ THIRD_PARTY_AGENT_RUNNER_KEY = {
     "dify": "dify_conversation_id",
     "coze": "coze_conversation_id",
     "dashscope": "dashscope_conversation_id",
-    "deerflow": "deerflow_thread_id",
+    DEERFLOW_PROVIDER_TYPE: DEERFLOW_THREAD_ID_KEY,
 }
 THIRD_PARTY_AGENT_RUNNER_STR = ", ".join(THIRD_PARTY_AGENT_RUNNER_KEY.keys())
 
