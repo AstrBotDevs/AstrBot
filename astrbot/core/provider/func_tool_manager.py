@@ -258,7 +258,10 @@ class FunctionToolManager:
                     timeout=MCP_INIT_TIMEOUT,
                 )
             except asyncio.TimeoutError:
-                pass
+                # 取消尚未完成的 wait_tasks，避免悬挂
+                for t in wait_tasks:
+                    t.cancel()
+                await asyncio.gather(*wait_tasks, return_exceptions=True)
 
             success_count = 0
             failed_services: list[str] = []
@@ -326,8 +329,11 @@ class FunctionToolManager:
             ready_event.set()
             await shutdown_event.wait()
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
+        except asyncio.CancelledError:
+            ready_event.set()  # 确保取消时也能解除等待
+            raise
         except Exception:
-            ready_event.set()  # 确保即使失败也能解除等待
+            ready_event.set()  # 确保初始化失败时也能解除等待
             logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
             raise
         finally:
