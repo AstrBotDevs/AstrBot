@@ -306,6 +306,7 @@ class ProviderOpenAIOfficial(Provider):
 
         state = ChatCompletionStreamState()
 
+        chunk_index = 0
         async for chunk in stream:
             # 兼容处理：部分非标准聚合平台（如通过newapi适配层转接的 Gemini）在流式返回 tool_calls 时，
             # 可能会缺失 type 字段。由于 openai SDK 的 ChatCompletionStreamState.handle_chunk
@@ -316,8 +317,13 @@ class ProviderOpenAIOfficial(Provider):
                     continue
                 for tool_call in choice.delta.tool_calls:
                     if hasattr(tool_call, "type") and tool_call.type in (None, ""):
-                        logger.warning(f"tool_call.type is empty, manually set to 'function'")
+                        logger.debug(
+                            f"[{self.get_model()}] tool_call.type is empty in chunk {chunk_index} "
+                            f"(provider: {self.provider_config.get('id', 'unknown')}), "
+                            f"manually set to 'function'"
+                        )
                         tool_call.type = "function"
+            chunk_index += 1
 
             try:
                 state.handle_chunk(chunk)

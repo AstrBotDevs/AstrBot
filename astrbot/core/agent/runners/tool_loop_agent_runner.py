@@ -20,9 +20,11 @@ from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
 from astrbot.core.message.components import Json
+import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import (
     MessageChain,
 )
+from astrbot.core.exceptions import LLMEmptyResponseError
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_event,
 )
@@ -243,10 +245,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 async for resp in self._iter_llm_responses(include_model=idx == 0):
                     # 如果回复为空且无工具调用 且不是最后一个回退渠道 则引发fallback
                     # 此处不应判断整个消息链是否为空 因为消息链包含整个对话流 而空回复可能发生在任何阶段
+                    # 规范化检查：去除空白字符后判断是否为空，同时检查 result_chain 中是否有非文本内容
+                    completion_text_stripped = (resp.completion_text or "").strip()
+                    reasoning_content_stripped = (resp.reasoning_content or "").strip()
+                    # 检查 result_chain 是否包含有意义的非空内容（如图片、非空文本等）
+                    has_result_chain_content = False
+                    if resp.result_chain and resp.result_chain.chain:
+                        for comp in resp.result_chain.chain:
+                            # 跳过空的 Plain 组件
+                            if isinstance(comp, Comp.Plain):
+                                if comp.text and comp.text.strip():
+                                    has_result_chain_content = True
+                                    break
+                            else:
+                                # 非 Plain 组件（如图片、语音等）视为有效内容
+                                has_result_chain_content = True
+                                break
                     if (
-                        not resp.completion_text
-                        and not resp.reasoning_content
+                        not completion_text_stripped
+                        and not reasoning_content_stripped
                         and not resp.tools_call_args
+                        and not has_result_chain_content
                         and not is_last_candidate
                     ):
                         logger.warning(
@@ -519,7 +538,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     "LLM returned empty assistant message with no tool calls."
                 )
                 # 若所有fallback使用完毕后依然为空回复 则显示执行报错 避免静默
-                raise RuntimeError("LLM returned empty assistant message with no tool calls.")
+                raise LLMEmptyResponseError("LLM returned empty assistant message with no tool calls.")
             
             self.run_context.messages.append(Message(role="assistant", content=parts))
 
