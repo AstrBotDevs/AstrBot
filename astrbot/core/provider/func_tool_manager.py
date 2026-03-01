@@ -266,9 +266,19 @@ class FunctionToolManager:
                     logger.error(f"MCP 服务 {name} 初始化失败: {exc}")
                     cfg = mcp_server_json_obj.get(name, {})
                     if "command" in cfg:
-                        logger.debug(f"  命令: {cfg['command']}")
-                        if "args" in cfg:
-                            logger.debug(f"  参数: {cfg['args']}")
+                        cmd = cfg["command"]
+                        executable = str(
+                            cmd[0] if isinstance(cmd, (list, tuple)) and cmd else cmd
+                        )
+                        args_val = cfg.get("args", [])
+                        args_count = (
+                            len(args_val)
+                            if isinstance(args_val, (list, tuple))
+                            else (0 if args_val is None else 1)
+                        )
+                        logger.debug(
+                            f"  命令可执行文件: {executable}, 参数数量: {args_count}"
+                        )
                     elif "url" in cfg:
                         parsed = urllib.parse.urlparse(cfg["url"])
                         logger.debug(f"  主机: {parsed.scheme}://{parsed.netloc}")
