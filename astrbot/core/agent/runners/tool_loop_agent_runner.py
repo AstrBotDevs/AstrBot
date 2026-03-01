@@ -242,13 +242,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             try:
                 async for resp in self._iter_llm_responses(include_model=idx == 0):
                     if resp.is_chunk:
-                        if (
-                            resp.completion_text
-                            or resp.reasoning_content
-                            or resp.tools_call_ids
-                            or (resp.result_chain and resp.result_chain.chain)
-                        ):
-                            has_stream_output = True
+                        has_stream_output = True
                         yield resp
                         continue
 
@@ -263,7 +257,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             candidate_id,
                         )
                         break
-
+                    
                     yield resp
                     return
 
