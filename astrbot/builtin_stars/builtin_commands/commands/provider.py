@@ -48,24 +48,48 @@ class ProviderCommands:
     def _mask_sensitive_text(value: str) -> str:
         return _API_KEY_PATTERN.sub("key=***", value)
 
-    def _safe_err(self, e: BaseException) -> str:
+    def _safe_err(self, e: Exception) -> str:
         return self._mask_sensitive_text(str(e))
 
-    def _format_err(self, prefix: str, e: BaseException) -> str:
+    def _format_err(self, prefix: str, e: Exception) -> str:
         return f"{prefix}{self._safe_err(e)}"
 
+    def _get_model_cache_ttl_seconds(self, umo: str | None = None) -> float:
+        ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
+        if not umo:
+            return ttl
+        try:
+            cfg = self.context.get_config(umo).get("provider_settings", {})
+            configured_ttl = cfg.get("model_list_cache_ttl_seconds")
+            if configured_ttl is not None:
+                ttl = float(configured_ttl)
+        except Exception as e:
+            logger.debug(
+                "读取 model_list_cache_ttl_seconds 失败，回退默认值 %.1f: %s",
+                self._MODEL_LIST_CACHE_TTL_SECONDS,
+                e,
+            )
+            ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
+        return max(ttl, 0.0)
+
     async def _get_provider_models(
-        self, provider: Provider, *, use_cache: bool = True
+        self,
+        provider: Provider,
+        *,
+        use_cache: bool = True,
+        umo: str | None = None,
     ) -> list[str]:
         provider_id = provider.meta().id
         now = time.monotonic()
-        if use_cache:
+        ttl_seconds = self._get_model_cache_ttl_seconds(umo)
+        if use_cache and ttl_seconds > 0:
             cached = self._provider_models_cache.get(provider_id)
-            if cached and now - cached[0] <= self._MODEL_LIST_CACHE_TTL_SECONDS:
+            if cached and now - cached[0] <= ttl_seconds:
                 return list(cached[1])
 
         models = list(await provider.get_models())
-        self._provider_models_cache[provider_id] = (now, tuple(models))
+        if use_cache and ttl_seconds > 0:
+            self._provider_models_cache[provider_id] = (now, tuple(models))
         return models
 
     def _log_reachability_failure(
@@ -102,7 +126,10 @@ class ProviderCommands:
             return False, err_code, err_reason
 
     async def _find_provider_for_model(
-        self, model_name: str, exclude_provider_id: str | None = None
+        self,
+        model_name: str,
+        exclude_provider_id: str | None = None,
+        umo: str | None = None,
     ) -> Provider | None:
         """在所有 LLM 提供商中查找包含指定模型的提供商。"""
         all_providers = [
@@ -115,10 +142,14 @@ class ProviderCommands:
 
         async def _fetch_models(
             provider: Provider,
-        ) -> tuple[Provider, list[str] | None, BaseException | None]:
+        ) -> tuple[Provider, list[str] | None, Exception | None]:
             try:
-                return provider, await self._get_provider_models(provider), None
-            except BaseException as e:
+                return (
+                    provider,
+                    await self._get_provider_models(provider, umo=umo),
+                    None,
+                )
+            except Exception as e:
                 return provider, None, e
 
         tasks = [
@@ -361,8 +392,8 @@ class ProviderCommands:
         curr_provider_id = prov.meta().id
 
         try:
-            models = await self._get_provider_models(prov)
-        except BaseException as e:
+            models = await self._get_provider_models(prov, umo=umo)
+        except Exception as e:
             err_msg = self._safe_err(e)
             logger.warning(
                 "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
@@ -387,7 +418,7 @@ class ProviderCommands:
 
         try:
             target_prov = await self._find_provider_for_model(
-                model_name, exclude_provider_id=curr_provider_id
+                model_name, exclude_provider_id=curr_provider_id, umo=umo
             )
         except _AllProvidersModelFetchFailedError:
             message.set_result(
@@ -418,7 +449,7 @@ class ProviderCommands:
                     f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
                 ),
             )
-        except BaseException as e:
+        except Exception as e:
             message.set_result(
                 MessageEventResult().message(
                     self._format_err("跨提供商切换并设置模型失败: ", e)
@@ -441,8 +472,10 @@ class ProviderCommands:
         if idx_or_name is None:
             models = []
             try:
-                models = await self._get_provider_models(prov)
-            except BaseException as e:
+                models = await self._get_provider_models(
+                    prov, umo=message.unified_msg_origin
+                )
+            except Exception as e:
                 message.set_result(
                     MessageEventResult()
                     .message(self._format_err("获取模型列表失败: ", e))
@@ -464,8 +497,10 @@ class ProviderCommands:
         elif isinstance(idx_or_name, int):
             models = []
             try:
-                models = await self._get_provider_models(prov)
-            except BaseException as e:
+                models = await self._get_provider_models(
+                    prov, umo=message.unified_msg_origin
+                )
+            except Exception as e:
                 message.set_result(
                     MessageEventResult().message(
                         self._format_err("获取模型列表失败: ", e)
@@ -483,7 +518,7 @@ class ProviderCommands:
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
                         ),
                     )
-                except BaseException as e:
+                except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
                             self._format_err("切换模型未知错误: ", e)
@@ -523,7 +558,7 @@ class ProviderCommands:
                     new_key = keys_data[index - 1]
                     self._set_key_and_invalidate(prov, new_key)
                     message.set_result(MessageEventResult().message("切换 Key 成功。"))
-                except BaseException as e:
+                except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
                             self._format_err("切换 Key 未知错误: ", e)
