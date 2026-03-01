@@ -1,6 +1,7 @@
 import asyncio
 import inspect
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot.core import astrbot_config, logger
@@ -123,6 +124,75 @@ async def run_third_party_agent(
         yield MessageChain().message(err_msg), True
 
 
+def _mark_runner_error(event: "AstrMessageEvent") -> None:
+    event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
+
+
+def _set_runner_error_flag(event: "AstrMessageEvent", is_error: bool) -> None:
+    event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_error)
+
+
+@dataclass
+class _RunnerAccumulation:
+    merged_chain: list
+    has_error: bool = False
+
+
+class _RunnerLifecycleGuard:
+    def __init__(
+        self,
+        runner: "BaseAgentRunner",
+        stream_consumption_close_timeout_sec: int,
+    ) -> None:
+        self._runner = runner
+        self._stream_consumption_close_timeout_sec = (
+            stream_consumption_close_timeout_sec
+        )
+        self._closed = False
+        self._streaming_started = False
+        self._stream_consumed = False
+        self._idle_task: asyncio.Task[None] | None = None
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        await _close_runner_if_supported(self._runner)
+
+    async def start_streaming_watchdog(self) -> None:
+        self._streaming_started = True
+        self._idle_task = asyncio.create_task(self._close_if_stream_never_consumed())
+
+    def mark_stream_consumed(self) -> None:
+        self._stream_consumed = True
+        if self._idle_task and not self._idle_task.done():
+            self._idle_task.cancel()
+
+    async def finalize(self) -> None:
+        if (
+            self._idle_task
+            and not self._idle_task.done()
+            and (self._stream_consumed or self._closed)
+        ):
+            self._idle_task.cancel()
+
+        if not self._streaming_started:
+            await self.close()
+
+    async def _close_if_stream_never_consumed(self) -> None:
+        try:
+            await asyncio.sleep(self._stream_consumption_close_timeout_sec)
+        except asyncio.CancelledError:
+            return
+
+        if not self._stream_consumed:
+            logger.warning(
+                "Third-party runner stream was never consumed in %ss; closing runner to avoid resource leak.",
+                self._stream_consumption_close_timeout_sec,
+            )
+            await self.close()
+
+
 async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
     close_callable = getattr(runner, "close", None)
     if not callable(close_callable):
@@ -179,31 +249,47 @@ class ThirdPartyAgentSubStage(Stage):
             logger.debug("Failed to resolve persona custom error message: %s", e)
             return None
 
+    async def _accumulate_runner_output(
+        self,
+        *,
+        runner: "BaseAgentRunner",
+        event: AstrMessageEvent,
+        stream_to_general: bool,
+        custom_error_message: str | None,
+        accumulation: _RunnerAccumulation,
+    ) -> AsyncGenerator[MessageChain, None]:
+        async for chain, is_error in run_third_party_agent(
+            runner,
+            stream_to_general=stream_to_general,
+            custom_error_message=custom_error_message,
+        ):
+            accumulation.merged_chain.extend(chain.chain or [])
+            if is_error:
+                accumulation.has_error = True
+                _mark_runner_error(event)
+            yield chain
+
     async def _handle_streaming_response(
         self,
         *,
         runner: "BaseAgentRunner",
         event: AstrMessageEvent,
         custom_error_message: str | None,
-        close_runner_once,
-        mark_stream_consumed,
+        close_runner_once: Callable[[], Awaitable[None]],
+        mark_stream_consumed: Callable[[], None],
     ) -> AsyncGenerator[None, None]:
-        stream_has_runner_error = False
-        merged_chain: list = []
+        accumulation = _RunnerAccumulation(merged_chain=[])
 
         async def _stream_runner_chain() -> AsyncGenerator[MessageChain, None]:
-            nonlocal merged_chain, stream_has_runner_error
             mark_stream_consumed()
             try:
-                async for chain, is_error in run_third_party_agent(
-                    runner,
+                async for chain in self._accumulate_runner_output(
+                    runner=runner,
+                    event=event,
                     stream_to_general=False,
                     custom_error_message=custom_error_message,
+                    accumulation=accumulation,
                 ):
-                    merged_chain.extend(chain.chain or [])
-                    if is_error:
-                        stream_has_runner_error = True
-                        event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
                     yield chain
             finally:
                 # Streaming runner cleanup must happen after consumer
@@ -220,12 +306,12 @@ class ThirdPartyAgentSubStage(Stage):
         if runner.done():
             final_resp = runner.get_final_llm_resp()
             final_chain, is_runner_error, _ = _resolve_runner_final_result(
-                merged_chain=merged_chain,
-                has_intermediate_error=stream_has_runner_error,
+                merged_chain=accumulation.merged_chain,
+                has_intermediate_error=accumulation.has_error,
                 final_resp=final_resp,
             )
 
-            event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
+            _set_runner_error_flag(event, is_runner_error)
             event.set_result(
                 MessageEventResult(
                     chain=final_chain,
@@ -241,29 +327,26 @@ class ThirdPartyAgentSubStage(Stage):
         stream_to_general: bool,
         custom_error_message: str | None,
     ) -> AsyncGenerator[None, None]:
-        merged_chain: list = []
-        has_intermediate_error = False
-        async for chain, is_error in run_third_party_agent(
-            runner,
+        accumulation = _RunnerAccumulation(merged_chain=[])
+        async for _ in self._accumulate_runner_output(
+            runner=runner,
+            event=event,
             stream_to_general=stream_to_general,
             custom_error_message=custom_error_message,
+            accumulation=accumulation,
         ):
-            merged_chain.extend(chain.chain or [])
-            if is_error:
-                has_intermediate_error = True
-                event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, True)
             yield
 
         final_resp = runner.get_final_llm_resp()
         final_chain, is_runner_error, result_content_type = (
             _resolve_runner_final_result(
-                merged_chain=merged_chain,
-                has_intermediate_error=has_intermediate_error,
+                merged_chain=accumulation.merged_chain,
+                has_intermediate_error=accumulation.has_error,
                 final_resp=final_resp,
             )
         )
 
-        event.set_extra(THIRD_PARTY_RUNNER_ERROR_EXTRA_KEY, is_runner_error)
+        _set_runner_error_flag(event, is_runner_error)
         event.set_result(
             MessageEventResult(
                 chain=final_chain,
@@ -341,35 +424,10 @@ class ThirdPartyAgentSubStage(Stage):
             and not event.platform_meta.support_streaming_message
         )
 
-        runner_closed = False
-        streaming_started = False
-        stream_consumption_started = False
-        stream_idle_close_task: asyncio.Task[None] | None = None
-
-        async def close_runner_once() -> None:
-            nonlocal runner_closed
-            if runner_closed:
-                return
-            runner_closed = True
-            await _close_runner_if_supported(runner)
-
-        def mark_stream_consumed() -> None:
-            nonlocal stream_consumption_started
-            stream_consumption_started = True
-            if stream_idle_close_task and not stream_idle_close_task.done():
-                stream_idle_close_task.cancel()
-
-        async def close_if_stream_never_consumed() -> None:
-            try:
-                await asyncio.sleep(self.stream_consumption_close_timeout_sec)
-            except asyncio.CancelledError:
-                return
-            if not stream_consumption_started:
-                logger.warning(
-                    "Third-party runner stream was never consumed in %ss; closing runner to avoid resource leak.",
-                    self.stream_consumption_close_timeout_sec,
-                )
-                await close_runner_once()
+        lifecycle_guard = _RunnerLifecycleGuard(
+            runner=runner,
+            stream_consumption_close_timeout_sec=self.stream_consumption_close_timeout_sec,
+        )
 
         try:
             await runner.reset(
@@ -384,16 +442,13 @@ class ThirdPartyAgentSubStage(Stage):
             )
 
             if streaming_response and not stream_to_general:
-                streaming_started = True
-                stream_idle_close_task = asyncio.create_task(
-                    close_if_stream_never_consumed(),
-                )
+                await lifecycle_guard.start_streaming_watchdog()
                 async for _ in self._handle_streaming_response(
                     runner=runner,
                     event=event,
                     custom_error_message=custom_error_message,
-                    close_runner_once=close_runner_once,
-                    mark_stream_consumed=mark_stream_consumed,
+                    close_runner_once=lifecycle_guard.close,
+                    mark_stream_consumed=lifecycle_guard.mark_stream_consumed,
                 ):
                     yield
             else:
@@ -405,15 +460,7 @@ class ThirdPartyAgentSubStage(Stage):
                 ):
                     yield
         finally:
-            if (
-                stream_idle_close_task
-                and not stream_idle_close_task.done()
-                and (stream_consumption_started or runner_closed)
-            ):
-                stream_idle_close_task.cancel()
-
-            if not streaming_started:
-                await close_runner_once()
+            await lifecycle_guard.finalize()
 
         asyncio.create_task(
             Metric.upload(

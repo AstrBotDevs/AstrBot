@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import hashlib
 import json
 import sys
@@ -23,6 +22,11 @@ from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .deerflow_api_client import DeerFlowAPIClient
+from .deerflow_content_mapper import (
+    build_chain_from_ai_content,
+    build_user_content,
+    image_component_from_url,
+)
 from .deerflow_stream_utils import (
     build_task_failure_summary,
     extract_ai_delta_from_event_data,
@@ -32,7 +36,6 @@ from .deerflow_stream_utils import (
     extract_latest_clarification_text,
     extract_messages_from_values_data,
     extract_task_failures_from_custom_event,
-    extract_text,
     get_message_id,
 )
 
@@ -339,60 +342,8 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             dropped = state.seen_message_order.popleft()
             state.seen_message_ids.discard(dropped)
 
-    def _is_likely_base64_image(self, value: str) -> bool:
-        if " " in value:
-            return False
-
-        compact = value.replace("\n", "").replace("\r", "")
-        if not compact or len(compact) < 32 or len(compact) % 4 != 0:
-            return False
-
-        base64_chars = (
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-        )
-        if any(ch not in base64_chars for ch in compact):
-            return False
-        try:
-            base64.b64decode(compact, validate=True)
-        except Exception:
-            return False
-        return True
-
     def _build_user_content(self, prompt: str, image_urls: list[str]) -> T.Any:
-        if not image_urls:
-            return prompt
-
-        content: list[dict[str, T.Any]] = []
-        skipped_invalid_images = 0
-        if prompt:
-            content.append({"type": "text", "text": prompt})
-
-        for image_url in image_urls:
-            url = image_url
-            if not isinstance(url, str):
-                continue
-            url = url.strip()
-            if not url:
-                continue
-            if url.startswith(("http://", "https://", "data:")):
-                content.append({"type": "image_url", "image_url": {"url": url}})
-                continue
-            if not self._is_likely_base64_image(url):
-                skipped_invalid_images += 1
-                continue
-            compact_base64 = url.replace("\n", "").replace("\r", "")
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{compact_base64}"},
-                },
-            )
-        if skipped_invalid_images:
-            logger.debug(
-                "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
-                skipped_invalid_images,
-            )
-        return content
+        return build_user_content(prompt, image_urls)
 
     async def _ensure_thread_id(self, session_id: str) -> str:
         thread_id = await sp.get_async(
@@ -437,90 +388,10 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         return messages
 
     def _image_component_from_url(self, url: T.Any) -> Comp.Image | None:
-        if not isinstance(url, str):
-            return None
-
-        normalized = url.strip()
-        if not normalized:
-            return None
-
-        if normalized.startswith(("http://", "https://")):
-            try:
-                return Comp.Image.fromURL(normalized)
-            except Exception:
-                return None
-
-        if not normalized.startswith("data:"):
-            return None
-
-        header, sep, payload = normalized.partition(",")
-        if not sep:
-            return None
-        if ";base64" not in header.lower():
-            return None
-
-        compact_payload = payload.replace("\n", "").replace("\r", "").strip()
-        if not compact_payload:
-            return None
-        try:
-            base64.b64decode(compact_payload, validate=True)
-        except Exception:
-            return None
-        return Comp.Image.fromBase64(compact_payload)
-
-    def _append_components_from_content(
-        self,
-        content: T.Any,
-        components: list[Comp.BaseMessageComponent],
-    ) -> None:
-        if isinstance(content, str):
-            if content:
-                components.append(Comp.Plain(content))
-            return
-
-        if isinstance(content, list):
-            for item in content:
-                self._append_components_from_content(item, components)
-            return
-
-        if not isinstance(content, dict):
-            return
-
-        item_type = str(content.get("type", "")).lower()
-        if item_type == "text" and isinstance(content.get("text"), str):
-            text = content["text"]
-            if text:
-                components.append(Comp.Plain(text))
-            return
-
-        if item_type == "image_url":
-            image_payload = content.get("image_url")
-            image_url: T.Any = image_payload
-            if isinstance(image_payload, dict):
-                image_url = image_payload.get("url")
-            image_comp = self._image_component_from_url(image_url)
-            if image_comp is not None:
-                components.append(image_comp)
-            return
-
-        if "content" in content:
-            self._append_components_from_content(content.get("content"), components)
-            return
-
-        kwargs = content.get("kwargs")
-        if isinstance(kwargs, dict) and "content" in kwargs:
-            self._append_components_from_content(kwargs.get("content"), components)
+        return image_component_from_url(url)
 
     def _build_chain_from_ai_content(self, content: T.Any) -> MessageChain:
-        components: list[Comp.BaseMessageComponent] = []
-        self._append_components_from_content(content, components)
-        if components:
-            return MessageChain(chain=components)
-
-        fallback_text = extract_text(content)
-        if fallback_text:
-            return MessageChain(chain=[Comp.Plain(fallback_text)])
-        return MessageChain()
+        return build_chain_from_ai_content(content, self._image_component_from_url)
 
     def _build_runtime_context(self, thread_id: str) -> dict[str, T.Any]:
         runtime_context: dict[str, T.Any] = {

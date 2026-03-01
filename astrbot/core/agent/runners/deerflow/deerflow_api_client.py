@@ -38,7 +38,8 @@ def _parse_sse_data_lines(data_lines: list[str]) -> Any:
 
 async def _stream_sse(resp: ClientResponse) -> AsyncGenerator[dict[str, Any], None]:
     """Parse SSE response blocks into event/data dictionaries."""
-    decoder = codecs.getincrementaldecoder("utf-8")()
+    # Use a forgiving decoder at network boundaries so malformed bytes do not abort stream parsing.
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
     buffer = ""
 
     async for chunk in resp.content.iter_chunked(8192):
