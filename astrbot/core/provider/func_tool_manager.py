@@ -20,8 +20,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
 # MCP 服务初始化的默认超时时间（秒）。
-# 如需适配慢速或远程 MCP 服务器，可调整此值。
-MCP_INIT_TIMEOUT: float = 20.0
+# 可通过环境变量 ASTRBOT_MCP_INIT_TIMEOUT 覆盖，适配慢速或远程 MCP 服务器。
+MCP_INIT_TIMEOUT: float = float(os.getenv("ASTRBOT_MCP_INIT_TIMEOUT", "20.0"))
 
 
 @dataclass
@@ -295,7 +295,10 @@ class FunctionToolManager:
                         )
                     elif "url" in cfg:
                         parsed = urllib.parse.urlparse(cfg["url"])
-                        logger.debug(f"  主机: {parsed.scheme}://{parsed.netloc}")
+                        # 只记录 scheme + hostname + port，不记录 userinfo 和查询参数
+                        host = parsed.hostname or ""
+                        port = f":{parsed.port}" if parsed.port else ""
+                        logger.debug(f"  主机: {parsed.scheme}://{host}{port}")
                     failed_services.append(info.name)
                 else:
                     success_count += 1
@@ -413,42 +416,46 @@ class FunctionToolManager:
         self,
         name: str,
         config: dict,
-        event: asyncio.Event | None = None,
-        ready_future: asyncio.Future | None = None,
-        timeout: int = 30,
+        shutdown_event: asyncio.Event | None = None,
+        timeout: float = MCP_INIT_TIMEOUT,
     ) -> None:
-        """Enable_mcp_server a new MCP server to the manager and initialize it.
+        """Enable a new MCP server and initialize it.
 
         Args:
-            name (str): The name of the MCP server.
-            config (dict): Configuration for the MCP server.
-            event (asyncio.Event): Event to signal when the MCP client is ready.
-            ready_future (asyncio.Future): Future to signal when the MCP client is ready.
-            timeout (int): Timeout for the initialization.
+            name: The name of the MCP server.
+            config: Configuration for the MCP server.
+            shutdown_event: Event to signal when the MCP client should shut down.
+            timeout: Timeout in seconds for initialization.
 
         Raises:
-            TimeoutError: If the initialization does not complete within the specified timeout.
+            TimeoutError: If initialization does not complete within the timeout.
             Exception: If there is an error during initialization.
-
         """
-        if not event:
-            event = asyncio.Event()
-        if not ready_future:
-            ready_future = asyncio.Future()
         if name in self.mcp_client_dict:
             return
-        asyncio.create_task(
-            self._init_mcp_client_task_wrapper(name, config, event, ready_future),
+        if not shutdown_event:
+            shutdown_event = asyncio.Event()
+
+        ready_event = asyncio.Event()
+        self.mcp_client_event[name] = shutdown_event
+
+        init_task = asyncio.create_task(
+            self._init_mcp_client_task_wrapper(
+                name, config, shutdown_event, ready_event
+            ),
         )
         try:
-            await asyncio.wait_for(ready_future, timeout=timeout)
-        finally:
-            self.mcp_client_event[name] = event
+            await asyncio.wait_for(ready_event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            init_task.cancel()
+            await asyncio.gather(init_task, return_exceptions=True)
+            self.mcp_client_event.pop(name, None)
+            raise TimeoutError(f"MCP 服务 {name} 初始化超时（{timeout} 秒）")
 
-        if ready_future.done() and ready_future.exception():
-            exc = ready_future.exception()
-            if exc is not None:
-                raise exc
+        # 如果初始化期间 task 已结束并带有异常，向上抛出
+        if init_task.done() and init_task.exception() is not None:
+            self.mcp_client_event.pop(name, None)
+            raise init_task.exception()
 
     async def disable_mcp_server(
         self,
