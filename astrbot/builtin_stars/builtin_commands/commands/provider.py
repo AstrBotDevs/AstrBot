@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from astrbot import logger
@@ -13,11 +14,27 @@ from astrbot.core.provider.entities import ProviderType
 if TYPE_CHECKING:
     from astrbot.core.provider.provider import Provider
 
-_API_KEY_PATTERN = re.compile(r"(?i)(api_?key|key)=[^&'\" ]+")
+_SECRET_PATTERNS = [
+    re.compile(
+        r"(?i)\b(api_?key|access_?token|token|secret|auth_?token|session_?id|password)\s*=\s*[^&'\" ]+"
+    ),
+    re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9._\-]+"),
+    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]+"),
+    re.compile(r"\bsk-[A-Za-z0-9]{16,}\b"),
+]
 
 
-class _AllProvidersModelFetchFailedError(RuntimeError):
-    pass
+def redact_secrets(text: str) -> str:
+    redacted = text
+    for pattern in _SECRET_PATTERNS:
+        redacted = pattern.sub("[REDACTED]", redacted)
+    return redacted
+
+
+@dataclass
+class _ModelCacheEntry:
+    timestamp: float
+    models: tuple[str, ...]
 
 
 class ProviderCommands:
@@ -25,7 +42,7 @@ class ProviderCommands:
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self._provider_models_cache: dict[str, tuple[float, tuple[str, ...]]] = {}
+        self._provider_models_cache: dict[str, _ModelCacheEntry] = {}
 
     def _invalidate_provider_models_cache(self, provider_id: str | None = None) -> None:
         if provider_id is None:
@@ -46,13 +63,10 @@ class ProviderCommands:
 
     @staticmethod
     def _mask_sensitive_text(value: str) -> str:
-        return _API_KEY_PATTERN.sub("key=***", value)
+        return redact_secrets(value)
 
-    def _safe_err(self, e: Exception) -> str:
-        return self._mask_sensitive_text(str(e))
-
-    def _format_err(self, prefix: str, e: Exception) -> str:
-        return f"{prefix}{self._safe_err(e)}"
+    def _format_safe_err(self, prefix: str, e: Exception) -> str:
+        return f"{prefix}{self._mask_sensitive_text(str(e))}"
 
     def _get_model_cache_ttl_seconds(self, umo: str | None = None) -> float:
         ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
@@ -67,7 +81,7 @@ class ProviderCommands:
             logger.debug(
                 "读取 model_list_cache_ttl_seconds 失败，回退默认值 %.1f: %s",
                 self._MODEL_LIST_CACHE_TTL_SECONDS,
-                e,
+                self._mask_sensitive_text(str(e)),
             )
             ttl = self._MODEL_LIST_CACHE_TTL_SECONDS
         return max(ttl, 0.0)
@@ -84,12 +98,15 @@ class ProviderCommands:
         ttl_seconds = self._get_model_cache_ttl_seconds(umo)
         if use_cache and ttl_seconds > 0:
             cached = self._provider_models_cache.get(provider_id)
-            if cached and now - cached[0] <= ttl_seconds:
-                return list(cached[1])
+            if cached and now - cached.timestamp <= ttl_seconds:
+                return list(cached.models)
 
         models = list(await provider.get_models())
         if use_cache and ttl_seconds > 0:
-            self._provider_models_cache[provider_id] = (now, tuple(models))
+            self._provider_models_cache[provider_id] = _ModelCacheEntry(
+                timestamp=now,
+                models=tuple(models),
+            )
         return models
 
     def _log_reachability_failure(
@@ -119,7 +136,7 @@ class ProviderCommands:
             return True, None, None
         except Exception as e:
             err_code = "TEST_FAILED"
-            err_reason = str(e)
+            err_reason = self._mask_sensitive_text(str(e))
             self._log_reachability_failure(
                 provider, provider_capability_type, err_code, err_reason
             )
@@ -139,41 +156,19 @@ class ProviderCommands:
         ]
         if not all_providers:
             return None
-
-        async def _fetch_models(
-            provider: Provider,
-        ) -> tuple[Provider, list[str] | None, Exception | None]:
-            try:
-                return (
-                    provider,
-                    await self._get_provider_models(provider, umo=umo),
-                    None,
-                )
-            except Exception as e:
-                return provider, None, e
-
-        tasks = [
-            asyncio.create_task(_fetch_models(provider)) for provider in all_providers
-        ]
         failed_provider_errors: list[tuple[str, str]] = []
-        matched_provider: Provider | None = None
-        for task in asyncio.as_completed(tasks):
-            provider, models, error = await task
-            if error is not None:
-                masked_error = self._safe_err(error)
-                failed_provider_errors.append((provider.meta().id, masked_error))
+        for provider in all_providers:
+            provider_id = provider.meta().id
+            try:
+                models = await self._get_provider_models(provider, umo=umo)
+            except Exception as e:
+                failed_provider_errors.append(
+                    (provider_id, self._format_safe_err("", e))
+                )
                 continue
 
-            if models is not None and model_name in models:
-                matched_provider = provider
-                break
-
-        if matched_provider is not None:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            return matched_provider
+            if model_name in models:
+                return provider
 
         if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
             failed_ids = ",".join(
@@ -184,9 +179,6 @@ class ProviderCommands:
                 model_name,
                 len(all_providers),
                 failed_ids,
-            )
-            raise _AllProvidersModelFetchFailedError(
-                f"all providers failed to fetch models: {failed_ids}"
             )
         elif failed_provider_errors:
             logger.debug(
@@ -254,7 +246,7 @@ class ProviderCommands:
                         p,
                         None,
                         reachable.__class__.__name__,
-                        str(reachable),
+                        self._mask_sensitive_text(str(reachable)),
                     )
                     reachable_flag = False
                     error_code = reachable.__class__.__name__
@@ -394,7 +386,7 @@ class ProviderCommands:
         try:
             models = await self._get_provider_models(prov, umo=umo)
         except Exception as e:
-            err_msg = self._safe_err(e)
+            err_msg = self._format_safe_err("", e)
             logger.warning(
                 "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
                 curr_provider_id,
@@ -402,7 +394,7 @@ class ProviderCommands:
             )
             message.set_result(
                 MessageEventResult().message(
-                    self._format_err("获取当前提供商模型列表失败: ", e)
+                    self._format_safe_err("获取当前提供商模型列表失败: ", e)
                 )
             )
             return
@@ -416,22 +408,14 @@ class ProviderCommands:
             )
             return
 
-        try:
-            target_prov = await self._find_provider_for_model(
-                model_name, exclude_provider_id=curr_provider_id, umo=umo
-            )
-        except _AllProvidersModelFetchFailedError:
-            message.set_result(
-                MessageEventResult().message(
-                    "跨提供商查询模型失败：所有提供商的模型列表均获取失败，请检查提供商配置或网络后重试。",
-                ),
-            )
-            return
+        target_prov = await self._find_provider_for_model(
+            model_name, exclude_provider_id=curr_provider_id, umo=umo
+        )
 
         if not target_prov:
             message.set_result(
                 MessageEventResult().message(
-                    f"模型 [{model_name}] 未在任何已配置的提供商中找到。请使用 /provider 切换到目标提供商，或确认模型名正确。",
+                    f"模型 [{model_name}] 未在任何已配置的提供商中找到，或所有提供商模型列表获取失败，请检查配置或网络后重试。",
                 ),
             )
             return
@@ -452,7 +436,7 @@ class ProviderCommands:
         except Exception as e:
             message.set_result(
                 MessageEventResult().message(
-                    self._format_err("跨提供商切换并设置模型失败: ", e)
+                    self._format_safe_err("跨提供商切换并设置模型失败: ", e)
                 ),
             )
 
@@ -478,7 +462,7 @@ class ProviderCommands:
             except Exception as e:
                 message.set_result(
                     MessageEventResult()
-                    .message(self._format_err("获取模型列表失败: ", e))
+                    .message(self._format_safe_err("获取模型列表失败: ", e))
                     .use_t2i(False),
                 )
                 return
@@ -503,7 +487,7 @@ class ProviderCommands:
             except Exception as e:
                 message.set_result(
                     MessageEventResult().message(
-                        self._format_err("获取模型列表失败: ", e)
+                        self._format_safe_err("获取模型列表失败: ", e)
                     ),
                 )
                 return
@@ -521,7 +505,7 @@ class ProviderCommands:
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            self._format_err("切换模型未知错误: ", e)
+                            self._format_safe_err("切换模型未知错误: ", e)
                         ),
                     )
                     return
@@ -561,7 +545,7 @@ class ProviderCommands:
                 except Exception as e:
                     message.set_result(
                         MessageEventResult().message(
-                            self._format_err("切换 Key 未知错误: ", e)
+                            self._format_safe_err("切换 Key 未知错误: ", e)
                         ),
                     )
                     return
