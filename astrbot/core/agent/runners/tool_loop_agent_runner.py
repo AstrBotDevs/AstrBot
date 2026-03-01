@@ -257,7 +257,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             candidate_id,
                         )
                         break
-                    
+
                     yield resp
                     return
 

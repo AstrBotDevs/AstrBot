@@ -307,12 +307,15 @@ class ProviderOpenAIOfficial(Provider):
         state = ChatCompletionStreamState()
 
         async for chunk in stream:
-            # 兼容非标准返回处理 补全tool_call.type字段
+            # 兼容处理：部分非标准聚合平台（如通过newapi适配层转接的 Gemini）在流式返回 tool_calls 时，
+            # 可能会缺失 type 字段。由于 openai SDK 的 ChatCompletionStreamState.handle_chunk
+            # 内部有 assert tool.type == "function" 的断言，缺少该字段会导致 AssertionError。
+            # 因此，若检测到 tool_call 且 type 为空，在此处手动补全为 "function"。
             for choice in chunk.choices or []:
                 if not choice.delta or not choice.delta.tool_calls:
                     continue
                 for tool_call in choice.delta.tool_calls:
-                    if tool_call.type is None:
+                    if hasattr(tool_call, "type") and tool_call.type is None:
                         tool_call.type = "function"
 
             try:
