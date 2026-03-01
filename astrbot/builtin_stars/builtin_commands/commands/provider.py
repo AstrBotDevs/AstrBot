@@ -82,32 +82,6 @@ class ProviderCommands:
         if provider_type == ProviderType.CHAT_COMPLETION:
             self.invalidate_provider_models_cache(provider_id, umo=umo)
 
-    @staticmethod
-    def _cache_key(provider_id: str, umo: str | None) -> tuple[str, str | None]:
-        return provider_id, umo
-
-    def _get_cached_models(
-        self, provider_id: str, *, ttl_seconds: float, umo: str | None
-    ) -> list[str] | None:
-        if ttl_seconds <= 0:
-            return None
-        entry = self._model_cache.get(self._cache_key(provider_id, umo))
-        if not entry:
-            return None
-        timestamp, models = entry
-        if time.monotonic() - timestamp > ttl_seconds:
-            self._model_cache.pop(self._cache_key(provider_id, umo), None)
-            return None
-        return list(models)
-
-    def _set_cached_models(
-        self, provider_id: str, models: list[str], *, umo: str | None
-    ) -> None:
-        self._model_cache[self._cache_key(provider_id, umo)] = (
-            time.monotonic(),
-            tuple(models),
-        )
-
     def _get_provider_setting(
         self,
         umo: str | None,
@@ -201,18 +175,18 @@ class ProviderCommands:
         provider_id = provider.meta().id
         ttl_seconds = config.cache_ttl_seconds
         umo = config.umo
-        if use_cache:
-            cached = self._get_cached_models(
-                provider_id,
-                ttl_seconds=ttl_seconds,
-                umo=umo,
-            )
-            if cached is not None:
-                return cached
+        cache_key = (provider_id, umo)
+        if use_cache and ttl_seconds > 0:
+            entry = self._model_cache.get(cache_key)
+            if entry:
+                timestamp, models = entry
+                if time.monotonic() - timestamp <= ttl_seconds:
+                    return list(models)
+                self._model_cache.pop(cache_key, None)
 
         models = list(await provider.get_models())
         if use_cache and ttl_seconds > 0:
-            self._set_cached_models(provider_id, models, umo=umo)
+            self._model_cache[cache_key] = (time.monotonic(), tuple(models))
         return models
 
     def _log_reachability_failure(
@@ -269,15 +243,12 @@ class ProviderCommands:
         if not all_providers:
             return None, None
 
-        failed_provider_errors: list[tuple[str, str]] = []
         semaphore = asyncio.Semaphore(config.max_concurrency)
 
-        async def fetch_and_match(
-            provider: Provider,
-        ) -> tuple[Provider | None, str | None]:
+        async def fetch_models(provider: Provider) -> list[str] | Exception:
             async with semaphore:
                 try:
-                    models = await self._get_provider_models(
+                    return await self._get_provider_models(
                         provider,
                         config=config,
                         use_cache=False,
@@ -285,32 +256,29 @@ class ProviderCommands:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    failed_provider_errors.append(
-                        (provider.meta().id, safe_error("", e))
-                    )
-                    return None, None
-
-            matched_model_name = self._resolve_model_name(model_name, models)
-            if matched_model_name is None:
-                return None, None
-            return provider, matched_model_name
+                    return e
 
         results = await asyncio.gather(
-            *(fetch_and_match(provider) for provider in all_providers),
+            *(fetch_models(provider) for provider in all_providers),
             return_exceptions=True,
         )
-        for result in results:
+        failed_provider_errors: list[tuple[str, str]] = []
+        for provider, result in zip(all_providers, results, strict=False):
             if isinstance(result, asyncio.CancelledError):
                 raise result
             if isinstance(result, Exception):
+                err = safe_error("", result)
+                failed_provider_errors.append((provider.meta().id, err))
                 logger.debug(
-                    "跨提供商查找模型 %s 发生异常: %s",
+                    "跨提供商查找模型 %s 获取 %s 模型列表失败: %s",
                     model_name,
-                    safe_error("", result),
+                    provider.meta().id,
+                    err,
                 )
                 continue
-            provider, matched_model_name = result
-            if provider is not None and matched_model_name is not None:
+
+            matched_model_name = self._resolve_model_name(model_name, result)
+            if matched_model_name is not None:
                 return provider, matched_model_name
 
         if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
