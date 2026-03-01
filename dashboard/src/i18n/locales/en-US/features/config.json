@@ -69,6 +69,26 @@
     "normalConfig": "Basic",
     "systemConfig": "System"
   },
+  "profileSidebar": {
+    "title": "Configuration Profiles",
+    "platformId": "Platform ID",
+    "umop": "Bound UMOP",
+    "noBindings": "No platform bindings"
+  },
+  "routeManager": {
+    "title": "Route Manager",
+    "targetConfig": "Config: {config}",
+    "hint": "AstrBot supports multiple config files, and routing decides which session uses which config. This dialog shows all routes handled by the current config: platform on the left and UMOP on the right; click Save after deleting routes.",
+    "empty": "No routes available to manage.",
+    "platform": "Platform",
+    "umop": "UMOP",
+    "allSessions": "All Sessions",
+    "delete": "Delete Route",
+    "loadFailed": "Failed to load routes",
+    "saveSuccess": "Routes saved",
+    "saveFailed": "Failed to save routes",
+    "routeOccupied": "This route is already occupied by another config: {umop}"
+  },
   "search": {
     "placeholder": "Search config items (key/description/hint)",
     "noResult": "No matching config items found"
