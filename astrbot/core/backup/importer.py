@@ -92,6 +92,40 @@ PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT = (
 )
 
 
+class _InvalidCountWarnLimiter:
+    """Rate-limit warnings for invalid platform_stats count values."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self._count = 0
+        self._suppression_logged = False
+
+    def warn_invalid_count(self, value: Any, key_for_log: tuple[Any, ...]) -> None:
+        if self.limit > 0:
+            if self._count < self.limit:
+                logger.warning(
+                    "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
+                    value,
+                    key_for_log,
+                )
+                self._count += 1
+                if self._count == self.limit and not self._suppression_logged:
+                    logger.warning(
+                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                        self.limit,
+                    )
+                    self._suppression_logged = True
+            return
+
+        if not self._suppression_logged:
+            # limit <= 0: emit only one suppression warning.
+            logger.warning(
+                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
+                self.limit,
+            )
+            self._suppression_logged = True
+
+
 @dataclass
 class ImportPreCheckResult:
     """导入预检查结果
@@ -577,49 +611,15 @@ class AstrBotImporter:
         """
         merged: dict[tuple[str, str, str], dict[str, Any]] = {}
         result: list[dict[str, Any]] = []
-        invalid_count_warnings = 0
-        suppression_logged = False
-        limit = PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT
+        warn_limiter = _InvalidCountWarnLimiter(PLATFORM_STATS_INVALID_COUNT_WARN_LIMIT)
 
         for row in rows:
-            normalized_row = self._normalize_platform_stats_row(row)
-            timestamp = normalized_row.get("timestamp")
+            normalized_row, normalized_timestamp, count = (
+                self._normalize_platform_stats_entry(row, warn_limiter)
+            )
             platform_id = normalized_row.get("platform_id")
             platform_type = normalized_row.get("platform_type")
-            key_for_log = (timestamp, repr(platform_id), repr(platform_type))
 
-            parsed_count = self._parse_platform_stats_count(
-                normalized_row.get("count", 0)
-            )
-            if parsed_count is None:
-                if limit > 0:
-                    if invalid_count_warnings < limit:
-                        logger.warning(
-                            "platform_stats count 非法，已按 0 处理: value=%r, key=%s",
-                            normalized_row.get("count", 0),
-                            key_for_log,
-                        )
-                        invalid_count_warnings += 1
-                        if invalid_count_warnings == limit and not suppression_logged:
-                            logger.warning(
-                                "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                                limit,
-                            )
-                            suppression_logged = True
-                elif not suppression_logged:
-                    # limit <= 0: emit only one suppression warning.
-                    logger.warning(
-                        "platform_stats 非法 count 告警已达到上限 (%d)，后续将抑制",
-                        limit,
-                    )
-                    suppression_logged = True
-                count = 0
-            else:
-                count = parsed_count
-
-            normalized_row["count"] = count
-
-            normalized_timestamp = self._normalize_platform_stats_timestamp(timestamp)
             if (
                 normalized_timestamp is None
                 or not isinstance(platform_id, str)
@@ -638,7 +638,11 @@ class AstrBotImporter:
 
         return result
 
-    def _normalize_platform_stats_row(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_platform_stats_entry(
+        self,
+        row: dict[str, Any],
+        warn_limiter: _InvalidCountWarnLimiter,
+    ) -> tuple[dict[str, Any], str | None, int]:
         normalized_row = dict(row)
         raw_timestamp = normalized_row.get("timestamp")
         normalized_timestamp = self._normalize_platform_stats_timestamp(raw_timestamp)
@@ -652,16 +656,20 @@ class AstrBotImporter:
         else:
             normalized_row["timestamp"] = str(raw_timestamp)
 
-        return normalized_row
-
-    def _parse_platform_stats_count(
-        self,
-        raw_count: Any,
-    ) -> int | None:
+        raw_count = normalized_row.get("count", 0)
         try:
-            return int(raw_count)
+            count = int(raw_count)
         except (TypeError, ValueError):
-            return None
+            key_for_log = (
+                normalized_row.get("timestamp"),
+                repr(normalized_row.get("platform_id")),
+                repr(normalized_row.get("platform_type")),
+            )
+            warn_limiter.warn_invalid_count(raw_count, key_for_log)
+            count = 0
+
+        normalized_row["count"] = count
+        return normalized_row, normalized_timestamp, count
 
     def _normalize_platform_stats_timestamp(self, value: Any) -> str | None:
         if isinstance(value, datetime):
