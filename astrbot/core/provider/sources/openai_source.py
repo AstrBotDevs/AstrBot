@@ -326,7 +326,8 @@ class ProviderOpenAIOfficial(Provider):
                     exc_info=True,
                 )
                 logger.warning(f"Saving chunk state error: {e}")
-            if len(chunk.choices) == 0:
+                
+            if not chunk.choices or len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta
             # logger.debug(f"chunk delta: {delta}")
