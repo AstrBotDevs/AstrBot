@@ -21,6 +21,12 @@ class ProviderCommands:
         self.context = context
         self._provider_models_cache: dict[str, tuple[float, list[str]]] = {}
 
+    def _invalidate_provider_models_cache(self, provider_id: str | None = None) -> None:
+        if provider_id is None:
+            self._provider_models_cache.clear()
+            return
+        self._provider_models_cache.pop(provider_id, None)
+
     @staticmethod
     def _mask_sensitive_text(value: str) -> str:
         return _API_KEY_PATTERN.sub("key=***", value)
@@ -87,23 +93,34 @@ class ProviderCommands:
             *[self._get_provider_models(p) for p in all_providers],
             return_exceptions=True,
         )
+        failed_provider_errors: list[tuple[str, str]] = []
         for provider, result in zip(all_providers, results):
             if isinstance(result, BaseException):
                 masked_error = self._mask_sensitive_text(str(result))
-                logger.warning(
-                    "跨提供商查找模型时，提供商 %s 的 get_models() 失败: %s",
-                    provider.meta().id,
-                    masked_error,
-                )
+                failed_provider_errors.append((provider.meta().id, masked_error))
                 continue
             provider_id = provider.meta().id
             if model_name in result:
                 return provider, provider_id
-        if results and all(isinstance(r, BaseException) for r in results):
+        if failed_provider_errors and len(failed_provider_errors) == len(all_providers):
+            failed_ids = ",".join(
+                provider_id for provider_id, _ in failed_provider_errors
+            )
             logger.error(
-                "跨提供商查找模型 %s 时，所有 %d 个提供商的 get_models() 均失败，请检查配置或网络",
+                "跨提供商查找模型 %s 时，所有 %d 个提供商的 get_models() 均失败: %s。请检查配置或网络",
                 model_name,
                 len(all_providers),
+                failed_ids,
+            )
+        elif failed_provider_errors:
+            logger.debug(
+                "跨提供商查找模型 %s 时有 %d 个提供商获取模型失败: %s",
+                model_name,
+                len(failed_provider_errors),
+                ",".join(
+                    f"{provider_id}({error})"
+                    for provider_id, error in failed_provider_errors
+                ),
             )
         return None, None
 
@@ -340,6 +357,7 @@ class ProviderCommands:
                 try:
                     new_model = models[idx_or_name - 1]
                     prov.set_model(new_model)
+                    self._invalidate_provider_models_cache(prov.meta().id)
                     message.set_result(
                         MessageEventResult().message(
                             f"切换模型成功。当前提供商: [{prov.meta().id}] 当前模型: [{prov.get_model()}]",
@@ -353,9 +371,12 @@ class ProviderCommands:
                     return
         else:
             # 字符串：模型名，需智能解析是否跨提供商
-            model_name = idx_or_name
+            model_name = idx_or_name.strip()
             umo = message.unified_msg_origin
             curr_provider_id = prov.meta().id
+            if not model_name:
+                message.set_result(MessageEventResult().message("模型名不能为空。"))
+                return
 
             # 1. 检查当前提供商
             models = []
@@ -376,6 +397,7 @@ class ProviderCommands:
                 return
             if model_name in models:
                 prov.set_model(model_name)
+                self._invalidate_provider_models_cache(curr_provider_id)
                 message.set_result(
                     MessageEventResult().message(
                         f"切换模型成功。当前提供商: [{curr_provider_id}] 当前模型: [{model_name}]",
@@ -388,17 +410,26 @@ class ProviderCommands:
                 model_name, exclude_provider_id=curr_provider_id
             )
             if target_prov and target_id:
-                await self.context.provider_manager.set_provider(
-                    provider_id=target_id,
-                    provider_type=ProviderType.CHAT_COMPLETION,
-                    umo=umo,
-                )
-                target_prov.set_model(model_name)
-                message.set_result(
-                    MessageEventResult().message(
-                        f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
-                    ),
-                )
+                try:
+                    await self.context.provider_manager.set_provider(
+                        provider_id=target_id,
+                        provider_type=ProviderType.CHAT_COMPLETION,
+                        umo=umo,
+                    )
+                    target_prov.set_model(model_name)
+                    self._invalidate_provider_models_cache(target_id)
+                    message.set_result(
+                        MessageEventResult().message(
+                            f"检测到模型 [{model_name}] 属于提供商 [{target_id}]，已自动切换提供商并设置模型。",
+                        ),
+                    )
+                except BaseException as e:
+                    err_msg = self._mask_sensitive_text(str(e))
+                    message.set_result(
+                        MessageEventResult().message(
+                            "跨提供商切换并设置模型失败: " + err_msg
+                        ),
+                    )
             else:
                 message.set_result(
                     MessageEventResult().message(
@@ -435,6 +466,7 @@ class ProviderCommands:
                 try:
                     new_key = keys_data[index - 1]
                     prov.set_key(new_key)
+                    self._invalidate_provider_models_cache(prov.meta().id)
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message(f"切换 Key 未知错误: {e!s}"),
