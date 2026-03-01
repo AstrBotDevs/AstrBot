@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import re
 import time
@@ -31,14 +33,14 @@ class ProviderCommands:
             return
         self._provider_models_cache.pop(provider_id, None)
 
-    def _invalidate_cache_for(self, provider: "Provider") -> None:
+    def _invalidate_cache_for(self, provider: Provider) -> None:
         self._invalidate_provider_models_cache(provider.meta().id)
 
-    def _set_model_and_invalidate(self, provider: "Provider", model_name: str) -> None:
+    def _set_model_and_invalidate(self, provider: Provider, model_name: str) -> None:
         provider.set_model(model_name)
         self._invalidate_cache_for(provider)
 
-    def _set_key_and_invalidate(self, provider: "Provider", key: str) -> None:
+    def _set_key_and_invalidate(self, provider: Provider, key: str) -> None:
         provider.set_key(key)
         self._invalidate_cache_for(provider)
 
@@ -53,7 +55,7 @@ class ProviderCommands:
         return f"{prefix}{self._safe_err(e)}"
 
     async def _get_provider_models(
-        self, provider: "Provider", *, use_cache: bool = True
+        self, provider: Provider, *, use_cache: bool = True
     ) -> list[str]:
         provider_id = provider.meta().id
         now = time.monotonic()
@@ -101,7 +103,7 @@ class ProviderCommands:
 
     async def _find_provider_for_model(
         self, model_name: str, exclude_provider_id: str | None = None
-    ) -> "Provider | None":
+    ) -> Provider | None:
         """在所有 LLM 提供商中查找包含指定模型的提供商。"""
         all_providers = [
             p
@@ -112,8 +114,8 @@ class ProviderCommands:
             return None
 
         async def _fetch_models(
-            provider: "Provider",
-        ) -> tuple["Provider", list[str] | None, BaseException | None]:
+            provider: Provider,
+        ) -> tuple[Provider, list[str] | None, BaseException | None]:
             try:
                 return provider, await self._get_provider_models(provider), None
             except BaseException as e:
@@ -348,7 +350,7 @@ class ProviderCommands:
             event.set_result(MessageEventResult().message("无效的参数。"))
 
     async def _switch_model_by_name(
-        self, message: AstrMessageEvent, model_name: str, prov: "Provider"
+        self, message: AstrMessageEvent, model_name: str, prov: Provider
     ) -> None:
         model_name = model_name.strip()
         if not model_name:
@@ -520,10 +522,11 @@ class ProviderCommands:
                 try:
                     new_key = keys_data[index - 1]
                     self._set_key_and_invalidate(prov, new_key)
+                    message.set_result(MessageEventResult().message("切换 Key 成功。"))
                 except BaseException as e:
                     message.set_result(
                         MessageEventResult().message(
                             self._format_err("切换 Key 未知错误: ", e)
                         ),
                     )
-                message.set_result(MessageEventResult().message("切换 Key 成功。"))
+                    return
