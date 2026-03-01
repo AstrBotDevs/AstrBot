@@ -3,7 +3,7 @@
     "name": "AI 配置",
     "agent_runner": {
       "description": "Agent 执行方式",
-      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器,不需要修改此节。",
+      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify、Coze、DeerFlow 等第三方 Agent 执行器,不需要修改此节。",
       "provider_settings": {
         "enable": {
           "description": "启用",
@@ -15,7 +15,8 @@
             "内置 Agent",
             "Dify",
             "Coze",
-            "阿里云百炼应用"
+            "阿里云百炼应用",
+            "DeerFlow"
           ]
         },
         "coze_agent_runner_provider_id": {
@@ -26,6 +27,9 @@
         },
         "dashscope_agent_runner_provider_id": {
           "description": "阿里云百炼应用 Agent 执行器提供商 ID"
+        },
+        "deerflow_agent_runner_provider_id": {
+          "description": "DeerFlow Agent 执行器提供商 ID"
         }
       }
     },
@@ -1365,6 +1369,45 @@
       "coze_api_base": {
         "description": "API Base URL",
         "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn"
+      },
+      "deerflow_api_base": {
+        "description": "API Base URL",
+        "hint": "DeerFlow API 网关地址，默认为 http://127.0.0.1:2026"
+      },
+      "deerflow_api_key": {
+        "description": "DeerFlow API Key",
+        "hint": "可选。若 DeerFlow 网关配置了 Bearer 鉴权，则在此填写。"
+      },
+      "deerflow_auth_header": {
+        "description": "Authorization Header",
+        "hint": "可选。自定义 Authorization 请求头，优先级高于 DeerFlow API Key。"
+      },
+      "deerflow_assistant_id": {
+        "description": "Assistant ID",
+        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+      },
+      "deerflow_model_name": {
+        "description": "模型名称覆盖",
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+      },
+      "deerflow_thinking_enabled": {
+        "description": "启用思考模式"
+      },
+      "deerflow_plan_mode": {
+        "description": "启用计划模式",
+        "hint": "对应 DeerFlow 的 is_plan_mode。"
+      },
+      "deerflow_subagent_enabled": {
+        "description": "启用子智能体",
+        "hint": "对应 DeerFlow 的 subagent_enabled。"
+      },
+      "deerflow_max_concurrent_subagents": {
+        "description": "子智能体最大并发数",
+        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+      },
+      "deerflow_recursion_limit": {
+        "description": "递归深度上限",
+        "hint": "对应 LangGraph recursion_limit。"
       },
       "auto_save_history": {
         "description": "由 Coze 管理对话记录",
