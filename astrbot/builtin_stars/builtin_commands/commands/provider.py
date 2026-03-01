@@ -32,12 +32,49 @@ class _ModelLookupConfig:
     max_concurrency: int
 
 
+class _ModelCache:
+    def __init__(self) -> None:
+        self._store: dict[tuple[str, str | None], tuple[float, tuple[str, ...]]] = {}
+
+    def get(self, provider_id: str, umo: str | None, ttl: float) -> list[str] | None:
+        if ttl <= 0:
+            return None
+        entry = self._store.get((provider_id, umo))
+        if not entry:
+            return None
+        timestamp, models = entry
+        if time.monotonic() - timestamp > ttl:
+            self._store.pop((provider_id, umo), None)
+            return None
+        return list(models)
+
+    def set(
+        self, provider_id: str, umo: str | None, models: list[str], ttl: float
+    ) -> None:
+        if ttl <= 0:
+            return
+        self._store[(provider_id, umo)] = (time.monotonic(), tuple(models))
+
+    def invalidate(
+        self, provider_id: str | None = None, *, umo: str | None = None
+    ) -> None:
+        if provider_id is None:
+            self._store.clear()
+            return
+        if umo is not None:
+            self._store.pop((provider_id, umo), None)
+            return
+        stale_keys = [
+            cache_key for cache_key in self._store if cache_key[0] == provider_id
+        ]
+        for cache_key in stale_keys:
+            self._store.pop(cache_key, None)
+
+
 class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self._model_cache: dict[
-            tuple[str, str | None], tuple[float, tuple[str, ...]]
-        ] = {}
+        self._model_cache = _ModelCache()
         self._register_provider_change_hook()
 
     def _register_provider_change_hook(self) -> None:
@@ -61,17 +98,7 @@ class ProviderCommands:
         self, provider_id: str | None = None, *, umo: str | None = None
     ) -> None:
         """Public hook for cache invalidation on external provider config changes."""
-        if provider_id is None:
-            self._model_cache.clear()
-            return
-        if umo is not None:
-            self._model_cache.pop((provider_id, umo), None)
-            return
-        stale_keys = [
-            cache_key for cache_key in self._model_cache if cache_key[0] == provider_id
-        ]
-        for cache_key in stale_keys:
-            self._model_cache.pop(cache_key, None)
+        self._model_cache.invalidate(provider_id, umo=umo)
 
     def _on_provider_manager_changed(
         self,
@@ -175,19 +202,42 @@ class ProviderCommands:
         provider_id = provider.meta().id
         ttl_seconds = config.cache_ttl_seconds
         umo = config.umo
-        cache_key = (provider_id, umo)
-        if use_cache and ttl_seconds > 0:
-            entry = self._model_cache.get(cache_key)
-            if entry:
-                timestamp, models = entry
-                if time.monotonic() - timestamp <= ttl_seconds:
-                    return list(models)
-                self._model_cache.pop(cache_key, None)
+        if use_cache:
+            cached = self._model_cache.get(provider_id, umo, ttl_seconds)
+            if cached is not None:
+                return cached
 
         models = list(await provider.get_models())
-        if use_cache and ttl_seconds > 0:
-            self._model_cache[cache_key] = (time.monotonic(), tuple(models))
+        if use_cache:
+            self._model_cache.set(provider_id, umo, models, ttl_seconds)
         return models
+
+    async def _get_models_or_reply_error(
+        self,
+        message: AstrMessageEvent,
+        prov: Provider,
+        config: _ModelLookupConfig,
+        *,
+        error_prefix: str,
+        disable_t2i: bool = False,
+        warning_log: str | None = None,
+    ) -> list[str] | None:
+        try:
+            return await self._get_provider_models(prov, config=config)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            if warning_log is not None:
+                logger.warning(
+                    warning_log,
+                    prov.meta().id,
+                    safe_error("", e),
+                )
+            result = MessageEventResult().message(safe_error(error_prefix, e))
+            if disable_t2i:
+                result = result.use_t2i(False)
+            message.set_result(result)
+            return None
 
     def _log_reachability_failure(
         self,
@@ -498,22 +548,14 @@ class ProviderCommands:
         config = self._get_model_lookup_config(umo)
         curr_provider_id = prov.meta().id
 
-        try:
-            models = await self._get_provider_models(prov, config=config)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            err_msg = safe_error("", e)
-            logger.warning(
-                "获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
-                curr_provider_id,
-                err_msg,
-            )
-            message.set_result(
-                MessageEventResult().message(
-                    safe_error("获取当前提供商模型列表失败: ", e)
-                )
-            )
+        models = await self._get_models_or_reply_error(
+            message,
+            prov,
+            config,
+            error_prefix="获取当前提供商模型列表失败: ",
+            warning_log="获取当前提供商 %s 模型列表失败，停止跨提供商查找: %s",
+        )
+        if models is None:
             return
 
         matched_model_name = self._resolve_model_name(model_name, models)
@@ -576,17 +618,14 @@ class ProviderCommands:
         config = self._get_model_lookup_config(message.unified_msg_origin)
 
         if idx_or_name is None:
-            models = []
-            try:
-                models = await self._get_provider_models(prov, config=config)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                message.set_result(
-                    MessageEventResult()
-                    .message(safe_error("获取模型列表失败: ", e))
-                    .use_t2i(False),
-                )
+            models = await self._get_models_or_reply_error(
+                message,
+                prov,
+                config,
+                error_prefix="获取模型列表失败: ",
+                disable_t2i=True,
+            )
+            if models is None:
                 return
             parts = ["下面列出了此模型提供商可用模型:"]
             for i, model in enumerate(models, 1):
@@ -601,15 +640,13 @@ class ProviderCommands:
             ret = "".join(parts)
             message.set_result(MessageEventResult().message(ret).use_t2i(False))
         elif isinstance(idx_or_name, int):
-            models = []
-            try:
-                models = await self._get_provider_models(prov, config=config)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                message.set_result(
-                    MessageEventResult().message(safe_error("获取模型列表失败: ", e)),
-                )
+            models = await self._get_models_or_reply_error(
+                message,
+                prov,
+                config,
+                error_prefix="获取模型列表失败: ",
+            )
+            if models is None:
                 return
             if idx_or_name > len(models) or idx_or_name < 1:
                 message.set_result(MessageEventResult().message("模型序号错误。"))

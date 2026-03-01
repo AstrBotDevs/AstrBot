@@ -70,7 +70,13 @@ def safe_error(
     *,
     redact: bool = True,
 ) -> str:
-    text = str(error)
+    try:
+        text = str(error)
+    except Exception:
+        try:
+            text = repr(error)
+        except Exception:
+            text = "<unprintable error>"
     if redact:
         text = redact_sensitive_text(text)
     return prefix + text
