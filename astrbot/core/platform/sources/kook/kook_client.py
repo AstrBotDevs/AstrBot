@@ -103,8 +103,8 @@ class KookClient:
                     logger.error(f"[KOOK] 获取gateway失败: {data}")
                     return None
 
-                gateway_url = data["data"]["url"]
-                logger.info(f"[KOOK] 获取gateway成功: {gateway_url}")
+                gateway_url: str = data["data"]["url"]
+                logger.info(f"[KOOK] 获取gateway成功: {gateway_url.split('?')[0]}")
                 return gateway_url
         except Exception as e:
             logger.error(f"[KOOK] 获取gateway异常: {e}")
