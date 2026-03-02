@@ -1,7 +1,6 @@
 from astrbot.core.lang import t
 from astrbot.dashboard.routes.route import Response, Route, RouteContext
 from quart import request
-from astrbot.api import logger
 
 
 class LangRoute(Route):
@@ -16,7 +15,7 @@ class LangRoute(Route):
         data = await request.get_json()
         lang = data.get("lang")
         if lang is None:
-            return Response().error("lang 为必填参数。").__dict__
+            return Response().error(t("msg-bf610e68")).__dict__
         try:
             t.load_locale(locale=lang.lower(), files=None)
         except ValueError as exc:
