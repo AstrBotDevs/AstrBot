@@ -122,16 +122,22 @@
       "previous": "Previous",
       "next": "Next",
       "sync": "Start Sync",
-      "getToken": "Get Token"
+      "getToken": "Get Token",
+      "fetchServers": "Fetch Servers"
     },
     "status": {
       "selectProvider": "Please select an MCP server provider",
       "enterToken": "Please enter the access token to continue",
+      "enterApiKey": "Please enter the API key to continue",
+      "fetchServersFirst": "Please fetch the server list first",
+      "fetchedServers": "Fetched servers ({count})",
       "readyToSync": "Ready to sync server configurations"
     },
     "messages": {
       "syncSuccess": "MCP servers synced successfully!",
       "syncError": "Sync failed: {error}",
+      "fetchServersSuccess": "Fetched {count} servers",
+      "fetchServersError": "Failed to fetch server list: {error}",
       "tokenHelp": "How to get a ModelScope access token? Click the button on the right for instructions"
     }
   },

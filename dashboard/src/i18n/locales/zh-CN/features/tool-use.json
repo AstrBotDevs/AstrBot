@@ -135,6 +135,24 @@
       }
     }
   },
+  "syncProvider": {
+    "buttons": {
+      "fetchServers": "获取服务器列表"
+    },
+    "status": {
+      "selectProvider": "请选择一个 MCP 服务器提供商",
+      "enterToken": "请输入访问令牌以继续",
+      "enterApiKey": "请输入 API Key 以继续",
+      "fetchServersFirst": "请先获取服务器列表",
+      "fetchedServers": "已获取服务器 ({count})"
+    },
+    "messages": {
+      "syncSuccess": "MCP 服务器同步成功!",
+      "syncError": "同步失败: {error}",
+      "fetchServersSuccess": "已获取 {count} 个服务器",
+      "fetchServersError": "获取服务器列表失败: {error}"
+    }
+  },
   "messages": {
     "getServersError": "获取 MCP 服务器列表失败: {error}",
     "getToolsError": "获取函数工具列表失败: {error}",
