@@ -64,10 +64,6 @@ class MockShipyardSandboxClient:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, data=data) as response:
                     if response.status == 200:
-                        logger.info(
-                            "[Computer] File uploaded to Boxlite sandbox: %s",
-                            remote_path,
-                        )
                         return {
                             "success": True,
                             "message": "File uploaded successfully",

@@ -46,32 +46,6 @@ ruff check .
 
 如果您使用 VSCode，可以安装 `Ruff` 插件。
 
-##### PR 功能完整性验证（推荐）
-
-如果您希望在本地做一套接近 CI 的完整验证，可使用：
-
-```bash
-make pr-test-neo
-```
-
-该命令会执行：
-- `uv sync --group dev`
-- `ruff format --check .` 与 `ruff check .`
-- Neo 相关关键测试
-- `main.py` 启动 smoke test（检测 `http://localhost:6185`）
-
-需要全量验证时可使用：
-
-```bash
-make pr-test-full
-```
-
-如果只想快速重复执行（跳过依赖同步和 dashboard 构建）：
-
-```bash
-make pr-test-full-fast
-```
-
 
 ## Contributing Guide
 
@@ -113,30 +87,4 @@ We use Ruff as our code formatter and static analysis tool. Before submitting yo
 ```bash
 ruff format .
 ruff check .
-```
-
-##### PR completeness checks (recommended)
-
-To run a local validation flow close to CI, use:
-
-```bash
-make pr-test-neo
-```
-
-This command runs:
-- `uv sync --group dev`
-- `ruff format --check .` and `ruff check .`
-- Neo-related critical tests
-- a startup smoke test against `http://localhost:6185`
-
-For full validation, use:
-
-```bash
-make pr-test-full
-```
-
-For faster repeated runs (skip dependency sync and dashboard build), use:
-
-```bash
-make pr-test-full-fast
 ```

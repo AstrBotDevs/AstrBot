@@ -1,4 +1,4 @@
-.PHONY: worktree worktree-add worktree-rm pr-test-neo pr-test-full pr-test-full-fast
+.PHONY: worktree worktree-add worktree-rm
 
 WORKTREE_DIR ?= ../astrbot_worktree
 BRANCH ?= $(word 2,$(MAKECMDGOALS))
@@ -26,15 +26,6 @@ endif
 	else \
 		echo "Worktree $(WORKTREE_DIR)/$(BRANCH) not found."; \
 	fi
-
-pr-test-neo:
-	./scripts/pr_test_env.sh --profile neo
-
-pr-test-full:
-	./scripts/pr_test_env.sh --profile full
-
-pr-test-full-fast:
-	./scripts/pr_test_env.sh --profile full --skip-sync --no-dashboard
 
 # Swallow extra args (branch/base) so make doesn't treat them as targets
 %:

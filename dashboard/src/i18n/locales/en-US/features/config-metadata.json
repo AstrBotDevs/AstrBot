@@ -161,22 +161,6 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
-          "shipyard_neo_endpoint": {
-            "description": "Shipyard Neo API Endpoint",
-            "hint": "Bay API address, default http://127.0.0.1:8114."
-          },
-          "shipyard_neo_access_token": {
-            "description": "Shipyard Neo Access Token",
-            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
-          },
-          "shipyard_neo_profile": {
-            "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
-          },
-          "shipyard_neo_ttl": {
-            "description": "Shipyard Neo Sandbox TTL",
-            "hint": "Sandbox time-to-live in seconds."
-          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "API access address for Shipyard service."
