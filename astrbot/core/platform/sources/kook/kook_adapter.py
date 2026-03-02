@@ -52,7 +52,6 @@ class KookPlatformAdapter(Platform):
             client=self.client,
         )
         await message_event.send(message_chain)
-        await super().send_by_session(session, message_chain)
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
