@@ -721,6 +721,17 @@
               "hint": "Telegram only supports a fixed reaction set, reference: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
             }
           }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Unicode or Custom Emoji Name)",
+              "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
+            }
+          }
         }
       }
     }

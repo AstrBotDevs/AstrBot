@@ -724,6 +724,17 @@
               "hint": "Telegram 仅支持固定反应集合,参考:[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
             }
           }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] 启用预回应表情"
+            },
+            "emojis": {
+              "description": "表情列表（Unicode 或自定义表情名）",
+              "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳"
+            }
+          }
         }
       }
     }
