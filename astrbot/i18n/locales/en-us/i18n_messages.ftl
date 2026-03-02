@@ -133,7 +133,7 @@ msg-cb218e86 = Model serial number error.
 msg-1756f199 = Model switched successfully. Current provider: [{ $res }Current model: [{ $res_2 }]
 msg-4d4f587f = Switch model to{ $res }.
 msg-584ca956 = Key sequence number is incorrect.
-msg-f52481b8 = Switch Key unknown error:{ $e }
+msg-f52481b8 = Switch Key unknown error:
 msg-7a156524 = Key switched successfully.
 
 ### astrbot\builtin_stars\builtin_commands\commands\setunset.py

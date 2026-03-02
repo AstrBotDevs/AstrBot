@@ -127,7 +127,7 @@ msg-cb218e86 = 模型序号错误。
 msg-1756f199 = 切换模型成功。当前提供商: [{$res}] 当前模型: [{$res_2}]
 msg-4d4f587f = 切换模型到 {$res}。
 msg-584ca956 = Key 序号错误。
-msg-f52481b8 = 切换 Key 未知错误: {$e}
+msg-f52481b8 = 切换 Key 未知错误: 
 msg-7a156524 = 切换 Key 成功。
 
 ### astrbot\builtin_stars\builtin_commands\commands\setunset.py
