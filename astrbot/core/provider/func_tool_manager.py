@@ -19,9 +19,36 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
-# MCP 服务初始化的默认超时时间（秒）。
-# 可通过环境变量 ASTRBOT_MCP_INIT_TIMEOUT 覆盖，适配慢速或远程 MCP 服务器。
-MCP_INIT_TIMEOUT: float = float(os.getenv("ASTRBOT_MCP_INIT_TIMEOUT", "20.0"))
+DEFAULT_MCP_INIT_TIMEOUT_SECONDS = 20.0
+DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS = 30.0
+MCP_INIT_TIMEOUT_ENV = "ASTRBOT_MCP_INIT_TIMEOUT"
+ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_ENABLE_TIMEOUT"
+
+
+def _resolve_timeout(
+    timeout: float | int | str | None = None,
+    *,
+    env_name: str = MCP_INIT_TIMEOUT_ENV,
+    default: float = DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
+) -> float:
+    if timeout is None:
+        timeout = os.getenv(env_name, str(default))
+
+    try:
+        timeout_value = float(timeout)
+    except (TypeError, ValueError):
+        logger.warning(
+            f"超时配置 {env_name}={timeout!r} 无效，使用默认值 {default:g} 秒。"
+        )
+        return default
+
+    if timeout_value <= 0:
+        logger.warning(
+            f"超时配置 {env_name}={timeout_value:g} 必须大于 0，使用默认值 {default:g} 秒。"
+        )
+        return default
+
+    return timeout_value
 
 
 @dataclass
@@ -31,7 +58,7 @@ class _McpClientInfo:
     name: str
     cfg: dict
     shutdown_event: asyncio.Event = field(default_factory=asyncio.Event)
-    ready_event: asyncio.Event = field(default_factory=asyncio.Event)
+    init_future: asyncio.Future[bool] | None = None
     task: asyncio.Task | None = None
 
 
@@ -197,6 +224,31 @@ class FunctionToolManager:
         tool_set = ToolSet(self.func_list.copy())
         return tool_set
 
+    @staticmethod
+    def _log_safe_mcp_debug_config(cfg: dict) -> None:
+        # 仅记录脱敏后的摘要，避免泄露 command/args/url 中的敏感信息
+        if "command" in cfg:
+            cmd = cfg["command"]
+            executable = str(cmd[0] if isinstance(cmd, (list, tuple)) and cmd else cmd)
+            args_val = cfg.get("args", [])
+            args_count = (
+                len(args_val)
+                if isinstance(args_val, (list, tuple))
+                else (0 if args_val is None else 1)
+            )
+            logger.debug(f"  命令可执行文件: {executable}, 参数数量: {args_count}")
+            return
+
+        if "url" in cfg:
+            parsed = urllib.parse.urlparse(str(cfg["url"]))
+            host = parsed.hostname or ""
+            scheme = parsed.scheme or "unknown"
+            try:
+                port = f":{parsed.port}" if parsed.port else ""
+            except ValueError:
+                port = ""
+            logger.debug(f"  主机: {scheme}://{host}{port}")
+
     async def init_mcp_clients(self) -> None:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
@@ -230,15 +282,25 @@ class FunctionToolManager:
             open(mcp_json_file, encoding="utf-8"),
         )["mcpServers"]
 
+        init_timeout = _resolve_timeout(
+            env_name=MCP_INIT_TIMEOUT_ENV,
+            default=DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
+        )
+        timeout_display = f"{init_timeout:g}"
+
         # 用 _McpClientInfo 跟踪每个客户端的事件和任务
         client_infos: dict[str, _McpClientInfo] = {}
 
         for name, cfg in mcp_server_json_obj.items():
             if cfg.get("active", True):
                 info = _McpClientInfo(name=name, cfg=cfg)
+                info.init_future = asyncio.get_running_loop().create_future()
                 info.task = asyncio.create_task(
                     self._init_mcp_client_task_wrapper(
-                        name, cfg, info.shutdown_event, info.ready_event
+                        name,
+                        cfg,
+                        info.shutdown_event,
+                        info.init_future,
                     ),
                 )
                 client_infos[name] = info
@@ -247,59 +309,52 @@ class FunctionToolManager:
         if client_infos:
             logger.info(f"等待 {len(client_infos)} 个 MCP 服务初始化...")
 
-            # 只等待初始化完成信号，不等待整个 task 的生命周期结束
-            wait_tasks = [
-                asyncio.create_task(info.ready_event.wait())
+            init_futures = [
+                info.init_future
                 for info in client_infos.values()
+                if info.init_future is not None
             ]
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*wait_tasks, return_exceptions=True),
-                    timeout=MCP_INIT_TIMEOUT,
+            _, pending_futures = await asyncio.wait(
+                init_futures,
+                timeout=init_timeout,
+            )
+
+            if pending_futures:
+                logger.warning(
+                    f"MCP 服务初始化超时（{timeout_display}秒），部分服务可能未完全加载。"
+                    "建议检查 MCP 服务器配置和网络连接。"
                 )
-            except asyncio.TimeoutError:
-                # 取消尚未完成的 wait_tasks，避免悬挂
-                for t in wait_tasks:
-                    t.cancel()
-                await asyncio.gather(*wait_tasks, return_exceptions=True)
 
             success_count = 0
             failed_services: list[str] = []
             cancelled_tasks: list[asyncio.Task] = []
 
             for info in client_infos.values():
-                if not info.ready_event.is_set():
+                if info.init_future in pending_futures:
                     # 超时，初始化未完成，取消 task
                     logger.error(f"MCP 服务 {info.name} 初始化超时")
-                    info.task.cancel()
-                    cancelled_tasks.append(info.task)
+                    if info.task is not None:
+                        info.task.cancel()
+                        cancelled_tasks.append(info.task)
                     failed_services.append(info.name)
-                elif info.task.done() and info.task.exception() is not None:
+                    self.mcp_client_event.pop(info.name, None)
+                elif info.init_future is None:
+                    logger.error(f"MCP 服务 {info.name} 初始化状态异常")
+                    failed_services.append(info.name)
+                    self.mcp_client_event.pop(info.name, None)
+                elif info.init_future.cancelled():
+                    logger.error(f"MCP 服务 {info.name} 初始化已取消")
+                    failed_services.append(info.name)
+                    self.mcp_client_event.pop(info.name, None)
+                elif info.init_future.exception() is not None:
                     # 初始化期间抛出异常（已在 wrapper 中记录，此处只记录配置摘要）
-                    exc = info.task.exception()
+                    exc = info.init_future.exception()
                     logger.error(f"MCP 服务 {info.name} 初始化失败: {exc}")
-                    cfg = info.cfg
-                    if "command" in cfg:
-                        cmd = cfg["command"]
-                        executable = str(
-                            cmd[0] if isinstance(cmd, (list, tuple)) and cmd else cmd
-                        )
-                        args_val = cfg.get("args", [])
-                        args_count = (
-                            len(args_val)
-                            if isinstance(args_val, (list, tuple))
-                            else (0 if args_val is None else 1)
-                        )
-                        logger.debug(
-                            f"  命令可执行文件: {executable}, 参数数量: {args_count}"
-                        )
-                    elif "url" in cfg:
-                        parsed = urllib.parse.urlparse(cfg["url"])
-                        # 只记录 scheme + hostname + port，不记录 userinfo 和查询参数
-                        host = parsed.hostname or ""
-                        port = f":{parsed.port}" if parsed.port else ""
-                        logger.debug(f"  主机: {parsed.scheme}://{host}{port}")
+                    if info.task is not None and info.task.done():
+                        info.task.exception()
+                    self._log_safe_mcp_debug_config(info.cfg)
                     failed_services.append(info.name)
+                    self.mcp_client_event.pop(info.name, None)
                 else:
                     success_count += 1
 
@@ -320,25 +375,29 @@ class FunctionToolManager:
         name: str,
         cfg: dict,
         shutdown_event: asyncio.Event,
-        ready_event: asyncio.Event,
+        init_future: asyncio.Future[bool] | None = None,
     ) -> None:
-        """初始化 MCP 客户端的包装函数。
-
-        初始化完成后立即 set ready_event，让 init_mcp_clients 可以
-        及时返回，而无需等待整个客户端的生命周期结束。
-        """
+        """初始化 MCP 客户端的包装函数。"""
+        initialized = False
         try:
             await self._init_mcp_client(name, cfg)
-            ready_event.set()
+            initialized = True
+            if init_future and not init_future.done():
+                init_future.set_result(True)
             await shutdown_event.wait()
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
         except asyncio.CancelledError:
-            ready_event.set()  # 确保取消时也能解除等待
+            if not initialized and init_future and not init_future.done():
+                init_future.set_exception(
+                    asyncio.TimeoutError(f"MCP 客户端 {name} 初始化超时"),
+                )
             raise
-        except Exception:
-            ready_event.set()  # 确保初始化失败时也能解除等待
-            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
-            raise
+        except Exception as e:
+            if init_future and not init_future.done():
+                init_future.set_exception(e)
+            if not initialized:
+                logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
+                raise
         finally:
             await self._terminate_mcp_client(name)
 
@@ -417,7 +476,7 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float = MCP_INIT_TIMEOUT,
+        timeout: float | int | str | None = None,
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -436,19 +495,31 @@ class FunctionToolManager:
         if not shutdown_event:
             shutdown_event = asyncio.Event()
 
-        ready_event = asyncio.Event()
+        timeout_value = _resolve_timeout(
+            timeout=timeout,
+            env_name=ENABLE_MCP_TIMEOUT_ENV,
+            default=DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS,
+        )
+        init_future = asyncio.get_running_loop().create_future()
 
         init_task = asyncio.create_task(
             self._init_mcp_client_task_wrapper(
-                name, config, shutdown_event, ready_event
+                name,
+                config,
+                shutdown_event,
+                init_future,
             ),
         )
         try:
-            await asyncio.wait_for(ready_event.wait(), timeout=timeout)
+            await asyncio.wait_for(init_future, timeout=timeout_value)
         except asyncio.TimeoutError:
             init_task.cancel()
             await asyncio.gather(init_task, return_exceptions=True)
-            raise TimeoutError(f"MCP 服务 {name} 初始化超时（{timeout} 秒）")
+            raise TimeoutError(f"MCP 服务 {name} 初始化超时（{timeout_value:g} 秒）")
+        except Exception:
+            # 消费 task 异常，避免未观察到的后台任务异常告警
+            await asyncio.gather(init_task, return_exceptions=True)
+            raise
 
         # 如果初始化期间 task 已结束并带有异常，向上抛出
         if init_task.done() and init_task.exception() is not None:
