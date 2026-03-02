@@ -407,16 +407,20 @@ class KookClient:
                 if resp.status == 200:
                     result: dict = await resp.json()
                     if result.get("code") == 0:
-                        logger.info("[KOOK] 发送文件消息成功")
+                        logger.info("[KOOK] 上传文件到kook服务器成功")
                         remote_url = result["data"]["url"]
                         logger.debug(f"[KOOK] 文件远端URL: {remote_url}")
                         return remote_url
                     else:
-                        logger.error(f"[KOOK] 发送文件消息失败: {result}")
+                        raise RuntimeError(f"上传文件到kook服务器失败: {result}")
                 else:
-                    logger.error(f"[KOOK] 发送文件消息HTTP错误: {resp.status}")
+                    raise RuntimeError(
+                        f"上传文件到kook服务器 HTTP错误: {resp.status} , {await resp.text()}"
+                    )
+        except RuntimeError:
+            raise
         except Exception as e:
-            logger.error(f"[KOOK] 发送文件消息异常: {e}")
+            raise RuntimeError(f"上传文件到kook服务器异常: {e}") from e
 
         return ""
 
