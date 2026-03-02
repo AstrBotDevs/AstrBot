@@ -50,13 +50,51 @@ def _prepare_config(config: dict) -> dict:
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     """快速测试 MCP 服务器可达性"""
+    import json
+
     import aiohttp
+    import mcp
 
     cfg = _prepare_config(config.copy())
 
     url = cfg["url"]
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
+
+    async def _format_http_error(response: aiohttp.ClientResponse) -> str:
+        reason = response.reason or ""
+        detail = ""
+        try:
+            raw = await response.content.read(2048)
+            if raw:
+                text = raw.decode(errors="replace").strip()
+                if text:
+                    try:
+                        data = json.loads(text)
+                    except Exception:
+                        detail = text
+                    else:
+                        if isinstance(data, dict):
+                            msg = (
+                                data.get("message")
+                                or data.get("error")
+                                or data.get("detail")
+                            )
+                            code = data.get("code")
+                            if msg is not None:
+                                detail = (
+                                    f"{code}: {msg}" if code is not None else str(msg)
+                                )
+                            else:
+                                detail = text
+                        else:
+                            detail = text
+        except Exception:
+            detail = ""
+
+        if detail:
+            return f"HTTP {response.status}: {reason} ({detail})"
+        return f"HTTP {response.status}: {reason}"
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -66,7 +104,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     "method": "initialize",
                     "id": 0,
                     "params": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": mcp.types.LATEST_PROTOCOL_VERSION,
                         "capabilities": {},
                         "clientInfo": {"name": "test-client", "version": "1.2.3"},
                     },
@@ -83,7 +121,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                    return False, await _format_http_error(response)
             else:
                 async with session.get(
                     url,
@@ -95,7 +133,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                    return False, await _format_http_error(response)
 
     except asyncio.TimeoutError:
         return False, f"连接超时: {timeout}秒"
@@ -238,7 +276,19 @@ class FunctionToolManager:
             await event.wait()
             logger.info(f"收到 MCP 客户端 {name} 终止信号")
         except Exception as e:
-            logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
+            msg = str(e).lower()
+            is_invalid_key = (
+                "invalid apikey" in msg or "invalid authorization key" in msg
+            )
+            if is_invalid_key:
+                if str(cfg.get("provider", "")).lower() == "mcprouter":
+                    logger.warning(
+                        f"初始化 MCP 客户端 {name} 失败：MCPRouter API Key 无效（请重新同步/更新 API Key）: {e!s}",
+                    )
+                else:
+                    logger.warning(f"初始化 MCP 客户端 {name} 失败: {e!s}")
+            else:
+                logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
             if ready_future and not ready_future.done():
                 ready_future.set_exception(e)
         finally:
