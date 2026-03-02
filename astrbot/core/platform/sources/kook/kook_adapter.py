@@ -227,7 +227,8 @@ class KookPlatformAdapter(Platform):
                     abm.message.append(Plain(text=text))
                 for img_url in images:
                     abm.message.append(Image(file=img_url))
-            except Exception:
+            except Exception as exp:
+                logger.error(f"[KOOK] 卡片消息解析失败: {exp}")
                 abm.message_str = "[卡片消息解析失败]"
                 abm.message = [Plain(text="[卡片消息解析失败]")]
         else:
