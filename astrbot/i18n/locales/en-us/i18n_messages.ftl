@@ -326,7 +326,7 @@ msg-24053a5f = Tool failed to send the message directly:{ $e }
 msg-f940b51e = Tool{ $res }Execution timeout{ $res_2 }Seconds.
 msg-7e22fc8e = Unknown method name:{ $method_name }
 msg-c285315c = Tool execution value error:{ $e }
-msg-41366b74 = Tool handler parameter mismatch; please check the handler definition. Handler parameters:{ $handler_param_str }
+msg-41366b74 = Tool handler parameter mismatch; please check the handler definition. Handler parameters:{ $handler_param_str }:{$e}
 msg-e8cadf8e = Tool execution error:{ $e }Backtrace:{ $trace_ }
 msg-d7b4aa84 = Previous error:{ $trace_ }
 
@@ -422,8 +422,8 @@ msg-80a186b8 = Failed to add file receiver:{ $e }
 ### astrbot\core\persona_mgr.py
 
 msg-51a854e6 = Loaded{ $res }Personality.
-msg-1ea88f45 = ID is{ $session_id }Personality does not exist.
-msg-28104dff = ID is{ $session_id }The personality already exists.
+msg-1ea88f45 = ID is{ $persona_id }Personality does not exist.
+msg-28104dff = ID is{ $persona_id }The personality already exists.
 msg-08ecfd42 = { $res }The personality scenario preset dialogue format is incorrect; the number of entries must be even.
 msg-b6292b94 = Failed to parse personality configuration:{ $e }
 
@@ -435,8 +435,8 @@ msg-f425c9f0 = Sub-agent Handover Tool Registered{ $res }
 
 ### astrbot\core\umop_config_router.py
 
-msg-dedcfded = The umop key must be a string in the format [platform_id]:[message_type]:[session_id], supporting the use of wildcard * or leaving it blank to indicate all.
-msg-8e3a16f3 = umop must be a string in the format [platform_id]:[message_type]:[session_id], where wildcard * or leaving it blank indicates all.
+msg-dedcfded = The umop key must be a string in the format [platform_id]:[message_type]:[persona_id], supporting the use of wildcard * or leaving it blank to indicate all.
+msg-8e3a16f3 = umop must be a string in the format [platform_id]:[message_type]:[persona_id], where wildcard * or leaving it blank indicates all.
 
 ### astrbot\core\updator.py
 
@@ -1104,7 +1104,7 @@ msg-7414707c = The aiocqhttp adapter has been shut down.
 
 msg-c81e728d = 2
 msg-d6371313 = DingTalk:{ $res }
-msg-a1c8b5b1 = DingTalk private chat sessions lack staff_id mapping, falling back to using session_id as the userId for sending.
+msg-a1c8b5b1 = DingTalk private chat sessions lack staff_id mapping, falling back to using persona_id as the userId for sending.
 msg-2abb842f = Failed to save DingTalk session mapping:{ $e }
 msg-46988861 = Failed to download DingTalk file:{ $res },{ $res_2 }
 msg-ba9e1288 = Failed to obtain access_token via dingtalk_stream:{ $e }
@@ -1329,7 +1329,7 @@ msg-1a176905 = [Misskey] Failed to send message:{ $e }
 
 ### astrbot\core\platform\sources\misskey\misskey_api.py
 
-msg-fab20f57 = The Misskey API requires aiohttp and websockets. Please install them using the following command: pip install aiohttp websockets
+msg-fab20f57 = The Misskey API requires aiohttp and websockets. Please install them using the following command: pip install aiohttp websockets:{$e}
 msg-f2eea8e1 = [Misskey WebSocket] Connected
 msg-5efd11a2 = [Misskey WebSocket] Resubscribe{ $channel_type }Failure:{ $e }
 msg-b70e2176 = [Misskey WebSocket] Connection failed:{ $e }
@@ -1377,7 +1377,7 @@ msg-dc96bbb8 = HTTP{ $status }For{ $endpoint }
 msg-4c7598b6 = [Misskey API] Retrieved{ $res }A new notification
 msg-851a2a54 = [Misskey API] Request successful:{ $endpoint }
 msg-5f5609b6 = [Misskey API] Response format error:{ $e }
-msg-c8f7bbeb = Invalid JSON response
+msg-c8f7bbeb = Invalid JSON response {$e}
 msg-82748b31 = [Misskey API] Request failed:{ $endpoint }- HTTP{ $res }Response:{ $error_text }
 msg-c6de3320 = [Misskey API] Request failed:{ $endpoint }- HTTP{ $res }
 msg-affb19a7 = [Misskey API] HTTP Request Error:{ $e }
@@ -1385,7 +1385,7 @@ msg-9f1286b3 = HTTP request failed:{ $e }
 msg-44f91be2 = [Misskey API] Post successful:{ $note_id }
 msg-fbafd3db = No upload file path provided.
 msg-872d8419 = [Misskey API] Local file does not exist:{ $file_path }
-msg-37186dea = File not found:{ $file_path }
+msg-37186dea = File not found:{ $file_path }:{$e}
 msg-65ef68e0 = [Misskey API] Local file upload successful:{ $filename }->{ $file_id }
 msg-0951db67 = [Misskey API] File upload network error:{ $e }
 msg-e3a322f5 = Upload failed:{ $e }
@@ -1653,7 +1653,7 @@ msg-ced70250 = An exception occurred while processing the welcome message:{ $e }
 msg-480c5dac = [WecomAI] Message queued:{ $stream_id }
 msg-f595dd6e = Failed to process encrypted image:{ $result }
 msg-e8beeb3d = WecomAIAdapter:{ $res }
-msg-0eedc642 = Failed to send proactive message: Enterprise WeChat message push Webhook URL is not configured. Please go to configure and add it. session_id={ $res }
+msg-0eedc642 = Failed to send proactive message: Enterprise WeChat message push Webhook URL is not configured. Please go to configure and add it. persona_id={ $res }
 msg-9934b024 = Enterprise WeChat message push failed (session={ $res }):{ $e }
 msg-827fa8d0 = Starting the WeChat Work intelligent robot adapter, listening{ $res }:{ $res_2 }
 msg-87616945 = Enterprise WeChat Smart Robot Adapter is shutting down...
@@ -1884,7 +1884,7 @@ msg-0b041916 = Unsupported additional content block type:{ $res }
 
 msg-93d9b5cf = [Azure TTS] Using proxy:{ $res }
 msg-9eea5bcb = Client not initialized. Please use the 'async with' context.
-msg-fd53d21d = Time synchronization failed
+msg-fd53d21d = Time synchronization failed: {$e}
 msg-77890ac4 = OTTS request failed:{ $e }
 msg-c6ec6ec7 = OTTS did not return an audio file.
 msg-5ad71900 = Invalid Azure subscription key
@@ -2275,7 +2275,7 @@ msg-77ca0ccb = Unsupported platforms:{ $platform }
 msg-3ed67eb2 = Unable to retrieve caller module information
 msg-e77ccce6 = Unable to retrieve module{ $res }Metadata information
 msg-76ac38ee = Unable to retrieve plugin name.
-msg-751bfd23 = Unable to create directory{ $data_dir }Insufficient permissions
+msg-751bfd23 = Unable to create directory{ $data_dir }Insufficient permissions: { $e}
 msg-68979283 = Unable to create directory{ $data_dir }:{ $e }
 
 ### astrbot\core\star\updator.py
@@ -2387,7 +2387,7 @@ msg-ecea161e = Path mapping:{ $url }->{ $srcPath }
 
 ### astrbot\core\utils\pip_installer.py
 
-msg-aa9e40b8 = pip module is not available (sys.executable={ $res }frozen={ $res_2 }ASTRBOT_DESKTOP_CLIENT={ $res_3 })
+msg-aa9e40b8 = pip module is not available (sys.executable={ $res }frozen={ $res_2 }ASTRBOT_DESKTOP_CLIENT={ $res_3 }): {$exc}
 msg-4c3d7a1c = Failed to read dependency file; skipping conflict detection:{ $exc }
 msg-fbf35dfa = Failed to read site-packages metadata; using fallback module name:{ $exc }
 msg-c815b9dc = { $conflict_message }
@@ -2431,7 +2431,7 @@ msg-33c88889 = [FFmpeg] Standard output:{ $res }
 msg-2470430c = [FFmpeg] Standard error output:{ $res }
 msg-1321d5f7 = [FFmpeg] Return code:{ $res }
 msg-c39d210c = The generated WAV file does not exist or is empty.
-msg-6e04bdb8 = pilk is not installed: please run pip install pilk
+msg-6e04bdb8 = pilk is not installed: please run pip install pilk: {$e}
 
 ### astrbot\core\utils\trace.py
 
@@ -2617,17 +2617,17 @@ msg-377a7406 = Missing key: file
 msg-bae87336 = Failed to create attachment.
 msg-5c531303 = Missing JSON request body
 msg-1c3efd8f = Missing key: message or file
-msg-04588d0f = Missing key value: session_id or conversation_id
+msg-04588d0f = Missing key value: persona_id or conversation_id
 msg-c6ec40ff = Message content is empty (replies with empty content are not allowed)
 msg-2c3fdeb9 = All messages are empty.
-msg-9bc95e22 = session_id is empty
+msg-9bc95e22 = persona_id is empty
 msg-344a401b = [WebChat] User{ $username }Disconnect the chat long connection.
 msg-6b54abec = WebChat stream error:{ $e }
 msg-53509ecb = Network chat stream message ID mismatch.
 msg-1211e857 = [WebChat] User{ $username }Disconnect the chat long connection.{ $e }
 msg-be34e848 = Failed to extract web search references:{ $e }
 msg-80bbd0ff = WebChat stream unexpected error:{ $e }
-msg-dbf41bfc = Missing key value: session_id
+msg-dbf41bfc = Missing key value: persona_id
 msg-d922dfa3 = Session{ $session_id }Not found
 msg-c52a1454 = Permission denied
 msg-e800fd14 = Failed to delete UMO route.{ $unified_msg_origin }During session cleanup:{ $exc }
@@ -2642,7 +2642,7 @@ msg-04827ead = Missing key: title
 msg-34fccfbb = Missing key: project_id
 msg-a7c08aee = Project{ $project_id }Not found
 msg-c52a1454 = Permission denied
-msg-dbf41bfc = Missing key value: session_id
+msg-dbf41bfc = Missing key value: persona_id
 msg-d922dfa3 = Session{ $session_id }Not found
 
 ### astrbot\dashboard\routes\command.py
@@ -3235,3 +3235,17 @@ msg-6c9836cd = { $delta_text }
 msg-e6e01cca = DeerFlow did not return text content in the stream event.
 msg-1a5b13c5 = DeerFlow stream returns an error event:{ $data }
 msg-298cca9c = DeerFlow stream in thread_id={ $thread_id }Time{ $res }Timeout in seconds; returning partial results.
+
+### Added Missing IDs
+
+msg-bf610e68 = Language cannot be empty
+msg-d103bc8e = Namespace cannot be empty
+msg-f66527da = Namespace cannot contain "."
+msg-b3665aee = Base directory {$base_dir} does not exist or is not a directory
+msg-3fe89e6a = No available locales found in {$base_dir}
+msg-c79b2c75 = Namespace {$namespace} already exists
+msg-7db3fccf = Cannot unregister the default namespace
+msg-3d066f64 = Namespace {$namespace} does not exist
+msg-d79e1ff9 = AstrBot CLI version: {$__version__}
+msg-15c55ed8 = Invalid other[...] format, should be other[{...}]
+msg-1c9fc93d = Module {$__name__} has no member {$name}

@@ -97,7 +97,7 @@ Text chunk to process:
                 return []
         except Exception as e:
             logger.warning(
-                t("msg-7b3dc642", res=attempt + 1, res_2=max_retries + 1, res_3=str(e))
+                t("msg-7b3dc642", attempt=attempt + 1, res=attempt + 1, res_2=max_retries + 1, res_3=str(e))
             )
 
     logger.error(

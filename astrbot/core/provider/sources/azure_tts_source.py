@@ -233,7 +233,7 @@ class AzureTTSProvider(TTSProvider):
                     f"错误详情: {e.msg}\n"
                     f"错误上下文: {json_str[max(0, e.pos - 30) : e.pos + 30]}"
                 )
-                raise ValueError(t("msg-10f72727", error_msg=error_msg, e=e)) from e
+                raise ValueError(t("msg-10f72727", error_msg=error_msg))
             except KeyError as e:
                 raise ValueError(t("msg-60b044ea", e=e)) from e
         if re.fullmatch(r"^[a-zA-Z0-9]{32}$", key_value):

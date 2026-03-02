@@ -316,7 +316,7 @@ msg-24053a5f = Tool直接发送消息失败： {$e}
 msg-f940b51e = Tool {$res} 执行超时 {$res_2} 秒。
 msg-7e22fc8e = 未知的方法名： {$method_name} 
 msg-c285315c = Tool 执行时值错误： {$e} 
-msg-41366b74 = Tool handler 参数不匹配，请检查handler定义。handler 参数： {$handler_param_str} 
+msg-41366b74 = Tool handler 参数不匹配，请检查handler定义。handler 参数： {$handler_param_str}:{$e}
 msg-e8cadf8e = Tool执行错误： {$e} . 回溯： {$trace_} 
 msg-d7b4aa84 = 先前错误： {$trace_} 
 
@@ -412,8 +412,8 @@ msg-80a186b8 = 添加文件接收器失败： {$e}
 ### astrbot\core\persona_mgr.py
 
 msg-51a854e6 = 已加载 {$res} 个人格。
-msg-1ea88f45 = ID为{$session_id}的人格不存在。
-msg-28104dff = ID为{$session_id}的人格已存在。
+msg-1ea88f45 = ID为{$persona_id}的人格不存在。
+msg-28104dff = ID为{$persona_id}的人格已存在。
 msg-08ecfd42 =  {$res} 人格情景预设对话格式不正确，条目数应为偶数。
 msg-b6292b94 = 解析人格配置失败： {$e} 
 
@@ -1316,7 +1316,7 @@ msg-1a176905 = [Misskey] 发送消息失败: {$e}
 
 ### astrbot\core\platform\sources\misskey\misskey_api.py
 
-msg-fab20f57 = Misskey API 需要 aiohttp 和 websockets。请使用以下命令安装：pip install aiohttp websockets
+msg-fab20f57 = [Misskey WebSocket] API 需要 aiohttp 和 websockets。请使用以下命令安装：pip install aiohttp websockets: {$e}
 msg-f2eea8e1 = [Misskey WebSocket] 已连接
 msg-5efd11a2 = [Misskey WebSocket] 重新订阅 {$channel_type} 失败: {$e} 
 msg-b70e2176 = [Misskey WebSocket] 连接失败: {$e}
@@ -1364,7 +1364,7 @@ msg-dc96bbb8 = HTTP {$status} 对于 {$endpoint}
 msg-4c7598b6 = [Misskey API] 已获取 {$res} 一条新通知
 msg-851a2a54 = [Misskey API] 请求成功： {$endpoint} 
 msg-5f5609b6 = [Misskey API] 响应格式错误： {$e} 
-msg-c8f7bbeb = 无效的JSON响应
+msg-c8f7bbeb = 无效的JSON响应 {$e}
 msg-82748b31 = [Misskey API] 请求失败： {$endpoint} - HTTP {$res} , 响应: {$error_text} 
 msg-c6de3320 = [Misskey API] 请求失败： {$endpoint} - HTTP {$res} 
 msg-affb19a7 = [Misskey API] HTTP 请求错误： {$e} 
@@ -1372,7 +1372,7 @@ msg-9f1286b3 = HTTP请求失败： {$e}
 msg-44f91be2 = [Misskey API] 发帖成功: {$note_id} 
 msg-fbafd3db = 未提供上传文件路径
 msg-872d8419 = [Misskey API] 本地文件不存在： {$file_path} 
-msg-37186dea = 文件未找到： {$file_path} 
+msg-37186dea = 文件未找到： {$file_path} :{$e}
 msg-65ef68e0 = [Misskey API] 本地文件上传成功： {$filename} -> {$file_id} 
 msg-0951db67 = [Misskey API] 文件上传网络错误： {$e} 
 msg-e3a322f5 = 上传失败： {$e} 
@@ -1869,7 +1869,7 @@ msg-0b041916 = 不支持的额外内容块类型： {$res}
 
 msg-93d9b5cf = [Azure TTS] 使用代理: {$res} 
 msg-9eea5bcb = 客户端未初始化。请使用 'async with' 上下文。
-msg-fd53d21d = 时间同步失败
+msg-fd53d21d = 时间同步失败: {$e}
 msg-77890ac4 = OTTS请求失败: {$e} 
 msg-c6ec6ec7 = OTTS未返回音频文件
 msg-5ad71900 = 无效的Azure订阅密钥
@@ -2260,7 +2260,7 @@ msg-77ca0ccb = 不支持的平台： {$platform}
 msg-3ed67eb2 = 无法获取调用者模块信息
 msg-e77ccce6 = 无法获取模块 {$res} 的元数据信息
 msg-76ac38ee = 无法获取插件名称
-msg-751bfd23 = 无法创建目录 {$data_dir}：权限不足
+msg-751bfd23 = 无法创建目录 {$data_dir}：权限不足: {$e}
 msg-68979283 = 无法创建目录 {$data_dir}：{$e}
 
 ### astrbot\core\star\updator.py
@@ -2371,7 +2371,7 @@ msg-ecea161e = 路径映射: {$url} -> {$srcPath}
 
 ### astrbot\core\utils\pip_installer.py
 
-msg-aa9e40b8 = pip 模块不可用 (sys.executable= {$res} , frozen= {$res_2} ASTRBOT_DESKTOP_CLIENT= {$res_3})
+msg-aa9e40b8 = pip 模块不可用 (sys.executable= {$res} , frozen= {$res_2} ASTRBOT_DESKTOP_CLIENT= {$res_3}): {$exc}
 msg-4c3d7a1c = 读取依赖文件失败，跳过冲突检测： {$exc} 
 msg-fbf35dfa = 读取 site-packages 元数据失败，使用回退模块名： {$exc} 
 msg-c815b9dc =  {$conflict_message} 
@@ -2415,7 +2415,7 @@ msg-33c88889 = [FFmpeg] 标准输出： {$res}
 msg-2470430c = [FFmpeg] 标准错误输出： {$res} 
 msg-1321d5f7 = [FFmpeg] 返回码： {$res} 
 msg-c39d210c = 生成的WAV文件不存在或为空。
-msg-6e04bdb8 = 未安装 pilk：请运行 pip install pilk
+msg-6e04bdb8 = 未安装 pilk：请运行 pip install pilk: {$e}
 
 ### astrbot\core\utils\trace.py
 
@@ -3203,3 +3203,13 @@ msg-6c9836cd = {$delta_text}
 msg-e6e01cca = DeerFlow 在流事件中未返回文本内容。
 msg-1a5b13c5 = DeerFlow 流返回错误事件: {$data}
 msg-298cca9c = DeerFlow 流在 thread_id={$thread_id} 时 {$res} 秒后超时；返回部分结果。
+
+### Added Missing IDs
+msg-bf610e68 = 语言不能为空
+msg-d103bc8e = 命名空间不能为空
+msg-f66527da = 命名空间不能包含 "."
+msg-b3665aee = 基础目录 {$base_dir} 不存在或不是目录
+msg-3fe89e6a = 在 {$base_dir} 中未找到可用的语言包
+msg-c79b2c75 = 命名空间 {$namespace} 已存在
+msg-7db3fccf = 无法取消注册默认命名空间
+msg-3d066f64 = 命名空间 {$namespace} 不存在

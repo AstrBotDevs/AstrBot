@@ -81,6 +81,17 @@ def scan_locales(locale_dir):
                     if entry.value:
                         extract_params_from_node(entry.value, params)
                     results[locale][filename][msg_id] = sorted(list(params))
+                elif isinstance(entry, fluent_ast.Junk):
+                    # 处理带下划线等非法字符的消息定义
+                    import re
+                    content_str = entry.content
+                    # 匹配 id = ...
+                    id_match = re.match(r"^([a-zA-Z0-9_-]+)\s*=", content_str)
+                    if id_match:
+                        msg_id = id_match.group(1)
+                        # 匹配所有的 {$param_name}，支持带下划线的变量
+                        params = set(re.findall(r"\{\s*\$([a-zA-Z0-9_-]+)\s*\}", content_str))
+                        results[locale][filename][msg_id] = sorted(list(params))
                     
     return results
 

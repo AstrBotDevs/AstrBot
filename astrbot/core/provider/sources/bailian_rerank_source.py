@@ -221,13 +221,13 @@ class BailianRerankProvider(RerankProvider):
         except aiohttp.ClientError as e:
             error_msg = f"网络请求失败: {e}"
             logger.error(t("msg-fa301307", e=e))
-            raise BailianNetworkError(t("msg-10f72727", error_msg=error_msg, e=e)) from e
+            raise BailianNetworkError(t("msg-10f72727", error_msg=error_msg))
         except BailianRerankError:
             raise
         except Exception as e:
             error_msg = f"重排序失败: {e}"
             logger.error(t("msg-9879e226", e=e))
-            raise BailianRerankError(t("msg-10f72727", error_msg=error_msg, e=e)) from e
+            raise BailianRerankError(t("msg-10f72727", error_msg=error_msg))
 
     async def terminate(self) -> None:
         """关闭HTTP客户端会话."""
