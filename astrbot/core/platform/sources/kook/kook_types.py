@@ -1,7 +1,7 @@
 import json
 from dataclasses import field
 from enum import IntEnum
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 from pydantic.dataclasses import dataclass
@@ -52,27 +52,27 @@ class KookCardColor(str):
     """16 进制色值"""
 
 
-class KookCardModelBase:
-    """卡片模块基类"""
+class KookCardElement(Protocol):
+    """卡片元素协议"""
 
     type: str
 
 
 @dataclass
-class PlainTextElement(KookCardModelBase):
+class PlainTextElement(KookCardElement):
     content: str
     type: str = "plain-text"
     emoji: bool = True
 
 
 @dataclass
-class KmarkdownElement(KookCardModelBase):
+class KmarkdownElement(KookCardElement):
     content: str
     type: str = "kmarkdown"
 
 
 @dataclass
-class ImageElement(KookCardModelBase):
+class ImageElement(KookCardElement):
     src: str
     type: str = "image"
     alt: str = ""
@@ -82,7 +82,7 @@ class ImageElement(KookCardModelBase):
 
 
 @dataclass
-class ButtonElement(KookCardModelBase):
+class ButtonElement(KookCardElement):
     text: str
     type: str = "button"
     theme: ThemeType = "primary"
@@ -93,25 +93,34 @@ class ButtonElement(KookCardModelBase):
     """click 代表用户点击的事件,默认为""，代表无任何事件。"""
 
 
-AnyElement = PlainTextElement | KmarkdownElement | ImageElement | ButtonElement | str
+class KookCardStructure(Protocol):
+    """卡片结构协议"""
+
+    type: str
 
 
 @dataclass
-class ParagraphStructure(KookCardModelBase):
+class ParagraphStructure(KookCardStructure):
     fields: list[PlainTextElement | KmarkdownElement]
     type: str = "paragraph"
     cols: int = 1
     """范围是 1-3 , 移动端忽略此参数"""
 
 
+class KookCardModule(Protocol):
+    """卡片模块协议"""
+
+    type: str
+
+
 @dataclass
-class HeaderModule(KookCardModelBase):
+class HeaderModule(KookCardModule):
     text: PlainTextElement
     type: str = "header"
 
 
 @dataclass
-class SectionModule(KookCardModelBase):
+class SectionModule(KookCardModule):
     text: PlainTextElement | KmarkdownElement | ParagraphStructure
     type: str = "section"
     mode: SectionMode = "left"
@@ -119,7 +128,7 @@ class SectionModule(KookCardModelBase):
 
 
 @dataclass
-class ImageGroupModule(KookCardModelBase):
+class ImageGroupModule(KookCardModule):
     """1 到多张图片的组合"""
 
     elements: list[ImageElement]
@@ -127,7 +136,7 @@ class ImageGroupModule(KookCardModelBase):
 
 
 @dataclass
-class ContainerModule(KookCardModelBase):
+class ContainerModule(KookCardModule):
     """1 到多张图片的组合，与图片组模块(ImageGroupModule)不同，图片并不会裁切为正方形。多张图片会纵向排列。"""
 
     elements: list[ImageElement]
@@ -135,25 +144,25 @@ class ContainerModule(KookCardModelBase):
 
 
 @dataclass
-class ActionGroupModule(KookCardModelBase):
+class ActionGroupModule(KookCardModule):
     elements: list[ButtonElement]
     type: str = "action-group"
 
 
 @dataclass
-class ContextModule(KookCardModelBase):
+class ContextModule(KookCardModule):
     elements: list[PlainTextElement | KmarkdownElement | ImageElement]
     """最多包含10个元素"""
     type: str = "context"
 
 
 @dataclass
-class DividerModule(KookCardModelBase):
+class DividerModule(KookCardModule):
     type: str = "divider"
 
 
 @dataclass
-class FileModule(KookCardModelBase):
+class FileModule(KookCardModule):
     src: str
     title: str = ""
     type: Literal["file", "audio", "video"] = "file"
@@ -162,7 +171,7 @@ class FileModule(KookCardModelBase):
 
 
 @dataclass
-class CountdownModule(KookCardModelBase):
+class CountdownModule(KookCardModule):
     """startTime 和 endTime 为毫秒时间戳，startTime 和 endTime 不能小于服务器当前时间戳。"""
 
     endTime: int
@@ -175,25 +184,10 @@ class CountdownModule(KookCardModelBase):
 
 
 @dataclass
-class InviteModule(KookCardModelBase):
+class InviteModule(KookCardModule):
     code: str
     """邀请链接或者邀请码"""
     type: str = "invite"
-
-
-# 所有模块的联合类型
-AnyModule = (
-    HeaderModule
-    | SectionModule
-    | ImageGroupModule
-    | ContainerModule
-    | ActionGroupModule
-    | ContextModule
-    | DividerModule
-    | FileModule
-    | CountdownModule
-    | InviteModule
-)
 
 
 class KookCardMessage(BaseModel):
@@ -207,10 +201,10 @@ class KookCardMessage(BaseModel):
     theme: ThemeType | None = None
     size: SizeType | None = None
     color: KookCardColor | None = None
-    modules: list[AnyModule] = field(default_factory=list)
+    modules: list[KookCardModule] = field(default_factory=list)
     """单个 card 模块数量不限制，但是一条消息中所有卡片的模块数量之和最多是 50"""
 
-    def add_module(self, module: AnyModule):
+    def add_module(self, module: KookCardModule):
         self.modules.append(module)
 
     def to_dict(self, exclude_none: bool = True):
