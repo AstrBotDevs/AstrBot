@@ -31,7 +31,6 @@ class KookPlatformAdapter(Platform):
         super().__init__(platform_config, event_queue)
         self.kook_config = KookConfig.from_dict(platform_config)
         logger.debug(f"[KOOK] 配置: {self.kook_config.pretty_jsons()}")
-        # self.config = platform_config
         self.settings = platform_settings
         self.client = KookClient(self.kook_config, self._on_received)
         self._reconnect_task = None
