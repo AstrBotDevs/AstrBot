@@ -587,6 +587,46 @@
       "only_use_webhook_url_to_send": {
         "description": "仅使用 Webhook 发送消息",
         "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。如果不需要打字机效果，强烈建议使用此选项。"
+      },
+      "kook_bot_token": {
+        "description": "机器人 Token",
+        "type": "string",
+        "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
+      },
+      "kook_reconnect_delay": {
+        "description": "重连延迟",
+        "type": "int",
+        "hint": "重连延迟时间（秒），使用指数退避策略"
+      },
+      "kook_max_reconnect_delay": {
+        "description": "最大重连延迟",
+        "type": "int",
+        "hint": "重连延迟的最大值（秒）"
+      },
+      "kook_max_retry_delay": {
+        "description": "最大重试延迟",
+        "type": "int",
+        "hint": "重试的最大延迟时间（秒）"
+      },
+      "kook_heartbeat_interval": {
+        "description": "心跳间隔",
+        "type": "int",
+        "hint": "心跳检测间隔时间（秒）"
+      },
+      "kook_heartbeat_timeout": {
+        "description": "心跳超时时间",
+        "type": "int",
+        "hint": "心跳检测超时时间（秒）"
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "最大心跳失败次数",
+        "type": "int",
+        "hint": "允许的最大心跳失败次数，超过后断开连接"
+      },
+      "kook_max_consecutive_failures": {
+        "description": "最大连续失败次数",
+        "type": "int",
+        "hint": "允许的最大连续失败次数，超过后停止重试"
       }
     },
     "general": {

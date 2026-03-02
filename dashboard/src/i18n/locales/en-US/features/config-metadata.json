@@ -584,6 +584,46 @@
       "only_use_webhook_url_to_send": {
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
+      },
+      "kook_bot_token": {
+        "description": "Bot Token",
+        "type": "string",
+        "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
+      },
+      "kook_reconnect_delay": {
+        "description": "Reconnect Delay",
+        "type": "int",
+        "hint": "Delay time for reconnection (seconds), using an exponential backoff strategy."
+      },
+      "kook_max_reconnect_delay": {
+        "description": "Max Reconnect Delay",
+        "type": "int",
+        "hint": "The maximum value for reconnection delay (seconds)."
+      },
+      "kook_max_retry_delay": {
+        "description": "Max Retry Delay",
+        "type": "int",
+        "hint": "The maximum delay time for retries (seconds)."
+      },
+      "kook_heartbeat_interval": {
+        "description": "Heartbeat Interval",
+        "type": "int",
+        "hint": "The interval time for heartbeat detection (seconds)."
+      },
+      "kook_heartbeat_timeout": {
+        "description": "Heartbeat Timeout",
+        "type": "int",
+        "hint": "The timeout duration for heartbeat detection (seconds)."
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "Max Heartbeat Failures",
+        "type": "int",
+        "hint": "Maximum allowed heartbeat failures; the connection will be dropped if exceeded."
+      },
+      "kook_max_consecutive_failures": {
+        "description": "Max Consecutive Failures",
+        "type": "int",
+        "hint": "Maximum allowed consecutive failures; retries will stop if exceeded."
       }
     },
     "general": {
