@@ -48,18 +48,29 @@ class Group:
 
 
 class AstrBotMessage:
-    """AstrBot 的消息对象"""
+    """Represents a message received from the platform, after parsing and normalization.
+    This is the main message object that will be passed to plugins and handlers."""
 
-    type: MessageType  # 消息类型
-    self_id: str  # 机器人的识别id
-    session_id: str  # 会话id。取决于 unique_session 的设置。
-    message_id: str  # 消息id
-    group: Group | None  # 群组
-    sender: MessageMember  # 发送者
-    message: list[BaseMessageComponent]  # 消息链使用 Nakuru 的消息链格式
-    message_str: str  # 最直观的纯文本消息字符串
+    type: MessageType
+    """GroupMessage, FriendMessage, etc"""
+    self_id: str
+    """Bot's ID"""
+    session_id: str
+    """Session ID, which is the last part of UMO"""
+    message_id: str
+    """Message ID"""
+    group: Group | None
+    """The group info, None if it's a friend message"""
+    sender: MessageMember
+    """The sender info"""
+    message: list[BaseMessageComponent]
+    """Sorted list of message components after parsing"""
+    message_str: str
+    """The parsed message text after parsing, without any formatting or special components"""
     raw_message: object
-    timestamp: int  # 消息时间戳
+    """The raw message object, the specific type depends on the platform"""
+    timestamp: int
+    """The timestamp when the message is received, in seconds"""
 
     def __init__(self) -> None:
         self.timestamp = int(time.time())
@@ -70,16 +81,12 @@ class AstrBotMessage:
 
     @property
     def group_id(self) -> str:
-        """向后兼容的 group_id 属性
-        群组id，如果为私聊，则为空
-        """
         if self.group:
             return self.group.group_id
         return ""
 
     @group_id.setter
     def group_id(self, value: str | None) -> None:
-        """设置 group_id"""
         if value:
             if self.group:
                 self.group.group_id = value
