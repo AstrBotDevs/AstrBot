@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -21,7 +22,7 @@ class McpServerSyncProvider(abc.ABC):
         raise NotImplementedError
 
     async def list_servers(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
-        raise NotImplementedError
+        return []
 
 
 _provider_registry: dict[str, type[McpServerSyncProvider]] = {}
@@ -177,6 +178,239 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
             headers["X-Title"] = app_name
         return headers
 
+    def _build_mcp_headers(
+        self,
+        *,
+        api_key: str,
+        app_url: str,
+        app_name: str,
+    ) -> dict[str, str]:
+        return self._build_api_headers(
+            api_key=api_key,
+            app_url=app_url,
+            app_name=app_name,
+        )
+
+    @staticmethod
+    def _parse_server_keys(value: Any) -> list[str]:
+        if isinstance(value, list):
+            parts = [str(item).strip() for item in value]
+        elif isinstance(value, str):
+            raw = value.replace(",", "\n").replace(";", "\n")
+            parts = [line.strip() for line in raw.splitlines()]
+        else:
+            return []
+
+        keys = [item for item in parts if item]
+        seen: set[str] = set()
+        result: list[str] = []
+        for item in keys:
+            if item in seen:
+                continue
+            seen.add(item)
+            result.append(item)
+        return result
+
+    @staticmethod
+    def _matches(server: dict[str, Any], q: str) -> bool:
+        if not q:
+            return True
+        haystacks = [
+            server.get("config_name"),
+            server.get("server_key"),
+            server.get("name"),
+            server.get("title"),
+            server.get("description"),
+            server.get("author_name"),
+        ]
+        combined = " ".join(str(v) for v in haystacks if v)
+        return q in combined.lower()
+
+    @staticmethod
+    def _resolve_server_name(
+        server: dict[str, Any],
+        *,
+        fallback: str | None = None,
+    ) -> str | None:
+        return (
+            server.get("config_name")
+            or server.get("server_key")
+            or server.get("name")
+            or server.get("title")
+            or fallback
+        )
+
+    def _make_item(
+        self,
+        *,
+        name: str,
+        url: str,
+        used_names: set[str],
+        headers: dict[str, str],
+        server_key: str | None = None,
+    ) -> SyncedMcpServer:
+        final_name = name
+        if final_name in used_names:
+            suffix = server_key or "dup"
+            final_name = f"{final_name}-{suffix}"
+        i = 2
+        while final_name in used_names:
+            final_name = f"{name}-{i}"
+            i += 1
+        used_names.add(final_name)
+        return SyncedMcpServer(
+            name=final_name,
+            config={
+                "url": url,
+                "transport": "streamable_http",
+                "headers": headers,
+                "active": True,
+                "provider": "mcprouter",
+            },
+        )
+
+    async def _iter_list_servers_batches(
+        self,
+        *,
+        list_url: str,
+        api_headers: dict[str, str],
+        limit: int,
+        max_pages: int,
+    ) -> AsyncGenerator[list[dict[str, Any]], None]:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for page in range(1, max_pages + 1):
+                data = await self._post_json(
+                    session=session,
+                    url=list_url,
+                    payload={"page": page, "limit": limit},
+                    headers=api_headers,
+                    action="MCPRouter list-servers",
+                )
+                self._ensure_api_success(data, action="MCPRouter list-servers")
+                raw_batch = data.get("data", {}).get("servers", []) or []
+                if not raw_batch:
+                    break
+                batch = [item for item in raw_batch if isinstance(item, dict)]
+                if batch:
+                    yield batch
+                if len(raw_batch) < limit:
+                    break
+
+    async def _fetch_from_provided_servers(
+        self,
+        *,
+        provided_servers: list[Any],
+        raw_max_servers: Any,
+        max_servers: int,
+        mcp_headers: dict[str, str],
+    ) -> list[SyncedMcpServer]:
+        used_names: set[str] = set()
+        items: list[SyncedMcpServer] = []
+        selected_servers = (
+            provided_servers[:max_servers]
+            if raw_max_servers is not None
+            else provided_servers
+        )
+        for server in selected_servers:
+            if not isinstance(server, dict):
+                continue
+            server_name = self._resolve_server_name(server)
+            server_url = server.get("server_url")
+            if not server_name or not server_url:
+                continue
+            server_key = server.get("server_key")
+            items.append(
+                self._make_item(
+                    name=str(server_name),
+                    url=str(server_url),
+                    used_names=used_names,
+                    headers=mcp_headers,
+                    server_key=str(server_key) if server_key else None,
+                )
+            )
+        return items
+
+    async def _fetch_from_server_keys(
+        self,
+        *,
+        server_keys: list[str],
+        max_servers: int,
+        get_url: str,
+        api_headers: dict[str, str],
+        mcp_headers: dict[str, str],
+    ) -> list[SyncedMcpServer]:
+        timeout = aiohttp.ClientTimeout(total=30)
+        used_names: set[str] = set()
+        items: list[SyncedMcpServer] = []
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for server_key in server_keys[:max_servers]:
+                data = await self._post_json(
+                    session=session,
+                    url=get_url,
+                    payload={"server": server_key},
+                    headers=api_headers,
+                    action="MCPRouter get-server",
+                )
+                self._ensure_api_success(data, action="MCPRouter get-server")
+                server = data.get("data") or {}
+                if not isinstance(server, dict):
+                    continue
+                server_url = server.get("server_url")
+                server_name = self._resolve_server_name(server, fallback=server_key)
+                if not server_url or not server_name:
+                    continue
+                items.append(
+                    self._make_item(
+                        name=str(server_name),
+                        url=str(server_url),
+                        used_names=used_names,
+                        headers=mcp_headers,
+                        server_key=server_key,
+                    )
+                )
+        return items
+
+    async def _fetch_from_listing(
+        self,
+        *,
+        list_url: str,
+        api_headers: dict[str, str],
+        mcp_headers: dict[str, str],
+        query: str,
+        max_servers: int,
+        limit: int,
+        max_pages: int,
+    ) -> list[SyncedMcpServer]:
+        used_names: set[str] = set()
+        items: list[SyncedMcpServer] = []
+        async for batch in self._iter_list_servers_batches(
+            list_url=list_url,
+            api_headers=api_headers,
+            limit=limit,
+            max_pages=max_pages,
+        ):
+            for server in batch:
+                if not self._matches(server, query):
+                    continue
+                server_url = server.get("server_url")
+                server_name = self._resolve_server_name(server)
+                if not server_url or not server_name:
+                    continue
+                server_key = server.get("server_key")
+                items.append(
+                    self._make_item(
+                        name=str(server_name),
+                        url=str(server_url),
+                        used_names=used_names,
+                        headers=mcp_headers,
+                        server_key=str(server_key) if server_key else None,
+                    )
+                )
+                if len(items) >= max_servers:
+                    return items
+        return items
+
     async def _validate_api_key(
         self,
         *,
@@ -231,6 +465,11 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
             app_url=app_url,
             app_name=app_name,
         )
+        mcp_headers = self._build_mcp_headers(
+            api_key=api_key,
+            app_url=app_url,
+            app_name=app_name,
+        )
 
         query = str(payload.get("query", "")).strip().lower()
         raw_max_servers = payload.get("max_servers")
@@ -243,179 +482,34 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         max_pages = int(payload.get("max_pages", 10) or 10)
         max_pages = max(1, min(max_pages, 50))
 
-        mcp_headers: dict[str, str] = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        if app_url:
-            mcp_headers["HTTP-Referer"] = app_url
-        if app_name:
-            mcp_headers["X-Title"] = app_name
-
-        def parse_server_keys(value: Any) -> list[str]:
-            if isinstance(value, list):
-                parts = [str(item).strip() for item in value]
-            elif isinstance(value, str):
-                raw = value.replace(",", "\n").replace(";", "\n")
-                parts = [line.strip() for line in raw.splitlines()]
-            else:
-                return []
-            keys = [item for item in parts if item]
-            seen: set[str] = set()
-            result: list[str] = []
-            for item in keys:
-                if item in seen:
-                    continue
-                seen.add(item)
-                result.append(item)
-            return result
-
-        def matches(server: dict[str, Any], q: str) -> bool:
-            if not q:
-                return True
-            haystacks = [
-                server.get("config_name"),
-                server.get("server_key"),
-                server.get("name"),
-                server.get("title"),
-                server.get("description"),
-                server.get("author_name"),
-            ]
-            combined = " ".join(str(v) for v in haystacks if v)
-            return q in combined.lower()
-
-        def make_item(
-            *,
-            name: str,
-            url: str,
-            used_names: set[str],
-            server_key: str | None = None,
-        ) -> SyncedMcpServer:
-            final_name = name
-            if final_name in used_names:
-                suffix = server_key or "dup"
-                final_name = f"{final_name}-{suffix}"
-            i = 2
-            while final_name in used_names:
-                final_name = f"{name}-{i}"
-                i += 1
-            used_names.add(final_name)
-            return SyncedMcpServer(
-                name=final_name,
-                config={
-                    "url": url,
-                    "transport": "streamable_http",
-                    "headers": mcp_headers,
-                    "active": True,
-                    "provider": "mcprouter",
-                },
-            )
-
-        timeout = aiohttp.ClientTimeout(total=30)
-        used_names: set[str] = set()
-        items: list[SyncedMcpServer] = []
-
         provided_servers = payload.get("servers")
         if isinstance(provided_servers, list) and provided_servers:
-            selected_servers = (
-                provided_servers[:max_servers]
-                if raw_max_servers is not None
-                else provided_servers
+            return await self._fetch_from_provided_servers(
+                provided_servers=provided_servers,
+                raw_max_servers=raw_max_servers,
+                max_servers=max_servers,
+                mcp_headers=mcp_headers,
             )
-            for server in selected_servers:
-                if not isinstance(server, dict):
-                    continue
-                server_key = server.get("server_key")
-                server_name = (
-                    server.get("config_name")
-                    or server_key
-                    or server.get("name")
-                    or server.get("title")
-                )
-                server_url = server.get("server_url")
-                if not server_name or not server_url:
-                    continue
-                items.append(
-                    make_item(
-                        name=str(server_name),
-                        url=str(server_url),
-                        used_names=used_names,
-                        server_key=str(server_key) if server_key else None,
-                    )
-                )
-            return items
 
-        server_keys = parse_server_keys(payload.get("server_keys"))
+        server_keys = self._parse_server_keys(payload.get("server_keys"))
         if server_keys:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                for server_key in server_keys[:max_servers]:
-                    data = await self._post_json(
-                        session=session,
-                        url=get_url,
-                        payload={"server": server_key},
-                        headers=api_headers,
-                        action="MCPRouter get-server",
-                    )
-                    self._ensure_api_success(data, action="MCPRouter get-server")
-                    server = data.get("data") or {}
-                    server_url = server.get("server_url")
-                    if not server_url:
-                        continue
-                    server_name = (
-                        server.get("config_name")
-                        or server.get("server_key")
-                        or server.get("name")
-                        or server_key
-                    )
-                    items.append(
-                        make_item(
-                            name=str(server_name),
-                            url=str(server_url),
-                            used_names=used_names,
-                            server_key=server_key,
-                        )
-                    )
-            return items
+            return await self._fetch_from_server_keys(
+                server_keys=server_keys,
+                max_servers=max_servers,
+                get_url=get_url,
+                api_headers=api_headers,
+                mcp_headers=mcp_headers,
+            )
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            for page in range(1, max_pages + 1):
-                data = await self._post_json(
-                    session=session,
-                    url=list_url,
-                    payload={"page": page, "limit": limit},
-                    headers=api_headers,
-                    action="MCPRouter list-servers",
-                )
-                self._ensure_api_success(data, action="MCPRouter list-servers")
-                batch = data.get("data", {}).get("servers", []) or []
-                if not batch:
-                    break
-                for server in batch:
-                    if not matches(server, query):
-                        continue
-                    server_url = server.get("server_url")
-                    if not server_url:
-                        continue
-                    server_key = server.get("server_key")
-                    server_name = (
-                        server.get("config_name") or server_key or server.get("name")
-                    )
-                    if not server_name:
-                        continue
-                    items.append(
-                        make_item(
-                            name=str(server_name),
-                            url=str(server_url),
-                            used_names=used_names,
-                            server_key=str(server_key) if server_key else None,
-                        )
-                    )
-                    if len(items) >= max_servers:
-                        return items
-                if len(batch) < limit:
-                    break
-
-        return items
+        return await self._fetch_from_listing(
+            list_url=list_url,
+            api_headers=api_headers,
+            mcp_headers=mcp_headers,
+            query=query,
+            max_servers=max_servers,
+            limit=limit,
+            max_pages=max_pages,
+        )
 
     async def list_servers(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         api_key = self._normalize_api_key(str(payload.get("api_key", "")))
@@ -447,32 +541,20 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         max_items = 2000
 
         servers: list[dict[str, Any]] = []
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            for page in range(1, max_pages + 1):
-                data = await self._post_json(
-                    session=session,
-                    url=list_url,
-                    payload={"page": page, "limit": limit},
-                    headers=api_headers,
-                    action="MCPRouter list-servers",
-                )
-                self._ensure_api_success(data, action="MCPRouter list-servers")
-                batch = data.get("data", {}).get("servers", []) or []
-                if not batch:
-                    break
-                for item in batch:
-                    if not isinstance(item, dict):
-                        continue
-                    server_url = item.get("server_url")
-                    server_key = item.get("server_key")
-                    config_name = item.get("config_name")
-                    if not server_url or not (server_key or config_name):
-                        continue
-                    servers.append(item)
-                    if len(servers) >= max_items:
-                        return servers
-                if len(batch) < limit:
-                    break
+        async for batch in self._iter_list_servers_batches(
+            list_url=list_url,
+            api_headers=api_headers,
+            limit=limit,
+            max_pages=max_pages,
+        ):
+            for item in batch:
+                server_url = item.get("server_url")
+                server_key = item.get("server_key")
+                config_name = item.get("config_name")
+                if not server_url or not (server_key or config_name):
+                    continue
+                servers.append(item)
+                if len(servers) >= max_items:
+                    return servers
 
         return servers
