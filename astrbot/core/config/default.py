@@ -449,6 +449,12 @@ CONFIG_METADATA_2 = {
                         "satori_heartbeat_interval": 10,
                         "satori_reconnect_delay": 5,
                     },
+                    "kook": {
+                        "id": "kook",
+                        "type": "kook",
+                        "enable": False,
+                        "token": "",
+                    },
                     # "WebChat": {
                     #     "id": "webchat",
                     #     "type": "webchat",
