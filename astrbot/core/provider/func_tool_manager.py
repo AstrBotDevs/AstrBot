@@ -409,8 +409,16 @@ class FunctionToolManager:
         shutdown_event: asyncio.Event | None = None,
         timeout: float,
     ) -> None:
-        """Initialize MCP server with timeout and register task/event together."""
+        """Initialize MCP server with timeout and register task/event together.
+
+        This method is idempotent. If the server is already running, the existing
+        runtime is kept and the new config is ignored.
+        """
         if name in self.mcp_server_runtime:
+            logger.warning(
+                f"MCP 服务 {name} 已在运行，忽略本次启用请求（timeout={timeout:g}）。"
+            )
+            self._log_safe_mcp_debug_config(cfg)
             return
 
         if shutdown_event is None:
@@ -444,12 +452,24 @@ class FunctionToolManager:
         self, lifecycle_task: asyncio.Task[None], timeout: float
     ) -> None:
         """Wait for lifecycle task and cancel on timeout."""
+        await self._wait_mcp_lifecycle_tasks([lifecycle_task], timeout)
+
+    async def _wait_mcp_lifecycle_tasks(
+        self, lifecycle_tasks: list[asyncio.Task[None]], timeout: float
+    ) -> None:
+        """Wait for lifecycle tasks and cancel unfinished tasks on timeout."""
+        if not lifecycle_tasks:
+            return
         try:
-            await asyncio.wait_for(asyncio.shield(lifecycle_task), timeout=timeout)
+            await asyncio.wait_for(
+                asyncio.gather(*(asyncio.shield(task) for task in lifecycle_tasks)),
+                timeout=timeout,
+            )
         except asyncio.TimeoutError:
-            if not lifecycle_task.done():
-                lifecycle_task.cancel()
-                await asyncio.gather(lifecycle_task, return_exceptions=True)
+            for task in lifecycle_tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
             raise
 
     async def _init_mcp_client(self, name: str, config: dict) -> None:
@@ -589,17 +609,7 @@ class FunctionToolManager:
             ]
             # waiting for all clients to finish
             try:
-                await asyncio.wait_for(
-                    asyncio.gather(*lifecycle_tasks),
-                    timeout=timeout,
-                )
-            except asyncio.TimeoutError:
-                for task in lifecycle_tasks:
-                    if not task.done():
-                        task.cancel()
-                if lifecycle_tasks:
-                    await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
-                raise
+                await self._wait_mcp_lifecycle_tasks(lifecycle_tasks, timeout)
             finally:
                 self.mcp_server_runtime.clear()
                 self.mcp_client_dict.clear()
