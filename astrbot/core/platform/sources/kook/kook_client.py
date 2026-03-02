@@ -12,8 +12,11 @@ import websockets
 
 from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .kook_types import KookApiPaths, KookMessageType
+
+ALLOWED_ASSETS_DIR = Path(get_astrbot_data_path()).resolve()
 
 
 class KookClient:
@@ -344,7 +347,7 @@ class KookClient:
         """上传文件到kook,获得远端资源url
         接口定义参见: https://developer.kookapp.cn/doc/http/asset
         """
-        if file_url is None:
+        if not file_url:
             return ""
 
         bytes_data: bytes | None = None
@@ -360,12 +363,41 @@ class KookClient:
                 b64_str = file_url.removeprefix("base64://")
             bytes_data = base64.b64decode(b64_str)
 
-        else:
-            file_url = file_url.replace("file:///", "")
-            file_url = file_url.replace("file://", "")
-            filename = Path(file_url).name
-            async with aiofiles.open(file_url, "rb") as f:
+        elif file_url.startswith("file://"):
+            if file_url.startswith("file:///"):
+                file_url = file_url.removeprefix("file:///")
+            else:
+                file_url = file_url.removeprefix("file://")
+
+            try:
+                target_path = Path(file_url)
+                target_path = target_path.resolve()
+            except Exception as exp:
+                logger.error(
+                    f'[KOOK] 获取文件 "{target_path.as_posix()}" 绝对路径失败: "{exp}"'
+                )
+                raise FileNotFoundError(
+                    f'获取文件 "{target_path.name}" 绝对路径失败: "{exp}"'
+                )
+
+            # 安全验证
+            if not target_path.is_relative_to(ALLOWED_ASSETS_DIR):
+                logger.error(
+                    f'[KOOK] 拒绝访问: "{target_path.as_posix()}" 不在允许的目录范围内'
+                )
+                raise PermissionError(
+                    f'拒绝访问: "{target_path.name}"文件路径不在允许的目录范围内'
+                )
+
+            if not target_path.is_file():
+                raise FileNotFoundError(f"文件不存在: {target_path.name}")
+
+            filename = target_path.name
+            async with aiofiles.open(target_path, "rb") as f:
                 bytes_data = await f.read()
+
+        else:
+            raise ValueError(f'[KOOK] 不支持的文件资源类型: "{file_url}"')
 
         data = aiohttp.FormData()
         data.add_field("file", bytes_data, filename=filename)
