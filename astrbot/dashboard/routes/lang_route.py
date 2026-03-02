@@ -12,11 +12,9 @@ class LangRoute(Route):
         }
         self.register_routes()
 
-    # TODO 删除日志
     async def set_Lang(self):
         data = await request.get_json()
         lang = data.get("lang")
-        logger.debug(f"[LangRoute] lang:{lang}")
         if lang is None:
             return Response().error("lang 为必填参数。").__dict__
         try:
