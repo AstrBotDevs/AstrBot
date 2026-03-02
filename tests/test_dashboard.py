@@ -1,6 +1,7 @@
 import asyncio
 import os
-from pathlib import Path
+import sys
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -311,3 +312,184 @@ async def test_do_update(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+
+
+class _FakeNeoSkills:
+    async def list_candidates(self, **kwargs):
+        _ = kwargs
+        return [
+            {
+                "id": "cand-1",
+                "skill_key": "neo.demo",
+                "status": "evaluated_pass",
+                "payload_ref": "pref-1",
+            }
+        ]
+
+    async def list_releases(self, **kwargs):
+        _ = kwargs
+        return [
+            {
+                "id": "rel-1",
+                "skill_key": "neo.demo",
+                "candidate_id": "cand-1",
+                "stage": "stable",
+                "active": True,
+            }
+        ]
+
+    async def get_payload(self, payload_ref: str):
+        return {
+            "payload_ref": payload_ref,
+            "payload": {"skill_markdown": "# Demo"},
+        }
+
+    async def evaluate_candidate(self, candidate_id: str, **kwargs):
+        return {"candidate_id": candidate_id, **kwargs}
+
+    async def promote_candidate(self, candidate_id: str, stage: str = "canary"):
+        return {
+            "id": "rel-2",
+            "skill_key": "neo.demo",
+            "candidate_id": candidate_id,
+            "stage": stage,
+        }
+
+    async def rollback_release(self, release_id: str):
+        return {"id": "rb-1", "rolled_back_release_id": release_id}
+
+
+class _FakeNeoBayClient:
+    def __init__(self, endpoint_url: str, access_token: str):
+        self.endpoint_url = endpoint_url
+        self.access_token = access_token
+        self.skills = _FakeNeoSkills()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        _ = exc_type, exc, tb
+        return False
+
+
+@pytest.mark.asyncio
+async def test_neo_skills_routes(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    provider_settings = core_lifecycle_td.astrbot_config.setdefault(
+        "provider_settings", {}
+    )
+    sandbox = provider_settings.setdefault("sandbox", {})
+    sandbox["shipyard_neo_endpoint"] = "http://neo.test"
+    sandbox["shipyard_neo_access_token"] = "neo-token"
+
+    fake_shipyard_neo_module = SimpleNamespace(BayClient=_FakeNeoBayClient)
+    monkeypatch.setitem(sys.modules, "shipyard_neo", fake_shipyard_neo_module)
+
+    async def _fake_sync_release(self, client, **kwargs):
+        _ = self, client, kwargs
+        return SimpleNamespace(
+            skill_key="neo.demo",
+            local_skill_name="neo_demo",
+            release_id="rel-2",
+            candidate_id="cand-1",
+            payload_ref="pref-1",
+            map_path="data/skills/neo_skill_map.json",
+            synced_at="2026-01-01T00:00:00Z",
+        )
+
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.NeoSkillSyncManager.sync_release",
+        _fake_sync_release,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+
+    test_client = app.test_client()
+
+    response = await test_client.get(
+        "/api/skills/neo/candidates", headers=authenticated_header
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"], list)
+    assert data["data"][0]["id"] == "cand-1"
+
+    response = await test_client.get(
+        "/api/skills/neo/releases", headers=authenticated_header
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"], list)
+    assert data["data"][0]["id"] == "rel-1"
+
+    response = await test_client.get(
+        "/api/skills/neo/payload?payload_ref=pref-1", headers=authenticated_header
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["payload_ref"] == "pref-1"
+
+    response = await test_client.post(
+        "/api/skills/neo/evaluate",
+        json={"candidate_id": "cand-1", "passed": True, "score": 0.95},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["candidate_id"] == "cand-1"
+    assert data["data"]["passed"] is True
+
+    response = await test_client.post(
+        "/api/skills/neo/evaluate",
+        json={"candidate_id": "cand-1", "passed": "false", "score": 0.0},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["passed"] is False
+
+    response = await test_client.post(
+        "/api/skills/neo/promote",
+        json={"candidate_id": "cand-1", "stage": "stable"},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["release"]["id"] == "rel-2"
+    assert data["data"]["sync"]["local_skill_name"] == "neo_demo"
+
+    response = await test_client.post(
+        "/api/skills/neo/rollback",
+        json={"release_id": "rel-2"},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["rolled_back_release_id"] == "rel-2"
+
+    response = await test_client.post(
+        "/api/skills/neo/sync",
+        json={"release_id": "rel-2"},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["skill_key"] == "neo.demo"

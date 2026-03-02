@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from quart import g, request
 
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
 from .route import Response, Route, RouteContext
 
@@ -26,11 +27,7 @@ class ApiKeyRoute(Route):
 
     @staticmethod
     def _normalize_utc(dt: datetime | None) -> datetime | None:
-        if dt is None:
-            return None
-        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+        return normalize_datetime_utc(dt)
 
     @classmethod
     def _serialize_datetime(cls, dt: datetime | None) -> str | None:

@@ -161,6 +161,22 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API Endpoint",
+            "hint": "Bay API address, default http://127.0.0.1:8114."
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo Access Token",
+            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo Profile",
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo Sandbox TTL",
+            "hint": "Sandbox time-to-live in seconds."
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "API access address for Shipyard service."
@@ -354,7 +370,8 @@
         "hint": "Optional Discord activity name. Leave empty to disable."
       },
       "discord_command_register": {
-        "description": "Auto-register plugin commands as Discord slash commands"
+        "description": "Register Discord slash commands",
+        "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"
       },
       "discord_proxy": {
         "description": "Discord Proxy URL",
@@ -719,6 +736,17 @@
             "emojis": {
               "description": "Emoji List (Unicode)",
               "hint": "Telegram only supports a fixed reaction set, reference: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Unicode or Custom Emoji Name)",
+              "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
             }
           }
         }

@@ -129,14 +129,18 @@ DEFAULT_CONFIG = {
         "proactive_capability": {
             "add_cron_tools": True,
         },
-        "computer_use_runtime": "local",
+        "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
-            "booter": "shipyard",
+            "booter": "shipyard_neo",
             "shipyard_endpoint": "",
             "shipyard_access_token": "",
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
+            "shipyard_neo_endpoint": "",
+            "shipyard_neo_access_token": "",
+            "shipyard_neo_profile": "python-default",
+            "shipyard_neo_ttl": 3600,
         },
     },
     # SubAgent orchestrator mode:
@@ -391,7 +395,6 @@ CONFIG_METADATA_2 = {
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
-                        "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
                     "Misskey": {
@@ -751,7 +754,8 @@ CONFIG_METADATA_2 = {
                         "hint": "可选的代理地址：http://ip:port",
                     },
                     "discord_command_register": {
-                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "description": "注册 Discord 指令",
+                        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令",
                         "type": "bool",
                     },
                     "discord_activity_name": {
@@ -2871,10 +2875,46 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard"],
-                        "labels": ["Shipyard"],
+                        "options": ["shipyard_neo", "shipyard"],
+                        "labels": ["Shipyard Neo", "Shipyard"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_endpoint": {
+                        "description": "Shipyard Neo API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_access_token": {
+                        "description": "Shipyard Neo Access Token",
+                        "type": "string",
+                        "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_profile": {
+                        "description": "Shipyard Neo Profile",
+                        "type": "string",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_ttl": {
+                        "description": "Shipyard Neo Sandbox TTL",
+                        "type": "int",
+                        "hint": "Shipyard Neo 沙箱生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
                         },
                     },
                     "provider_settings.sandbox.shipyard_endpoint": {
@@ -3112,46 +3152,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.max_quoted_fallback_images": {
-                        "description": "引用图片回退解析上限",
-                        "type": "int",
-                        "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_component_chain_depth": {
-                        "description": "引用解析组件链深度",
-                        "type": "int",
-                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_forward_node_depth": {
-                        "description": "引用解析转发节点深度",
-                        "type": "int",
-                        "hint": "解析合并转发节点时允许的最大递归深度。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_forward_fetch": {
-                        "description": "引用解析转发拉取上限",
-                        "type": "int",
-                        "hint": "递归拉取 get_forward_msg 的最大次数。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.warn_on_action_failure": {
-                        "description": "引用解析 action 失败告警",
-                        "type": "bool",
-                        "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
@@ -3194,6 +3194,46 @@ CONFIG_METADATA_3 = {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                    },
+                    "provider_settings.max_quoted_fallback_images": {
+                        "description": "引用图片回退解析上限",
+                        "type": "int",
+                        "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_component_chain_depth": {
+                        "description": "引用解析组件链深度",
+                        "type": "int",
+                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_forward_node_depth": {
+                        "description": "引用解析转发节点深度",
+                        "type": "int",
+                        "hint": "解析合并转发节点时允许的最大递归深度。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_forward_fetch": {
+                        "description": "引用解析转发拉取上限",
+                        "type": "int",
+                        "hint": "递归拉取 get_forward_msg 的最大次数。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.warn_on_action_failure": {
+                        "description": "引用解析 action 失败告警",
+                        "type": "bool",
+                        "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                 },
                 "condition": {
@@ -3404,6 +3444,19 @@ CONFIG_METADATA_3 = {
                         "hint": "Telegram 仅支持固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
                         "condition": {
                             "platform_specific.telegram.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.discord.pre_ack_emoji.enable": {
+                        "description": "[Discord] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.discord.pre_ack_emoji.emojis": {
+                        "description": "表情列表（Unicode 或自定义表情名）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳",
+                        "condition": {
+                            "platform_specific.discord.pre_ack_emoji.enable": True,
                         },
                     },
                 },
