@@ -40,6 +40,12 @@ class ToolsRoute(Route):
 
             # 获取所有服务器并添加它们的工具列表
             for name, server_config in config["mcpServers"].items():
+                if not isinstance(server_config, dict):
+                    logger.warning(
+                        f"MCP 服务器 '{name}' 的配置无效（类型为 {type(server_config).__name__}），已跳过"
+                    )
+                    continue
+
                 server_info = {
                     "name": name,
                     "active": server_config.get("active", True),
@@ -87,10 +93,19 @@ class ToolsRoute(Route):
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
                     if key == "mcpServers":
-                        key_0 = list(server_data["mcpServers"].keys())[
-                            0
-                        ]  # 不考虑为空的情况
-                        server_config = server_data["mcpServers"][key_0]
+                        mcp_keys = list(server_data["mcpServers"].keys())
+                        if not mcp_keys:
+                            return Response().error(
+                                "mcpServers 配置不能为空"
+                            ).__dict__
+                        key_0 = mcp_keys[0]
+                        extracted = server_data["mcpServers"][key_0]
+                        if not isinstance(extracted, dict):
+                            return Response().error(
+                                "mcpServers 配置格式不正确。请确保 mcpServers 内部的 key 是服务器名称，"
+                                "其值为包含 command/url 等字段的对象。"
+                            ).__dict__
+                        server_config = extracted
                     else:
                         server_config[key] = value
                     has_valid_config = True
@@ -146,10 +161,12 @@ class ToolsRoute(Route):
                 return Response().error(f"服务器 {name} 已存在").__dict__
 
             # 获取活动状态
-            active = server_data.get(
-                "active",
-                config["mcpServers"][old_name].get("active", True),
-            )
+            old_config = config["mcpServers"][old_name]
+            if isinstance(old_config, dict):
+                old_active = old_config.get("active", True)
+            else:
+                old_active = True
+            active = server_data.get("active", old_active)
 
             # 创建新的配置对象
             server_config = {"active": active}
@@ -167,17 +184,26 @@ class ToolsRoute(Route):
                     "oldName",
                 ]:  # 排除特殊字段
                     if key == "mcpServers":
-                        key_0 = list(server_data["mcpServers"].keys())[
-                            0
-                        ]  # 不考虑为空的情况
-                        server_config = server_data["mcpServers"][key_0]
+                        mcp_keys = list(server_data["mcpServers"].keys())
+                        if not mcp_keys:
+                            return Response().error(
+                                "mcpServers 配置不能为空"
+                            ).__dict__
+                        key_0 = mcp_keys[0]
+                        extracted = server_data["mcpServers"][key_0]
+                        if not isinstance(extracted, dict):
+                            return Response().error(
+                                "mcpServers 配置格式不正确。请确保 mcpServers 内部的 key 是服务器名称，"
+                                "其值为包含 command/url 等字段的对象。"
+                            ).__dict__
+                        server_config = extracted
                     else:
                         server_config[key] = value
                     only_update_active = False
 
             # 如果只更新活动状态，保留原始配置
-            if only_update_active:
-                for key, value in config["mcpServers"][old_name].items():
+            if only_update_active and isinstance(old_config, dict):
+                for key, value in old_config.items():
                     if key != "active":  # 除了active之外的所有字段都保留
                         server_config[key] = value
 
