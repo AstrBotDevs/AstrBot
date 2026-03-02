@@ -26,8 +26,16 @@ ENABLE_MCP_TIMEOUT_ENV = "ASTRBOT_MCP_ENABLE_TIMEOUT"
 MAX_MCP_TIMEOUT_SECONDS = 300.0
 
 
-class MCPInitTimeoutError(asyncio.TimeoutError):
+class MCPInitError(Exception):
+    """Base exception for MCP initialization failures."""
+
+
+class MCPInitTimeoutError(asyncio.TimeoutError, MCPInitError):
     """Raised when MCP client initialization exceeds the configured timeout."""
+
+
+class MCPAllServicesFailedError(MCPInitError):
+    """Raised when all configured MCP services fail to initialize."""
 
 
 @dataclass
@@ -78,6 +86,20 @@ def _resolve_timeout(
         return MAX_MCP_TIMEOUT_SECONDS
 
     return timeout_value
+
+
+def _resolve_mcp_timeout(
+    *,
+    timeout: float | int | str | None = None,
+    init_phase: bool,
+) -> float:
+    env_name = MCP_INIT_TIMEOUT_ENV if init_phase else ENABLE_MCP_TIMEOUT_ENV
+    default = (
+        DEFAULT_MCP_INIT_TIMEOUT_SECONDS
+        if init_phase
+        else DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS
+    )
+    return _resolve_timeout(timeout=timeout, env_name=env_name, default=default)
 
 
 SUPPORTED_TYPES = [
@@ -300,10 +322,7 @@ class FunctionToolManager:
             open(mcp_json_file, encoding="utf-8"),
         )["mcpServers"]
 
-        init_timeout = _resolve_timeout(
-            env_name=MCP_INIT_TIMEOUT_ENV,
-            default=DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
-        )
+        init_timeout = _resolve_mcp_timeout(init_phase=True)
         timeout_display = f"{init_timeout:g}"
 
         active_configs: list[tuple[str, dict, asyncio.Event]] = []
@@ -358,7 +377,7 @@ class FunctionToolManager:
         )
         logger.info(f"MCP 服务初始化完成: {summary.success}/{summary.total} 成功")
         if summary.total > 0 and summary.success == 0:
-            raise RuntimeError(
+            raise MCPAllServicesFailedError(
                 "全部 MCP 服务初始化失败，请检查 mcp_server.json 配置和服务器可用性。"
             )
         return summary
@@ -382,14 +401,21 @@ class FunctionToolManager:
             if runtime and runtime.lifecycle_task is current_task:
                 self.mcp_server_runtime.pop(name, None)
 
-    async def _start_mcp_client_with_timeout(
+    async def _start_mcp_server(
         self,
         name: str,
         cfg: dict,
-        shutdown_event: asyncio.Event,
+        *,
+        shutdown_event: asyncio.Event | None = None,
         timeout: float,
-    ) -> asyncio.Task[None]:
-        """启动 MCP 客户端：先初始化，成功后再启动长生命周期任务。"""
+    ) -> None:
+        """Initialize MCP server with timeout and register task/event together."""
+        if name in self.mcp_server_runtime:
+            return
+
+        if shutdown_event is None:
+            shutdown_event = asyncio.Event()
+
         try:
             await asyncio.wait_for(
                 self._init_mcp_client(name, cfg),
@@ -405,31 +431,9 @@ class FunctionToolManager:
             await self._terminate_mcp_client(name)
             raise
 
-        return asyncio.create_task(
+        lifecycle_task = asyncio.create_task(
             self._run_mcp_client(name, shutdown_event),
             name=f"mcp-client:{name}",
-        )
-
-    async def _start_mcp_server(
-        self,
-        name: str,
-        cfg: dict,
-        *,
-        shutdown_event: asyncio.Event | None = None,
-        timeout: float,
-    ) -> None:
-        """Initialize MCP server with timeout and register task/event together."""
-        if name in self.mcp_client_dict:
-            return
-
-        if shutdown_event is None:
-            shutdown_event = asyncio.Event()
-
-        lifecycle_task = await self._start_mcp_client_with_timeout(
-            name=name,
-            cfg=cfg,
-            shutdown_event=shutdown_event,
-            timeout=timeout,
         )
         self.mcp_server_runtime[name] = _MCPServerRuntime(
             shutdown_event=shutdown_event,
@@ -537,14 +541,10 @@ class FunctionToolManager:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
         """
-        if name in self.mcp_client_dict:
+        if name in self.mcp_server_runtime:
             logger.info(f"MCP 服务 {name} 已存在，跳过重复启用。")
             return
-        timeout_value = _resolve_timeout(
-            timeout=timeout,
-            env_name=ENABLE_MCP_TIMEOUT_ENV,
-            default=DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS,
-        )
+        timeout_value = _resolve_mcp_timeout(timeout=timeout, init_phase=False)
         await self._start_mcp_server(
             name=name,
             cfg=config,
@@ -566,19 +566,12 @@ class FunctionToolManager:
         """
         if name:
             runtime = self.mcp_server_runtime.get(name)
-            if runtime is None and name not in self.mcp_client_dict:
+            if runtime is None:
                 return
 
             try:
-                if runtime is not None:
-                    runtime.shutdown_event.set()
-                    await self._wait_mcp_lifecycle_task(runtime.lifecycle_task, timeout)
-                else:
-                    client = self.mcp_client_dict.get(name)
-                    if client is not None:
-                        await asyncio.wait_for(
-                            client.running_event.wait(), timeout=timeout
-                        )
+                runtime.shutdown_event.set()
+                await self._wait_mcp_lifecycle_task(runtime.lifecycle_task, timeout)
             finally:
                 self.mcp_server_runtime.pop(name, None)
                 self.func_list = [
@@ -587,22 +580,17 @@ class FunctionToolManager:
                     if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
                 ]
         else:
-            for runtime in self.mcp_server_runtime.values():
+            runtimes = list(self.mcp_server_runtime.values())
+            for runtime in runtimes:
                 runtime.shutdown_event.set()
 
             lifecycle_tasks: list[asyncio.Task[None]] = [
-                runtime.lifecycle_task for runtime in self.mcp_server_runtime.values()
-            ]
-
-            running_events = [
-                client.running_event.wait()
-                for client_name, client in self.mcp_client_dict.items()
-                if client_name not in self.mcp_server_runtime
+                runtime.lifecycle_task for runtime in runtimes
             ]
             # waiting for all clients to finish
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*running_events, *lifecycle_tasks),
+                    asyncio.gather(*lifecycle_tasks),
                     timeout=timeout,
                 )
             except asyncio.TimeoutError:
