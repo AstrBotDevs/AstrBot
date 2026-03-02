@@ -321,7 +321,7 @@ class AstrBotDashboard:
             logger.info(t("msg-a3adcb66"))
             return None
 
-        logger.info(t("msg-44832296", scheme=scheme, host=host, port=port))
+        logger.info(t("msg-44832296", scheme=scheme, host=host, port=str(port)))
         if host == "0.0.0.0":
             logger.info(
                 t("msg-3eed4a73"),
@@ -344,9 +344,9 @@ class AstrBotDashboard:
             raise Exception(t("msg-6d1dfba8", port=port))
 
         parts = [t("msg-228fe31e", VERSION=VERSION)]
-        parts.append(t("msg-3749e149", scheme=scheme, port=port))
+        parts.append(t("msg-3749e149", scheme=scheme, port=str(port)))
         for ip in ip_addr:
-            parts.append(t("msg-3c2a1175", scheme=scheme, ip=ip, port=port))
+            parts.append(t("msg-3c2a1175", scheme=scheme, ip=ip, port=str(port)))
         parts.append(t("msg-d1ba29cb"))
         display = "".join(parts)
 
