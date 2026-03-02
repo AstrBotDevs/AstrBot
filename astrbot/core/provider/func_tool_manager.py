@@ -194,12 +194,24 @@ class FunctionToolManager:
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP 服务运行时状态（唯一事实来源）"""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
-        self._mcp_client_dict_cache: dict[str, MCPClient] = {}
-        self._mcp_client_dict_view = MappingProxyType(self._mcp_client_dict_cache)
         self._timeout_mismatch_warned = False
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
         self._mcp_starting: set[str] = set()
+        self._init_timeout_default = _resolve_timeout(
+            timeout=None,
+            env_name=MCP_INIT_TIMEOUT_ENV,
+            default=DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
+        )
+        self._enable_timeout_default = _resolve_timeout(
+            timeout=None,
+            env_name=ENABLE_MCP_TIMEOUT_ENV,
+            default=DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS,
+        )
+        self._warn_on_timeout_mismatch(
+            self._init_timeout_default,
+            self._enable_timeout_default,
+        )
 
     @property
     def mcp_client_dict(self) -> Mapping[str, MCPClient]:
@@ -207,7 +219,9 @@ class FunctionToolManager:
 
         Note: Mutating this mapping is unsupported and will raise TypeError.
         """
-        return self._mcp_client_dict_view
+        return MappingProxyType(
+            {name: runtime.client for name, runtime in self._mcp_server_runtime.items()}
+        )
 
     @property
     def mcp_server_runtime_view(self) -> Mapping[str, _MCPServerRuntime]:
@@ -354,17 +368,7 @@ class FunctionToolManager:
         with open(mcp_json_file, encoding="utf-8") as f:
             mcp_server_json_obj: dict[str, dict] = json.load(f)["mcpServers"]
 
-        init_timeout = _resolve_timeout(
-            timeout=None,
-            env_name=MCP_INIT_TIMEOUT_ENV,
-            default=DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
-        )
-        enable_timeout = _resolve_timeout(
-            timeout=None,
-            env_name=ENABLE_MCP_TIMEOUT_ENV,
-            default=DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS,
-        )
-        self._warn_on_timeout_mismatch(init_timeout, enable_timeout)
+        init_timeout = self._init_timeout_default
         timeout_display = f"{init_timeout:g}"
 
         active_configs: list[tuple[str, dict, asyncio.Event]] = []
@@ -405,7 +409,6 @@ class FunctionToolManager:
                 failed_services.append(name)
                 async with self._runtime_lock:
                     self._mcp_server_runtime.pop(name, None)
-                    self._mcp_client_dict_cache.pop(name, None)
                 continue
 
             success_count += 1
@@ -479,12 +482,6 @@ class FunctionToolManager:
                 raise
             finally:
                 await self._terminate_mcp_client(name)
-                current_task = asyncio.current_task()
-                async with self._runtime_lock:
-                    runtime = self._mcp_server_runtime.get(name)
-                    if runtime and runtime.lifecycle_task is current_task:
-                        self._mcp_server_runtime.pop(name, None)
-                        self._mcp_client_dict_cache.pop(name, None)
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
         async with self._runtime_lock:
@@ -494,7 +491,6 @@ class FunctionToolManager:
                 shutdown_event=shutdown_event,
                 lifecycle_task=lifecycle_task,
             )
-            self._mcp_client_dict_cache[name] = mcp_client
             self._mcp_starting.discard(name)
 
     async def _shutdown_runtimes(
@@ -596,7 +592,8 @@ class FunctionToolManager:
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
-        runtime = self._mcp_server_runtime.get(name)
+        async with self._runtime_lock:
+            runtime = self._mcp_server_runtime.get(name)
         if runtime:
             client = runtime.client
             try:
@@ -612,7 +609,8 @@ class FunctionToolManager:
                     if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
                 ]
                 async with self._runtime_lock:
-                    self._mcp_client_dict_cache.pop(name, None)
+                    self._mcp_server_runtime.pop(name, None)
+                    self._mcp_starting.discard(name)
                 logger.info(f"已关闭 MCP 服务 {name}")
             return
 
@@ -623,7 +621,7 @@ class FunctionToolManager:
             if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
         ]
         async with self._runtime_lock:
-            self._mcp_client_dict_cache.pop(name, None)
+            self._mcp_starting.discard(name)
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
@@ -663,17 +661,14 @@ class FunctionToolManager:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
         """
-        timeout_value = _resolve_timeout(
-            timeout=timeout,
-            env_name=ENABLE_MCP_TIMEOUT_ENV,
-            default=DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS,
-        )
-        init_timeout = _resolve_timeout(
-            timeout=None,
-            env_name=MCP_INIT_TIMEOUT_ENV,
-            default=DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
-        )
-        self._warn_on_timeout_mismatch(init_timeout, timeout_value)
+        if timeout is None:
+            timeout_value = self._enable_timeout_default
+        else:
+            timeout_value = _resolve_timeout(
+                timeout=timeout,
+                env_name=ENABLE_MCP_TIMEOUT_ENV,
+                default=self._enable_timeout_default,
+            )
         await self._start_mcp_server(
             name=name,
             cfg=config,
@@ -703,29 +698,11 @@ class FunctionToolManager:
             if runtime is None:
                 return
 
-            try:
-                await self._shutdown_runtimes([runtime], timeout, strict=True)
-            finally:
-                async with self._runtime_lock:
-                    self._mcp_server_runtime.pop(name, None)
-                    self._mcp_client_dict_cache.pop(name, None)
-                self.func_list = [
-                    f
-                    for f in self.func_list
-                    if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-                ]
+            await self._shutdown_runtimes([runtime], timeout, strict=True)
         else:
             async with self._runtime_lock:
                 runtimes = list(self._mcp_server_runtime.values())
-            try:
-                await self._shutdown_runtimes(runtimes, timeout, strict=False)
-            finally:
-                async with self._runtime_lock:
-                    self._mcp_server_runtime.clear()
-                    self._mcp_client_dict_cache.clear()
-                self.func_list = [
-                    f for f in self.func_list if not isinstance(f, MCPTool)
-                ]
+            await self._shutdown_runtimes(runtimes, timeout, strict=False)
 
     def _warn_on_timeout_mismatch(
         self,
