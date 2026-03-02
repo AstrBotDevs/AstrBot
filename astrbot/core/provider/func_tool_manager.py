@@ -333,6 +333,7 @@ class FunctionToolManager:
                 if info.init_future in pending_futures:
                     # 超时，初始化未完成，取消 task
                     logger.error(f"MCP 服务 {info.name} 初始化超时")
+                    self._log_safe_mcp_debug_config(info.cfg)
                     if info.task is not None:
                         info.task.cancel()
                         cancelled_tasks.append(info.task)
@@ -398,6 +399,7 @@ class FunctionToolManager:
             if not initialized:
                 logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
                 raise
+            logger.error(f"MCP 客户端 {name} 初始化后运行异常: {e}", exc_info=True)
         finally:
             await self._terminate_mcp_client(name)
 
