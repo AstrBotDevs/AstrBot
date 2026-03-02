@@ -38,7 +38,7 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
         "是否需要集成式 WebUI？（个人电脑推荐，服务器不推荐）",
         default=True,
     ):
-        await check_dashboard(astrbot_root / "data")
+        await check_dashboard(astrbot_root)
     else:
         click.echo("你可以使用在线面版（v4.14.4+），填写后端地址的方式来控制。")
 
