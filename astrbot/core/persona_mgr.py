@@ -70,12 +70,7 @@ class PersonaManager:
             "default_personality",
             "default",
         )
-        if not default_persona_id or default_persona_id == "default":
-            return DEFAULT_PERSONALITY
-        try:
-            return next(p for p in self.personas_v3 if p["name"] == default_persona_id)
-        except Exception:
-            return DEFAULT_PERSONALITY
+        return self.get_persona_v3_by_id(default_persona_id) or DEFAULT_PERSONALITY
 
     async def resolve_selected_persona(
         self,
