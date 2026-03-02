@@ -1,4 +1,4 @@
 from pathlib import Path
 
 
-TEST_DATA_DIR = Path("./tests/test_kook/data")
+TEST_DATA_DIR = Path(__file__).parent / "data"
