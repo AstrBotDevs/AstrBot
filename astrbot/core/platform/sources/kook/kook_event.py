@@ -174,7 +174,7 @@ class KookEvent(AstrMessageEvent):
                 # 这样后面的 for 循环就能把它当成普通文本发出去
                 err_node = OrderMessage(
                     index=index,
-                    text=f"⚠️ {result}",
+                    text=str(result),
                     type=KookMessageType.TEXT,
                 )
                 order_messages.append(err_node)
@@ -208,7 +208,7 @@ class KookEvent(AstrMessageEvent):
             except RuntimeError as exp:
                 await self.client.send_text(
                     self.channel_id,
-                    f"⚠️ {str(exp)}",
+                    str(exp),
                     self.astrbot_message_type,
                     KookMessageType.TEXT,
                     reply_id,
