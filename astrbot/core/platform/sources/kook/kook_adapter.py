@@ -220,7 +220,21 @@ class KookPlatformAdapter(Platform):
                         elif module.get("type") == "container":
                             for element in module.get("elements", []):
                                 if element.get("type") == "image":
-                                    images.append(element.get("src"))
+                                    image_src = element.get("src")
+                                    if not isinstance(image_src, str):
+                                        logger.warning(
+                                            f'[KOOK] 处理卡片中的图片时发生错误,图片url "{image_src}" 应该为str类型, 而不是 "{type(image_src)}" '
+                                        )
+                                        continue
+                                    if not image_src.startswith(
+                                        ("http://", "https://")
+                                    ):
+                                        logger.warning(
+                                            f"[KOOK] 屏蔽非http图片url: {image_src}"
+                                        )
+                                        continue
+                                    images.append(image_src)
+
                 abm.message_str = text
                 abm.message = []
                 if text:
