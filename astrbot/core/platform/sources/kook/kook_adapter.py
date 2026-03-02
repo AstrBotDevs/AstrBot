@@ -16,11 +16,13 @@ from astrbot.api.platform import (
 from astrbot.core.platform.astr_message_event import MessageSesion
 
 from .kook_client import KookClient
+from .kook_config import KookConfig
 from .kook_event import KookEvent
 
 
 @register_platform_adapter(
-    "kook", "KOOK 适配器", default_config_tmpl={"token": "你kook获取到的机器人token"}
+    "kook",
+    "KOOK 适配器",
 )
 class KookPlatformAdapter(Platform):
     def __init__(
@@ -28,6 +30,10 @@ class KookPlatformAdapter(Platform):
     ) -> None:
         super().__init__(platform_config, event_queue)
         self.config = platform_config
+        """给astrbot内部用"""
+        self.kook_config = KookConfig.from_dict(platform_config)
+        logger.debug(f"[KOOK] 配置: {self.kook_config.pretty_jsons()}")
+        # self.config = platform_config
         self.settings = platform_settings
         self.client = None
         self._reconnect_task = None
@@ -52,7 +58,7 @@ class KookPlatformAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return PlatformMetadata(
-            name="kook", description="KOOK 适配器", id=self.config.get("id")
+            name="kook", description="KOOK 适配器", id=self.kook_config.id
         )
 
     async def run(self):
@@ -72,7 +78,7 @@ class KookPlatformAdapter(Platform):
                     except Exception as e:
                         logger.error(f"[KOOK] 消息处理异常: {e}")
 
-        self.client = KookClient(self.config["token"], on_received)
+        self.client = KookClient(self.kook_config, on_received)
 
         # 启动主循环
         self._main_task = asyncio.create_task(self._main_loop())
@@ -90,7 +96,8 @@ class KookPlatformAdapter(Platform):
     async def _main_loop(self):
         """主循环，处理连接和重连"""
         consecutive_failures = 0
-        max_consecutive_failures = 5
+        max_consecutive_failures = self.kook_config.max_consecutive_failures
+        max_retry_delay = self.kook_config.max_retry_delay
 
         while self.running:
             try:
@@ -129,7 +136,9 @@ class KookPlatformAdapter(Platform):
                         break
 
                     # 等待一段时间后重试
-                    wait_time = min(2**consecutive_failures, 60)  # 指数退避，最大60秒
+                    wait_time = min(
+                        2**consecutive_failures, max_retry_delay
+                    )  # 指数退避，最大60秒
                     logger.info(f"[KOOK] 等待 {wait_time} 秒后重试...")
                     await asyncio.sleep(wait_time)
 
@@ -245,6 +254,7 @@ class KookPlatformAdapter(Platform):
                 abm.message_str = "[卡片消息解析失败]"
                 abm.message = [Plain(text="[卡片消息解析失败]")]
         else:
+            logger.warning(f'[KOOK] 不支持的kook消息类型: "{data.get("type")}"')
             abm.message_str = "[不支持的消息类型]"
             abm.message = [Plain(text="[不支持的消息类型]")]
 

@@ -14,34 +14,36 @@ from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from .kook_config import KookConfig
 from .kook_types import KookApiPaths, KookMessageType
 
 ALLOWED_ASSETS_DIR = Path(get_astrbot_data_path()).resolve()
 
 
 class KookClient:
-    def __init__(self, token, event_callback):
+    def __init__(self, config: KookConfig, event_callback):
+        # 数据字段
+        self.config = config
         self._bot_id = ""
         self._bot_name = ""
+
+        # 资源字段
         self._http_client = aiohttp.ClientSession(
             headers={
-                "Authorization": f"Bot {token}",
+                "Authorization": f"Bot {self.config.token}",
             }
         )
         self.event_callback = event_callback  # 回调函数，用于处理接收到的事件
         self.ws = None
-        self.running = False
+        self.heartbeat_task = None
         self._stop_event = asyncio.Event()  # 用于通知连接结束
+
+        # 状态/计算字段
+        self.running = False
         self.session_id = None
         self.last_sn = 0  # 记录最后处理的消息序号
-        self.heartbeat_task = None
-        self.reconnect_delay = 1  # 重连延迟，指数退避
-        self.max_reconnect_delay = 60  # 最大重连延迟
-        self.heartbeat_interval = 30  # 心跳间隔
-        self.heartbeat_timeout = 6  # 心跳超时时间
         self.last_heartbeat_time = 0
         self.heartbeat_failed_count = 0
-        self.max_heartbeat_failures = 3  # 最大心跳失败次数
 
     @property
     def bot_id(self):
@@ -221,8 +223,8 @@ class KookClient:
         if code == 0:
             self.session_id = hello_data.get("session_id")
             logger.info(f"[KOOK] 握手成功，session_id: {self.session_id}")
-            # 重置重连延迟
-            self.reconnect_delay = 1
+            # TODO 重置重连延迟
+            # self.reconnect_delay = 1
         else:
             logger.error(f"[KOOK] 握手失败，错误码: {code}")
             if code == 40103:  # token过期
@@ -254,7 +256,7 @@ class KookClient:
         while self.running:
             try:
                 # 随机化心跳间隔 (30±5秒)
-                interval = self.heartbeat_interval + random.randint(-5, 5)
+                interval = self.config.heartbeat_interval + random.randint(-5, 5)
                 await asyncio.sleep(interval)
 
                 if not self.running:
@@ -264,16 +266,22 @@ class KookClient:
                 await self._send_ping()
 
                 # 等待PONG响应
-                await asyncio.sleep(self.heartbeat_timeout)
+                await asyncio.sleep(self.config.heartbeat_timeout)
 
                 # 检查是否收到PONG响应
-                if time.time() - self.last_heartbeat_time > self.heartbeat_timeout:
+                if (
+                    time.time() - self.last_heartbeat_time
+                    > self.config.heartbeat_timeout
+                ):
                     self.heartbeat_failed_count += 1
                     logger.warning(
                         f"[KOOK] 心跳超时，失败次数: {self.heartbeat_failed_count}"
                     )
 
-                    if self.heartbeat_failed_count >= self.max_heartbeat_failures:
+                    if (
+                        self.heartbeat_failed_count
+                        >= self.config.max_heartbeat_failures
+                    ):
                         logger.error("[KOOK] 心跳失败次数过多，准备重连")
                         self.running = False
                         break
