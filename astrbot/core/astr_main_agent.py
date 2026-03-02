@@ -373,20 +373,26 @@ async def _ensure_persona_and_skills(
                     continue
                 if a.get("enabled", True) is False:
                     continue
-                persona_tools = None
                 pid = a.get("persona_id")
-                if pid:
-                    persona_tools = next(
+                # Using a sentinel-like approach to distinguish "not found" from "found with tools=None"
+                # If persona exists, its tool config (could be None) overrides the subagent's manual tool list.
+                target_persona = (
+                    next(
                         (
-                            p.get("tools")
+                            p
                             for p in plugin_context.persona_manager.personas_v3
                             if p["name"] == pid
                         ),
                         None,
                     )
+                    if pid
+                    else None
+                )
+
                 tools = a.get("tools", [])
-                if persona_tools is not None:
-                    tools = persona_tools
+                if target_persona:
+                    tools = target_persona.get("tools")
+
                 if tools is None:
                     assigned_tools.update(
                         [
@@ -764,6 +770,9 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
                 continue
             mp = tool.handler_module_path
             if not mp:
+                # Preservation: Tools without a handler_module_path are built-in tools or MCP tools.
+                # These lack a direct plugin mapping and must be preserved during plugin filtering.
+                new_tool_set.add_tool(tool)
                 continue
             plugin = star_map.get(mp)
             if not plugin:
@@ -1065,9 +1074,26 @@ async def build_main_agent(
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config)
+    # Execution Order Significance:
+    # Built-in tools (Computer Use, Cron, Proactive Messaging) must be added BEFORE _decorate_llm_request.
+    # This is because _decorate_llm_request invokes subagent deduplication logic, which needs to see
+    # these tools in the main toolset to determine if they should be removed (delegated to a subagent).
+    if config.computer_use_runtime == "sandbox":
+        _apply_sandbox_tools(config, req, req.session_id)
+    elif config.computer_use_runtime == "local":
+        _apply_local_env_tools(req)
+
+    if config.add_cron_tools:
+        _proactive_cron_job_tools(req)
+
+    if event.platform_meta.support_proactive_message:
+        if req.func_tool is None:
+            req.func_tool = ToolSet()
+        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
     await _apply_kb(event, req, plugin_context, config)
+
+    await _decorate_llm_request(event, req, plugin_context, config)
 
     if not req.session_id:
         req.session_id = event.unified_msg_origin
@@ -1079,24 +1105,11 @@ async def build_main_agent(
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
-    if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
-    elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req)
-
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
         context=plugin_context,
         event=event,
     )
-
-    if config.add_cron_tools:
-        _proactive_cron_job_tools(req)
-
-    if event.platform_meta.support_proactive_message:
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()
