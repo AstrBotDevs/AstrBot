@@ -65,6 +65,22 @@ class _MCPServerRuntime:
     lifecycle_task: asyncio.Task[None]
 
 
+class _MCPClientDictView(Mapping[str, MCPClient]):
+    """Read-only view of MCP clients derived from runtime state."""
+
+    def __init__(self, runtime: dict[str, _MCPServerRuntime]) -> None:
+        self._runtime = runtime
+
+    def __getitem__(self, key: str) -> MCPClient:
+        return self._runtime[key].client
+
+    def __iter__(self):
+        return iter(self._runtime)
+
+    def __len__(self) -> int:
+        return len(self._runtime)
+
+
 def _resolve_timeout(
     timeout: float | int | str | None = None,
     *,
@@ -194,6 +210,7 @@ class FunctionToolManager:
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP 服务运行时状态（唯一事实来源）"""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
+        self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
         self._timeout_mismatch_warned = False
         self._timeout_warn_lock = threading.Lock()
         self._runtime_lock = asyncio.Lock()
@@ -219,9 +236,7 @@ class FunctionToolManager:
 
         Note: Mutating this mapping is unsupported and will raise TypeError.
         """
-        return MappingProxyType(
-            {name: runtime.client for name, runtime in self._mcp_server_runtime.items()}
-        )
+        return self._mcp_client_dict_view
 
     @property
     def mcp_server_runtime_view(self) -> Mapping[str, _MCPServerRuntime]:
@@ -596,22 +611,18 @@ class FunctionToolManager:
             runtime = self._mcp_server_runtime.get(name)
         if runtime:
             client = runtime.client
-            try:
-                # 关闭MCP连接
-                await client.cleanup()
-            except Exception as e:
-                logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
-            finally:
-                # 移除关联的FuncTool
-                self.func_list = [
-                    f
-                    for f in self.func_list
-                    if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-                ]
-                async with self._runtime_lock:
-                    self._mcp_server_runtime.pop(name, None)
-                    self._mcp_starting.discard(name)
-                logger.info(f"已关闭 MCP 服务 {name}")
+            # 关闭MCP连接
+            await self._cleanup_mcp_client_safely(client, name)
+            # 移除关联的FuncTool
+            self.func_list = [
+                f
+                for f in self.func_list
+                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
+            ]
+            async with self._runtime_lock:
+                self._mcp_server_runtime.pop(name, None)
+                self._mcp_starting.discard(name)
+            logger.info(f"已关闭 MCP 服务 {name}")
             return
 
         # Runtime missing but stale tools may still exist after failed flows.
