@@ -209,7 +209,7 @@ class ResultDecorateStage(Stage):
                 "dingtalk",
             ]:
                 if (
-                    self.only_llm_result and result.is_llm_result()
+                    self.only_llm_result and result.is_model_result()
                 ) or not self.only_llm_result:
                     new_chain = []
                     for comp in result.chain:

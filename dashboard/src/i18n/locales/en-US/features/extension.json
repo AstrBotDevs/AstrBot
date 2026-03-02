@@ -11,6 +11,14 @@
   "titles": {
     "installedAstrBotPlugins": "Installed AstrBot Plugins"
   },
+  "failedPlugins": {
+    "title": "Failed to Load Plugins ({count})",
+    "hint": "These plugins failed to load. You can try reload or uninstall them directly.",
+    "columns": {
+      "plugin": "Plugin",
+      "error": "Error"
+    }
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
@@ -109,6 +117,8 @@
     "sourceExists": "This source already exists",
     "installPlugin": "Install Plugin",
     "randomPlugins": "🎲 Random Plugins",
+    "showRandomPlugins": "Show Random Plugins",
+    "hideRandomPlugins": "Hide Random Plugins",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
@@ -177,7 +187,9 @@
     "refreshing": "Refreshing extension list...",
     "refreshSuccess": "Extension list refreshed!",
     "refreshFailed": "Error occurred while refreshing extension list",
+    "operationFailed": "Operation failed",
     "reloadSuccess": "Reload successful",
+    "reloadFailed": "Reload failed",
     "updateSuccess": "Update successful!",
     "addSuccess": "Add successful!",
     "saveSuccess": "Save successful!",

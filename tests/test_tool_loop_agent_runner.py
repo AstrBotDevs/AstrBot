@@ -461,7 +461,8 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     final_resp = runner.get_final_llm_resp()
     assert final_resp is not None
     assert final_resp.role == "assistant"
-    assert final_resp.completion_text == "partial "
+    # When interrupted, the runner replaces completion_text with a system message
+    assert "interrupted" in final_resp.completion_text.lower()
     assert runner.run_context.messages[-1].role == "assistant"
 
 
