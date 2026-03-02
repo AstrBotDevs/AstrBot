@@ -17,16 +17,18 @@
 然后使用 create_event 方法提交事件到指定平台
 """
 
+from __future__ import annotations
+
 import inspect
 import os
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
@@ -34,9 +36,11 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
     AiocqhttpAdapter,
 )
-from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_map
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+if TYPE_CHECKING:
+    from .context import Context
 
 
 class StarTools:

@@ -391,23 +391,18 @@ class TestPlatformRegistry:
         assert "consistency_test" in platform_cls_map
 
 
-# NOTE: The following tests previously ran into circular import issues
-# when importing PlatformManager directly from astrbot.core.platform.manager.
-# To avoid this, they exercise PlatformManager behavior in a separate
-# subprocess via `_assert_platform_manager_case(...)`, which imports
-# PlatformManager in isolation and prevents circular imports in this process.
-# The historical circular import chain was:
-# manager.py -> star_handler -> star_tools -> api.platform -> star.register -> star_handler -> astr_agent_context -> context -> manager
+# NOTE: The PlatformManager tests below use subprocess isolation via `_assert_platform_manager_case()`
+# to avoid circular import issues when importing PlatformManager.
 #
-# WARNING: These tests are currently marked as xfail due to an unresolved
-# circular import issue that prevents PlatformManager from being imported
-# even in a subprocess. This is a known issue in the codebase that needs
-# to be addressed separately.
+# The circular import chain is:
+#   manager.py -> star_handler -> star_tools -> api.platform ->
+#   api.__init__ -> star.register -> star (partially initialized)
+#
+# This is caused by star_tools.py importing from astrbot.api.platform at module level.
+# Fix: Change star_tools.py line 27 to import directly from astrbot.core.platform.
+#
 
 
-@pytest.mark.xfail(
-    reason="Circular import issue prevents PlatformManager import even in subprocess"
-)
 class TestPlatformManagerHelperFunctions:
     """Tests for PlatformManager helper functions."""
 
@@ -424,9 +419,6 @@ class TestPlatformManagerHelperFunctions:
         _assert_platform_manager_case("sanitize_platform_id")
 
 
-@pytest.mark.xfail(
-    reason="Circular import issue prevents PlatformManager import even in subprocess"
-)
 class TestPlatformManagerInit:
     """Tests for PlatformManager initialization."""
 
@@ -435,9 +427,6 @@ class TestPlatformManagerInit:
         _assert_platform_manager_case("platform_manager_init")
 
 
-@pytest.mark.xfail(
-    reason="Circular import issue prevents PlatformManager import even in subprocess"
-)
 class TestPlatformManagerGetAllStats:
     """Tests for PlatformManager get_all_stats method."""
 
@@ -450,9 +439,6 @@ class TestPlatformManagerGetAllStats:
         _assert_platform_manager_case("get_all_stats_with_platforms")
 
 
-@pytest.mark.xfail(
-    reason="Circular import issue prevents PlatformManager import even in subprocess"
-)
 class TestPlatformManagerGetInsts:
     """Tests for PlatformManager get_insts method."""
 
