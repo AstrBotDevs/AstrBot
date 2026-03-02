@@ -184,7 +184,7 @@ class KookPlatformAdapter(Platform):
                 abm.group_id = data.get("target_id")
                 abm.session_id = data.get("target_id")
             case _:
-                raise ValueError(f"[KOOK] 不支持的频道类型: {channel_type}")
+                raise ValueError(f"不支持的频道类型: {channel_type}")
 
         abm.sender = MessageMember(
             user_id=data.get("author_id"),
