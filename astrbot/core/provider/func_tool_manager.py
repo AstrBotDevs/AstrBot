@@ -614,7 +614,8 @@ class FunctionToolManager:
         for item in servers:
             local_mcp_config["mcpServers"][item.name] = item.config
 
-        self.save_mcp_config(local_mcp_config)
+        if not self.save_mcp_config(local_mcp_config):
+            raise RuntimeError("保存 MCP 配置失败，已取消同步启用")
 
         enabled_count, failures = await self._enable_mcp_servers_with_concurrency_limit(
             [item.name for item in servers],

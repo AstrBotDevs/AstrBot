@@ -152,14 +152,14 @@
 
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
-      <v-card>
-        <v-card-title class="bg-primary text-white py-3">
-          <span>同步外部平台 MCP 服务器</span>
-        </v-card-title>
+        <v-card>
+          <v-card-title class="bg-primary text-white py-3">
+          <span>{{ tm('syncProvider.title') }}</span>
+          </v-card-title>
 
         <v-card-text class="py-4">
           <v-select v-model="selectedMcpServerProvider" :items="mcpServerProviderList"
-            label="选择平台" variant="outlined" required></v-select>
+            :label="tm('syncProvider.fields.provider')" variant="outlined" required></v-select>
           <div v-if="selectedMcpServerProvider === 'modelscope'">
             <v-timeline align="start" side="end">
               <v-timeline-item icon="mdi-numeric-1" icon-color="rgb(var(--v-theme-background))">
@@ -196,21 +196,23 @@
             <v-timeline align="start" side="end">
               <v-timeline-item icon="mdi-numeric-1" icon-color="rgb(var(--v-theme-background))">
                 <div>
-                  <div class="text-h4">创建 API Key</div>
+                  <div class="text-h4">{{ tm('syncProvider.timeline.mcprouter.createApiKeyTitle') }}</div>
                   <p class="mt-2">
-                    访问 <a href="https://mcprouter.co/" target="_blank">MCPRouter</a> 创建并复制您的 API Key。
+                    {{ tm('syncProvider.timeline.mcprouter.createApiKeyDescPrefix') }}
+                    <a href="https://mcprouter.co/" target="_blank">MCPRouter</a>
+                    {{ tm('syncProvider.timeline.mcprouter.createApiKeyDescSuffix') }}
                   </p>
                 </div>
               </v-timeline-item>
 
               <v-timeline-item icon="mdi-numeric-2" icon-color="rgb(var(--v-theme-background))">
                 <div>
-                  <div class="text-h4">输入 API Key</div>
+                  <div class="text-h4">{{ tm('syncProvider.timeline.mcprouter.inputApiKeyTitle') }}</div>
                   <p class="mt-2">
-                    输入 API Key 以同步 MCP 服务器。
+                    {{ tm('syncProvider.timeline.mcprouter.inputApiKeyDesc') }}
                   </p>
                   <v-text-field v-model="mcprouterApiKey" type="password" variant="outlined"
-                    label="API Key" class="mt-2" hide-details/>
+                    :label="tm('syncProvider.fields.apiKey')" class="mt-2" hide-details/>
                   <v-btn color="primary" variant="tonal" class="mt-2" :loading="mcprouterServersLoading"
                     @click="fetchMcpRouterServers">
                     {{ tm('syncProvider.buttons.fetchServers') }}
@@ -242,14 +244,14 @@
 
               <v-timeline-item icon="mdi-numeric-3" icon-color="rgb(var(--v-theme-background))">
                 <div>
-                  <div class="text-h4">可选：应用标识</div>
+                  <div class="text-h4">{{ tm('syncProvider.timeline.mcprouter.optionalAppInfoTitle') }}</div>
                   <p class="mt-2">
-                    部分 MCPRouter 服务可能会校验以下标识（可留空）。
+                    {{ tm('syncProvider.timeline.mcprouter.optionalAppInfoDesc') }}
                   </p>
                   <v-text-field v-model="mcprouterAppUrl" variant="outlined"
-                    label="HTTP-Referer" class="mt-2" hide-details/>
+                    :label="tm('syncProvider.fields.appUrl')" class="mt-2" hide-details/>
                   <v-text-field v-model="mcprouterAppName" variant="outlined"
-                    label="X-Title" class="mt-2" hide-details/>
+                    :label="tm('syncProvider.fields.appName')" class="mt-2" hide-details/>
                 </div>
               </v-timeline-item>
             </v-timeline>
@@ -579,7 +581,10 @@ export default {
         }
       } catch (error) {
         this.showError(this.tm('syncProvider.messages.fetchServersError', {
-          error: error.response?.data?.message || error.message || '网络连接或 API Key 问题'
+          error:
+            error.response?.data?.message ||
+            error.message ||
+            this.tm('syncProvider.messages.networkOrApiKeyIssue')
         }));
       } finally {
         this.mcprouterServersLoading = false;
@@ -638,7 +643,10 @@ export default {
         }
       } catch (error) {
         this.showError(this.tm('syncProvider.messages.syncError', {
-          error: error.response?.data?.message || error.message || '网络连接或访问令牌问题'
+          error:
+            error.response?.data?.message ||
+            error.message ||
+            this.tm('syncProvider.messages.networkOrTokenIssue')
         }));
       } finally {
         this.loading = false;

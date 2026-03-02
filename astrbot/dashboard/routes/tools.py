@@ -425,7 +425,7 @@ class ToolsRoute(Route):
     async def sync_provider(self):
         """同步 MCP 提供者配置"""
         try:
-            data = await request.json
+            data = (await request.json) or {}
             provider_name = data.get("name")  # modelscope, or others
             if not provider_name:
                 return Response().error("缺少必要参数: name").__dict__
