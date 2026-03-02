@@ -33,7 +33,7 @@ class KookPlatformAdapter(Platform):
         logger.debug(f"[KOOK] 配置: {self.kook_config.pretty_jsons()}")
         # self.config = platform_config
         self.settings = platform_settings
-        self.client = None
+        self.client = KookClient(self.kook_config, self._on_received)
         self._reconnect_task = None
         self.running = False
         self._main_task = None
@@ -58,24 +58,22 @@ class KookPlatformAdapter(Platform):
             name="kook", description="KOOK 适配器", id=self.kook_config.id
         )
 
+    async def _on_received(self, data: dict):
+        logger.debug(f"KOOK 收到数据: {data}")
+        if "d" in data and data["s"] == 0:
+            event_type = data["d"].get("type")
+            # 支持type=9（文本）和type=10（卡片）
+            if event_type in (9, 10):
+                try:
+                    abm = await self.convert_message(data["d"])
+                    await self.handle_msg(abm)
+                except Exception as e:
+                    logger.error(f"[KOOK] 消息处理异常: {e}")
+
     async def run(self):
         """主运行循环"""
         self.running = True
         logger.info("[KOOK] 启动KOOK适配器")
-
-        async def on_received(data):
-            logger.debug(f"KOOK 收到数据: {data}")
-            if "d" in data and data["s"] == 0:
-                event_type = data["d"].get("type")
-                # 支持type=9（文本）和type=10（卡片）
-                if event_type in (9, 10):
-                    try:
-                        abm = await self.convert_message(data["d"])
-                        await self.handle_msg(abm)
-                    except Exception as e:
-                        logger.error(f"[KOOK] 消息处理异常: {e}")
-
-        self.client = KookClient(self.kook_config, on_received)
 
         # 启动主循环
         self._main_task = asyncio.create_task(self._main_loop())
