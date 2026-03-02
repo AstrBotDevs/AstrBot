@@ -5,13 +5,7 @@ import copy
 import json
 import os
 import urllib.parse
-from collections.abc import (
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Mapping,
-    MutableMapping,
-)
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -69,38 +63,6 @@ class _MCPServerRuntime:
     client: MCPClient
     shutdown_event: asyncio.Event
     lifecycle_task: asyncio.Task[None]
-
-
-class _MCPClientDictView(MutableMapping[str, MCPClient]):
-    """Read-only compatibility view for mcp_client_dict.
-
-    Writes are rejected to avoid silently ignoring mutations. Use
-    enable_mcp_server/disable_mcp_server or mcp_server_runtime_view instead.
-    """
-
-    def __init__(self, runtime: dict[str, _MCPServerRuntime]) -> None:
-        self._runtime = runtime
-
-    def __getitem__(self, key: str) -> MCPClient:
-        return self._runtime[key].client
-
-    def __iter__(self):
-        return iter(self._runtime)
-
-    def __len__(self) -> int:
-        return len(self._runtime)
-
-    def __setitem__(self, key: str, value: MCPClient) -> None:
-        raise TypeError(
-            "mcp_client_dict 是只读视图；请使用 enable_mcp_server/disable_mcp_server "
-            "或通过 mcp_server_runtime_view 只读访问。"
-        )
-
-    def __delitem__(self, key: str) -> None:
-        raise TypeError(
-            "mcp_client_dict 是只读视图；请使用 disable_mcp_server "
-            "或通过 mcp_server_runtime_view 只读访问。"
-        )
 
 
 def _resolve_timeout(
@@ -232,15 +194,16 @@ class FunctionToolManager:
         self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP 服务运行时状态（唯一事实来源）"""
         self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
-        self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
 
     @property
-    def mcp_client_dict(self) -> MutableMapping[str, MCPClient]:
-        """Compatibility view for external callers that still read mcp_client_dict.
+    def mcp_client_dict(self) -> Mapping[str, MCPClient]:
+        """Read-only compatibility view for external callers that still read mcp_client_dict.
 
-        This is a read-only view; write attempts raise TypeError.
+        Note: Mutating this mapping is unsupported and will raise TypeError.
         """
-        return self._mcp_client_dict_view
+        return MappingProxyType(
+            {name: runtime.client for name, runtime in self._mcp_server_runtime.items()}
+        )
 
     @property
     def mcp_server_runtime_view(self) -> Mapping[str, _MCPServerRuntime]:
@@ -249,7 +212,10 @@ class FunctionToolManager:
 
     @property
     def mcp_server_runtime(self) -> Mapping[str, _MCPServerRuntime]:
-        """Backward-compatible read-only view (deprecated)."""
+        """Backward-compatible read-only view (deprecated). Do not mutate.
+
+        Note: Mutations are not supported and will raise TypeError.
+        """
         return self._mcp_server_runtime_view
 
     def empty(self) -> bool:
@@ -565,24 +531,21 @@ class FunctionToolManager:
         """初始化单个MCP客户端"""
         mcp_client = MCPClient()
         mcp_client.name = name
-        tools_res = None
-        connected = False
         try:
             await mcp_client.connect_to_server(config, name)
-            connected = True
             tools_res = await mcp_client.list_tools_and_save()
         except asyncio.CancelledError:
+            try:
+                await mcp_client.cleanup()
+            except Exception as cleanup_exc:
+                logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
             raise
         except Exception:
+            try:
+                await mcp_client.cleanup()
+            except Exception as cleanup_exc:
+                logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
             raise
-        finally:
-            if not connected:
-                try:
-                    await mcp_client.cleanup()
-                except Exception as cleanup_exc:
-                    logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
-        if tools_res is None:
-            raise RuntimeError(f"MCP 服务 {name} 初始化失败：未获取工具列表。")
         logger.debug(f"MCP server {name} list tools response: {tools_res}")
         tool_names = [tool.name for tool in tools_res.tools]
 
