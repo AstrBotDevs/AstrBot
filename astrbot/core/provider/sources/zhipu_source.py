@@ -7,7 +7,6 @@ from typing import Any
 from openai.types.chat import ChatCompletion
 
 from astrbot.core.agent.tool import ToolSet
-from astrbot.core.message.message_event_result import MessageChain
 
 from ..entities import LLMResponse
 from ..register import register_provider_adapter
@@ -20,9 +19,11 @@ _GLM_ROLE_TOKEN_RE = re.compile(
     re.IGNORECASE,
 )
 
-# GLM's "null response" signal — the model outputs <None> (sometimes prefixed with
-# whitespace/newlines) to indicate it has nothing to say.
-_GLM_NULL_TOKEN_RE = re.compile(r"<None>", re.IGNORECASE)
+# GLM's "null response" signal — the model outputs exactly <None> (capital N, like Python's
+# None literal) to indicate it has nothing to say.  We intentionally do NOT use re.IGNORECASE
+# here: GLM always emits <None> with a capital N, and a case-insensitive match could
+# accidentally remove unrelated HTML/XML-like content that merely starts with "none".
+_GLM_NULL_TOKEN_RE = re.compile(r"<None>")
 
 
 @register_provider_adapter("zhipu_chat_completion", "智谱 Chat Completion 提供商适配器")
@@ -70,11 +71,11 @@ class ProviderZhipu(ProviderOpenAIOfficial):
         llm_response = await super()._parse_openai_completion(completion, tools)
 
         # Apply GLM special token cleaning to the assembled completion text.
+        # Use the completion_text setter so that non-Plain components (e.g. tool calls)
+        # in the chain are preserved; only the Plain text segments are updated in-place.
         if llm_response.completion_text:
             cleaned = self._clean_glm_special_tokens(llm_response.completion_text)
             if cleaned != llm_response.completion_text:
-                llm_response.result_chain = (
-                    MessageChain().message(cleaned) if cleaned else MessageChain()
-                )
+                llm_response.completion_text = cleaned
 
         return llm_response

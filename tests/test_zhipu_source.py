@@ -65,10 +65,12 @@ class TestCleanGLMSpecialTokens:
         assert ProviderZhipu._clean_glm_special_tokens("  <None>  ") == ""
 
     def test_null_token_case_insensitive_lower(self):
-        assert ProviderZhipu._clean_glm_special_tokens("<none>") == ""
+        # Without re.IGNORECASE, lowercase <none> is not a GLM token and must be preserved.
+        assert ProviderZhipu._clean_glm_special_tokens("<none>") == "<none>"
 
     def test_null_token_case_insensitive_upper(self):
-        assert ProviderZhipu._clean_glm_special_tokens("<NONE>") == ""
+        # Without re.IGNORECASE, uppercase <NONE> is not a GLM token and must be preserved.
+        assert ProviderZhipu._clean_glm_special_tokens("<NONE>") == "<NONE>"
 
     def test_null_token_in_middle_of_text(self):
         result = ProviderZhipu._clean_glm_special_tokens("hello <None> world")
