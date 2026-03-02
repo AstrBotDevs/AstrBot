@@ -29,8 +29,6 @@ class KookPlatformAdapter(Platform):
         self, platform_config: dict, platform_settings: dict, event_queue: asyncio.Queue
     ) -> None:
         super().__init__(platform_config, event_queue)
-        self.config = platform_config
-        """给astrbot内部用"""
         self.kook_config = KookConfig.from_dict(platform_config)
         logger.debug(f"[KOOK] 配置: {self.kook_config.pretty_jsons()}")
         # self.config = platform_config
