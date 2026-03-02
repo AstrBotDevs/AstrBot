@@ -5,8 +5,15 @@ import copy
 import json
 import os
 import urllib.parse
-from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping
+from collections.abc import (
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Mapping,
+    MutableMapping,
+)
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 import aiohttp
@@ -68,7 +75,7 @@ class _MCPClientDictView(MutableMapping[str, MCPClient]):
     """Read-only compatibility view for mcp_client_dict.
 
     Writes are rejected to avoid silently ignoring mutations. Use
-    enable_mcp_server/disable_mcp_server or mcp_server_runtime instead.
+    enable_mcp_server/disable_mcp_server or mcp_server_runtime_view instead.
     """
 
     def __init__(self, runtime: dict[str, _MCPServerRuntime]) -> None:
@@ -86,13 +93,13 @@ class _MCPClientDictView(MutableMapping[str, MCPClient]):
     def __setitem__(self, key: str, value: MCPClient) -> None:
         raise TypeError(
             "mcp_client_dict 是只读视图；请使用 enable_mcp_server/disable_mcp_server "
-            "或直接操作 mcp_server_runtime。"
+            "或通过 mcp_server_runtime_view 只读访问。"
         )
 
     def __delitem__(self, key: str) -> None:
         raise TypeError(
             "mcp_client_dict 是只读视图；请使用 disable_mcp_server "
-            "或直接操作 mcp_server_runtime。"
+            "或通过 mcp_server_runtime_view 只读访问。"
         )
 
 
@@ -222,9 +229,10 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
-        self.mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
+        self._mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
         """MCP 服务运行时状态（唯一事实来源）"""
-        self._mcp_client_dict_view = _MCPClientDictView(self.mcp_server_runtime)
+        self._mcp_server_runtime_view = MappingProxyType(self._mcp_server_runtime)
+        self._mcp_client_dict_view = _MCPClientDictView(self._mcp_server_runtime)
 
     @property
     def mcp_client_dict(self) -> MutableMapping[str, MCPClient]:
@@ -233,6 +241,16 @@ class FunctionToolManager:
         This is a read-only view; write attempts raise TypeError.
         """
         return self._mcp_client_dict_view
+
+    @property
+    def mcp_server_runtime_view(self) -> Mapping[str, _MCPServerRuntime]:
+        """Read-only view of MCP runtime metadata for external callers."""
+        return self._mcp_server_runtime_view
+
+    @property
+    def mcp_server_runtime(self) -> Mapping[str, _MCPServerRuntime]:
+        """Backward-compatible read-only view (deprecated)."""
+        return self._mcp_server_runtime_view
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -410,7 +428,7 @@ class FunctionToolManager:
                     logger.error(f"MCP 服务 {name} 初始化失败: {result}")
                 self._log_safe_mcp_debug_config(cfg)
                 failed_services.append(name)
-                self.mcp_server_runtime.pop(name, None)
+                self._mcp_server_runtime.pop(name, None)
                 continue
 
             success_count += 1
@@ -445,7 +463,7 @@ class FunctionToolManager:
         This method is idempotent. If the server is already running, the existing
         runtime is kept and the new config is ignored.
         """
-        if name in self.mcp_server_runtime:
+        if name in self._mcp_server_runtime:
             logger.warning(
                 f"MCP 服务 {name} 已在运行，忽略本次启用请求（timeout={timeout:g}）。"
             )
@@ -478,12 +496,12 @@ class FunctionToolManager:
             finally:
                 await self._terminate_mcp_client(name)
                 current_task = asyncio.current_task()
-                runtime = self.mcp_server_runtime.get(name)
+                runtime = self._mcp_server_runtime.get(name)
                 if runtime and runtime.lifecycle_task is current_task:
-                    self.mcp_server_runtime.pop(name, None)
+                    self._mcp_server_runtime.pop(name, None)
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
-        self.mcp_server_runtime[name] = _MCPServerRuntime(
+        self._mcp_server_runtime[name] = _MCPServerRuntime(
             name=name,
             client=mcp_client,
             shutdown_event=shutdown_event,
@@ -491,8 +509,12 @@ class FunctionToolManager:
         )
 
     async def _shutdown_runtimes(
-        self, runtimes: list[_MCPServerRuntime], timeout: float
-    ) -> None:
+        self,
+        runtimes: list[_MCPServerRuntime],
+        timeout: float,
+        *,
+        strict: bool = True,
+    ) -> list[str]:
         """Shutdown runtimes and wait for lifecycle tasks to complete."""
         lifecycle_tasks = [
             runtime.lifecycle_task
@@ -500,7 +522,7 @@ class FunctionToolManager:
             if not runtime.lifecycle_task.done()
         ]
         if not lifecycle_tasks:
-            return
+            return []
 
         for runtime in runtimes:
             runtime.shutdown_event.set()
@@ -520,7 +542,14 @@ class FunctionToolManager:
                 if not task.done():
                     task.cancel()
             await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
-            raise MCPShutdownTimeoutError(pending_names, timeout)
+            if strict:
+                raise MCPShutdownTimeoutError(pending_names, timeout)
+            logger.warning(
+                "MCP 服务关闭超时（%s 秒），以下服务未完全关闭：%s",
+                f"{timeout:g}",
+                ", ".join(pending_names),
+            )
+            return pending_names
         else:
             for result in results:
                 if isinstance(result, asyncio.CancelledError):
@@ -530,26 +559,30 @@ class FunctionToolManager:
                         "MCP lifecycle task failed during shutdown.",
                         exc_info=(type(result), result, result.__traceback__),
                     )
+        return []
 
     async def _init_mcp_client(self, name: str, config: dict) -> MCPClient:
         """初始化单个MCP客户端"""
         mcp_client = MCPClient()
         mcp_client.name = name
+        tools_res = None
+        connected = False
         try:
             await mcp_client.connect_to_server(config, name)
+            connected = True
             tools_res = await mcp_client.list_tools_and_save()
         except asyncio.CancelledError:
-            try:
-                await mcp_client.cleanup()
-            except Exception as cleanup_exc:
-                logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
             raise
         except Exception:
-            try:
-                await mcp_client.cleanup()
-            except Exception as cleanup_exc:
-                logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
             raise
+        finally:
+            if not connected:
+                try:
+                    await mcp_client.cleanup()
+                except Exception as cleanup_exc:
+                    logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
+        if tools_res is None:
+            raise RuntimeError(f"MCP 服务 {name} 初始化失败：未获取工具列表。")
         logger.debug(f"MCP server {name} list tools response: {tools_res}")
         tool_names = [tool.name for tool in tools_res.tools]
 
@@ -574,7 +607,7 @@ class FunctionToolManager:
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
-        runtime = self.mcp_server_runtime.get(name)
+        runtime = self._mcp_server_runtime.get(name)
         if runtime:
             client = runtime.client
             try:
@@ -663,28 +696,29 @@ class FunctionToolManager:
 
         Raises:
             MCPShutdownTimeoutError: If shutdown does not complete within timeout.
+                Only raised when disabling a specific server (name is not None).
 
         """
         if name:
-            runtime = self.mcp_server_runtime.get(name)
+            runtime = self._mcp_server_runtime.get(name)
             if runtime is None:
                 return
 
             try:
-                await self._shutdown_runtimes([runtime], timeout)
+                await self._shutdown_runtimes([runtime], timeout, strict=True)
             finally:
-                self.mcp_server_runtime.pop(name, None)
+                self._mcp_server_runtime.pop(name, None)
                 self.func_list = [
                     f
                     for f in self.func_list
                     if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
                 ]
         else:
-            runtimes = list(self.mcp_server_runtime.values())
+            runtimes = list(self._mcp_server_runtime.values())
             try:
-                await self._shutdown_runtimes(runtimes, timeout)
+                await self._shutdown_runtimes(runtimes, timeout, strict=False)
             finally:
-                self.mcp_server_runtime.clear()
+                self._mcp_server_runtime.clear()
                 self.func_list = [
                     f for f in self.func_list if not isinstance(f, MCPTool)
                 ]
