@@ -100,6 +100,12 @@ class KookClient:
 
     async def connect(self, resume=False):
         """连接WebSocket"""
+        if self.ws:
+            try:
+                await self.ws.close()
+            except Exception:
+                pass
+            self.ws = None
         self._stop_event.clear()
         try:
             # 获取gateway地址
@@ -131,6 +137,12 @@ class KookClient:
 
         except Exception as e:
             logger.error(f"[KOOK] WebSocket 连接失败: {e}")
+            if self.ws:
+                try:
+                    await self.ws.close()
+                except Exception:
+                    pass
+                self.ws = None
             return False
 
     async def listen(self):
@@ -274,30 +286,6 @@ class KookClient:
             logger.debug(f"[KOOK] 发送心跳，sn: {self.last_sn}")
         except Exception as e:
             logger.error(f"[KOOK] 发送心跳失败: {e}")
-
-    async def reconnect(self):
-        """重连方法"""
-        logger.info(f"[KOOK] 开始重连，延迟: {self.reconnect_delay}秒")
-        await asyncio.sleep(self.reconnect_delay)
-
-        # 关闭当前连接
-        await self.close()
-
-        # 尝试重连
-        success = await self.connect(resume=True)
-
-        if success:
-            # 重连成功，重置延迟
-            self.reconnect_delay = 1
-            logger.info("[KOOK] 重连成功")
-        else:
-            # 重连失败，增加延迟（指数退避）
-            self.reconnect_delay = min(
-                self.reconnect_delay * 2, self.max_reconnect_delay
-            )
-            logger.warning(f"[KOOK] 重连失败，下次延迟: {self.reconnect_delay}秒")
-
-        return success
 
     async def send_text(
         self,
