@@ -24,4 +24,4 @@ jobs:
 
     - name: Run I18n Check
       run: |
-        pytest --tb=line tests/test_i18n.py
+        python -m pytest --tb=line tests/test_i18n.py
