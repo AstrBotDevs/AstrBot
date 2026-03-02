@@ -46,6 +46,44 @@ class TestConversationManagerInit:
         conversation_manager.register_on_session_deleted(callback)
         assert callback in conversation_manager._on_session_deleted_callbacks
 
+    @pytest.mark.asyncio
+    async def test_trigger_session_deleted_callback_exception(
+        self, conversation_manager
+    ):
+        """Test that exception in one callback doesn't affect others.
+
+        When one session deleted callback raises an exception,
+        other callbacks should still be executed.
+        This verifies the exception handling at lines 49-57 in conversation_mgr.py.
+        """
+        # Register two callbacks: one that fails, one that succeeds
+        """Test that exception in one callback doesn't affect others.
+
+        When one session deleted callback raises an exception,
+        other callbacks should still be executed.
+        This verifies the exception handling at lines 49-57 in conversation_mgr.py.
+        """
+        # Register two callbacks: one that fails, one that succeeds
+        failing_callback = AsyncMock(side_effect=RuntimeError("Callback error"))
+        success_callback = AsyncMock()
+
+        conversation_manager.register_on_session_deleted(failing_callback)
+        conversation_manager.register_on_session_deleted(success_callback)
+
+        # Trigger the callbacks - should not raise exception
+        with patch("astrbot.core.logger") as mock_logger:
+            await conversation_manager._trigger_session_deleted("test:group:123")
+
+        # Both callbacks should have been called
+        failing_callback.assert_called_once_with("test:group:123")
+        success_callback.assert_called_once_with("test:group:123")
+
+        # Error should have been logged
+        mock_logger.error.assert_called_once()
+        error_msg = mock_logger.error.call_args[0][0]
+        assert "test:group:123" in error_msg
+        assert "Callback error" in str(error_msg)
+
 
 class TestNewConversation:
     """Tests for new_conversation method."""
@@ -122,6 +160,68 @@ class TestNewConversation:
             content=content,
             title="Test Title",
             persona_id="test-persona",
+        )
+
+    @pytest.mark.asyncio
+    async def test_new_conversation_platform_id_fallback(
+        self, conversation_manager, mock_db
+    ):
+        """Test creating conversation with malformed unified_msg_origin falls back to 'unknown'.
+
+        When unified_msg_origin format is not 'platform:type:id', platform_id should fallback to 'unknown'.
+        This verifies the defensive coding at lines 91-97 in conversation_mgr.py.
+        """
+        mock_conv = MagicMock()
+        mock_conv.conversation_id = "test-conv-id"
+        mock_db.create_conversation.return_value = mock_conv
+
+        with patch("astrbot.core.conversation_mgr.sp") as mock_sp:
+            mock_sp.session_put = AsyncMock()
+
+            # Test with malformed format (no colons)
+            conv_id = await conversation_manager.new_conversation(
+                unified_msg_origin="invalid_format_without_colons"
+            )
+
+        assert conv_id == "test-conv-id"
+        # Verify platform_id fallback to 'unknown'
+        mock_db.create_conversation.assert_called_once_with(
+            user_id="invalid_format_without_colons",
+            platform_id="unknown",
+            content=None,
+            title=None,
+            persona_id=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_new_conversation_platform_id_partial_fallback(
+        self, conversation_manager, mock_db
+    ):
+        """Test fallback with partial format (only 1 colon).
+
+        When unified_msg_origin has fewer than 3 parts after splitting by ':',
+        platform_id should fallback to 'unknown'.
+        """
+        mock_conv = MagicMock()
+        mock_conv.conversation_id = "test-conv-id"
+        mock_db.create_conversation.return_value = mock_conv
+
+        with patch("astrbot.core.conversation_mgr.sp") as mock_sp:
+            mock_sp.session_put = AsyncMock()
+
+            # Test with partial format (only 1 colon, needs at least 2 for 3 parts)
+            conv_id = await conversation_manager.new_conversation(
+                unified_msg_origin="platform:only_two_parts"
+            )
+
+        assert conv_id == "test-conv-id"
+        # Verify platform_id fallback to 'unknown' because len(parts) == 2 < 3
+        mock_db.create_conversation.assert_called_once_with(
+            user_id="platform:only_two_parts",
+            platform_id="unknown",
+            content=None,
+            title=None,
+            persona_id=None,
         )
 
 
@@ -220,6 +320,40 @@ class TestDeleteConversation:
 
         callback.assert_called_once_with("test:group:123")
 
+    @pytest.mark.asyncio
+    async def test_delete_conversation_not_current(self, conversation_manager, mock_db):
+        """Test deleting a non-current conversation doesn't affect session state.
+
+        When deleting a conversation that is NOT the current one,
+        session_conversations should remain unchanged.
+        This verifies the conditional logic at lines 139-141 in conversation_mgr.py.
+        """
+        # Setup: current conversation is "current-conv", we delete "other-conv"
+        conversation_manager.session_conversations["test:group:123"] = "current-conv"
+
+        with patch("astrbot.core.conversation_mgr.sp") as mock_sp:
+            mock_sp.session_remove = AsyncMock()
+            # Mock get_curr_conversation_id to return the current conversation
+            conversation_manager.get_curr_conversation_id = AsyncMock(
+                return_value="current-conv"
+            )
+
+            await conversation_manager.delete_conversation(
+                unified_msg_origin="test:group:123",
+                conversation_id="other-conv",  # Different from current
+            )
+
+        # Verify the conversation was deleted from DB
+        mock_db.delete_conversation.assert_called_once_with(cid="other-conv")
+        # Verify session state is NOT affected (not cleared)
+        assert "test:group:123" in conversation_manager.session_conversations
+        assert (
+            conversation_manager.session_conversations["test:group:123"]
+            == "current-conv"
+        )
+        # Verify session_remove was NOT called
+        mock_sp.session_remove.assert_not_called()
+
 
 class TestGetConversation:
     """Tests for get_conversation methods."""
@@ -297,6 +431,116 @@ class TestGetConversation:
             unified_msg_origin="test:group:123", conversation_id="non-existent"
         )
 
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_conversations_maps_conversation_v2_structure(
+        self, conversation_manager, mock_db
+    ):
+        """Ensure get_conversations maps ConversationV2 to the expected public structure."""
+        # Arrange - Create mock ConversationV2 with specific attributes
+        mock_conv_v2 = MagicMock(spec=ConversationV2)
+        mock_conv_v2.conversation_id = "conv1"
+        mock_conv_v2.user_id = "test:group:123"
+        mock_conv_v2.title = "First conversation"
+        mock_conv_v2.created_at = MagicMock()
+        mock_conv_v2.created_at.timestamp.return_value = 1234567890
+        mock_conv_v2.updated_at = MagicMock()
+        mock_conv_v2.updated_at.timestamp.return_value = 1234567999
+        mock_conv_v2.platform_id = "test_platform"
+        mock_conv_v2.persona_id = "test_persona"
+        mock_conv_v2.token_usage = 100
+        mock_conv_v2.content = []  # Must be JSON serializable
+
+        mock_db.get_conversations.return_value = [mock_conv_v2]
+
+        # Act
+        result = await conversation_manager.get_conversations(
+            unified_msg_origin="test:group:123"
+        )
+
+        # Assert - Verify ordering and structure of the public response
+        assert isinstance(result, list)
+        assert len(result) == 1
+
+        conv_public = result[0]
+        # Verify public API structure - returns Conversation object with attributes
+        assert conv_public.cid == "conv1"
+        assert conv_public.user_id == "test:group:123"
+        assert conv_public.title == "First conversation"
+        assert conv_public.created_at == 1234567890
+        assert conv_public.updated_at == 1234567999
+        assert conv_public.platform_id == "test_platform"
+        assert conv_public.persona_id == "test_persona"
+        assert conv_public.token_usage == 100
+
+        mock_db.get_conversations.assert_awaited_once_with(
+            user_id="test:group:123", platform_id=None
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_conversation_create_if_not_exists(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting conversation with create_if_not_exists=True creates new conversation.
+
+        When conversation doesn't exist and create_if_not_exists=True,
+        a new conversation should be created automatically.
+        This verifies the logic at lines 190-193 in conversation_mgr.py.
+        """
+        # Setup: first call returns None (not found), second call returns the new conversation
+        mock_new_conv = MagicMock(spec=ConversationV2)
+        mock_new_conv.conversation_id = "new-conv-id"
+        mock_new_conv.platform_id = "test_platform"
+        mock_new_conv.user_id = "test:group:123"
+        mock_new_conv.content = []
+        mock_new_conv.title = "New Conversation"
+        mock_new_conv.persona_id = None
+        mock_new_conv.created_at = MagicMock()
+        mock_new_conv.created_at.timestamp.return_value = 1234567890
+        mock_new_conv.updated_at = MagicMock()
+        mock_new_conv.updated_at.timestamp.return_value = 1234567890
+        mock_new_conv.token_usage = 0
+
+        # First call returns None, second call returns the conversation
+        mock_db.get_conversation_by_id.side_effect = [None, mock_new_conv]
+        mock_db.create_conversation.return_value = mock_new_conv
+
+        with patch("astrbot.core.conversation_mgr.sp") as mock_sp:
+            mock_sp.session_put = AsyncMock()
+
+            result = await conversation_manager.get_conversation(
+                unified_msg_origin="test:group:123",
+                conversation_id="non-existent-id",
+                create_if_not_exists=True,
+            )
+
+        # Verify new conversation was created
+        mock_db.create_conversation.assert_called_once()
+        # Verify get_conversation_by_id was called twice (first: None, second: new conv)
+        assert mock_db.get_conversation_by_id.call_count == 2
+        assert result is not None
+        assert result.cid == "new-conv-id"
+
+    @pytest.mark.asyncio
+    async def test_get_conversation_create_if_not_exists_false(
+        self, conversation_manager, mock_db
+    ):
+        """Test getting non-existent conversation with create_if_not_exists=False (default).
+
+        When conversation doesn't exist and create_if_not_exists=False (default),
+        should return None without creating a new conversation.
+        """
+        mock_db.get_conversation_by_id.return_value = None
+
+        result = await conversation_manager.get_conversation(
+            unified_msg_origin="test:group:123",
+            conversation_id="non-existent-id",
+            create_if_not_exists=False,  # explicit False
+        )
+
+        # Verify no new conversation was created
+        mock_db.create_conversation.assert_not_called()
         assert result is None
 
 
@@ -482,6 +726,193 @@ class TestGetFilteredConversations:
         assert len(result) == 0
         assert count == 0
         mock_db.get_filtered_conversations.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_filtered_conversations_pagination_filters_and_total(
+        self, conversation_manager, mock_db
+    ):
+        """Ensure get_filtered_conversations forwards filters/pagination and maps items & total correctly."""
+        # Arrange
+        conv1 = MagicMock(spec=ConversationV2)
+        conv1.conversation_id = "conv1"
+        conv1.user_id = "test:group:123"
+        conv1.title = "First conversation"
+        conv1.created_at = MagicMock()
+        conv1.created_at.timestamp.return_value = 1
+        conv1.updated_at = MagicMock()
+        conv1.updated_at.timestamp.return_value = 2
+        conv1.platform_id = "platform1"
+        conv1.persona_id = None
+        conv1.token_usage = 0
+        conv1.content = []  # Must be JSON serializable
+
+        conv2 = MagicMock(spec=ConversationV2)
+        conv2.conversation_id = "conv2"
+        conv2.user_id = "test:group:123"
+        conv2.title = "Second conversation"
+        conv2.created_at = MagicMock()
+        conv2.created_at.timestamp.return_value = 3
+        conv2.updated_at = MagicMock()
+        conv2.updated_at.timestamp.return_value = 4
+        conv2.platform_id = "platform1"
+        conv2.persona_id = None
+        conv2.token_usage = 0
+        conv2.content = []  # Must be JSON serializable
+
+        db_items = [conv1, conv2]
+        db_total = 10
+
+        mock_db.get_filtered_conversations.return_value = (db_items, db_total)
+
+        # Act
+        items, total = await conversation_manager.get_filtered_conversations(
+            page=1,
+            page_size=2,
+            platform_ids=["platform1"],
+            search_query="First",
+        )
+
+        # Assert: underlying DB called with correct parameters
+        mock_db.get_filtered_conversations.assert_awaited_once()
+        call_args = mock_db.get_filtered_conversations.call_args
+        assert call_args.kwargs["page"] == 1
+        assert call_args.kwargs["page_size"] == 2
+        assert call_args.kwargs["platform_ids"] == ["platform1"]
+        assert call_args.kwargs["search_query"] == "First"
+
+        # Assert: total is passed through correctly
+        assert total == db_total
+
+        # Assert: items length, ordering, and structure are preserved/mapped correctly
+        assert isinstance(items, list)
+        assert len(items) == 2
+        # Returns Conversation objects, not dicts
+        assert items[0].cid == "conv1"
+        assert items[1].cid == "conv2"
+        assert items[0].title == "First conversation"
+        assert items[1].title == "Second conversation"
+        assert items[0].created_at == 1
+        assert items[1].created_at == 3
+
+
+class TestGetConversations:
+    """Tests for get_conversations method with explicit mapping verification."""
+
+    @pytest.mark.asyncio
+    async def test_get_conversations_maps_conversation_v2_structure(
+        self, conversation_manager, mock_db
+    ):
+        """Ensure get_conversations maps ConversationV2 to the expected public structure."""
+        # Arrange - Create mock ConversationV2 with specific attributes
+        mock_conv_v2 = MagicMock(spec=ConversationV2)
+        mock_conv_v2.conversation_id = "conv1"
+        mock_conv_v2.user_id = "test:group:123"
+        mock_conv_v2.title = "First conversation"
+        mock_conv_v2.created_at = MagicMock()
+        mock_conv_v2.created_at.timestamp.return_value = 1234567890
+        mock_conv_v2.updated_at = MagicMock()
+        mock_conv_v2.updated_at.timestamp.return_value = 1234567999
+        mock_conv_v2.platform_id = "test_platform"
+        mock_conv_v2.persona_id = "test_persona"
+        mock_conv_v2.token_usage = 100
+        mock_conv_v2.content = []  # Must be JSON serializable
+
+        mock_db.get_conversations.return_value = [mock_conv_v2]
+
+        # Act
+        result = await conversation_manager.get_conversations(
+            unified_msg_origin="test:group:123"
+        )
+
+        # Assert - Verify ordering and structure of the public response
+        assert isinstance(result, list)
+        assert len(result) == 1
+
+        conv_public = result[0]
+        # Verify public API structure - returns Conversation object with attributes
+        assert conv_public.cid == "conv1"
+        assert conv_public.user_id == "test:group:123"
+        assert conv_public.title == "First conversation"
+        assert conv_public.created_at == 1234567890
+        assert conv_public.updated_at == 1234567999
+        assert conv_public.platform_id == "test_platform"
+        assert conv_public.persona_id == "test_persona"
+        assert conv_public.token_usage == 100
+
+        mock_db.get_conversations.assert_awaited_once_with(
+            user_id="test:group:123", platform_id=None
+        )
+
+
+class TestGetFilteredConversationsDetailed:
+    """Detailed tests for get_filtered_conversations with full verification."""
+
+    @pytest.mark.asyncio
+    async def test_get_filtered_conversations_pagination_filters_and_total(
+        self, conversation_manager, mock_db
+    ):
+        """Ensure get_filtered_conversations forwards filters/pagination and maps items & total correctly."""
+        # Arrange
+        conv1 = MagicMock(spec=ConversationV2)
+        conv1.conversation_id = "conv1"
+        conv1.user_id = "test:group:123"
+        conv1.title = "First conversation"
+        conv1.created_at = MagicMock()
+        conv1.created_at.timestamp.return_value = 1
+        conv1.updated_at = MagicMock()
+        conv1.updated_at.timestamp.return_value = 2
+        conv1.platform_id = "platform1"
+        conv1.persona_id = None
+        conv1.token_usage = 0
+        conv1.content = []  # Must be JSON serializable
+
+        conv2 = MagicMock(spec=ConversationV2)
+        conv2.conversation_id = "conv2"
+        conv2.user_id = "test:group:123"
+        conv2.title = "Second conversation"
+        conv2.created_at = MagicMock()
+        conv2.created_at.timestamp.return_value = 3
+        conv2.updated_at = MagicMock()
+        conv2.updated_at.timestamp.return_value = 4
+        conv2.platform_id = "platform1"
+        conv2.persona_id = None
+        conv2.token_usage = 0
+        conv2.content = []  # Must be JSON serializable
+
+        db_items = [conv1, conv2]
+        db_total = 10
+
+        mock_db.get_filtered_conversations.return_value = (db_items, db_total)
+
+        # Act
+        items, total = await conversation_manager.get_filtered_conversations(
+            page=1,
+            page_size=2,
+            platform_ids=["platform1"],
+            search_query="First",
+        )
+
+        # Assert: underlying DB called with correct parameters
+        mock_db.get_filtered_conversations.assert_awaited_once()
+        call_args = mock_db.get_filtered_conversations.call_args
+        assert call_args.kwargs["page"] == 1
+        assert call_args.kwargs["page_size"] == 2
+        assert call_args.kwargs["platform_ids"] == ["platform1"]
+        assert call_args.kwargs["search_query"] == "First"
+
+        # Assert: total is passed through correctly
+        assert total == db_total
+
+        # Assert: items length, ordering, and structure are preserved/mapped correctly
+        assert isinstance(items, list)
+        assert len(items) == 2
+        # Returns Conversation objects, not dicts
+        assert items[0].cid == "conv1"
+        assert items[1].cid == "conv2"
+        assert items[0].title == "First conversation"
+        assert items[1].title == "Second conversation"
+        assert items[0].created_at == 1
+        assert items[1].created_at == 3
 
 
 class TestGetHumanReadableContext:

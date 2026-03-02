@@ -106,7 +106,9 @@ class TestPersonaManagerInitialize:
         mock_persona.persona_id = "test-persona"
         mock_db.get_personas.return_value = [mock_persona]
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 1
@@ -196,7 +198,9 @@ class TestCreatePersona:
         mock_db.get_persona_by_id.return_value = None
         mock_db.insert_persona.return_value = sample_persona
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             result = await persona_manager.create_persona(
                 persona_id="test-persona",
                 system_prompt="You are helpful.",
@@ -239,7 +243,9 @@ class TestUpdatePersona:
         mock_db.update_persona.return_value = updated_persona
         persona_manager.personas = [sample_persona]
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             result = await persona_manager.update_persona(
                 persona_id="test-persona",
                 system_prompt="Updated prompt",
@@ -269,7 +275,9 @@ class TestDeletePersona:
         mock_db.get_persona_by_id.return_value = sample_persona
         persona_manager.personas = [sample_persona]
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.delete_persona("test-persona")
 
         mock_db.delete_persona.assert_called_once_with("test-persona")
@@ -480,7 +488,9 @@ class TestBatchUpdateSortOrder:
         ]
         mock_db.get_personas.return_value = []
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.batch_update_sort_order(items)
 
         mock_db.batch_update_sort_order.assert_called_once_with(items)
@@ -550,7 +560,9 @@ class TestLoadPersonas:
         ]
         mock_db.get_personas.return_value = personas
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 2
@@ -563,7 +575,9 @@ class TestLoadPersonas:
         """Test loading personas when database is empty."""
         mock_db.get_personas.return_value = []
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 0
@@ -584,7 +598,9 @@ class TestLoadPersonas:
         ]
         mock_db.get_personas.return_value = personas
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 1
@@ -613,7 +629,9 @@ class TestLoadPersonas:
         ]
         mock_db.get_personas.return_value = personas
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 2
@@ -640,7 +658,9 @@ class TestLoadPersonas:
         ]
         mock_db.get_personas.return_value = personas
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 1
@@ -661,7 +681,9 @@ class TestLoadPersonas:
         ]
         mock_db.get_personas.return_value = personas
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 1
@@ -686,7 +708,9 @@ class TestPersonaHotReload:
         ]
         mock_db.get_personas.return_value = initial_personas
 
-        with patch.object(persona_manager, "get_v3_persona_data"):
+        with patch.object(
+            persona_manager, "get_v3_persona_data"
+        ) as _mock_get_v3_persona_data:
             await persona_manager.initialize()
 
         assert len(persona_manager.personas) == 1
