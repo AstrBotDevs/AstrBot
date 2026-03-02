@@ -149,7 +149,7 @@ class AstrBotUpdator(RepoZipUpdator):
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
-            raise Exception("不支持更新此方式启动的AstrBot")  # 避免版本管理混乱
+            raise Exception("Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot.")  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]

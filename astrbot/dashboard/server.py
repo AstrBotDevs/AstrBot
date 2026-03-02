@@ -33,6 +33,9 @@ from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
 
+# Static assets shipped inside the wheel (built during `hatch build`).
+_BUNDLED_DIST = Path(__file__).parent / "dist"
+
 
 class _AddrWithPort(Protocol):
     port: int
@@ -66,13 +69,22 @@ class AstrBotDashboard:
         self.config = core_lifecycle.astrbot_config
         self.db = db
 
-        # 参数指定webui目录
+        # Path priority:
+        # 1. Explicit webui_dir argument
+        # 2. data/dist/ (user-installed / manually updated dashboard)
+        # 3. astrbot/dashboard/dist/ (bundled with the wheel)
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
-            self.data_path = os.path.abspath(
-                os.path.join(get_astrbot_data_path(), "dist"),
-            )
+            user_dist = os.path.join(get_astrbot_data_path(), "dist")
+            if os.path.exists(user_dist):
+                self.data_path = os.path.abspath(user_dist)
+            elif _BUNDLED_DIST.exists():
+                self.data_path = str(_BUNDLED_DIST)
+                logger.info("Using bundled dashboard dist: %s", self.data_path)
+            else:
+                # Fall back to expected user path (will fail gracefully later)
+                self.data_path = os.path.abspath(user_dist)
 
         self.app = Quart("dashboard", static_folder=self.data_path, static_url_path="/")
         APP = self.app  # noqa

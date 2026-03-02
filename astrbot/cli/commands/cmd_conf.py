@@ -10,57 +10,57 @@ from ..utils import check_astrbot_root, get_astrbot_root
 
 
 def _validate_log_level(value: str) -> str:
-    """验证日志级别"""
+    """Validate log level"""
     value = value.upper()
     if value not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
         raise click.ClickException(
-            "日志级别必须是 DEBUG/INFO/WARNING/ERROR/CRITICAL 之一",
+            "Log level must be one of DEBUG/INFO/WARNING/ERROR/CRITICAL",
         )
     return value
 
 
 def _validate_dashboard_port(value: str) -> int:
-    """验证 Dashboard 端口"""
+    """Validate Dashboard port"""
     try:
         port = int(value)
         if port < 1 or port > 65535:
-            raise click.ClickException("端口必须在 1-65535 范围内")
+            raise click.ClickException("Port must be in range 1-65535")
         return port
     except ValueError:
-        raise click.ClickException("端口必须是数字")
+        raise click.ClickException("Port must be a number")
 
 
 def _validate_dashboard_username(value: str) -> str:
-    """验证 Dashboard 用户名"""
+    """Validate Dashboard username"""
     if not value:
-        raise click.ClickException("用户名不能为空")
+        raise click.ClickException("Username cannot be empty")
     return value
 
 
 def _validate_dashboard_password(value: str) -> str:
-    """验证 Dashboard 密码"""
+    """Validate Dashboard password"""
     if not value:
-        raise click.ClickException("密码不能为空")
+        raise click.ClickException("Password cannot be empty")
     return hashlib.md5(value.encode()).hexdigest()
 
 
 def _validate_timezone(value: str) -> str:
-    """验证时区"""
+    """Validate timezone"""
     try:
         zoneinfo.ZoneInfo(value)
     except Exception:
-        raise click.ClickException(f"无效的时区: {value}，请使用有效的IANA时区名称")
+        raise click.ClickException(f"Invalid timezone: {value}. Please use a valid IANA timezone name")
     return value
 
 
 def _validate_callback_api_base(value: str) -> str:
-    """验证回调接口基址"""
+    """Validate callback API base URL"""
     if not value.startswith("http://") and not value.startswith("https://"):
-        raise click.ClickException("回调接口基址必须以 http:// 或 https:// 开头")
+        raise click.ClickException("Callback API base must start with http:// or https://")
     return value
 
 
-# 可通过CLI设置的配置项，配置键到验证器函数的映射
+# Configuration items settable via CLI, mapping config keys to validator functions
 CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
     "timezone": _validate_timezone,
     "log_level": _validate_log_level,
@@ -72,11 +72,11 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 
 
 def _load_config() -> dict[str, Any]:
-    """加载或初始化配置文件"""
+    """Load or initialize config file"""
     root = get_astrbot_root()
     if not check_astrbot_root(root):
         raise click.ClickException(
-            f"{root}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
+            f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
 
     config_path = root / "data" / "cmd_config.json"
@@ -91,11 +91,11 @@ def _load_config() -> dict[str, Any]:
     try:
         return json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        raise click.ClickException(f"配置文件解析失败: {e!s}")
+        raise click.ClickException(f"Failed to parse config file: {e!s}")
 
 
 def _save_config(config: dict[str, Any]) -> None:
-    """保存配置文件"""
+    """Save config file"""
     config_path = get_astrbot_root() / "data" / "cmd_config.json"
 
     config_path.write_text(
@@ -105,21 +105,21 @@ def _save_config(config: dict[str, Any]) -> None:
 
 
 def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
-    """设置嵌套字典中的值"""
+    """Set a value in a nested dictionary"""
     parts = path.split(".")
     for part in parts[:-1]:
         if part not in obj:
             obj[part] = {}
         elif not isinstance(obj[part], dict):
             raise click.ClickException(
-                f"配置路径冲突: {'.'.join(parts[: parts.index(part) + 1])} 不是字典",
+                f"Config path conflict: {'.'.join(parts[: parts.index(part) + 1])} is not a dict",
             )
         obj = obj[part]
     obj[parts[-1]] = value
 
 
 def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
-    """获取嵌套字典中的值"""
+    """Get a value from a nested dictionary"""
     parts = path.split(".")
     for part in parts:
         obj = obj[part]
@@ -128,21 +128,21 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 @click.group(name="conf")
 def conf() -> None:
-    """配置管理命令
+    """Configuration management commands
 
-    支持的配置项:
+    Supported config keys:
 
-    - timezone: 时区设置 (例如: Asia/Shanghai)
+    - timezone: Timezone setting (e.g. Asia/Shanghai)
 
-    - log_level: 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    - log_level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
 
-    - dashboard.port: Dashboard 端口
+    - dashboard.port: Dashboard port
 
-    - dashboard.username: Dashboard 用户名
+    - dashboard.username: Dashboard username
 
-    - dashboard.password: Dashboard 密码
+    - dashboard.password: Dashboard password
 
-    - callback_api_base: 回调接口基址
+    - callback_api_base: Callback API base URL
     """
 
 
@@ -150,9 +150,9 @@ def conf() -> None:
 @click.argument("key")
 @click.argument("value")
 def set_config(key: str, value: str) -> None:
-    """设置配置项的值"""
+    """Set the value of a config item"""
     if key not in CONFIG_VALIDATORS:
-        raise click.ClickException(f"不支持的配置项: {key}")
+        raise click.ClickException(f"Unsupported config key: {key}")
 
     config = _load_config()
 
@@ -162,29 +162,29 @@ def set_config(key: str, value: str) -> None:
         _set_nested_item(config, key, validated_value)
         _save_config(config)
 
-        click.echo(f"配置已更新: {key}")
+        click.echo(f"Config updated: {key}")
         if key == "dashboard.password":
-            click.echo("  原值: ********")
-            click.echo("  新值: ********")
+            click.echo("  Old value: ********")
+            click.echo("  New value: ********")
         else:
-            click.echo(f"  原值: {old_value}")
-            click.echo(f"  新值: {validated_value}")
+            click.echo(f"  Old value: {old_value}")
+            click.echo(f"  New value: {validated_value}")
 
     except KeyError:
-        raise click.ClickException(f"未知的配置项: {key}")
+        raise click.ClickException(f"Unknown config key: {key}")
     except Exception as e:
-        raise click.UsageError(f"设置配置失败: {e!s}")
+        raise click.UsageError(f"Failed to set config: {e!s}")
 
 
 @conf.command(name="get")
 @click.argument("key", required=False)
 def get_config(key: str | None = None) -> None:
-    """获取配置项的值，不提供key则显示所有可配置项"""
+    """Get the value of a config item. If no key is provided, show all configurable items"""
     config = _load_config()
 
     if key:
         if key not in CONFIG_VALIDATORS:
-            raise click.ClickException(f"不支持的配置项: {key}")
+            raise click.ClickException(f"Unsupported config key: {key}")
 
         try:
             value = _get_nested_item(config, key)
@@ -192,11 +192,11 @@ def get_config(key: str | None = None) -> None:
                 value = "********"
             click.echo(f"{key}: {value}")
         except KeyError:
-            raise click.ClickException(f"未知的配置项: {key}")
+            raise click.ClickException(f"Unknown config key: {key}")
         except Exception as e:
-            raise click.UsageError(f"获取配置失败: {e!s}")
+            raise click.UsageError(f"Failed to get config: {e!s}")
     else:
-        click.echo("当前配置:")
+        click.echo("Current config:")
         for key in CONFIG_VALIDATORS:
             try:
                 value = (

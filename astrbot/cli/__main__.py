@@ -1,4 +1,4 @@
-"""AstrBot CLI入口"""
+"""AstrBot CLI entry point"""
 
 import sys
 
@@ -29,23 +29,23 @@ def cli() -> None:
 @click.command()
 @click.argument("command_name", required=False, type=str)
 def help(command_name: str | None) -> None:
-    """显示命令的帮助信息
+    """Display help information for commands
 
-    如果提供了 COMMAND_NAME，则显示该命令的详细帮助信息。
-    否则，显示通用帮助信息。
+    If COMMAND_NAME is provided, display detailed help for that command.
+    Otherwise, display general help information.
     """
     ctx = click.get_current_context()
     if command_name:
-        # 查找指定命令
+        # Find the specified command
         command = cli.get_command(ctx, command_name)
         if command:
-            # 显示特定命令的帮助信息
+            # Display help for the specific command
             click.echo(command.get_help(ctx))
         else:
             click.echo(f"Unknown command: {command_name}")
             sys.exit(1)
     else:
-        # 显示通用帮助信息
+        # Display general help information
         click.echo(cli.get_help(ctx))
 
 

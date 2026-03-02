@@ -14,7 +14,7 @@ import certifi
 import psutil
 from PIL import Image
 
-from .astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
 
@@ -219,7 +219,14 @@ def get_local_ip_addresses():
 
 
 async def get_dashboard_version():
+    # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
+    if not os.path.exists(dist_dir):
+        # Fall back to the dist bundled inside the installed wheel.
+        # _bundled = Path(_dash_pkg.__file__).parent / "dist"
+        _bundled = Path(get_astrbot_path()) / "dashboard" / "dist"
+        if _bundled.exists():
+            dist_dir = str(_bundled)
     if os.path.exists(dist_dir):
         version_file = os.path.join(dist_dir, "assets", "version")
         if os.path.exists(version_file):

@@ -16,14 +16,14 @@ from ..utils import (
 
 @click.group()
 def plug() -> None:
-    """插件管理"""
+    """Plugin management"""
 
 
 def _get_data_path() -> Path:
     base = get_astrbot_root()
     if not check_astrbot_root(base):
         raise click.ClickException(
-            f"{base}不是有效的 AstrBot 根目录，如需初始化请使用 astrbot init",
+            f"{base} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
     return (base / "data").resolve()
 
@@ -32,7 +32,7 @@ def display_plugins(plugins, title=None, color=None) -> None:
     if title:
         click.echo(click.style(title, fg=color, bold=True))
 
-    click.echo(f"{'名称':<20} {'版本':<10} {'状态':<10} {'作者':<15} {'描述':<30}")
+    click.echo(f"{'Name':<20} {'Version':<10} {'Status':<10} {'Author':<15} {'Description':<30}")
     click.echo("-" * 85)
 
     for p in plugins:
@@ -46,30 +46,30 @@ def display_plugins(plugins, title=None, color=None) -> None:
 @plug.command()
 @click.argument("name")
 def new(name: str) -> None:
-    """创建新插件"""
+    """Create a new plugin"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins" / name
 
     if plug_path.exists():
-        raise click.ClickException(f"插件 {name} 已存在")
+        raise click.ClickException(f"Plugin {name} already exists")
 
-    author = click.prompt("请输入插件作者", type=str)
-    desc = click.prompt("请输入插件描述", type=str)
-    version = click.prompt("请输入插件版本", type=str)
+    author = click.prompt("Enter plugin author", type=str)
+    desc = click.prompt("Enter plugin description", type=str)
+    version = click.prompt("Enter plugin version", type=str)
     if not re.match(r"^\d+\.\d+(\.\d+)?$", version.lower().lstrip("v")):
-        raise click.ClickException("版本号必须为 x.y 或 x.y.z 格式")
-    repo = click.prompt("请输入插件仓库：", type=str)
+        raise click.ClickException("Version must be in x.y or x.y.z format")
+    repo = click.prompt("Enter plugin repository URL:", type=str)
     if not repo.startswith("http"):
-        raise click.ClickException("仓库地址必须以 http 开头")
+        raise click.ClickException("Repository URL must start with http")
 
-    click.echo("下载插件模板...")
+    click.echo("Downloading plugin template...")
     get_git_repo(
         "https://github.com/Soulter/helloworld",
         plug_path,
     )
 
-    click.echo("重写插件信息...")
-    # 重写 metadata.yaml
+    click.echo("Rewriting plugin metadata...")
+    # Rewrite metadata.yaml
     with open(plug_path / "metadata.yaml", "w", encoding="utf-8") as f:
         f.write(
             f"name: {name}\n"
@@ -79,11 +79,11 @@ def new(name: str) -> None:
             f"repo: {repo}\n",
         )
 
-    # 重写 README.md
+    # Rewrite README.md
     with open(plug_path / "README.md", "w", encoding="utf-8") as f:
-        f.write(f"# {name}\n\n{desc}\n\n# 支持\n\n[帮助文档](https://astrbot.app)\n")
+        f.write(f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://astrbot.app)\n")
 
-    # 重写 main.py
+    # Rewrite main.py
     with open(plug_path / "main.py", encoding="utf-8") as f:
         content = f.read()
 
@@ -95,54 +95,54 @@ def new(name: str) -> None:
     with open(plug_path / "main.py", "w", encoding="utf-8") as f:
         f.write(new_content)
 
-    click.echo(f"插件 {name} 创建成功")
+    click.echo(f"Plugin {name} created successfully")
 
 
 @plug.command()
-@click.option("--all", "-a", is_flag=True, help="列出未安装的插件")
+@click.option("--all", "-a", is_flag=True, help="List uninstalled plugins")
 def list(all: bool) -> None:
-    """列出插件"""
+    """List plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
-    # 未发布的插件
+    # Unpublished plugins
     not_published_plugins = [
         p for p in plugins if p["status"] == PluginStatus.NOT_PUBLISHED
     ]
     if not_published_plugins:
-        display_plugins(not_published_plugins, "未发布的插件", "red")
+        display_plugins(not_published_plugins, "Unpublished Plugins", "red")
 
-    # 需要更新的插件
+    # Plugins needing update
     need_update_plugins = [
         p for p in plugins if p["status"] == PluginStatus.NEED_UPDATE
     ]
     if need_update_plugins:
-        display_plugins(need_update_plugins, "需要更新的插件", "yellow")
+        display_plugins(need_update_plugins, "Plugins Needing Update", "yellow")
 
-    # 已安装的插件
+    # Installed plugins
     installed_plugins = [p for p in plugins if p["status"] == PluginStatus.INSTALLED]
     if installed_plugins:
-        display_plugins(installed_plugins, "已安装的插件", "green")
+        display_plugins(installed_plugins, "Installed Plugins", "green")
 
-    # 未安装的插件
+    # Uninstalled plugins
     not_installed_plugins = [
         p for p in plugins if p["status"] == PluginStatus.NOT_INSTALLED
     ]
     if not_installed_plugins and all:
-        display_plugins(not_installed_plugins, "未安装的插件", "blue")
+        display_plugins(not_installed_plugins, "Uninstalled Plugins", "blue")
 
     if (
         not any([not_published_plugins, need_update_plugins, installed_plugins])
         and not all
     ):
-        click.echo("未安装任何插件")
+        click.echo("No plugins installed")
 
 
 @plug.command()
 @click.argument("name")
-@click.option("--proxy", help="代理服务器地址")
+@click.option("--proxy", help="Proxy server address")
 def install(name: str, proxy: str | None) -> None:
-    """安装插件"""
+    """Install a plugin"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
@@ -157,7 +157,7 @@ def install(name: str, proxy: str | None) -> None:
     )
 
     if not plugin:
-        raise click.ClickException(f"未找到可安装的插件 {name}，可能是不存在或已安装")
+        raise click.ClickException(f"Plugin {name} not found or already installed")
 
     manage_plugin(plugin, plug_path, is_update=False, proxy=proxy)
 
@@ -165,30 +165,30 @@ def install(name: str, proxy: str | None) -> None:
 @plug.command()
 @click.argument("name")
 def remove(name: str) -> None:
-    """卸载插件"""
+    """Uninstall a plugin"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
     plugin = next((p for p in plugins if p["name"] == name), None)
 
     if not plugin or not plugin.get("local_path"):
-        raise click.ClickException(f"插件 {name} 不存在或未安装")
+        raise click.ClickException(f"Plugin {name} does not exist or is not installed")
 
     plugin_path = plugin["local_path"]
 
-    click.confirm(f"确定要卸载插件 {name} 吗?", default=False, abort=True)
+    click.confirm(f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True)
 
     try:
         shutil.rmtree(plugin_path)
-        click.echo(f"插件 {name} 已卸载")
+        click.echo(f"Plugin {name} has been uninstalled")
     except Exception as e:
-        raise click.ClickException(f"卸载插件 {name} 失败: {e}")
+        raise click.ClickException(f"Failed to uninstall plugin {name}: {e}")
 
 
 @plug.command()
 @click.argument("name", required=False)
-@click.option("--proxy", help="Github代理地址")
+@click.option("--proxy", help="GitHub proxy address")
 def update(name: str, proxy: str | None) -> None:
-    """更新插件"""
+    """Update plugins"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
@@ -204,7 +204,7 @@ def update(name: str, proxy: str | None) -> None:
         )
 
         if not plugin:
-            raise click.ClickException(f"插件 {name} 不需要更新或无法更新")
+            raise click.ClickException(f"Plugin {name} does not need updating or cannot be updated")
 
         manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)
     else:
@@ -213,20 +213,20 @@ def update(name: str, proxy: str | None) -> None:
         ]
 
         if not need_update_plugins:
-            click.echo("没有需要更新的插件")
+            click.echo("No plugins need updating")
             return
 
-        click.echo(f"发现 {len(need_update_plugins)} 个插件需要更新")
+        click.echo(f"Found {len(need_update_plugins)} plugin(s) needing update")
         for plugin in need_update_plugins:
             plugin_name = plugin["name"]
-            click.echo(f"正在更新插件 {plugin_name}...")
+            click.echo(f"Updating plugin {plugin_name}...")
             manage_plugin(plugin, plug_path, is_update=True, proxy=proxy)
 
 
 @plug.command()
 @click.argument("query")
 def search(query: str) -> None:
-    """搜索插件"""
+    """Search for plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
@@ -239,7 +239,7 @@ def search(query: str) -> None:
     ]
 
     if not matched_plugins:
-        click.echo(f"未找到匹配 '{query}' 的插件")
+        click.echo(f"No plugins matching '{query}' found")
         return
 
-    display_plugins(matched_plugins, f"搜索结果: '{query}'", "cyan")
+    display_plugins(matched_plugins, f"Search results: '{query}'", "cyan")
