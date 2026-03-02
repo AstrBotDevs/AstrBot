@@ -15,4 +15,4 @@ class RegexFilter(HandlerFilter):
         self.regex = re.compile(regex)
 
     def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
-        return bool(self.regex.match(event.get_message_str().strip()))
+        return bool(self.regex.search(event.get_message_str().strip()))
