@@ -370,7 +370,8 @@
         "hint": "Optional Discord activity name. Leave empty to disable."
       },
       "discord_command_register": {
-        "description": "Auto-register plugin commands as Discord slash commands"
+        "description": "Register Discord slash commands",
+        "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"
       },
       "discord_proxy": {
         "description": "Discord Proxy URL",
