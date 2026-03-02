@@ -41,7 +41,7 @@ class KookPlatformAdapter(Platform):
         inner_message.session_id = session.session_id
         inner_message.type = session.message_type
         message_event = KookEvent(
-            message_str="kook",
+            message_str=message_chain.get_plain_text(),
             message_obj=inner_message,
             platform_meta=self.meta(),
             session_id=session.session_id,
