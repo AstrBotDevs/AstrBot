@@ -342,6 +342,8 @@ class KookClient:
                     raise RuntimeError(
                         f'发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}'
                     )
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.error(
                 f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}'
