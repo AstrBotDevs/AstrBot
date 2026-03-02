@@ -523,6 +523,8 @@ class TestEnsurePersonaAndSkills:
         mock_skill = MagicMock()
         mock_skill.name = "test_skill"
         mock_skill.to_prompt.return_value = "Skill description"
+        mock_skill.description = "Skill description"
+        mock_skill.path = "data/skills/test_skill/SKILL.md"
         mock_context.persona_manager.personas_v3 = []
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=(None, None, None, False)

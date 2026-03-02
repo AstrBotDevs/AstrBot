@@ -12,16 +12,24 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.zip_updator import ReleaseInfo
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
-    MockPluginConfig,
     create_mock_updater_install,
     create_mock_updater_update,
 )
 
+RUN_ONLINE_UPDATE_CHECK = os.environ.get(
+    "ASTRBOT_RUN_ONLINE_UPDATE_CHECK", ""
+).lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
-@pytest_asyncio.fixture(scope="module")
+
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def core_lifecycle_td(tmp_path_factory):
     """Creates and initializes a core lifecycle instance with a temporary database."""
     tmp_db_path = tmp_path_factory.mktemp("data") / "test_data_v3.db"
@@ -51,7 +59,7 @@ def app(core_lifecycle_td: AstrBotCoreLifecycle):
     return server.app
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
@@ -108,16 +116,14 @@ async def test_plugins(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试插件 API 端点，使用 Mock 避免真实网络调用。"""
+    """Test plugin APIs with mocked updater behavior."""
     test_client = app.test_client()
 
-    # 已经安装的插件
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
 
-    # 插件市场
     response = await test_client.get(
         "/api/plugin/market_list",
         headers=authenticated_header,
@@ -126,31 +132,24 @@ async def test_plugins(
     data = await response.get_json()
     assert data["status"] == "ok"
 
-    # 使用 MockPluginBuilder 创建测试插件
     plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
     builder = MockPluginBuilder(plugin_store_path)
 
-    # 定义测试插件
     test_plugin_name = "test_mock_plugin"
     test_repo_url = f"https://github.com/test/{test_plugin_name}"
 
-    # 创建 Mock 函数
     mock_install = create_mock_updater_install(
         builder,
         repo_to_plugin={test_repo_url: test_plugin_name},
     )
     mock_update = create_mock_updater_update(builder)
 
-    # 设置 Mock
     monkeypatch.setattr(
         core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_update
-    )
+    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
 
     try:
-        # 插件安装
         response = await test_client.post(
             "/api/plugin/install",
             json={"url": test_repo_url},
@@ -158,13 +157,13 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+        assert data["status"] == "ok", (
+            f"install failed: {data.get('message', 'unknown error')}"
+        )
 
-        # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
-        assert exists is True, f"插件 {test_plugin_name} 未成功载入"
+        assert exists is True, f"plugin {test_plugin_name} was not loaded"
 
-        # 插件更新
         response = await test_client.post(
             "/api/plugin/update",
             json={"name": test_plugin_name},
@@ -174,11 +173,9 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        # 验证更新标记文件
         plugin_dir = builder.get_plugin_path(test_plugin_name)
         assert (plugin_dir / ".updated").exists()
 
-        # 插件卸载
         response = await test_client.post(
             "/api/plugin/uninstall",
             json={"name": test_plugin_name},
@@ -188,16 +185,14 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        # 验证插件已卸载
         exists = any(md.name == test_plugin_name for md in star_registry)
-        assert exists is False, f"插件 {test_plugin_name} 未成功卸载"
+        assert exists is False, f"plugin {test_plugin_name} was not unloaded"
         exists = any(
             test_plugin_name in md.handler_module_path for md in star_handlers_registry
         )
-        assert exists is False, f"插件 {test_plugin_name} handler 未成功清理"
+        assert exists is False, f"plugin {test_plugin_name} handlers were not cleaned"
 
     finally:
-        # 清理测试插件
         builder.cleanup(test_plugin_name)
 
 
@@ -230,41 +225,141 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
-async def test_check_update(
+async def test_check_update_success_no_new_version(
     app: Quart,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
 ):
-    """测试检查更新 API，使用 Mock 避免真实网络调用。"""
-    test_client = app.test_client()
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
 
-    # Mock 更新检查和网络请求
-    async def mock_check_update(*args, **kwargs):
-        """Mock 更新检查，返回无新版本。"""
-        return None  # None 表示没有新版本
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        return None
 
-    async def mock_get_dashboard_version(*args, **kwargs):
-        """Mock Dashboard 版本获取。"""
-        from astrbot.core.config.default import VERSION
-
-        return f"v{VERSION}"  # 返回当前版本
-
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
     monkeypatch.setattr(
         core_lifecycle_td.astrbot_updator,
         "check_update",
         mock_check_update,
     )
-    monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.get_dashboard_version",
-        mock_get_dashboard_version,
-    )
+    test_client = app.test_client()
 
     response = await test_client.get("/api/update/check", headers=authenticated_header)
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "success"
+    assert {
+        "version",
+        "has_new_version",
+        "dashboard_version",
+        "dashboard_has_new_version",
+    }.issubset(data["data"])
     assert data["data"]["has_new_version"] is False
+    assert data["data"]["dashboard_version"] == "v-test-dashboard"
+
+
+@pytest.mark.asyncio
+async def test_check_update_success_has_new_version(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        return ReleaseInfo(
+            version="v999.0.0",
+            published_at="2026-01-01",
+            body="test release",
+        )
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "success"
+    assert {
+        "version",
+        "has_new_version",
+        "dashboard_version",
+        "dashboard_has_new_version",
+    }.issubset(data["data"])
+    assert data["data"]["has_new_version"] is True
+    assert data["data"]["dashboard_version"] == "v-test-dashboard"
+
+
+@pytest.mark.asyncio
+async def test_check_update_error_when_updator_raises(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    async def mock_get_dashboard_version():
+        return "v-test-dashboard"
+
+    async def mock_check_update(*args, **kwargs):  # noqa: ARG001
+        raise RuntimeError("mock update check failure")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_dashboard_version",
+        mock_get_dashboard_version,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "check_update",
+        mock_check_update,
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert isinstance(data["message"], str)
+    assert data["message"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not RUN_ONLINE_UPDATE_CHECK,
+    reason="Set ASTRBOT_RUN_ONLINE_UPDATE_CHECK=1 to run online update check test.",
+)
+async def test_check_update_online_optional(app: Quart, authenticated_header: dict):
+    """Optional online smoke test for the real update-check request path."""
+    test_client = app.test_client()
+    response = await test_client.get("/api/update/check", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] in {"success", "error"}
+    assert "message" in data
+    assert "data" in data
+
+    if data["status"] == "success":
+        assert {
+            "version",
+            "has_new_version",
+            "dashboard_version",
+            "dashboard_has_new_version",
+        }.issubset(data["data"])
 
 
 @pytest.mark.asyncio
