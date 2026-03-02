@@ -54,3 +54,7 @@ IFLOW.md
 # genie_tts data
 CharacterModels/
 GenieData/
+.agent/
+.codex/
+.opencode/
+.kilocode/
