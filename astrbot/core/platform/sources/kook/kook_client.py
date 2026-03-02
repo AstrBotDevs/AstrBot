@@ -422,8 +422,6 @@ class KookClient:
         except Exception as e:
             raise RuntimeError(f"上传文件到kook服务器异常: {e}") from e
 
-        return ""
-
     async def wait_until_closed(self):
         """提供给外部调用的等待方法"""
         await self._stop_event.wait()
