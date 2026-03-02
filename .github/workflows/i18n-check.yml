@@ -1,5 +1,6 @@
 name: I18n Usage Check
-
+env:
+    PYTHONPATH: .
 on:
   pull_request:
     paths:
