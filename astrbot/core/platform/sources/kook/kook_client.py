@@ -332,16 +332,18 @@ class KookClient:
             async with self._http_client.post(url, json=payload) as resp:
                 if resp.status == 200:
                     result = await resp.json()
-                    if result.get("code") == 0:
-                        logger.info("[KOOK] 发送消息成功")
-                    else:
-                        logger.error(
-                            f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 失败: {result}'
+                    if result.get("code") != 0:
+                        raise RuntimeError(
+                            f'发送kook消息类型 "{kook_message_type.name}" 失败: {result}'
                         )
+                    # else:
+                    #     logger.info("[KOOK] 发送消息成功")
                 else:
-                    logger.error(
-                        f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}'
+                    raise RuntimeError(
+                        f'发送kook消息类型 "{kook_message_type.name}" HTTP错误: {resp.status} , 响应内容 : {await resp.text()}'
                     )
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.error(
                 f'[KOOK] 发送kook消息类型 "{kook_message_type.name}" 异常: {e}'

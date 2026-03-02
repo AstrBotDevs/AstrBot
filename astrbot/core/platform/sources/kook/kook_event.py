@@ -164,18 +164,35 @@ class KookEvent(AstrMessageEvent):
         # order_messages.sort(key=lambda x: 0 if x.reply_id else 1)
 
         reply_id: str | int = ""
+        # TODO 暂时用不了 ExceptionGroup,
+        # 因为pyproject的target-version是"py3.10"
+        errors: list[Exception] = []
         for item in order_messages:
             if item.reply_id:
                 reply_id = item.reply_id
             if not item.text:
                 logger.debug(f'[Kook] 跳过空消息,类型为"{item.type}"')
                 continue
-            await self.client.send_text(
-                self.channel_id,
-                item.text,
-                self.astrbot_message_type,
-                item.type,
-                reply_id,
-            )
+            try:
+                await self.client.send_text(
+                    self.channel_id,
+                    item.text,
+                    self.astrbot_message_type,
+                    item.type,
+                    reply_id,
+                )
+            except RuntimeError as exp:
+                await self.client.send_text(
+                    self.channel_id,
+                    str(exp),
+                    self.astrbot_message_type,
+                    KookMessageType.TEXT,
+                    reply_id,
+                )
+                errors.append(exp)
+
+        if errors:
+            err_msg = "\n".join([str(err) for err in errors])
+            logger.error(f"[kook] {err_msg}")
 
         await super().send(message)
