@@ -981,7 +981,24 @@
       },
       "custom_headers": {
         "description": "Custom request headers",
-        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
+        "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings.",
+        "template_schema": {
+          "User-Agent": {
+            "description": "User-Agent header",
+            "hint": "Override the default client identity.",
+            "name": "User-Agent"
+          },
+          "Accept": {
+            "description": "Accept header",
+            "hint": "Declares accepted response formats. Leave empty by default to use SDK/provider defaults and only override when needed (e.g. application/json).",
+            "name": "Accept"
+          },
+          "Accept-Language": {
+            "description": "Accept-Language header",
+            "hint": "Declares preferred languages, e.g. zh-CN,zh;q=0.9,en;q=0.8.",
+            "name": "Accept-Language"
+          }
+        }
       },
       "custom_extra_body": {
         "description": "Custom request body parameters",

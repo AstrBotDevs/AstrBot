@@ -387,6 +387,24 @@ class ConfigRoute(Route):
         }
         self.register_routes()
 
+    @staticmethod
+    def _with_default_custom_headers(config: dict) -> dict:
+        normalized = dict(config) if isinstance(config, dict) else {}
+        headers = normalized.get("custom_headers")
+        if not isinstance(headers, dict):
+            normalized["custom_headers"] = {}
+        return normalized
+
+    # 在返回 provider_sources 和 provider 配置时，如果 custom_headers 字段不是 dict，则强制转换为 dict，避免前端使用时出错
+    def _normalize_custom_headers_configs(self, configs: list) -> list:
+        normalized = []
+        for config in configs:
+            if isinstance(config, dict):
+                normalized.append(self._with_default_custom_headers(config))
+            else:
+                normalized.append(config)
+        return normalized
+
     async def delete_provider_source(self):
         """删除 provider_source，并更新关联的 providers"""
         post_data = await request.json
@@ -442,6 +460,8 @@ class ConfigRoute(Route):
 
         if not isinstance(new_source_config, dict):
             return Response().error("缺少或错误的配置数据").__dict__
+
+        new_source_config = self._with_default_custom_headers(new_source_config)
 
         # 确保配置中有 id 字段
         if not new_source_config.get("id"):
@@ -524,8 +544,12 @@ class ConfigRoute(Route):
         }
         data = {
             "config_schema": config_schema,
-            "providers": astrbot_config["provider"],
-            "provider_sources": astrbot_config["provider_sources"],
+            "providers": self._normalize_custom_headers_configs(
+                astrbot_config["provider"]
+            ),
+            "provider_sources": self._normalize_custom_headers_configs(
+                astrbot_config["provider_sources"]
+            ),
         }
         return Response().ok(data=data).__dict__
 
@@ -1255,6 +1279,7 @@ class ConfigRoute(Route):
 
     async def post_new_provider(self):
         new_provider_config = await request.json
+        new_provider_config = self._with_default_custom_headers(new_provider_config)
 
         try:
             await self.core_lifecycle.provider_manager.create_provider(
@@ -1297,6 +1322,8 @@ class ConfigRoute(Route):
         new_config = update_provider_config.get("config", None)
         if not origin_provider_id or not new_config:
             return Response().error("参数错误").__dict__
+
+        new_config = self._with_default_custom_headers(new_config)
 
         try:
             await self.core_lifecycle.provider_manager.update_provider(
