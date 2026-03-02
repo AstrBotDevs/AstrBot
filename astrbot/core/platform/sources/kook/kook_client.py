@@ -255,8 +255,10 @@ class KookClient:
         """心跳循环"""
         while self.running:
             try:
-                # 随机化心跳间隔 (30±5秒)
-                interval = self.config.heartbeat_interval + random.randint(-5, 5)
+                # 随机化心跳间隔 (±5秒)
+                interval = max(
+                    1, self.config.heartbeat_interval + random.randint(-5, 5)
+                )
                 await asyncio.sleep(interval)
 
                 if not self.running:

@@ -135,7 +135,7 @@ class KookPlatformAdapter(Platform):
                     # 等待一段时间后重试
                     wait_time = min(
                         2**consecutive_failures, max_retry_delay
-                    )  # 指数退避，最大60秒
+                    )  # 指数退避
                     logger.info(f"[KOOK] 等待 {wait_time} 秒后重试...")
                     await asyncio.sleep(wait_time)
 
