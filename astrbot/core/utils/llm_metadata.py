@@ -61,7 +61,7 @@ async def update_llm_metadata() -> None:
                 # Replace the global cache in-place so references remain valid
                 LLM_METADATAS.clear()
                 LLM_METADATAS.update(models)
-                logger.info(t("msg-d6535d03", res=len(models)))
+                logger.info(t("msg-d6535d03", res=str(len(models))))
     except Exception as e:
         logger.error(t("msg-8cceaeb0", e=e))
         return
