@@ -136,12 +136,34 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             return None
 
-        payload: dict = {
-            # "content": plain_text,
-            "markdown": MarkdownPayload(content=plain_text) if plain_text else None,
-            "msg_type": 2,
-            "msg_id": self.message_obj.message_id,
-        }
+        # 检查消息是否包含模板信息
+        import json
+        is_template_message = False
+        template_data = None
+        
+        try:
+            # 尝试解析plain_text为JSON，检查是否包含custom_template_id
+            if plain_text:
+                template_data = json.loads(plain_text)
+                if isinstance(template_data, dict) and "markdown" in template_data and "custom_template_id" in template_data["markdown"]:
+                    is_template_message = True
+        except:
+            pass
+        
+        if is_template_message and template_data:
+            # 使用模板消息模式
+            payload = {
+                "markdown": template_data["markdown"],
+                "msg_type": 2,
+                "msg_id": self.message_obj.message_id,
+            }
+        else:
+            # 使用普通文本消息模式
+            payload = {
+                "content": plain_text,
+                "msg_type": 0,
+                "msg_id": self.message_obj.message_id,
+            }
 
         if not isinstance(source, botpy.message.Message | botpy.message.DirectMessage):
             payload["msg_seq"] = random.randint(1, 10000)
