@@ -9,7 +9,11 @@ from typing import Any
 
 from astrbot import logger
 from astrbot.core import sp
-from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPTool,
+    _quick_test_mcp_connection,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -37,108 +41,6 @@ PY_TO_JSON_TYPE = {
 }
 # alias
 FuncTool = FunctionTool
-
-
-def _prepare_config(config: dict) -> dict:
-    """准备配置，处理嵌套格式"""
-    if config.get("mcpServers"):
-        first_key = next(iter(config["mcpServers"]))
-        config = config["mcpServers"][first_key]
-    config.pop("active", None)
-    return config
-
-
-async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
-    """快速测试 MCP 服务器可达性"""
-    import json
-
-    import aiohttp
-    import mcp
-
-    cfg = _prepare_config(config.copy())
-
-    url = cfg["url"]
-    headers = cfg.get("headers", {})
-    timeout = cfg.get("timeout", 10)
-
-    async def _format_http_error(response: aiohttp.ClientResponse) -> str:
-        reason = response.reason or ""
-        detail = ""
-        try:
-            raw = await response.content.read(2048)
-            if raw:
-                text = raw.decode(errors="replace").strip()
-                if text:
-                    try:
-                        data = json.loads(text)
-                    except Exception:
-                        detail = text
-                    else:
-                        if isinstance(data, dict):
-                            msg = (
-                                data.get("message")
-                                or data.get("error")
-                                or data.get("detail")
-                            )
-                            code = data.get("code")
-                            if msg is not None:
-                                detail = (
-                                    f"{code}: {msg}" if code is not None else str(msg)
-                                )
-                            else:
-                                detail = text
-                        else:
-                            detail = text
-        except Exception:
-            detail = ""
-
-        if detail:
-            return f"HTTP {response.status}: {reason} ({detail})"
-        return f"HTTP {response.status}: {reason}"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            if cfg.get("transport") == "streamable_http":
-                test_payload = {
-                    "jsonrpc": "2.0",
-                    "method": "initialize",
-                    "id": 0,
-                    "params": {
-                        "protocolVersion": mcp.types.LATEST_PROTOCOL_VERSION,
-                        "capabilities": {},
-                        "clientInfo": {"name": "test-client", "version": "1.2.3"},
-                    },
-                }
-                async with session.post(
-                    url,
-                    headers={
-                        **headers,
-                        "Content-Type": "application/json",
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    json=test_payload,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    return False, await _format_http_error(response)
-            else:
-                async with session.get(
-                    url,
-                    headers={
-                        **headers,
-                        "Accept": "application/json, text/event-stream",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        return True, ""
-                    return False, await _format_http_error(response)
-
-    except asyncio.TimeoutError:
-        return False, f"连接超时: {timeout}秒"
-    except Exception as e:
-        return False, f"{e!s}"
 
 
 class FunctionToolManager:
