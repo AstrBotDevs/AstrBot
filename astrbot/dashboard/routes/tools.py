@@ -26,6 +26,10 @@ class ToolsRoute(Route):
             "/tools/mcp/update": ("POST", self.update_mcp_server),
             "/tools/mcp/delete": ("POST", self.delete_mcp_server),
             "/tools/mcp/test": ("POST", self.test_mcp_connection),
+            "/tools/mcp/providers/mcprouter/list-servers": (
+                "POST",
+                self.list_mcprouter_servers,
+            ),
             "/tools/list": ("GET", self.get_tool_list),
             "/tools/toggle-tool": ("POST", self.toggle_tool),
             "/tools/mcp/sync-provider": ("POST", self.sync_provider),
@@ -379,19 +383,77 @@ class ToolsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"操作工具失败: {e!s}").__dict__
 
+    async def list_mcprouter_servers(self):
+        """List MCP servers from MCPRouter."""
+        try:
+            data = await request.json
+            api_key = str((data or {}).get("api_key", "")).strip()
+            if not api_key:
+                return Response().error("缺少必要参数: api_key").__dict__
+
+            app_url = str((data or {}).get("app_url", "")).strip()
+            if not app_url:
+                app_url = (
+                    request.headers.get("Origin")
+                    or request.headers.get("Referer")
+                    or ""
+                )
+            app_name = str((data or {}).get("app_name", "")).strip() or "AstrBot"
+            api_base = (
+                str((data or {}).get("api_base", "https://api.mcprouter.to/v1")).strip()
+                or "https://api.mcprouter.to/v1"
+            )
+
+            servers = await self.tool_mgr.list_mcp_servers_from_provider(
+                "mcprouter",
+                {
+                    "api_key": api_key,
+                    "app_url": app_url,
+                    "app_name": app_name,
+                    "api_base": api_base,
+                },
+            )
+            return (
+                Response()
+                .ok(data=servers, message=f"已获取 {len(servers)} 个服务器")
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取 MCPRouter 服务器列表失败: {e!s}").__dict__
+
     async def sync_provider(self):
         """同步 MCP 提供者配置"""
         try:
             data = await request.json
             provider_name = data.get("name")  # modelscope, or others
-            match provider_name:
-                case "modelscope":
-                    access_token = data.get("access_token", "")
-                    await self.tool_mgr.sync_modelscope_mcp_servers(access_token)
-                case _:
-                    return Response().error(f"未知: {provider_name}").__dict__
+            if not provider_name:
+                return Response().error("缺少必要参数: name").__dict__
 
-            return Response().ok(message="同步成功").__dict__
+            if provider_name == "mcprouter":
+                data.setdefault(
+                    "app_url",
+                    request.headers.get("Origin")
+                    or request.headers.get("Referer")
+                    or "",
+                )
+                data.setdefault("app_name", "AstrBot")
+
+            result = await self.tool_mgr.sync_mcp_servers_from_provider(
+                provider_name,
+                data,
+            )
+            synced = int(result.get("synced", 0) or 0)
+            enabled = int(result.get("enabled", 0) or 0)
+            failed = int(result.get("failed", 0) or 0)
+
+            if synced == 0:
+                return Response().ok(message="未找到可同步的 MCP 服务器").__dict__
+
+            msg = f"同步完成：同步 {synced} 个，启用 {enabled} 个"
+            if failed:
+                msg += f"，失败 {failed} 个"
+            return Response().ok(message=msg).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"同步失败: {e!s}").__dict__
