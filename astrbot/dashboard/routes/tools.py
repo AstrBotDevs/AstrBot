@@ -52,11 +52,9 @@ class ToolsRoute(Route):
                         server_info[key] = value
 
                 # 如果MCP客户端已初始化，从客户端获取工具名称
-                for (
-                    name_key,
-                    mcp_client,
-                ) in self.tool_mgr.mcp_client_dict.items():
+                for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
+                        mcp_client = runtime.client
                         server_info["tools"] = [tool.name for tool in mcp_client.tools]
                         server_info["errlogs"] = mcp_client.server_errlogs
                         break
@@ -193,7 +191,7 @@ class ToolsRoute(Route):
                 # 处理MCP客户端状态变化
                 if active:
                     if (
-                        old_name in self.tool_mgr.mcp_client_dict
+                        old_name in self.tool_mgr.mcp_server_runtime_view
                         or not only_update_active
                         or is_rename
                     ):
@@ -234,7 +232,7 @@ class ToolsRoute(Route):
                             .__dict__
                         )
                 # 如果要停用服务器
-                elif old_name in self.tool_mgr.mcp_client_dict:
+                elif old_name in self.tool_mgr.mcp_server_runtime_view:
                     try:
                         await self.tool_mgr.disable_mcp_server(old_name, timeout=10)
                     except TimeoutError:
@@ -273,7 +271,7 @@ class ToolsRoute(Route):
             del config["mcpServers"][name]
 
             if self.tool_mgr.save_mcp_config(config):
-                if name in self.tool_mgr.mcp_client_dict:
+                if name in self.tool_mgr.mcp_server_runtime_view:
                     try:
                         await self.tool_mgr.disable_mcp_server(name, timeout=10)
                     except TimeoutError:
