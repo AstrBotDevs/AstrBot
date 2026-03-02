@@ -10,7 +10,8 @@
     "cancel": "Cancel",
     "save": "Save",
     "move": "Move",
-    "addDialogPair": "Add Dialog Pair"
+    "addDialogPair": "Add Dialog Pair",
+    "import": "Import"
   },
   "labels": {
     "presetDialogs": "Preset Dialogs ({count} pairs)",
@@ -82,18 +83,23 @@
     "saveError": "Save failed",
     "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
-    "deleteError": "Delete failed"
+    "deleteError": "Delete failed",
+    "importExists": "Persona with ID {id} already exists."
   },
   "persona": {
     "personasTitle": "Personas",
     "toolsCount": "tools",
     "skillsCount": "skills",
     "contextMenu": {
-      "moveTo": "Move to..."
+      "moveTo": "Move to...",
+      "export": "Export"
     },
     "messages": {
       "moveSuccess": "Persona moved successfully",
-      "moveError": "Failed to move persona"
+      "moveError": "Failed to move persona",
+      "exportSuccess": "Exported successfully(excluding skills and tools)",
+      "importSuccess": "Imported successfully",
+      "importError": "Failed to import persona"
     }
   },
   "folder": {
