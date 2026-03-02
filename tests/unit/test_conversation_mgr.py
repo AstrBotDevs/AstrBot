@@ -57,13 +57,6 @@ class TestConversationManagerInit:
         This verifies the exception handling at lines 49-57 in conversation_mgr.py.
         """
         # Register two callbacks: one that fails, one that succeeds
-        """Test that exception in one callback doesn't affect others.
-
-        When one session deleted callback raises an exception,
-        other callbacks should still be executed.
-        This verifies the exception handling at lines 49-57 in conversation_mgr.py.
-        """
-        # Register two callbacks: one that fails, one that succeeds
         failing_callback = AsyncMock(side_effect=RuntimeError("Callback error"))
         success_callback = AsyncMock()
 
