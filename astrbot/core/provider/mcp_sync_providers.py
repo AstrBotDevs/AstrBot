@@ -93,6 +93,59 @@ class ModelscopeMcpServerSyncProvider(McpServerSyncProvider):
 
 @register_mcp_sync_provider("mcprouter")
 class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
+    @staticmethod
+    def _build_error_detail(data: dict[str, Any]) -> str:
+        message = data.get("message") or data.get("error") or data.get("detail")
+        code = data.get("code")
+        if message is None:
+            return ""
+        message_text = str(message).strip()
+        if not message_text:
+            return ""
+        if code is None:
+            return message_text
+        return f"{code}: {message_text}"
+
+    async def _post_json(
+        self,
+        *,
+        session: aiohttp.ClientSession,
+        url: str,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        action: str,
+    ) -> dict[str, Any]:
+        async with session.post(url, json=payload, headers=headers) as response:
+            body_text = ""
+            data: dict[str, Any] = {}
+            try:
+                parsed = await response.json(content_type=None)
+                if isinstance(parsed, dict):
+                    data = parsed
+            except Exception:
+                body_text = (await response.text()).strip()
+
+            if response.status != 200:
+                reason = response.reason or ""
+                detail = self._build_error_detail(data) or body_text[:300]
+                if detail:
+                    raise RuntimeError(
+                        f"{action} failed: HTTP {response.status} {reason} ({detail})"
+                    )
+                raise RuntimeError(f"{action} failed: HTTP {response.status} {reason}")
+
+            if not data:
+                detail = body_text[:300] if body_text else "empty or non-json response"
+                raise RuntimeError(f"{action} failed: invalid response ({detail})")
+
+            return data
+
+    def _ensure_api_success(self, data: dict[str, Any], *, action: str) -> None:
+        if data.get("code") == 0:
+            return
+        detail = self._build_error_detail(data) or "unknown error"
+        raise RuntimeError(f"{action} failed: {detail}")
+
     def _normalize_api_key(self, value: str) -> str:
         raw = value.strip()
         if not raw:
@@ -131,9 +184,8 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         app_url: str,
         app_name: str,
         base_url: str,
-        server_key: str,
     ) -> None:
-        url = f"{base_url}/list-tools"
+        url = f"{base_url}/list-servers"
         headers = self._build_api_headers(
             api_key=api_key,
             app_url=app_url,
@@ -141,20 +193,17 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         )
         timeout = aiohttp.ClientTimeout(total=20)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                url,
-                json={"server": server_key},
+            data = await self._post_json(
+                session=session,
+                url=url,
+                payload={"page": 1, "limit": 1},
                 headers=headers,
-            ) as response:
-                data = await response.json()
-                if response.status != 200:
-                    raise RuntimeError(
-                        f"MCPRouter API request failed: HTTP {response.status}"
-                    )
-        if data.get("code") != 0:
-            raise ValueError(
-                f"MCPRouter API key validation failed: {data.get('message', 'unknown')}"
+                action="MCPRouter API key validation",
             )
+
+        if data.get("code") != 0:
+            detail = self._build_error_detail(data) or "unknown"
+            raise ValueError(f"MCPRouter API key validation failed: {detail}")
 
     async def fetch(self, payload: dict[str, Any]) -> list[SyncedMcpServer]:
         api_key = self._normalize_api_key(str(payload.get("api_key", "")))
@@ -170,27 +219,11 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         list_url = f"{base_url}/list-servers"
         get_url = f"{base_url}/get-server"
 
-        validation_server_key = "time"
-        provided_servers = payload.get("servers")
-        if isinstance(provided_servers, list) and provided_servers:
-            for item in provided_servers:
-                if not isinstance(item, dict):
-                    continue
-                server_key = str(item.get("server_key") or "").strip()
-                config_name = str(item.get("config_name") or "").strip()
-                if server_key == "time" or config_name == "time":
-                    validation_server_key = "time"
-                    break
-                if server_key:
-                    validation_server_key = server_key
-                    break
-
         await self._validate_api_key(
             api_key=api_key,
             app_url=app_url,
             app_name=app_name,
             base_url=base_url,
-            server_key=validation_server_key,
         )
 
         api_headers = self._build_api_headers(
@@ -316,85 +349,71 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         if server_keys:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 for server_key in server_keys[:max_servers]:
-                    async with session.post(
-                        get_url,
-                        json={"server": server_key},
+                    data = await self._post_json(
+                        session=session,
+                        url=get_url,
+                        payload={"server": server_key},
                         headers=api_headers,
-                    ) as response:
-                        if response.status != 200:
-                            raise RuntimeError(
-                                f"MCPRouter API request failed: HTTP {response.status}"
-                            )
-                        data = await response.json()
-                        if data.get("code") != 0:
-                            raise RuntimeError(
-                                f"MCPRouter API error: {data.get('message', 'unknown')}"
-                            )
-                        server = data.get("data") or {}
-                        server_url = server.get("server_url")
-                        if not server_url:
-                            continue
-                        server_name = (
-                            server.get("config_name")
-                            or server.get("server_key")
-                            or server.get("name")
-                            or server_key
+                        action="MCPRouter get-server",
+                    )
+                    self._ensure_api_success(data, action="MCPRouter get-server")
+                    server = data.get("data") or {}
+                    server_url = server.get("server_url")
+                    if not server_url:
+                        continue
+                    server_name = (
+                        server.get("config_name")
+                        or server.get("server_key")
+                        or server.get("name")
+                        or server_key
+                    )
+                    items.append(
+                        make_item(
+                            name=str(server_name),
+                            url=str(server_url),
+                            used_names=used_names,
+                            server_key=server_key,
                         )
-                        items.append(
-                            make_item(
-                                name=str(server_name),
-                                url=str(server_url),
-                                used_names=used_names,
-                                server_key=server_key,
-                            )
-                        )
+                    )
             return items
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for page in range(1, max_pages + 1):
-                async with session.post(
-                    list_url,
-                    json={"page": page, "limit": limit},
+                data = await self._post_json(
+                    session=session,
+                    url=list_url,
+                    payload={"page": page, "limit": limit},
                     headers=api_headers,
-                ) as response:
-                    if response.status != 200:
-                        raise RuntimeError(
-                            f"MCPRouter API request failed: HTTP {response.status}"
+                    action="MCPRouter list-servers",
+                )
+                self._ensure_api_success(data, action="MCPRouter list-servers")
+                batch = data.get("data", {}).get("servers", []) or []
+                if not batch:
+                    break
+                for server in batch:
+                    if not matches(server, query):
+                        continue
+                    server_url = server.get("server_url")
+                    if not server_url:
+                        continue
+                    server_key = server.get("server_key")
+                    server_name = (
+                        server.get("config_name") or server_key or server.get("name")
+                    )
+                    if not server_name:
+                        continue
+                    items.append(
+                        make_item(
+                            name=str(server_name),
+                            url=str(server_url),
+                            used_names=used_names,
+                            server_key=str(server_key) if server_key else None,
                         )
-                    data = await response.json()
-                    if data.get("code") != 0:
-                        raise RuntimeError(
-                            f"MCPRouter API error: {data.get('message', 'unknown')}"
-                        )
-                    batch = data.get("data", {}).get("servers", []) or []
-                    if not batch:
-                        break
-                    for server in batch:
-                        if not matches(server, query):
-                            continue
-                        server_url = server.get("server_url")
-                        if not server_url:
-                            continue
-                        server_key = server.get("server_key")
-                        server_name = (
-                            server.get("config_name")
-                            or server_key
-                            or server.get("name")
-                        )
-                        if not server_name:
-                            continue
-                        items.append(
-                            make_item(
-                                name=str(server_name),
-                                url=str(server_url),
-                                used_names=used_names,
-                                server_key=str(server_key) if server_key else None,
-                            )
-                        )
-                        if len(items) >= max_servers:
-                            return items
-                    if len(batch) < limit:
-                        break
+                    )
+                    if len(items) >= max_servers:
+                        return items
+                if len(batch) < limit:
+                    break
 
         return items
 
@@ -415,7 +434,6 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
             app_url=app_url,
             app_name=app_name,
             base_url=base_url,
-            server_key="time",
         )
 
         api_headers = self._build_api_headers(
@@ -432,35 +450,29 @@ class McpRouterMcpServerSyncProvider(McpServerSyncProvider):
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             for page in range(1, max_pages + 1):
-                async with session.post(
-                    list_url,
-                    json={"page": page, "limit": limit},
+                data = await self._post_json(
+                    session=session,
+                    url=list_url,
+                    payload={"page": page, "limit": limit},
                     headers=api_headers,
-                ) as response:
-                    if response.status != 200:
-                        raise RuntimeError(
-                            f"MCPRouter API request failed: HTTP {response.status}"
-                        )
-                    data = await response.json()
-                    if data.get("code") != 0:
-                        raise RuntimeError(
-                            f"MCPRouter API error: {data.get('message', 'unknown')}"
-                        )
-                    batch = data.get("data", {}).get("servers", []) or []
-                    if not batch:
-                        break
-                    for item in batch:
-                        if not isinstance(item, dict):
-                            continue
-                        server_url = item.get("server_url")
-                        server_key = item.get("server_key")
-                        config_name = item.get("config_name")
-                        if not server_url or not (server_key or config_name):
-                            continue
-                        servers.append(item)
-                        if len(servers) >= max_items:
-                            return servers
-                    if len(batch) < limit:
-                        break
+                    action="MCPRouter list-servers",
+                )
+                self._ensure_api_success(data, action="MCPRouter list-servers")
+                batch = data.get("data", {}).get("servers", []) or []
+                if not batch:
+                    break
+                for item in batch:
+                    if not isinstance(item, dict):
+                        continue
+                    server_url = item.get("server_url")
+                    server_key = item.get("server_key")
+                    config_name = item.get("config_name")
+                    if not server_url or not (server_key or config_name):
+                        continue
+                    servers.append(item)
+                    if len(servers) >= max_items:
+                        return servers
+                if len(batch) < limit:
+                    break
 
         return servers

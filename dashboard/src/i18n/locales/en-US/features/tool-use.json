@@ -109,13 +109,28 @@
     },
     "providers": {
       "modelscope": "ModelScope",
+      "mcprouter": "MCPRouter",
       "description": "ModelScope is an open model community providing MCP servers for various machine learning and AI services"
     },
     "fields": {
       "provider": "Select Provider",
       "accessToken": "Access Token",
+      "apiKey": "API Key",
+      "appUrl": "HTTP-Referer",
+      "appName": "X-Title",
       "tokenRequired": "Access token is required",
       "tokenHint": "Please enter your ModelScope access token"
+    },
+    "timeline": {
+      "mcprouter": {
+        "createApiKeyTitle": "Create API Key",
+        "createApiKeyDescPrefix": "Visit ",
+        "createApiKeyDescSuffix": " to create and copy your API key.",
+        "inputApiKeyTitle": "Enter API Key",
+        "inputApiKeyDesc": "Enter your API key to sync MCP servers.",
+        "optionalAppInfoTitle": "Optional: App Identity",
+        "optionalAppInfoDesc": "Some MCPRouter services may validate the following headers (optional)."
+      }
     },
     "buttons": {
       "cancel": "Cancel",
@@ -138,6 +153,8 @@
       "syncError": "Sync failed: {error}",
       "fetchServersSuccess": "Fetched {count} servers",
       "fetchServersError": "Failed to fetch server list: {error}",
+      "networkOrApiKeyIssue": "Network connection issue or invalid API key",
+      "networkOrTokenIssue": "Network connection issue or invalid access token",
       "tokenHelp": "How to get a ModelScope access token? Click the button on the right for instructions"
     }
   },
