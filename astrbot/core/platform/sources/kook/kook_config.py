@@ -74,7 +74,9 @@ class KookConfig:
         return asdict(self)
 
     def pretty_jsons(self, indent=2) -> str:
-        return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
+        dict_config = self.to_dict()
+        dict_config["token"] = "*" * len(self.token) if self.token else "MISSING"
+        return json.dumps(dict_config, indent=indent, ensure_ascii=False)
 
 
 # TODO 没用上的config配置,未来有空会实现这些配置描述的功能?
