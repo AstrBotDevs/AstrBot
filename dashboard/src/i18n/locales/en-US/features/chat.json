@@ -81,9 +81,16 @@
     "disabled": "Streaming disabled",
     "on": "Stream",
     "off": "Normal"
-  },  "config": {
+  },
+  "transport": {
+    "title": "Transport Mode",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
     "title": "Config"
-  },  "reasoning": {
+  },
+  "reasoning": {
     "thinking": "Thinking Process"
   },
   "reply": {

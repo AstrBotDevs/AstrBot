@@ -19,6 +19,9 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
+from astrbot.core.persona_error_reply import (
+    extract_persona_custom_error_message_from_event,
+)
 from astrbot.core.pipeline.stage import Stage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import (
@@ -29,8 +32,16 @@ from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.session_lock import session_lock_manager
 
-from .....astr_agent_run_util import run_agent, run_live_agent
+from .....astr_agent_run_util import AgentRunner, run_agent, run_live_agent
 from ....context import PipelineContext, call_event_hook
+from ...follow_up import (
+    FollowUpCapture,
+    finalize_follow_up_capture,
+    prepare_follow_up_capture,
+    register_active_runner,
+    try_capture_follow_up,
+    unregister_active_runner,
+)
 
 
 class InternalAgentSubStage(Stage):
@@ -130,6 +141,9 @@ class InternalAgentSubStage(Stage):
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
+        follow_up_capture: FollowUpCapture | None = None
+        follow_up_consumed_marked = False
+        follow_up_activated = False
         try:
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
@@ -150,196 +164,225 @@ class InternalAgentSubStage(Stage):
                 return
 
             logger.debug("ready to request llm provider")
+            follow_up_capture = try_capture_follow_up(event)
+            if follow_up_capture:
+                (
+                    follow_up_consumed_marked,
+                    follow_up_activated,
+                ) = await prepare_follow_up_capture(follow_up_capture)
+                if follow_up_consumed_marked:
+                    logger.info(
+                        "Follow-up ticket already consumed, stopping processing. umo=%s, seq=%s",
+                        event.unified_msg_origin,
+                        follow_up_capture.ticket.seq,
+                    )
+                    return
 
             await event.send_typing()
             await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
+                agent_runner: AgentRunner | None = None
+                runner_registered = False
+                try:
+                    build_cfg = replace(
+                        self.main_agent_cfg,
+                        provider_wake_prefix=provider_wake_prefix,
+                        streaming_response=streaming_response,
+                    )
 
-                build_cfg = replace(
-                    self.main_agent_cfg,
-                    provider_wake_prefix=provider_wake_prefix,
-                    streaming_response=streaming_response,
-                )
+                    build_result: MainAgentBuildResult | None = await build_main_agent(
+                        event=event,
+                        plugin_context=self.ctx.plugin_manager.context,
+                        config=build_cfg,
+                        apply_reset=False,
+                    )
 
-                build_result: MainAgentBuildResult | None = await build_main_agent(
-                    event=event,
-                    plugin_context=self.ctx.plugin_manager.context,
-                    config=build_cfg,
-                    apply_reset=False,
-                )
-
-                if build_result is None:
-                    return
-
-                agent_runner = build_result.agent_runner
-                req = build_result.provider_request
-                provider = build_result.provider
-                reset_coro = build_result.reset_coro
-
-                api_base = provider.provider_config.get("api_base", "")
-                for host in decoded_blocked:
-                    if host in api_base:
-                        logger.error(
-                            "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
-                            api_base,
-                        )
+                    if build_result is None:
                         return
 
-                stream_to_general = (
-                    self.unsupported_streaming_strategy == "turn_off"
-                    and not event.platform_meta.support_streaming_message
-                )
+                    agent_runner = build_result.agent_runner
+                    req = build_result.provider_request
+                    provider = build_result.provider
+                    reset_coro = build_result.reset_coro
 
-                if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    api_base = provider.provider_config.get("api_base", "")
+                    for host in decoded_blocked:
+                        if host in api_base:
+                            logger.error(
+                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
+                                api_base,
+                            )
+                            return
+
+                    stream_to_general = (
+                        self.unsupported_streaming_strategy == "turn_off"
+                        and not event.platform_meta.support_streaming_message
+                    )
+
+                    if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                        if reset_coro:
+                            reset_coro.close()
+                        return
+
+                    # apply reset
                     if reset_coro:
-                        reset_coro.close()
-                    return
+                        await reset_coro
 
-                # apply reset
-                if reset_coro:
-                    await reset_coro
+                    register_active_runner(event.unified_msg_origin, agent_runner)
+                    runner_registered = True
+                    action_type = event.get_extra("action_type")
 
-                action_type = event.get_extra("action_type")
-
-                event.trace.record(
-                    "astr_agent_prepare",
-                    system_prompt=req.system_prompt,
-                    tools=req.func_tool.names() if req.func_tool else [],
-                    stream=streaming_response,
-                    chat_provider={
-                        "id": provider.provider_config.get("id", ""),
-                        "model": provider.get_model(),
-                    },
-                )
-
-                # 检测 Live Mode
-                if action_type == "live":
-                    # Live Mode: 使用 run_live_agent
-                    logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
-
-                    # 获取 TTS Provider
-                    tts_provider = (
-                        self.ctx.plugin_manager.context.get_using_tts_provider(
-                            event.unified_msg_origin
-                        )
+                    event.trace.record(
+                        "astr_agent_prepare",
+                        system_prompt=req.system_prompt,
+                        tools=req.func_tool.names() if req.func_tool else [],
+                        stream=streaming_response,
+                        chat_provider={
+                            "id": provider.provider_config.get("id", ""),
+                            "model": provider.get_model(),
+                        },
                     )
 
-                    if not tts_provider:
-                        logger.warning(
-                            "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                    # 检测 Live Mode
+                    if action_type == "live":
+                        # Live Mode: 使用 run_live_agent
+                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+
+                        # 获取 TTS Provider
+                        tts_provider = (
+                            self.ctx.plugin_manager.context.get_using_tts_provider(
+                                event.unified_msg_origin
+                            )
                         )
 
-                    # 使用 run_live_agent，总是使用流式响应
-                    event.set_result(
-                        MessageEventResult()
-                        .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                        .set_async_stream(
-                            run_live_agent(
-                                agent_runner,
-                                tts_provider,
-                                self.max_step,
-                                self.show_tool_use,
-                                self.show_tool_call_result,
-                                show_reasoning=self.show_reasoning,
+                        if not tts_provider:
+                            logger.warning(
+                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                            )
+
+                        # 使用 run_live_agent，总是使用流式响应
+                        event.set_result(
+                            MessageEventResult()
+                            .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                            .set_async_stream(
+                                run_live_agent(
+                                    agent_runner,
+                                    tts_provider,
+                                    self.max_step,
+                                    self.show_tool_use,
+                                    self.show_tool_call_result,
+                                    show_reasoning=self.show_reasoning,
+                                ),
                             ),
-                        ),
-                    )
-                    yield
+                        )
+                        yield
 
-                    # 保存历史记录
-                    if agent_runner.done() and (
-                        not event.is_stopped() or agent_runner.was_aborted()
-                    ):
+                        # 保存历史记录
+                        if agent_runner.done() and (
+                            not event.is_stopped() or agent_runner.was_aborted()
+                        ):
+                            await self._save_to_history(
+                                event,
+                                req,
+                                agent_runner.get_final_llm_resp(),
+                                agent_runner.run_context.messages,
+                                agent_runner.stats,
+                                user_aborted=agent_runner.was_aborted(),
+                            )
+
+                    elif streaming_response and not stream_to_general:
+                        # 流式响应
+                        event.set_result(
+                            MessageEventResult()
+                            .set_result_content_type(ResultContentType.STREAMING_RESULT)
+                            .set_async_stream(
+                                run_agent(
+                                    agent_runner,
+                                    self.max_step,
+                                    self.show_tool_use,
+                                    self.show_tool_call_result,
+                                    show_reasoning=self.show_reasoning,
+                                ),
+                            ),
+                        )
+                        yield
+                        if agent_runner.done():
+                            if final_llm_resp := agent_runner.get_final_llm_resp():
+                                if final_llm_resp.completion_text:
+                                    chain = (
+                                        MessageChain()
+                                        .message(final_llm_resp.completion_text)
+                                        .chain
+                                    )
+                                elif final_llm_resp.result_chain:
+                                    chain = final_llm_resp.result_chain.chain
+                                else:
+                                    chain = MessageChain().chain
+                                event.set_result(
+                                    MessageEventResult(
+                                        chain=chain,
+                                        result_content_type=ResultContentType.STREAMING_FINISH,
+                                    ),
+                                )
+                    else:
+                        async for _ in run_agent(
+                            agent_runner,
+                            self.max_step,
+                            self.show_tool_use,
+                            self.show_tool_call_result,
+                            stream_to_general,
+                            show_reasoning=self.show_reasoning,
+                        ):
+                            yield
+
+                    final_resp = agent_runner.get_final_llm_resp()
+
+                    event.trace.record(
+                        "astr_agent_complete",
+                        stats=agent_runner.stats.to_dict(),
+                        resp=final_resp.completion_text if final_resp else None,
+                    )
+
+                    # 检查事件是否被停止，如果被停止则不保存历史记录
+                    if not event.is_stopped() or agent_runner.was_aborted():
                         await self._save_to_history(
                             event,
                             req,
-                            agent_runner.get_final_llm_resp(),
+                            final_resp,
                             agent_runner.run_context.messages,
                             agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
                         )
 
-                elif streaming_response and not stream_to_general:
-                    # 流式响应
-                    event.set_result(
-                        MessageEventResult()
-                        .set_result_content_type(ResultContentType.STREAMING_RESULT)
-                        .set_async_stream(
-                            run_agent(
-                                agent_runner,
-                                self.max_step,
-                                self.show_tool_use,
-                                self.show_tool_call_result,
-                                show_reasoning=self.show_reasoning,
-                            ),
+                    asyncio.create_task(
+                        Metric.upload(
+                            llm_tick=1,
+                            model_name=agent_runner.provider.get_model(),
+                            provider_type=agent_runner.provider.meta().type,
                         ),
                     )
-                    yield
-                    if agent_runner.done():
-                        if final_llm_resp := agent_runner.get_final_llm_resp():
-                            if final_llm_resp.completion_text:
-                                chain = (
-                                    MessageChain()
-                                    .message(final_llm_resp.completion_text)
-                                    .chain
-                                )
-                            elif final_llm_resp.result_chain:
-                                chain = final_llm_resp.result_chain.chain
-                            else:
-                                chain = MessageChain().chain
-                            event.set_result(
-                                MessageEventResult(
-                                    chain=chain,
-                                    result_content_type=ResultContentType.STREAMING_FINISH,
-                                ),
-                            )
-                else:
-                    async for _ in run_agent(
-                        agent_runner,
-                        self.max_step,
-                        self.show_tool_use,
-                        self.show_tool_call_result,
-                        stream_to_general,
-                        show_reasoning=self.show_reasoning,
-                    ):
-                        yield
-
-                final_resp = agent_runner.get_final_llm_resp()
-
-                event.trace.record(
-                    "astr_agent_complete",
-                    stats=agent_runner.stats.to_dict(),
-                    resp=final_resp.completion_text if final_resp else None,
-                )
-
-                # 检查事件是否被停止，如果被停止则不保存历史记录
-                if not event.is_stopped() or agent_runner.was_aborted():
-                    await self._save_to_history(
-                        event,
-                        req,
-                        final_resp,
-                        agent_runner.run_context.messages,
-                        agent_runner.stats,
-                        user_aborted=agent_runner.was_aborted(),
-                    )
-
-            asyncio.create_task(
-                Metric.upload(
-                    llm_tick=1,
-                    model_name=agent_runner.provider.get_model(),
-                    provider_type=agent_runner.provider.meta().type,
-                ),
-            )
+                finally:
+                    if runner_registered and agent_runner is not None:
+                        unregister_active_runner(event.unified_msg_origin, agent_runner)
 
         except Exception as e:
             logger.error(f"Error occurred while processing agent: {e}")
-            await event.send(
-                MessageChain().message(
-                    f"Error occurred while processing agent request: {e}"
-                )
+            custom_error_message = extract_persona_custom_error_message_from_event(
+                event
             )
+            error_text = custom_error_message or (
+                f"Error occurred while processing agent request: {e}"
+            )
+            await event.send(MessageChain().message(error_text))
+        finally:
+            if follow_up_capture:
+                await finalize_follow_up_capture(
+                    follow_up_capture,
+                    activated=follow_up_activated,
+                    consumed_marked=follow_up_consumed_marked,
+                )
 
     async def _save_to_history(
         self,

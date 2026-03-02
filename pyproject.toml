@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.18.2"
+version = "4.18.3"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -61,6 +61,7 @@ dependencies = [
   "xinference-client",
   "tenacity>=9.1.2",
   "shipyard-python-sdk>=0.2.4",
+  "shipyard-neo-sdk @ git+https://github.com/AstrBotDevs/shipyard-neo.git#subdirectory=shipyard-neo-sdk",
   "python-socks>=2.8.0",
   "packaging>=24.2",
 ]
@@ -109,6 +110,9 @@ reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

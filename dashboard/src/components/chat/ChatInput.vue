@@ -32,11 +32,12 @@
                 </div>
             </transition>
             <textarea ref="inputField" v-model="localPrompt" @keydown="handleKeyDown" :disabled="disabled"
-                placeholder="Ask AstrBot..."
-                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 12px 16px; min-height: 40px; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
+                placeholder="Ask AstrBot..." class="chat-textarea"
+                autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"
+                style="width: 100%; resize: none; outline: none; border: 1px solid var(--v-theme-border); border-radius: 12px; padding: 16px 20px; min-height: 40px; max-height: 200px; overflow-y: auto; font-family: inherit; font-size: 16px; background-color: var(--v-theme-surface);"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;">
                 <div
-                    style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px;">
+                    style="display: flex; justify-content: flex-start; margin-top: 4px; align-items: center; gap: 8px; min-width: 0; flex: 1; overflow: hidden;">
                     <!-- Settings Menu -->
                     <StyledMenu offset="8" location="top start" :close-on-content-click="false">
                         <template v-slot:activator="{ props: activatorProps }">
@@ -72,9 +73,9 @@
                     <!-- Provider/Model Selector Menu -->
                     <ProviderModelMenu v-if="showProviderSelector" ref="providerModelMenuRef" />
                 </div>
-                <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center;">
+                <div style="display: flex; justify-content: flex-end; margin-top: 8px; align-items: center; flex-shrink: 0;">
                     <input type="file" ref="imageInputRef" @change="handleFileSelect" style="display: none" multiple />
-                    <v-progress-circular v-if="disabled" indeterminate size="16" class="mr-1" width="1.5" />
+                    <v-progress-circular v-if="disabled && !mobile" indeterminate size="16" class="mr-1" width="1.5" />
                     <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
@@ -87,36 +88,21 @@
                         </v-tooltip>
                     </v-btn> -->
                     <v-btn @click="handleRecordClick" icon variant="text" :color="isRecording ? 'error' : 'deep-purple'"
-                        class="record-btn" size="small">
+                        class="record-btn">
                         <v-icon :icon="isRecording ? 'mdi-stop-circle' : 'mdi-microphone'" variant="text"
                             plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn
-                        icon
-                        v-if="isRunning"
-                        @click="$emit('stop')"
-                        variant="text"
-                        class="send-btn"
-                        size="small"
-                    >
+                    <v-btn icon v-if="isRunning" @click="$emit('stop')" variant="tonal" color="deep-purple" class="send-btn">
                         <v-icon icon="mdi-stop" variant="text" plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ tm('input.stopGenerating') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn
-                        v-else
-                        @click="$emit('send')"
-                        icon="mdi-send"
-                        variant="text"
-                        color="deep-purple"
-                        :disabled="!canSend"
-                        class="send-btn"
-                        size="small"
-                    />
+                    <v-btn v-else @click="$emit('send')" icon="mdi-send" variant="tonal" color="deep-purple"
+                        :disabled="!canSend" class="send-btn" />
                 </div>
             </div>
         </div>
@@ -152,7 +138,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { useDisplay } from 'vuetify';
 import { useModuleI18n } from '@/i18n/composables';
 import { useCustomizerStore } from '@/stores/customizer';
 import ConfigSelector from './ConfigSelector.vue';
@@ -251,21 +238,34 @@ function handleReplyAfterLeave() {
     isReplyClosing.value = false;
 }
 
-function handleKeyDown(e: KeyboardEvent) {
-    // Enter 发送消息或触发命令
-    if (e.keyCode === 13 && !e.shiftKey) {
-        e.preventDefault();
+const { mobile } = useDisplay();
 
-        // 检查是否是 /astr_live_dev 命令
+// Auto-resize textarea
+function autoResize() {
+    const el = inputField.value;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+watch(localPrompt, () => {
+    nextTick(autoResize);
+});
+
+function handleKeyDown(e: KeyboardEvent) {
+    // Enter 插入换行（桌面和手机端均如此，发送通过右下角发送按鈕）
+    // Shift+Enter 发送（Ctrl+Enter / Cmd+Enter 也保留）
+    if (e.keyCode === 13 && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
         if (localPrompt.value.trim() === '/astr_live_dev') {
             emit('openLiveMode');
             localPrompt.value = '';
             return;
         }
-
         if (canSend.value) {
             emit('send');
         }
+        return;
     }
 
     // Ctrl+B 录音
@@ -588,11 +588,20 @@ defineExpose({
 @media (max-width: 768px) {
     .input-area {
         padding: 0 !important;
+        padding-bottom: 10px !important;
     }
 
     .input-container {
         width: 100% !important;
         max-width: 100% !important;
+    }
+
+    .input-area textarea,
+    .chat-textarea {
+        min-height: 32px !important;
+        max-height: 160px !important;
+        font-size: 16px !important;
+        padding: 16px 16px 12px 16px !important;
     }
 }
 </style>
