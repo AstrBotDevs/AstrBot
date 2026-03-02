@@ -372,15 +372,12 @@ class KookClient:
                 file_url = file_url.removeprefix("file://")
 
             try:
-                target_path = Path(file_url)
-                target_path = target_path.resolve()
+                target_path = Path(file_url).resolve()
             except Exception as exp:
-                logger.error(
-                    f'[KOOK] 获取文件 "{target_path.as_posix()}" 绝对路径失败: "{exp}"'
-                )
+                logger.error(f'[KOOK] 获取文件 "{file_url}" 绝对路径失败: "{exp}"')
                 raise FileNotFoundError(
-                    f'获取文件 "{target_path.name}" 绝对路径失败: "{exp}"'
-                )
+                    f'获取文件 "{file_url}" 绝对路径失败: "{exp}"'
+                ) from exp
 
             # 安全验证
             if not target_path.is_relative_to(ALLOWED_ASSETS_DIR):
