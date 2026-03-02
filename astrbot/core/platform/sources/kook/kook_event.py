@@ -156,7 +156,31 @@ class KookEvent(AstrMessageEvent):
 
         if self._file_message_counter > 0:
             logger.debug("[Kook] 正在向kook服务器上传文件")
-        order_messages = await asyncio.gather(*file_upload_tasks)
+        # asyncio.gather 的返回结果竟然是有序的,真神奇,但是以防万一
+        # OrderMessage还是有index字段的
+        # https://docs.python.org/3/library/asyncio-task.html#asyncio.gather
+        tasks_result = await asyncio.gather(*file_upload_tasks, return_exceptions=True)
+        order_messages: list[OrderMessage] = []
+
+        # 这里如果上传文件的任务有几个报错的
+        # 那么就拿不到message index了
+        # 那只能按结果列表的index来填进去了
+        # 虽然自定义一个exception,里边加一个index字段也不是不行
+        # 但是先这样吧
+        for index, result in enumerate(tasks_result):
+            if isinstance(result, BaseException):
+                logger.error(f"[Kook] {result}")
+                # 构造一个虚假的 OrderMessage，让用户知道这里本来有张图但坏了
+                # 这样后面的 for 循环就能把它当成普通文本发出去
+                err_node = OrderMessage(
+                    index=index,
+                    text=f"⚠️ 图片上传失败: {result}",
+                    type=KookMessageType.TEXT,
+                )
+                order_messages.append(err_node)
+            else:
+                order_messages.append(result)
+
         order_messages.sort(key=lambda x: x.index)
 
         # 考虑到reply可能多次出现在消息链中(虽然大概率不会有人这么用)
