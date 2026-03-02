@@ -373,7 +373,8 @@
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
       },
       "discord_command_register": {
-        "description": "是否自动将插件指令注册为 Discord 斜杠指令"
+        "description": "注册 Discord 指令",
+        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
       },
       "discord_proxy": {
         "description": "Discord 代理地址",

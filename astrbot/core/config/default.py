@@ -395,7 +395,6 @@ CONFIG_METADATA_2 = {
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
-                        "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
                     "Misskey": {
@@ -755,7 +754,8 @@ CONFIG_METADATA_2 = {
                         "hint": "可选的代理地址：http://ip:port",
                     },
                     "discord_command_register": {
-                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "description": "注册 Discord 指令",
+                        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令",
                         "type": "bool",
                     },
                     "discord_activity_name": {
