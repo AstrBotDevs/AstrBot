@@ -373,7 +373,8 @@
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
       },
       "discord_command_register": {
-        "description": "是否自动将插件指令注册为 Discord 斜杠指令"
+        "description": "注册 Discord 指令",
+        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
       },
       "discord_proxy": {
         "description": "Discord 代理地址",
@@ -738,6 +739,17 @@
             "emojis": {
               "description": "表情列表(Unicode)",
               "hint": "Telegram 仅支持固定反应集合,参考:[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] 启用预回应表情"
+            },
+            "emojis": {
+              "description": "表情列表（Unicode 或自定义表情名）",
+              "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳"
             }
           }
         }

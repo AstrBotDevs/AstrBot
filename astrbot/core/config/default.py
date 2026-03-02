@@ -395,7 +395,6 @@ CONFIG_METADATA_2 = {
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
-                        "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
                     "Misskey": {
@@ -755,7 +754,8 @@ CONFIG_METADATA_2 = {
                         "hint": "可选的代理地址：http://ip:port",
                     },
                     "discord_command_register": {
-                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "description": "注册 Discord 指令",
+                        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令",
                         "type": "bool",
                     },
                     "discord_activity_name": {
@@ -3444,6 +3444,19 @@ CONFIG_METADATA_3 = {
                         "hint": "Telegram 仅支持固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
                         "condition": {
                             "platform_specific.telegram.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.discord.pre_ack_emoji.enable": {
+                        "description": "[Discord] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.discord.pre_ack_emoji.emojis": {
+                        "description": "表情列表（Unicode 或自定义表情名）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳",
+                        "condition": {
+                            "platform_specific.discord.pre_ack_emoji.enable": True,
                         },
                     },
                 },
