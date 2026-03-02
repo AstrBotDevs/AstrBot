@@ -76,6 +76,7 @@ dev = [
 
 [project.scripts]
 astrbot = "astrbot.cli.__main__:cli"
+astr = "astrbot.cli.client.__main__:main"
 
 [tool.ruff]
 exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "tests"]
@@ -109,6 +110,10 @@ reportMissingTypeStubs = false
 reportMissingImports = false
 include = ["astrbot"]
 exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+addopts = "--ignore=tests/test_cli"
 
 [build-system]
 requires = ["hatchling"]

@@ -103,8 +103,19 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
+# 模块级单例引用，供无法通过依赖注入获取实例的模块使用（如CLI适配器）
+_global_instance: FunctionToolManager | None = None
+
+
+def get_func_tool_manager() -> FunctionToolManager | None:
+    """获取全局 FunctionToolManager 实例"""
+    return _global_instance
+
+
 class FunctionToolManager:
     def __init__(self) -> None:
+        global _global_instance
+        _global_instance = self
         self.func_list: list[FuncTool] = []
         self.mcp_client_dict: dict[str, MCPClient] = {}
         """MCP 服务列表"""
