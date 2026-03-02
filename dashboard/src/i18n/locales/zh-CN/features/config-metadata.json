@@ -3,7 +3,7 @@
     "name": "AI 配置",
     "agent_runner": {
       "description": "Agent 执行方式",
-      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器,不需要修改此节。",
+      "hint": "选择 AI 对话的执行器,默认为 AstrBot 内置 Agent 执行器,可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify、Coze、DeerFlow 等第三方 Agent 执行器,不需要修改此节。",
       "provider_settings": {
         "enable": {
           "description": "启用",
@@ -15,7 +15,8 @@
             "内置 Agent",
             "Dify",
             "Coze",
-            "阿里云百炼应用"
+            "阿里云百炼应用",
+            "DeerFlow"
           ]
         },
         "coze_agent_runner_provider_id": {
@@ -26,6 +27,9 @@
         },
         "dashscope_agent_runner_provider_id": {
           "description": "阿里云百炼应用 Agent 执行器提供商 ID"
+        },
+        "deerflow_agent_runner_provider_id": {
+          "description": "DeerFlow Agent 执行器提供商 ID"
         }
       }
     },
@@ -159,6 +163,22 @@
         "sandbox": {
           "booter": {
             "description": "沙箱环境驱动器"
+          },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API Endpoint",
+            "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo 访问令牌",
+            "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。"
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo Profile",
+            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。"
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo Sandbox 存活时间(秒)",
+            "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
@@ -353,7 +373,8 @@
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
       },
       "discord_command_register": {
-        "description": "是否自动将插件指令注册为 Discord 斜杠指令"
+        "description": "注册 Discord 指令",
+        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令"
       },
       "discord_proxy": {
         "description": "Discord 代理地址",
@@ -718,6 +739,17 @@
             "emojis": {
               "description": "表情列表(Unicode)",
               "hint": "Telegram 仅支持固定反应集合,参考:[https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] 启用预回应表情"
+            },
+            "emojis": {
+              "description": "表情列表（Unicode 或自定义表情名）",
+              "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳"
             }
           }
         }
@@ -1089,6 +1121,12 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding 会在请求时自动补上 /v1。"
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding 无需手动添加 /v1beta。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
@@ -1316,6 +1354,10 @@
       "api_base": {
         "description": "API Base URL"
       },
+      "proxy": {
+        "description": "代理地址",
+        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。"
+      },
       "model": {
         "description": "模型 ID",
         "hint": "模型名称，如 gpt-4o-mini, deepseek-chat。"
@@ -1355,6 +1397,45 @@
       "coze_api_base": {
         "description": "API Base URL",
         "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn"
+      },
+      "deerflow_api_base": {
+        "description": "API Base URL",
+        "hint": "DeerFlow API 网关地址，默认为 http://127.0.0.1:2026"
+      },
+      "deerflow_api_key": {
+        "description": "DeerFlow API Key",
+        "hint": "可选。若 DeerFlow 网关配置了 Bearer 鉴权，则在此填写。"
+      },
+      "deerflow_auth_header": {
+        "description": "Authorization Header",
+        "hint": "可选。自定义 Authorization 请求头，优先级高于 DeerFlow API Key。"
+      },
+      "deerflow_assistant_id": {
+        "description": "Assistant ID",
+        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+      },
+      "deerflow_model_name": {
+        "description": "模型名称覆盖",
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+      },
+      "deerflow_thinking_enabled": {
+        "description": "启用思考模式"
+      },
+      "deerflow_plan_mode": {
+        "description": "启用计划模式",
+        "hint": "对应 DeerFlow 的 is_plan_mode。"
+      },
+      "deerflow_subagent_enabled": {
+        "description": "启用子智能体",
+        "hint": "对应 DeerFlow 的 subagent_enabled。"
+      },
+      "deerflow_max_concurrent_subagents": {
+        "description": "子智能体最大并发数",
+        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+      },
+      "deerflow_recursion_limit": {
+        "description": "递归深度上限",
+        "hint": "对应 LangGraph recursion_limit。"
       },
       "auto_save_history": {
         "description": "由 Coze 管理对话记录",

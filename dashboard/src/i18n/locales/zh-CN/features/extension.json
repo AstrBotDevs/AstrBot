@@ -8,6 +8,17 @@
     "skills": "Skills",
     "handlersOperation": "管理行为"
   },
+  "titles": {
+    "installedAstrBotPlugins": "已安装的 AstrBot 插件"
+  },
+  "failedPlugins": {
+    "title": "加载失败插件（{count}）",
+    "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
+    "columns": {
+      "plugin": "插件",
+      "error": "错误"
+    }
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
@@ -106,6 +117,8 @@
     "sourceExists": "该插件源已存在",
     "installPlugin": "安装插件",
     "randomPlugins": "🎲 随机插件",
+    "showRandomPlugins": "显示随机插件",
+    "hideRandomPlugins": "隐藏随机插件",
     "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
   },
   "sort": {
@@ -174,7 +187,9 @@
     "refreshing": "正在刷新插件列表...",
     "refreshSuccess": "插件列表已刷新！",
     "refreshFailed": "刷新插件列表时发生错误",
+    "operationFailed": "操作失败",
     "reloadSuccess": "重载成功",
+    "reloadFailed": "重载失败",
     "updateSuccess": "更新成功!",
     "addSuccess": "添加成功!",
     "saveSuccess": "保存成功!",
@@ -201,6 +216,9 @@
     "enterUrl": "输入插件仓库链接"
   },
   "skills": {
+    "modeLocal": "本地 Skills",
+    "modeNeo": "Neo Skills",
+    "actions": "操作",
     "upload": "上传 Skills",
     "refresh": "刷新",
     "empty": "暂无 Skills",
@@ -214,6 +232,9 @@
     "path": "路径",
     "uploadSuccess": "上传成功",
     "uploadFailed": "上传失败",
+    "download": "下载",
+    "downloadSuccess": "下载成功",
+    "downloadFailed": "下载失败",
     "loadFailed": "加载 Skills 失败",
     "updateSuccess": "更新成功",
     "updateFailed": "更新失败",
@@ -221,8 +242,42 @@
     "deleteMessage": "确定要删除该 Skill 吗？",
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
+    "neoSkillKey": "skill_key 过滤",
+    "neoStatus": "候选状态",
+    "neoStage": "发布阶段",
+    "neoFilterHint": "筛选候选与发布记录",
+    "neoAll": "全部",
+    "neoCandidates": "Neo Candidates",
+    "neoReleases": "Neo Releases",
+    "neoLoadFailed": "加载 Neo Skills 数据失败",
+    "neoPass": "通过",
+    "neoReject": "拒绝",
+    "neoEvaluateSuccess": "评测更新成功",
+    "neoEvaluateFailed": "评测更新失败",
+    "neoPromoteSuccess": "发布成功",
+    "neoPromoteFailed": "发布失败",
+    "neoRollback": "回滚",
+    "neoRollbackSuccess": "回滚成功",
+    "neoRollbackFailed": "回滚失败",
+    "neoDeactivate": "失活",
+    "neoDeactivateSuccess": "失活成功",
+    "neoDeactivateFailed": "失活失败",
+    "neoSync": "同步",
+    "neoSyncSuccess": "同步成功",
+    "neoSyncFailed": "同步失败",
+    "neoDelete": "删除",
+    "neoDeleteSuccess": "删除成功",
+    "neoDeleteFailed": "删除失败",
+    "neoPayloadTitle": "Neo Payload 详情",
+    "neoPayloadFailed": "读取 Payload 失败",
     "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
-    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。"
+    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。",
+    "neoRuntimeRequired": "Neo Skills 仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。",
+    "sourceLocalOnly": "本地 Skill",
+    "sourceSandboxOnly": "Sandbox 预置 Skill",
+    "sourceBoth": "本地 + Sandbox",
+    "sandboxDiscoveryPending": "尚未发现 Sandbox 预置 Skill。请至少启动一次 Sandbox 会话后再查看。",
+    "sandboxPresetReadonly": "Sandbox 预置 Skill 在此处为只读，无法在本地 Skills 页面删除或启用/禁用。"
   },
   "card": {
     "actions": {

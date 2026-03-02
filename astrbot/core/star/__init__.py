@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     # Type-only imports to avoid circular dependencies
     from astrbot.core.provider import Provider
 
+    from .base import Star
     from .context import Context
-    from .star_class import Star
     from .star_manager import PluginManager
     from .star_tools import StarTools
 
@@ -31,7 +31,7 @@ def __getattr__(name: str) -> object:
         return _import_cache[name]
 
     if name == "Star":
-        from .star_class import Star as _Star
+        from .base import Star as _Star
 
         _import_cache[name] = _Star
         return _Star

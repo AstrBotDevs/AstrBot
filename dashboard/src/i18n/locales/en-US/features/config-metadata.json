@@ -3,7 +3,7 @@
     "name": "AI",
     "agent_runner": {
       "description": "Agent Runner",
-      "hint": "Select the runner for AI conversations. Defaults to AstrBot's built-in Agent runner, which supports knowledge base, persona, and tool calling features. You don't need to modify this section unless you plan to integrate third-party Agent runners like Dify or Coze.",
+      "hint": "Select the runner for AI conversations. Defaults to AstrBot's built-in Agent runner, which supports knowledge base, persona, and tool calling features. You don't need to modify this section unless you plan to integrate third-party Agent runners like Dify, Coze, or DeerFlow.",
       "provider_settings": {
         "enable": {
           "description": "Enable",
@@ -15,7 +15,8 @@
             "Built-in Agent",
             "Dify",
             "Coze",
-            "Alibaba Cloud Bailian Application"
+            "Alibaba Cloud Bailian Application",
+            "DeerFlow"
           ]
         },
         "coze_agent_runner_provider_id": {
@@ -26,6 +27,9 @@
         },
         "dashscope_agent_runner_provider_id": {
           "description": "Alibaba Cloud Bailian Application Agent Runner Provider ID"
+        },
+        "deerflow_agent_runner_provider_id": {
+          "description": "DeerFlow Agent Runner Provider ID"
         }
       }
     },
@@ -156,6 +160,22 @@
         "sandbox": {
           "booter": {
             "description": "Sandbox Environment Driver"
+          },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API Endpoint",
+            "hint": "Bay API address, default http://127.0.0.1:8114."
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo Access Token",
+            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo Profile",
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo Sandbox TTL",
+            "hint": "Sandbox time-to-live in seconds."
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
@@ -350,7 +370,8 @@
         "hint": "Optional Discord activity name. Leave empty to disable."
       },
       "discord_command_register": {
-        "description": "Auto-register plugin commands as Discord slash commands"
+        "description": "Register Discord slash commands",
+        "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"
       },
       "discord_proxy": {
         "description": "Discord Proxy URL",
@@ -715,6 +736,17 @@
             "emojis": {
               "description": "Emoji List (Unicode)",
               "hint": "Telegram only supports a fixed reaction set, reference: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Unicode or Custom Emoji Name)",
+              "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
             }
           }
         }
@@ -1086,6 +1118,12 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "openai_embedding": {
+        "hint": "OpenAI Embedding automatically appends /v1 at request time."
+      },
+      "gemini_embedding": {
+        "hint": "Gemini Embedding does not require manually adding /v1beta."
+      },
       "volcengine_cluster": {
         "description": "Volcengine cluster",
         "hint": "For voice cloning models, choose volcano_icl or volcano_icl_concurr; default is volcano_tts."
@@ -1313,6 +1351,10 @@
       "api_base": {
         "description": "API Base URL"
       },
+      "proxy": {
+        "description": "Proxy address",
+        "hint": "HTTP/HTTPS proxy URL, e.g. http://127.0.0.1:7890. Applies only to this provider's API requests and does not affect Docker internal networking."
+      },
       "model": {
         "description": "Model ID",
         "hint": "Model name, e.g., gpt-4o-mini, deepseek-chat."
@@ -1352,6 +1394,45 @@
       "coze_api_base": {
         "description": "API Base URL",
         "hint": "Base URL for the Coze API. Default: https://api.coze.cn"
+      },
+      "deerflow_api_base": {
+        "description": "API Base URL",
+        "hint": "DeerFlow API gateway URL. Default: http://127.0.0.1:2026"
+      },
+      "deerflow_api_key": {
+        "description": "DeerFlow API Key",
+        "hint": "Optional. Fill this if your DeerFlow gateway is protected by Bearer auth."
+      },
+      "deerflow_auth_header": {
+        "description": "Authorization Header",
+        "hint": "Optional. Custom Authorization header value; takes precedence over DeerFlow API Key."
+      },
+      "deerflow_assistant_id": {
+        "description": "Assistant ID",
+        "hint": "LangGraph assistant_id, default is lead_agent."
+      },
+      "deerflow_model_name": {
+        "description": "Model name override",
+        "hint": "Optional. Overrides DeerFlow default model (maps to runtime context model_name)."
+      },
+      "deerflow_thinking_enabled": {
+        "description": "Enable thinking mode"
+      },
+      "deerflow_plan_mode": {
+        "description": "Enable plan mode",
+        "hint": "Maps to DeerFlow is_plan_mode."
+      },
+      "deerflow_subagent_enabled": {
+        "description": "Enable subagent",
+        "hint": "Maps to DeerFlow subagent_enabled."
+      },
+      "deerflow_max_concurrent_subagents": {
+        "description": "Max concurrent subagents",
+        "hint": "Maps to DeerFlow max_concurrent_subagents. Effective only when subagent is enabled. Default: 3."
+      },
+      "deerflow_recursion_limit": {
+        "description": "Recursion limit",
+        "hint": "Maps to LangGraph recursion_limit."
       },
       "auto_save_history": {
         "description": "Conversation history managed by Coze",

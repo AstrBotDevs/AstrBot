@@ -79,6 +79,7 @@ import { useModuleI18n } from '@/i18n/composables';
 interface Persona {
     persona_id: string;
     system_prompt: string;
+    custom_error_message?: string | null;
     begin_dialogs?: string[] | null;
     tools?: string[] | null;
     skills?: string[] | null;

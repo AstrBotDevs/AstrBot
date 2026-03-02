@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.18.1"
+VERSION = "4.18.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -113,6 +113,7 @@ DEFAULT_CONFIG = {
         "dify_agent_runner_provider_id": "",
         "coze_agent_runner_provider_id": "",
         "dashscope_agent_runner_provider_id": "",
+        "deerflow_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
         "max_agent_step": 30,
@@ -128,14 +129,18 @@ DEFAULT_CONFIG = {
         "proactive_capability": {
             "add_cron_tools": True,
         },
-        "computer_use_runtime": "local",
+        "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
-            "booter": "shipyard",
+            "booter": "shipyard_neo",
             "shipyard_endpoint": "",
             "shipyard_access_token": "",
             "shipyard_ttl": 3600,
             "shipyard_max_sessions": 10,
+            "shipyard_neo_endpoint": "",
+            "shipyard_neo_access_token": "",
+            "shipyard_neo_profile": "python-default",
+            "shipyard_neo_ttl": 3600,
         },
     },
     # SubAgent orchestrator mode:
@@ -390,7 +395,6 @@ CONFIG_METADATA_2 = {
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
-                        "discord_guild_id_for_debug": "",
                         "discord_activity_name": "",
                     },
                     "Misskey": {
@@ -425,7 +429,15 @@ CONFIG_METADATA_2 = {
                         "slack_webhook_port": 6197,
                         "slack_webhook_path": "/astrbot-slack-webhook/callback",
                     },
-                    # LINE's config is located in line_adapter.py
+                    "Line": {
+                        "id": "line",
+                        "type": "line",
+                        "enable": False,
+                        "channel_access_token": "",
+                        "channel_secret": "",
+                        "unified_webhook_mode": True,
+                        "webhook_uuid": "",
+                    },
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
@@ -742,7 +754,8 @@ CONFIG_METADATA_2 = {
                         "hint": "可选的代理地址：http://ip:port",
                     },
                     "discord_command_register": {
-                        "description": "是否自动将插件指令注册为 Discord 斜杠指令",
+                        "description": "注册 Discord 指令",
+                        "hint": "启用后，自动将插件指令注册为 Discord 斜杠指令",
                         "type": "bool",
                     },
                     "discord_activity_name": {
@@ -1244,6 +1257,25 @@ CONFIG_METADATA_2 = {
                         "timeout": 60,
                         "proxy": "",
                     },
+                    "DeerFlow": {
+                        "id": "deerflow",
+                        "provider": "deerflow",
+                        "type": "deerflow",
+                        "provider_type": "agent_runner",
+                        "enable": True,
+                        "deerflow_api_base": "http://127.0.0.1:2026",
+                        "deerflow_api_key": "",
+                        "deerflow_auth_header": "",
+                        "deerflow_assistant_id": "lead_agent",
+                        "deerflow_model_name": "",
+                        "deerflow_thinking_enabled": False,
+                        "deerflow_plan_mode": False,
+                        "deerflow_subagent_enabled": False,
+                        "deerflow_max_concurrent_subagents": 3,
+                        "deerflow_recursion_limit": 1000,
+                        "timeout": 300,
+                        "proxy": "",
+                    },
                     "FastGPT": {
                         "id": "fastgpt",
                         "provider": "fastgpt",
@@ -1463,6 +1495,7 @@ CONFIG_METADATA_2 = {
                         "type": "openai_embedding",
                         "provider": "openai",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.openai_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -1476,6 +1509,7 @@ CONFIG_METADATA_2 = {
                         "type": "gemini_embedding",
                         "provider": "google",
                         "provider_type": "embedding",
+                        "hint": "provider_group.provider.gemini_embedding.hint",
                         "enable": True,
                         "embedding_api_key": "",
                         "embedding_api_base": "",
@@ -2192,9 +2226,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "proxy": {
-                        "description": "代理地址",
+                        "description": "provider_group.provider.proxy.description",
                         "type": "string",
-                        "hint": "HTTP/HTTPS 代理地址，格式如 http://127.0.0.1:7890。仅对该提供商的 API 请求生效，不影响 Docker 内网通信。",
+                        "hint": "provider_group.provider.proxy.hint",
                     },
                     "model": {
                         "description": "模型 ID",
@@ -2247,6 +2281,55 @@ CONFIG_METADATA_2 = {
                         "description": "API Base URL",
                         "type": "string",
                         "hint": "Coze API 的基础 URL 地址，默认为 https://api.coze.cn",
+                    },
+                    "deerflow_api_base": {
+                        "description": "API Base URL",
+                        "type": "string",
+                        "hint": "DeerFlow API 网关地址，默认为 http://127.0.0.1:2026",
+                    },
+                    "deerflow_api_key": {
+                        "description": "DeerFlow API Key",
+                        "type": "string",
+                        "hint": "可选。若 DeerFlow 网关配置了 Bearer 鉴权，则在此填写。",
+                    },
+                    "deerflow_auth_header": {
+                        "description": "Authorization Header",
+                        "type": "string",
+                        "hint": "可选。自定义 Authorization 请求头，优先级高于 DeerFlow API Key。",
+                    },
+                    "deerflow_assistant_id": {
+                        "description": "Assistant ID",
+                        "type": "string",
+                        "hint": "LangGraph assistant_id，默认为 lead_agent。",
+                    },
+                    "deerflow_model_name": {
+                        "description": "模型名称覆盖",
+                        "type": "string",
+                        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。",
+                    },
+                    "deerflow_thinking_enabled": {
+                        "description": "启用思考模式",
+                        "type": "bool",
+                    },
+                    "deerflow_plan_mode": {
+                        "description": "启用计划模式",
+                        "type": "bool",
+                        "hint": "对应 DeerFlow 的 is_plan_mode。",
+                    },
+                    "deerflow_subagent_enabled": {
+                        "description": "启用子智能体",
+                        "type": "bool",
+                        "hint": "对应 DeerFlow 的 subagent_enabled。",
+                    },
+                    "deerflow_max_concurrent_subagents": {
+                        "description": "子智能体最大并发数",
+                        "type": "int",
+                        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。",
+                    },
+                    "deerflow_recursion_limit": {
+                        "description": "递归深度上限",
+                        "type": "int",
+                        "hint": "对应 LangGraph recursion_limit。",
                     },
                     "auto_save_history": {
                         "description": "由 Coze 管理对话记录",
@@ -2323,6 +2406,9 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                     },
                     "dashscope_agent_runner_provider_id": {
+                        "type": "string",
+                    },
+                    "deerflow_agent_runner_provider_id": {
                         "type": "string",
                     },
                     "max_agent_step": {
@@ -2533,7 +2619,7 @@ CONFIG_METADATA_3 = {
         "metadata": {
             "agent_runner": {
                 "description": "Agent 执行方式",
-                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify 或 Coze 等第三方 Agent 执行器，不需要修改此节。",
+                "hint": "选择 AI 对话的执行器，默认为 AstrBot 内置 Agent 执行器，可使用 AstrBot 内的知识库、人格、工具调用功能。如果不打算接入 Dify、Coze、DeerFlow 等第三方 Agent 执行器，不需要修改此节。",
                 "type": "object",
                 "items": {
                     "provider_settings.enable": {
@@ -2544,8 +2630,14 @@ CONFIG_METADATA_3 = {
                     "provider_settings.agent_runner_type": {
                         "description": "执行器",
                         "type": "string",
-                        "options": ["local", "dify", "coze", "dashscope"],
-                        "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用"],
+                        "options": ["local", "dify", "coze", "dashscope", "deerflow"],
+                        "labels": [
+                            "内置 Agent",
+                            "Dify",
+                            "Coze",
+                            "阿里云百炼应用",
+                            "DeerFlow",
+                        ],
                         "condition": {
                             "provider_settings.enable": True,
                         },
@@ -2574,6 +2666,15 @@ CONFIG_METADATA_3 = {
                         "_special": "select_agent_runner_provider:dashscope",
                         "condition": {
                             "provider_settings.agent_runner_type": "dashscope",
+                            "provider_settings.enable": True,
+                        },
+                    },
+                    "provider_settings.deerflow_agent_runner_provider_id": {
+                        "description": "DeerFlow Agent 执行器提供商 ID",
+                        "type": "string",
+                        "_special": "select_agent_runner_provider:deerflow",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "deerflow",
                             "provider_settings.enable": True,
                         },
                     },
@@ -2774,10 +2875,46 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
                         "type": "string",
-                        "options": ["shipyard"],
-                        "labels": ["Shipyard"],
+                        "options": ["shipyard_neo", "shipyard"],
+                        "labels": ["Shipyard Neo", "Shipyard"],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_endpoint": {
+                        "description": "Shipyard Neo API Endpoint",
+                        "type": "string",
+                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_access_token": {
+                        "description": "Shipyard Neo Access Token",
+                        "type": "string",
+                        "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_profile": {
+                        "description": "Shipyard Neo Profile",
+                        "type": "string",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
+                        },
+                    },
+                    "provider_settings.sandbox.shipyard_neo_ttl": {
+                        "description": "Shipyard Neo Sandbox TTL",
+                        "type": "int",
+                        "hint": "Shipyard Neo 沙箱生存时间（秒）。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                            "provider_settings.sandbox.booter": "shipyard_neo",
                         },
                     },
                     "provider_settings.sandbox.shipyard_endpoint": {
@@ -3015,46 +3152,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.max_quoted_fallback_images": {
-                        "description": "引用图片回退解析上限",
-                        "type": "int",
-                        "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_component_chain_depth": {
-                        "description": "引用解析组件链深度",
-                        "type": "int",
-                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_forward_node_depth": {
-                        "description": "引用解析转发节点深度",
-                        "type": "int",
-                        "hint": "解析合并转发节点时允许的最大递归深度。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_forward_fetch": {
-                        "description": "引用解析转发拉取上限",
-                        "type": "int",
-                        "hint": "递归拉取 get_forward_msg 的最大次数。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.warn_on_action_failure": {
-                        "description": "引用解析 action 失败告警",
-                        "type": "bool",
-                        "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
@@ -3097,6 +3194,46 @@ CONFIG_METADATA_3 = {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                    },
+                    "provider_settings.max_quoted_fallback_images": {
+                        "description": "引用图片回退解析上限",
+                        "type": "int",
+                        "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_component_chain_depth": {
+                        "description": "引用解析组件链深度",
+                        "type": "int",
+                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_forward_node_depth": {
+                        "description": "引用解析转发节点深度",
+                        "type": "int",
+                        "hint": "解析合并转发节点时允许的最大递归深度。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_forward_fetch": {
+                        "description": "引用解析转发拉取上限",
+                        "type": "int",
+                        "hint": "递归拉取 get_forward_msg 的最大次数。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.warn_on_action_failure": {
+                        "description": "引用解析 action 失败告警",
+                        "type": "bool",
+                        "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                 },
                 "condition": {
@@ -3307,6 +3444,19 @@ CONFIG_METADATA_3 = {
                         "hint": "Telegram 仅支持固定反应集合，参考：https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9",
                         "condition": {
                             "platform_specific.telegram.pre_ack_emoji.enable": True,
+                        },
+                    },
+                    "platform_specific.discord.pre_ack_emoji.enable": {
+                        "description": "[Discord] 启用预回应表情",
+                        "type": "bool",
+                    },
+                    "platform_specific.discord.pre_ack_emoji.emojis": {
+                        "description": "表情列表（Unicode 或自定义表情名）",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "填写 Unicode 表情符号，例如：👍、🤔、⏳",
+                        "condition": {
+                            "platform_specific.discord.pre_ack_emoji.enable": True,
                         },
                     },
                 },

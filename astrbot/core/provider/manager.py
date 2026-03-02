@@ -2,11 +2,13 @@ import asyncio
 import copy
 import os
 import traceback
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.error_redaction import safe_error
 
 from ..persona_mgr import PersonaManager
 from .entities import ProviderType
@@ -71,6 +73,56 @@ class ProviderManager:
         self.curr_tts_provider_inst: TTSProvider | None = None
         """默认的 Text To Speech Provider 实例。已弃用，请使用 get_using_provider() 方法获取当前使用的 Provider 实例。"""
         self.db_helper = db_helper
+        self._provider_change_callback: (
+            Callable[[str, ProviderType, str | None], None] | None
+        ) = None
+        self._provider_change_hooks: list[
+            Callable[[str, ProviderType, str | None], None]
+        ] = []
+
+    def set_provider_change_callback(
+        self,
+        cb: Callable[[str, ProviderType, str | None], None] | None,
+    ) -> None:
+        # Backward-compatible single-callback setter.
+        # This callback coexists with register_provider_change_hook subscriptions.
+        self._provider_change_callback = cb
+
+    def register_provider_change_hook(
+        self,
+        hook: Callable[[str, ProviderType, str | None], None],
+    ) -> None:
+        if hook not in self._provider_change_hooks:
+            self._provider_change_hooks.append(hook)
+
+    def _notify_provider_changed(
+        self,
+        provider_id: str,
+        provider_type: ProviderType,
+        umo: str | None,
+    ) -> None:
+        if self._provider_change_callback is not None:
+            try:
+                self._provider_change_callback(provider_id, provider_type, umo)
+            except Exception as e:
+                logger.warning(
+                    "调用 provider 变更回调失败: provider_id=%s, type=%s, err=%s",
+                    provider_id,
+                    provider_type,
+                    safe_error("", e),
+                )
+        for hook in list(self._provider_change_hooks):
+            if hook is self._provider_change_callback:
+                continue
+            try:
+                hook(provider_id, provider_type, umo)
+            except Exception as e:
+                logger.warning(
+                    "调用 provider 变更钩子失败: provider_id=%s, type=%s, err=%s",
+                    provider_id,
+                    provider_type,
+                    safe_error("", e),
+                )
 
     @property
     def persona_configs(self) -> list:
@@ -111,6 +163,7 @@ class ProviderManager:
                 f"provider_perf_{provider_type.value}",
                 provider_id,
             )
+            self._notify_provider_changed(provider_id, provider_type, umo)
             return
         # 不启用提供商会话隔离模式的情况
 
@@ -126,6 +179,7 @@ class ProviderManager:
                 scope="global",
                 scope_id="global",
             )
+            self._notify_provider_changed(provider_id, provider_type, umo)
         elif provider_type == ProviderType.SPEECH_TO_TEXT and isinstance(
             prov,
             STTProvider,
@@ -137,6 +191,7 @@ class ProviderManager:
                 scope="global",
                 scope_id="global",
             )
+            self._notify_provider_changed(provider_id, provider_type, umo)
         elif provider_type == ProviderType.CHAT_COMPLETION and isinstance(
             prov,
             Provider,
@@ -148,6 +203,7 @@ class ProviderManager:
                 scope="global",
                 scope_id="global",
             )
+            self._notify_provider_changed(provider_id, provider_type, umo)
 
     async def get_provider_by_id(self, provider_id: str) -> Providers | None:
         """根据提供商 ID 获取提供商实例"""

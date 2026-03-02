@@ -58,6 +58,18 @@
       "guideStep2": "Install it and restart AstrBot.",
       "guideStep3": "If you use Docker, prefer the image update path."
     },
+    "desktopApp": {
+      "title": "Update Desktop App",
+      "message": "Check and upgrade the AstrBot desktop application.",
+      "currentVersion": "Current version: ",
+      "latestVersion": "Latest version: ",
+      "checking": "Checking desktop app updates...",
+      "hasNewVersion": "A new version is available. Click confirm to upgrade.",
+      "isLatest": "Already on the latest version",
+      "installing": "Downloading and installing update. The app will restart automatically...",
+      "checkFailed": "Failed to check updates. Please try again later.",
+      "installFailed": "Upgrade failed. Please try again later."
+    },
     "dashboardUpdate": {
       "title": "Update Dashboard to Latest Version Only",
       "currentVersion": "Current Version",
