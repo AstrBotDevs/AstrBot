@@ -90,7 +90,14 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    """注册自定义标记。"""
+    """注册自定义标记并提前 mock 外部依赖。
+
+    在测试收集阶段提前 mock 外部依赖（telegram, discord, apscheduler 等），
+    避免 import 时触发循环导入问题。
+    """
+    # 提前 mock 外部依赖，解决循环导入问题
+    _mock_external_dependencies()
+
     config.addinivalue_line("markers", "unit: 单元测试")
     config.addinivalue_line("markers", "integration: 集成测试")
     config.addinivalue_line("markers", "slow: 慢速测试")
@@ -99,6 +106,133 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "db: 数据库相关测试")
     config.addinivalue_line("markers", "tier_c: C-tier tests (optional / non-blocking)")
     config.addinivalue_line("markers", "tier_d: D-tier tests (extended / integration)")
+
+
+def _mock_external_dependencies():
+    """提前 mock 外部依赖模块，避免循环导入。
+
+    某些外部依赖（如 telegram, discord, apscheduler）在导入时会触发
+    astrbot 内部的循环导入链。通过提前 mock 这些模块，可以避免问题。
+    """
+    # 检查是否已经 mock 过
+    if hasattr(sys, "_astrbot_external_deps_mocked"):
+        return
+
+    # Mock astrbot.core.star 相关模块（解决循环导入）
+    _mock_star_modules()
+
+    # Mock telegram
+    if "telegram" not in sys.modules:
+        mock_telegram = MagicMock()
+        mock_telegram.BotCommand = MagicMock
+        mock_telegram.Update = MagicMock
+        mock_telegram.constants = MagicMock()
+        mock_telegram.constants.ChatType = MagicMock()
+        mock_telegram.constants.ChatType.PRIVATE = "private"
+        mock_telegram.constants.ChatAction = MagicMock()
+        mock_telegram.error = MagicMock()
+        mock_telegram.error.BadRequest = Exception
+        mock_telegram.ReactionTypeCustomEmoji = MagicMock
+        mock_telegram.ReactionTypeEmoji = MagicMock
+
+        mock_telegram_ext = MagicMock()
+        mock_telegram_ext.ApplicationBuilder = MagicMock
+        mock_telegram_ext.CallbackContext = MagicMock
+        mock_telegram_ext.ContextTypes = MagicMock
+        mock_telegram_ext.ExtBot = MagicMock
+        mock_telegram_ext.filters = MagicMock()
+        mock_telegram_ext.filters.ALL = MagicMock()
+        mock_telegram_ext.MessageHandler = MagicMock
+
+        sys.modules["telegram"] = mock_telegram
+        sys.modules["telegram.constants"] = mock_telegram.constants
+        sys.modules["telegram.error"] = mock_telegram.error
+        sys.modules["telegram.ext"] = mock_telegram_ext
+
+    # Mock telegramify_markdown
+    if "telegramify_markdown" not in sys.modules:
+        mock_telegramify = MagicMock()
+        mock_telegramify.markdownify = lambda text, **kwargs: text
+        sys.modules["telegramify_markdown"] = mock_telegramify
+
+    # Mock apscheduler
+    if "apscheduler" not in sys.modules:
+        mock_apscheduler = MagicMock()
+        mock_apscheduler.schedulers = MagicMock()
+        mock_apscheduler.schedulers.asyncio = MagicMock()
+        mock_apscheduler.schedulers.asyncio.AsyncIOScheduler = MagicMock
+        mock_apscheduler.schedulers.background = MagicMock()
+        mock_apscheduler.schedulers.background.BackgroundScheduler = MagicMock
+
+        sys.modules["apscheduler"] = mock_apscheduler
+        sys.modules["apscheduler.schedulers"] = mock_apscheduler.schedulers
+        sys.modules["apscheduler.schedulers.asyncio"] = mock_apscheduler.schedulers.asyncio
+        sys.modules["apscheduler.schedulers.background"] = mock_apscheduler.schedulers.background
+
+    # Mock discord (py-cord)
+    if "discord" not in sys.modules:
+        mock_discord = MagicMock()
+        mock_discord.Client = MagicMock
+        mock_discord.Intents = MagicMock
+        mock_discord.Message = MagicMock
+        mock_discord.ApplicationContext = MagicMock
+        mock_discord.Option = MagicMock
+        mock_discord.SlashCommand = MagicMock
+        mock_discord.SlashCommandOptionType = MagicMock()
+        mock_discord.SlashCommandOptionType.string = 3
+
+        sys.modules["discord"] = mock_discord
+
+    # 标记已 mock
+    sys._astrbot_external_deps_mocked = True
+
+
+def _mock_star_modules():
+    """Mock astrbot.core.star 相关模块，解决循环导入问题。"""
+    # 创建 mock star_map 和 star_handlers_registry
+    mock_star_map: dict = {}
+    mock_star_handlers_registry: list = []
+
+    # Mock astrbot.core.star.star
+    mock_star_module = MagicMock()
+    mock_star_module.star_map = mock_star_map
+    mock_star_module.star_registry = []
+    mock_star_module.StarMetadata = MagicMock
+
+    # Mock astrbot.core.star.star_handler
+    mock_star_handler_module = MagicMock()
+    mock_star_handler_module.star_handlers_registry = mock_star_handlers_registry
+
+    # Mock astrbot.core.star.filter.command
+    # 创建真正的类，而不是函数，以便 isinstance 可以正常工作
+    class MockCommandFilter:
+        """Mock CommandFilter 类。"""
+
+        def __init__(self, command_name: str, alias: set | None = None, **kwargs):
+            self.command_name = command_name
+            self.alias = alias or set()
+            self.parent_command_names = kwargs.get("parent_command_names", [])
+
+    mock_command_filter_module = MagicMock()
+    mock_command_filter_module.CommandFilter = MockCommandFilter
+
+    # Mock astrbot.core.star.filter.command_group
+    class MockCommandGroupFilter:
+        """Mock CommandGroupFilter 类。"""
+
+        def __init__(self, group_name: str, alias: set | None = None, **kwargs):
+            self.group_name = group_name
+            self.alias = alias or set()
+            self.parent_group = kwargs.get("parent_group", None)
+
+    mock_command_group_filter_module = MagicMock()
+    mock_command_group_filter_module.CommandGroupFilter = MockCommandGroupFilter
+
+    # 注册到 sys.modules
+    sys.modules["astrbot.core.star.star"] = mock_star_module
+    sys.modules["astrbot.core.star.star_handler"] = mock_star_handler_module
+    sys.modules["astrbot.core.star.filter.command"] = mock_command_filter_module
+    sys.modules["astrbot.core.star.filter.command_group"] = mock_command_group_filter_module
 
 
 # ============================================================

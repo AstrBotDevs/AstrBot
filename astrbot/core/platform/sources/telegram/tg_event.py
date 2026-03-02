@@ -10,8 +10,7 @@ from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import (
+from astrbot.core.message.components import (
     At,
     File,
     Image,
@@ -20,7 +19,13 @@ from astrbot.api.message_components import (
     Reply,
     Video,
 )
-from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import (
+    AstrBotMessage,
+    AstrMessageEvent,
+    MessageType,
+    PlatformMetadata,
+)
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -167,7 +172,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
         except BadRequest as e:
             # python-telegram-bot raises BadRequest for Voice_messages_forbidden;
             # distinguish the voice-privacy case via the API error message.
-            if "Voice_messages_forbidden" not in e.message:
+            err_msg = getattr(e, "message", str(e))
+            if "Voice_messages_forbidden" not in err_msg:
                 raise
             logger.warning(
                 "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "

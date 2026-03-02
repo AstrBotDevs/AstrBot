@@ -2,10 +2,9 @@ import asyncio
 import re
 from collections.abc import AsyncGenerator
 
-from aiocqhttp import CQHttp, Event
+import aiocqhttp
 
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import (
+from astrbot.core.message.components import (
     BaseMessageComponent,
     File,
     Image,
@@ -15,7 +14,8 @@ from astrbot.api.message_components import (
     Record,
     Video,
 )
-from astrbot.api.platform import Group, MessageMember
+from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.platform import AstrMessageEvent, Group, MessageMember
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -25,7 +25,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         message_obj,
         platform_meta,
         session_id,
-        bot: CQHttp,
+        bot: aiocqhttp.CQHttp,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
@@ -80,8 +80,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     @classmethod
     async def _dispatch_send(
         cls,
-        bot: CQHttp,
-        event: Event | None,
+        bot: aiocqhttp.CQHttp,
+        event: aiocqhttp.Event | None,
         is_group: bool,
         session_id: str | None,
         messages: list[dict],
@@ -95,7 +95,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             await bot.send_group_msg(group_id=session_id_int, message=messages)
         elif not is_group and isinstance(session_id_int, int):
             await bot.send_private_msg(user_id=session_id_int, message=messages)
-        elif isinstance(event, Event):  # 最后兜底
+        elif isinstance(event, aiocqhttp.Event):  # 最后兜底
             await bot.send(event=event, message=messages)
         else:
             raise ValueError(
@@ -105,9 +105,9 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
     @classmethod
     async def send_message(
         cls,
-        bot: CQHttp,
+        bot: aiocqhttp.CQHttp,
         message_chain: MessageChain,
-        event: Event | None = None,
+        event: aiocqhttp.Event | None = None,
         is_group: bool = False,
         session_id: str | None = None,
     ) -> None:
