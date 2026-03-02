@@ -47,6 +47,7 @@ class MCPInitSummary:
 
 @dataclass
 class _MCPServerRuntime:
+    client: MCPClient
     shutdown_event: asyncio.Event
     lifecycle_task: asyncio.Task[None]
 
@@ -88,18 +89,20 @@ def _resolve_timeout(
     return timeout_value
 
 
-def _resolve_mcp_timeout(
-    *,
-    timeout: float | int | str | None = None,
-    init_phase: bool,
-) -> float:
-    env_name = MCP_INIT_TIMEOUT_ENV if init_phase else ENABLE_MCP_TIMEOUT_ENV
-    default = (
-        DEFAULT_MCP_INIT_TIMEOUT_SECONDS
-        if init_phase
-        else DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS
+def _resolve_init_timeout(timeout: float | int | str | None = None) -> float:
+    return _resolve_timeout(
+        timeout=timeout,
+        env_name=MCP_INIT_TIMEOUT_ENV,
+        default=DEFAULT_MCP_INIT_TIMEOUT_SECONDS,
     )
-    return _resolve_timeout(timeout=timeout, env_name=env_name, default=default)
+
+
+def _resolve_enable_timeout(timeout: float | int | str | None = None) -> float:
+    return _resolve_timeout(
+        timeout=timeout,
+        env_name=ENABLE_MCP_TIMEOUT_ENV,
+        default=DEFAULT_ENABLE_MCP_TIMEOUT_SECONDS,
+    )
 
 
 SUPPORTED_TYPES = [
@@ -191,9 +194,15 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
-        self.mcp_client_dict: dict[str, MCPClient] = {}
-        """MCP 服务列表"""
         self.mcp_server_runtime: dict[str, _MCPServerRuntime] = {}
+        """MCP 服务运行时状态（唯一事实来源）"""
+
+    @property
+    def mcp_client_dict(self) -> dict[str, MCPClient]:
+        """Compatibility view for external callers that still read mcp_client_dict."""
+        return {
+            name: runtime.client for name, runtime in self.mcp_server_runtime.items()
+        }
 
     def empty(self) -> bool:
         return len(self.func_list) == 0
@@ -289,7 +298,9 @@ class FunctionToolManager:
                 port = ""
             logger.debug(f"  主机: {scheme}://{host}{port}")
 
-    async def init_mcp_clients(self) -> MCPInitSummary:
+    async def init_mcp_clients(
+        self, raise_on_all_failed: bool = False
+    ) -> MCPInitSummary:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
         {
@@ -322,7 +333,7 @@ class FunctionToolManager:
             open(mcp_json_file, encoding="utf-8"),
         )["mcpServers"]
 
-        init_timeout = _resolve_mcp_timeout(init_phase=True)
+        init_timeout = _resolve_init_timeout()
         timeout_display = f"{init_timeout:g}"
 
         active_configs: list[tuple[str, dict, asyncio.Event]] = []
@@ -377,9 +388,10 @@ class FunctionToolManager:
         )
         logger.info(f"MCP 服务初始化完成: {summary.success}/{summary.total} 成功")
         if summary.total > 0 and summary.success == 0:
-            raise MCPAllServicesFailedError(
-                "全部 MCP 服务初始化失败，请检查 mcp_server.json 配置和服务器可用性。"
-            )
+            msg = "全部 MCP 服务初始化失败，请检查 mcp_server.json 配置和服务器可用性。"
+            if raise_on_all_failed:
+                raise MCPAllServicesFailedError(msg)
+            logger.error(msg)
         return summary
 
     async def _run_mcp_client(
@@ -425,18 +437,16 @@ class FunctionToolManager:
             shutdown_event = asyncio.Event()
 
         try:
-            await asyncio.wait_for(
+            mcp_client = await asyncio.wait_for(
                 self._init_mcp_client(name, cfg),
                 timeout=timeout,
             )
         except asyncio.TimeoutError as exc:
-            await self._terminate_mcp_client(name)
             raise MCPInitTimeoutError(
                 f"MCP 服务 {name} 初始化超时（{timeout:g} 秒）"
             ) from exc
         except Exception:
             logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
-            await self._terminate_mcp_client(name)
             raise
 
         lifecycle_task = asyncio.create_task(
@@ -444,6 +454,7 @@ class FunctionToolManager:
             name=f"mcp-client:{name}",
         )
         self.mcp_server_runtime[name] = _MCPServerRuntime(
+            client=mcp_client,
             shutdown_event=shutdown_event,
             lifecycle_task=lifecycle_task,
         )
@@ -462,7 +473,7 @@ class FunctionToolManager:
             return
         try:
             await asyncio.wait_for(
-                asyncio.gather(*(asyncio.shield(task) for task in lifecycle_tasks)),
+                asyncio.gather(*lifecycle_tasks),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -472,17 +483,19 @@ class FunctionToolManager:
             await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
             raise
 
-    async def _init_mcp_client(self, name: str, config: dict) -> None:
+    async def _init_mcp_client(self, name: str, config: dict) -> MCPClient:
         """初始化单个MCP客户端"""
-        # 先清理之前的客户端，如果存在
-        if name in self.mcp_client_dict:
-            await self._terminate_mcp_client(name)
-
         mcp_client = MCPClient()
         mcp_client.name = name
-        self.mcp_client_dict[name] = mcp_client
-        await mcp_client.connect_to_server(config, name)
-        tools_res = await mcp_client.list_tools_and_save()
+        try:
+            await mcp_client.connect_to_server(config, name)
+            tools_res = await mcp_client.list_tools_and_save()
+        except BaseException:
+            try:
+                await mcp_client.cleanup()
+            except Exception as cleanup_exc:
+                logger.error(f"清理 MCP 客户端资源 {name} 失败: {cleanup_exc}")
+            raise
         logger.debug(f"MCP server {name} list tools response: {tools_res}")
         tool_names = [tool.name for tool in tools_res.tools]
 
@@ -503,19 +516,19 @@ class FunctionToolManager:
             self.func_list.append(func_tool)
 
         logger.info(f"已连接 MCP 服务 {name}, Tools: {tool_names}")
+        return mcp_client
 
     async def _terminate_mcp_client(self, name: str) -> None:
         """关闭并清理MCP客户端"""
-        if name in self.mcp_client_dict:
-            client = self.mcp_client_dict[name]
+        runtime = self.mcp_server_runtime.get(name)
+        if runtime:
+            client = runtime.client
             try:
                 # 关闭MCP连接
                 await client.cleanup()
             except Exception as e:
                 logger.error(f"清空 MCP 客户端资源 {name}: {e}。")
             finally:
-                # Remove client from dict after cleanup attempt (successful or not)
-                self.mcp_client_dict.pop(name, None)
                 # 移除关联的FuncTool
                 self.func_list = [
                     f
@@ -523,6 +536,14 @@ class FunctionToolManager:
                     if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
                 ]
                 logger.info(f"已关闭 MCP 服务 {name}")
+            return
+
+        # Runtime missing but stale tools may still exist after failed flows.
+        self.func_list = [
+            f
+            for f in self.func_list
+            if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
+        ]
 
     @staticmethod
     async def test_mcp_server_connection(config: dict) -> list[str]:
@@ -561,10 +582,7 @@ class FunctionToolManager:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
         """
-        if name in self.mcp_server_runtime:
-            logger.info(f"MCP 服务 {name} 已存在，跳过重复启用。")
-            return
-        timeout_value = _resolve_mcp_timeout(timeout=timeout, init_phase=False)
+        timeout_value = _resolve_enable_timeout(timeout)
         await self._start_mcp_server(
             name=name,
             cfg=config,
@@ -612,7 +630,6 @@ class FunctionToolManager:
                 await self._wait_mcp_lifecycle_tasks(lifecycle_tasks, timeout)
             finally:
                 self.mcp_server_runtime.clear()
-                self.mcp_client_dict.clear()
                 self.func_list = [
                     f for f in self.func_list if not isinstance(f, MCPTool)
                 ]
