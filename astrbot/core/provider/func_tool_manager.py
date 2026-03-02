@@ -294,7 +294,7 @@ class FunctionToolManager:
             with open(mcp_json_file, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
-            return
+            return MCPInitSummary(total=0, success=0, failed=[])
 
         mcp_server_json_obj: dict[str, dict] = json.load(
             open(mcp_json_file, encoding="utf-8"),
@@ -439,7 +439,7 @@ class FunctionToolManager:
     async def _wait_mcp_lifecycle_task(
         self, lifecycle_task: asyncio.Task[None], timeout: float
     ) -> None:
-        """Wait for lifecycle task first; fallback to client running_event."""
+        """Wait for lifecycle task and cancel on timeout."""
         try:
             await asyncio.wait_for(asyncio.shield(lifecycle_task), timeout=timeout)
         except asyncio.TimeoutError:
