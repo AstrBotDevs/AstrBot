@@ -33,7 +33,6 @@ class KookPlatformAdapter(Platform):
         self._reconnect_task = None
         self.running = False
         self._main_task = None
-        self._bot_id = ""
 
     async def send_by_session(
         self, session: MessageSesion, message_chain: MessageChain
@@ -265,7 +264,7 @@ class KookPlatformAdapter(Platform):
         kmarkdown = raw.get("extra", {}).get("kmarkdown", {})
         mention_role_part = kmarkdown.get("mention_role_part", [])
         raw_content = kmarkdown.get("raw_content", "")
-        bot_nickname = "astrbot"
+        bot_nickname = self.client.bot_name
         if mention_role_part:
             is_at = True
         elif f"@{bot_nickname}" in raw_content:

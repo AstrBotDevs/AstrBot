@@ -22,6 +22,7 @@ ALLOWED_ASSETS_DIR = Path(get_astrbot_data_path()).resolve()
 class KookClient:
     def __init__(self, token, event_callback):
         self._bot_id = ""
+        self._bot_name = ""
         self._http_client = aiohttp.ClientSession(
             headers={
                 "Authorization": f"Bot {token}",
@@ -46,7 +47,11 @@ class KookClient:
     def bot_id(self):
         return self._bot_id
 
-    async def get_bot_id(self) -> str:
+    @property
+    def bot_name(self):
+        return self._bot_name
+
+    async def get_bot_info(self) -> str:
         """获取机器人账号ID"""
         url = KookApiPaths.USER_ME
 
@@ -62,7 +67,12 @@ class KookClient:
                     return ""
 
                 bot_id: str = data["data"]["id"]
+                self._bot_id = bot_id
                 logger.info(f"[KOOK] 获取机器人账号ID成功: {bot_id}")
+                bot_name: str = data["data"]["nickname"] or data["data"]["username"]
+                self._bot_name = bot_name
+                logger.info(f"[KOOK] 获取机器人名称成功: {self._bot_name}")
+
                 return bot_id
         except Exception as e:
             logger.error(f"[KOOK] 获取机器人账号ID异常: {e}")
@@ -112,14 +122,10 @@ class KookClient:
             gateway_url = await self.get_gateway_url(
                 resume=resume, sn=self.last_sn, session_id=self.session_id
             )
-            bot_id = await self.get_bot_id()
+            await self.get_bot_info()
 
             if not gateway_url:
                 return False
-            if not bot_id:
-                return False
-
-            self._bot_id = bot_id
 
             # 连接WebSocket
             self.ws = await websockets.connect(gateway_url)
