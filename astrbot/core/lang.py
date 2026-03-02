@@ -44,7 +44,6 @@ class Lang:
     @staticmethod
     def _validate_namespace(namespace: str) -> None:
         if not namespace:
-            raise ValueError(t("msg-d103bc8e"))
         if "." in namespace:
             raise ValueError(t("msg-f66527da"))
 
