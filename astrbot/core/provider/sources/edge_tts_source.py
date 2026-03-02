@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import subprocess
 import uuid
 
@@ -40,12 +41,26 @@ class ProviderEdgeTTS(TTSProvider):
         self.volume = provider_config.get("volume")
         self.pitch = provider_config.get("pitch")
         self.timeout = provider_config.get("timeout", 30)
-
+        self.filter_regex = provider_config.get("filter_regex", "")
         self.proxy = os.getenv("https_proxy", None)
 
         self.set_model("edge_tts")
 
     async def get_audio(self, text: str) -> str:
+        if self.filter_regex:
+            try:
+                # 使用 re.sub 将匹配到的内容替换为空字符串
+                text = re.sub(self.filter_regex, "", text)
+                logger.debug(f"正则过滤后的文本: {text}")
+            except re.error as e:
+                logger.error(
+                    "正则表达式执行错误: %s | pattern=%r",
+                    e,
+                    self.filter_regex,
+                )
+        if not text.strip():
+            logger.warning("文本为空，跳过语音生成。")
+            raise RuntimeError("过滤后文本为空，跳过语音生成。")
         temp_dir = get_astrbot_temp_path()
         mp3_path = os.path.join(temp_dir, f"edge_tts_temp_{uuid.uuid4()}.mp3")
         wav_path = os.path.join(temp_dir, f"edge_tts_{uuid.uuid4()}.wav")
