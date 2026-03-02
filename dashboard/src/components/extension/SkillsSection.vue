@@ -113,7 +113,7 @@
           <div class="d-flex flex-wrap justify-space-between align-center ga-2 mb-3">
             <div>
               <div class="text-subtitle-1 font-weight-bold">Neo Skills</div>
-              <div class="text-caption text-medium-emphasis">筛选候选与发布记录</div>
+              <div class="text-caption text-medium-emphasis">{{ tm("skills.neoFilterHint") }}</div>
             </div>
             <v-btn color="primary" prepend-icon="mdi-refresh" variant="flat" @click="fetchNeoData">
               {{ tm("skills.refresh") }}
@@ -188,10 +188,24 @@
                 <v-btn size="x-small" color="warning" variant="tonal" @click="evaluateCandidate(item, false)">
                   {{ tm("skills.neoReject") }}
                 </v-btn>
-                <v-btn size="x-small" color="primary" variant="tonal" @click="promoteCandidate(item, 'canary')">
+                <v-btn
+                  size="x-small"
+                  color="primary"
+                  variant="tonal"
+                  :loading="isCandidatePromoteLoading(item.id, 'canary')"
+                  :disabled="isCandidatePromoting(item.id)"
+                  @click="promoteCandidate(item, 'canary')"
+                >
                   Canary
                 </v-btn>
-                <v-btn size="x-small" color="primary" variant="tonal" @click="promoteCandidate(item, 'stable')">
+                <v-btn
+                  size="x-small"
+                  color="primary"
+                  variant="tonal"
+                  :loading="isCandidatePromoteLoading(item.id, 'stable')"
+                  :disabled="isCandidatePromoting(item.id)"
+                  @click="promoteCandidate(item, 'stable')"
+                >
                   Stable
                 </v-btn>
                 <v-btn
@@ -347,6 +361,7 @@ export default {
       status: "",
       stage: "",
     });
+    const candidatePromoteLoading = reactive({});
     const payloadDialog = reactive({
       show: false,
       content: "",
@@ -631,10 +646,21 @@ export default {
       }
     };
 
+    const candidatePromoteLoadingKey = (candidateId, stage) => `${candidateId}:${stage}`;
+    const isCandidatePromoteLoading = (candidateId, stage) =>
+      !!candidatePromoteLoading[candidatePromoteLoadingKey(candidateId, stage)];
+    const isCandidatePromoting = (candidateId) =>
+      isCandidatePromoteLoading(candidateId, "canary") || isCandidatePromoteLoading(candidateId, "stable");
+
     const promoteCandidate = async (candidate, stage) => {
+      const candidateId = candidate?.id;
+      if (!candidateId) return;
+      const loadingKey = candidatePromoteLoadingKey(candidateId, stage);
+      if (candidatePromoteLoading[loadingKey]) return;
+      candidatePromoteLoading[loadingKey] = true;
       try {
         const res = await axios.post("/api/skills/neo/promote", {
-          candidate_id: candidate.id,
+          candidate_id: candidateId,
           stage,
           sync_to_local: true,
         });
@@ -650,6 +676,8 @@ export default {
         }
       } catch (_err) {
         showMessage(tm("skills.neoPromoteFailed"), "error");
+      } finally {
+        candidatePromoteLoading[loadingKey] = false;
       }
     };
 
@@ -818,6 +846,8 @@ export default {
       deleteSkill,
       evaluateCandidate,
       promoteCandidate,
+      isCandidatePromoteLoading,
+      isCandidatePromoting,
       rollbackRelease,
       deactivateRelease,
       handleReleaseLifecycleAction,
