@@ -46,7 +46,7 @@ class KookEvent(AstrMessageEvent):
         self.astrbot_message_type: MessageType = message_obj.type
         self._file_message_counter = 0
 
-    def _warp_message(
+    def _wrap_message(
         self, index: int, message_component: BaseMessageComponent
     ) -> Coroutine[Any, Any, OrderMessage]:
         async def wrap_upload(
@@ -152,7 +152,7 @@ class KookEvent(AstrMessageEvent):
     async def send(self, message: MessageChain):
         file_upload_tasks: list[Coroutine[Any, Any, OrderMessage]] = []
         for index, item in enumerate(message.chain):
-            file_upload_tasks.append(self._warp_message(index, item))
+            file_upload_tasks.append(self._wrap_message(index, item))
 
         if self._file_message_counter > 0:
             logger.debug("[Kook] 正在向kook服务器上传文件")
