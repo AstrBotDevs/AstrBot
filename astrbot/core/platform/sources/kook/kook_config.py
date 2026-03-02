@@ -42,32 +42,32 @@ class KookConfig:
             token=config_dict.get("kook_bot_token", ""),
             reconnect_delay=config_dict.get(
                 "kook_reconnect_delay",
-            )
-            or KookConfig.reconnect_delay,
+                KookConfig.reconnect_delay,
+            ),
             max_reconnect_delay=config_dict.get(
                 "kook_max_reconnect_delay",
-            )
-            or KookConfig.max_reconnect_delay,
+                KookConfig.max_reconnect_delay,
+            ),
             max_retry_delay=config_dict.get(
                 "kook_max_retry_delay",
-            )
-            or KookConfig.max_retry_delay,
+                KookConfig.max_retry_delay,
+            ),
             heartbeat_interval=config_dict.get(
                 "kook_heartbeat_interval",
-            )
-            or KookConfig.heartbeat_interval,
+                KookConfig.heartbeat_interval,
+            ),
             heartbeat_timeout=config_dict.get(
                 "kook_heartbeat_timeout",
-            )
-            or KookConfig.heartbeat_timeout,
+                KookConfig.heartbeat_timeout,
+            ),
             max_heartbeat_failures=config_dict.get(
                 "kook_max_heartbeat_failures",
-            )
-            or KookConfig.max_heartbeat_failures,
+                KookConfig.max_heartbeat_failures,
+            ),
             max_consecutive_failures=config_dict.get(
                 "kook_max_consecutive_failures",
-            )
-            or KookConfig.max_consecutive_failures,
+                KookConfig.max_consecutive_failures,
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
