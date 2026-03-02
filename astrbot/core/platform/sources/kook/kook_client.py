@@ -360,11 +360,9 @@ class KookClient:
             filename = file_url.split("/")[-1]
             return file_url
 
-        elif file_url.startswith("base64://"):
-            if file_url.startswith("base64:///"):
-                b64_str = file_url.removeprefix("base64:///")
-            else:
-                b64_str = file_url.removeprefix("base64://")
+        elif file_url.startswith("base64:///"):
+            # b64decode的时候得开头留一个'/'的, 不然会报错
+            b64_str = file_url.removeprefix("base64://")
             bytes_data = base64.b64decode(b64_str)
 
         elif file_url.startswith("file://"):
