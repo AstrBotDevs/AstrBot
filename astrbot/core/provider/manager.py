@@ -275,7 +275,24 @@ class ProviderManager:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
         # 初始化 MCP Client 连接（等待完成以确保工具可用）
-        await self.llm_tools.init_mcp_clients()
+        strict_mcp_init = os.getenv("ASTRBOT_MCP_INIT_STRICT", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        mcp_init_summary = await self.llm_tools.init_mcp_clients(
+            raise_on_all_failed=strict_mcp_init
+        )
+        if (
+            mcp_init_summary.total > 0
+            and mcp_init_summary.success == 0
+            and not strict_mcp_init
+        ):
+            logger.warning(
+                "MCP 服务全部初始化失败，系统将继续启动（可设置 "
+                "ASTRBOT_MCP_INIT_STRICT=1 以在此场景下中止启动）。"
+            )
 
     def dynamic_import_provider(self, type: str):
         """动态导入提供商适配器模块
