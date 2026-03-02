@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 import asyncio
 import time
 from collections.abc import Sequence
@@ -10,6 +9,7 @@ from typing import TYPE_CHECKING
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
+from astrbot.core.lang import t
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.utils.error_redaction import safe_error
 
@@ -81,7 +81,7 @@ class _ModelCache:
         ]
         for cache_key in stale_keys:
             self._store.pop(cache_key, None)
-from astrbot.core.lang import t
+
 
 class ProviderCommands:
     def __init__(self, context: star.Context) -> None:

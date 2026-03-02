@@ -20,7 +20,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install fluent.runtime pytest
+        pip install fluent.runtime pytest pytest_asyncio
 
     - name: Run I18n Check
       run: |
