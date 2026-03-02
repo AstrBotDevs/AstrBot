@@ -192,6 +192,68 @@
               </v-timeline-item>
             </v-timeline>
           </div>
+          <div v-else-if="selectedMcpServerProvider === 'mcprouter'">
+            <v-timeline align="start" side="end">
+              <v-timeline-item icon="mdi-numeric-1" icon-color="rgb(var(--v-theme-background))">
+                <div>
+                  <div class="text-h4">创建 API Key</div>
+                  <p class="mt-2">
+                    访问 <a href="https://mcprouter.co/" target="_blank">MCPRouter</a> 创建并复制您的 API Key。
+                  </p>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item icon="mdi-numeric-2" icon-color="rgb(var(--v-theme-background))">
+                <div>
+                  <div class="text-h4">输入 API Key</div>
+                  <p class="mt-2">
+                    输入 API Key 以同步 MCP 服务器。
+                  </p>
+                  <v-text-field v-model="mcprouterApiKey" type="password" variant="outlined"
+                    label="API Key" class="mt-2" hide-details/>
+                  <v-btn color="primary" variant="tonal" class="mt-2" :loading="mcprouterServersLoading"
+                    @click="fetchMcpRouterServers">
+                    {{ tm('syncProvider.buttons.fetchServers') }}
+                  </v-btn>
+
+                  <div v-if="mcprouterServers.length > 0" class="mt-3">
+                    <div class="text-caption text-medium-emphasis mb-1">
+                      {{ tm('syncProvider.status.fetchedServers', { count: mcprouterServers.length }) }}
+                    </div>
+                    <v-card variant="outlined" class="mcprouter-server-list">
+                      <v-list density="compact">
+                        <v-list-item v-for="(server, idx) in mcprouterServers" :key="server.server_key || server.config_name || idx">
+                          <v-list-item-title class="text-truncate">
+                            {{ server.title || server.config_name || server.server_key || server.name }}
+                            <span v-if="server.server_key" class="text-caption text-medium-emphasis">({{ server.server_key }})</span>
+                          </v-list-item-title>
+                          <v-list-item-subtitle class="text-truncate">
+                            {{ server.description || server.author_name || server.config_name || '' }}
+                          </v-list-item-subtitle>
+                          <template v-slot:append>
+                            <v-btn icon="mdi-close" size="small" variant="text" @click.stop="removeMcpRouterServer(idx)"></v-btn>
+                          </template>
+                        </v-list-item>
+                      </v-list>
+                    </v-card>
+                  </div>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item icon="mdi-numeric-3" icon-color="rgb(var(--v-theme-background))">
+                <div>
+                  <div class="text-h4">可选：应用标识</div>
+                  <p class="mt-2">
+                    部分 MCPRouter 服务可能会校验以下标识（可留空）。
+                  </p>
+                  <v-text-field v-model="mcprouterAppUrl" variant="outlined"
+                    label="HTTP-Referer" class="mt-2" hide-details/>
+                  <v-text-field v-model="mcprouterAppName" variant="outlined"
+                    label="X-Title" class="mt-2" hide-details/>
+                </div>
+              </v-timeline-item>
+            </v-timeline>
+          </div>
         </v-card-text>
 
         <v-card-actions class="pa-4">
@@ -241,8 +303,13 @@ export default {
       mcpServers: [],
       showMcpServerDialog: false,
       selectedMcpServerProvider: 'modelscope',
-      mcpServerProviderList: ['modelscope'],
+      mcpServerProviderList: ['modelscope', 'mcprouter'],
       mcpProviderToken: '',
+      mcprouterApiKey: '',
+      mcprouterAppUrl: '',
+      mcprouterAppName: 'AstrBot',
+      mcprouterServersLoading: false,
+      mcprouterServers: [],
       showSyncMcpServerDialog: false,
       addServerDialogMessage: '',
       loading: false,
@@ -283,6 +350,7 @@ export default {
   },
   mounted() {
     this.getServers();
+    this.mcprouterAppUrl = window.location.origin;
     this.refreshInterval = setInterval(() => {
       this.getServers();
     }, 5000);
@@ -486,6 +554,40 @@ export default {
       this.save_message_success = 'error';
       this.save_message_snack = true;
     },
+    async fetchMcpRouterServers() {
+      if (!this.mcprouterApiKey.trim()) {
+        this.showError(this.tm('syncProvider.status.enterApiKey'));
+        return;
+      }
+      this.mcprouterServersLoading = true;
+      try {
+        const requestData = {
+          api_key: this.mcprouterApiKey.trim()
+        };
+        if (this.mcprouterAppUrl.trim()) {
+          requestData.app_url = this.mcprouterAppUrl.trim();
+        }
+        if (this.mcprouterAppName.trim()) {
+          requestData.app_name = this.mcprouterAppName.trim();
+        }
+        const response = await axios.post('/api/tools/mcp/providers/mcprouter/list-servers', requestData);
+        if (response.data.status === 'ok') {
+          this.mcprouterServers = response.data.data || [];
+          this.showSuccess(response.data.message || this.tm('syncProvider.messages.fetchServersSuccess', { count: this.mcprouterServers.length }));
+        } else {
+          this.showError(response.data.message || this.tm('syncProvider.messages.fetchServersError', { error: 'Unknown error' }));
+        }
+      } catch (error) {
+        this.showError(this.tm('syncProvider.messages.fetchServersError', {
+          error: error.response?.data?.message || error.message || '网络连接或 API Key 问题'
+        }));
+      } finally {
+        this.mcprouterServersLoading = false;
+      }
+    },
+    removeMcpRouterServer(index) {
+      this.mcprouterServers.splice(index, 1);
+    },
     async syncMcpServers() {
       if (!this.selectedMcpServerProvider) {
         this.showError(this.tm('syncProvider.status.selectProvider'));
@@ -503,12 +605,33 @@ export default {
             return;
           }
           requestData.access_token = this.mcpProviderToken.trim();
+        } else if (this.selectedMcpServerProvider === 'mcprouter') {
+          if (!this.mcprouterApiKey.trim()) {
+            this.showError(this.tm('syncProvider.status.enterApiKey'));
+            this.loading = false;
+            return;
+          }
+          if (!this.mcprouterServers.length) {
+            this.showError(this.tm('syncProvider.status.fetchServersFirst'));
+            this.loading = false;
+            return;
+          }
+          requestData.api_key = this.mcprouterApiKey.trim();
+          if (this.mcprouterAppUrl.trim()) {
+            requestData.app_url = this.mcprouterAppUrl.trim();
+          }
+          if (this.mcprouterAppName.trim()) {
+            requestData.app_name = this.mcprouterAppName.trim();
+          }
+          requestData.servers = this.mcprouterServers;
         }
         const response = await axios.post('/api/tools/mcp/sync-provider', requestData);
         if (response.data.status === 'ok') {
           this.showSuccess(response.data.message || this.tm('syncProvider.messages.syncSuccess'));
           this.showSyncMcpServerDialog = false;
           this.mcpProviderToken = '';
+          this.mcprouterApiKey = '';
+          this.mcprouterServers = [];
           this.getServers();
         } else {
           this.showError(response.data.message || this.tm('syncProvider.messages.syncError', { error: 'Unknown error' }));
@@ -537,5 +660,10 @@ export default {
   height: 300px;
   margin-top: 4px;
   overflow: hidden;
+}
+
+.mcprouter-server-list {
+  max-height: 260px;
+  overflow-y: auto;
 }
 </style>
