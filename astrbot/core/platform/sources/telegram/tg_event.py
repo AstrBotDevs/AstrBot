@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import os
 import re
@@ -94,7 +95,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 payload["message_thread_id"] = message_thread_id
             await client.send_chat_action(**payload)
         except Exception as e:
-            logger.warning(f"[Telegram] 发送 chat action 失败: {e}")
+            logger.warning(t("msg-7757f090", e=e))
 
     @classmethod
     def _get_chat_action_for_chain(cls, chain: list[Any]) -> ChatAction | str:
@@ -170,8 +171,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             if "Voice_messages_forbidden" not in e.message:
                 raise
             logger.warning(
-                "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
-                "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
+                t("msg-80b075a3")
             )
             if use_media_action:
                 media_payload = dict(payload)
@@ -271,7 +271,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )
                     except Exception as e:
                         logger.warning(
-                            f"MarkdownV2 send failed: {e}. Using plain text instead.",
+                            t("msg-20665ad1", e=e),
                         )
                         await client.send_message(text=chunk, **cast(Any, payload))
             elif isinstance(i, Image):
@@ -337,7 +337,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 is_big=big,  # 可选：大动画
             )
         except Exception as e:
-            logger.error(f"[Telegram] 添加反应失败: {e}")
+            logger.error(t("msg-323cb67c", e=e))
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
@@ -380,7 +380,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                                 message_id=message_id,
                             )
                         except Exception as e:
-                            logger.warning(f"编辑消息失败(streaming-break): {e!s}")
+                            logger.warning(t("msg-abe7fc3d", e=e))
                     message_id = None  # 重置消息 ID
                     delta = ""  # 重置 delta
                     continue
@@ -437,7 +437,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )
                         continue
                     else:
-                        logger.warning(f"不支持的消息类型: {type(i)}")
+                        logger.warning(t("msg-f7d40103", res=type(i)))
                         continue
 
                 # Plain
@@ -461,7 +461,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             )
                             current_content = delta
                         except Exception as e:
-                            logger.warning(f"编辑消息失败(streaming): {e!s}")
+                            logger.warning(t("msg-d4b50a96", e=e))
                         last_edit_time = (
                             asyncio.get_event_loop().time()
                         )  # 更新上次编辑的时间
@@ -478,7 +478,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )
                         current_content = delta
                     except Exception as e:
-                        logger.warning(f"发送消息失败(streaming): {e!s}")
+                        logger.warning(t("msg-2701a78f", e=e))
                     message_id = msg.message_id
                     last_edit_time = (
                         asyncio.get_event_loop().time()
@@ -498,13 +498,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         parse_mode="MarkdownV2",
                     )
                 except Exception as e:
-                    logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
+                    logger.warning(t("msg-2a8ecebd", e=e))
                     await self.client.edit_message_text(
                         text=delta,
                         chat_id=payload["chat_id"],
                         message_id=message_id,
                     )
         except Exception as e:
-            logger.warning(f"编辑消息失败(streaming): {e!s}")
+            logger.warning(t("msg-d4b50a96", e=e))
 
         return await super().send_streaming(generator, use_fallback)

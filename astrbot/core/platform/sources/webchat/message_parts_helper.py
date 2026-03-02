@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import json
 import mimetypes
 import shutil
@@ -64,7 +65,7 @@ async def parse_webchat_message_parts(
     for part in message_parts:
         if not isinstance(part, dict):
             if strict:
-                raise ValueError("message part must be an object")
+                raise ValueError(t("msg-697561eb"))
             continue
 
         part_type = str(part.get("type", "")).strip()
@@ -81,7 +82,7 @@ async def parse_webchat_message_parts(
             message_id = part.get("message_id")
             if message_id is None:
                 if strict:
-                    raise ValueError("reply part missing message_id")
+                    raise ValueError(t("msg-2c4bf283"))
                 continue
 
             reply_chain = []
@@ -129,19 +130,19 @@ async def parse_webchat_message_parts(
 
         if part_type not in MEDIA_PART_TYPES:
             if strict:
-                raise ValueError(f"unsupported message part type: {part_type}")
+                raise ValueError(t("msg-60ddb927", part_type=part_type))
             continue
 
         path = part.get("path")
         if not path:
             if strict:
-                raise ValueError(f"{part_type} part missing path")
+                raise ValueError(t("msg-6fa997ae", part_type=part_type))
             continue
 
         file_path = Path(str(path))
         if verify_media_path_exists and not file_path.exists():
             if strict:
-                raise ValueError(f"file not found: {file_path!s}")
+                raise ValueError(t("msg-e565c4b5", file_path=file_path))
             continue
 
         file_path_str = (
@@ -173,14 +174,14 @@ async def build_webchat_message_parts(
 
     if not isinstance(message_payload, list):
         if strict:
-            raise ValueError("message must be a string or list")
+            raise ValueError(t("msg-1389e46a"))
         return []
 
     message_parts: list[dict] = []
     for part in message_payload:
         if not isinstance(part, dict):
             if strict:
-                raise ValueError("message part must be an object")
+                raise ValueError(t("msg-697561eb"))
             continue
 
         part_type = str(part.get("type", "")).strip()
@@ -194,7 +195,7 @@ async def build_webchat_message_parts(
             message_id = part.get("message_id")
             if message_id is None:
                 if strict:
-                    raise ValueError("reply part missing message_id")
+                    raise ValueError(t("msg-2c4bf283"))
                 continue
             message_parts.append(
                 {
@@ -207,19 +208,19 @@ async def build_webchat_message_parts(
 
         if part_type not in MEDIA_PART_TYPES:
             if strict:
-                raise ValueError(f"unsupported message part type: {part_type}")
+                raise ValueError(t("msg-60ddb927", part_type=part_type))
             continue
 
         attachment_id = part.get("attachment_id")
         if not attachment_id:
             if strict:
-                raise ValueError(f"{part_type} part missing attachment_id")
+                raise ValueError(t("msg-58e0b84a", part_type=part_type))
             continue
 
         attachment = await get_attachment_by_id(str(attachment_id))
         if not attachment:
             if strict:
-                raise ValueError(f"attachment not found: {attachment_id}")
+                raise ValueError(t("msg-cf310369", attachment_id=attachment_id))
             continue
 
         attachment_path = Path(attachment.path)
@@ -246,7 +247,7 @@ def webchat_message_parts_to_message_chain(
     for part in message_parts:
         if not isinstance(part, dict):
             if strict:
-                raise ValueError("message part must be an object")
+                raise ValueError(t("msg-697561eb"))
             continue
 
         part_type = str(part.get("type", "")).strip()
@@ -261,7 +262,7 @@ def webchat_message_parts_to_message_chain(
             message_id = part.get("message_id")
             if message_id is None:
                 if strict:
-                    raise ValueError("reply part missing message_id")
+                    raise ValueError(t("msg-2c4bf283"))
                 continue
             components.append(
                 Reply(
@@ -274,19 +275,19 @@ def webchat_message_parts_to_message_chain(
 
         if part_type not in MEDIA_PART_TYPES:
             if strict:
-                raise ValueError(f"unsupported message part type: {part_type}")
+                raise ValueError(t("msg-60ddb927", part_type=part_type))
             continue
 
         path = part.get("path")
         if not path:
             if strict:
-                raise ValueError(f"{part_type} part missing path")
+                raise ValueError(t("msg-6fa997ae", part_type=part_type))
             continue
 
         file_path = Path(str(path))
         if not file_path.exists():
             if strict:
-                raise ValueError(f"file not found: {file_path!s}")
+                raise ValueError(t("msg-e565c4b5", file_path=file_path))
             continue
 
         file_path_str = str(file_path.resolve())
@@ -302,7 +303,7 @@ def webchat_message_parts_to_message_chain(
             components.append(File(name=filename, file=file_path_str))
 
     if strict and (not components or not has_content):
-        raise ValueError("Message content is empty (reply only is not allowed)")
+        raise ValueError(t("msg-c6ec40ff"))
 
     return MessageChain(chain=components)
 
@@ -323,7 +324,7 @@ async def build_message_chain_from_payload(
         strict=strict,
     )
     if strict and (not components or not has_content):
-        raise ValueError("Message content is empty (reply only is not allowed)")
+        raise ValueError(t("msg-c6ec40ff"))
     return MessageChain(chain=components)
 
 

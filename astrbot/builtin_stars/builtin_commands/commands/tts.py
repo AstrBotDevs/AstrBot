@@ -1,4 +1,5 @@
 """文本转语音命令"""
+from astrbot.core.lang import t
 
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -27,10 +28,10 @@ class TTSCommand:
         if new_status and not tts_enable:
             event.set_result(
                 MessageEventResult().message(
-                    f"{status_text}当前会话的文本转语音。但 TTS 功能在配置中未启用，请前往 WebUI 开启。",
+                    t("msg-ef1b2145", status_text=status_text),
                 ),
             )
         else:
             event.set_result(
-                MessageEventResult().message(f"{status_text}当前会话的文本转语音。"),
+                MessageEventResult().message(t("msg-deee9deb", status_text=status_text)),
             )

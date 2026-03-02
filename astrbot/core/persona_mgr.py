@@ -3,6 +3,7 @@ from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
+from astrbot.core.lang import t
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.sentinels import NOT_GIVEN
 
@@ -35,13 +36,13 @@ class PersonaManager:
     async def initialize(self) -> None:
         self.personas = await self.get_all_personas()
         self.get_v3_persona_data()
-        logger.info(f"已加载 {len(self.personas)} 个人格。")
+        logger.info(t("msg-51a854e6", res=len(self.personas)))
 
     async def get_persona(self, persona_id: str):
         """获取指定 persona 的信息"""
         persona = await self.db.get_persona_by_id(persona_id)
         if not persona:
-            raise ValueError(f"Persona with ID {persona_id} does not exist.")
+            raise ValueError(t("msg-1ea88f45", persona_id=persona_id))
         return persona
 
     async def get_default_persona_v3(
@@ -118,7 +119,7 @@ class PersonaManager:
     async def delete_persona(self, persona_id: str) -> None:
         """删除指定 persona"""
         if not await self.db.get_persona_by_id(persona_id):
-            raise ValueError(f"Persona with ID {persona_id} does not exist.")
+            raise ValueError(t("msg-1ea88f45", persona_id=persona_id))
         await self.db.delete_persona(persona_id)
         self.personas = [p for p in self.personas if p.persona_id != persona_id]
         self.get_v3_persona_data()
@@ -135,7 +136,7 @@ class PersonaManager:
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
         if not existing_persona:
-            raise ValueError(f"Persona with ID {persona_id} does not exist.")
+            raise ValueError(t("msg-1ea88f45", persona_id=persona_id))
         update_kwargs = {}
         if tools is not NOT_GIVEN:
             update_kwargs["tools"] = tools
@@ -324,7 +325,7 @@ class PersonaManager:
             sort_order: 排序顺序
         """
         if await self.db.get_persona_by_id(persona_id):
-            raise ValueError(f"Persona with ID {persona_id} already exists.")
+            raise ValueError(t("msg-28104dff", persona_id=persona_id))
         new_persona = await self.db.insert_persona(
             persona_id,
             system_prompt,
@@ -372,7 +373,7 @@ class PersonaManager:
             if begin_dialogs:
                 if len(begin_dialogs) % 2 != 0:
                     logger.error(
-                        f"{persona_cfg['name']} 人格情景预设对话格式不对，条数应该为偶数。",
+                        t("msg-08ecfd42", res=persona_cfg["name"]),
                     )
                     begin_dialogs = []
                 user_turn = True
@@ -396,7 +397,7 @@ class PersonaManager:
                     selected_default_persona = persona
                 personas_v3.append(persona)
             except Exception as e:
-                logger.error(f"解析 Persona 配置失败：{e}")
+                logger.error(t("msg-b6292b94", e=e))
 
         if not selected_default_persona and len(personas_v3) > 0:
             # 默认选择第一个

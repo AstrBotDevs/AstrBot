@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { translations as staticTranslations } from './translations';
 import type { Locale } from './types';
+import axios from 'axios';
 
 // 全局状态
 const currentLocale = ref<Locale>('zh-CN');

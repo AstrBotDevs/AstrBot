@@ -14,5 +14,8 @@
   },
   "debugHint": {
     "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
+  },
+  "loggingLocalization": {
+    "button": "Log Language"
   }
 }

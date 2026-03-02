@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import datetime
 
 from astrbot.api import sp, star
@@ -60,8 +61,7 @@ class ConversationCommands:
         if required_perm == "admin" and message.role != "admin":
             message.set_result(
                 MessageEventResult().message(
-                    f"在{scene.name}场景下，reset命令需要管理员权限，"
-                    f"您 (ID {message.get_sender_id()}) 不是管理员，无法执行此操作。",
+                    t("msg-63fe9607", res=scene.name, res_2=message.get_sender_id()),
                 ),
             )
             return
@@ -74,12 +74,12 @@ class ConversationCommands:
                 scope_id=umo,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            message.set_result(MessageEventResult().message("重置对话成功。"))
+            message.set_result(MessageEventResult().message(t("msg-6f4bbe27")))
             return
 
         if not self.context.get_using_provider(umo):
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(t("msg-4cdd042d")),
             )
             return
 
@@ -88,7 +88,7 @@ class ConversationCommands:
         if not cid:
             message.set_result(
                 MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 切换或者 /new 创建。",
+                    t("msg-69ed45be"),
                 ),
             )
             return
@@ -105,7 +105,7 @@ class ConversationCommands:
 
         message.set_extra("_clean_ltm_session", True)
 
-        message.set_result(MessageEventResult().message(ret))
+        message.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)))
 
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话正在运行的 Agent"""
@@ -124,18 +124,18 @@ class ConversationCommands:
         if stopped_count > 0:
             message.set_result(
                 MessageEventResult().message(
-                    f"已请求停止 {stopped_count} 个运行中的任务。"
+                    t("msg-772ec1fa", stopped_count=stopped_count)
                 )
             )
             return
 
-        message.set_result(MessageEventResult().message("当前会话没有运行中的任务。"))
+        message.set_result(MessageEventResult().message(t("msg-8d42cd8a")))
 
     async def his(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话记录"""
         if not self.context.get_using_provider(message.unified_msg_origin):
             message.set_result(
-                MessageEventResult().message("未找到任何 LLM 提供商。请先配置。"),
+                MessageEventResult().message(t("msg-4cdd042d")),
             )
             return
 
@@ -172,7 +172,7 @@ class ConversationCommands:
             f"*输入 /history 2 跳转到第 2 页"
         )
 
-        message.set_result(MessageEventResult().message(ret).use_t2i(False))
+        message.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)).use_t2i(False))
 
     async def convs(self, message: AstrMessageEvent, page: int = 1) -> None:
         """查看对话列表"""
@@ -181,7 +181,7 @@ class ConversationCommands:
         if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
             message.set_result(
                 MessageEventResult().message(
-                    f"{THIRD_PARTY_AGENT_RUNNER_STR} 对话列表功能暂不支持。",
+                    t("msg-efdfbe3e", THIRD_PARTY_AGENT_RUNNER_STR=THIRD_PARTY_AGENT_RUNNER_STR),
                 ),
             )
             return
@@ -263,7 +263,7 @@ class ConversationCommands:
         ret += f"\n第 {page} 页 | 共 {total_pages} 页"
         ret += "\n*输入 /ls 2 跳转到第 2 页"
 
-        message.set_result(MessageEventResult().message(ret).use_t2i(False))
+        message.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)).use_t2i(False))
         return
 
     async def new_conv(self, message: AstrMessageEvent) -> None:
@@ -277,7 +277,7 @@ class ConversationCommands:
                 scope_id=message.unified_msg_origin,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            message.set_result(MessageEventResult().message("已创建新对话。"))
+            message.set_result(MessageEventResult().message(t("msg-492c2c02")))
             return
 
         active_event_registry.stop_all(message.unified_msg_origin, exclude=message)
@@ -291,7 +291,7 @@ class ConversationCommands:
         message.set_extra("_clean_ltm_session", True)
 
         message.set_result(
-            MessageEventResult().message(f"切换到新对话: 新对话({cid[:4]})。"),
+            MessageEventResult().message(t("msg-c7dc838d", res=cid[:4])),
         )
 
     async def groupnew_conv(self, message: AstrMessageEvent, sid: str = "") -> None:
@@ -313,12 +313,12 @@ class ConversationCommands:
             )
             message.set_result(
                 MessageEventResult().message(
-                    f"群聊 {session} 已切换到新对话: 新对话({cid[:4]})。",
+                    t("msg-6da01230", session=session, res=cid[:4]),
                 ),
             )
         else:
             message.set_result(
-                MessageEventResult().message("请输入群聊 ID。/groupnew 群聊ID。"),
+                MessageEventResult().message(t("msg-f356d65a")),
             )
 
     async def switch_conv(
@@ -329,14 +329,14 @@ class ConversationCommands:
         """通过 /ls 前面的序号切换对话"""
         if not isinstance(index, int):
             message.set_result(
-                MessageEventResult().message("类型错误，请输入数字对话序号。"),
+                MessageEventResult().message(t("msg-7e442185")),
             )
             return
 
         if index is None:
             message.set_result(
                 MessageEventResult().message(
-                    "请输入对话序号。/switch 对话序号。/ls 查看对话 /new 新建对话",
+                    t("msg-00dbe29c"),
                 ),
             )
             return
@@ -345,7 +345,7 @@ class ConversationCommands:
         )
         if index > len(conversations) or index < 1:
             message.set_result(
-                MessageEventResult().message("对话序号错误，请使用 /ls 查看"),
+                MessageEventResult().message(t("msg-a848ccf6")),
             )
         else:
             conversation = conversations[index - 1]
@@ -356,20 +356,20 @@ class ConversationCommands:
             )
             message.set_result(
                 MessageEventResult().message(
-                    f"切换到对话: {title}({conversation.cid[:4]})。",
+                    t("msg-1ec33cf6", title=title, res=conversation.cid[:4]),
                 ),
             )
 
     async def rename_conv(self, message: AstrMessageEvent, new_name: str = "") -> None:
         """重命名对话"""
         if not new_name:
-            message.set_result(MessageEventResult().message("请输入新的对话名称。"))
+            message.set_result(MessageEventResult().message(t("msg-68e5dd6c")))
             return
         await self.context.conversation_manager.update_conversation_title(
             message.unified_msg_origin,
             new_name,
         )
-        message.set_result(MessageEventResult().message("重命名对话成功。"))
+        message.set_result(MessageEventResult().message(t("msg-c8dd6158")))
 
     async def del_conv(self, message: AstrMessageEvent) -> None:
         """删除当前对话"""
@@ -380,7 +380,7 @@ class ConversationCommands:
             # 群聊，没开独立会话，发送人不是管理员
             message.set_result(
                 MessageEventResult().message(
-                    f"会话处于群聊，并且未开启独立会话，并且您 (ID {message.get_sender_id()}) 不是管理员，因此没有权限删除当前对话。",
+                    t("msg-1f1fa2f2", res=message.get_sender_id()),
                 ),
             )
             return
@@ -393,7 +393,7 @@ class ConversationCommands:
                 scope_id=umo,
                 key=THIRD_PARTY_AGENT_RUNNER_KEY[agent_runner_type],
             )
-            message.set_result(MessageEventResult().message("重置对话成功。"))
+            message.set_result(MessageEventResult().message(t("msg-6f4bbe27")))
             return
 
         session_curr_cid = (
@@ -403,7 +403,7 @@ class ConversationCommands:
         if not session_curr_cid:
             message.set_result(
                 MessageEventResult().message(
-                    "当前未处于对话状态，请 /switch 序号 切换或 /new 创建。",
+                    t("msg-6a1dc4b7"),
                 ),
             )
             return
@@ -417,4 +417,4 @@ class ConversationCommands:
 
         ret = "删除当前对话成功。不再处于对话状态，使用 /switch 序号 切换到其他对话或 /new 创建。"
         message.set_extra("_clean_ltm_session", True)
-        message.set_result(MessageEventResult().message(ret))
+        message.set_result(MessageEventResult().message(t("msg-ed8dcc22", ret=ret)))

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import os
 import uuid
@@ -27,7 +28,7 @@ class GenieTTSProvider(TTSProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         if not genie:
-            raise ImportError("Please install genie_tts first.")
+            raise ImportError(t("msg-583dd8a6"))
 
         self.character_name = provider_config.get("genie_character_name", "mika")
         language = provider_config.get("genie_language", "Japanese")
@@ -48,7 +49,7 @@ class GenieTTSProvider(TTSProvider):
                 language=language,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to load character {self.character_name}: {e}")
+            raise RuntimeError(t("msg-935222b4", res=self.character_name, e=e))
 
     def support_stream(self) -> bool:
         return True
@@ -75,10 +76,10 @@ class GenieTTSProvider(TTSProvider):
             if os.path.exists(path):
                 return path
 
-            raise RuntimeError("Genie TTS did not save to file.")
+            raise RuntimeError(t("msg-a6886f9e"))
 
         except Exception as e:
-            raise RuntimeError(f"Genie TTS generation failed: {e}")
+            raise RuntimeError(t("msg-e3587d60", e=e))
 
     async def get_audio_stream(
         self,
@@ -122,7 +123,7 @@ class GenieTTSProvider(TTSProvider):
                     except OSError:
                         pass
                 else:
-                    logger.error(f"Genie TTS failed to generate audio for: {text}")
+                    logger.error(t("msg-3303e3a8", text=text))
 
             except Exception as e:
-                logger.error(f"Genie TTS stream error: {e}")
+                logger.error(t("msg-1cfe1af1", e=e))

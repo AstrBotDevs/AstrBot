@@ -1,4 +1,5 @@
 """会话控制"""
+from astrbot.core.lang import t
 
 import abc
 import asyncio
@@ -77,7 +78,7 @@ class SessionController:
             await asyncio.wait_for(event.wait(), timeout)
         except asyncio.TimeoutError:
             if not self.future.done():
-                self.future.set_exception(TimeoutError("等待超时"))
+                self.future.set_exception(TimeoutError(t("msg-0c977996")))
         except asyncio.CancelledError:
             pass  # 避免报错
         # finally:
@@ -191,7 +192,7 @@ def session_waiter(timeout: int = 30, record_history_chains: bool = False):
             if not session_filter:
                 session_filter = DefaultSessionFilter()
             if not isinstance(session_filter, SessionFilter):
-                raise ValueError("session_filter 必须是 SessionFilter")
+                raise ValueError(t("msg-ac406437"))
 
             session_id = session_filter.filter(event)
             FILTERS.append(session_filter)

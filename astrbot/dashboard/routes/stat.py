@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import re
 import threading
@@ -48,7 +49,7 @@ class StatRoute(Route):
         if DEMO_MODE:
             return (
                 Response()
-                .error("You are not permitted to do this operation in demo mode")
+                .error(t("msg-1198c327"))
                 .__dict__
             )
 
@@ -155,7 +156,7 @@ class StatRoute(Route):
 
             return Response().ok(stat_dict).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(e.__str__()).__dict__
 
     async def test_ghproxy_connection(self):
@@ -165,7 +166,7 @@ class StatRoute(Route):
             proxy_url: str = data.get("proxy_url")
 
             if not proxy_url:
-                return Response().error("proxy_url is required").__dict__
+                return Response().error(t("msg-0e5bb0b1")).__dict__
 
             proxy_url = proxy_url.rstrip("/")
 
@@ -187,26 +188,26 @@ class StatRoute(Route):
                     }
                     return Response().ok(data=ret).__dict__
                 return (
-                    Response().error(f"Failed. Status code: {response.status}").__dict__
+                    Response().error(t("msg-f0e0983e", res=response.status)).__dict__
                 )
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-68e65093", e=e)).__dict__
 
     async def get_changelog(self):
         """获取指定版本的更新日志"""
         try:
             version = request.args.get("version")
             if not version:
-                return Response().error("version parameter is required").__dict__
+                return Response().error(t("msg-b5979fe8")).__dict__
 
             version = version.lstrip("v")
 
             # 防止路径遍历攻击
             if not re.match(r"^[a-zA-Z0-9._-]+$", version):
-                return Response().error("Invalid version format").__dict__
+                return Response().error(t("msg-b88a1887")).__dict__
             if ".." in version or "/" in version or "\\" in version:
-                return Response().error("Invalid version format").__dict__
+                return Response().error(t("msg-b88a1887")).__dict__
 
             filename = f"v{version}.md"
             project_path = get_astrbot_path()
@@ -226,20 +227,20 @@ class StatRoute(Route):
             expected_prefix = changelogs_dir_normalized + os.sep
             if not changelog_path_normalized.startswith(expected_prefix):
                 logger.warning(
-                    f"Path traversal attempt detected: {version} -> {changelog_path}",
+                    t("msg-8cb9bb6b", version=version, changelog_path=changelog_path),
                 )
-                return Response().error("Invalid version format").__dict__
+                return Response().error(t("msg-b88a1887")).__dict__
 
             if not os.path.exists(changelog_path):
                 return (
                     Response()
-                    .error(f"Changelog for version {version} not found")
+                    .error(t("msg-7616304c", version=version))
                     .__dict__
                 )
             if not os.path.isfile(changelog_path):
                 return (
                     Response()
-                    .error(f"Changelog for version {version} not found")
+                    .error(t("msg-7616304c", version=version))
                     .__dict__
                 )
 
@@ -248,8 +249,8 @@ class StatRoute(Route):
 
             return Response().ok({"content": content, "version": version}).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-68e65093", e=e)).__dict__
 
     async def list_changelog_versions(self):
         """获取所有可用的更新日志版本列表"""
@@ -279,8 +280,8 @@ class StatRoute(Route):
 
             return Response().ok({"versions": versions}).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-68e65093", e=e)).__dict__
 
     async def get_first_notice(self):
         """读取项目根目录 FIRST_NOTICE.md 内容。"""
@@ -316,5 +317,5 @@ class StatRoute(Route):
 
             return Response().ok({"content": None}).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"Error: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-68e65093", e=e)).__dict__

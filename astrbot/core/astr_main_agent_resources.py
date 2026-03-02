@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import base64
 import json
 import os
@@ -259,10 +260,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
                 )
                 await sb.download_file(path, local_path)
-                logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
+                logger.info(t("msg-509829d8", path=path, local_path=local_path))
                 return local_path, True
         except Exception as e:
-            logger.warning(f"Failed to check/download file from sandbox: {e}")
+            logger.warning(t("msg-b462b60d", e=e))
 
         # Return the original path (will likely fail later, but that's expected)
         return path, False
@@ -401,7 +402,7 @@ async def retrieve_knowledge_base(
 
         # 如果配置为空列表，明确表示不使用知识库
         if not kb_ids:
-            logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
+            logger.info(t("msg-0b3144f1", umo=umo))
             return
 
         top_k = session_config.get("top_k", 5)
@@ -414,29 +415,29 @@ async def retrieve_knowledge_base(
             if kb_helper:
                 kb_names.append(kb_helper.kb.kb_name)
             else:
-                logger.warning(f"[知识库] 知识库不存在或未加载: {kb_id}")
+                logger.warning(t("msg-97e13f98", kb_id=kb_id))
                 invalid_kb_ids.append(kb_id)
 
         if invalid_kb_ids:
             logger.warning(
-                f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}",
+                t("msg-312d09c7", umo=umo, invalid_kb_ids=invalid_kb_ids),
             )
 
         if not kb_names:
             return
 
-        logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
+        logger.debug(t("msg-42b0e9f8", res=len(kb_names)))
     else:
         kb_names = config.get("kb_names", [])
         top_k = config.get("kb_final_top_k", 5)
-        logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
+        logger.debug(t("msg-08167007", res=len(kb_names)))
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
     if not kb_names:
         return
 
-    logger.debug(f"[知识库] 开始检索知识库，数量: {len(kb_names)}, top_k={top_k}")
+    logger.debug(t("msg-a00becc3", res=len(kb_names), top_k=top_k))
     kb_context = await kb_mgr.retrieve(
         query=query,
         kb_names=kb_names,
@@ -450,7 +451,7 @@ async def retrieve_knowledge_base(
     formatted = kb_context.get("context_text", "")
     if formatted:
         results = kb_context.get("results", [])
-        logger.debug(f"[知识库] 为会话 {umo} 注入了 {len(results)} 条相关知识块")
+        logger.debug(t("msg-199e71b7", umo=umo, res=len(results)))
         return formatted
 
 

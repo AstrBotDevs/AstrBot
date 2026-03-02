@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import os
 import time
@@ -122,7 +123,7 @@ class WebChatAdapter(Platform):
                 await self._save_proactive_message(conversation_id, message_chain)
             except Exception as e:
                 logger.error(
-                    f"[WebChatAdapter] Failed to save proactive message: {e}",
+                    t("msg-7177ecf8", e=e),
                     exc_info=True,
                 )
 
@@ -213,7 +214,7 @@ class WebChatAdapter(Platform):
         message_parts = payload.get("message", [])
         abm.message, message_str_parts = await self._parse_message_parts(message_parts)
 
-        logger.debug(f"WebChatAdapter: {abm.message}")
+        logger.debug(t("msg-9406158c", res=abm.message))
 
         abm.timestamp = int(time.time())
         abm.message_str = "".join(message_str_parts)

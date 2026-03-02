@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import sys
 import time
@@ -30,16 +31,16 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             parent = psutil.Process(os.getpid())
             children = parent.children(recursive=True)
-            logger.info(f"正在终止 {len(children)} 个子进程。")
+            logger.info(t("msg-e3d42a3b", res=len(children)))
             for child in children:
-                logger.info(f"正在终止子进程 {child.pid}")
+                logger.info(t("msg-e7edc4a4", res=child.pid))
                 child.terminate()
                 try:
                     child.wait(timeout=3)
                 except psutil.NoSuchProcess:
                     continue
                 except psutil.TimeoutExpired:
-                    logger.info(f"子进程 {child.pid} 没有被正常终止, 正在强行杀死。")
+                    logger.info(t("msg-37bea42d", res=child.pid))
                     child.kill()
         except psutil.NoSuchProcess:
             pass
@@ -125,7 +126,7 @@ class AstrBotUpdator(RepoZipUpdator):
             reboot_argv = self._build_reboot_argv(executable)
             self._exec_reboot(executable, reboot_argv)
         except Exception as e:
-            logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
+            logger.error(t("msg-cc6d9588", executable=executable, e=e))
             raise e
 
     async def check_update(
@@ -149,12 +150,12 @@ class AstrBotUpdator(RepoZipUpdator):
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
-            raise Exception("不支持更新此方式启动的AstrBot")  # 避免版本管理混乱
+            raise Exception(t("msg-0e4439d8"))  # 避免版本管理混乱
 
         if latest:
             latest_version = update_data[0]["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
-                raise Exception("当前已经是最新版本。")
+                raise Exception(t("msg-3f39a942"))
             file_url = update_data[0]["zipball_url"]
         elif str(version).startswith("v"):
             # 更新到指定版本
@@ -162,12 +163,12 @@ class AstrBotUpdator(RepoZipUpdator):
                 if data["tag_name"] == version:
                     file_url = data["zipball_url"]
             if not file_url:
-                raise Exception(f"未找到版本号为 {version} 的更新文件。")
+                raise Exception(t("msg-c7bdf215", version=version))
         else:
             if len(str(version)) != 40:
-                raise Exception("commit hash 长度不正确，应为 40")
+                raise Exception(t("msg-92e46ecc"))
             file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
-        logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
+        logger.info(t("msg-71c01b1c", version=version))
 
         if proxy:
             proxy = proxy.removesuffix("/")
@@ -175,7 +176,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
         try:
             await download_file(file_url, "temp.zip")
-            logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
+            logger.info(t("msg-d3a0e13d"))
             self.unzip_file("temp.zip", self.MAIN_PATH)
         except BaseException as e:
             raise e

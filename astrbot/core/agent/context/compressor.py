@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from ..message import Message
@@ -220,7 +221,7 @@ class LLMSummaryCompressor:
             response = await self.provider.text_chat(contexts=llm_payload)
             summary_content = response.completion_text
         except Exception as e:
-            logger.error(f"Failed to generate summary: {e}")
+            logger.error(t("msg-6c75531b", e=e))
             return messages
 
         # build result

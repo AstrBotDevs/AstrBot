@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import json
 import threading
@@ -37,11 +38,7 @@ from .dingtalk_event import DingtalkMessageEvent
 class MyEventHandler(dingtalk_stream.EventHandler):
     async def process(self, event: dingtalk_stream.EventMessage):
         print(
-            "2",
-            event.headers.event_type,
-            event.headers.event_id,
-            event.headers.event_born_time,
-            event.data,
+            t("msg-c81e728d"),
         )
         return AckMessage.STATUS_OK, "OK"
 
@@ -65,7 +62,7 @@ class DingtalkPlatformAdapter(Platform):
 
         class AstrCallbackClient(dingtalk_stream.ChatbotHandler):
             async def process(self, message: dingtalk_stream.CallbackMessage):
-                logger.debug(f"dingtalk: {message.data}")
+                logger.debug(t("msg-d6371313", res=message.data))
                 im = dingtalk_stream.ChatbotMessage.from_dict(message.data)
                 abm = await outer_self.convert_msg(im)
                 await outer_self.handle_msg(abm)
@@ -110,7 +107,7 @@ class DingtalkPlatformAdapter(Platform):
             staff_id = await self._get_sender_staff_id(session)
             if not staff_id:
                 logger.warning(
-                    "钉钉私聊会话缺少 staff_id 映射，回退使用 session_id 作为 userId 发送",
+                    t("msg-a1c8b5b1"),
                 )
                 staff_id = session.session_id
             await self.send_message_chain_to_user(
@@ -229,7 +226,7 @@ class DingtalkPlatformAdapter(Platform):
                         sender_staff_id,
                     )
         except Exception as e:
-            logger.warning(f"保存钉钉会话映射失败: {e}")
+            logger.warning(t("msg-2abb842f", e=e))
 
     async def download_ding_file(
         self,
@@ -266,7 +263,7 @@ class DingtalkPlatformAdapter(Platform):
         ):
             if resp.status != 200:
                 logger.error(
-                    f"下载钉钉文件失败: {resp.status}, {await resp.text()}",
+                    t("msg-46988861", res=resp.status, res_2=await resp.text()),
                 )
                 return ""
             resp_data = await resp.json()
@@ -283,7 +280,7 @@ class DingtalkPlatformAdapter(Platform):
             if access_token:
                 return access_token
         except Exception as e:
-            logger.warning(f"通过 dingtalk_stream 获取 access_token 失败: {e}")
+            logger.warning(t("msg-ba9e1288", e=e))
 
         payload = {"appKey": self.client_id, "appSecret": self.client_secret}
         async with aiohttp.ClientSession() as session:
@@ -293,7 +290,7 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}",
+                        t("msg-835b1ce6", res=resp.status, res_2=await resp.text()),
                     )
                     return ""
                 data = await resp.json()
@@ -309,7 +306,7 @@ class DingtalkPlatformAdapter(Platform):
             )
             return cast(str, staff_id or "")
         except Exception as e:
-            logger.warning(f"读取钉钉 staff_id 映射失败: {e}")
+            logger.warning(t("msg-331fcb1f", e=e))
             return ""
 
     async def _send_group_message(
@@ -321,7 +318,7 @@ class DingtalkPlatformAdapter(Platform):
     ) -> None:
         access_token = await self.get_access_token()
         if not access_token:
-            logger.error("钉钉群消息发送失败: access_token 为空")
+            logger.error(t("msg-ba183a34"))
             return
 
         payload = {
@@ -342,7 +339,7 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
+                        t("msg-b8aaa69b", res=resp.status, res_2=await resp.text()),
                     )
 
     async def _send_private_message(
@@ -354,7 +351,7 @@ class DingtalkPlatformAdapter(Platform):
     ) -> None:
         access_token = await self.get_access_token()
         if not access_token:
-            logger.error("钉钉私聊消息发送失败: access_token 为空")
+            logger.error(t("msg-cfb35bf5"))
             return
 
         payload = {
@@ -375,7 +372,7 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
+                        t("msg-7553c219", res=resp.status, res_2=await resp.text()),
                     )
 
     def _safe_remove_file(self, file_path: str | None) -> None:
@@ -386,7 +383,7 @@ class DingtalkPlatformAdapter(Platform):
             if p.exists() and p.is_file():
                 p.unlink()
         except Exception as e:
-            logger.warning(f"清理临时文件失败: {file_path}, {e}")
+            logger.warning(t("msg-5ab2d58d", file_path=file_path, e=e))
 
     async def _prepare_voice_for_dingtalk(self, input_path: str) -> tuple[str, bool]:
         """优先转换为 OGG(Opus)，不可用时回退 AMR。"""
@@ -398,7 +395,7 @@ class DingtalkPlatformAdapter(Platform):
             converted = await convert_audio_format(input_path, "ogg")
             return converted, converted != input_path
         except Exception as e:
-            logger.warning(f"钉钉语音转 OGG 失败，回退 AMR: {e}")
+            logger.warning(t("msg-c0c40912", e=e))
             converted = await convert_audio_format(input_path, "amr")
             return converted, converted != input_path
 
@@ -406,7 +403,7 @@ class DingtalkPlatformAdapter(Platform):
         media_file_path = Path(file_path)
         access_token = await self.get_access_token()
         if not access_token:
-            logger.error("钉钉媒体上传失败: access_token 为空")
+            logger.error(t("msg-21c73eca"))
             return ""
 
         form = aiohttp.FormData()
@@ -423,12 +420,12 @@ class DingtalkPlatformAdapter(Platform):
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"钉钉媒体上传失败: {resp.status}, {await resp.text()}"
+                        t("msg-24e3054f", res=resp.status, res_2=await resp.text())
                     )
                     return ""
                 data = await resp.json()
                 if data.get("errcode") != 0:
-                    logger.error(f"钉钉媒体上传失败: {data}")
+                    logger.error(t("msg-34d0a11d", data=data))
                     return ""
                 return cast(str, data.get("media_id", ""))
 
@@ -504,7 +501,7 @@ class DingtalkPlatformAdapter(Platform):
                         },
                     )
                 except Exception as e:
-                    logger.warning(f"钉钉语音发送失败: {e}")
+                    logger.warning(t("msg-3b0d4fb5", e=e))
                     continue
                 finally:
                     if converted_audio:
@@ -535,7 +532,7 @@ class DingtalkPlatformAdapter(Platform):
                         },
                     )
                 except Exception as e:
-                    logger.warning(f"钉钉视频发送失败: {e}")
+                    logger.warning(t("msg-7187f424", e=e))
                     continue
                 finally:
                     self._safe_remove_file(cover_path)
@@ -610,7 +607,7 @@ class DingtalkPlatformAdapter(Platform):
             )
             staff_id = sender_staff_id or await self._get_sender_staff_id(session)
             if not staff_id:
-                logger.error("钉钉私聊回复失败: 缺少 sender_staff_id")
+                logger.error(t("msg-e40cc45f"))
                 return
             await self.send_message_chain_to_user(
                 staff_id=staff_id,
@@ -643,9 +640,9 @@ class DingtalkPlatformAdapter(Platform):
                     task.result()
             except Exception as e:
                 if "Graceful shutdown" in str(e):
-                    logger.info("钉钉适配器已被关闭")
+                    logger.info(t("msg-be63618a"))
                     return
-                logger.error(f"钉钉机器人启动失败: {e}")
+                logger.error(t("msg-0ab22b13", e=e))
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, start_client, loop)

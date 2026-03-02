@@ -17,6 +17,7 @@ from astrbot.core.agent.runners.deerflow.deerflow_agent_runner import (
 )
 from astrbot.core.agent.runners.dify.dify_agent_runner import DifyAgentRunner
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
+from astrbot.core.lang import t
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     MessageChain,
@@ -80,7 +81,7 @@ async def run_third_party_agent(
             elif resp.type == "err":
                 yield resp.data["chain"], True
     except Exception as e:
-        logger.error(f"Third party agent runner error: {e}")
+        logger.error(t("msg-5e551baf", e=e))
         err_msg = custom_error_message
         if not err_msg:
             err_msg = (
@@ -88,7 +89,7 @@ async def run_third_party_agent(
                 f"Error Type: {type(e).__name__} (3rd party)\n"
                 f"Error Message: {str(e)}"
             )
-        yield MessageChain().message(err_msg), True
+        yield MessageChain().message(t("msg-34f164d4", err_msg=err_msg)), True
 
 
 class _RunnerResultAggregator:
@@ -107,12 +108,12 @@ class _RunnerResultAggregator:
     ) -> tuple[list, bool]:
         if not final_resp or not final_resp.result_chain:
             if self.merged_chain:
-                logger.warning(RUNNER_NO_FINAL_RESPONSE_LOG)
+                logger.warning(t("msg-67c22b5b", RUNNER_NO_FINAL_RESPONSE_LOG=RUNNER_NO_FINAL_RESPONSE_LOG))
                 return self.merged_chain, self.has_error
 
-            logger.warning(RUNNER_NO_RESULT_LOG)
+            logger.warning(t("msg-e9587c7e", RUNNER_NO_RESULT_LOG=RUNNER_NO_RESULT_LOG))
             fallback_error_chain = MessageChain().message(
-                RUNNER_NO_RESULT_FALLBACK_MESSAGE,
+                t("msg-cdb7e5b6", RUNNER_NO_RESULT_FALLBACK_MESSAGE=RUNNER_NO_RESULT_FALLBACK_MESSAGE),
             )
             return fallback_error_chain.chain or [], True
 
@@ -134,14 +135,13 @@ def _start_stream_watchdog(
             return
         if not is_stream_consumed():
             logger.warning(
-                "Third-party runner stream was never consumed in %ss; closing runner to avoid resource leak.",
-                timeout_sec,
+                t("msg-13ea140b", timeout_sec=timeout_sec),
             )
             try:
                 await close_runner_once()
             except Exception:
                 logger.warning(
-                    "Exception while closing third-party runner from stream watchdog.",
+                    t("msg-87a7a566"),
                     exc_info=True,
                 )
 
@@ -158,7 +158,7 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
         if inspect.isawaitable(close_result):
             await close_result
     except Exception as e:
-        logger.warning(f"Failed to close third-party runner cleanly: {e}")
+        logger.warning(t("msg-966b8ef7", e=e))
 
 
 class ThirdPartyAgentSubStage(Stage):
@@ -201,7 +201,7 @@ class ThirdPartyAgentSubStage(Stage):
                 conversation_persona_id=conversation_persona_id,
             )
         except Exception as e:
-            logger.debug("Failed to resolve persona custom error message: %s", e)
+            logger.debug(t("msg-371b6b3d", e=e))
             return None
 
     async def _handle_streaming_response(
@@ -301,12 +301,10 @@ class ThirdPartyAgentSubStage(Stage):
             {},
         )
         if not self.prov_id:
-            logger.error("没有填写 Agent Runner 提供商 ID，请前往配置页面配置。")
+            logger.error(t("msg-f9d76893"))
             return
         if not self.prov_cfg:
-            logger.error(
-                f"Agent Runner 提供商 {self.prov_id} 配置不存在，请前往配置页面修改配置。"
-            )
+            logger.error(t("msg-0f856470", res=self.prov_id))
             return
 
         # make provider request
@@ -338,7 +336,7 @@ class ThirdPartyAgentSubStage(Stage):
             runner = DeerFlowAgentRunner[AstrAgentContext]()
         else:
             raise ValueError(
-                f"Unsupported third party agent runner type: {self.runner_type}",
+                t("msg-b3f25c81", res=self.runner_type),
             )
 
         astr_agent_ctx = AstrAgentContext(

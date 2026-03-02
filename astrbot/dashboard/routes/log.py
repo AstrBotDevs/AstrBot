@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import json
 import time
@@ -59,7 +60,7 @@ class LogRoute(Route):
         except ValueError:
             pass
         except Exception as e:
-            logger.error(f"Log SSE 补发历史错误: {e}")
+            logger.error(t("msg-5bf500c1", e=e))
 
     async def log(self) -> QuartResponse:
         last_event_id = request.headers.get("Last-Event-ID")
@@ -80,7 +81,7 @@ class LogRoute(Route):
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                logger.error(f"Log SSE 连接错误: {e}")
+                logger.error(t("msg-e4368397", e=e))
             finally:
                 if queue:
                     self.log_broker.unregister(queue)
@@ -114,8 +115,8 @@ class LogRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(f"获取日志历史失败: {e}")
-            return Response().error(f"获取日志历史失败: {e}").__dict__
+            logger.error(t("msg-547abccb", e=e))
+            return Response().error(t("msg-547abccb", e=e)).__dict__
 
     async def get_trace_settings(self):
         """获取 Trace 设置"""
@@ -123,15 +124,15 @@ class LogRoute(Route):
             trace_enable = self.config.get("trace_enable", True)
             return Response().ok(data={"trace_enable": trace_enable}).__dict__
         except Exception as e:
-            logger.error(f"获取 Trace 设置失败: {e}")
-            return Response().error(f"获取 Trace 设置失败: {e}").__dict__
+            logger.error(t("msg-cb5d4ebb", e=e))
+            return Response().error(t("msg-cb5d4ebb", e=e)).__dict__
 
     async def update_trace_settings(self):
         """更新 Trace 设置"""
         try:
             data = await request.json
             if data is None:
-                return Response().error("请求数据为空").__dict__
+                return Response().error(t("msg-7564d3b0")).__dict__
 
             trace_enable = data.get("trace_enable")
             if trace_enable is not None:
@@ -140,5 +141,5 @@ class LogRoute(Route):
 
             return Response().ok(message="Trace 设置已更新").__dict__
         except Exception as e:
-            logger.error(f"更新 Trace 设置失败: {e}")
-            return Response().error(f"更新 Trace 设置失败: {e}").__dict__
+            logger.error(t("msg-d2a1cd76", e=e))
+            return Response().error(t("msg-d2a1cd76", e=e)).__dict__

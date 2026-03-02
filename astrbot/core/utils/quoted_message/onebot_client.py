@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 from collections.abc import Awaitable
 from typing import Any, Protocol
@@ -63,22 +64,11 @@ class OneBotClient:
                 last_error = exc
                 last_params = params
                 logger.debug(
-                    "quoted_message_parser: action %s failed with params %s: %s",
-                    action,
-                    {k: str(v)[:64] for k, v in params.items()},
-                    exc,
+                    t("msg-03ad9f29", action=action, res={k: str(v)[:64] for k, v in params.items()}, exc=exc),
                 )
         if warn_on_all_failed and last_error is not None:
             logger.warning(
-                "quoted_message_parser: all attempts failed for action %s, "
-                "last_params=%s, error=%s",
-                action,
-                (
-                    {k: str(v)[:64] for k, v in last_params.items()}
-                    if isinstance(last_params, dict)
-                    else None
-                ),
-                last_error,
+                t("msg-519d0dec", action=action, res={k: str(v)[:64] for k, v in last_params.items()} if isinstance(last_params, dict) else None, last_error=last_error),
             )
         return None
 

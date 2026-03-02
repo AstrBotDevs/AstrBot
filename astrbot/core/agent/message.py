@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 # Inspired by MoonshotAI/kosong, credits to MoonshotAI/kosong authors for the original implementation.
 # License: Apache License 2.0
 
@@ -27,7 +28,7 @@ class ContentPart(BaseModel):
 
         type_value = getattr(cls, "type", None)
         if type_value is None or not isinstance(type_value, str):
-            raise ValueError(invalid_subclass_error_msg)
+            raise ValueError(t("msg-d38656d7", invalid_subclass_error_msg=invalid_subclass_error_msg))
 
         cls.__content_part_registry[type_value] = cls
 
@@ -47,11 +48,11 @@ class ContentPart(BaseModel):
                 if isinstance(value, dict) and "type" in value:
                     type_value: Any | None = cast(dict[str, Any], value).get("type")
                     if not isinstance(type_value, str):
-                        raise ValueError(f"Cannot validate {value} as ContentPart")
+                        raise ValueError(t("msg-42d5a315", value=value))
                     target_class = cls.__content_part_registry[type_value]
                     return target_class.model_validate(value)
 
-                raise ValueError(f"Cannot validate {value} as ContentPart")
+                raise ValueError(t("msg-42d5a315", value=value))
 
             return core_schema.no_info_plain_validator_function(validate_content_part)
 
@@ -195,7 +196,7 @@ class Message(BaseModel):
         # other all cases: content is required
         if self.content is None:
             raise ValueError(
-                "content is required unless role='assistant' and tool_calls is not None"
+                t("msg-ffc376d0")
             )
         return self
 

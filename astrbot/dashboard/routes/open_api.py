@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import hashlib
 import json
@@ -130,7 +131,7 @@ class OpenApiRoute(Route):
             existing = await self.db.get_platform_session_by_id(session_id)
             if existing and existing.creator == username:
                 return None
-            logger.error("Failed to create chat session %s: %s", session_id, e)
+            logger.error(t("msg-855e0b38", session_id=session_id, e=e))
             return f"Failed to create session: {e}"
 
         return None
@@ -141,9 +142,11 @@ class OpenApiRoute(Route):
             post_data.get("username")
         )
         if username_err:
-            return Response().error(username_err).__dict__
+            return (
+                Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
+            )
         if not effective_username:
-            return Response().error("Invalid username").__dict__
+            return Response().error(t("msg-bc3b3977")).__dict__
 
         raw_session_id = post_data.get("session_id", post_data.get("conversation_id"))
         session_id = str(raw_session_id).strip() if raw_session_id is not None else ""
@@ -155,11 +158,15 @@ class OpenApiRoute(Route):
             session_id,
         )
         if ensure_session_err:
-            return Response().error(ensure_session_err).__dict__
+            return (
+                Response()
+                .error(t("msg-2cd6e70f", ensure_session_err=ensure_session_err))
+                .__dict__
+            )
 
         config_id, resolve_err = self._resolve_chat_config_id(post_data)
         if resolve_err:
-            return Response().error(resolve_err).__dict__
+            return Response().error(t("msg-53632573", resolve_err=resolve_err)).__dict__
 
         original_username = g.get("username", "guest")
         g.username = effective_username
@@ -174,17 +181,10 @@ class OpenApiRoute(Route):
                     )
             except Exception as e:
                 logger.error(
-                    "Failed to update chat config route for %s with %s: %s",
-                    umo,
-                    config_id,
-                    e,
+                    t("msg-d4765667", umo=umo, config_id=config_id, e=e),
                     exc_info=True,
                 )
-                return (
-                    Response()
-                    .error(f"Failed to update chat config route: {e}")
-                    .__dict__
-                )
+                return Response().error(t("msg-7c7a9f55", e=e)).__dict__
         try:
             return await self.chat_route.chat(post_data=post_data)
         finally:
@@ -261,10 +261,7 @@ class OpenApiRoute(Route):
                 )
         except Exception as e:
             logger.error(
-                "Failed to update chat config route for %s with %s: %s",
-                umo,
-                config_id,
-                e,
+                t("msg-d4765667", umo=umo, config_id=config_id, e=e),
                 exc_info=True,
             )
             return f"Failed to update chat config route: {e}"
@@ -376,7 +373,7 @@ class OpenApiRoute(Route):
                     continue
 
                 if "message_id" in result and result["message_id"] != message_id:
-                    logger.warning("openapi ws stream message_id mismatch")
+                    logger.warning(t("msg-ba0964a1"))
                     continue
 
                 result_text = result.get("data", "")
@@ -464,7 +461,7 @@ class OpenApiRoute(Route):
                         )
                     except Exception as e:
                         logger.exception(
-                            f"Open API WS failed to extract web search refs: {e}",
+                            t("msg-ca769cde", e=e),
                             exc_info=True,
                         )
 
@@ -495,7 +492,7 @@ class OpenApiRoute(Route):
                     agent_stats = {}
                     refs = {}
         except Exception as e:
-            logger.exception(f"Open API WS chat failed: {e}", exc_info=True)
+            logger.exception(t("msg-0f97a5df", e=e), exc_info=True)
             await self._send_chat_ws_error(
                 f"Failed to process message: {e}", "PROCESSING_ERROR"
             )
@@ -532,7 +529,7 @@ class OpenApiRoute(Route):
 
                 await self._handle_chat_ws_send(message)
         except Exception as e:
-            logger.debug("Open API WS connection closed: %s", e)
+            logger.debug(t("msg-d6873ba9", e=e))
 
     async def upload_file(self):
         return await self.chat_route.post_file()
@@ -542,7 +539,9 @@ class OpenApiRoute(Route):
             request.args.get("username")
         )
         if username_err:
-            return Response().error(username_err).__dict__
+            return (
+                Response().error(t("msg-fc15cbcd", username_err=username_err)).__dict__
+            )
 
         assert username is not None  # for type checker
 
@@ -550,7 +549,7 @@ class OpenApiRoute(Route):
             page = int(request.args.get("page", 1))
             page_size = int(request.args.get("page_size", 20))
         except ValueError:
-            return Response().error("page and page_size must be integers").__dict__
+            return Response().error(t("msg-74bff366")).__dict__
 
         if page < 1:
             page = 1
@@ -620,14 +619,14 @@ class OpenApiRoute(Route):
         umo = post_data.get("umo")
 
         if message_payload is None:
-            return Response().error("Missing key: message").__dict__
+            return Response().error(t("msg-2b00f931")).__dict__
         if not umo:
-            return Response().error("Missing key: umo").__dict__
+            return Response().error(t("msg-a29d9adb")).__dict__
 
         try:
             session = MessageSesion.from_str(str(umo))
         except Exception as e:
-            return Response().error(f"Invalid umo: {e}").__dict__
+            return Response().error(t("msg-4990e908", e=e)).__dict__
 
         platform_id = session.platform_name
         platform_inst = next(
@@ -639,11 +638,7 @@ class OpenApiRoute(Route):
             None,
         )
         if not platform_inst:
-            return (
-                Response()
-                .error(f"Bot not found or not running for platform: {platform_id}")
-                .__dict__
-            )
+            return Response().error(t("msg-45ac857c", platform_id=platform_id)).__dict__
 
         try:
             message_chain = await self._build_message_chain_from_payload(
@@ -654,8 +649,8 @@ class OpenApiRoute(Route):
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(f"Open API send_message failed: {e}", exc_info=True)
-            return Response().error(f"Failed to send message: {e}").__dict__
+            logger.error(t("msg-ec0f0bd2", e=e), exc_info=True)
+            return Response().error(t("msg-d04109ab", e=e)).__dict__
 
     async def get_bots(self):
         bot_ids = []

@@ -1,4 +1,5 @@
 """Network error handling utilities for providers."""
+from astrbot.core.lang import t
 
 import httpx
 
@@ -73,11 +74,10 @@ def log_connection_failure(
 
     if effective_proxy:
         logger.error(
-            f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            t("msg-54b8fda8", provider_label=provider_label, error_type=error_type, effective_proxy=effective_proxy, error=error)
         )
     else:
-        logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
+        logger.error(t("msg-ea7c80f1", provider_label=provider_label, error_type=error_type, error=error))
 
 
 def create_proxy_client(
@@ -97,6 +97,6 @@ def create_proxy_client(
         An httpx.AsyncClient configured with the proxy, or None if no proxy
     """
     if proxy:
-        logger.info(f"[{provider_label}] 使用代理: {proxy}")
+        logger.info(t("msg-f8c8a73c", provider_label=provider_label, proxy=proxy))
         return httpx.AsyncClient(proxy=proxy)
     return None

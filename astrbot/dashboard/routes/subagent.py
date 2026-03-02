@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import traceback
 
 from quart import jsonify, request
@@ -61,14 +62,14 @@ class SubAgentRoute(Route):
                         a.setdefault("persona_id", None)
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取 subagent 配置失败: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-eda47201", e=e)).__dict__)
 
     async def update_config(self):
         try:
             data = await request.json
             if not isinstance(data, dict):
-                return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
+                return jsonify(Response().error(t("msg-3e5b1fe0")).__dict__)
 
             cfg = self.core_lifecycle.astrbot_config
             cfg["subagent_orchestrator"] = data
@@ -84,8 +85,8 @@ class SubAgentRoute(Route):
 
             return jsonify(Response().ok(message="保存成功").__dict__)
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-9f285dd3", e=e)).__dict__)
 
     async def get_available_tools(self):
         """Return all registered tools (name/description/parameters/active/origin).
@@ -113,5 +114,5 @@ class SubAgentRoute(Route):
                 )
             return jsonify(Response().ok(data=tools_dict).__dict__)
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return jsonify(Response().error(f"获取可用工具失败: {e!s}").__dict__)
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return jsonify(Response().error(t("msg-665f4751", e=e)).__dict__)

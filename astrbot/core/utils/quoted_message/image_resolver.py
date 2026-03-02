@@ -1,4 +1,5 @@
 from __future__ import annotations
+from astrbot.core.lang import t
 
 import os
 from typing import Any
@@ -81,8 +82,7 @@ class ImageResolver:
             elif get_existing_local_path(image_ref):
                 # Drop non-image local paths instead of treating them as remote IDs.
                 logger.debug(
-                    "quoted_message_parser: skip non-image local path ref=%s",
-                    image_ref[:128],
+                    t("msg-6dfa6994", res=image_ref[:128]),
                 )
             else:
                 unresolved.append(image_ref)
@@ -123,8 +123,6 @@ class ImageResolver:
                     return normalized
 
         logger.warning(
-            "quoted_message_parser: failed to resolve quoted image ref=%s after %d actions",
-            image_ref[:128],
-            len(actions),
+            t("msg-9326ec62", res=image_ref[:128], res_2=len(actions)),
         )
         return None

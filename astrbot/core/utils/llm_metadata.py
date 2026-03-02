@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from typing import Literal, TypedDict
 
 import aiohttp
@@ -60,7 +61,7 @@ async def update_llm_metadata() -> None:
                 # Replace the global cache in-place so references remain valid
                 LLM_METADATAS.clear()
                 LLM_METADATAS.update(models)
-                logger.info(f"Successfully fetched metadata for {len(models)} LLMs.")
+                logger.info(t("msg-d6535d03", res=str(len(models))))
     except Exception as e:
-        logger.error(f"Failed to fetch LLM metadata: {e}")
+        logger.error(t("msg-8cceaeb0", e=e))
         return

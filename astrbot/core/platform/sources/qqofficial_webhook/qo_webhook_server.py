@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import logging
 from typing import cast
@@ -41,9 +42,9 @@ class QQOfficialWebhook:
         self.shutdown_event = asyncio.Event()
 
     async def initialize(self) -> None:
-        logger.info("正在登录到 QQ 官方机器人...")
+        logger.info(t("msg-41a3e59d"))
         self.user = await self.http.login(self.token)
-        logger.info(f"已登录 QQ 官方机器人账号: {self.user}")
+        logger.info(t("msg-66040e15", res=self.user))
         # 直接注入到 botpy 的 Client，移花接木！
         self.client.api = self.api
         self.client.http = self.http
@@ -94,7 +95,7 @@ class QQOfficialWebhook:
             响应数据
         """
         msg: dict = await request.json
-        logger.debug(f"收到 qq_official_webhook 回调: {msg}")
+        logger.debug(t("msg-6ed59b60", msg=msg))
 
         event = msg.get("t")
         opcode = msg.get("op")
@@ -103,7 +104,7 @@ class QQOfficialWebhook:
         if opcode == 13:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
-            print(signed)
+            print(t("msg-ad355b59", signed=signed))
             return signed
 
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
@@ -111,7 +112,7 @@ class QQOfficialWebhook:
             try:
                 func = self._connection.parser[event]
             except KeyError:
-                logger.error("_parser unknown event %s.", event)
+                logger.error(t("msg-4bf0bff8", event=event))
             else:
                 func(msg)
 
@@ -119,7 +120,7 @@ class QQOfficialWebhook:
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。",
+            t("msg-cef08b17", res=self.callback_server_host, res_2=self.port),
         )
         await self.server.run_task(
             host=self.callback_server_host,

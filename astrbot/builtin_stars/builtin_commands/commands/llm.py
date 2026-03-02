@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageChain
 
@@ -17,4 +18,4 @@ class LLMCommands:
             cfg["provider_settings"]["enable"] = True
             status = "开启"
         cfg.save_config()
-        await event.send(MessageChain().message(f"{status} LLM 聊天功能。"))
+        await event.send(MessageChain().message(t("msg-72cd5f57", status=status)))

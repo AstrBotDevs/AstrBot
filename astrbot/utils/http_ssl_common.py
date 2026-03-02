@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import logging
 import ssl
 from typing import Any
@@ -16,9 +17,7 @@ def build_ssl_context_with_certifi(log_obj: Any | None = None) -> ssl.SSLContext
     except Exception as exc:
         if logger and hasattr(logger, "warning"):
             logger.warning(
-                "Failed to load certifi CA bundle into SSL context; "
-                "falling back to system trust store only: %s",
-                exc,
+                t("msg-5304f0e3", exc=exc),
             )
 
     return ssl_context

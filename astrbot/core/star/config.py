@@ -1,4 +1,5 @@
 """此功能已过时，参考 https://astrbot.app/dev/plugin.html#%E6%B3%A8%E5%86%8C%E6%8F%92%E4%BB%B6%E9%85%8D%E7%BD%AE-beta"""
+from astrbot.core.lang import t
 
 import json
 import os
@@ -33,13 +34,13 @@ def put_config(namespace: str, name: str, key: str, value, description: str) -> 
     注意：value一定要是该配置项对应类型的值，否则类型判断会乱。
     """
     if namespace == "":
-        raise ValueError("namespace 不能为空。")
+        raise ValueError(t("msg-c2189e8d"))
     if namespace.startswith("internal_"):
-        raise ValueError("namespace 不能以 internal_ 开头。")
+        raise ValueError(t("msg-97f66907"))
     if not isinstance(key, str):
-        raise ValueError("key 只支持 str 类型。")
+        raise ValueError(t("msg-09179604"))
     if not isinstance(value, str | int | float | bool | list):
-        raise ValueError("value 只支持 str, int, float, bool, list 类型。")
+        raise ValueError(t("msg-1163e4f1"))
 
     config_dir = os.path.join(get_astrbot_data_path(), "config")
     path = os.path.join(config_dir, f"{namespace}.json")
@@ -72,12 +73,12 @@ def update_config(namespace: str, key: str, value) -> None:
     """
     path = os.path.join(get_astrbot_data_path(), "config", f"{namespace}.json")
     if not os.path.exists(path):
-        raise FileNotFoundError(f"配置文件 {namespace}.json 不存在。")
+        raise FileNotFoundError(t("msg-ed0f93e4", namespace=namespace))
     with open(path, encoding="utf-8-sig") as f:
         d = json.load(f)
     assert isinstance(d, dict)
     if key not in d:
-        raise KeyError(f"配置项 {key} 不存在。")
+        raise KeyError(t("msg-e3b5cdfb", key=key))
     d[key]["value"] = value
     with open(path, "w", encoding="utf-8-sig") as f:
         json.dump(d, f, indent=2, ensure_ascii=False)

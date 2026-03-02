@@ -6,6 +6,7 @@
 - 小版本（第三位）不同时提示警告，用户可选择强制导入
 - 版本匹配时也需要用户确认
 """
+from astrbot.core.lang import t
 
 import json
 import os
@@ -183,12 +184,12 @@ class ImportResult:
 
     def add_warning(self, msg: str) -> None:
         self.warnings.append(msg)
-        logger.warning(msg)
+        logger.warning(t("msg-c046b6e4", msg=msg))
 
     def add_error(self, msg: str) -> None:
         self.errors.append(msg)
         self.success = False
-        logger.error(msg)
+        logger.error(t("msg-c046b6e4", msg=msg))
 
     def to_dict(self) -> dict:
         return {
@@ -368,7 +369,7 @@ class AstrBotImporter:
             result.add_error(f"备份文件不存在: {zip_path}")
             return result
 
-        logger.info(f"开始从 {zip_path} 导入备份")
+        logger.info(t("msg-0e6f1f5d", zip_path=zip_path))
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -483,7 +484,7 @@ class AstrBotImporter:
                 if progress_callback:
                     await progress_callback("directories", 100, 100, "目录导入完成")
 
-            logger.info(f"备份导入完成: {result.to_dict()}")
+            logger.info(t("msg-2bf97ca0", res=result.to_dict()))
             return result
 
         except zipfile.BadZipFile:
@@ -501,7 +502,7 @@ class AstrBotImporter:
         """
         backup_version = manifest.get("astrbot_version")
         if not backup_version:
-            raise ValueError("备份文件缺少版本信息")
+            raise ValueError(t("msg-e67dda98"))
 
         # 使用新的版本兼容性检查
         version_check = self._check_version_compatibility(backup_version)
@@ -511,7 +512,7 @@ class AstrBotImporter:
 
         # minor_diff 和 match 都允许导入
         if version_check["status"] == "minor_diff":
-            logger.warning(f"版本差异警告: {version_check['message']}")
+            logger.warning(t("msg-8f871d9f", res=version_check['message']))
 
     async def _clear_main_db(self) -> None:
         """清空主数据库所有表"""
@@ -520,11 +521,9 @@ class AstrBotImporter:
                 for table_name, model_class in MAIN_DB_MODELS.items():
                     try:
                         await session.execute(delete(model_class))
-                        logger.debug(f"已清空表 {table_name}")
+                        logger.debug(t("msg-2d6da12a", table_name=table_name))
                     except Exception as e:
-                        raise DatabaseClearError(
-                            f"清空表 {table_name} 失败: {e}"
-                        ) from e
+                        logger.warning(t("msg-7d21b23a", table_name=table_name, e=e))
 
     async def _clear_kb_data(self) -> None:
         """清空知识库数据"""
@@ -537,9 +536,9 @@ class AstrBotImporter:
                 for table_name, model_class in KB_METADATA_MODELS.items():
                     try:
                         await session.execute(delete(model_class))
-                        logger.debug(f"已清空知识库表 {table_name}")
+                        logger.debug(t("msg-ab0f09db", table_name=table_name))
                     except Exception as e:
-                        logger.warning(f"清空知识库表 {table_name} 失败: {e}")
+                        logger.warning(t("msg-7bcdfaee", table_name=table_name, e=e))
 
         # 删除知识库文件目录
         for kb_id in list(self.kb_manager.kb_insts.keys()):
@@ -549,7 +548,7 @@ class AstrBotImporter:
                 if kb_helper.kb_dir.exists():
                     shutil.rmtree(kb_helper.kb_dir)
             except Exception as e:
-                logger.warning(f"清理知识库 {kb_id} 失败: {e}")
+                logger.warning(t("msg-43f008f1", kb_id=kb_id, e=e))
 
         self.kb_manager.kb_insts.clear()
 
@@ -564,7 +563,7 @@ class AstrBotImporter:
                 for table_name, rows in data.items():
                     model_class = MAIN_DB_MODELS.get(table_name)
                     if not model_class:
-                        logger.warning(f"未知的表: {table_name}")
+                        logger.warning(t("msg-985cae66", table_name=table_name))
                         continue
                     normalized_rows = self._preprocess_main_table_rows(table_name, rows)
 
@@ -577,10 +576,10 @@ class AstrBotImporter:
                             session.add(obj)
                             count += 1
                         except Exception as e:
-                            logger.warning(f"导入记录到 {table_name} 失败: {e}")
+                            logger.warning(t("msg-dfa8b605", table_name=table_name, e=e))
 
                     imported[table_name] = count
-                    logger.debug(f"导入表 {table_name}: {count} 条记录")
+                    logger.debug(t("msg-89a2120c", table_name=table_name, count=count))
 
         return imported
 
@@ -722,7 +721,7 @@ class AstrBotImporter:
                             session.add(obj)
                             count += 1
                         except Exception as e:
-                            logger.warning(f"导入知识库记录到 {table_name} 失败: {e}")
+                            logger.warning(t("msg-f1dec753", table_name=table_name, e=e))
 
                     result.imported_tables[f"kb_{table_name}"] = count
 
@@ -795,7 +794,7 @@ class AstrBotImporter:
                         metadata=json.loads(doc.get("metadata", "{}")),
                     )
                 except Exception as e:
-                    logger.warning(f"导入文档块失败: {e}")
+                    logger.warning(t("msg-9807bcd8", e=e))
         finally:
             await doc_storage.close()
 
@@ -832,7 +831,7 @@ class AstrBotImporter:
                         dst.write(src.read())
                     count += 1
                 except Exception as e:
-                    logger.warning(f"导入附件 {name} 失败: {e}")
+                    logger.warning(t("msg-98a66293", name=name, e=e))
 
         return count
 
@@ -857,7 +856,7 @@ class AstrBotImporter:
         # 检查备份版本是否支持目录备份（需要版本 >= 1.1）
         backup_version = manifest.get("version", "1.0")
         if VersionComparator.compare_version(backup_version, "1.1") < 0:
-            logger.info("备份版本不支持目录备份，跳过目录导入")
+            logger.info(t("msg-39f2325f"))
             return dir_stats
 
         backed_up_dirs = manifest.get("directories", [])
@@ -890,7 +889,7 @@ class AstrBotImporter:
                     if backup_path.exists():
                         shutil.rmtree(backup_path)
                     shutil.move(str(target_dir), str(backup_path))
-                    logger.debug(f"已备份现有目录 {target_dir} 到 {backup_path}")
+                    logger.debug(t("msg-689050b6", target_dir=target_dir, backup_path=backup_path))
 
                 # 创建目标目录
                 target_dir.mkdir(parents=True, exist_ok=True)
@@ -913,7 +912,7 @@ class AstrBotImporter:
                         result.add_warning(f"导入文件 {name} 失败: {e}")
 
                 dir_stats[dir_name] = file_count
-                logger.debug(f"导入目录 {dir_name}: {file_count} 个文件")
+                logger.debug(t("msg-d51b3536", dir_name=dir_name, file_count=file_count))
 
             except Exception as e:
                 result.add_warning(f"导入目录 {dir_name} 失败: {e}")

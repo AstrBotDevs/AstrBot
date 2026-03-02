@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import copy
 import os
@@ -156,7 +157,7 @@ class ProviderManager:
 
         """
         if provider_id not in self.inst_map:
-            raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
+            raise ValueError(t("msg-9e1a7f1f", provider_id=provider_id))
         if umo:
             await sp.session_put(
                 umo,
@@ -260,11 +261,11 @@ class ProviderManager:
                         self.tts_provider_insts[0] if self.tts_provider_insts else None
                     )
             else:
-                raise ValueError(f"Unknown provider type: {provider_type}")
+                raise ValueError(t("msg-5fda2049", provider_type=provider_type))
 
         if not provider and provider_id:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                t("msg-a5cb19c6", provider_id=provider_id)
             )
 
         return provider
@@ -275,8 +276,8 @@ class ProviderManager:
             try:
                 await self.load_provider(provider_config)
             except Exception as e:
-                logger.error(traceback.format_exc())
-                logger.error(e)
+                logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+                logger.error(t("msg-5bdf8f5c", e=e))
 
         selected_provider_id = await sp.get_async(
             key="curr_provider",
@@ -488,7 +489,7 @@ class ProviderManager:
                     if env_val is None:
                         provider_id = provider_config.get("id")
                         logger.warning(
-                            f"Provider {provider_id} 配置项 key[{idx}] 使用环境变量 {env_key} 但未设置。",
+                            t("msg-b734a1f4", provider_id=provider_id, idx=idx, env_key=env_key),
                         )
                         resolved_keys.append("")
                     else:
@@ -508,13 +509,13 @@ class ProviderManager:
             provider_config = self._resolve_env_key_list(provider_config)
 
         if not provider_config["enable"]:
-            logger.info(f"Provider {provider_config['id']} is disabled, skipping")
+            logger.info(t("msg-664b3329", res=provider_config['id']))
             return
         if provider_config.get("provider_type", "") == "agent_runner":
             return
 
         logger.info(
-            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ...",
+            t("msg-f43f8022", res=provider_config['type'], res_2=provider_config['id']),
         )
 
         # 动态导入
@@ -522,20 +523,20 @@ class ProviderManager:
             self.dynamic_import_provider(provider_config["type"])
         except (ImportError, ModuleNotFoundError) as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
+                t("msg-edd4aefe", res=provider_config['type'], res_2=provider_config['id'], e=e),
                 exc_info=True,
             )
             return
         except Exception as e:
             logger.critical(
-                f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因",
+                t("msg-78e514a1", res=provider_config['type'], res_2=provider_config['id'], e=e),
                 exc_info=True,
             )
             return
 
         if provider_config["type"] not in provider_cls_map:
             logger.error(
-                f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。",
+                t("msg-4636f83c", res=provider_config['type'], res_2=provider_config['id']),
                 exc_info=True,
             )
             return
@@ -545,7 +546,7 @@ class ProviderManager:
             # 按任务实例化提供商
             cls_type = provider_metadata.cls_type
             if not cls_type:
-                logger.error(f"无法找到 {provider_metadata.type} 的类")
+                logger.error(t("msg-e9c6c4a2", res=provider_metadata.type))
                 return
 
             provider_metadata.id = provider_config["id"]
@@ -555,7 +556,7 @@ class ProviderManager:
                     # STT 任务
                     if not issubclass(cls_type, STTProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of STTProvider"
+                            t("msg-f705cf50", cls_type=cls_type)
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
@@ -569,7 +570,7 @@ class ProviderManager:
                     ):
                         self.curr_stt_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
+                            t("msg-d20620aa", res=provider_config['type'], res_2=provider_config['id']),
                         )
                     if not self.curr_stt_provider_inst:
                         self.curr_stt_provider_inst = inst
@@ -578,7 +579,7 @@ class ProviderManager:
                     # TTS 任务
                     if not issubclass(cls_type, TTSProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of TTSProvider"
+                            t("msg-afbe5661", cls_type=cls_type)
                         )
                     inst = cls_type(provider_config, self.provider_settings)
 
@@ -592,7 +593,7 @@ class ProviderManager:
                     ):
                         self.curr_tts_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
+                            t("msg-74d437ed", res=provider_config['type'], res_2=provider_config['id']),
                         )
                     if not self.curr_tts_provider_inst:
                         self.curr_tts_provider_inst = inst
@@ -601,7 +602,7 @@ class ProviderManager:
                     # 文本生成任务
                     if not issubclass(cls_type, Provider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of Provider"
+                            t("msg-08cd85c9", cls_type=cls_type)
                         )
                     inst = cls_type(
                         provider_config,
@@ -618,7 +619,7 @@ class ProviderManager:
                     ):
                         self.curr_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
+                            t("msg-16a2b8e0", res=provider_config['type'], res_2=provider_config['id']),
                         )
                     if not self.curr_provider_inst:
                         self.curr_provider_inst = inst
@@ -626,7 +627,7 @@ class ProviderManager:
                 case ProviderType.EMBEDDING:
                     if not issubclass(cls_type, EmbeddingProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of EmbeddingProvider"
+                            t("msg-0e1707e7", cls_type=cls_type)
                         )
                     inst = cls_type(provider_config, self.provider_settings)
                     if isinstance(inst, HasInitialize):
@@ -635,7 +636,7 @@ class ProviderManager:
                 case ProviderType.RERANK:
                     if not issubclass(cls_type, RerankProvider):
                         raise TypeError(
-                            f"Provider class {cls_type} is not a subclass of RerankProvider"
+                            t("msg-821d06e0", cls_type=cls_type)
                         )
                     inst = cls_type(provider_config, self.provider_settings)
                     if isinstance(inst, HasInitialize):
@@ -645,16 +646,16 @@ class ProviderManager:
                     # 未知供应商抛出异常，确保inst初始化
                     # Should be unreachable
                     raise Exception(
-                        f"未知的提供商类型：{provider_metadata.provider_type}"
+                        t("msg-14c35664", res=provider_metadata.provider_type)
                     )
 
             self.inst_map[provider_config["id"]] = inst
         except Exception as e:
             logger.error(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
+                t("msg-186fd5c6", res=provider_config['type'], res_2=provider_config['id'], e=e),
             )
             raise Exception(
-                f"实例化 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}",
+                t("msg-186fd5c6", res=provider_config['type'], res_2=provider_config['id'], e=e),
             )
 
     async def reload(self, provider_config: dict) -> None:
@@ -667,7 +668,7 @@ class ProviderManager:
             self.providers_config = astrbot_config["provider"]
             self.provider_sources_config = astrbot_config.get("provider_sources", [])
             config_ids = [provider["id"] for provider in self.providers_config]
-            logger.info(f"providers in user's config: {config_ids}")
+            logger.info(t("msg-ede02a99", config_ids=config_ids))
             for key in list(self.inst_map.keys()):
                 if key not in config_ids:
                     await self.terminate_provider(key)
@@ -677,7 +678,7 @@ class ProviderManager:
             elif self.curr_provider_inst is None and len(self.provider_insts) > 0:
                 self.curr_provider_inst = self.provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_provider_inst.meta().id} 作为当前提供商适配器。",
+                    t("msg-95dc4227", res=self.curr_provider_inst.meta().id),
                 )
 
             if len(self.stt_provider_insts) == 0:
@@ -687,7 +688,7 @@ class ProviderManager:
             ):
                 self.curr_stt_provider_inst = self.stt_provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_stt_provider_inst.meta().id} 作为当前语音转文本提供商适配器。",
+                    t("msg-a6187bac", res=self.curr_stt_provider_inst.meta().id),
                 )
 
             if len(self.tts_provider_insts) == 0:
@@ -697,7 +698,7 @@ class ProviderManager:
             ):
                 self.curr_tts_provider_inst = self.tts_provider_insts[0]
                 logger.info(
-                    f"自动选择 {self.curr_tts_provider_inst.meta().id} 作为当前文本转语音提供商适配器。",
+                    t("msg-bf28f7e2", res=self.curr_tts_provider_inst.meta().id),
                 )
 
     def get_insts(self):
@@ -706,7 +707,7 @@ class ProviderManager:
     async def terminate_provider(self, provider_id: str) -> None:
         if provider_id in self.inst_map:
             logger.info(
-                f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
+                t("msg-dba10c27", provider_id=provider_id, res=len(self.provider_insts), res_2=len(self.stt_provider_insts), res_3=len(self.tts_provider_insts)),
             )
 
             if self.inst_map[provider_id] in self.provider_insts:
@@ -733,7 +734,7 @@ class ProviderManager:
                 await self.inst_map[provider_id].terminate()  # type: ignore
 
             logger.info(
-                f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
+                t("msg-9d9d9765", provider_id=provider_id, res=len(self.provider_insts), res_2=len(self.stt_provider_insts), res_3=len(self.tts_provider_insts)),
             )
             del self.inst_map[provider_id]
 
@@ -757,28 +758,28 @@ class ProviderManager:
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
             config.save_config()
-            logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
+            logger.info(t("msg-925bb70a", target_prov_ids=target_prov_ids))
 
     async def update_provider(self, origin_provider_id: str, new_config: dict) -> None:
         """Update provider config and reload the instance. Config will be saved after update."""
         async with self.resource_lock:
             npid = new_config.get("id", None)
             if not npid:
-                raise ValueError("New provider config must have an 'id' field")
+                raise ValueError(t("msg-a1657092"))
             config = self.acm.default_conf
             for provider in config["provider"]:
                 if (
                     provider.get("id", None) == npid
                     and provider.get("id", None) != origin_provider_id
                 ):
-                    raise ValueError(f"Provider ID {npid} already exists")
+                    raise ValueError(t("msg-1486c653", npid=npid))
             # update config
             for idx, provider in enumerate(config["provider"]):
                 if provider.get("id", None) == origin_provider_id:
                     config["provider"][idx] = new_config
                     break
             else:
-                raise ValueError(f"Provider ID {origin_provider_id} not found")
+                raise ValueError(t("msg-f9fc1545", origin_provider_id=origin_provider_id))
             config.save_config()
             # reload instance
             await self.reload(new_config)
@@ -788,11 +789,11 @@ class ProviderManager:
         async with self.resource_lock:
             npid = new_config.get("id", None)
             if not npid:
-                raise ValueError("New provider config must have an 'id' field")
+                raise ValueError(t("msg-a1657092"))
             config = self.acm.default_conf
             for provider in config["provider"]:
                 if provider.get("id", None) == npid:
-                    raise ValueError(f"Provider ID {npid} already exists")
+                    raise ValueError(t("msg-1486c653", npid=npid))
             # add to config
             config["provider"].append(new_config)
             config.save_config()
@@ -806,4 +807,4 @@ class ProviderManager:
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:
-            logger.error("Error while disabling MCP servers", exc_info=True)
+            logger.error(t("msg-4e2c657c"), exc_info=True)

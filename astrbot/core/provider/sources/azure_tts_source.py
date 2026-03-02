@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import hashlib
 import json
@@ -33,14 +34,14 @@ class OTTSProvider:
         self.retry_count = 3
         self.proxy = config.get("proxy", "")
         if self.proxy:
-            logger.info(f"[Azure TTS] 使用代理: {self.proxy}")
+            logger.info(t("msg-93d9b5cf", res=self.proxy))
         self._client: AsyncClient | None = None
 
     @property
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                t("msg-9eea5bcb")
             )
         return self._client
 
@@ -65,7 +66,7 @@ class OTTSProvider:
             self.last_sync_time = local_time
         except Exception as e:
             if time.time() - self.last_sync_time > 3600:
-                raise RuntimeError("时间同步失败") from e
+                raise RuntimeError(t("msg-fd53d21d", e=e)) from e
 
     async def _generate_signature(self) -> str:
         await self._sync_time()
@@ -104,9 +105,9 @@ class OTTSProvider:
                 return str(file_path.resolve())
             except Exception as e:
                 if attempt == self.retry_count - 1:
-                    raise RuntimeError(f"OTTS请求失败: {e!s}") from e
+                    raise RuntimeError(t("msg-77890ac4", e=e)) from e
                 await asyncio.sleep(0.5 * (attempt + 1))
-        raise RuntimeError("OTTS未返回音频文件")
+        raise RuntimeError(t("msg-c6ec6ec7"))
 
 
 class AzureNativeProvider(TTSProvider):
@@ -117,7 +118,7 @@ class AzureNativeProvider(TTSProvider):
             "",
         ).strip()
         if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
-            raise ValueError("无效的Azure订阅密钥")
+            raise ValueError(t("msg-5ad71900"))
         self.region = provider_config.get("azure_tts_region", "eastus").strip()
         self.endpoint = (
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
@@ -134,13 +135,13 @@ class AzureNativeProvider(TTSProvider):
         }
         self.proxy = provider_config.get("proxy", "")
         if self.proxy:
-            logger.info(f"[Azure TTS Native] 使用代理: {self.proxy}")
+            logger.info(t("msg-6416da27", res=self.proxy))
 
     @property
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                t("msg-9eea5bcb")
             )
         return self._client
 
@@ -219,12 +220,12 @@ class AzureTTSProvider(TTSProvider):
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:
-                    raise ValueError("无效的other[...]格式，应形如 other[{...}]")
+                    raise ValueError(t("msg-15c55ed8"))
                 json_str = match.group(1).strip()
                 otts_config = json.loads(json_str)
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
                 if missing := required - otts_config.keys():
-                    raise ValueError(f"缺少OTTS参数: {', '.join(missing)}")
+                    raise ValueError(t("msg-90b31925", res=', '.join(missing)))
                 return OTTSProvider(otts_config)
             except json.JSONDecodeError as e:
                 error_msg = (
@@ -232,12 +233,12 @@ class AzureTTSProvider(TTSProvider):
                     f"错误详情: {e.msg}\n"
                     f"错误上下文: {json_str[max(0, e.pos - 30) : e.pos + 30]}"
                 )
-                raise ValueError(error_msg) from e
+                raise ValueError(t("msg-10f72727", error_msg=error_msg))
             except KeyError as e:
-                raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
+                raise ValueError(t("msg-60b044ea", e=e)) from e
         if re.fullmatch(r"^[a-zA-Z0-9]{32}$", key_value):
             return AzureNativeProvider(config, self.provider_settings)
-        raise ValueError("订阅密钥格式无效，应为32位字母数字或other[...]格式")
+        raise ValueError(t("msg-5c7dee08"))
 
     async def get_audio(self, text: str) -> str:
         if isinstance(self.provider, OTTSProvider):

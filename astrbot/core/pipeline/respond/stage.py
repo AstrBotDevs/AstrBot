@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import math
 import random
@@ -85,8 +86,8 @@ class RespondStage(Stage):
             try:
                 self.interval = [float(t) for t in interval_str_ls]
             except BaseException as e:
-                logger.error(f"解析分段回复的间隔时间失败。{e}")
-            logger.info(f"分段回复间隔时间：{self.interval}")
+                logger.error(t("msg-59539c6e", e=e))
+            logger.info(t("msg-4ddee754", res=self.interval))
 
     async def _word_cnt(self, text: str) -> int:
         """分段回复 统计字数"""
@@ -182,12 +183,12 @@ class RespondStage(Stage):
             return
 
         logger.info(
-            f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
+            t("msg-5e2371a9", res=event.get_sender_name(), res_2=event.get_sender_id(), res_3=event._outline_chain(result.chain)),
         )
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
-                logger.warning("async_stream 为空，跳过发送。")
+                logger.warning(t("msg-df92ac24"))
                 return
             # 流式结果直接交付平台适配器处理
             realtime_segmenting = (
@@ -197,7 +198,7 @@ class RespondStage(Stage):
                 )
                 == "realtime_segmenting"
             )
-            logger.info(f"应用流式输出({event.get_platform_id()})")
+            logger.info(t("msg-858b0e4f", res=event.get_platform_id()))
             await event.send_streaming(result.async_stream, realtime_segmenting)
             return
         if len(result.chain) > 0:
@@ -212,10 +213,10 @@ class RespondStage(Stage):
             # 检查消息链是否为空
             try:
                 if await self._is_empty_message_chain(result.chain):
-                    logger.info("消息为空，跳过发送阶段")
+                    logger.info(t("msg-22c7a672"))
                     return
             except Exception as e:
-                logger.warning(f"空内容检查异常: {e}")
+                logger.warning(t("msg-e6ab7a25", e=e))
 
             # 将 Plain 为空的消息段移除
             result.chain = [
@@ -239,7 +240,7 @@ class RespondStage(Stage):
                 if not result.chain or len(result.chain) == 0:
                     # may fix #2670
                     logger.warning(
-                        f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
+                        t("msg-b29b99c1", header_comps=header_comps, res=result.chain),
                     )
                     return
                 for comp in result.chain:
@@ -253,7 +254,7 @@ class RespondStage(Stage):
                             header_comps.clear()
                     except Exception as e:
                         logger.error(
-                            f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
+                            t("msg-842df577", res=MessageChain([comp]), e=e),
                             exc_info=True,
                         )
             else:
@@ -263,7 +264,7 @@ class RespondStage(Stage):
                 ):
                     # may fix #2670
                     logger.warning(
-                        f"消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: {result.chain}",
+                        t("msg-f35465cf", res=result.chain),
                     )
                     return
                 sep_comps = self._extract_comp(
@@ -277,7 +278,7 @@ class RespondStage(Stage):
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
-                            f"发送消息链失败: chain = {chain}, error = {e}",
+                            t("msg-784e8a67", chain=chain, e=e),
                             exc_info=True,
                         )
                 chain = MessageChain(result.chain)
@@ -286,7 +287,7 @@ class RespondStage(Stage):
                         await event.send(chain)
                     except Exception as e:
                         logger.error(
-                            f"发送消息链失败: chain = {chain}, error = {e}",
+                            t("msg-784e8a67", chain=chain, e=e),
                             exc_info=True,
                         )
 

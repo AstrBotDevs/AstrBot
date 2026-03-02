@@ -3,6 +3,7 @@
 在 AstrBot 中, 会话和对话是独立的, 会话用于标记对话窗口, 例如群聊"123456789"可以建立一个会话,
 在一个会话中可以建立多个对话, 并且支持对话的切换和删除
 """
+from astrbot.core.lang import t
 
 import json
 from collections.abc import Awaitable, Callable
@@ -54,7 +55,7 @@ class ConversationManager:
                 from astrbot.core import logger
 
                 logger.error(
-                    f"会话删除回调执行失败 (session: {unified_msg_origin}): {e}",
+                    t("msg-86f404dd", unified_msg_origin=unified_msg_origin, e=e),
                 )
 
     def _convert_conv_from_v2_to_v1(self, conv_v2: ConversationV2) -> Conversation:
@@ -347,7 +348,7 @@ class ConversationManager:
         """
         conv = await self.db.get_conversation_by_id(cid=cid)
         if not conv:
-            raise Exception(f"Conversation with id {cid} not found")
+            raise Exception(t("msg-57dcc41f", cid=cid))
         history = conv.content or []
         if isinstance(user_message, UserMessageSegment):
             user_msg_dict = user_message.model_dump()

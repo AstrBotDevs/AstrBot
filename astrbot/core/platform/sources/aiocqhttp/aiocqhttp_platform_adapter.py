@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import inspect
 import itertools
@@ -69,7 +70,7 @@ class AiocqhttpAdapter(Platform):
                     return
                 await self.handle_msg(abm)
             except Exception as e:
-                logger.exception(f"Handle request message failed: {e}")
+                logger.exception(t("msg-859d480d", e=e))
                 return
 
         @self.bot.on_notice()
@@ -79,7 +80,7 @@ class AiocqhttpAdapter(Platform):
                 if abm:
                     await self.handle_msg(abm)
             except Exception as e:
-                logger.exception(f"Handle notice message failed: {e}")
+                logger.exception(t("msg-6fb672e1", e=e))
                 return
 
         @self.bot.on_message("group")
@@ -89,7 +90,7 @@ class AiocqhttpAdapter(Platform):
                 if abm:
                     await self.handle_msg(abm)
             except Exception as e:
-                logger.exception(f"Handle group message failed: {e}")
+                logger.exception(t("msg-cf4687a3", e=e))
                 return
 
         @self.bot.on_message("private")
@@ -99,12 +100,12 @@ class AiocqhttpAdapter(Platform):
                 if abm:
                     await self.handle_msg(abm)
             except Exception as e:
-                logger.exception(f"Handle private message failed: {e}")
+                logger.exception(t("msg-3a9853e3", e=e))
                 return
 
         @self.bot.on_websocket_connection
         def on_websocket_connection(_) -> None:
-            logger.info("aiocqhttp(OneBot v11) 适配器已连接。")
+            logger.info(t("msg-ec06dc3d"))
 
     async def send_by_session(
         self,
@@ -126,7 +127,7 @@ class AiocqhttpAdapter(Platform):
         await super().send_by_session(session, message_chain)
 
     async def convert_message(self, event: Event) -> AstrBotMessage | None:
-        logger.debug(f"[aiocqhttp] RawMessage {event}")
+        logger.debug(t("msg-1304a54d", event=event))
 
         if event["post_type"] == "message":
             abm = await self._convert_handle_message_event(event)
@@ -231,12 +232,12 @@ class AiocqhttpAdapter(Platform):
         message_str = ""
         if not isinstance(event.message, list):
             err = f"aiocqhttp: 无法识别的消息类型: {event.message!s}，此条消息将被忽略。如果您在使用 go-cqhttp，请将其配置文件中的 message.post-format 更改为 array。"
-            logger.critical(err)
+            logger.critical(t("msg-93cbb9fa", err=err))
             try:
                 await self.bot.send(event, err)
             except BaseException as e:
-                logger.error(f"回复消息失败: {e}")
-            raise ValueError(err)
+                logger.error(t("msg-a4487a03", e=e))
+            raise ValueError(t("msg-93cbb9fa", err=err))
 
         # 按消息段类型类型适配
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
@@ -254,7 +255,7 @@ class AiocqhttpAdapter(Platform):
                 for m in m_group:
                     if m["data"].get("url") and m["data"].get("url").startswith("http"):
                         # Lagrange
-                        logger.info("guessing lagrange")
+                        logger.info(t("msg-48bc7bff"))
                         # 检查多个可能的文件名字段
                         file_name = (
                             m["data"].get("file_name", "")
@@ -290,12 +291,12 @@ class AiocqhttpAdapter(Platform):
                                 a = File(name=file_name, url=file_url)
                                 abm.message.append(a)
                             else:
-                                logger.error(f"获取文件失败: {ret}")
+                                logger.error(t("msg-6ab145a1", ret=ret))
 
                         except ActionFailed as e:
-                            logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                            logger.error(t("msg-457454d7", e=e))
                         except BaseException as e:
-                            logger.error(f"获取文件失败: {e}，此消息段将被忽略。")
+                            logger.error(t("msg-457454d7", e=e))
 
             elif t == "reply":
                 for m in m_group:
@@ -313,7 +314,7 @@ class AiocqhttpAdapter(Platform):
                             new_event = Event.from_payload(reply_event_data)
                             if not new_event:
                                 logger.error(
-                                    f"无法从回复消息数据构造 Event 对象: {reply_event_data}",
+                                    t("msg-7a299806", reply_event_data=reply_event_data),
                                 )
                                 continue
                             abm_reply = await self._convert_handle_message_event(
@@ -334,7 +335,7 @@ class AiocqhttpAdapter(Platform):
 
                             abm.message.append(reply_seg)
                         except BaseException as e:
-                            logger.error(f"获取引用消息失败: {e}。")
+                            logger.error(t("msg-e6633a51", e=e))
                             a = ComponentTypes[t](**m["data"])
                             abm.message.append(a)
             elif t == "at":
@@ -384,9 +385,9 @@ class AiocqhttpAdapter(Platform):
                         else:
                             abm.message.append(At(qq=str(m["data"]["qq"]), name=""))
                     except ActionFailed as e:
-                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+                        logger.error(t("msg-6e99cb8d", e=e))
                     except BaseException as e:
-                        logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
+                        logger.error(t("msg-6e99cb8d", e=e))
 
                 message_str += "".join(at_parts)
             elif t == "markdown":
@@ -399,14 +400,14 @@ class AiocqhttpAdapter(Platform):
                     try:
                         if t not in ComponentTypes:
                             logger.warning(
-                                f"不支持的消息段类型，已忽略: {t}, data={m['data']}"
+                                t("msg-cf15fd40", t=t, res=m['data'])
                             )
                             continue
                         a = ComponentTypes[t](**m["data"])
                         abm.message.append(a)
                     except Exception as e:
                         logger.exception(
-                            f"消息段解析失败: type={t}, data={m['data']}. {e}"
+                            t("msg-45d126ad", t=t, res=m['data'], e=e)
                         )
                         continue
 
@@ -419,7 +420,7 @@ class AiocqhttpAdapter(Platform):
     def run(self) -> Awaitable[Any]:
         if not self.host or not self.port:
             logger.warning(
-                "aiocqhttp: 未配置 ws_reverse_host 或 ws_reverse_port，将使用默认值：http://0.0.0.0:6199",
+                t("msg-394a20ae"),
             )
             self.host = "0.0.0.0"
             self.port = 6199
@@ -476,7 +477,7 @@ class AiocqhttpAdapter(Platform):
 
     async def shutdown_trigger_placeholder(self) -> None:
         await self.shutdown_event.wait()
-        logger.info("aiocqhttp 适配器已被关闭")
+        logger.info(t("msg-7414707c"))
 
     def meta(self) -> PlatformMetadata:
         return self.metadata

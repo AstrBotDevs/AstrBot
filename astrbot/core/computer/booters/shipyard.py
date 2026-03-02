@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from shipyard import ShipyardClient, Spec
 
 from astrbot.api import logger
@@ -27,7 +28,7 @@ class ShipyardBooter(ComputerBooter):
             max_session_num=self._session_num,
             session_id=session_id,
         )
-        logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
+        logger.info(t("msg-b03115b0", res=ship.id, session_id=session_id))
         self._ship = ship
 
     async def shutdown(self) -> None:
@@ -80,5 +81,5 @@ class ShipyardBooter(ComputerBooter):
             )
             return health
         except Exception as e:
-            logger.error(f"Error checking Shipyard sandbox availability: {e}")
+            logger.error(t("msg-c5ce8bde", e=e))
             return False

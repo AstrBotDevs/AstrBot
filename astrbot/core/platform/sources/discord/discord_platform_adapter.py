@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import re
 import sys
@@ -64,7 +65,7 @@ class DiscordPlatformAdapter(Platform):
         """通过会话发送消息"""
         if self.client.user is None:
             logger.error(
-                "[Discord] 客户端未就绪 (self.client.user is None)，无法发送消息"
+                t("msg-7ea23347")
             )
             return
 
@@ -78,14 +79,14 @@ class DiscordPlatformAdapter(Platform):
             channel_id = int(channel_id_str)
             channel = self.client.get_channel(channel_id)
         except (ValueError, TypeError):
-            logger.warning(f"[Discord] Invalid channel ID format: {channel_id_str}")
+            logger.warning(t("msg-ff6611ce", channel_id_str=channel_id_str))
 
         if channel:
             message_obj.type = self._get_message_type(channel)
             message_obj.group_id = self._get_channel_id(channel)
         else:
             logger.warning(
-                f"[Discord] Can't get channel info for {channel_id_str}, will guess message type.",
+                t("msg-5e4e5d63", channel_id_str=channel_id_str),
             )
             message_obj.type = MessageType.GROUP_MESSAGE
             message_obj.group_id = session.session_id
@@ -127,7 +128,7 @@ class DiscordPlatformAdapter(Platform):
 
         # 初始化回调函数
         async def on_received(message_data) -> None:
-            logger.debug(f"[Discord] 收到消息: {message_data}")
+            logger.debug(t("msg-32d4751b", message_data=message_data))
             if self.client_self_id is None:
                 self.client_self_id = message_data.get("bot_id")
             abm = await self.convert_message(data=message_data)
@@ -136,7 +137,7 @@ class DiscordPlatformAdapter(Platform):
         # 初始化 Discord 客户端
         token = str(self.config.get("discord_token"))
         if not token:
-            logger.error("[Discord] Bot Token 未配置。请在配置文件中正确设置 token。")
+            logger.error(t("msg-8296c994"))
             return
 
         proxy = self.config.get("discord_proxy") or None
@@ -158,11 +159,11 @@ class DiscordPlatformAdapter(Platform):
             self._polling_task = asyncio.create_task(self.client.start_polling())
             await self.shutdown_event.wait()
         except discord.errors.LoginFailure:
-            logger.error("[Discord] 登录失败。请检查你的 Bot Token 是否正确。")
+            logger.error(t("msg-170b31df"))
         except discord.errors.ConnectionClosed:
-            logger.warning("[Discord] 与 Discord 的连接已关闭。")
+            logger.warning(t("msg-6678fbd3"))
         except Exception as e:
-            logger.error(f"[Discord] 适配器运行时发生意外错误: {e}", exc_info=True)
+            logger.error(t("msg-cd8c35d2", e=e), exc_info=True)
 
     def _get_message_type(
         self,
@@ -264,7 +265,7 @@ class DiscordPlatformAdapter(Platform):
 
         if self.client.user is None:
             logger.error(
-                "[Discord] 客户端未就绪 (self.client.user is None)，无法处理消息"
+                t("msg-4df30f1d")
             )
             return
 
@@ -283,7 +284,7 @@ class DiscordPlatformAdapter(Platform):
         raw_message = message.raw_message
         if not isinstance(raw_message, discord.Message):
             logger.warning(
-                f"[Discord] 收到非 Message 类型的消息: {type(raw_message)}，已忽略。"
+                t("msg-f7803502", res=type(raw_message))
             )
             return
 
@@ -325,7 +326,7 @@ class DiscordPlatformAdapter(Platform):
     @override
     async def terminate(self) -> None:
         """终止适配器"""
-        logger.info("[Discord] 正在终止适配器... (step 1: cancel polling task)")
+        logger.info(t("msg-134e70e9"))
         self.shutdown_event.set()
         # 优先 cancel polling_task
         if self._polling_task:
@@ -333,10 +334,10 @@ class DiscordPlatformAdapter(Platform):
             try:
                 await asyncio.wait_for(self._polling_task, timeout=10)
             except asyncio.CancelledError:
-                logger.info("[Discord] polling_task 已取消。")
+                logger.info(t("msg-5c01a092"))
             except Exception as e:
-                logger.warning(f"[Discord] polling_task 取消异常: {e}")
-        logger.info("[Discord] 正在清理已注册的斜杠指令... (step 2)")
+                logger.warning(t("msg-77f8ca59", e=e))
+        logger.info(t("msg-528b6618"))
         # 清理指令
         if self.enable_command_register and self.client:
             try:
@@ -347,16 +348,16 @@ class DiscordPlatformAdapter(Platform):
                     ),
                     timeout=10,
                 )
-                logger.info("[Discord] 指令清理完成。")
+                logger.info(t("msg-d0b832e6"))
             except Exception as e:
-                logger.error(f"[Discord] 清理指令时发生错误: {e}", exc_info=True)
-        logger.info("[Discord] 正在关闭 Discord 客户端... (step 3)")
+                logger.error(t("msg-43383f5e", e=e), exc_info=True)
+        logger.info(t("msg-b960ed33"))
         if self.client and hasattr(self.client, "close"):
             try:
                 await asyncio.wait_for(self.client.close(), timeout=10)
             except Exception as e:
-                logger.warning(f"[Discord] 客户端关闭异常: {e}")
-        logger.info("[Discord] 适配器已终止。")
+                logger.warning(t("msg-5e58f8a2", e=e))
+        logger.info(t("msg-d1271bf1"))
 
     def register_handler(self, handler_info) -> None:
         """注册处理器信息"""
@@ -364,7 +365,7 @@ class DiscordPlatformAdapter(Platform):
 
     async def _collect_and_register_commands(self) -> None:
         """收集所有指令并注册到Discord"""
-        logger.info("[Discord] 开始收集并注册斜杠指令...")
+        logger.info(t("msg-c374da7a"))
         registered_commands = []
 
         for handler_md in star_handlers_registry:
@@ -405,15 +406,15 @@ class DiscordPlatformAdapter(Platform):
 
         if registered_commands:
             logger.info(
-                f"[Discord] 准备同步 {len(registered_commands)} 个指令: {', '.join(registered_commands)}",
+                t("msg-a6d37e4d", res=len(registered_commands), res_2=', '.join(registered_commands)),
             )
         else:
-            logger.info("[Discord] 没有发现可注册的指令。")
+            logger.info(t("msg-dbcaf095"))
 
         # 使用 Pycord 的方法同步指令
         # 注意：这可能需要一些时间，并且有频率限制
         await self.client.sync_commands()
-        logger.info("[Discord] 指令同步完成。")
+        logger.info(t("msg-09209f2f"))
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
@@ -422,17 +423,15 @@ class DiscordPlatformAdapter(Platform):
             ctx: discord.ApplicationContext, params: str | None = None
         ) -> None:
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
-            logger.debug(f"[Discord] 回调函数触发: {cmd_name}")
-            logger.debug(f"[Discord] 回调函数参数: {ctx}")
-            logger.debug(f"[Discord] 回调函数参数: {params}")
+            logger.debug(t("msg-a95055fd", cmd_name=cmd_name))
+            logger.debug(t("msg-55b13b1e", ctx=ctx))
+            logger.debug(t("msg-79f72e4e", params=params))
             message_str_for_filter = cmd_name
             if params:
                 message_str_for_filter += f" {params}"
 
             logger.debug(
-                f"[Discord] 斜杠指令 '{cmd_name}' 被触发。 "
-                f"原始参数: '{params}'. "
-                f"构建的指令字符串: '{message_str_for_filter}'",
+                t("msg-22add467", cmd_name=cmd_name, params=params, message_str_for_filter=message_str_for_filter),
             )
 
             # 尝试立即响应，防止超时
@@ -441,7 +440,7 @@ class DiscordPlatformAdapter(Platform):
                 await ctx.defer()
                 followup_webhook = ctx.followup
             except Exception as e:
-                logger.warning(f"[Discord] 指令 '{cmd_name}' defer 失败: {e}")
+                logger.warning(t("msg-ccffc74a", cmd_name=cmd_name, e=e))
 
             # 2. 构建 AstrBotMessage
             channel = ctx.channel
@@ -503,7 +502,7 @@ class DiscordPlatformAdapter(Platform):
 
         # Discord 斜杠指令名称规范
         if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
-            logger.debug(f"[Discord] 跳过不符合规范的指令: {cmd_name}")
+            logger.debug(t("msg-13402a28", cmd_name=cmd_name))
             return None
 
         description = handler_metadata.desc or f"指令: {cmd_name}"

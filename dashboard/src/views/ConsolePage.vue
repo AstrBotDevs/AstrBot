@@ -31,6 +31,17 @@ const { tm } = useModuleI18n('features/console');
           color="primary"
           style="margin-right: 16px;"
         ></v-switch>
+        <v-select
+          :model-value="logLangLocale"
+          :items="logLanguageItems"
+          :label="tm('loggingLocalization.button')"
+          hide-details
+          density="compact"
+          rounded="md"
+          variant="outlined"
+          style="max-width: 200px; margin-right: 16px;"
+          @update:model-value="setLogLanguage"
+        />
         <v-dialog v-model="pipDialog" width="400">
           <template v-slot:activator="{ props }">
             <v-btn variant="plain" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
@@ -70,6 +81,11 @@ export default {
   data() {
     return {
       autoScrollEnabled: true,
+      logLangLocale: localStorage.getItem('logLangLocale') || 'zh-CN',
+      logLanguageItems: [
+        { value: 'zh-CN', title: '🇨🇳 简体中文' },
+        { value: 'en-US', title: '🇺🇸 English' },
+      ],
       pipDialog: false,
       pipInstallPayload: {
         package: '',
@@ -102,6 +118,31 @@ export default {
         }).finally(() => {
           this.loading = false;
         });
+    },
+
+    async setLogLanguage(langLocale) {
+      if (!langLocale || langLocale === this.logLangLocale) return;
+
+      const previousLocale = this.logLangLocale;
+      this.logLangLocale = langLocale;
+
+      try {
+        const response = await axios.post('/api/setLang', { lang: langLocale });
+        const ok =
+          response?.data?.status ? response.data.status === 'ok' :
+          response?.data?.code ? response.data.code === 200 :
+          true;
+
+        if (ok) {
+          localStorage.setItem('logLangLocale', langLocale);
+        } else {
+          console.error('Failed to set language on server:', response?.data?.message);
+          this.logLangLocale = previousLocale;
+        }
+      } catch (error) {
+        console.error('Error setting language on server:', error);
+        this.logLangLocale = previousLocale;
+      }
     }
   }
 }

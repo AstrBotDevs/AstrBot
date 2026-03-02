@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import base64
 import json
@@ -82,7 +83,7 @@ class ProviderGoogleGenAI(Provider):
         )
         if proxy:
             http_options.async_client_args = {"proxy": proxy}
-            logger.info(f"[Gemini] 使用代理: {proxy}")
+            logger.info(t("msg-1474947f", proxy=proxy))
         self.client = genai.Client(
             api_key=self.chosen_api_key,
             http_options=http_options,
@@ -111,14 +112,14 @@ class ProviderGoogleGenAI(Provider):
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
                 logger.info(
-                    f"检测到 Key 异常({e.message})，正在尝试更换 API Key 重试... 当前 Key: {self.chosen_api_key[:12]}...",
+                    t("msg-e2a81024", res=e.message, res_2=self.chosen_api_key[:12]),
                 )
                 await asyncio.sleep(1)
                 return True
             logger.error(
-                f"检测到 Key 异常({e.message})，且已没有可用的 Key。 当前 Key: {self.chosen_api_key[:12]}...",
+                t("msg-0d388dae", res=e.message, res_2=self.chosen_api_key[:12]),
             )
-            raise Exception("达到了 Gemini 速率限制, 请稍后再试...")
+            raise Exception(t("msg-1465290c"))
 
         # 连接错误处理
         if is_connection_error(e):
@@ -144,7 +145,7 @@ class ProviderGoogleGenAI(Provider):
             self.provider_settings.get("streaming_response", False)
             and "IMAGE" in modalities
         ):
-            logger.warning("流式输出不支持图片模态，已自动降级为文本模态")
+            logger.warning(t("msg-7e9c01ca"))
             modalities = ["TEXT"]
 
         tool_list: list[types.Tool] | None = []
@@ -157,10 +158,10 @@ class ProviderGoogleGenAI(Provider):
             if native_coderunner:
                 tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
                 if native_search:
-                    logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
+                    logger.warning(t("msg-89bac423"))
                 if url_context:
                     logger.warning(
-                        "代码执行工具与URL上下文工具互斥，已忽略URL上下文工具",
+                        t("msg-301cf76e"),
                     )
             else:
                 if native_search:
@@ -171,13 +172,13 @@ class ProviderGoogleGenAI(Provider):
                         tool_list.append(types.Tool(url_context=types.UrlContext()))
                     else:
                         logger.warning(
-                            "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
+                            t("msg-356e7b28"),
                         )
 
         elif "gemini-2.0-lite" in model_name:
             if native_coderunner or native_search or url_context:
                 logger.warning(
-                    "gemini-2.0-lite 不支持代码执行、搜索工具和URL上下文，将忽略这些设置",
+                    t("msg-7d4e7d48"),
                 )
             tool_list = None
 
@@ -185,7 +186,7 @@ class ProviderGoogleGenAI(Provider):
             if native_coderunner:
                 tool_list.append(types.Tool(code_execution=types.ToolCodeExecution()))
                 if native_search:
-                    logger.warning("代码执行工具与搜索工具互斥，已忽略搜索工具")
+                    logger.warning(t("msg-89bac423"))
             elif native_search:
                 tool_list.append(types.Tool(google_search=types.GoogleSearch()))
 
@@ -194,14 +195,14 @@ class ProviderGoogleGenAI(Provider):
                     tool_list.append(types.Tool(url_context=types.UrlContext()))
                 else:
                     logger.warning(
-                        "当前 SDK 版本不支持 URL 上下文工具，已忽略该设置，请升级 google-genai 包",
+                        t("msg-356e7b28"),
                     )
 
         if not tool_list:
             tool_list = None
 
         if tools and tool_list:
-            logger.warning("已启用原生工具，函数工具将被忽略")
+            logger.warning(t("msg-cc5c666f"))
         elif tools and (func_desc := tools.get_func_desc_google_genai_style()):
             tool_list = [
                 types.Tool(function_declarations=func_desc["function_declarations"]),
@@ -244,7 +245,7 @@ class ProviderGoogleGenAI(Provider):
                 thinking_level = thinking_level.upper()
                 if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
                     logger.warning(
-                        f"Invalid thinking level: {thinking_level}, using HIGH"
+                        t("msg-aa7c77a5", thinking_level=thinking_level)
                     )
                     thinking_level = "HIGH"
                 level = types.ThinkingLevel(thinking_level)
@@ -285,7 +286,7 @@ class ProviderGoogleGenAI(Provider):
         def create_text_part(text: str) -> types.Part:
             content_a = text if text else " "
             if not text:
-                logger.warning("文本内容为空，已添加空格占位")
+                logger.warning(t("msg-59e1e769"))
             return types.Part.from_text(text=content_a)
 
         def process_image_url(image_url_dict: dict) -> types.Part:
@@ -349,7 +350,7 @@ class ProviderGoogleGenAI(Provider):
                             thinking_signature = base64.b64decode(thinking_signature)
                         except Exception as e:
                             logger.warning(
-                                f"Failed to decode google gemini thinking signature: {e}",
+                                t("msg-34c5c910", e=e),
                                 exc_info=True,
                             )
                             thinking_signature = None
@@ -382,10 +383,10 @@ class ProviderGoogleGenAI(Provider):
                         parts.append(part)
                     append_or_extend(gemini_contents, parts, types.ModelContent)
                 else:
-                    logger.warning("assistant 角色的消息内容为空，已添加空格占位")
+                    logger.warning(t("msg-a2357584"))
                     if native_tool_enabled and "tool_calls" in message:
                         logger.warning(
-                            "检测到启用Gemini原生工具，且上下文中存在函数调用，建议使用 /reset 重置上下文",
+                            t("msg-f627f75d"),
                         )
                     parts = [types.Part.from_text(text=" ")]
                     append_or_extend(gemini_contents, parts, types.ModelContent)
@@ -437,30 +438,30 @@ class ProviderGoogleGenAI(Provider):
     ) -> MessageChain:
         """处理内容部分并构建消息链"""
         if not candidate.content:
-            logger.warning(f"收到的 candidate.content 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content 为空。")
+            logger.warning(t("msg-cb743183", candidate=candidate))
+            raise Exception(t("msg-34b367fc"))
 
         finish_reason = candidate.finish_reason
         result_parts: list[types.Part] | None = candidate.content.parts
 
         if finish_reason == types.FinishReason.SAFETY:
-            raise Exception("模型生成内容未通过 Gemini 平台的安全检查")
+            raise Exception(t("msg-73541852"))
 
         if finish_reason in {
             types.FinishReason.PROHIBITED_CONTENT,
             types.FinishReason.SPII,
             types.FinishReason.BLOCKLIST,
         }:
-            raise Exception("模型生成内容违反 Gemini 平台政策")
+            raise Exception(t("msg-ae3cdcea"))
 
         # 防止旧版本SDK不存在IMAGE_SAFETY
         if hasattr(types.FinishReason, "IMAGE_SAFETY"):
             if finish_reason == types.FinishReason.IMAGE_SAFETY:
-                raise Exception("模型生成内容违反 Gemini 平台政策")
+                raise Exception(t("msg-ae3cdcea"))
 
         if not result_parts:
-            logger.warning(f"收到的 candidate.content.parts 为空: {candidate}")
-            raise Exception("API 返回的 candidate.content.parts 为空。")
+            logger.warning(t("msg-5d8f1711", candidate=candidate))
+            raise Exception(t("msg-57847bd5"))
 
         # 提取 reasoning content
         reasoning = self._extract_reasoning_content(candidate)
@@ -544,18 +545,18 @@ class ProviderGoogleGenAI(Provider):
                     contents=cast(types.ContentListUnion, conversation),
                     config=config,
                 )
-                logger.debug(f"genai result: {result}")
+                logger.debug(t("msg-a56c85e4", result=result))
 
                 if not result.candidates:
-                    logger.error(f"请求失败, 返回的 candidates 为空: {result}")
-                    raise Exception("请求失败, 返回的 candidates 为空。")
+                    logger.error(t("msg-42fc0767", result=result))
+                    raise Exception(t("msg-faf3a0dd"))
 
                 if result.candidates[0].finish_reason == types.FinishReason.RECITATION:
                     if temperature > 2:
-                        raise Exception("温度参数已超过最大值2，仍然发生recitation")
+                        raise Exception(t("msg-cd690916"))
                     temperature += 0.2
                     logger.warning(
-                        f"发生了recitation，正在提高温度至{temperature:.1f}重试...",
+                        t("msg-632e23d7", temperature=temperature),
                     )
                     continue
 
@@ -566,11 +567,11 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{model} 不支持 system prompt，已自动去除(影响人格设置)",
+                        t("msg-41ff84bc", model=model),
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
-                    logger.warning(f"{model} 不支持函数调用，已自动去除")
+                    logger.warning(t("msg-ef9512f7", model=model))
                     tools = None
                 elif (
                     "Multi-modal output is not supported" in e.message
@@ -579,7 +580,7 @@ class ProviderGoogleGenAI(Provider):
                     or "only supports text output" in e.message
                 ):
                     logger.warning(
-                        f"{model} 不支持多模态输出，降级为文本模态",
+                        t("msg-fde41b1d", model=model),
                     )
                     modalities = ["TEXT"]
                 else:
@@ -629,11 +630,11 @@ class ProviderGoogleGenAI(Provider):
                     e.message = ""
                 if "Developer instruction is not enabled" in e.message:
                     logger.warning(
-                        f"{model} 不支持 system prompt，已自动去除(影响人格设置)",
+                        t("msg-41ff84bc", model=model),
                     )
                     system_instruction = None
                 elif "Function calling is not enabled" in e.message:
-                    logger.warning(f"{model} 不支持函数调用，已自动去除")
+                    logger.warning(t("msg-ef9512f7", model=model))
                     tools = None
                 else:
                     raise
@@ -648,10 +649,10 @@ class ProviderGoogleGenAI(Provider):
             llm_response = LLMResponse("assistant", is_chunk=True)
 
             if not chunk.candidates:
-                logger.warning(f"收到的 chunk 中 candidates 为空: {chunk}")
+                logger.warning(t("msg-4e168d67", chunk=chunk))
                 continue
             if not chunk.candidates[0].content:
-                logger.warning(f"收到的 chunk 中 content 为空: {chunk}")
+                logger.warning(t("msg-11af7d46", chunk=chunk))
                 continue
 
             if chunk.candidates[0].content.parts and any(
@@ -770,7 +771,7 @@ class ProviderGoogleGenAI(Provider):
                     continue
                 break
 
-        raise Exception("请求失败。")
+        raise Exception(t("msg-8836d4a2"))
 
     async def text_chat_stream(
         self,
@@ -838,7 +839,7 @@ class ProviderGoogleGenAI(Provider):
                 and m.name
             ]
         except APIError as e:
-            raise Exception(f"获取模型列表失败: {e.message}")
+            raise Exception(t("msg-757d3828", res=e.message))
 
     def get_current_key(self) -> str:
         return self.chosen_api_key
@@ -868,7 +869,7 @@ class ProviderGoogleGenAI(Provider):
             else:
                 image_data = await self.encode_image_bs64(image_url)
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning(t("msg-7fc6f623", image_url=image_url))
                 return None
             return {
                 "type": "image_url",
@@ -898,7 +899,7 @@ class ProviderGoogleGenAI(Provider):
                     if image_part:
                         content_blocks.append(image_part)
                 else:
-                    raise ValueError(f"不支持的额外内容块类型: {type(part)}")
+                    raise ValueError(t("msg-0b041916", res=type(part)))
 
         # 3. 图片内容
         if image_urls:

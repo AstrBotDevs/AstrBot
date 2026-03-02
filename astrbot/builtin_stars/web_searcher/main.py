@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import json
 import random
@@ -41,7 +42,7 @@ class Main(star.Star):
             tavily_key = provider_settings.get("websearch_tavily_key")
             if isinstance(tavily_key, str):
                 logger.info(
-                    "检测到旧版 websearch_tavily_key (字符串格式)，自动迁移为列表格式并保存。",
+                    t("msg-7f5fd92b"),
                 )
                 if tavily_key:
                     provider_settings["websearch_tavily_key"] = [tavily_key]
@@ -85,7 +86,7 @@ class Main(star.Star):
         websearch_link: bool,
     ) -> str:
         """处理单个搜索结果"""
-        logger.info(f"web_searcher - scraping web: {result.title} - {result.url}")
+        logger.info(t("msg-bed9def5", res=result.title, res_2=result.url))
         try:
             site_result = await self._get_from_url(result.url)
         except BaseException:
@@ -110,15 +111,15 @@ class Main(star.Star):
         try:
             results = await self.bing_search.search(query, num_results)
         except Exception as e:
-            logger.error(f"bing search error: {e}, try the next one...")
+            logger.error(t("msg-8214760c", e=e))
         if len(results) == 0:
-            logger.debug("search bing failed")
+            logger.debug(t("msg-8676b5aa"))
             try:
                 results = await self.sogo_search.search(query, num_results)
             except Exception as e:
-                logger.error(f"sogo search error: {e}")
+                logger.error(t("msg-3fb6d6ad", e=e))
         if len(results) == 0:
-            logger.debug("search sogo failed")
+            logger.debug(t("msg-fe9b336f"))
             return []
 
         return results
@@ -127,7 +128,7 @@ class Main(star.Star):
         """并发安全的从列表中获取并轮换Tavily API密钥。"""
         tavily_keys = cfg.get("provider_settings", {}).get("websearch_tavily_key", [])
         if not tavily_keys:
-            raise ValueError("错误：Tavily API密钥未在AstrBot中配置。")
+            raise ValueError(t("msg-c991b022"))
 
         async with self.tavily_key_lock:
             key = tavily_keys[self.tavily_key_index]
@@ -155,7 +156,7 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Tavily web search failed: {reason}, status: {response.status}",
+                        t("msg-b4fbb4a9", reason=reason, res=response.status),
                     )
                 data = await response.json()
                 results = []
@@ -186,13 +187,13 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"Tavily web search failed: {reason}, status: {response.status}",
+                        t("msg-b4fbb4a9", reason=reason, res=response.status),
                     )
                 data = await response.json()
                 results: list[dict] = data.get("results", [])
                 if not results:
                     raise ValueError(
-                        "Error: Tavily web searcher does not return any results.",
+                        t("msg-6769aba9"),
                     )
                 return results
 
@@ -210,7 +211,7 @@ class Main(star.Star):
             max_results(number): 返回的最大搜索结果数量，默认为 5。
 
         """
-        logger.info(f"web_searcher - search_from_search_engine: {query}")
+        logger.info(t("msg-b1877974", query=query))
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         websearch_link = cfg["provider_settings"].get("web_search_link", False)
 
@@ -226,7 +227,7 @@ class Main(star.Star):
         ret = ""
         for processed_result in processed_results:
             if isinstance(processed_result, BaseException):
-                logger.error(f"Error processing search result: {processed_result}")
+                logger.error(t("msg-2360df6b", processed_result=processed_result))
                 continue
             ret += processed_result
 
@@ -245,7 +246,7 @@ class Main(star.Star):
         )
         if not key:
             raise ValueError(
-                "Error: Baidu AI Search API key is not configured in AstrBot.",
+                t("msg-359d0443"),
             )
         func_tool_mgr = self.context.get_llm_tool_manager()
         await func_tool_mgr.enable_mcp_server(
@@ -258,7 +259,7 @@ class Main(star.Star):
             },
         )
         self.baidu_initialized = True
-        logger.info("Successfully initialized Baidu AI Search MCP server.")
+        logger.info(t("msg-94351632"))
 
     @llm_tool(name="fetch_url")
     async def fetch_website_content(self, event: AstrMessageEvent, url: str) -> str:
@@ -298,11 +299,11 @@ class Main(star.Star):
             end_date(string): Optional. The end date for the search results in the format 'YYYY-MM-DD'.
 
         """
-        logger.info(f"web_searcher - search_from_tavily: {query}")
+        logger.info(t("msg-5a7207c1", query=query))
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         # websearch_link = cfg["provider_settings"].get("web_search_link", False)
         if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+            raise ValueError(t("msg-b36134c9"))
 
         # build payload
         payload = {"query": query, "max_results": max_results, "include_favicon": True}
@@ -363,10 +364,10 @@ class Main(star.Star):
         """
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         if not cfg.get("provider_settings", {}).get("websearch_tavily_key", []):
-            raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+            raise ValueError(t("msg-b36134c9"))
 
         if not url:
-            raise ValueError("Error: url must be a non-empty string.")
+            raise ValueError(t("msg-98ed69f4"))
         if extract_depth not in ["basic", "advanced"]:
             extract_depth = "basic"
         payload = {
@@ -387,7 +388,7 @@ class Main(star.Star):
         """并发安全的从列表中获取并轮换BoCha API密钥。"""
         bocha_keys = cfg.get("provider_settings", {}).get("websearch_bocha_key", [])
         if not bocha_keys:
-            raise ValueError("错误：BoCha API密钥未在AstrBot中配置。")
+            raise ValueError(t("msg-51edd9ee"))
 
         async with self.bocha_key_lock:
             key = bocha_keys[self.bocha_key_index]
@@ -415,7 +416,7 @@ class Main(star.Star):
                 if response.status != 200:
                     reason = await response.text()
                     raise Exception(
-                        f"BoCha web search failed: {reason}, status: {response.status}",
+                        t("msg-73964067", reason=reason, res=response.status),
                     )
                 data = await response.json()
                 data = data["data"]["webPages"]["value"]
@@ -488,11 +489,11 @@ class Main(star.Star):
                 The actual number of returned results may be less than the
                 specified count.
         """
-        logger.info(f"web_searcher - search_from_bocha: {query}")
+        logger.info(t("msg-34417720", query=query))
         cfg = self.context.get_config(umo=event.unified_msg_origin)
         # websearch_link = cfg["provider_settings"].get("web_search_link", False)
         if not cfg.get("provider_settings", {}).get("websearch_bocha_key", []):
-            raise ValueError("Error: BoCha API key is not configured in AstrBot.")
+            raise ValueError(t("msg-b798883b"))
 
         # build payload
         payload = {
@@ -591,7 +592,7 @@ class Main(star.Star):
                 await self.ensure_baidu_ai_search_mcp(event.unified_msg_origin)
                 aisearch_tool = func_tool_mgr.get_func("AIsearch")
                 if not aisearch_tool:
-                    raise ValueError("Cannot get Baidu AI Search MCP tool.")
+                    raise ValueError(t("msg-22993708"))
                 tool_set.add_tool(aisearch_tool)
                 tool_set.remove_tool("web_search")
                 tool_set.remove_tool("fetch_url")
@@ -599,7 +600,7 @@ class Main(star.Star):
                 tool_set.remove_tool("tavily_extract_web_page")
                 tool_set.remove_tool("web_search_bocha")
             except Exception as e:
-                logger.error(f"Cannot Initialize Baidu AI Search MCP Server: {e}")
+                logger.error(t("msg-6f8d62a4", e=e))
         elif provider == "bocha":
             web_search_bocha = func_tool_mgr.get_func("web_search_bocha")
             if web_search_bocha:

@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 from astrbot.api import logger
+from astrbot.core.lang import t
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
 from astrbot.core.star.context import Context
 from astrbot.core.utils.astrbot_path import (
@@ -383,38 +384,32 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     zip_path = zip_base.with_suffix(".zip")
 
     try:
-        if local_skill_dirs:
-            if zip_path.exists():
-                zip_path.unlink()
-            shutil.make_archive(str(zip_base), "zip", str(skills_root))
-            remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
-            logger.info("Uploading skills bundle to sandbox...")
-            await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-            upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
-            if not upload_result.get("success", False):
-                raise RuntimeError("Failed to upload skills bundle to sandbox.")
-        else:
-            logger.info(
-                "No local skills found. Keeping sandbox built-ins and refreshing metadata."
-            )
-            await booter.shell.exec(f"rm -f {SANDBOX_SKILLS_ROOT}/skills.zip")
-
-        # Keep backward-compatible behavior while splitting lifecycle into two
-        # observable phases: apply (filesystem mutation) + scan (metadata read).
-        await _apply_skills_to_sandbox(booter)
-        payload = await _scan_sandbox_skills(booter)
-        _update_sandbox_skills_cache(payload)
-        managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
-        logger.info(
-            "[Computer] Sandbox skill sync complete: managed=%d",
-            len(managed),
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+        shutil.make_archive(zip_base, "zip", skills_root)
+        remote_zip = Path(SANDBOX_SKILLS_ROOT) / "skills.zip"
+        logger.info(t("msg-7cb974b8"))
+        await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+        upload_result = await booter.upload_file(zip_path, str(remote_zip))
+        if not upload_result.get("success", False):
+            raise RuntimeError(t("msg-130cf3e3"))
+        # Use -n flag to never overwrite existing files, fallback to Python if unzip unavailable
+        await booter.shell.exec(
+            f"unzip -n {remote_zip} -d {SANDBOX_SKILLS_ROOT} || "
+            f"python3 -c \"import zipfile, os, pathlib; z=zipfile.ZipFile('{remote_zip}'); "
+            f"[z.extract(m, '{SANDBOX_SKILLS_ROOT}') for m in z.namelist() "
+            f"if not os.path.exists(os.path.join('{SANDBOX_SKILLS_ROOT}', m))]\" || "
+            f"python -c \"import zipfile, os, pathlib; z=zipfile.ZipFile('{remote_zip}'); "
+            f"[z.extract(m, '{SANDBOX_SKILLS_ROOT}') for m in z.namelist() "
+            f"if not os.path.exists(os.path.join('{SANDBOX_SKILLS_ROOT}', m))]\"; "
+            f"rm -f {remote_zip}"
         )
     finally:
         if zip_path.exists():
             try:
                 zip_path.unlink()
             except Exception:
-                logger.warning(f"Failed to remove temp skills zip: {zip_path}")
+                logger.warning(t("msg-99188d69", zip_path=zip_path))
 
 
 async def get_booter(
@@ -473,7 +468,7 @@ async def get_booter(
 
             client = BoxliteBooter()
         else:
-            raise ValueError(f"Unknown booter type: {booter_type}")
+            raise ValueError(t("msg-3f3c81da", booter_type=booter_type))
 
         try:
             await client.boot(uuid_str)
@@ -482,7 +477,7 @@ async def get_booter(
             )
             await _sync_skills_to_sandbox(client)
         except Exception as e:
-            logger.error(f"Error booting sandbox for session {session_id}: {e}")
+            logger.error(t("msg-e20cc33a", session_id=session_id, e=e))
             raise e
 
         session_booter[session_id] = client

@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import base64
 from collections.abc import Callable
 from typing import Any
@@ -42,14 +43,13 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
         if not isinstance(url, str):
             skipped_invalid_images += 1
             logger.debug(
-                "Skipped DeerFlow image input because value is not a string: %r",
-                type(image_url).__name__,
+                t("msg-3958eaa0", res=type(image_url).__name__),
             )
             continue
         url = url.strip()
         if not url:
             skipped_invalid_images += 1
-            logger.debug("Skipped DeerFlow image input because value is empty.")
+            logger.debug(t("msg-582f6f32"))
             continue
         if url.startswith(("http://", "https://", "data:")):
             content.append({"type": "image_url", "image_url": {"url": url}})
@@ -58,7 +58,7 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
         if not is_likely_base64_image(url):
             skipped_invalid_images += 1
             logger.debug(
-                "Skipped DeerFlow image input because it is neither URL/data URI nor valid base64."
+                t("msg-935c7c66")
             )
             continue
         compact_base64 = url.replace("\n", "").replace("\r", "")
@@ -79,17 +79,14 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
         content.insert(0, {"type": "text", "text": note_text})
         if not any_valid_image:
             logger.warning(
-                "All %d provided DeerFlow image inputs were rejected as invalid or unsupported.",
-                skipped_invalid_images,
+                t("msg-764cafe0", skipped_invalid_images=skipped_invalid_images),
             )
         else:
             logger.info(
-                "%d DeerFlow image input(s) were rejected as invalid or unsupported.",
-                skipped_invalid_images,
+                t("msg-7d6f7e4d", skipped_invalid_images=skipped_invalid_images),
             )
         logger.debug(
-            "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
-            skipped_invalid_images,
+            t("msg-67438dc2", skipped_invalid_images=skipped_invalid_images),
         )
     return content
 

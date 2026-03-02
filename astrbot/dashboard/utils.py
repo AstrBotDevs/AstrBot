@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import base64
 import traceback
 from io import BytesIO
@@ -34,7 +35,7 @@ async def generate_tsne_visualization(
         from sklearn.manifold import TSNE
     except ImportError as e:
         raise Exception(
-            "缺少必要的库以生成 t-SNE 可视化。请安装 matplotlib 和 scikit-learn: {e}",
+            t("msg-32a21658", e=e),
         ) from e
 
     try:
@@ -46,7 +47,7 @@ async def generate_tsne_visualization(
                 break
 
         if not kb_helper:
-            logger.warning("未找到知识库")
+            logger.warning(t("msg-aa3a3dbf"))
             return None
 
         kb = kb_helper.kb
@@ -54,17 +55,17 @@ async def generate_tsne_visualization(
 
         # 读取 FAISS 索引
         if not index_path.exists():
-            logger.warning(f"FAISS 索引不存在: {index_path!s}")
+            logger.warning(t("msg-0e404ea3", index_path=index_path))
             return None
 
         index = faiss.read_index(str(index_path))
 
         if index.ntotal == 0:
-            logger.warning("索引为空")
+            logger.warning(t("msg-8d92420c"))
             return None
 
         # 提取所有向量
-        logger.info(f"提取 {index.ntotal} 个向量用于可视化...")
+        logger.info(t("msg-24c0450e", res=index.ntotal))
         if isinstance(index, faiss.IndexIDMap):
             base_index = faiss.downcast_index(index.index)
             if hasattr(base_index, "reconstruct_n"):
@@ -90,7 +91,7 @@ async def generate_tsne_visualization(
         all_vectors = np.vstack([vectors, query_vector])
 
         # t-SNE 降维
-        logger.info("开始 t-SNE 降维...")
+        logger.info(t("msg-632d0acf"))
         perplexity = min(30, all_vectors.shape[0] - 1)
         tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
         vectors_2d = tsne.fit_transform(all_vectors)
@@ -100,7 +101,7 @@ async def generate_tsne_visualization(
         query_vector_2d = vectors_2d[-1]
 
         # 可视化
-        logger.info("生成可视化图表...")
+        logger.info(t("msg-61f0449f"))
         plt.figure(figsize=(14, 10))
 
         # 绘制知识库向量
@@ -159,6 +160,6 @@ async def generate_tsne_visualization(
         return img_base64
 
     except Exception as e:
-        logger.error(f"生成 t-SNE 可视化时出错: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(t("msg-4436ad2b", e=e))
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
         return None

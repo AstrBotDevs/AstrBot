@@ -26,6 +26,7 @@ dependencies = [
   "docstring-parser>=0.16",
   "faiss-cpu>=1.12.0",
   "filelock>=3.18.0",
+  "fluent.runtime>=0.4.0",
   "google-genai>=1.56.0",
   "lark-oapi>=1.4.15",
   "lxml-html-clean>=0.4.2",

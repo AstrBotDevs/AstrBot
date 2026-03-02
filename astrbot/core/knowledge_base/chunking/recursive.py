@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from collections.abc import Callable
 
 from .base import BaseChunker
@@ -154,11 +155,11 @@ class RecursiveCharacterChunker(BaseChunker):
         if overlap is None:
             overlap = self.chunk_overlap
         if chunk_size <= 0:
-            raise ValueError("chunk_size must be greater than 0")
+            raise ValueError(t("msg-21db456a"))
         if overlap < 0:
-            raise ValueError("chunk_overlap must be non-negative")
+            raise ValueError(t("msg-c0656f4e"))
         if overlap >= chunk_size:
-            raise ValueError("chunk_overlap must be less than chunk_size")
+            raise ValueError(t("msg-82bd199c"))
         result = []
         for i in range(0, len(text), chunk_size - overlap):
             end = min(i + chunk_size, len(text))

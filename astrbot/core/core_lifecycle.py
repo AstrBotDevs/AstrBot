@@ -8,6 +8,7 @@
 2. 启动事件总线和任务, 所有任务都在这里运行
 3. 执行启动完成事件钩子
 """
+from astrbot.core.lang import t
 
 import asyncio
 import os
@@ -65,7 +66,7 @@ class AstrBotCoreLifecycle:
         if proxy_config != "":
             os.environ["https_proxy"] = proxy_config
             os.environ["http_proxy"] = proxy_config
-            logger.debug(f"Using proxy: {proxy_config}")
+            logger.debug(t("msg-9967ec8b", proxy_config=proxy_config))
             # 设置 no_proxy
             no_proxy_list = self.astrbot_config.get("no_proxy", [])
             os.environ["no_proxy"] = ",".join(no_proxy_list)
@@ -77,7 +78,7 @@ class AstrBotCoreLifecycle:
                 del os.environ["http_proxy"]
             if "no_proxy" in os.environ:
                 del os.environ["no_proxy"]
-            logger.debug("HTTP proxy cleared")
+            logger.debug(t("msg-5a29b73d"))
 
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
@@ -95,7 +96,7 @@ class AstrBotCoreLifecycle:
                 self.astrbot_config.get("subagent_orchestrator", {}),
             )
         except Exception as e:
-            logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
+            logger.error(t("msg-fafb87ce", e=e), exc_info=True)
 
     async def initialize(self) -> None:
         """初始化 AstrBot 核心生命周期管理类.
@@ -143,8 +144,8 @@ class AstrBotCoreLifecycle:
                 self.astrbot_config_mgr,
             )
         except Exception as e:
-            logger.error(f"AstrBot migration failed: {e!s}")
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-f7861f86", e=e))
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
         # 初始化事件队列
         self.event_queue = Queue()
@@ -283,10 +284,10 @@ class AstrBotCoreLifecycle:
             pass  # 任务被取消, 静默处理
         except Exception as e:
             # 获取完整的异常堆栈信息, 按行分割并记录到日志中
-            logger.error(f"------- 任务 {task.get_name()} 发生错误: {e}")
+            logger.error(t("msg-967606fd", res=task.get_name(), e=e))
             for line in traceback.format_exc().split("\n"):
-                logger.error(f"|    {line}")
-            logger.error("-------")
+                logger.error(t("msg-a2cd77f3", line=line))
+            logger.error(t("msg-1f686eeb"))
 
     async def start(self) -> None:
         """启动 AstrBot 核心生命周期管理类.
@@ -294,7 +295,7 @@ class AstrBotCoreLifecycle:
         用load加载事件总线和任务并初始化, 执行启动完成事件钩子
         """
         self._load()
-        logger.info("AstrBot 启动完成。")
+        logger.info(t("msg-9556d279"))
 
         # 执行启动完成事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -303,11 +304,11 @@ class AstrBotCoreLifecycle:
         for handler in handlers:
             try:
                 logger.info(
-                    f"hook(on_astrbot_loaded) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
+                    t("msg-daaf690b", res=star_map[handler.handler_module_path].name, res_2=handler.handler_name),
                 )
                 await handler.handler()
             except BaseException:
-                logger.error(traceback.format_exc())
+                logger.error(t("msg-78b9c276", res=traceback.format_exc()))
 
         # 同时运行curr_tasks中的所有任务
         await asyncio.gather(*self.curr_tasks, return_exceptions=True)
@@ -328,9 +329,9 @@ class AstrBotCoreLifecycle:
             try:
                 await self.plugin_manager._terminate_plugin(plugin)
             except Exception as e:
-                logger.warning(traceback.format_exc())
+                logger.warning(t("msg-78b9c276", res=traceback.format_exc()))
                 logger.warning(
-                    f"插件 {plugin.name} 未被正常终止 {e!s}, 可能会导致资源泄露等问题。",
+                    t("msg-4719cb33", res=plugin.name, e=e),
                 )
 
         await self.provider_manager.terminate()
@@ -345,7 +346,7 @@ class AstrBotCoreLifecycle:
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+                logger.error(t("msg-c3bbfa1d", res=task.get_name(), e=e))
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
@@ -397,7 +398,7 @@ class AstrBotCoreLifecycle:
         """
         ab_config = self.astrbot_config_mgr.confs.get(conf_id)
         if not ab_config:
-            raise ValueError(f"配置文件 {conf_id} 不存在")
+            raise ValueError(t("msg-af06ccab", conf_id=conf_id))
         scheduler = PipelineScheduler(
             PipelineContext(ab_config, self.plugin_manager, conf_id),
         )

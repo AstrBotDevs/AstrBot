@@ -6,6 +6,7 @@
 3. 签名校验 (SHA256)
 4. 事件接收和处理
 """
+from astrbot.core.lang import t
 
 import asyncio
 import base64
@@ -109,7 +110,7 @@ class LarkWebhookServer:
             解密后的事件字典
         """
         if not self.cipher:
-            raise ValueError("未配置 encrypt_key，无法解密事件")
+            raise ValueError(t("msg-2f3bccf1"))
 
         decrypted_str = self.cipher.decrypt_string(encrypted_data)
         return json.loads(decrypted_str)
@@ -124,7 +125,7 @@ class LarkWebhookServer:
             包含 challenge 的响应
         """
         challenge = event_data.get("challenge", "")
-        logger.info(f"[Lark Webhook] 收到 challenge 验证请求: {challenge}")
+        logger.info(t("msg-e77104e2", challenge=challenge))
 
         return {"challenge": challenge}
 
@@ -143,11 +144,11 @@ class LarkWebhookServer:
         try:
             event_data = await request.json
         except Exception as e:
-            logger.error(f"[Lark Webhook] 解析请求体失败: {e}")
+            logger.error(t("msg-34b24fa1", e=e))
             return {"error": "Invalid JSON"}, 400
 
         if not event_data:
-            logger.error("[Lark Webhook] 请求体为空")
+            logger.error(t("msg-ec0fe13e"))
             return {"error": "Empty request body"}, 400
 
         # 如果配置了 encrypt_key，进行签名验证
@@ -160,16 +161,16 @@ class LarkWebhookServer:
                 if not self.verify_signature(
                     timestamp, nonce, self.encrypt_key, body, signature
                 ):
-                    logger.error("[Lark Webhook] 签名验证失败")
+                    logger.error(t("msg-f69ebbdb"))
                     return {"error": "Invalid signature"}, 401
 
         # 检查是否是加密事件
         if "encrypt" in event_data:
             try:
                 event_data = self.decrypt_event(event_data["encrypt"])
-                logger.debug(f"[Lark Webhook] 解密后的事件: {event_data}")
+                logger.debug(t("msg-7ece4036", event_data=event_data))
             except Exception as e:
-                logger.error(f"[Lark Webhook] 解密事件失败: {e}")
+                logger.error(t("msg-f2cb4b46", e=e))
                 return {"error": "Decryption failed"}, 400
 
         # 验证 token
@@ -180,7 +181,7 @@ class LarkWebhookServer:
             else:
                 token = event_data.get("token", "")
             if token != self.verification_token:
-                logger.error("[Lark Webhook] Verification Token 不匹配。")
+                logger.error(t("msg-ef9f8906"))
                 return {"error": "Invalid verification token"}, 401
 
         # 处理 URL 验证 (challenge)
@@ -192,7 +193,7 @@ class LarkWebhookServer:
             try:
                 await self.callback(event_data)
             except Exception as e:
-                logger.error(f"[Lark Webhook] 处理事件回调失败: {e}", exc_info=True)
+                logger.error(t("msg-bedb2071", e=e), exc_info=True)
                 return {"error": "Event processing failed"}, 500
 
         return {}

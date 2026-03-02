@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import hashlib
 import json
@@ -116,8 +117,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 await api_client.close()
             except Exception as e:
                 logger.warning(
-                    "Failed to close DeerFlowAPIClient during runner shutdown: %s",
-                    e,
+                    t("msg-d5533e66", e=e),
                     exc_info=True,
                 )
 
@@ -127,7 +127,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         try:
             await self.agent_hooks.on_agent_done(self.run_context, self.final_llm_resp)
         except Exception as e:
-            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+            logger.error(t("msg-8eb53be3", e=e), exc_info=True)
 
     async def _finish_with_result(
         self, chain: MessageChain, role: str
@@ -145,7 +145,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
     async def _finish_with_error(self, err_msg: str) -> AgentResponse:
         err_text = f"DeerFlow request failed: {err_msg}"
-        err_chain = MessageChain().message(err_text)
+        err_chain = MessageChain().message(t("msg-6ac10910", err_text=err_text))
         self.final_llm_resp = LLMResponse(
             role="err",
             completion_text=err_text,
@@ -166,7 +166,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             ("http://", "https://"),
         ):
             raise ValueError(
-                "DeerFlow API Base URL format is invalid. It must start with http:// or https://.",
+                t("msg-e4ca153b"),
             )
 
         proxy = provider_config.get("proxy", "")
@@ -247,7 +247,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                 await old_client.close()
             except Exception as e:
                 logger.warning(
-                    f"Failed to close previous DeerFlow API client cleanly: {e}"
+                    t("msg-d6691163", e=e)
                 )
 
         self.api_client = DeerFlowAPIClient(
@@ -279,7 +279,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
     @override
     async def step(self):
         if not self.req:
-            raise ValueError("Request is not set. Please call reset() first.")
+            raise ValueError(t("msg-55333301"))
         if self.done():
             return
 
@@ -287,7 +287,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
-                logger.error(f"Error in on_agent_begin hook: {e}", exc_info=True)
+                logger.error(t("msg-d3b77736", e=e), exc_info=True)
 
         self._transition_state(AgentState.RUNNING)
 
@@ -299,7 +299,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             raise
         except Exception as e:
             err_msg = self._format_exception(e)
-            logger.error(f"DeerFlow request failed: {err_msg}", exc_info=True)
+            logger.error(t("msg-940b0a9f", err_msg=err_msg), exc_info=True)
             yield await self._finish_with_error(err_msg)
 
     @override
@@ -307,7 +307,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         self, max_step: int = 30
     ) -> T.AsyncGenerator[AgentResponse, None]:
         if max_step <= 0:
-            raise ValueError("max_step must be greater than 0")
+            raise ValueError(t("msg-20f437c9"))
 
         step_count = 0
         while not self.done() and step_count < max_step:
@@ -317,7 +317,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
         if not self.done():
             raise RuntimeError(
-                f"DeerFlow agent reached max_step ({max_step}) without completion."
+                t("msg-adeda135", max_step=max_step)
             )
 
     def _extract_new_messages_from_values(
@@ -382,7 +382,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         thread_id = thread.get("thread_id", "")
         if not thread_id:
             raise Exception(
-                f"DeerFlow create thread returned invalid payload: {thread}"
+                t("msg-7449f8a7", thread=thread)
             )
 
         await sp.put_async(
@@ -467,7 +467,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             return [
                 AgentResponse(
                     type="streaming_delta",
-                    data=AgentResponseData(chain=MessageChain().message(delta)),
+                    data=AgentResponseData(chain=MessageChain().message(t("msg-3bde4a11", delta=delta))),
                 )
             ]
 
@@ -478,7 +478,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(
-                            chain=MessageChain().message(delta_text)
+                            chain=MessageChain().message(t("msg-6c9836cd", delta_text=delta_text))
                         ),
                     )
                 ]
@@ -581,7 +581,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     failures_only = True
 
         if not final_chain.chain:
-            logger.warning("DeerFlow returned no text content in stream events.")
+            logger.warning(t("msg-e6e01cca"))
             final_chain = MessageChain(
                 chain=[Comp.Plain("DeerFlow returned an empty response.")],
             )
@@ -662,15 +662,13 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
                     continue
 
                 if event_type == "error":
-                    raise Exception(f"DeerFlow stream returned error event: {data}")
+                    raise Exception(t("msg-1a5b13c5", data=data))
 
                 if event_type == "end":
                     break
         except (asyncio.TimeoutError, TimeoutError):
             logger.warning(
-                "DeerFlow stream timed out after %ss for thread_id=%s; returning partial result.",
-                self.timeout,
-                thread_id,
+                t("msg-298cca9c", res=self.timeout, thread_id=thread_id),
             )
             state.timed_out = True
 

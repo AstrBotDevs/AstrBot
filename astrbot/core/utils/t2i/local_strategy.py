@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import re
 import os
 import aiohttp
@@ -59,7 +60,7 @@ class FontManager:
             # PIL默认字体大小固定，这里不缓存
             return default_font
         except Exception:
-            raise RuntimeError("无法加载任何字体")
+            raise RuntimeError(t("msg-94a58a1e"))
 
 
 class TextMeasurer:
@@ -640,9 +641,9 @@ class ImageElement(MarkdownElement):
                         image_data = await resp.read()
                         self.image = Image.open(BytesIO(image_data))
                     else:
-                        print(f"Failed to load image: HTTP {resp.status}")
+                        print(t("msg-d5c7d255", res=resp.status))
         except Exception as e:
-            print(f"Failed to load image: {e}")
+            print(t("msg-7d59d0a0", e=e))
 
     def calculate_height(self, image_width: int, font_size: int) -> int:
         if self.image is None:

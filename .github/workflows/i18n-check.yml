@@ -1,0 +1,29 @@
+name: I18n Usage Check
+env:
+    PYTHONPATH: .
+on:
+  pull_request:
+    paths:
+      - '**.py'
+
+jobs:
+  i18n-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install fluent.runtime pytest pytest_asyncio
+
+    - name: Run I18n Check
+      run: |
+        python -m pytest --tb=line tests/test_i18n.py

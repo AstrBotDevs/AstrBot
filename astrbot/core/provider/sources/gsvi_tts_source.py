@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import os
 import urllib.parse
 import uuid
@@ -53,7 +54,7 @@ class ProviderGSVITTS(TTSProvider):
                 else:
                     error_text = await response.text()
                     raise Exception(
-                        f"GSVI TTS API 请求失败，状态码: {response.status}，错误: {error_text}",
+                        t("msg-520e410f", res=response.status, error_text=error_text),
                     )
 
         return path

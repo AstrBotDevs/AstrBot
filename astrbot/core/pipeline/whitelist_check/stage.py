@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 from collections.abc import AsyncGenerator
 
 from astrbot.core import logger
@@ -63,6 +64,6 @@ class WhitelistCheckStage(Stage):
         ):
             if self.wl_log:
                 logger.info(
-                    f"会话 ID {event.unified_msg_origin} 不在会话白名单中，已终止事件传播。请在配置文件中添加该会话 ID 到白名单。",
+                    t("msg-8282c664", res=event.unified_msg_origin),
                 )
             event.stop_event()

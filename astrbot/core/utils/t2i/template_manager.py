@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 # astrbot/core/utils/t2i/template_manager.py
 
 import os
@@ -43,7 +44,7 @@ class TemplateManager:
     def _get_user_template_path(self, name: str) -> str:
         """获取用户模板的完整路径，防止路径遍历漏洞。"""
         if ".." in name or "/" in name or "\\" in name:
-            raise ValueError("模板名称包含非法字符。")
+            raise ValueError(t("msg-47d72ff5"))
         return os.path.join(self.user_template_dir, f"{name}.html")
 
     def _read_file(self, path: str) -> str:
@@ -78,13 +79,13 @@ class TemplateManager:
         if os.path.exists(builtin_path):
             return self._read_file(builtin_path)
 
-        raise FileNotFoundError("模板不存在。")
+        raise FileNotFoundError(t("msg-d1b2131b"))
 
     def create_template(self, name: str, content: str) -> None:
         """在用户目录中创建一个新的模板文件。"""
         path = self._get_user_template_path(name)
         if os.path.exists(path):
-            raise FileExistsError("同名模板已存在。")
+            raise FileExistsError(t("msg-dde05b0f"))
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
@@ -103,7 +104,7 @@ class TemplateManager:
         """
         path = self._get_user_template_path(name)
         if not os.path.exists(path):
-            raise FileNotFoundError("用户模板不存在，无法删除。")
+            raise FileNotFoundError(t("msg-0aa209bf"))
         os.remove(path)
 
     def reset_default_template(self) -> None:

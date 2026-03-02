@@ -1,3 +1,4 @@
+from astrbot.core.lang import t
 import asyncio
 import copy
 import inspect
@@ -108,7 +109,7 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 continue
             meta = metadata[key]
             if "type" not in meta:
-                logger.debug(f"配置项 {path}{key} 没有类型定义, 跳过校验")
+                logger.debug(t("msg-680e7347", path=path, key=key))
                 continue
             # null 转换
             if value is None:
@@ -304,7 +305,7 @@ def save_config(
 ) -> None:
     """验证并保存配置"""
     errors = None
-    logger.info(f"Saving config, is_core={is_core}")
+    logger.info(t("msg-ef2e5902", is_core=is_core))
 
     # Snapshot old Computer config for change detection
     if is_core:
@@ -322,11 +323,11 @@ def save_config(
                 post_config, getattr(config, "schema", {}), is_core
             )
     except BaseException as e:
-        logger.error(traceback.format_exc())
-        logger.warning(f"验证配置时出现异常: {e}")
-        raise ValueError(f"验证配置时出现异常: {e}")
+        logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+        logger.warning(t("msg-acef166d", e=e))
+        raise ValueError(t("msg-acef166d", e=e))
     if errors:
-        raise ValueError(f"格式校验未通过: {errors}")
+        raise ValueError(t("msg-42f62db0", errors=errors))
 
     config.save_config(post_config)
 
@@ -391,11 +392,11 @@ class ConfigRoute(Route):
         """删除 provider_source，并更新关联的 providers"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         provider_source_id = post_data.get("id")
         if not provider_source_id:
-            return Response().error("缺少 provider_source_id").__dict__
+            return Response().error(t("msg-196b9b25")).__dict__
 
         provider_sources = self.config.get("provider_sources", [])
         target_idx = next(
@@ -408,7 +409,7 @@ class ConfigRoute(Route):
         )
 
         if target_idx == -1:
-            return Response().error("未找到对应的 provider source").__dict__
+            return Response().error(t("msg-dbbbc375")).__dict__
 
         # 删除 provider_source
         del provider_sources[target_idx]
@@ -424,7 +425,7 @@ class ConfigRoute(Route):
         try:
             save_config(self.config, self.config, is_core=True)
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
         return Response().ok(message="删除 provider source 成功").__dict__
@@ -433,15 +434,15 @@ class ConfigRoute(Route):
         """更新或新增 provider_source，并重载关联的 providers"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         new_source_config = post_data.get("config") or post_data
         original_id = post_data.get("original_id")
         if not original_id:
-            return Response().error("缺少 original_id").__dict__
+            return Response().error(t("msg-a77f69f4")).__dict__
 
         if not isinstance(new_source_config, dict):
-            return Response().error("缺少或错误的配置数据").__dict__
+            return Response().error(t("msg-96f154c4")).__dict__
 
         # 确保配置中有 id 字段
         if not new_source_config.get("id"):
@@ -454,7 +455,7 @@ class ConfigRoute(Route):
                 return (
                     Response()
                     .error(
-                        f"Provider source ID '{new_source_config['id']}' exists already, please try another ID.",
+                        t("msg-c80b2c0f", res=new_source_config['id']),
                     )
                     .__dict__
                 )
@@ -485,7 +486,7 @@ class ConfigRoute(Route):
         try:
             save_config(self.config, self.config, is_core=True)
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
         # 重载受影响的 providers，使新的 source 配置生效
@@ -495,7 +496,7 @@ class ConfigRoute(Route):
             try:
                 await prov_mgr.reload(provider)
             except Exception as e:
-                logger.error(traceback.format_exc())
+                logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                 reload_errors.append(f"{provider.get('id')}: {e}")
 
         if reload_errors:
@@ -537,49 +538,49 @@ class ConfigRoute(Route):
         """更新 UMOP 配置路由表的全部内容"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         new_routing = post_data.get("routing", None)
 
         if not new_routing or not isinstance(new_routing, dict):
-            return Response().error("缺少或错误的路由表数据").__dict__
+            return Response().error(t("msg-537b700b")).__dict__
 
         try:
             await self.ucr.update_routing_data(new_routing)
             return Response().ok(message="更新成功").__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-b5079e61", e=e)).__dict__
 
     async def update_ucr(self):
         """更新 UMOP 配置路由表"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         umo = post_data.get("umo", None)
         conf_id = post_data.get("conf_id", None)
 
         if not umo or not conf_id:
-            return Response().error("缺少 UMO 或配置文件 ID").__dict__
+            return Response().error(t("msg-cf97d400")).__dict__
 
         try:
             await self.ucr.update_route(umo, conf_id)
             return Response().ok(message="更新成功").__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新路由表失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-b5079e61", e=e)).__dict__
 
     async def delete_ucr(self):
         """删除 UMOP 配置路由表中的一项"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         umo = post_data.get("umo", None)
 
         if not umo:
-            return Response().error("缺少 UMO").__dict__
+            return Response().error(t("msg-2a05bc8d")).__dict__
 
         try:
             if umo in self.ucr.umop_to_conf_id:
@@ -587,8 +588,8 @@ class ConfigRoute(Route):
                 await self.ucr.update_routing_data(self.ucr.umop_to_conf_id)
             return Response().ok(message="删除成功").__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除路由表项失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-7098aa3f", e=e)).__dict__
 
     async def get_default_config(self):
         """获取默认配置文件"""
@@ -604,7 +605,7 @@ class ConfigRoute(Route):
         """创建新的 AstrBot 配置文件"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
         name = post_data.get("name", None)
         config = post_data.get("config", DEFAULT_CONFIG)
 
@@ -619,7 +620,7 @@ class ConfigRoute(Route):
         abconf_id = request.args.get("id")
         system_config = request.args.get("system_config", "0").lower() == "1"
         if not abconf_id and not system_config:
-            return Response().error("缺少配置文件 ID").__dict__
+            return Response().error(t("msg-902aedc3")).__dict__
 
         try:
             if system_config:
@@ -629,7 +630,7 @@ class ConfigRoute(Route):
                 )
                 return Response().ok({"config": abconf, "metadata": metadata}).__dict__
             if abconf_id is None:
-                raise ValueError("abconf_id cannot be None")
+                raise ValueError(t("msg-b9026977"))
             abconf = self.acm.confs[abconf_id]
             metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
             return Response().ok({"config": abconf, "metadata": metadata}).__dict__
@@ -640,32 +641,32 @@ class ConfigRoute(Route):
         """删除指定 AstrBot 配置文件"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         conf_id = post_data.get("id")
         if not conf_id:
-            return Response().error("缺少配置文件 ID").__dict__
+            return Response().error(t("msg-902aedc3")).__dict__
 
         try:
             success = self.acm.delete_conf(conf_id)
             if success:
                 return Response().ok(message="删除成功").__dict__
-            return Response().error("删除失败").__dict__
+            return Response().error(t("msg-acf0664a")).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"删除配置文件失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-59c93c1a", e=e)).__dict__
 
     async def update_abconf(self):
         """更新指定 AstrBot 配置文件信息"""
         post_data = await request.json
         if not post_data:
-            return Response().error("缺少配置数据").__dict__
+            return Response().error(t("msg-3e668849")).__dict__
 
         conf_id = post_data.get("id")
         if not conf_id:
-            return Response().error("缺少配置文件 ID").__dict__
+            return Response().error(t("msg-902aedc3")).__dict__
 
         name = post_data.get("name")
 
@@ -673,12 +674,12 @@ class ConfigRoute(Route):
             success = self.acm.update_conf_info(conf_id, name=name)
             if success:
                 return Response().ok(message="更新成功").__dict__
-            return Response().error("更新失败").__dict__
+            return Response().error(t("msg-930442e2")).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"更新配置文件失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-7375d4dc", e=e)).__dict__
 
     async def _test_single_provider(self, provider):
         """辅助函数：测试单个 provider 的可用性"""
@@ -695,23 +696,23 @@ class ConfigRoute(Route):
             "error": None,
         }
         logger.debug(
-            f"Attempting to check provider: {status_info['name']} (ID: {status_info['id']}, Type: {status_info['type']}, Model: {status_info['model']})",
+            t("msg-53a8fdb2", res=status_info['name'], res_2=status_info['id'], res_3=status_info['type'], res_4=status_info['model']),
         )
 
         try:
             await provider.test()
             status_info["status"] = "available"
             logger.info(
-                f"Provider {status_info['name']} (ID: {status_info['id']}) is available.",
+                t("msg-8b0a48ee", res=status_info['name'], res_2=status_info['id']),
             )
         except Exception as e:
             error_message = str(e)
             status_info["error"] = error_message
             logger.warning(
-                f"Provider {status_info['name']} (ID: {status_info['id']}) is unavailable. Error: {error_message}",
+                t("msg-7c7180a7", res=status_info['name'], res_2=status_info['id'], error_message=error_message),
             )
             logger.debug(
-                f"Traceback for {status_info['name']}:\n{traceback.format_exc()}",
+                t("msg-1298c229", res=status_info['name'], res_2=traceback.format_exc()),
             )
 
         return status_info
@@ -726,7 +727,7 @@ class ConfigRoute(Route):
         # 记录更详细的traceback信息，但只在是严重错误时
         if status_code == 500:
             log_fn(traceback.format_exc())
-        return Response().error(message).__dict__
+        return Response().error(t("msg-d7f9a42f", message=message)).__dict__
 
     async def check_one_provider_status(self):
         """API: check a single LLM Provider's status by id"""
@@ -738,18 +739,18 @@ class ConfigRoute(Route):
                 logger.warning,
             )
 
-        logger.info(f"API call: /config/provider/check_one id={provider_id}")
+        logger.info(t("msg-cd303a28", provider_id=provider_id))
         try:
             prov_mgr = self.core_lifecycle.provider_manager
             target = prov_mgr.inst_map.get(provider_id)
 
             if not target:
                 logger.warning(
-                    f"Provider with id '{provider_id}' not found in provider_manager.",
+                    t("msg-55b8107a", provider_id=provider_id),
                 )
                 return (
                     Response()
-                    .error(f"Provider with id '{provider_id}' not found")
+                    .error(t("msg-d1a98a9b", provider_id=provider_id))
                     .__dict__
                 )
 
@@ -773,7 +774,7 @@ class ConfigRoute(Route):
     async def get_provider_config_list(self):
         provider_type = request.args.get("provider_type", None)
         if not provider_type:
-            return Response().error("缺少参数 provider_type").__dict__
+            return Response().error(t("msg-cb9c402c")).__dict__
         provider_type_ls = provider_type.split(",")
         provider_list = []
         ps = self.core_lifecycle.provider_manager.providers_config
@@ -802,16 +803,16 @@ class ConfigRoute(Route):
         """获取指定提供商的模型列表"""
         provider_id = request.args.get("provider_id", None)
         if not provider_id:
-            return Response().error("缺少参数 provider_id").__dict__
+            return Response().error(t("msg-e092d4ee")).__dict__
 
         prov_mgr = self.core_lifecycle.provider_manager
         provider = prov_mgr.inst_map.get(provider_id, None)
         if not provider:
-            return Response().error(f"未找到 ID 为 {provider_id} 的提供商").__dict__
+            return Response().error(t("msg-1ff28fed", provider_id=provider_id)).__dict__
         if not isinstance(provider, Provider):
             return (
                 Response()
-                .error(f"提供商 {provider_id} 类型不支持获取模型列表")
+                .error(t("msg-92347c35", provider_id=provider_id))
                 .__dict__
             )
 
@@ -832,7 +833,7 @@ class ConfigRoute(Route):
             }
             return Response().ok(ret).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
     async def get_embedding_dim(self):
@@ -840,7 +841,7 @@ class ConfigRoute(Route):
         post_data = await request.json
         provider_config = post_data.get("provider_config", None)
         if not provider_config:
-            return Response().error("缺少参数 provider_config").__dict__
+            return Response().error(t("msg-d0845a10")).__dict__
 
         try:
             # 动态导入 EmbeddingProvider
@@ -850,7 +851,7 @@ class ConfigRoute(Route):
             # 获取 provider 类型
             provider_type = provider_config.get("type", None)
             if not provider_type:
-                return Response().error("provider_config 缺少 type 字段").__dict__
+                return Response().error(t("msg-5657fea4")).__dict__
 
             # 首次添加某类提供商时，provider_cls_map 可能尚未注册该适配器
             if provider_type not in provider_cls_map:
@@ -859,11 +860,11 @@ class ConfigRoute(Route):
                         provider_type,
                     )
                 except ImportError:
-                    logger.error(traceback.format_exc())
+                    logger.error(t("msg-78b9c276", res=traceback.format_exc()))
                     return (
                         Response()
                         .error(
-                            "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
+                            t("msg-09ed9dc7")
                         )
                         .__dict__
                     )
@@ -872,7 +873,7 @@ class ConfigRoute(Route):
             if provider_type not in provider_cls_map:
                 return (
                     Response()
-                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .error(t("msg-1cce1cd4", provider_type=provider_type))
                     .__dict__
                 )
 
@@ -880,14 +881,14 @@ class ConfigRoute(Route):
             cls_type = provider_metadata.cls_type
 
             if not cls_type:
-                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+                return Response().error(t("msg-8361e44d", provider_type=provider_type)).__dict__
 
             # 实例化 provider
             inst = cls_type(provider_config, {})
 
             # 检查是否是 EmbeddingProvider
             if not isinstance(inst, EmbeddingProvider):
-                return Response().error("提供商不是 EmbeddingProvider 类型").__dict__
+                return Response().error(t("msg-4325087c")).__dict__
 
             init_fn = getattr(inst, "initialize", None)
             if inspect.iscoroutinefunction(init_fn):
@@ -898,13 +899,13 @@ class ConfigRoute(Route):
             dim = len(vec)
 
             logger.info(
-                f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}",
+                t("msg-a9873ea4", res=provider_config.get('id', 'unknown'), dim=dim),
             )
 
             return Response().ok({"embedding_dimensions": dim}).__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"获取嵌入维度失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-d170e384", e=e)).__dict__
 
     async def get_provider_source_models(self):
         """获取指定 provider_source 支持的模型列表
@@ -913,7 +914,7 @@ class ConfigRoute(Route):
         """
         provider_source_id = request.args.get("source_id")
         if not provider_source_id:
-            return Response().error("缺少参数 source_id").__dict__
+            return Response().error(t("msg-abfeda72")).__dict__
 
         try:
             from astrbot.core.provider.register import provider_cls_map
@@ -929,28 +930,28 @@ class ConfigRoute(Route):
             if not provider_source:
                 return (
                     Response()
-                    .error(f"未找到 ID 为 {provider_source_id} 的 provider_source")
+                    .error(t("msg-0384f4c9", provider_source_id=provider_source_id))
                     .__dict__
                 )
 
             # 获取 provider 类型
             provider_type = provider_source.get("type", None)
             if not provider_type:
-                return Response().error("provider_source 缺少 type 字段").__dict__
+                return Response().error(t("msg-aec35bdb")).__dict__
 
             try:
                 self.core_lifecycle.provider_manager.dynamic_import_provider(
                     provider_type
                 )
             except ImportError as e:
-                logger.error(traceback.format_exc())
-                return Response().error(f"动态导入提供商适配器失败: {e!s}").__dict__
+                logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+                return Response().error(t("msg-cbb9d637", e=e)).__dict__
 
             # 获取对应的 provider 类
             if provider_type not in provider_cls_map:
                 return (
                     Response()
-                    .error(f"未找到适用于 {provider_type} 的提供商适配器")
+                    .error(t("msg-1cce1cd4", provider_type=provider_type))
                     .__dict__
                 )
 
@@ -958,13 +959,13 @@ class ConfigRoute(Route):
             cls_type = provider_metadata.cls_type
 
             if not cls_type:
-                return Response().error(f"无法找到 {provider_type} 的类").__dict__
+                return Response().error(t("msg-8361e44d", provider_type=provider_type)).__dict__
 
             # 检查是否是 Provider 类型
             if not issubclass(cls_type, Provider):
                 return (
                     Response()
-                    .error(f"提供商 {provider_type} 不支持获取模型列表")
+                    .error(t("msg-468f64b3", provider_type=provider_type))
                     .__dict__
                 )
 
@@ -992,7 +993,7 @@ class ConfigRoute(Route):
                 await terminate_fn()
 
             logger.info(
-                f"获取到 provider_source {provider_source_id} 的模型列表: {models}",
+                t("msg-cb07fc1c", provider_source_id=provider_source_id, models=models),
             )
 
             return (
@@ -1001,8 +1002,8 @@ class ConfigRoute(Route):
                 .__dict__
             )
         except Exception as e:
-            logger.error(traceback.format_exc())
-            return Response().error(f"获取模型列表失败: {e!s}").__dict__
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
+            return Response().error(t("msg-d2f6e16d", e=e)).__dict__
 
     async def get_platform_list(self):
         """获取所有平台的列表"""
@@ -1033,7 +1034,7 @@ class ConfigRoute(Route):
                 return Response().ok(None, f"保存成功。{warning}").__dict__
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
-            logger.error(traceback.format_exc())
+            logger.error(t("msg-78b9c276", res=traceback.format_exc()))
             return Response().error(str(e)).__dict__
 
     async def post_plugin_configs(self):
@@ -1070,13 +1071,13 @@ class ConfigRoute(Route):
         key_path = request.args.get("key")
 
         if scope != "plugin":
-            raise ValueError(f"Unsupported scope: {scope}")
+            raise ValueError(t("msg-25ea8a96", scope=scope))
         if not name or not key_path:
-            raise ValueError("Missing name or key parameter")
+            raise ValueError(t("msg-23c8933f"))
 
         md = self._get_plugin_metadata_by_name(name)
         if not md or not md.config:
-            raise ValueError(f"Plugin {name} not found or has no config")
+            raise ValueError(t("msg-536e77ae", name=name))
 
         return scope, name, key_path, md, md.config
 
@@ -1090,7 +1091,7 @@ class ConfigRoute(Route):
 
         meta = get_schema_item(getattr(config, "schema", None), key_path)
         if not meta or meta.get("type") != "file":
-            return Response().error("Config item not found or not file type").__dict__
+            return Response().error(t("msg-1b6bc453")).__dict__
 
         file_types = meta.get("file_types")
         allowed_exts: list[str] = []
@@ -1101,14 +1102,14 @@ class ConfigRoute(Route):
 
         files = await request.files
         if not files:
-            return Response().error("No files uploaded").__dict__
+            return Response().error(t("msg-fc0a457e")).__dict__
 
         storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
         plugin_root_path = (storage_root_path / name).resolve(strict=False)
         try:
             plugin_root_path.relative_to(storage_root_path)
         except ValueError:
-            return Response().error("Invalid name parameter").__dict__
+            return Response().error(t("msg-31c718d7")).__dict__
         plugin_root_path.mkdir(parents=True, exist_ok=True)
 
         uploaded: list[str] = []
@@ -1165,31 +1166,31 @@ class ConfigRoute(Route):
         scope = request.args.get("scope") or "plugin"
         name = request.args.get("name")
         if not name:
-            return Response().error("Missing name parameter").__dict__
+            return Response().error(t("msg-e1edc16e")).__dict__
         if scope != "plugin":
-            return Response().error(f"Unsupported scope: {scope}").__dict__
+            return Response().error(t("msg-25ea8a96", scope=scope)).__dict__
 
         data = await request.get_json()
         rel_path = data.get("path") if isinstance(data, dict) else None
         rel_path = normalize_rel_path(rel_path)
         if not rel_path or not rel_path.startswith("files/"):
-            return Response().error("Invalid path parameter").__dict__
+            return Response().error(t("msg-8e634b35")).__dict__
 
         md = self._get_plugin_metadata_by_name(name)
         if not md:
-            return Response().error(f"Plugin {name} not found").__dict__
+            return Response().error(t("msg-0b52a254", name=name)).__dict__
 
         storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
         plugin_root_path = (storage_root_path / name).resolve(strict=False)
         try:
             plugin_root_path.relative_to(storage_root_path)
         except ValueError:
-            return Response().error("Invalid name parameter").__dict__
+            return Response().error(t("msg-31c718d7")).__dict__
         target_path = (plugin_root_path / rel_path).resolve(strict=False)
         try:
             target_path.relative_to(plugin_root_path)
         except ValueError:
-            return Response().error("Invalid path parameter").__dict__
+            return Response().error(t("msg-8e634b35")).__dict__
         if target_path.is_file():
             target_path.unlink()
 
@@ -1205,21 +1206,21 @@ class ConfigRoute(Route):
 
         meta = get_schema_item(getattr(config, "schema", None), key_path)
         if not meta or meta.get("type") != "file":
-            return Response().error("Config item not found or not file type").__dict__
+            return Response().error(t("msg-1b6bc453")).__dict__
 
         storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
         plugin_root_path = (storage_root_path / name).resolve(strict=False)
         try:
             plugin_root_path.relative_to(storage_root_path)
         except ValueError:
-            return Response().error("Invalid name parameter").__dict__
+            return Response().error(t("msg-31c718d7")).__dict__
 
         folder = config_key_to_folder(key_path)
         target_dir = (plugin_root_path / "files" / folder).resolve(strict=False)
         try:
             target_dir.relative_to(plugin_root_path)
         except ValueError:
-            return Response().error("Invalid path parameter").__dict__
+            return Response().error(t("msg-8e634b35")).__dict__
 
         if not target_dir.exists() or not target_dir.is_dir():
             return Response().ok({"files": []}).__dict__
@@ -1269,10 +1270,10 @@ class ConfigRoute(Route):
         origin_platform_id = update_platform_config.get("id", None)
         new_config = update_platform_config.get("config", None)
         if not origin_platform_id or not new_config:
-            return Response().error("参数错误").__dict__
+            return Response().error(t("msg-bff0e837")).__dict__
 
         if origin_platform_id != new_config.get("id", None):
-            return Response().error("机器人名称不允许修改").__dict__
+            return Response().error(t("msg-2f29d263")).__dict__
 
         # 如果是支持统一 webhook 模式的平台，且启用了统一 webhook 模式，确保有 webhook_uuid
         ensure_platform_webhook_config(new_config)
@@ -1282,7 +1283,7 @@ class ConfigRoute(Route):
                 self.config["platform"][i] = new_config
                 break
         else:
-            return Response().error("未找到对应平台").__dict__
+            return Response().error(t("msg-1478800f")).__dict__
 
         try:
             save_config(self.config, self.config, is_core=True)
@@ -1296,7 +1297,7 @@ class ConfigRoute(Route):
         origin_provider_id = update_provider_config.get("id", None)
         new_config = update_provider_config.get("config", None)
         if not origin_provider_id or not new_config:
-            return Response().error("参数错误").__dict__
+            return Response().error(t("msg-bff0e837")).__dict__
 
         try:
             await self.core_lifecycle.provider_manager.update_provider(
@@ -1314,7 +1315,7 @@ class ConfigRoute(Route):
                 del self.config["platform"][i]
                 break
         else:
-            return Response().error("未找到对应平台").__dict__
+            return Response().error(t("msg-1478800f")).__dict__
         try:
             save_config(self.config, self.config, is_core=True)
             await self.core_lifecycle.platform_manager.terminate_platform(platform_id)
@@ -1326,7 +1327,7 @@ class ConfigRoute(Route):
         provider_id = await request.json
         provider_id = provider_id.get("id", "")
         if not provider_id:
-            return Response().error("缺少参数 id").__dict__
+            return Response().error(t("msg-ca6133f7")).__dict__
 
         try:
             await self.core_lifecycle.provider_manager.delete_provider(
@@ -1358,13 +1359,13 @@ class ConfigRoute(Route):
                 ):
                     platform_default_tmpl[platform.name] = {}
                 platform_default_tmpl[platform.name]["logo_token"] = cached_token
-                logger.debug(f"Using cached logo token for platform {platform.name}")
+                logger.debug(t("msg-1199c1f9", res=platform.name))
                 return
 
             # 获取平台适配器类
             platform_cls = platform_cls_map.get(platform.name)
             if not platform_cls:
-                logger.warning(f"Platform class not found for {platform.name}")
+                logger.warning(t("msg-889a7de5", res=platform.name))
                 return
 
             # 获取插件目录路径
@@ -1392,21 +1393,21 @@ class ConfigRoute(Route):
                 # 缓存token
                 self._logo_token_cache[cache_key] = logo_token
 
-                logger.debug(f"Logo token registered for platform {platform.name}")
+                logger.debug(t("msg-317f359c", res=platform.name))
             else:
                 logger.warning(
-                    f"Platform {platform.name} logo file not found: {logo_file_path}",
+                    t("msg-323ec1e2", res=platform.name, logo_file_path=logo_file_path),
                 )
 
         except (ImportError, AttributeError) as e:
             logger.warning(
-                f"Failed to import required modules for platform {platform.name}: {e}",
+                t("msg-bc6d0bcf", res=platform.name, e=e),
             )
         except OSError as e:
-            logger.warning(f"File system error for platform {platform.name} logo: {e}")
+            logger.warning(t("msg-b02b538d", res=platform.name, e=e))
         except Exception as e:
             logger.warning(
-                f"Unexpected error registering logo for platform {platform.name}: {e}",
+                t("msg-31123607", res=platform.name, e=e),
             )
 
     def _inject_platform_metadata_with_i18n(
@@ -1521,7 +1522,7 @@ class ConfigRoute(Route):
     ) -> None:
         try:
             if conf_id not in self.acm.confs:
-                raise ValueError(f"配置文件 {conf_id} 不存在")
+                raise ValueError(t("msg-af06ccab", conf_id=conf_id))
             astrbot_config = self.acm.confs[conf_id]
 
             # 保留服务端的 t2i_active_template 值
@@ -1541,9 +1542,9 @@ class ConfigRoute(Route):
                 md = plugin_md
 
         if not md:
-            raise ValueError(f"插件 {plugin_name} 不存在")
+            raise ValueError(t("msg-082a5585", plugin_name=plugin_name))
         if not md.config:
-            raise ValueError(f"插件 {plugin_name} 没有注册配置")
+            raise ValueError(t("msg-ca334960", plugin_name=plugin_name))
         assert md.config is not None
 
         try:
@@ -1551,7 +1552,7 @@ class ConfigRoute(Route):
                 post_configs, getattr(md.config, "schema", {}), is_core=False
             )
             if errors:
-                raise ValueError(f"格式校验未通过: {errors}")
+                raise ValueError(t("msg-42f62db0", errors=errors))
             md.config.save_config(post_configs)
         except Exception as e:
             raise e
