@@ -611,6 +611,13 @@
         "reply_with_quote": {
           "description": "回复时引用发送人消息"
         },
+        "reply_with_quote_scope": {
+          "description": "引用回复范围",
+          "labels": [
+            "全部开启", 
+            "仅群聊", 
+            "仅私聊"]
+        },
         "forward_threshold": {
           "description": "转发消息的字数阈值"
         },
