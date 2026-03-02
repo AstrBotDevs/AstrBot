@@ -3152,46 +3152,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.max_quoted_fallback_images": {
-                        "description": "引用图片回退解析上限",
-                        "type": "int",
-                        "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_component_chain_depth": {
-                        "description": "引用解析组件链深度",
-                        "type": "int",
-                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_forward_node_depth": {
-                        "description": "引用解析转发节点深度",
-                        "type": "int",
-                        "hint": "解析合并转发节点时允许的最大递归深度。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.max_forward_fetch": {
-                        "description": "引用解析转发拉取上限",
-                        "type": "int",
-                        "hint": "递归拉取 get_forward_msg 的最大次数。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.quoted_message_parser.warn_on_action_failure": {
-                        "description": "引用解析 action 失败告警",
-                        "type": "bool",
-                        "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
                     "provider_settings.max_agent_step": {
                         "description": "工具调用轮数上限",
                         "type": "int",
@@ -3234,6 +3194,46 @@ CONFIG_METADATA_3 = {
                         "description": "提供商可达性检测",
                         "type": "bool",
                         "hint": "/provider 命令列出模型时是否并发检测连通性。开启后会主动调用模型测试连通性，可能产生额外 token 消耗。",
+                    },
+                    "provider_settings.max_quoted_fallback_images": {
+                        "description": "引用图片回退解析上限",
+                        "type": "int",
+                        "hint": "引用/转发消息回退解析图片时的最大注入数量，超出会截断。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_component_chain_depth": {
+                        "description": "引用解析组件链深度",
+                        "type": "int",
+                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_forward_node_depth": {
+                        "description": "引用解析转发节点深度",
+                        "type": "int",
+                        "hint": "解析合并转发节点时允许的最大递归深度。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.max_forward_fetch": {
+                        "description": "引用解析转发拉取上限",
+                        "type": "int",
+                        "hint": "递归拉取 get_forward_msg 的最大次数。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.quoted_message_parser.warn_on_action_failure": {
+                        "description": "引用解析 action 失败告警",
+                        "type": "bool",
+                        "hint": "开启后，get_msg/get_forward_msg 全部尝试失败时输出 warning 日志。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
                     },
                 },
                 "condition": {
