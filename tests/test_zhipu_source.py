@@ -6,9 +6,11 @@ Covers the three layers of cleaning introduced to fix issue #5556:
 3. ``_parse_openai_completion``   — second-pass cleaning on assembled text
 """
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from astrbot.core.agent.tool import (
     ToolSet,  # noqa: F401 – ensures the module is importable
@@ -184,134 +186,112 @@ class TestParseOpenAICompletionCleaning:
     correctly applies the extra GLM cleaning pass on top.
     """
 
+    @pytest_asyncio.fixture
+    async def provider(self) -> AsyncGenerator[ProviderZhipu, None]:
+        p = _make_provider()
+        yield p
+        await p.terminate()
+
     @pytest.mark.asyncio
-    async def test_null_token_content_becomes_empty(self):
+    async def test_null_token_content_becomes_empty(self, provider: ProviderZhipu):
         """content='\\n<None>' (real API response) should produce an empty reply."""
-        provider = _make_provider()
-        try:
-            fake_completion = MagicMock()
-            parent_response = _make_llm_response("\n<None>")
+        fake_completion = MagicMock()
+        parent_response = _make_llm_response("\n<None>")
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(fake_completion, None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(fake_completion, None)
 
-            assert result.completion_text == ""
-        finally:
-            await provider.terminate()
+        assert result.completion_text == ""
 
     @pytest.mark.asyncio
-    async def test_endoftext_token_stripped_from_end(self):
-        provider = _make_provider()
-        try:
-            parent_response = _make_llm_response("当然可以！<|endoftext|>")
+    async def test_endoftext_token_stripped_from_end(self, provider: ProviderZhipu):
+        parent_response = _make_llm_response("当然可以！<|endoftext|>")
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(MagicMock(), None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(MagicMock(), None)
 
-            assert result.completion_text == "当然可以！"
-        finally:
-            await provider.terminate()
+        assert result.completion_text == "当然可以！"
 
     @pytest.mark.asyncio
-    async def test_assistant_role_token_prefix_stripped(self):
-        provider = _make_provider()
-        try:
-            parent_response = _make_llm_response("<|assistant|>我是一个AI助手。")
+    async def test_assistant_role_token_prefix_stripped(self, provider: ProviderZhipu):
+        parent_response = _make_llm_response("<|assistant|>我是一个AI助手。")
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(MagicMock(), None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(MagicMock(), None)
 
-            assert result.completion_text == "我是一个AI助手。"
-        finally:
-            await provider.terminate()
+        assert result.completion_text == "我是一个AI助手。"
 
     @pytest.mark.asyncio
-    async def test_normal_content_unchanged(self):
+    async def test_normal_content_unchanged(self, provider: ProviderZhipu):
         """Normal GLM replies must not be modified."""
-        provider = _make_provider()
-        try:
-            normal = "好的，我来帮你解答这个问题。"
-            parent_response = _make_llm_response(normal)
+        normal = "好的，我来帮你解答这个问题。"
+        parent_response = _make_llm_response(normal)
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(MagicMock(), None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(MagicMock(), None)
 
-            assert result.completion_text == normal
-        finally:
-            await provider.terminate()
+        assert result.completion_text == normal
 
     @pytest.mark.asyncio
-    async def test_empty_completion_text_not_modified(self):
+    async def test_empty_completion_text_not_modified(self, provider: ProviderZhipu):
         """When the base class returns empty completion_text, don't error out."""
-        provider = _make_provider()
-        try:
-            parent_response = LLMResponse("assistant")
-            parent_response.result_chain = None
-            parent_response._completion_text = ""
+        parent_response = LLMResponse("assistant")
+        parent_response.result_chain = None
+        parent_response._completion_text = ""
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(MagicMock(), None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(MagicMock(), None)
 
-            assert result.completion_text == ""
-        finally:
-            await provider.terminate()
+        assert result.completion_text == ""
 
     @pytest.mark.asyncio
-    async def test_reasoning_content_preserved(self):
+    async def test_reasoning_content_preserved(self, provider: ProviderZhipu):
         """Cleaning must not touch reasoning_content."""
-        provider = _make_provider()
-        try:
-            parent_response = _make_llm_response("\n<None>")
-            parent_response.reasoning_content = "思考过程：用户打了招呼，不需要回复。"
+        parent_response = _make_llm_response("\n<None>")
+        parent_response.reasoning_content = "思考过程：用户打了招呼，不需要回复。"
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(MagicMock(), None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(MagicMock(), None)
 
-            assert result.completion_text == ""
-            assert "思考过程" in result.reasoning_content
-        finally:
-            await provider.terminate()
+        assert result.completion_text == ""
+        assert "思考过程" in result.reasoning_content
 
     @pytest.mark.asyncio
-    async def test_other_response_fields_preserved(self):
+    async def test_other_response_fields_preserved(self, provider: ProviderZhipu):
         """id, usage and other metadata must survive the cleaning pass."""
-        provider = _make_provider()
-        try:
-            parent_response = _make_llm_response("普通回复")
-            parent_response.id = "cmp-test-id-123"
+        parent_response = _make_llm_response("普通回复")
+        parent_response.id = "cmp-test-id-123"
 
-            with patch.object(
-                ProviderOpenAIOfficial,
-                "_parse_openai_completion",
-                new=AsyncMock(return_value=parent_response),
-            ):
-                result = await provider._parse_openai_completion(MagicMock(), None)
+        with patch.object(
+            ProviderOpenAIOfficial,
+            "_parse_openai_completion",
+            new=AsyncMock(return_value=parent_response),
+        ):
+            result = await provider._parse_openai_completion(MagicMock(), None)
 
-            assert result.id == "cmp-test-id-123"
-            assert result.completion_text == "普通回复"
-        finally:
-            await provider.terminate()
+        assert result.id == "cmp-test-id-123"
+        assert result.completion_text == "普通回复"
