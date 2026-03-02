@@ -182,6 +182,8 @@ class ResultContentType(enum.Enum):
 
     LLM_RESULT = enum.auto()
     """调用 LLM 产生的结果"""
+    AGENT_RUNNER_ERROR = enum.auto()
+    """第三方 Agent Runner 返回的错误结果"""
     GENERAL_RESULT = enum.auto()
     """普通的消息结果"""
     STREAMING_RESULT = enum.auto()
@@ -245,6 +247,13 @@ class MessageEventResult(MessageChain):
     def is_llm_result(self) -> bool:
         """是否为 LLM 结果。"""
         return self.result_content_type == ResultContentType.LLM_RESULT
+
+    def is_model_result(self) -> bool:
+        """Whether result comes from model execution (including runner errors)."""
+        return self.result_content_type in (
+            ResultContentType.LLM_RESULT,
+            ResultContentType.AGENT_RUNNER_ERROR,
+        )
 
 
 # 为了兼容旧版代码，保留 CommandResult 的别名

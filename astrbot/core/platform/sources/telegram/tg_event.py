@@ -18,6 +18,7 @@ from astrbot.api.message_components import (
     Plain,
     Record,
     Reply,
+    Video,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
 
@@ -36,6 +37,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
     # 消息类型到 chat action 的映射，用于优先级判断
     ACTION_BY_TYPE: dict[type, str] = {
         Record: ChatAction.UPLOAD_VOICE,
+        Video: ChatAction.UPLOAD_VIDEO,
         File: ChatAction.UPLOAD_DOCUMENT,
         Image: ChatAction.UPLOAD_PHOTO,
         Plain: ChatAction.TYPING,
@@ -114,10 +116,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
         **payload: Any,
     ) -> None:
         """发送媒体时显示 upload action，发送完成后恢复 typing"""
-        await cls._send_chat_action(client, user_name, upload_action, message_thread_id)
-        await send_coro(**payload)
+        effective_thread_id = message_thread_id or cast(
+            str | None, payload.get("message_thread_id")
+        )
         await cls._send_chat_action(
-            client, user_name, ChatAction.TYPING, message_thread_id
+            client, user_name, upload_action, effective_thread_id
+        )
+        send_payload = dict(payload)
+        if effective_thread_id and "message_thread_id" not in send_payload:
+            send_payload["message_thread_id"] = effective_thread_id
+        await send_coro(**send_payload)
+        await cls._send_chat_action(
+            client, user_name, ChatAction.TYPING, effective_thread_id
         )
 
     @classmethod
@@ -141,14 +151,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
         """
         try:
             if use_media_action:
+                media_payload = dict(payload)
+                if message_thread_id and "message_thread_id" not in media_payload:
+                    media_payload["message_thread_id"] = message_thread_id
                 await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_VOICE,
                     client.send_voice,
                     user_name=user_name,
-                    message_thread_id=message_thread_id,
                     voice=path,
-                    **cast(Any, payload),
+                    **cast(Any, media_payload),
                 )
             else:
                 await client.send_voice(voice=path, **cast(Any, payload))
@@ -162,15 +174,17 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
             )
             if use_media_action:
+                media_payload = dict(payload)
+                if message_thread_id and "message_thread_id" not in media_payload:
+                    media_payload["message_thread_id"] = message_thread_id
                 await cls._send_media_with_action(
                     client,
                     ChatAction.UPLOAD_DOCUMENT,
                     client.send_document,
                     user_name=user_name,
-                    message_thread_id=message_thread_id,
                     document=path,
                     caption=caption,
-                    **cast(Any, payload),
+                    **cast(Any, media_payload),
                 )
             else:
                 await client.send_document(
@@ -278,6 +292,13 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     caption=i.text or None,
                     use_media_action=False,
                 )
+            elif isinstance(i, Video):
+                path = await i.convert_to_file_path()
+                await client.send_video(
+                    video=path,
+                    caption=getattr(i, "text", None) or None,
+                    **cast(Any, payload),
+                )
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
@@ -333,7 +354,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             "chat_id": user_name,
         }
         if message_thread_id:
-            payload["reply_to_message_id"] = message_thread_id
+            payload["message_thread_id"] = message_thread_id
 
         delta = ""
         current_content = ""
@@ -375,7 +396,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             ChatAction.UPLOAD_PHOTO,
                             self.client.send_photo,
                             user_name=user_name,
-                            message_thread_id=message_thread_id,
                             photo=image_path,
                             **cast(Any, payload),
                         )
@@ -388,7 +408,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             ChatAction.UPLOAD_DOCUMENT,
                             self.client.send_document,
                             user_name=user_name,
-                            message_thread_id=message_thread_id,
                             document=path,
                             filename=name,
                             **cast(Any, payload),
@@ -404,6 +423,17 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             user_name=user_name,
                             message_thread_id=message_thread_id,
                             use_media_action=True,
+                        )
+                        continue
+                    elif isinstance(i, Video):
+                        path = await i.convert_to_file_path()
+                        await self._send_media_with_action(
+                            self.client,
+                            ChatAction.UPLOAD_VIDEO,
+                            self.client.send_video,
+                            user_name=user_name,
+                            video=path,
+                            **cast(Any, payload),
                         )
                         continue
                     else:
