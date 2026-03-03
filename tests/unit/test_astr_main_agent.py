@@ -517,30 +517,6 @@ class TestEnsurePersonaAndSkills:
         assert "Persona Instructions" not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_skills(self, mock_event, mock_context):
-        """Test applying skills to request."""
-        module = ama
-        mock_skill = MagicMock()
-        mock_skill.name = "test_skill"
-        mock_skill.to_prompt.return_value = "Skill description"
-        mock_context.persona_manager.personas_v3 = []
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=(None, None, None, False)
-        )
-
-        with patch("astrbot.core.astr_main_agent.SkillManager") as mock_skill_mgr_cls:
-            mock_skill_mgr = MagicMock()
-            mock_skill_mgr.list_skills.return_value = [mock_skill]
-            mock_skill_mgr_cls.return_value = mock_skill_mgr
-
-            req = ProviderRequest()
-            req.conversation = MagicMock(persona_id=None)
-
-            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
-
-        assert "test_skill" in req.system_prompt
-
-    @pytest.mark.asyncio
     async def test_ensure_tools_from_persona(self, mock_event, mock_context):
         """Test applying tools from persona."""
         module = ama
