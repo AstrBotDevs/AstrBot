@@ -223,8 +223,7 @@ async def get_dashboard_version():
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
     if not os.path.exists(dist_dir):
         # Fall back to the dist bundled inside the installed wheel.
-        # _bundled = Path(_dash_pkg.__file__).parent / "dist"
-        _bundled = Path(get_astrbot_path()) / "dashboard" / "dist"
+        _bundled = Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
         if _bundled.exists():
             dist_dir = str(_bundled)
     if os.path.exists(dist_dir):
