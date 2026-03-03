@@ -950,6 +950,14 @@
         "description": "启用原生搜索功能",
         "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。"
       },
+      "bl_coding_plan": {
+        "description": "启用 Coding Plan 模式",
+        "hint": "启用后将使用阿里云百炼 Coding Plan 专用 API，需要使用 sk-sp- 开头的专用 API Key。注意：Coding Plan 模式不支持自动获取模型列表，请参考 [支持模型列表](https://bailian.console.aliyun.com/cn-beijing/?tab=doc#/doc/?type=model&url=3005961) 手动添加。"
+      },
+      "bl_thinking": {
+        "description": "启用 Thinking",
+        "hint": "启用后模型将进行深度推理，提供更详细的思考过程。适用于需要复杂推理的任务。"
+      },
       "rerank_api_base": {
         "description": "重排序模型 API Base URL",
         "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"

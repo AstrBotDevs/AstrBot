@@ -1044,6 +1044,20 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "百炼": {
+                        "id": "dashscope",
+                        "provider": "dashscope",
+                        "type": "bailian_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                        "bl_coding_plan": False,
+                        "bl_thinking": False,
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "AIHubMix": {
                         "id": "aihubmix",
                         "provider": "aihubmix",
@@ -1914,6 +1928,12 @@ CONFIG_METADATA_2 = {
                         "description": "启用原生搜索功能",
                         "type": "bool",
                         "hint": "启用后所有函数工具将全部失效，免费次数限制请查阅官方文档",
+                    },
+                    "bl_coding_plan": {
+                        "type": "bool",
+                    },
+                    "bl_thinking": {
+                        "type": "bool",
                     },
                     "gm_native_coderunner": {
                         "description": "启用原生代码执行器",

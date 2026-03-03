@@ -443,6 +443,14 @@ class ConfigRoute(Route):
         if not isinstance(new_source_config, dict):
             return Response().error("缺少或错误的配置数据").__dict__
 
+        # 百炼 Chat Completion: 根据 bl_coding_plan 强制设置正确的 api_base
+        if new_source_config.get("type") == "bailian_chat_completion":
+            is_coding_plan = new_source_config.get("bl_coding_plan", False)
+            if is_coding_plan:
+                new_source_config["api_base"] = "https://coding.dashscope.aliyuncs.com/v1"
+            else:
+                new_source_config["api_base"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
         # 确保配置中有 id 字段
         if not new_source_config.get("id"):
             new_source_config["id"] = original_id

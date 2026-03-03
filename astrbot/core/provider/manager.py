@@ -449,6 +449,10 @@ class ProviderManager:
                 from .sources.bailian_rerank_source import (
                     BailianRerankProvider as BailianRerankProvider,
                 )
+            case "bailian_chat_completion":
+                from .sources.bailian_chat_source import (
+                    ProviderBailianChat as ProviderBailianChat,
+                )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果

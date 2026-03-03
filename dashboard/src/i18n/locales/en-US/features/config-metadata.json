@@ -947,6 +947,14 @@
         "description": "Enable native search",
         "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI providers."
       },
+      "bl_coding_plan": {
+        "description": "Enable Coding Plan Mode",
+        "hint": "Uses Aliyun Bailian Coding Plan dedicated API. Requires sk-sp- prefixed API keys. Note: This mode doesn't support automatic model list fetching; please refer to [Supported Models](https://bailian.console.aliyun.com/cn-beijing/?tab=doc#/doc/?type=model&url=3005961) and add models manually."
+      },
+      "bl_thinking": {
+        "description": "Enable Thinking",
+        "hint": "Enables deep reasoning for detailed thought processes. Suitable for complex reasoning tasks."
+      },
       "rerank_api_base": {
         "description": "Rerank Model API Base URL",
         "hint": "AstrBot appends /v1/rerank to the request URL."
