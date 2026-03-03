@@ -236,6 +236,57 @@ class KookPlatformAdapter(Platform):
 
         return components, message_str
 
+    def _parse_card_message(self, data: dict) -> tuple[list, str]:
+        content = data.get("content", "[]")
+        if not isinstance(content, str):
+            content = str(content)
+        card_list = json.loads(content)
+
+        text_parts: list[str] = []
+        images: list[str] = []
+
+        for card in card_list:
+            if not isinstance(card, dict):
+                continue
+            for module in card.get("modules", []):
+                if not isinstance(module, dict):
+                    continue
+
+                module_type = module.get("type")
+                if module_type == "section":
+                    section_text = module.get("text", {}).get("content", "")
+                    if section_text:
+                        text_parts.append(str(section_text))
+                    continue
+
+                if module_type != "container":
+                    continue
+
+                for element in module.get("elements", []):
+                    if not isinstance(element, dict):
+                        continue
+                    if element.get("type") != "image":
+                        continue
+
+                    image_src = element.get("src")
+                    if not isinstance(image_src, str):
+                        logger.warning(
+                            f'[KOOK] 处理卡片中的图片时发生错误,图片url "{image_src}" 应该为str类型, 而不是 "{type(image_src)}" '
+                        )
+                        continue
+                    if not image_src.startswith(("http://", "https://")):
+                        logger.warning(f"[KOOK] 屏蔽非http图片url: {image_src}")
+                        continue
+                    images.append(image_src)
+
+        text = "".join(text_parts)
+        message = []
+        if text:
+            message.append(Plain(text=text))
+        for img_url in images:
+            message.append(Image(file=img_url))
+        return message, text
+
     async def convert_message(self, data: dict) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.raw_message = data
@@ -278,39 +329,8 @@ class KookPlatformAdapter(Platform):
             abm.message_str = message_str
         # 卡片消息
         elif data.get("type") == 10:
-            content = data.get("content", {})
             try:
-                card_list = json.loads(content)
-                text = ""
-                images = []
-                for card in card_list:
-                    for module in card.get("modules", []):
-                        if module.get("type") == "section":
-                            text += module.get("text", {}).get("content", "")
-                        elif module.get("type") == "container":
-                            for element in module.get("elements", []):
-                                if element.get("type") == "image":
-                                    image_src = element.get("src")
-                                    if not isinstance(image_src, str):
-                                        logger.warning(
-                                            f'[KOOK] 处理卡片中的图片时发生错误,图片url "{image_src}" 应该为str类型, 而不是 "{type(image_src)}" '
-                                        )
-                                        continue
-                                    if not image_src.startswith(
-                                        ("http://", "https://")
-                                    ):
-                                        logger.warning(
-                                            f"[KOOK] 屏蔽非http图片url: {image_src}"
-                                        )
-                                        continue
-                                    images.append(image_src)
-
-                abm.message_str = text
-                abm.message = []
-                if text:
-                    abm.message.append(Plain(text=text))
-                for img_url in images:
-                    abm.message.append(Image(file=img_url))
+                abm.message, abm.message_str = self._parse_card_message(data)
             except Exception as exp:
                 logger.error(f"[KOOK] 卡片消息解析失败: {exp}")
                 abm.message_str = "[卡片消息解析失败]"
