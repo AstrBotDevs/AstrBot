@@ -19,13 +19,14 @@ DEMO_MODE = os.getenv("DEMO_MODE", False)
 
 astrbot_config = AstrBotConfig()
 saved_locale = astrbot_config.get("i18n", {}).get("locale", "zh-cn")
-try:
-    t.load_locale(locale=str(saved_locale).lower(), files=None)
-except ValueError:
+normalized_locale = t.normalize_locale(str(saved_locale).lower())
+if normalized_locale is None:
     t.load_locale(locale="zh-cn", files=None)
     i18n_config = astrbot_config.setdefault("i18n", {})
     i18n_config["locale"] = "zh-cn"
     astrbot_config.save_config()
+else:
+    t.load_locale(locale=normalized_locale, files=None)
 t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2img")
 html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name="astrbot")

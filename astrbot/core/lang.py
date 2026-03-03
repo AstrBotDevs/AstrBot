@@ -44,6 +44,7 @@ class Lang:
     @staticmethod
     def _validate_namespace(namespace: str) -> None:
         if not namespace:
+            raise ValueError("Namespace must not be empty.")
         if "." in namespace:
             raise ValueError(t("msg-f66527da"))
 
@@ -67,6 +68,17 @@ class Lang:
                 if locale_name.lower() == locale.lower()
             ),
             locale,
+        )
+
+    @staticmethod
+    def _normalize_locale(available_locales: list[str], locale: str) -> str | None:
+        return next(
+            (
+                locale_name
+                for locale_name in available_locales
+                if locale_name.lower() == locale.lower()
+            ),
+            None,
         )
 
     def _build_localization(
@@ -208,6 +220,12 @@ class Lang:
         if namespace in self._l10n_map and real_key:
             return namespace, real_key
         return self.default_namespace, key
+
+    def normalize_locale(self, locale: str | None) -> str | None:
+        if not locale:
+            return None
+        with self._lock:
+            return self._normalize_locale(self.available_locales, str(locale))
 
     def __call__(self, key: str, **kwargs) -> str:
         if not key:

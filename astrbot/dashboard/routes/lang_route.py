@@ -17,7 +17,11 @@ class LangRoute(Route):
         lang = data.get("lang")
         if lang is None:
             return Response().error(t("msg-bf610e68")).__dict__
-        normalized_lang = lang.lower()
+
+        normalized_lang = t.normalize_locale(str(lang).lower())
+        if normalized_lang is None:
+            return Response().error(t("msg-fd2f74bc", locale=lang)).__dict__
+
         try:
             t.load_locale(locale=normalized_lang, files=None)
         except ValueError as exc:

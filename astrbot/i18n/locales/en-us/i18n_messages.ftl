@@ -3246,6 +3246,7 @@ msg-3fe89e6a = No available locales found in {$base_dir}
 msg-c79b2c75 = Namespace {$namespace} already exists
 msg-7db3fccf = Cannot unregister the default namespace
 msg-3d066f64 = Namespace {$namespace} does not exist
+msg-fd2f74bc = Unsupported locale: {$locale}
 msg-d79e1ff9 = AstrBot CLI version: {$__version__}
 msg-15c55ed8 = Invalid other[...] format, should be other[{...}]
 msg-1c9fc93d = Module {$__name__} has no member {$name}

@@ -3213,3 +3213,4 @@ msg-3fe89e6a = 在 {$base_dir} 中未找到可用的语言包
 msg-c79b2c75 = 命名空间 {$namespace} 已存在
 msg-7db3fccf = 无法取消注册默认命名空间
 msg-3d066f64 = 命名空间 {$namespace} 不存在
+msg-fd2f74bc = 不支持的语言: {$locale}
