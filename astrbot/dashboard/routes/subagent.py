@@ -1,3 +1,4 @@
+import re
 import traceback
 
 from quart import jsonify, request
@@ -8,6 +9,13 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.subagent.codec import decode_subagent_config, encode_subagent_config
 
 from .route import Response, Route, RouteContext
+
+_TASK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_task_id(task_id: str) -> bool:
+    """Validate task_id format to prevent injection attacks."""
+    return bool(_TASK_ID_PATTERN.match(task_id))
 
 
 class SubAgentRoute(Route):
@@ -157,6 +165,8 @@ class SubAgentRoute(Route):
 
     async def retry_task(self, task_id: str):
         try:
+            if not _validate_task_id(task_id):
+                return jsonify(Response().error("无效的任务ID格式").__dict__)
             orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
             if orch is None:
                 return jsonify(
@@ -172,6 +182,8 @@ class SubAgentRoute(Route):
 
     async def cancel_task(self, task_id: str):
         try:
+            if not _validate_task_id(task_id):
+                return jsonify(Response().error("无效的任务ID格式").__dict__)
             orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
             if orch is None:
                 return jsonify(

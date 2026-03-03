@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, cast
 
+from .constants import (
+    DEFAULT_FATAL_EXCEPTION_NAMES,
+    DEFAULT_TRANSIENT_EXCEPTION_NAMES,
+)
 from .models import (
     SubagentAgentSpec,
     SubagentConfig,
@@ -152,14 +156,9 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
     fatal_exceptions_raw = error_classifier_raw.get("fatal_exceptions")
     transient_exceptions_raw = error_classifier_raw.get("transient_exceptions")
     if fatal_exceptions_raw is None:
-        fatal_exceptions_raw = ["ValueError", "PermissionError", "KeyError"]
+        fatal_exceptions_raw = DEFAULT_FATAL_EXCEPTION_NAMES
     if transient_exceptions_raw is None:
-        transient_exceptions_raw = [
-            "asyncio.TimeoutError",
-            "TimeoutError",
-            "ConnectionError",
-            "ConnectionResetError",
-        ]
+        transient_exceptions_raw = DEFAULT_TRANSIENT_EXCEPTION_NAMES
     if not isinstance(fatal_exceptions_raw, list):
         raise ValueError("`error_classifier.fatal_exceptions` must be a list")
     if not isinstance(transient_exceptions_raw, list):

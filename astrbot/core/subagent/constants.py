@@ -67,6 +67,17 @@ MIN_POLL_INTERVAL: float = 0.1
 MIN_BATCH_SIZE: int = 1
 
 # ============================================================================
+# Handoff Execution Limits
+# ============================================================================
+
+# Maximum nested depth for subagent handoffs
+MAX_NESTED_DEPTH_LIMIT: int = 8
+MIN_NESTED_DEPTH_LIMIT: int = 1
+
+# Default max steps for subagent execution
+DEFAULT_MAX_STEPS: int = 30
+
+# ============================================================================
 # Allowed Exception Types for Configuration
 # ============================================================================
 

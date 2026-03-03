@@ -403,7 +403,7 @@ class SubagentRuntime:
         error_class: str | None = None,
         error_message: str | None = None,
     ) -> None:
-        logger.info(
+        logger.debug(
             "[SubagentRuntime] event=%s task_id=%s subagent=%s attempt=%s umo=%s delay=%s error_class=%s error=%s",
             event_type,
             task_id,

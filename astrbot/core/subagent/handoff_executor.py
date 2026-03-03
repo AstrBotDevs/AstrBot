@@ -21,6 +21,11 @@ from astrbot.core.provider.register import llm_tools
 from astrbot.core.subagent.background_notifier import (
     wake_main_agent_for_background_result,
 )
+from astrbot.core.subagent.constants import (
+    DEFAULT_MAX_STEPS,
+    MAX_NESTED_DEPTH_LIMIT,
+    MIN_NESTED_DEPTH_LIMIT,
+)
 from astrbot.core.subagent.models import SubagentTaskData
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -72,7 +77,7 @@ class HandoffExecutor:
         orchestrator_depth_getter = getattr(orchestrator, "get_max_nested_depth", None)
         if callable(orchestrator_depth_getter):
             depth = cls._safe_int(orchestrator_depth_getter(), 2)
-            return min(8, max(1, depth))
+            return min(MAX_NESTED_DEPTH_LIMIT, max(MIN_NESTED_DEPTH_LIMIT, depth))
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -84,7 +89,7 @@ class HandoffExecutor:
             else 2
         )
         depth = cls._safe_int(raw_depth, 2)
-        return min(8, max(1, depth))
+        return min(MAX_NESTED_DEPTH_LIMIT, max(MIN_NESTED_DEPTH_LIMIT, depth))
 
     @classmethod
     def _resolve_execution_settings(
@@ -95,7 +100,8 @@ class HandoffExecutor:
             runtime=str(provider_settings.get("computer_use_runtime", "none")),
             max_nested_depth=cls._resolve_max_nested_depth(run_context),
             default_max_steps=cls._safe_int(
-                provider_settings.get("max_agent_step", 30), 30
+                provider_settings.get("max_agent_step", DEFAULT_MAX_STEPS),
+                DEFAULT_MAX_STEPS,
             ),
             streaming_response=bool(provider_settings.get("streaming_response", False)),
         )
