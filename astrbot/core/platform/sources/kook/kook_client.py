@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import os
 import random
 import time
 import zlib
@@ -12,12 +13,9 @@ import websockets
 
 from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .kook_config import KookConfig
 from .kook_types import KookApiPaths, KookMessageType
-
-ALLOWED_ASSETS_DIR = Path(get_astrbot_data_path()).resolve()
 
 
 class KookClient:
@@ -362,16 +360,13 @@ class KookClient:
             filename = file_url.split("/")[-1]
             return file_url
 
-        elif file_url.startswith("base64:///"):
+        if file_url.startswith("base64:///"):
             # b64decode的时候得开头留一个'/'的, 不然会报错
             b64_str = file_url.removeprefix("base64://")
             bytes_data = base64.b64decode(b64_str)
 
-        elif file_url.startswith("file://"):
-            if file_url.startswith("file:///"):
-                file_url = file_url.removeprefix("file:///")
-            else:
-                file_url = file_url.removeprefix("file://")
+        elif file_url.startswith("file://") or os.path.exists(file_url):
+            file_url = file_url.removeprefix("file://")
 
             try:
                 target_path = Path(file_url).resolve()
@@ -380,15 +375,6 @@ class KookClient:
                 raise FileNotFoundError(
                     f'获取文件 "{file_url}" 绝对路径失败: "{exp}"'
                 ) from exp
-
-            # 安全验证
-            if not target_path.is_relative_to(ALLOWED_ASSETS_DIR):
-                logger.error(
-                    f'[KOOK] 拒绝访问: "{target_path.as_posix()}" 不在允许的目录范围内'
-                )
-                raise PermissionError(
-                    f'拒绝访问: "{target_path.name}"文件路径不在允许的目录范围内'
-                )
 
             if not target_path.is_file():
                 raise FileNotFoundError(f"文件不存在: {target_path.name}")

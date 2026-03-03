@@ -4,7 +4,7 @@ import re
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.message_components import At, AtAll, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -165,52 +165,120 @@ class KookPlatformAdapter(Platform):
 
         logger.info("[KOOK] 资源清理完成")
 
+    def _parse_kmarkdown_text_message(
+        self, data: dict, self_id: str
+    ) -> tuple[list, str]:
+        kmarkdown = data.get("extra", {}).get("kmarkdown", {})
+        content = data.get("content") or ""
+        raw_content = kmarkdown.get("raw_content") or content
+        if not isinstance(content, str):
+            content = str(content)
+        if not isinstance(raw_content, str):
+            raw_content = str(raw_content)
+
+        mention_name_map: dict[str, str] = {}
+        mention_part = kmarkdown.get("mention_part", [])
+        if isinstance(mention_part, list):
+            for item in mention_part:
+                if not isinstance(item, dict):
+                    continue
+                mention_id = item.get("id")
+                if mention_id is None:
+                    continue
+                mention_name_map[str(mention_id)] = str(item.get("username", ""))
+
+        components = []
+        cursor = 0
+        for match in re.finditer(r"\(met\)([^()]+)\(met\)", content):
+            if match.start() > cursor:
+                plain_text = content[cursor : match.start()]
+                if plain_text:
+                    components.append(Plain(text=plain_text))
+
+            mention_target = match.group(1).strip()
+            if mention_target == "all":
+                components.append(AtAll())
+            elif mention_target:
+                components.append(
+                    At(
+                        qq=mention_target,
+                        name=mention_name_map.get(mention_target, ""),
+                    )
+                )
+            cursor = match.end()
+
+        if cursor < len(content):
+            tail_text = content[cursor:]
+            if tail_text:
+                components.append(Plain(text=tail_text))
+
+        message_str = raw_content
+        if components:
+            for comp in components:
+                if isinstance(comp, Plain):
+                    if not comp.text.strip():
+                        continue
+                    break
+                if isinstance(comp, At):
+                    if str(comp.qq) == str(self_id):
+                        message_str = re.sub(
+                            r"^@[^\s]+(\s*-\s*[^\s]+)?\s*",
+                            "",
+                            message_str,
+                            count=1,
+                        ).strip()
+                    break
+        if not components:
+            if message_str:
+                components = [Plain(text=message_str)]
+            else:
+                components = []
+
+        return components, message_str
+
     async def convert_message(self, data: dict) -> AstrBotMessage:
         abm = AstrBotMessage()
         abm.raw_message = data
         abm.self_id = self.client.bot_id
 
         channel_type = data.get("channel_type")
+        author_id = data.get("author_id", "unknown")
         # channel_type定义: https://developer.kookapp.cn/doc/event/event-introduction
         match channel_type:
             case "GROUP":
+                session_id = data.get("target_id") or "unknown"
                 abm.type = MessageType.GROUP_MESSAGE
-                abm.group_id = data.get("target_id")
-                abm.session_id = data.get("target_id")
+                abm.group_id = session_id
+                abm.session_id = session_id
             case "PERSON":
                 abm.type = MessageType.FRIEND_MESSAGE
                 abm.group_id = ""
-                abm.session_id = data.get("author_id")
+                abm.session_id = data.get("author_id", "unknown")
             case "BROADCAST":
+                session_id = data.get("target_id") or "unknown"
                 abm.type = MessageType.OTHER_MESSAGE
-                abm.group_id = data.get("target_id")
-                abm.session_id = data.get("target_id")
+                abm.group_id = session_id
+                abm.session_id = session_id
             case _:
                 raise ValueError(f"不支持的频道类型: {channel_type}")
 
         abm.sender = MessageMember(
-            user_id=data.get("author_id"),
+            user_id=author_id,
             nickname=data.get("extra", {}).get("author", {}).get("username", ""),
         )
 
-        abm.message_id = data.get("msg_id")
+        abm.message_id = data.get("msg_id", "unknown")
 
         # 普通文本消息
         if data.get("type") == 9:
-            raw_content = (
-                data.get("extra", {})
-                .get("kmarkdown", {})
-                .get("raw_content", data.get("content"))
+            message, message_str = self._parse_kmarkdown_text_message(
+                data, str(abm.self_id)
             )
-
-            raw_content = re.sub(
-                r"^@[^\s]+(\s*-\s*[^\s]+)?\s*", "", raw_content
-            )  # 删除@前缀
-            abm.message_str = raw_content
-            abm.message = [Plain(text=raw_content)]
+            abm.message = message
+            abm.message_str = message_str
         # 卡片消息
         elif data.get("type") == 10:
-            content = data.get("content")
+            content = data.get("content", {})
             try:
                 card_list = json.loads(content)
                 text = ""
@@ -262,18 +330,4 @@ class KookPlatformAdapter(Platform):
             session_id=message.session_id,
             client=self.client,
         )
-        raw = message.raw_message
-        is_at = False
-        # 检查kmarkdown.mention_role_part
-        kmarkdown = raw.get("extra", {}).get("kmarkdown", {})
-        mention_role_part = kmarkdown.get("mention_role_part", [])
-        raw_content = kmarkdown.get("raw_content", "")
-        bot_nickname = self.client.bot_name
-        if mention_role_part:
-            is_at = True
-        elif f"@{bot_nickname}" in raw_content:
-            is_at = True
-        if is_at:
-            message_event.is_wake = True
-            message_event.is_at_or_wake_command = True
         self.commit_event(message_event)

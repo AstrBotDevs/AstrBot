@@ -156,9 +156,7 @@ class KookEvent(AstrMessageEvent):
 
         if self._file_message_counter > 0:
             logger.debug("[Kook] 正在向kook服务器上传文件")
-        # asyncio.gather 的返回结果竟然是有序的,真神奇,但是以防万一
-        # OrderMessage还是有index字段的
-        # https://docs.python.org/3/library/asyncio-task.html#asyncio.gather
+
         tasks_result = await asyncio.gather(*file_upload_tasks, return_exceptions=True)
         order_messages: list[OrderMessage] = []
 
