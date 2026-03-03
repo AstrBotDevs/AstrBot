@@ -593,11 +593,6 @@
         "type": "string",
         "hint": "必填项。从 KOOK 开发者平台获取的机器人 Token"
       },
-      "kook_bot_nickname": {
-        "description": "Bot Nickname",
-        "type": "string",
-        "hint": "可选项。若发送者昵称与此值一致，将忽略该消息。"
-      },
       "kook_reconnect_delay": {
         "description": "重连延迟",
         "type": "int",

@@ -57,20 +57,12 @@ class KookPlatformAdapter(Platform):
             name="kook", description="KOOK 适配器", id=self.kook_config.id
         )
 
-    def _should_ignore_event_by_bot_nickname(self, payload: dict) -> bool:
-        bot_nickname = self.kook_config.bot_nickname.strip()
-        if not bot_nickname:
+    def _should_ignore_event_by_bot_self(self, payload: dict) -> bool:
+        bot_id = self.client.bot_id
+        author_id: str = payload.get("author_id", "")
+        if not isinstance(author_id, str):
             return False
-
-        author = payload.get("extra", {}).get("author", {})
-        if not isinstance(author, dict):
-            return False
-
-        author_nickname = author.get("nickname") or author.get("username") or ""
-        if not isinstance(author_nickname, str):
-            author_nickname = str(author_nickname)
-
-        return author_nickname.strip().casefold() == bot_nickname.casefold()
+        return bot_id == author_id
 
     async def _on_received(self, data: dict):
         logger.debug(f"KOOK 收到数据: {data}")
@@ -79,7 +71,7 @@ class KookPlatformAdapter(Platform):
             event_type = payload.get("type")
             # 支持type=9（文本）和type=10（卡片）
             if event_type in (9, 10):
-                if self._should_ignore_event_by_bot_nickname(payload):
+                if self._should_ignore_event_by_bot_self(payload):
                     return
                 try:
                     abm = await self.convert_message(payload)
