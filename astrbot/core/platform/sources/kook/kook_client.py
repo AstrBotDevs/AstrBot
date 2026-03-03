@@ -166,7 +166,6 @@ class KookClient:
                             continue
                         msg = msg.decode("utf-8")
 
-                    logger.debug(f"[KOOK] 收到原始消息: {msg}")
                     data = json.loads(msg)
 
                     # 处理不同类型的信令
@@ -233,7 +232,6 @@ class KookClient:
         """处理PONG心跳响应"""
         self.last_heartbeat_time = time.time()
         self.heartbeat_failed_count = 0
-        logger.debug("[KOOK] 收到心跳响应")
 
     async def _handle_reconnect(self, data):
         """处理重连指令"""
@@ -297,7 +295,6 @@ class KookClient:
         try:
             ping_data = {"s": 2, "sn": self.last_sn}
             await self.ws.send(json.dumps(ping_data))  # type: ignore
-            logger.debug(f"[KOOK] 发送心跳，sn: {self.last_sn}")
         except Exception as e:
             logger.error(f"[KOOK] 发送心跳失败: {e}")
 
