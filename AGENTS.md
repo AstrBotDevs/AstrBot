@@ -21,7 +21,7 @@ Runs on `http://localhost:3000` by default.
 
 ### Test
 
-Use the following command to run the tests: .\.venv\Scripts\pytest.exe. Do not use uv run pytest.
+Use the following command to run the tests: .\.venv\Scripts\pytest.exe arfter changeing the code. Do not use uv run pytest 
 
 ## Dev environment tips
 
