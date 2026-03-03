@@ -669,6 +669,16 @@ class BaseDatabase(abc.ABC):
     ) -> bool: ...
 
     @abc.abstractmethod
+    async def reschedule_subagent_task(
+        self,
+        *,
+        task_id: str,
+        next_run_at: datetime.datetime,
+        error_class: str,
+        last_error: str,
+    ) -> bool: ...
+
+    @abc.abstractmethod
     async def mark_subagent_task_succeeded(
         self,
         task_id: str,

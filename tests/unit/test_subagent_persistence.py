@@ -115,6 +115,19 @@ async def test_sqlite_subagent_task_status_transitions(tmp_path: Path):
         last_error="bad input",
     )
     assert failed is True
+    retried_failed = await db.reschedule_subagent_task(
+        task_id=failed_task.task_id,
+        next_run_at=now - timedelta(seconds=1),
+        error_class="manual",
+        last_error="manual retry requested",
+    )
+    assert retried_failed is True
+    running_failed_retry = await db.mark_subagent_task_running(failed_task.task_id)
+    assert running_failed_retry is not None
+    succeeded_after_retry = await db.mark_subagent_task_succeeded(
+        failed_task.task_id, result_text="done_after_manual_retry"
+    )
+    assert succeeded_after_retry is True
 
     canceled_task = await db.create_subagent_task(
         task_id="task_3",
@@ -152,6 +165,7 @@ async def test_sqlite_subagent_task_status_transitions(tmp_path: Path):
     failed_rows = await db.list_subagent_tasks(status="failed", limit=10)
     canceled_rows = await db.list_subagent_tasks(status="canceled", limit=10)
     assert any(row.task_id == "task_1" for row in succeeded_rows)
-    assert any(row.task_id == "task_2" for row in failed_rows)
+    assert not any(row.task_id == "task_2" for row in failed_rows)
+    assert any(row.task_id == "task_2" for row in succeeded_rows)
     assert any(row.task_id == "task_3" for row in canceled_rows)
     assert any(row.task_id == "task_4" for row in canceled_rows)

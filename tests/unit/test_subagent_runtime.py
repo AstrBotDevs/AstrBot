@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from astrbot.core.db.po import SubagentTask
 from astrbot.core.subagent.error_classifier import ErrorClassifier
@@ -62,12 +63,33 @@ class _FakeDb:
         self, *, task_id: str, next_run_at: datetime, error_class: str, last_error: str
     ):
         t = self.tasks.get(task_id)
-        if t is None:
+        if t is None or t.status != "running":
             return False
         t.status = "retrying"
         t.next_run_at = next_run_at
         t.error_class = error_class
         t.last_error = last_error
+        t.updated_at = datetime.now(timezone.utc)
+        return True
+
+    async def reschedule_subagent_task(
+        self, *, task_id: str, next_run_at: datetime, error_class: str, last_error: str
+    ):
+        t = self.tasks.get(task_id)
+        if t is None or t.status not in {
+            "failed",
+            "canceled",
+            "succeeded",
+            "pending",
+            "retrying",
+        }:
+            return False
+        t.status = "retrying"
+        t.next_run_at = next_run_at
+        t.error_class = error_class
+        t.last_error = last_error
+        t.result_text = None
+        t.finished_at = None
         t.updated_at = datetime.now(timezone.utc)
         return True
 
@@ -352,3 +374,87 @@ async def test_runtime_retryable_classification_follows_retry_branch():
     processed = await runtime.process_once(batch_size=8)
     assert processed == 1
     assert db.tasks[task_id].status == "retrying"
+
+
+@pytest.mark.asyncio
+async def test_runtime_manual_retry_reschedules_failed_task():
+    db = _FakeDb()
+    runtime = SubagentRuntime(db, max_attempts=3)
+    calls = {"n": 0}
+
+    async def _executor(_task):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("fatal")
+        return "done"
+
+    runtime.set_task_executor(_executor)
+    task_id = await runtime.enqueue(
+        umo="webchat:FriendMessage:webchat!u!s",
+        subagent_name="writer",
+        handoff_tool_name="transfer_to_writer",
+        payload={"tool_args": {"input": "manual-retry"}},
+        tool_call_id="call_manual_retry",
+    )
+
+    processed = await runtime.process_once(batch_size=8)
+    assert processed == 1
+    assert db.tasks[task_id].status == "failed"
+
+    retried = await runtime.retry_task(task_id)
+    assert retried is True
+    assert db.tasks[task_id].status == "retrying"
+
+    db.tasks[task_id].next_run_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    processed = await runtime.process_once(batch_size=8)
+    assert processed == 1
+    assert db.tasks[task_id].status == "succeeded"
+    assert calls["n"] == 2
+
+
+class _RaceDb(_FakeDb):
+    def __init__(self):
+        super().__init__()
+        self._race_injected = False
+
+    async def create_subagent_task(self, **kwargs) -> SubagentTask:
+        if not self._race_injected:
+            self._race_injected = True
+            now = datetime.now(timezone.utc)
+            winner = SubagentTask(
+                task_id="winner_task",
+                idempotency_key=kwargs["idempotency_key"],
+                umo=kwargs["umo"],
+                subagent_name=kwargs["subagent_name"],
+                handoff_tool_name=kwargs["handoff_tool_name"],
+                payload_json=kwargs["payload_json"],
+                max_attempts=kwargs.get("max_attempts", 3),
+                status="pending",
+                attempt=0,
+                next_run_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            self.tasks[winner.task_id] = winner
+            raise IntegrityError(
+                statement="INSERT INTO subagent_tasks ...",
+                params={},
+                orig=Exception("UNIQUE constraint failed: subagent_tasks.idempotency_key"),
+            )
+        return await super().create_subagent_task(**kwargs)
+
+
+@pytest.mark.asyncio
+async def test_runtime_enqueue_handles_idempotency_race_and_returns_existing_task():
+    db = _RaceDb()
+    runtime = SubagentRuntime(db)
+
+    task_id = await runtime.enqueue(
+        umo="webchat:FriendMessage:webchat!u!s",
+        subagent_name="writer",
+        handoff_tool_name="transfer_to_writer",
+        payload={"tool_args": {"input": "race"}},
+        tool_call_id="call_race",
+    )
+
+    assert task_id == "winner_task"

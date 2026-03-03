@@ -1,32 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Literal, Protocol
 
+from .constants import (
+    DEFAULT_ERROR_CLASS,
+    DEFAULT_FATAL_EXCEPTION_NAMES,
+    DEFAULT_FATAL_EXCEPTIONS,
+    DEFAULT_TRANSIENT_EXCEPTION_NAMES,
+    DEFAULT_TRANSIENT_EXCEPTIONS,
+    EXCEPTION_ALLOWLIST,
+)
 from .models import SubagentErrorClassifierConfig
 
 ErrorClass = Literal["fatal", "transient", "retryable"]
-
-_CLASSIFY_DEFAULTS = {
-    "fatal_exceptions": ["ValueError", "PermissionError", "KeyError"],
-    "transient_exceptions": [
-        "asyncio.TimeoutError",
-        "TimeoutError",
-        "ConnectionError",
-        "ConnectionResetError",
-    ],
-    "default_class": "transient",
-}
-
-_EXCEPTION_ALLOWLIST: dict[str, type[Exception]] = {
-    "ValueError": ValueError,
-    "PermissionError": PermissionError,
-    "KeyError": KeyError,
-    "TimeoutError": TimeoutError,
-    "ConnectionError": ConnectionError,
-    "ConnectionResetError": ConnectionResetError,
-    "asyncio.TimeoutError": asyncio.TimeoutError,
-}
 
 
 class ErrorClassifier(Protocol):
@@ -39,23 +25,14 @@ class DefaultErrorClassifier:
         *,
         fatal_types: tuple[type[Exception], ...] | None = None,
         transient_types: tuple[type[Exception], ...] | None = None,
-        default_class: ErrorClass = "transient",
+        default_class: ErrorClass = DEFAULT_ERROR_CLASS,
     ) -> None:
-        self.fatal_types = fatal_types or (
-            ValueError,
-            PermissionError,
-            KeyError,
-        )
-        self.transient_types = transient_types or (
-            asyncio.TimeoutError,
-            TimeoutError,
-            ConnectionError,
-            ConnectionResetError,
-        )
+        self.fatal_types = fatal_types or DEFAULT_FATAL_EXCEPTIONS
+        self.transient_types = transient_types or DEFAULT_TRANSIENT_EXCEPTIONS
         self.default_class: ErrorClass = (
             default_class
             if default_class in {"fatal", "transient", "retryable"}
-            else "transient"
+            else DEFAULT_ERROR_CLASS
         )
 
     def classify(self, exc: Exception) -> ErrorClass:
@@ -67,7 +44,15 @@ class DefaultErrorClassifier:
 
 
 def get_error_classifier_defaults() -> dict[str, str | list[str]]:
-    return dict(_CLASSIFY_DEFAULTS)
+    """Return default configuration for error classifier.
+
+    This function provides serializable default values for configuration.
+    """
+    return {
+        "fatal_exceptions": DEFAULT_FATAL_EXCEPTION_NAMES,
+        "transient_exceptions": DEFAULT_TRANSIENT_EXCEPTION_NAMES,
+        "default_class": DEFAULT_ERROR_CLASS,
+    }
 
 
 def build_error_classifier_from_config(
@@ -108,7 +93,7 @@ def _resolve_exception_types(
         name = str(raw_name or "").strip()
         if not name:
             continue
-        exc_type = _EXCEPTION_ALLOWLIST.get(name)
+        exc_type = EXCEPTION_ALLOWLIST.get(name)
         if exc_type is None:
             diagnostics.append(f"{field_name}: unsupported exception '{name}' ignored.")
             continue

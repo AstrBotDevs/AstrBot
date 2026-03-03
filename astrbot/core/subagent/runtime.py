@@ -9,10 +9,23 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+
 from astrbot import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import SubagentTask
 
+from .constants import (
+    DEFAULT_BASE_DELAY_MS,
+    DEFAULT_JITTER_RATIO,
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_MAX_CONCURRENT_TASKS,
+    DEFAULT_MAX_DELAY_MS,
+    MAX_CONCURRENT_TASKS,
+    MIN_ATTEMPTS,
+    MIN_BASE_DELAY_MS,
+    MIN_CONCURRENT_TASKS,
+)
 from .error_classifier import DefaultErrorClassifier, ErrorClassifier
 from .hooks import NoopSubagentHooks, SubagentHooks
 from .models import SubagentTaskData
@@ -29,18 +42,20 @@ class SubagentRuntime:
         self,
         db: BaseDatabase | None,
         *,
-        max_concurrent: int = 8,
-        max_attempts: int = 3,
-        base_delay_ms: int = 500,
-        max_delay_ms: int = 30000,
-        jitter_ratio: float = 0.1,
+        max_concurrent: int = DEFAULT_MAX_CONCURRENT_TASKS,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        base_delay_ms: int = DEFAULT_BASE_DELAY_MS,
+        max_delay_ms: int = DEFAULT_MAX_DELAY_MS,
+        jitter_ratio: float = DEFAULT_JITTER_RATIO,
         hooks: SubagentHooks | None = None,
         error_classifier: ErrorClassifier | None = None,
     ) -> None:
         self._db = db
-        self._max_concurrent = max(1, min(int(max_concurrent), 64))
-        self._max_attempts = max(1, int(max_attempts))
-        self._base_delay_ms = max(100, int(base_delay_ms))
+        self._max_concurrent = max(
+            MIN_CONCURRENT_TASKS, min(int(max_concurrent), MAX_CONCURRENT_TASKS)
+        )
+        self._max_attempts = max(MIN_ATTEMPTS, int(max_attempts))
+        self._base_delay_ms = max(MIN_BASE_DELAY_MS, int(base_delay_ms))
         self._max_delay_ms = max(self._base_delay_ms, int(max_delay_ms))
         self._jitter_ratio = max(0.0, min(float(jitter_ratio), 1.0))
         self._active_lanes: dict[str, str] = {}
@@ -52,7 +67,9 @@ class SubagentRuntime:
         )
 
     def set_max_concurrent(self, value: int) -> None:
-        self._max_concurrent = max(1, min(int(value), 64))
+        self._max_concurrent = max(
+            MIN_CONCURRENT_TASKS, min(int(value), MAX_CONCURRENT_TASKS)
+        )
 
     def set_task_executor(
         self,
@@ -91,15 +108,22 @@ class SubagentRuntime:
             return existing.task_id
 
         task_id = uuid.uuid4().hex
-        created = await self._db.create_subagent_task(
-            task_id=task_id,
-            idempotency_key=idem,
-            umo=umo,
-            subagent_name=subagent_name,
-            handoff_tool_name=handoff_tool_name,
-            payload_json=payload_json,
-            max_attempts=self._max_attempts,
-        )
+        try:
+            created = await self._db.create_subagent_task(
+                task_id=task_id,
+                idempotency_key=idem,
+                umo=umo,
+                subagent_name=subagent_name,
+                handoff_tool_name=handoff_tool_name,
+                payload_json=payload_json,
+                max_attempts=self._max_attempts,
+            )
+        except IntegrityError:
+            # Handle concurrent enqueue with the same idempotency key.
+            existing_after_race = await self._db.get_subagent_task_by_idempotency(idem)
+            if existing_after_race:
+                return existing_after_race.task_id
+            raise
         self._emit_event("task_enqueued", task_id, subagent_name, 0, umo)
         await self._call_hook("on_task_enqueued", _to_task_data(created))
         return task_id
@@ -154,7 +178,7 @@ class SubagentRuntime:
     async def retry_task(self, task_id: str) -> bool:
         if not self._db:
             return False
-        return await self._db.mark_subagent_task_retrying(
+        return await self._db.reschedule_subagent_task(
             task_id=task_id,
             next_run_at=datetime.now(timezone.utc),
             error_class="manual",
@@ -179,7 +203,7 @@ class SubagentRuntime:
             result = await self._task_executor(task)
             updated = await self._db.mark_subagent_task_succeeded(
                 task.task_id, result_text=result
-            )  # type: ignore[arg-type]
+            )
             if not updated:
                 self._emit_event(
                     "task_result_ignored",
@@ -218,7 +242,7 @@ class SubagentRuntime:
                     next_run_at=next_run,
                     error_class=error_class,
                     last_error=str(exc),
-                )  # type: ignore[arg-type]
+                )
                 if not updated:
                     self._emit_event(
                         "task_result_ignored",
@@ -258,7 +282,7 @@ class SubagentRuntime:
                 task_id=task.task_id,
                 error_class=error_class,
                 last_error=str(exc),
-            )  # type: ignore[arg-type]
+            )
             if not updated:
                 self._emit_event(
                     "task_result_ignored",
@@ -345,10 +369,16 @@ class SubagentRuntime:
             return
         try:
             await hook(*args, **kwargs)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            exc_type = type(exc).__name__
+            exc_module = type(exc).__module__
+            full_exc_name = (
+                exc_type if exc_module == "builtins" else f"{exc_module}.{exc_type}"
+            )
             logger.error(
-                "[SubagentRuntime] hook=%s failed: %s",
+                "[SubagentRuntime] hook=%s failed (type=%s): %s",
                 hook_name,
+                full_exc_name,
                 exc,
                 exc_info=True,
             )

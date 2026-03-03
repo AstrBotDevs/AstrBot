@@ -3,13 +3,13 @@
     <div class="d-flex align-center justify-space-between mb-6">
       <div>
         <div class="d-flex align-center gap-2 mb-1">
-          <h2 class="text-h5 font-weight-bold">{{ tm('page.title') }}</h2>
+          <h2 class="text-h5 font-weight-bold">{{ tf('page.title', 'SubAgent Orchestration') }}</h2>
           <v-chip size="x-small" color="orange-darken-2" variant="tonal" label class="font-weight-bold">
-            {{ tm('page.beta') }}
+            {{ tf('page.beta', 'Experimental') }}
           </v-chip>
         </div>
         <div class="text-body-2 text-medium-emphasis">
-          {{ tm('page.subtitle') }}
+          {{ tf('page.subtitle', 'The main LLM can use its own tools directly and delegate tasks to SubAgents via handoff.') }}
         </div>
       </div>
 
@@ -21,7 +21,7 @@
           :loading="loading"
           @click="reload"
         >
-          {{ tm('actions.refresh') }}
+          {{ tf('actions.refresh', 'Refresh') }}
         </v-btn>
         <v-btn
           variant="flat"
@@ -30,7 +30,7 @@
           :loading="saving"
           @click="save"
         >
-          {{ tm('actions.save') }}
+          {{ tf('actions.save', 'Save') }}
         </v-btn>
       </div>
     </div>
@@ -40,7 +40,7 @@
       <v-card-text>
         <div class="d-flex align-center justify-space-between">
           <div>
-            <div class="text-subtitle-1 font-weight-bold mb-1">{{ tm('section.globalSettings') || 'Global Settings' }}</div>
+            <div class="text-subtitle-1 font-weight-bold mb-1">{{ tf('section.globalSettings', 'Global Settings') }}</div>
             <div class="text-caption text-medium-emphasis">
               {{ mainStateDescription }}
             </div>
@@ -53,7 +53,7 @@
           <v-col cols="12" md="6">
             <v-switch
               v-model="cfg.main_enable"
-              :label="tm('switches.enable')"
+              :label="tf('switches.enable', 'Enable SubAgent orchestration')"
               color="primary"
               hide-details
               inset
@@ -61,8 +61,8 @@
             >
               <template #label>
                 <div class="d-flex flex-column">
-                  <span class="text-body-2 font-weight-medium">{{ tm('switches.enable') }}</span>
-                  <span class="text-caption text-medium-emphasis">{{ tm('switches.enableHint') }}</span>
+                  <span class="text-body-2 font-weight-medium">{{ tf('switches.enable', 'Enable SubAgent orchestration') }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ tf('switches.enableHint', 'Enable sub-agent functionality') }}</span>
                 </div>
               </template>
             </v-switch>
@@ -71,7 +71,7 @@
             <v-switch
               v-model="cfg.remove_main_duplicate_tools"
               :disabled="!cfg.main_enable"
-              :label="tm('switches.dedupe')"
+              :label="tf('switches.dedupe', 'Deduplicate main LLM tools (hide tools duplicated by SubAgents)')"
               color="primary"
               hide-details
               inset
@@ -79,8 +79,8 @@
             >
               <template #label>
                 <div class="d-flex flex-column">
-                  <span class="text-body-2 font-weight-medium">{{ tm('switches.dedupe') }}</span>
-                  <span class="text-caption text-medium-emphasis">{{ tm('switches.dedupeHint') }}</span>
+                  <span class="text-body-2 font-weight-medium">{{ tf('switches.dedupe', 'Deduplicate main LLM tools (hide tools duplicated by SubAgents)') }}</span>
+                  <span class="text-caption text-medium-emphasis">{{ tf('switches.dedupeHint', 'Remove duplicate tools from main agent') }}</span>
                 </div>
               </template>
             </v-switch>
@@ -93,7 +93,7 @@
     <div class="d-flex align-center justify-space-between mb-4">
       <div class="d-flex align-center gap-2">
         <v-icon icon="mdi-robot" color="primary" size="small" />
-        <div class="text-h6 font-weight-bold">{{ tm('section.title') }}</div>
+        <div class="text-h6 font-weight-bold">{{ tf('section.title', 'SubAgents') }}</div>
         <v-chip size="small" variant="tonal" color="primary" class="ml-2">
           {{ cfg.agents.length }}
         </v-chip>
@@ -103,7 +103,7 @@
         color="primary"
         @click="addAgent"
       >
-        {{ tm('actions.add') }}
+        {{ tf('actions.add', 'Add SubAgent') }}
       </v-btn>
     </div>
 
@@ -129,11 +129,11 @@
             <div class="d-flex flex-column flex-grow-1" style="min-width: 0;">
               <div class="d-flex align-center gap-2">
                 <span class="text-subtitle-1 font-weight-bold text-truncate">
-                  {{ agent.name || tm('cards.unnamed') }}
+                  {{ agent.name || tf('cards.unnamed', 'Untitled SubAgent') }}
                 </span>
               </div>
               <div class="text-caption text-medium-emphasis text-truncate">
-                {{ agent.public_description || tm('cards.noDescription') }}
+                {{ agent.public_description || tf('cards.noDescription', 'No description') }}
               </div>
             </div>
 
@@ -165,10 +165,10 @@
               <div class="d-flex flex-column gap-4">
                 <v-text-field
                   v-model="agent.name"
-                  :label="tm('form.nameLabel')"
+                  :label="tf('form.nameLabel', 'Agent name (used for transfer_to_{name})')"
                   :rules="[
-                    v => !!v || tm('messages.nameRequired'),
-                    v => (v || '').trim().length <= 256 || tm('messages.nameInvalid')
+                    v => !!v || tf('messages.nameRequired', 'Name is required'),
+                    v => (v || '').trim().length <= 256 || tf('messages.nameInvalid', 'Invalid SubAgent name')
                   ]"
                   variant="outlined"
                   density="comfortable"
@@ -177,7 +177,7 @@
                 />
 
                 <div class="d-flex flex-column gap-1">
-                  <div class="text-caption text-medium-emphasis ml-1">{{ tm('form.providerLabel') }}</div>
+                  <div class="text-caption text-medium-emphasis ml-1">{{ tf('form.providerLabel', 'Chat Provider (optional)') }}</div>
                   <v-card variant="outlined" class="pa-0 border-thin rounded bg-transparent" style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));">
                     <div class="pa-3">
                       <ProviderSelector
@@ -192,7 +192,7 @@
                 </div>
 
                 <div class="d-flex flex-column gap-1">
-                  <div class="text-caption text-medium-emphasis ml-1">{{ tm('form.personaLabel') }}</div>
+                  <div class="text-caption text-medium-emphasis ml-1">{{ tf('form.personaLabel', 'Choose Persona') }}</div>
                   <v-card variant="outlined" class="pa-0 border-thin rounded bg-transparent" style="border-color: rgba(var(--v-border-color), var(--v-border-opacity));">
                     <div class="pa-3">
                       <PersonaSelector
@@ -204,7 +204,7 @@
 
                 <v-textarea
                   v-model="agent.public_description"
-                  :label="tm('form.descriptionLabel')"
+                  :label="tf('form.descriptionLabel', 'Description for the main LLM (used to decide handoff)')"
                   variant="outlined"
                   density="comfortable"
                   auto-grow
@@ -218,7 +218,7 @@
             <v-col cols="12" md="6">
               <div class="h-100">
                 <div class="text-caption font-weight-bold text-medium-emphasis mb-2 ml-1">
-                  {{ tm('cards.personaPreview') }}
+                  {{ tf('cards.personaPreview', 'Persona Preview') }}
                 </div>
                 <PersonaQuickPreview
                   :model-value="agent.persona_id"
@@ -234,17 +234,17 @@
     <!-- Empty State -->
     <div v-if="cfg.agents.length === 0" class="d-flex flex-column align-center justify-center py-12 text-medium-emphasis">
       <v-icon icon="mdi-robot-off" size="64" class="mb-4 opacity-50" />
-      <div class="text-h6">{{ tm('empty.title') }}</div>
-      <div class="text-body-2 mb-4">{{ tm('empty.subtitle') }}</div>
+      <div class="text-h6">{{ tf('empty.title', 'No Agents Configured') }}</div>
+      <div class="text-body-2 mb-4">{{ tf('empty.subtitle', 'Add a new sub-agent to get started') }}</div>
       <v-btn color="primary" variant="tonal" @click="addAgent">
-        {{ tm('empty.action') }}
+        {{ tf('empty.action', 'Create First Agent') }}
       </v-btn>
     </div>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
       {{ snackbar.message }}
       <template #actions>
-         <v-btn variant="text" @click="snackbar.show = false">{{ tm('actions.close') }}</v-btn>
+         <v-btn variant="text" @click="snackbar.show = false">{{ tf('actions.close', 'Close') }}</v-btn>
       </template>
     </v-snackbar>
   </div>
@@ -301,6 +301,22 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
   snackbar.value = { show: true, message, color }
 }
 
+function tf(
+  key: string,
+  fallback: string,
+  params?: Record<string, string | number>
+): string {
+  const translated = tm(key, params)
+  if (
+    !translated ||
+    translated.startsWith('[MISSING:') ||
+    translated.startsWith('[INVALID:')
+  ) {
+    return fallback
+  }
+  return translated
+}
+
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
@@ -319,7 +335,15 @@ const cfg = ref<SubAgentConfig>({
 })
 
 const mainStateDescription = computed(() =>
-  cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
+  cfg.value.main_enable
+    ? tf(
+      'description.enabled',
+      'When on: the main LLM keeps its own tools and mounts transfer_to_* delegate tools.'
+    )
+    : tf(
+      'description.disabled',
+      'When off: SubAgent is disabled and the main LLM calls tools directly.'
+    )
 )
 
 function inferToolsScope(a: any): ToolsScope {
@@ -398,10 +422,10 @@ async function loadConfig() {
     if (res.data.status === 'ok') {
       cfg.value = normalizeConfig(res.data.data)
     } else {
-      toast(res.data.message || tm('messages.loadConfigFailed'), 'error')
+      toast(res.data.message || tf('messages.loadConfigFailed', 'Failed to load config'), 'error')
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.loadConfigFailed'), 'error')
+    toast(e?.response?.data?.message || tf('messages.loadConfigFailed', 'Failed to load config'), 'error')
   } finally {
     loading.value = false
   }
@@ -431,20 +455,26 @@ function validateBeforeSave(): boolean {
   for (const a of cfg.value.agents) {
     const name = (a.name || '').trim()
     if (!name) {
-      toast(tm('messages.nameMissing'), 'warning')
+      toast(tf('messages.nameMissing', 'A SubAgent is missing a name'), 'warning')
       return false
     }
     if (name.length > 256) {
-      toast(tm('messages.nameInvalid'), 'warning')
+      toast(tf('messages.nameInvalid', 'Invalid SubAgent name'), 'warning')
       return false
     }
     if (seen.has(name)) {
-      toast(tm('messages.nameDuplicate', { name }), 'warning')
+      toast(
+        tf('messages.nameDuplicate', `Duplicate SubAgent name: ${name}`, { name }),
+        'warning'
+      )
       return false
     }
     seen.add(name)
     if (!a.persona_id) {
-      toast(tm('messages.personaMissing', { name }), 'warning')
+      toast(
+        tf('messages.personaMissing', `SubAgent ${name} has no persona selected`, { name }),
+        'warning'
+      )
       return false
     }
   }
@@ -485,12 +515,12 @@ async function save() {
 
     const res = await axios.post('/api/subagent/config', payload)
     if (res.data.status === 'ok') {
-      toast(res.data.message || tm('messages.saveSuccess'), 'success')
+      toast(res.data.message || tf('messages.saveSuccess', 'Saved successfully'), 'success')
     } else {
-      toast(res.data.message || tm('messages.saveFailed'), 'error')
+      toast(res.data.message || tf('messages.saveFailed', 'Failed to save'), 'error')
     }
   } catch (e: any) {
-    toast(e?.response?.data?.message || tm('messages.saveFailed'), 'error')
+    toast(e?.response?.data?.message || tf('messages.saveFailed', 'Failed to save'), 'error')
   } finally {
     saving.value = false
   }

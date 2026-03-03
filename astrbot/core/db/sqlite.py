@@ -1979,6 +1979,39 @@ class SQLiteDatabase(BaseDatabase):
                 res = await session.execute(stmt)
                 return bool(res.rowcount)
 
+    async def reschedule_subagent_task(
+        self,
+        *,
+        task_id: str,
+        next_run_at: datetime,
+        error_class: str,
+        last_error: str,
+    ) -> bool:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status).in_(
+                            ["failed", "canceled", "succeeded", "pending", "retrying"]
+                        ),
+                    )
+                    .values(
+                        status="retrying",
+                        next_run_at=next_run_at,
+                        error_class=error_class,
+                        last_error=last_error,
+                        result_text=None,
+                        finished_at=None,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                return bool(res.rowcount)
+
     async def mark_subagent_task_succeeded(
         self,
         task_id: str,
