@@ -329,6 +329,100 @@ async def test_execute_queued_task_uses_prepared_image_urls_and_notifies(
 
 
 @pytest.mark.asyncio
+async def test_execute_queued_task_restores_handoff_from_snapshot_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    class _FakeAstrAgentContext:
+        def __init__(self, *, context, event):
+            self.context = context
+            self.event = event
+
+    class _FakeAgentContextWrapper:
+        def __init__(self, *, context, tool_call_timeout):
+            self.context = context
+            self.tool_call_timeout = tool_call_timeout
+
+    async def _fake_execute_foreground(tool, *_args, **kwargs):
+        captured["tool"] = tool
+        captured["kwargs"] = kwargs
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="done from snapshot")]
+        )
+
+    async def _fake_notify(**kwargs):
+        captured["notify"] = kwargs
+
+    monkeypatch.setattr(HandoffExecutor, "execute_foreground", _fake_execute_foreground)
+    monkeypatch.setattr(
+        "astrbot.core.subagent.handoff_executor.wake_main_agent_for_background_result",
+        _fake_notify,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_context.AstrAgentContext",
+        _FakeAstrAgentContext,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_context.AgentContextWrapper",
+        _FakeAgentContextWrapper,
+    )
+
+    task = SubagentTaskData(
+        task_id="task_queued_snapshot",
+        idempotency_key="idem_snapshot",
+        umo="webchat:FriendMessage:webchat!user!session",
+        subagent_name="subagent",
+        handoff_tool_name="transfer_to_subagent",
+        status="running",
+        attempt=1,
+        max_attempts=3,
+        next_run_at=None,
+        payload_json=json.dumps(
+            {
+                "_handoff_snapshot": {
+                    "name": "transfer_to_subagent",
+                    "agent_name": "subagent",
+                    "agent_display_name": "Sub Agent",
+                    "instructions": "snapshot prompt",
+                    "tools": ["tool_a"],
+                    "begin_dialogs": [{"role": "assistant", "content": "hello"}],
+                    "provider_id": "provider-x",
+                    "max_steps": 9,
+                    "tool_description": "snapshot desc",
+                },
+                "_meta": {"background_note": "done", "tool_call_timeout": 60},
+                "tool_args": {"image_urls": ["https://example.com/a.png"], "input": "hi"},
+            }
+        ),
+        error_class=None,
+        last_error=None,
+        result_text=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        finished_at=None,
+    )
+
+    result = await HandoffExecutor.execute_queued_task(
+        task=task,
+        plugin_context=SimpleNamespace(),
+        handoff=None,
+    )
+
+    restored_tool = captured["tool"]
+    assert restored_tool.name == "transfer_to_subagent"
+    assert restored_tool.provider_id == "provider-x"
+    assert restored_tool.max_steps == 9
+    assert restored_tool.agent_display_name == "Sub Agent"
+    assert restored_tool.agent.instructions == "snapshot prompt"
+    assert restored_tool.agent.tools == ["tool_a"]
+    assert restored_tool.agent.begin_dialogs == [
+        {"role": "assistant", "content": "hello"}
+    ]
+    assert "done from snapshot" in result
+
+
+@pytest.mark.asyncio
 async def test_build_handoff_toolset_defaults_runtime_to_none():
     event = _DummyEvent([])
     context = SimpleNamespace(

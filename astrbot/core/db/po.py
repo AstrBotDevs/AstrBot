@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from sqlalchemy import Index
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -176,6 +177,14 @@ class SubagentTask(TimestampMixin, SQLModel, table=True):
     """Persistent subagent background task."""
 
     __tablename__: str = "subagent_tasks"
+    __table_args__ = (
+        Index(
+            "idx_subagent_tasks_status_next_run_created",
+            "status",
+            "next_run_at",
+            "created_at",
+        ),
+    )
 
     task_id: str = Field(primary_key=True, max_length=64)
     idempotency_key: str = Field(

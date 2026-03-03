@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import mcp
 
 from astrbot import logger
+from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
@@ -112,6 +113,66 @@ class HandoffExecutor:
         if isinstance(configured_max_step, int) and configured_max_step > 0:
             return configured_max_step
         return default_max_steps
+
+    @classmethod
+    def _build_handoff_from_snapshot(cls, snapshot: T.Any) -> HandoffTool | None:
+        if not isinstance(snapshot, dict):
+            return None
+        agent_name = str(snapshot.get("agent_name", "")).strip()
+        if not agent_name:
+            return None
+        instructions = str(snapshot.get("instructions", "") or "")
+        tools_raw = snapshot.get("tools")
+        tools: list[str] | None
+        if tools_raw is None:
+            tools = None
+        elif isinstance(tools_raw, list):
+            tools = [str(item).strip() for item in tools_raw if str(item).strip()]
+        else:
+            tools = []
+
+        agent = Agent[T.Any](
+            name=agent_name,
+            instructions=instructions,
+            tools=tools,  # type: ignore[arg-type]
+        )
+        dialogs_raw = snapshot.get("begin_dialogs")
+        if isinstance(dialogs_raw, list):
+            agent.begin_dialogs = dialogs_raw
+
+        description_raw = snapshot.get("tool_description")
+        description = (
+            str(description_raw).strip()
+            if isinstance(description_raw, str) and description_raw.strip()
+            else None
+        )
+        handoff = HandoffTool(agent=agent, tool_description=description)
+        expected_name = str(snapshot.get("name", "")).strip()
+        if expected_name and handoff.name != expected_name:
+            logger.warning(
+                "Subagent snapshot handoff name mismatch: expected=%s actual=%s",
+                expected_name,
+                handoff.name,
+            )
+        provider_id_raw = snapshot.get("provider_id")
+        handoff.provider_id = (
+            str(provider_id_raw).strip()
+            if isinstance(provider_id_raw, str) and provider_id_raw.strip()
+            else None
+        )
+        display_name_raw = snapshot.get("agent_display_name")
+        handoff.agent_display_name = (
+            str(display_name_raw).strip()
+            if isinstance(display_name_raw, str) and display_name_raw.strip()
+            else agent_name
+        )
+        max_steps_raw = snapshot.get("max_steps")
+        handoff.max_steps = (
+            int(max_steps_raw)
+            if isinstance(max_steps_raw, int) and max_steps_raw > 0
+            else None
+        )
+        return handoff
 
     @classmethod
     def collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
@@ -443,12 +504,17 @@ class HandoffExecutor:
         plugin_context: T.Any,
         handoff: HandoffTool | None,
     ) -> str:
-        if handoff is None:
-            raise ValueError(f"Handoff tool `{task.handoff_tool_name}` not found.")
-
         payload = json.loads(task.payload_json)
         if not isinstance(payload, dict):
             raise ValueError("Invalid task payload.")
+
+        snapshot_handoff = cls._build_handoff_from_snapshot(
+            payload.get("_handoff_snapshot")
+        )
+        queued_handoff = snapshot_handoff or handoff
+        if queued_handoff is None:
+            raise ValueError(f"Handoff tool `{task.handoff_tool_name}` not found.")
+
         tool_args = payload.get("tool_args", {})
         if not isinstance(tool_args, dict):
             raise ValueError("Invalid task tool_args payload.")
@@ -490,7 +556,7 @@ class HandoffExecutor:
         )
         result_text = ""
         async for result in cls.execute_foreground(
-            handoff,
+            queued_handoff,
             wrapper,
             image_urls_prepared=True,
             **handoff_args,
@@ -503,7 +569,7 @@ class HandoffExecutor:
         await wake_main_agent_for_background_result(
             run_context=wrapper,
             task_id=task.task_id,
-            tool_name=handoff.name,
+            tool_name=queued_handoff.name,
             result_text=result_text,
             tool_args=handoff_args,
             note=meta.get("background_note")

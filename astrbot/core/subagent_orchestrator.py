@@ -45,6 +45,75 @@ class SubAgentOrchestrator:
     def bind_context(self, context) -> None:
         self._context = context
 
+    @staticmethod
+    def _build_handoff_snapshot(handoff: HandoffTool) -> dict[str, Any]:
+        tools_raw = getattr(handoff.agent, "tools", None)
+        serialized_tools: list[str] | None
+        if tools_raw is None:
+            serialized_tools = None
+        elif isinstance(tools_raw, list):
+            serialized_tools = []
+            for item in tools_raw:
+                if isinstance(item, str):
+                    tool_name = item.strip()
+                else:
+                    tool_name = str(getattr(item, "name", "")).strip()
+                if tool_name:
+                    serialized_tools.append(tool_name)
+        else:
+            serialized_tools = []
+
+        dialogs_raw = getattr(handoff.agent, "begin_dialogs", None)
+        serialized_dialogs: list[dict[str, Any]] | None = None
+        if isinstance(dialogs_raw, list):
+            serialized_dialogs = []
+            for item in dialogs_raw:
+                if isinstance(item, dict):
+                    serialized_dialogs.append(item)
+                    continue
+                model_dump = getattr(item, "model_dump", None)
+                if callable(model_dump):
+                    dumped = model_dump(mode="python")
+                    if isinstance(dumped, dict):
+                        serialized_dialogs.append(dumped)
+
+        max_steps_raw = getattr(handoff, "max_steps", None)
+        max_steps = (
+            int(max_steps_raw)
+            if isinstance(max_steps_raw, int) and max_steps_raw > 0
+            else None
+        )
+        provider_id_raw = getattr(handoff, "provider_id", None)
+        provider_id = (
+            str(provider_id_raw).strip()
+            if isinstance(provider_id_raw, str) and provider_id_raw.strip()
+            else None
+        )
+        tool_description_raw = getattr(handoff, "description", None)
+        tool_description = (
+            str(tool_description_raw).strip()
+            if isinstance(tool_description_raw, str) and tool_description_raw.strip()
+            else None
+        )
+        display_name_raw = getattr(handoff, "agent_display_name", None)
+        display_name = (
+            str(display_name_raw).strip()
+            if isinstance(display_name_raw, str) and display_name_raw.strip()
+            else handoff.agent.name
+        )
+
+        return {
+            "name": handoff.name,
+            "agent_name": handoff.agent.name,
+            "agent_display_name": display_name,
+            "instructions": str(getattr(handoff.agent, "instructions", "") or ""),
+            "tools": serialized_tools,
+            "begin_dialogs": serialized_dialogs,
+            "provider_id": provider_id,
+            "max_steps": max_steps,
+            "tool_description": tool_description,
+        }
+
     def start_worker(self):
         return self._worker.start()
 
@@ -109,6 +178,7 @@ class SubAgentOrchestrator:
             )
         task_payload = {
             "tool_args": payload,
+            "_handoff_snapshot": self._build_handoff_snapshot(handoff),
             "_meta": {
                 "role": getattr(event, "role", None),
                 "background_note": background_note,

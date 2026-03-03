@@ -33,19 +33,21 @@ class _FakeMigrationEngine:
 
 class _FakeMigrationDb:
     def __init__(self):
-        self.marker_done = False
+        self.markers: dict[str, bool] = {}
         self.engine = _FakeMigrationEngine()
 
-    async def get_preference(self, _scope, _scope_id, _key):
-        return self.marker_done
+    async def get_preference(self, _scope, _scope_id, key):
+        return self.markers.get(key, False)
 
 
 @pytest.mark.asyncio
 async def test_subagent_migration_is_idempotent(monkeypatch: pytest.MonkeyPatch):
     db = _FakeMigrationDb()
-    put_async = AsyncMock(
-        side_effect=lambda *_args, **_kwargs: setattr(db, "marker_done", True)
-    )
+
+    async def _fake_put_async(_scope, _scope_id, key, value):
+        db.markers[key] = bool(value)
+
+    put_async = AsyncMock(side_effect=_fake_put_async)
     monkeypatch.setattr(
         "astrbot.core.db.migration.migra_subagent_tasks.sp.put_async", put_async
     )
@@ -53,7 +55,7 @@ async def test_subagent_migration_is_idempotent(monkeypatch: pytest.MonkeyPatch)
     await migrate_subagent_tasks(db)
     await migrate_subagent_tasks(db)
 
-    put_async.assert_awaited_once()
+    assert put_async.await_count == 2
 
 
 @pytest.mark.asyncio

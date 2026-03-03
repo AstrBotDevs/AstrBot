@@ -470,13 +470,6 @@ function validateBeforeSave(): boolean {
       return false
     }
     seen.add(name)
-    if (!a.persona_id) {
-      toast(
-        tf('messages.personaMissing', `SubAgent ${name} has no persona selected`, { name }),
-        'warning'
-      )
-      return false
-    }
   }
   return true
 }
