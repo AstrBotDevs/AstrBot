@@ -366,6 +366,7 @@ class KookClient:
             bytes_data = base64.b64decode(b64_str)
 
         elif file_url.startswith("file://") or os.path.exists(file_url):
+            file_url = file_url.removeprefix("file:///")
             file_url = file_url.removeprefix("file://")
 
             try:
