@@ -59,8 +59,10 @@ class KookPlatformAdapter(Platform):
 
     def _should_ignore_event_by_bot_self(self, payload: dict) -> bool:
         bot_id = self.client.bot_id
-        author_id: str = payload.get("author_id", "")
-        if not isinstance(author_id, str):
+        if not bot_id:
+            logger.warning("[kook] 发现 bot_id 为空, 将无法过滤来自机器人自身的消息")
+        author_id: str | None = payload.get("author_id")
+        if not author_id:
             return False
         return bot_id == author_id
 
