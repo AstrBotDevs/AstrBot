@@ -91,7 +91,9 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
             name = "unknown-skill"
         description = str(getattr(skill, "description", "") or "").strip()
         # 清理换行符，防止 Indirect Prompt Injection
-        description = (description or "No description").replace("\n", " ").replace("\r", " ")
+        description = (
+            (description or "No description").replace("\n", " ").replace("\r", " ")
+        )
         path = str(getattr(skill, "path", "") or "").strip()
         path = path or "<skills_root>/<skill_name>/SKILL.md"
         # 清理路径中的危险字符

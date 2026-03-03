@@ -181,7 +181,9 @@ class MainAgentBuildConfig:
             "max_context_length": int(ps.get("max_context_length", -1)),
             "dequeue_context_length": int(ps.get("dequeue_context_length", 1)),
             "llm_safety_mode": bool(ps.get("llm_safety_mode", True)),
-            "safety_mode_strategy": str(ps.get("safety_mode_strategy", "system_prompt")),
+            "safety_mode_strategy": str(
+                ps.get("safety_mode_strategy", "system_prompt")
+            ),
             "computer_use_runtime": str(ps.get("computer_use_runtime", "local")),
             "sandbox_cfg": ps.get("sandbox", {}) or {},
             "add_cron_tools": bool(proactive_cfg.get("add_cron_tools", True)),
