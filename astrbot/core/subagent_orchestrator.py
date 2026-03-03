@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
-from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.persona_mgr import PersonaManager
-from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.subagent.codec import decode_subagent_config
+from astrbot.core.subagent.error_classifier import build_error_classifier_from_config
+from astrbot.core.subagent.handoff_executor import HandoffExecutor
 from astrbot.core.subagent.models import (
     SubagentConfig,
     SubagentMountPlan,
@@ -66,6 +65,11 @@ class SubAgentOrchestrator:
 
         self._config = canonical
         self._runtime.set_max_concurrent(canonical.max_concurrent_subagent_runs)
+        classifier, classifier_diagnostics = build_error_classifier_from_config(
+            canonical.error_classifier
+        )
+        self._runtime.set_error_classifier(classifier)
+        diagnostics.extend(classifier_diagnostics)
         mount_plan = await self._planner.build_mount_plan(canonical)
         mount_plan.diagnostics = diagnostics + mount_plan.diagnostics
         self._mount_plan = mount_plan
@@ -135,79 +139,8 @@ class SubAgentOrchestrator:
     async def _execute_background_task(self, task: SubagentTaskData) -> str:
         if not self._context:
             raise RuntimeError("Subagent orchestrator context is not bound.")
-        handoff = self.find_handoff(task.handoff_tool_name)
-        if handoff is None:
-            raise ValueError(f"Handoff tool `{task.handoff_tool_name}` not found.")
-
-        payload = json.loads(task.payload_json)
-        if not isinstance(payload, dict):
-            raise ValueError("Invalid task payload.")
-        tool_args = payload.get("tool_args", {})
-        if not isinstance(tool_args, dict):
-            raise ValueError("Invalid task tool_args payload.")
-        meta = payload.get("_meta", {})
-        if not isinstance(meta, dict):
-            meta = {}
-
-        session = MessageSession.from_str(task.umo)
-        cron_event = CronMessageEvent(
-            context=self._context,
-            session=session,
-            message=str(
-                tool_args.get("input") or f"[SubagentTask] {task.subagent_name}"
-            ),
-            extras={
-                "background_note": meta.get("background_note")
-                or f"Background task for subagent '{task.subagent_name}' finished."
-            },
-            message_type=session.message_type,
+        return await HandoffExecutor.execute_queued_task(
+            task=task,
+            plugin_context=self._context,
+            handoff=self.find_handoff(task.handoff_tool_name),
         )
-        if role := meta.get("role"):
-            cron_event.role = role
-
-        from astrbot.core.astr_agent_context import (
-            AgentContextWrapper,
-            AstrAgentContext,
-        )
-
-        agent_ctx = AstrAgentContext(context=self._context, event=cron_event)
-        wrapper = AgentContextWrapper(
-            context=agent_ctx,
-            tool_call_timeout=int(meta.get("tool_call_timeout", 3600)),
-        )
-
-        import mcp
-
-        from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-
-        tool_args = dict(tool_args)
-        tool_args[
-            "image_urls"
-        ] = await FunctionToolExecutor._collect_handoff_image_urls(
-            wrapper,
-            tool_args.get("image_urls"),
-        )
-        result_text = ""
-        async for r in FunctionToolExecutor._execute_handoff(
-            handoff,
-            wrapper,
-            image_urls_prepared=True,
-            **tool_args,
-        ):
-            if isinstance(r, mcp.types.CallToolResult):
-                for content in r.content:
-                    if isinstance(content, mcp.types.TextContent):
-                        result_text += content.text + "\n"
-
-        await FunctionToolExecutor._wake_main_agent_for_background_result(
-            run_context=wrapper,
-            task_id=task.task_id,
-            tool_name=handoff.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=meta.get("background_note")
-            or f"Background task for subagent '{task.subagent_name}' finished.",
-            summary_name=f"Dedicated to subagent `{task.subagent_name}`",
-            extra_result_fields={"subagent_name": task.subagent_name},
-        )
-        return result_text or "ok"

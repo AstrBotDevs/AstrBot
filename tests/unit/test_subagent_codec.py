@@ -39,7 +39,7 @@ def test_decode_subagent_config_rejects_unknown_non_extension_fields():
         )
 
 
-def test_encode_subagent_config_to_legacy_shape():
+def test_encode_subagent_config_to_transitional_dual_fields():
     config, _ = decode_subagent_config(
         {
             "main_enable": True,
@@ -58,6 +58,7 @@ def test_encode_subagent_config_to_legacy_shape():
     assert payload["main_enable"] is True
     assert payload["agents"][0]["name"] == "planner"
     assert payload["agents"][0]["tools"] == ["tool_a"]
+    assert payload["agents"][0]["instructions"] == "hello"
     assert payload["agents"][0]["system_prompt"] == "hello"
 
 
@@ -94,3 +95,21 @@ def test_decode_subagent_config_explicit_tools_scope_overrides_tools_inference()
     )
     assert config.agents[0].tools_scope == ToolsScope.NONE
     assert config.agents[0].tools is None
+
+
+def test_encode_decode_roundtrip_with_instructions_has_no_legacy_warning():
+    config, _ = decode_subagent_config(
+        {
+            "main_enable": True,
+            "agents": [
+                {
+                    "name": "writer",
+                    "enabled": True,
+                    "instructions": "do work",
+                }
+            ],
+        }
+    )
+    encoded = encode_subagent_config(config)
+    _, diagnostics = decode_subagent_config(encoded)
+    assert not any("legacy field `agents[0].system_prompt`" in d for d in diagnostics)

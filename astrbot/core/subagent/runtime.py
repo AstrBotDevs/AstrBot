@@ -13,15 +13,9 @@ from astrbot import logger
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import SubagentTask
 
+from .error_classifier import DefaultErrorClassifier, ErrorClassifier
+from .hooks import NoopSubagentHooks, SubagentHooks
 from .models import SubagentTaskData
-
-TransientErrors = (
-    asyncio.TimeoutError,
-    TimeoutError,
-    ConnectionError,
-    ConnectionResetError,
-)
-FatalErrors = (ValueError, PermissionError, KeyError)
 
 
 class SubagentRuntime:
@@ -40,6 +34,8 @@ class SubagentRuntime:
         base_delay_ms: int = 500,
         max_delay_ms: int = 30000,
         jitter_ratio: float = 0.1,
+        hooks: SubagentHooks | None = None,
+        error_classifier: ErrorClassifier | None = None,
     ) -> None:
         self._db = db
         self._max_concurrent = max(1, min(int(max_concurrent), 64))
@@ -50,6 +46,10 @@ class SubagentRuntime:
         self._active_lanes: dict[str, str] = {}
         self._task_executor: Callable[[SubagentTaskData], Awaitable[str]] | None = None
         self._running_recovery_done = False
+        self._hooks: SubagentHooks = hooks or NoopSubagentHooks()
+        self._error_classifier: ErrorClassifier = (
+            error_classifier or DefaultErrorClassifier()
+        )
 
     def set_max_concurrent(self, value: int) -> None:
         self._max_concurrent = max(1, min(int(value), 64))
@@ -59,6 +59,12 @@ class SubagentRuntime:
         executor: Callable[[SubagentTaskData], Awaitable[str]],
     ) -> None:
         self._task_executor = executor
+
+    def set_hooks(self, hooks: SubagentHooks | None) -> None:
+        self._hooks = hooks or NoopSubagentHooks()
+
+    def set_error_classifier(self, error_classifier: ErrorClassifier | None) -> None:
+        self._error_classifier = error_classifier or DefaultErrorClassifier()
 
     async def enqueue(
         self,
@@ -85,7 +91,7 @@ class SubagentRuntime:
             return existing.task_id
 
         task_id = uuid.uuid4().hex
-        await self._db.create_subagent_task(
+        created = await self._db.create_subagent_task(
             task_id=task_id,
             idempotency_key=idem,
             umo=umo,
@@ -95,6 +101,7 @@ class SubagentRuntime:
             max_attempts=self._max_attempts,
         )
         self._emit_event("task_enqueued", task_id, subagent_name, 0, umo)
+        await self._call_hook("on_task_enqueued", _to_task_data(created))
         return task_id
 
     async def process_once(self, *, batch_size: int = 8) -> int:
@@ -157,13 +164,17 @@ class SubagentRuntime:
     async def cancel_task(self, task_id: str) -> bool:
         if not self._db:
             return False
-        return await self._db.cancel_subagent_task(task_id)
+        canceled = await self._db.cancel_subagent_task(task_id)
+        if canceled:
+            await self._call_hook("on_task_canceled", task_id)
+        return canceled
 
     async def _run_one(self, task: SubagentTaskData) -> None:
         lane = self._lane_key(task.umo, task.subagent_name)
         self._emit_event(
             "task_started", task.task_id, task.subagent_name, task.attempt, task.umo
         )
+        await self._call_hook("on_task_started", task)
         try:
             result = await self._task_executor(task)
             updated = await self._db.mark_subagent_task_succeeded(
@@ -179,6 +190,11 @@ class SubagentRuntime:
                     error_class="state_changed",
                     error_message="task status changed before success commit",
                 )
+                await self._call_hook(
+                    "on_task_result_ignored",
+                    task,
+                    reason="task status changed before success commit",
+                )
                 return
             self._emit_event(
                 "task_succeeded",
@@ -187,10 +203,14 @@ class SubagentRuntime:
                 task.attempt,
                 task.umo,
             )
+            await self._call_hook("on_task_succeeded", task, result)
             return
         except Exception as exc:  # noqa: BLE001
             error_class = self._classify_error(exc)
-            if error_class == "transient" and task.attempt < task.max_attempts:
+            if (
+                error_class in {"transient", "retryable"}
+                and task.attempt < task.max_attempts
+            ):
                 delay = self._compute_delay_seconds(task.attempt)
                 next_run = datetime.now(timezone.utc) + timedelta(seconds=delay)
                 updated = await self._db.mark_subagent_task_retrying(
@@ -209,6 +229,11 @@ class SubagentRuntime:
                         error_class="state_changed",
                         error_message="task status changed before retry commit",
                     )
+                    await self._call_hook(
+                        "on_task_result_ignored",
+                        task,
+                        reason="task status changed before retry commit",
+                    )
                     return
                 self._emit_event(
                     "task_retrying",
@@ -219,6 +244,13 @@ class SubagentRuntime:
                     delay_seconds=delay,
                     error_class=error_class,
                     error_message=str(exc),
+                )
+                await self._call_hook(
+                    "on_task_retrying",
+                    task,
+                    delay_seconds=delay,
+                    error_class=error_class,
+                    error=exc,
                 )
                 return
 
@@ -237,6 +269,11 @@ class SubagentRuntime:
                     error_class="state_changed",
                     error_message="task status changed before failure commit",
                 )
+                await self._call_hook(
+                    "on_task_result_ignored",
+                    task,
+                    reason="task status changed before failure commit",
+                )
                 return
             self._emit_event(
                 "task_failed",
@@ -246,6 +283,12 @@ class SubagentRuntime:
                 task.umo,
                 error_class=error_class,
                 error_message=str(exc),
+            )
+            await self._call_hook(
+                "on_task_failed",
+                task,
+                error_class=error_class,
+                error=exc,
             )
             return
         finally:
@@ -271,12 +314,10 @@ class SubagentRuntime:
         jitter_ms = delay_ms * self._jitter_ratio * random.random()  # noqa: S311
         return (delay_ms + jitter_ms) / 1000.0
 
-    @staticmethod
-    def _classify_error(exc: Exception) -> str:
-        if isinstance(exc, FatalErrors):
-            return "fatal"
-        if isinstance(exc, TransientErrors):
-            return "transient"
+    def _classify_error(self, exc: Exception) -> str:
+        classified = self._error_classifier.classify(exc)
+        if classified in {"fatal", "transient", "retryable"}:
+            return classified
         return "transient"
 
     async def _recover_interrupted_running_tasks(self) -> int:
@@ -297,6 +338,20 @@ class SubagentRuntime:
             if ok:
                 recovered += 1
         return recovered
+
+    async def _call_hook(self, hook_name: str, *args, **kwargs) -> None:
+        hook = getattr(self._hooks, hook_name, None)
+        if not callable(hook):
+            return
+        try:
+            await hook(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "[SubagentRuntime] hook=%s failed: %s",
+                hook_name,
+                exc,
+                exc_info=True,
+            )
 
     @staticmethod
     def _emit_event(

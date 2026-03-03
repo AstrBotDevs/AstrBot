@@ -277,6 +277,12 @@ type SubAgentItem = {
 type SubAgentConfig = {
   main_enable: boolean
   remove_main_duplicate_tools: boolean
+  error_classifier?: {
+    type?: string
+    fatal_exceptions?: string[]
+    transient_exceptions?: string[]
+    default_class?: string
+  }
   agents: SubAgentItem[]
 }
 
@@ -298,6 +304,17 @@ function toast(message: string, color: 'success' | 'error' | 'warning' = 'succes
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
+  error_classifier: {
+    type: 'default',
+    fatal_exceptions: ['ValueError', 'PermissionError', 'KeyError'],
+    transient_exceptions: [
+      'asyncio.TimeoutError',
+      'TimeoutError',
+      'ConnectionError',
+      'ConnectionResetError'
+    ],
+    default_class: 'transient'
+  },
   agents: []
 })
 
@@ -322,6 +339,23 @@ function inferToolsScope(a: any): ToolsScope {
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
+  const error_classifier = raw?.error_classifier && typeof raw.error_classifier === 'object'
+    ? {
+      type: (raw.error_classifier.type ?? 'default').toString(),
+      fatal_exceptions: Array.isArray(raw.error_classifier.fatal_exceptions)
+        ? raw.error_classifier.fatal_exceptions.map((x: any) => (x ?? '').toString()).filter((x: string) => !!x)
+        : ['ValueError', 'PermissionError', 'KeyError'],
+      transient_exceptions: Array.isArray(raw.error_classifier.transient_exceptions)
+        ? raw.error_classifier.transient_exceptions.map((x: any) => (x ?? '').toString()).filter((x: string) => !!x)
+        : ['asyncio.TimeoutError', 'TimeoutError', 'ConnectionError', 'ConnectionResetError'],
+      default_class: (raw.error_classifier.default_class ?? 'transient').toString()
+    }
+    : {
+      type: 'default',
+      fatal_exceptions: ['ValueError', 'PermissionError', 'KeyError'],
+      transient_exceptions: ['asyncio.TimeoutError', 'TimeoutError', 'ConnectionError', 'ConnectionResetError'],
+      default_class: 'transient'
+    }
   const agentsRaw = Array.isArray(raw?.agents) ? raw.agents : []
 
   const agents: SubAgentItem[] = agentsRaw.map((a: any, i: number) => {
@@ -354,7 +388,7 @@ function normalizeConfig(raw: any): SubAgentConfig {
     }
   })
 
-  return { main_enable, remove_main_duplicate_tools, agents }
+  return { main_enable, remove_main_duplicate_tools, error_classifier, agents }
 }
 
 async function loadConfig() {
@@ -424,6 +458,12 @@ async function save() {
     const payload = {
       main_enable: cfg.value.main_enable,
       remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
+      error_classifier: cfg.value.error_classifier ?? {
+        type: 'default',
+        fatal_exceptions: ['ValueError', 'PermissionError', 'KeyError'],
+        transient_exceptions: ['asyncio.TimeoutError', 'TimeoutError', 'ConnectionError', 'ConnectionResetError'],
+        default_class: 'transient'
+      },
       agents: cfg.value.agents.map((a) => ({
         name: a.name,
         persona_id: a.persona_id,

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -72,6 +72,24 @@ class SubagentAgentSpec(BaseModel):
         return build_safe_handoff_agent_name(self.name)
 
 
+class SubagentErrorClassifierConfig(BaseModel):
+    type: str = "default"
+    fatal_exceptions: list[str] = Field(
+        default_factory=lambda: ["ValueError", "PermissionError", "KeyError"]
+    )
+    transient_exceptions: list[str] = Field(
+        default_factory=lambda: [
+            "asyncio.TimeoutError",
+            "TimeoutError",
+            "ConnectionError",
+            "ConnectionResetError",
+        ]
+    )
+    default_class: Literal["fatal", "transient", "retryable"] = "transient"
+
+    model_config = ConfigDict(extra="allow")
+
+
 class SubagentConfig(BaseModel):
     main_enable: bool = False
     remove_main_duplicate_tools: bool = False
@@ -79,6 +97,9 @@ class SubagentConfig(BaseModel):
     agents: list[SubagentAgentSpec] = Field(default_factory=list)
     max_concurrent_subagent_runs: int = 8
     max_nested_depth: int = 2
+    error_classifier: SubagentErrorClassifierConfig = Field(
+        default_factory=SubagentErrorClassifierConfig
+    )
     extensions: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="allow")

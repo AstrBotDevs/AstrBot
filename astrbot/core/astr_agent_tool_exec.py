@@ -1,122 +1,30 @@
 import asyncio
 import inspect
-import json
 import traceback
 import typing as T
 import uuid
-from collections.abc import Sequence
-from collections.abc import Set as AbstractSet
 
 import mcp
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
-    EXECUTE_SHELL_TOOL,
-    FILE_DOWNLOAD_TOOL,
-    FILE_UPLOAD_TOOL,
-    LOCAL_EXECUTE_SHELL_TOOL,
-    LOCAL_PYTHON_TOOL,
-    PYTHON_TOOL,
-    SEND_MESSAGE_TO_USER_TOOL,
-)
-from astrbot.core.cron.events import CronMessageEvent
-from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
     CommandResult,
     MessageChain,
     MessageEventResult,
 )
-from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.provider.entites import ProviderRequest
-from astrbot.core.provider.register import llm_tools
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.history_saver import persist_agent_history
-from astrbot.core.utils.image_ref_utils import is_supported_image_ref
-from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.subagent.background_notifier import (
+    wake_main_agent_for_background_result,
+)
+from astrbot.core.subagent.handoff_executor import HandoffExecutor
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
-    @classmethod
-    def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
-        if image_urls_raw is None:
-            return []
-
-        if isinstance(image_urls_raw, str):
-            return [image_urls_raw]
-
-        if isinstance(image_urls_raw, (Sequence, AbstractSet)) and not isinstance(
-            image_urls_raw, (str, bytes, bytearray)
-        ):
-            return [item for item in image_urls_raw if isinstance(item, str)]
-
-        logger.debug(
-            "Unsupported image_urls type in handoff tool args: %s",
-            type(image_urls_raw).__name__,
-        )
-        return []
-
-    @classmethod
-    async def _collect_image_urls_from_message(
-        cls, run_context: ContextWrapper[AstrAgentContext]
-    ) -> list[str]:
-        urls: list[str] = []
-        event = getattr(run_context.context, "event", None)
-        message_obj = getattr(event, "message_obj", None)
-        message = getattr(message_obj, "message", None)
-        if message:
-            for idx, component in enumerate(message):
-                if not isinstance(component, Image):
-                    continue
-                try:
-                    path = await component.convert_to_file_path()
-                    if path:
-                        urls.append(path)
-                except Exception as e:
-                    logger.error(
-                        "Failed to convert handoff image component at index %d: %s",
-                        idx,
-                        e,
-                        exc_info=True,
-                    )
-        return urls
-
-    @classmethod
-    async def _collect_handoff_image_urls(
-        cls,
-        run_context: ContextWrapper[AstrAgentContext],
-        image_urls_raw: T.Any,
-    ) -> list[str]:
-        candidates: list[str] = []
-        candidates.extend(cls._collect_image_urls_from_args(image_urls_raw))
-        candidates.extend(await cls._collect_image_urls_from_message(run_context))
-
-        normalized = normalize_and_dedupe_strings(candidates)
-        extensionless_local_roots = (get_astrbot_temp_path(),)
-        sanitized = [
-            item
-            for item in normalized
-            if is_supported_image_ref(
-                item,
-                allow_extensionless_existing_local_file=True,
-                extensionless_local_roots=extensionless_local_roots,
-            )
-        ]
-        dropped_count = len(normalized) - len(sanitized)
-        if dropped_count > 0:
-            logger.debug(
-                "Dropped %d invalid image_urls entries in handoff image inputs.",
-                dropped_count,
-            )
-        return sanitized
-
     @classmethod
     async def execute(cls, tool, run_context, **tool_args):
         """执行函数调用。
@@ -133,7 +41,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
-                async for r in cls._execute_handoff_background(
+                async for r in HandoffExecutor.submit_background(
                     tool,
                     run_context,
                     tool_call_id=tool_call_id,
@@ -141,7 +49,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 ):
                     yield r
                 return
-            async for r in cls._execute_handoff(tool, run_context, **tool_args):
+            async for r in HandoffExecutor.execute_foreground(
+                tool, run_context, **tool_args
+            ):
                 yield r
             return
 
@@ -181,311 +91,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
     @classmethod
-    def _get_runtime_computer_tools(cls, runtime: str) -> dict[str, FunctionTool]:
-        if runtime == "sandbox":
-            return {
-                EXECUTE_SHELL_TOOL.name: EXECUTE_SHELL_TOOL,
-                PYTHON_TOOL.name: PYTHON_TOOL,
-                FILE_UPLOAD_TOOL.name: FILE_UPLOAD_TOOL,
-                FILE_DOWNLOAD_TOOL.name: FILE_DOWNLOAD_TOOL,
-            }
-        if runtime == "local":
-            return {
-                LOCAL_EXECUTE_SHELL_TOOL.name: LOCAL_EXECUTE_SHELL_TOOL,
-                LOCAL_PYTHON_TOOL.name: LOCAL_PYTHON_TOOL,
-            }
-        return {}
-
-    @classmethod
-    def _build_handoff_toolset(
-        cls,
-        run_context: ContextWrapper[AstrAgentContext],
-        tools: list[str | FunctionTool] | None,
-    ) -> ToolSet | None:
-        ctx = run_context.context.context
-        event = run_context.context.event
-        cfg = ctx.get_config(umo=event.unified_msg_origin)
-        provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "none"))
-        runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
-
-        # Keep persona semantics aligned with the main agent: tools=None means
-        # "all tools", including runtime computer-use tools.
-        if tools is None:
-            toolset = ToolSet()
-            for registered_tool in llm_tools.func_list:
-                if isinstance(registered_tool, HandoffTool):
-                    continue
-                if registered_tool.active:
-                    toolset.add_tool(registered_tool)
-            for runtime_tool in runtime_computer_tools.values():
-                toolset.add_tool(runtime_tool)
-            return None if toolset.empty() else toolset
-
-        if not tools:
-            return None
-
-        toolset = ToolSet()
-        for tool_name_or_obj in tools:
-            if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if (
-                    registered_tool
-                    and registered_tool.active
-                    and not isinstance(registered_tool, HandoffTool)
-                ):
-                    toolset.add_tool(registered_tool)
-                    continue
-                runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
-                if runtime_tool:
-                    toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool) and not isinstance(
-                tool_name_or_obj, HandoffTool
-            ):
-                toolset.add_tool(tool_name_or_obj)
-        return None if toolset.empty() else toolset
-
-    @classmethod
-    async def _execute_handoff(
-        cls,
-        tool: HandoffTool,
-        run_context: ContextWrapper[AstrAgentContext],
-        *,
-        image_urls_prepared: bool = False,
-        **tool_args: T.Any,
-    ):
-        tool_args = dict(tool_args)
-        input_ = tool_args.get("input")
-        if image_urls_prepared:
-            prepared_image_urls = tool_args.get("image_urls")
-            if isinstance(prepared_image_urls, list):
-                image_urls = prepared_image_urls
-            else:
-                logger.debug(
-                    "Expected prepared handoff image_urls as list[str], got %s.",
-                    type(prepared_image_urls).__name__,
-                )
-                image_urls = []
-        else:
-            image_urls = await cls._collect_handoff_image_urls(
-                run_context,
-                tool_args.get("image_urls"),
-            )
-        tool_args["image_urls"] = image_urls
-
-        # Build handoff toolset from registered tools plus runtime computer tools.
-        toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
-
-        ctx = run_context.context.context
-        event = run_context.context.event
-        umo = event.unified_msg_origin
-        event_get_extra = getattr(event, "get_extra", None)
-        current_depth = (
-            int(event_get_extra("subagent_handoff_depth") or 0)
-            if callable(event_get_extra)
-            else 0
-        )
-        max_depth = int(
-            ctx.get_config(umo=umo)
-            .get("subagent_orchestrator", {})
-            .get("max_nested_depth", 2)
-        )
-        if current_depth >= max_depth:
-            yield mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(
-                        type="text",
-                        text=(
-                            f"error: nested subagent handoff depth limit reached ({max_depth}). "
-                            "Please continue in current agent."
-                        ),
-                    )
-                ]
-            )
-            return
-
-        # Use per-subagent provider override if configured; otherwise fall back
-        # to the current/default provider resolution.
-        prov_id = getattr(
-            tool, "provider_id", None
-        ) or await ctx.get_current_chat_provider_id(umo)
-
-        # prepare begin dialogs
-        contexts = None
-        dialogs = tool.agent.begin_dialogs
-        if dialogs:
-            contexts = []
-            for dialog in dialogs:
-                try:
-                    contexts.append(
-                        dialog
-                        if isinstance(dialog, Message)
-                        else Message.model_validate(dialog)
-                    )
-                except Exception:
-                    continue
-
-        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        configured_max_step = getattr(tool, "max_steps", None)
-        if isinstance(configured_max_step, int) and configured_max_step > 0:
-            agent_max_step = configured_max_step
-        else:
-            agent_max_step = int(prov_settings.get("max_agent_step", 30))
-        stream = prov_settings.get("streaming_response", False)
-        event_set_extra = getattr(event, "set_extra", None)
-        if callable(event_set_extra):
-            event_set_extra("subagent_handoff_depth", current_depth + 1)
-        try:
-            llm_resp = await ctx.tool_loop_agent(
-                event=event,
-                chat_provider_id=prov_id,
-                prompt=input_,
-                image_urls=image_urls,
-                system_prompt=tool.agent.instructions,
-                tools=toolset,
-                contexts=contexts,
-                max_steps=agent_max_step,
-                stream=stream,
-            )
-        finally:
-            if callable(event_set_extra):
-                event_set_extra("subagent_handoff_depth", current_depth)
-        yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
-        )
-
-    @classmethod
-    async def _execute_handoff_background(
-        cls,
-        tool: HandoffTool,
-        run_context: ContextWrapper[AstrAgentContext],
-        *,
-        tool_call_id: str | None = None,
-        **tool_args,
-    ):
-        """Execute a handoff as a background task via subagent orchestrator."""
-        prepared_tool_args = dict(tool_args)
-        prepared_tool_args["image_urls"] = await cls._collect_handoff_image_urls(
-            run_context,
-            prepared_tool_args.get("image_urls"),
-        )
-        orchestrator = getattr(
-            run_context.context.context, "subagent_orchestrator", None
-        )
-        if orchestrator is None:
-            yield mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(
-                        type="text",
-                        text=(
-                            "error: subagent orchestrator is not available, "
-                            "background handoff cannot be submitted."
-                        ),
-                    )
-                ]
-            )
-            return
-
-        try:
-            task_id = await orchestrator.submit_handoff(
-                handoff=tool,
-                run_context=run_context,
-                payload=prepared_tool_args,
-                background=True,
-                tool_call_id=tool_call_id,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "Failed to submit handoff to subagent orchestrator runtime: %s",
-                exc,
-                exc_info=True,
-            )
-            yield mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(
-                        type="text",
-                        text=(
-                            "error: failed to submit subagent background task to orchestrator."
-                        ),
-                    )
-                ]
-            )
-            return
-
-        if not task_id:
-            yield mcp.types.CallToolResult(
-                content=[
-                    mcp.types.TextContent(
-                        type="text",
-                        text=(
-                            "error: failed to submit subagent background task "
-                            "because orchestrator returned no task id."
-                        ),
-                    )
-                ]
-            )
-            return
-
-        yield mcp.types.CallToolResult(
-            content=[
-                mcp.types.TextContent(
-                    type="text",
-                    text=(
-                        f"Background task dedicated to subagent '{tool.agent.name}' submitted. "
-                        f"task_id={task_id}. You will be notified when it finishes."
-                    ),
-                )
-            ]
-        )
-
-    @classmethod
-    async def _do_handoff_background(
-        cls,
-        tool: HandoffTool,
-        run_context: ContextWrapper[AstrAgentContext],
-        task_id: str,
-        **tool_args,
-    ) -> None:
-        """Run the subagent handoff and, on completion, wake the main agent."""
-        result_text = ""
-        tool_args = dict(tool_args)
-        tool_args["image_urls"] = await cls._collect_handoff_image_urls(
-            run_context,
-            tool_args.get("image_urls"),
-        )
-        try:
-            async for r in cls._execute_handoff(
-                tool,
-                run_context,
-                image_urls_prepared=True,
-                **tool_args,
-            ):
-                if isinstance(r, mcp.types.CallToolResult):
-                    for content in r.content:
-                        if isinstance(content, mcp.types.TextContent):
-                            result_text += content.text + "\n"
-        except Exception as e:
-            result_text = (
-                f"error: Background task execution failed, internal error: {e!s}"
-            )
-
-        event = run_context.context.event
-
-        await cls._wake_main_agent_for_background_result(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task for subagent '{tool.agent.name}' finished."
-            ),
-            summary_name=f"Dedicated to subagent `{tool.agent.name}`",
-            extra_result_fields={"subagent_name": tool.agent.name},
-        )
-
-    @classmethod
     async def _execute_background(
         cls,
         tool: FunctionTool,
@@ -512,7 +117,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         event = run_context.context.event
 
-        await cls._wake_main_agent_for_background_result(
+        await wake_main_agent_for_background_result(
             run_context=run_context,
             task_id=task_id,
             tool_name=tool.name,
@@ -524,165 +129,6 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             ),
             summary_name=tool.name,
         )
-
-    @classmethod
-    async def _wake_main_agent_for_background_result(
-        cls,
-        run_context: ContextWrapper[AstrAgentContext],
-        *,
-        task_id: str,
-        tool_name: str,
-        result_text: str,
-        tool_args: dict[str, T.Any],
-        note: str,
-        summary_name: str,
-        extra_result_fields: dict[str, T.Any] | None = None,
-    ) -> None:
-        from astrbot.core.astr_main_agent import (
-            MainAgentBuildConfig,
-            _get_session_conv,
-            build_main_agent,
-        )
-
-        event = run_context.context.event
-        ctx = run_context.context.context
-
-        task_result = {
-            "task_id": task_id,
-            "tool_name": tool_name,
-            "result": result_text or "",
-            "tool_args": tool_args,
-        }
-        if extra_result_fields:
-            task_result.update(extra_result_fields)
-        extras = {"background_task_result": task_result}
-
-        session = MessageSession.from_str(event.unified_msg_origin)
-        cron_event = CronMessageEvent(
-            context=ctx,
-            session=session,
-            message=note,
-            extras=extras,
-            message_type=session.message_type,
-        )
-        cron_event.role = event.role
-        cfg = ctx.get_config(umo=event.unified_msg_origin)
-        provider_settings = cfg.get("provider_settings", {})
-        proactive_cfg = provider_settings.get("proactive_capability", {})
-        file_extract_cfg = provider_settings.get("file_extract", {})
-        config = MainAgentBuildConfig(
-            tool_call_timeout=int(provider_settings.get("tool_call_timeout", 3600)),
-            tool_schema_mode=str(provider_settings.get("tool_schema_mode", "full")),
-            streaming_response=bool(
-                provider_settings.get(
-                    "streaming_response",
-                    provider_settings.get("stream", False),
-                )
-            ),
-            sanitize_context_by_modalities=bool(
-                provider_settings.get("sanitize_context_by_modalities", False)
-            ),
-            kb_agentic_mode=bool(cfg.get("kb_agentic_mode", False)),
-            file_extract_enabled=bool(file_extract_cfg.get("enable", False)),
-            file_extract_prov=str(file_extract_cfg.get("provider", "moonshotai")),
-            file_extract_msh_api_key=str(
-                file_extract_cfg.get("moonshotai_api_key", "")
-            ),
-            context_limit_reached_strategy=str(
-                provider_settings.get(
-                    "context_limit_reached_strategy", "truncate_by_turns"
-                )
-            ),
-            llm_compress_instruction=str(
-                provider_settings.get("llm_compress_instruction", "")
-            ),
-            llm_compress_keep_recent=int(
-                provider_settings.get("llm_compress_keep_recent", 6)
-            ),
-            llm_compress_provider_id=str(
-                provider_settings.get("llm_compress_provider_id", "")
-            ),
-            max_context_length=int(provider_settings.get("max_context_length", -1)),
-            dequeue_context_length=int(
-                provider_settings.get("dequeue_context_length", 1)
-            ),
-            llm_safety_mode=bool(provider_settings.get("llm_safety_mode", True)),
-            safety_mode_strategy=str(
-                provider_settings.get("safety_mode_strategy", "system_prompt")
-            ),
-            computer_use_runtime=str(
-                provider_settings.get("computer_use_runtime", "none")
-            ),
-            sandbox_cfg=dict(provider_settings.get("sandbox", {}) or {}),
-            add_cron_tools=bool(proactive_cfg.get("add_cron_tools", True)),
-            provider_settings=provider_settings,
-            subagent_orchestrator=dict(cfg.get("subagent_orchestrator", {}) or {}),
-            timezone=cfg.get("timezone"),
-            max_quoted_fallback_images=int(
-                provider_settings.get("max_quoted_fallback_images", 20)
-            ),
-        )
-
-        req = ProviderRequest()
-        conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
-        req.conversation = conv
-        context = json.loads(conv.history)
-        if context:
-            req.contexts = context
-            context_dump = req._print_friendly_context()
-            req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
-
-        bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
-        )
-        req.prompt = (
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "If you need to deliver the result to the user immediately, "
-            "you MUST use `send_message_to_user` tool to send the message directly to the user, "
-            "otherwise the user will not see the result. "
-            "After completing your task, summarize and output your actions and results. "
-        )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
-
-        result = await build_main_agent(
-            event=cron_event, plugin_context=ctx, config=config, req=req
-        )
-        if not result:
-            logger.error(f"Failed to build main agent for background task {tool_name}.")
-            return
-
-        runner = result.agent_runner
-        async for _ in runner.step_until_done(30):
-            # agent will send message to user via using tools
-            pass
-        llm_resp = runner.get_final_llm_resp()
-        task_meta = extras.get("background_task_result", {})
-        summary_note = (
-            f"[BackgroundTask] {summary_name} "
-            f"(task_id={task_meta.get('task_id', task_id)}) finished. "
-            f"Result: {task_meta.get('result') or result_text or 'no content'}"
-        )
-        if llm_resp and llm_resp.completion_text:
-            summary_note += (
-                f"I finished the task, here is the result: {llm_resp.completion_text}"
-            )
-        await persist_agent_history(
-            ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
-        if not llm_resp:
-            logger.warning("background task agent got no response")
-            return
 
     @classmethod
     async def _execute_local(

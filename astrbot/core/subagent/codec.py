@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import SubagentAgentSpec, SubagentConfig, ToolsScope
+from .models import (
+    SubagentAgentSpec,
+    SubagentConfig,
+    SubagentErrorClassifierConfig,
+    ToolsScope,
+)
 
 _CONFIG_KEYS = {
     "main_enable",
@@ -12,6 +17,7 @@ _CONFIG_KEYS = {
     "agents",
     "max_concurrent_subagent_runs",
     "max_nested_depth",
+    "error_classifier",
     "diagnostics",
     "compat_warnings",
 }
@@ -134,6 +140,41 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
             raise ValueError(f"invalid subagent at agents[{idx}]: {exc}") from exc
         agents.append(spec)
 
+    error_classifier_raw = raw.get("error_classifier", {})
+    if error_classifier_raw is None:
+        error_classifier_raw = {}
+    if not isinstance(error_classifier_raw, dict):
+        raise ValueError("`error_classifier` must be an object")
+
+    fatal_exceptions_raw = error_classifier_raw.get("fatal_exceptions")
+    transient_exceptions_raw = error_classifier_raw.get("transient_exceptions")
+    if fatal_exceptions_raw is None:
+        fatal_exceptions_raw = ["ValueError", "PermissionError", "KeyError"]
+    if transient_exceptions_raw is None:
+        transient_exceptions_raw = [
+            "asyncio.TimeoutError",
+            "TimeoutError",
+            "ConnectionError",
+            "ConnectionResetError",
+        ]
+    if not isinstance(fatal_exceptions_raw, list):
+        raise ValueError("`error_classifier.fatal_exceptions` must be a list")
+    if not isinstance(transient_exceptions_raw, list):
+        raise ValueError("`error_classifier.transient_exceptions` must be a list")
+
+    error_classifier = SubagentErrorClassifierConfig(
+        type=str(error_classifier_raw.get("type", "default")).strip() or "default",
+        fatal_exceptions=[
+            str(item).strip() for item in fatal_exceptions_raw if str(item).strip()
+        ],
+        transient_exceptions=[
+            str(item).strip() for item in transient_exceptions_raw if str(item).strip()
+        ],
+        default_class=str(
+            error_classifier_raw.get("default_class", "transient")
+        ).strip(),
+    )
+
     extensions = {k: v for k, v in raw.items() if k.startswith("x-")}
     config = SubagentConfig(
         main_enable=main_enable,
@@ -142,6 +183,7 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
         agents=agents,
         max_concurrent_subagent_runs=int(raw.get("max_concurrent_subagent_runs", 8)),
         max_nested_depth=int(raw.get("max_nested_depth", 2)),
+        error_classifier=error_classifier,
         extensions=extensions,
     )
     diagnostics.extend(compat_warnings)
@@ -160,6 +202,12 @@ def encode_subagent_config(
         "router_system_prompt": config.router_system_prompt or "",
         "max_concurrent_subagent_runs": int(config.max_concurrent_subagent_runs),
         "max_nested_depth": int(config.max_nested_depth),
+        "error_classifier": {
+            "type": str(config.error_classifier.type or "default"),
+            "fatal_exceptions": list(config.error_classifier.fatal_exceptions),
+            "transient_exceptions": list(config.error_classifier.transient_exceptions),
+            "default_class": str(config.error_classifier.default_class),
+        },
         "agents": [],
     }
     if config.extensions:
@@ -181,6 +229,7 @@ def encode_subagent_config(
             "public_description": spec.public_description,
             "tools_scope": spec.tools_scope.value,
             "tools": tools,
+            "instructions": spec.instructions,
             "system_prompt": spec.instructions,
             "max_steps": spec.max_steps,
         }

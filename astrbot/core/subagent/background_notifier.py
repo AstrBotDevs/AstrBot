@@ -1,0 +1,166 @@
+from __future__ import annotations
+
+import json
+import typing as T
+
+from astrbot import logger
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import ToolSet
+from astrbot.core.cron.events import CronMessageEvent
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.utils.history_saver import persist_agent_history
+
+if T.TYPE_CHECKING:
+    from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+async def wake_main_agent_for_background_result(
+    run_context: ContextWrapper[AstrAgentContext],
+    *,
+    task_id: str,
+    tool_name: str,
+    result_text: str,
+    tool_args: dict[str, T.Any],
+    note: str,
+    summary_name: str,
+    extra_result_fields: dict[str, T.Any] | None = None,
+) -> None:
+    from astrbot.core.astr_main_agent import (
+        MainAgentBuildConfig,
+        _get_session_conv,
+        build_main_agent,
+    )
+    from astrbot.core.astr_main_agent_resources import (
+        BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+        SEND_MESSAGE_TO_USER_TOOL,
+    )
+
+    event = run_context.context.event
+    ctx = run_context.context.context
+
+    task_result = {
+        "task_id": task_id,
+        "tool_name": tool_name,
+        "result": result_text or "",
+        "tool_args": tool_args,
+    }
+    if extra_result_fields:
+        task_result.update(extra_result_fields)
+    extras = {"background_task_result": task_result}
+
+    session = MessageSession.from_str(event.unified_msg_origin)
+    cron_event = CronMessageEvent(
+        context=ctx,
+        session=session,
+        message=note,
+        extras=extras,
+        message_type=session.message_type,
+    )
+    cron_event.role = event.role
+    cfg = ctx.get_config(umo=event.unified_msg_origin)
+    provider_settings = cfg.get("provider_settings", {})
+    proactive_cfg = provider_settings.get("proactive_capability", {})
+    file_extract_cfg = provider_settings.get("file_extract", {})
+    config = MainAgentBuildConfig(
+        tool_call_timeout=int(provider_settings.get("tool_call_timeout", 3600)),
+        tool_schema_mode=str(provider_settings.get("tool_schema_mode", "full")),
+        streaming_response=bool(
+            provider_settings.get(
+                "streaming_response",
+                provider_settings.get("stream", False),
+            )
+        ),
+        sanitize_context_by_modalities=bool(
+            provider_settings.get("sanitize_context_by_modalities", False)
+        ),
+        kb_agentic_mode=bool(cfg.get("kb_agentic_mode", False)),
+        file_extract_enabled=bool(file_extract_cfg.get("enable", False)),
+        file_extract_prov=str(file_extract_cfg.get("provider", "moonshotai")),
+        file_extract_msh_api_key=str(file_extract_cfg.get("moonshotai_api_key", "")),
+        context_limit_reached_strategy=str(
+            provider_settings.get("context_limit_reached_strategy", "truncate_by_turns")
+        ),
+        llm_compress_instruction=str(
+            provider_settings.get("llm_compress_instruction", "")
+        ),
+        llm_compress_keep_recent=int(
+            provider_settings.get("llm_compress_keep_recent", 6)
+        ),
+        llm_compress_provider_id=str(
+            provider_settings.get("llm_compress_provider_id", "")
+        ),
+        max_context_length=int(provider_settings.get("max_context_length", -1)),
+        dequeue_context_length=int(provider_settings.get("dequeue_context_length", 1)),
+        llm_safety_mode=bool(provider_settings.get("llm_safety_mode", True)),
+        safety_mode_strategy=str(
+            provider_settings.get("safety_mode_strategy", "system_prompt")
+        ),
+        computer_use_runtime=str(provider_settings.get("computer_use_runtime", "none")),
+        sandbox_cfg=dict(provider_settings.get("sandbox", {}) or {}),
+        add_cron_tools=bool(proactive_cfg.get("add_cron_tools", True)),
+        provider_settings=provider_settings,
+        subagent_orchestrator=dict(cfg.get("subagent_orchestrator", {}) or {}),
+        timezone=cfg.get("timezone"),
+        max_quoted_fallback_images=int(
+            provider_settings.get("max_quoted_fallback_images", 20)
+        ),
+    )
+
+    req = ProviderRequest()
+    conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+    req.conversation = conv
+    context = json.loads(conv.history)
+    if context:
+        req.contexts = context
+        context_dump = req._print_friendly_context()
+        req.contexts = []
+        req.system_prompt += (
+            f"\n\nBellow is you and user previous conversation history:\n{context_dump}"
+        )
+
+    bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
+    req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
+        background_task_result=bg
+    )
+    req.prompt = (
+        "Proceed according to your system instructions. "
+        "Output using same language as previous conversation. "
+        "If you need to deliver the result to the user immediately, "
+        "you MUST use `send_message_to_user` tool to send the message directly to the user, "
+        "otherwise the user will not see the result. "
+        "After completing your task, summarize and output your actions and results. "
+    )
+    if not req.func_tool:
+        req.func_tool = ToolSet()
+    req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+
+    result = await build_main_agent(
+        event=cron_event, plugin_context=ctx, config=config, req=req
+    )
+    if not result:
+        logger.error("Failed to build main agent for background task %s.", tool_name)
+        return
+
+    runner = result.agent_runner
+    async for _ in runner.step_until_done(30):
+        pass
+    llm_resp = runner.get_final_llm_resp()
+    task_meta = extras.get("background_task_result", {})
+    summary_note = (
+        f"[BackgroundTask] {summary_name} "
+        f"(task_id={task_meta.get('task_id', task_id)}) finished. "
+        f"Result: {task_meta.get('result') or result_text or 'no content'}"
+    )
+    if llm_resp and llm_resp.completion_text:
+        summary_note += (
+            f"I finished the task, here is the result: {llm_resp.completion_text}"
+        )
+    await persist_agent_history(
+        ctx.conversation_manager,
+        event=cron_event,
+        req=req,
+        summary_note=summary_note,
+    )
+    if not llm_resp:
+        logger.warning("background task agent got no response")

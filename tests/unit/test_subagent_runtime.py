@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from astrbot.core.db.po import SubagentTask
+from astrbot.core.subagent.error_classifier import ErrorClassifier
 from astrbot.core.subagent.runtime import SubagentRuntime
 
 
@@ -318,3 +319,36 @@ async def test_runtime_recovers_running_tasks_after_restart():
     assert processed == 1
     assert db.tasks[task_id].status == "succeeded"
     assert db.tasks[task_id].attempt == 2
+
+
+class _RetryableClassifier(ErrorClassifier):
+    def classify(self, exc: Exception) -> str:
+        _ = exc
+        return "retryable"
+
+
+@pytest.mark.asyncio
+async def test_runtime_retryable_classification_follows_retry_branch():
+    db = _FakeDb()
+    runtime = SubagentRuntime(
+        db,
+        base_delay_ms=100,
+        max_delay_ms=100,
+        max_attempts=2,
+        error_classifier=_RetryableClassifier(),
+    )
+
+    async def _executor(_task):
+        raise RuntimeError("retryable")
+
+    runtime.set_task_executor(_executor)
+    task_id = await runtime.enqueue(
+        umo="webchat:FriendMessage:webchat!u!s",
+        subagent_name="writer",
+        handoff_tool_name="transfer_to_writer",
+        payload={"tool_args": {"input": "x"}},
+        tool_call_id="call_retryable",
+    )
+    processed = await runtime.process_once(batch_size=8)
+    assert processed == 1
+    assert db.tasks[task_id].status == "retrying"

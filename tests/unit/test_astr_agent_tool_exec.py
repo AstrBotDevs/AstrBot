@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -5,8 +7,12 @@ import mcp
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.subagent.background_notifier import (
+    wake_main_agent_for_background_result,
+)
+from astrbot.core.subagent.handoff_executor import HandoffExecutor
+from astrbot.core.subagent.models import SubagentTaskData
 
 
 class _DummyEvent:
@@ -48,7 +54,7 @@ async def test_collect_handoff_image_urls_normalizes_filters_and_appends_event_i
         123,
     )
 
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    image_urls = await HandoffExecutor.collect_handoff_image_urls(
         run_context,
         image_urls_input,
     )
@@ -70,7 +76,7 @@ async def test_collect_handoff_image_urls_skips_failed_event_image_conversion(
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    image_urls = await HandoffExecutor.collect_handoff_image_urls(
         run_context,
         ["https://example.com/a.png"],
     )
@@ -109,9 +115,7 @@ async def test_collect_handoff_image_urls_filters_supported_schemes_and_extensio
     expected_supported_refs: set[str],
 ):
     run_context = _build_run_context([])
-    result = await FunctionToolExecutor._collect_handoff_image_urls(
-        run_context, image_refs
-    )
+    result = await HandoffExecutor.collect_handoff_image_urls(run_context, image_refs)
     assert set(result) == expected_supported_refs
 
 
@@ -125,52 +129,12 @@ async def test_collect_handoff_image_urls_collects_event_image_when_args_is_none
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    image_urls = await HandoffExecutor.collect_handoff_image_urls(
         run_context,
         None,
     )
 
     assert image_urls == ["/tmp/event_only.png"]
-
-
-@pytest.mark.asyncio
-async def test_do_handoff_background_reports_prepared_image_urls(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    captured: dict = {}
-
-    async def _fake_execute_handoff(
-        cls, tool, run_context, image_urls_prepared=False, **tool_args
-    ):
-        assert image_urls_prepared is True
-        yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text="ok")]
-        )
-
-    async def _fake_wake(cls, run_context, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(
-        FunctionToolExecutor,
-        "_execute_handoff",
-        classmethod(_fake_execute_handoff),
-    )
-    monkeypatch.setattr(
-        FunctionToolExecutor,
-        "_wake_main_agent_for_background_result",
-        classmethod(_fake_wake),
-    )
-
-    run_context = _build_run_context()
-    await FunctionToolExecutor._do_handoff_background(
-        tool=_DummyTool(),
-        run_context=run_context,
-        task_id="task-id",
-        input="hello",
-        image_urls="https://example.com/raw.png",
-    )
-
-    assert captured["tool_args"]["image_urls"] == ["https://example.com/raw.png"]
 
 
 @pytest.mark.asyncio
@@ -209,11 +173,11 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
     )
 
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.normalize_and_dedupe_strings", _boom
+        "astrbot.core.subagent.handoff_executor.normalize_and_dedupe_strings", _boom
     )
 
     results = []
-    async for result in FunctionToolExecutor._execute_handoff(
+    async for result in HandoffExecutor.execute_foreground(
         tool,
         run_context,
         image_urls_prepared=True,
@@ -260,7 +224,7 @@ async def test_execute_handoff_uses_subagent_max_steps_override(
     )
 
     results = []
-    async for result in FunctionToolExecutor._execute_handoff(
+    async for result in HandoffExecutor.execute_foreground(
         tool,
         run_context,
         input="hello",
@@ -273,13 +237,105 @@ async def test_execute_handoff_uses_subagent_max_steps_override(
 
 
 @pytest.mark.asyncio
+async def test_execute_queued_task_uses_prepared_image_urls_and_notifies(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    class _FakeAstrAgentContext:
+        def __init__(self, *, context, event):
+            self.context = context
+            self.event = event
+
+    class _FakeAgentContextWrapper:
+        def __init__(self, *, context, tool_call_timeout):
+            self.context = context
+            self.tool_call_timeout = tool_call_timeout
+
+    async def _fake_execute_foreground(*_args, **kwargs):
+        assert kwargs["image_urls_prepared"] is True
+        assert kwargs["image_urls"] == ["https://example.com/a.png"]
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="done from queued task")]
+        )
+
+    async def _fake_notify(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(HandoffExecutor, "execute_foreground", _fake_execute_foreground)
+    monkeypatch.setattr(
+        "astrbot.core.subagent.handoff_executor.wake_main_agent_for_background_result",
+        _fake_notify,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_context.AstrAgentContext",
+        _FakeAstrAgentContext,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_context.AgentContextWrapper",
+        _FakeAgentContextWrapper,
+    )
+
+    task = SubagentTaskData(
+        task_id="task_queued_1",
+        idempotency_key="idem",
+        umo="webchat:FriendMessage:webchat!user!session",
+        subagent_name="subagent",
+        handoff_tool_name="transfer_to_subagent",
+        status="running",
+        attempt=1,
+        max_attempts=3,
+        next_run_at=None,
+        payload_json=json.dumps(
+            {
+                "_meta": {"background_note": "finished", "tool_call_timeout": 90},
+                "tool_args": {
+                    "image_urls": ["https://example.com/a.png"],
+                    "input": "hello",
+                },
+            }
+        ),
+        error_class=None,
+        last_error=None,
+        result_text=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        finished_at=None,
+    )
+    plugin_context = SimpleNamespace()
+    handoff = SimpleNamespace(
+        name="transfer_to_subagent",
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+        provider_id=None,
+        max_steps=None,
+    )
+
+    result = await HandoffExecutor.execute_queued_task(
+        task=task,
+        plugin_context=plugin_context,
+        handoff=handoff,
+    )
+
+    assert "done from queued task" in result
+    assert captured["task_id"] == "task_queued_1"
+    assert captured["note"] == "finished"
+    assert captured["tool_args"]["image_urls"] == ["https://example.com/a.png"]
+
+
+@pytest.mark.asyncio
 async def test_build_handoff_toolset_defaults_runtime_to_none():
     event = _DummyEvent([])
     context = SimpleNamespace(
         get_config=lambda **_kwargs: {"provider_settings": {}},
     )
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
-    toolset = FunctionToolExecutor._build_handoff_toolset(run_context, [])
+    toolset = HandoffExecutor.build_handoff_toolset(run_context, [])
     assert toolset is None
 
 
@@ -323,7 +379,7 @@ async def test_wake_main_agent_for_background_result_uses_provider_settings(
         _fake_build_main_agent,
     )
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        "astrbot.core.subagent.background_notifier.persist_agent_history",
         _fake_persist_agent_history,
     )
 
@@ -346,7 +402,7 @@ async def test_wake_main_agent_for_background_result_uses_provider_settings(
     event = _DummyEvent([])
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
 
-    await FunctionToolExecutor._wake_main_agent_for_background_result(
+    await wake_main_agent_for_background_result(
         run_context=run_context,
         task_id="task_1",
         tool_name="transfer_to_subagent",
@@ -372,14 +428,14 @@ async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_fil
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.subagent.handoff_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
     )
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    image_urls = await HandoffExecutor.collect_handoff_image_urls(
         run_context,
         [],
     )
@@ -396,14 +452,14 @@ async def test_collect_handoff_image_urls_filters_extensionless_missing_event_fi
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.subagent.handoff_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: False
     )
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    image_urls = await HandoffExecutor.collect_handoff_image_urls(
         run_context,
         [],
     )
@@ -420,14 +476,14 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
 
     monkeypatch.setattr(Image, "convert_to_file_path", _fake_convert_to_file_path)
     monkeypatch.setattr(
-        "astrbot.core.astr_agent_tool_exec.get_astrbot_temp_path", lambda: "/tmp"
+        "astrbot.core.subagent.handoff_executor.get_astrbot_temp_path", lambda: "/tmp"
     )
     monkeypatch.setattr(
         "astrbot.core.utils.image_ref_utils.os.path.exists", lambda _: True
     )
 
     run_context = _build_run_context([Image(file="file:///tmp/original.png")])
-    image_urls = await FunctionToolExecutor._collect_handoff_image_urls(
+    image_urls = await HandoffExecutor.collect_handoff_image_urls(
         run_context,
         [],
     )
@@ -440,9 +496,11 @@ async def test_execute_handoff_background_strict_failover_without_orchestrator()
     run_context = _build_run_context()
     tool = _DummyTool()
 
-    with patch("astrbot.core.astr_agent_tool_exec.asyncio.create_task") as create_task_mock:
+    with patch(
+        "astrbot.core.astr_agent_tool_exec.asyncio.create_task"
+    ) as create_task_mock:
         results = []
-        async for result in FunctionToolExecutor._execute_handoff_background(
+        async for result in HandoffExecutor.submit_background(
             tool,
             run_context,
             tool_call_id="call_1",
@@ -458,14 +516,18 @@ async def test_execute_handoff_background_strict_failover_without_orchestrator()
 
 @pytest.mark.asyncio
 async def test_execute_handoff_background_strict_failover_submit_error():
-    orchestrator = SimpleNamespace(submit_handoff=AsyncMock(side_effect=RuntimeError("boom")))
+    orchestrator = SimpleNamespace(
+        submit_handoff=AsyncMock(side_effect=RuntimeError("boom"))
+    )
     event = _DummyEvent([])
     context = SimpleNamespace(subagent_orchestrator=orchestrator)
     run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
 
-    with patch("astrbot.core.astr_agent_tool_exec.asyncio.create_task") as create_task_mock:
+    with patch(
+        "astrbot.core.astr_agent_tool_exec.asyncio.create_task"
+    ) as create_task_mock:
         results = []
-        async for result in FunctionToolExecutor._execute_handoff_background(
+        async for result in HandoffExecutor.submit_background(
             _DummyTool(),
             run_context,
             tool_call_id="call_1",

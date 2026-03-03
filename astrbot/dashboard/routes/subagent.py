@@ -70,6 +70,8 @@ class SubAgentRoute(Route):
             data = await request.json
             if not isinstance(data, dict):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
+            # Canonical field is `instructions`; `system_prompt` is accepted for
+            # backward compatibility and serialized as a deprecated mirror field.
             canonical, diagnostics = decode_subagent_config(data)
             normalized = encode_subagent_config(canonical)
 
