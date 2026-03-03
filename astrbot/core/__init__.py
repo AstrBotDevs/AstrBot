@@ -8,6 +8,7 @@ from astrbot.core.utils.pip_installer import PipInstaller
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
+from .lang import t
 from .log import LogBroker, LogManager  # noqa
 from .utils.astrbot_path import get_astrbot_data_path
 
@@ -17,6 +18,14 @@ os.makedirs(get_astrbot_data_path(), exist_ok=True)
 DEMO_MODE = os.getenv("DEMO_MODE", False)
 
 astrbot_config = AstrBotConfig()
+saved_locale = astrbot_config.get("i18n", {}).get("locale", "zh-cn")
+try:
+    t.load_locale(locale=str(saved_locale).lower(), files=None)
+except ValueError:
+    t.load_locale(locale="zh-cn", files=None)
+    i18n_config = astrbot_config.setdefault("i18n", {})
+    i18n_config["locale"] = "zh-cn"
+    astrbot_config.save_config()
 t2i_base_url = astrbot_config.get("t2i_endpoint", "https://t2i.soulter.top/text2img")
 html_renderer = HtmlRenderer(t2i_base_url)
 logger = LogManager.GetLogger(log_name="astrbot")

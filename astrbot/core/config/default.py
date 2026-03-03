@@ -210,6 +210,9 @@ DEFAULT_CONFIG = {
             "ca_certs": "",
         },
     },
+    "i18n": {
+        "locale": "zh-cn",
+    },
     "platform": [],
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
