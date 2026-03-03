@@ -36,7 +36,7 @@ class CustomBuildHook(BuildHookInterface):
         if not (dashboard_src / "node_modules").exists():
             print("[hatch_build] Installing dashboard Node dependencies...")
             subprocess.run(
-                ["npm", "ci"],
+                ["npm", "install"],
                 cwd=dashboard_src,
                 check=True,
             )
