@@ -12,6 +12,12 @@ from .route import Response, Route, RouteContext
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
 
+class EmptyMcpServersError(ValueError):
+    """mcpServers 为空时抛出"""
+
+    pass
+
+
 def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     """从用户提交的 mcpServers 字段中提取服务器配置。
 
@@ -21,7 +27,7 @@ def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     if not isinstance(mcp_servers_value, dict):
         raise ValueError("mcpServers 必须是一个 JSON 对象")
     if not mcp_servers_value:
-        raise ValueError("mcpServers 配置不能为空")
+        raise EmptyMcpServersError("mcpServers 配置不能为空")
     key_0 = next(iter(mcp_servers_value))
     extracted = mcp_servers_value[key_0]
     if not isinstance(extracted, dict):
@@ -52,6 +58,17 @@ class ToolsRoute(Route):
         }
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+
+    def _rollback_mcp_server(self, name: str) -> bool:
+        try:
+            rollback_config = self.tool_mgr.load_mcp_config()
+            if name in rollback_config["mcpServers"]:
+                rollback_config["mcpServers"].pop(name)
+                return self.tool_mgr.save_mcp_config(rollback_config)
+            return True
+        except Exception:
+            logger.error(traceback.format_exc())
+            return False
 
     async def get_mcp_servers(self):
         try:
@@ -146,17 +163,6 @@ class ToolsRoute(Route):
 
             config["mcpServers"][name] = server_config
 
-            def rollback_added_server() -> bool:
-                try:
-                    rollback_config = self.tool_mgr.load_mcp_config()
-                    if name in rollback_config["mcpServers"]:
-                        rollback_config["mcpServers"].pop(name)
-                        return self.tool_mgr.save_mcp_config(rollback_config)
-                    return True
-                except Exception:
-                    logger.error(traceback.format_exc())
-                    return False
-
             if self.tool_mgr.save_mcp_config(config):
                 try:
                     await self.tool_mgr.enable_mcp_server(
@@ -165,14 +171,14 @@ class ToolsRoute(Route):
                         timeout=30,
                     )
                 except TimeoutError:
-                    rollback_ok = rollback_added_server()
+                    rollback_ok = self._rollback_mcp_server(name)
                     err_msg = f"启用 MCP 服务器 {name} 超时。"
                     if not rollback_ok:
                         err_msg += " 配置回滚失败，请手动检查配置。"
                     return Response().error(err_msg).__dict__
                 except Exception as e:
                     logger.error(traceback.format_exc())
-                    rollback_ok = rollback_added_server()
+                    rollback_ok = self._rollback_mcp_server(name)
                     err_msg = f"启用 MCP 服务器 {name} 失败: {e!s}"
                     if not rollback_ok:
                         err_msg += " 配置回滚失败，请手动检查配置。"
@@ -369,9 +375,9 @@ class ToolsRoute(Route):
                     return Response().error("一次只能配置一个 MCP 服务器配置").__dict__
                 try:
                     config = _extract_mcp_server_config(mcp_servers)
+                except EmptyMcpServersError:
+                    return Response().error("MCP 服务器配置不能为空").__dict__
                 except ValueError as e:
-                    if str(e) == "mcpServers 配置不能为空":
-                        return Response().error("MCP 服务器配置不能为空").__dict__
                     return Response().error(f"{e!s}").__dict__
             elif not config:
                 return Response().error("MCP 服务器配置不能为空").__dict__
