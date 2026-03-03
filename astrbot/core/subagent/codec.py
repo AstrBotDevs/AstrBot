@@ -43,6 +43,20 @@ _AGENT_KEYS = {
 }
 
 
+def _parse_bool(value: Any, *, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"`{field_name}` must be a boolean value")
+
+
 def _validate_no_unknown_keys(data: dict[str, Any], allowed: set[str]) -> None:
     unknown = [k for k in data.keys() if k not in allowed and not k.startswith("x-")]
     if unknown:
@@ -74,11 +88,15 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
     diagnostics: list[str] = []
     compat_warnings: list[str] = []
 
-    main_enable = bool(raw.get("main_enable", raw.get("enable", False)))
-    if "enable" in raw and "main_enable" not in raw:
+    if "main_enable" in raw:
+        main_enable = _parse_bool(raw["main_enable"], field_name="main_enable")
+    elif "enable" in raw:
+        main_enable = _parse_bool(raw["enable"], field_name="enable")
         compat_warnings.append(
             "legacy field `enable` is accepted and mapped to `main_enable`."
         )
+    else:
+        main_enable = False
 
     agents_raw = raw.get("agents", [])
     if agents_raw is None:
@@ -115,9 +133,19 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
             tools = None
 
         try:
+            if "enabled" in item:
+                enabled = _parse_bool(
+                    item["enabled"], field_name=f"agents[{idx}].enabled"
+                )
+            elif "enable" in item:
+                enabled = _parse_bool(
+                    item["enable"], field_name=f"agents[{idx}].enable"
+                )
+            else:
+                enabled = True
             spec = SubagentAgentSpec(
                 name=str(item.get("name", "")).strip(),
-                enabled=bool(item.get("enabled", item.get("enable", True))),
+                enabled=enabled,
                 persona_id=(
                     str(item.get("persona_id")).strip()
                     if item.get("persona_id") is not None
@@ -190,7 +218,14 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
     extensions = {k: v for k, v in raw.items() if k.startswith("x-")}
     config = SubagentConfig(
         main_enable=main_enable,
-        remove_main_duplicate_tools=bool(raw.get("remove_main_duplicate_tools", False)),
+        remove_main_duplicate_tools=(
+            _parse_bool(
+                raw["remove_main_duplicate_tools"],
+                field_name="remove_main_duplicate_tools",
+            )
+            if "remove_main_duplicate_tools" in raw
+            else False
+        ),
         router_system_prompt=str(raw.get("router_system_prompt", "")).strip(),
         agents=agents,
         max_concurrent_subagent_runs=int(raw.get("max_concurrent_subagent_runs", 8)),

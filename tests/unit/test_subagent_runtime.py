@@ -85,6 +85,7 @@ class _FakeDb:
         }:
             return False
         t.status = "retrying"
+        t.attempt = 0
         t.next_run_at = next_run_at
         t.error_class = error_class
         t.last_error = last_error
@@ -404,6 +405,7 @@ async def test_runtime_manual_retry_reschedules_failed_task():
     retried = await runtime.retry_task(task_id)
     assert retried is True
     assert db.tasks[task_id].status == "retrying"
+    assert db.tasks[task_id].attempt == 0
 
     db.tasks[task_id].next_run_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     processed = await runtime.process_once(batch_size=8)

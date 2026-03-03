@@ -102,8 +102,13 @@ async def test_planner_detects_safe_tool_name_conflict():
     )
     planner = SubagentPlanner(_FakeToolMgr(), _FakePersonaMgr())
     plan = await planner.build_mount_plan(config)
-    assert len(plan.handoffs) == 1
-    assert any("duplicate subagent tool name" in d for d in plan.diagnostics)
+    assert len(plan.handoffs) == 2
+    assert plan.handoffs[0].name == "transfer_to_a_a"
+    assert plan.handoffs[1].name == "transfer_to_a_a-2"
+    assert any(
+        "duplicate subagent tool name" in d and "renamed" in d
+        for d in plan.diagnostics
+    )
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,13 @@ from astrbot import logger
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 
-from .models import SubagentAgentSpec, SubagentConfig, SubagentMountPlan, ToolsScope
+from .models import (
+    SubagentAgentSpec,
+    SubagentConfig,
+    SubagentMountPlan,
+    ToolsScope,
+    build_safe_handoff_agent_name,
+)
 
 
 class SubagentPlanner:
@@ -38,12 +44,24 @@ class SubagentPlanner:
                 continue
 
             safe_agent_name = spec.handoff_agent_name
-            if safe_agent_name in seen_agent_names:
+            resolved_agent_name = safe_agent_name
+            if resolved_agent_name in seen_agent_names:
+                suffix = 2
+                while suffix <= 99 and resolved_agent_name in seen_agent_names:
+                    resolved_agent_name = build_safe_handoff_agent_name(
+                        f"{spec.name}-{suffix}"
+                    )
+                    suffix += 1
+                if resolved_agent_name in seen_agent_names:
+                    diagnostics.append(
+                        f"ERROR: duplicate subagent tool name generated from `{spec.name}`."
+                    )
+                    continue
                 diagnostics.append(
-                    f"ERROR: duplicate subagent tool name generated from `{spec.name}`."
+                    "WARN: duplicate subagent tool name generated from "
+                    f"`{spec.name}`, renamed to `{resolved_agent_name}`."
                 )
-                continue
-            seen_agent_names.add(safe_agent_name)
+            seen_agent_names.add(resolved_agent_name)
 
             persona = await self._resolve_persona(spec, diagnostics)
             instructions = self._resolve_instructions(spec, persona)
@@ -52,7 +70,7 @@ class SubagentPlanner:
             begin_dialogs = getattr(persona, "begin_dialogs", None) if persona else None
 
             agent = Agent[Any](
-                name=safe_agent_name,
+                name=resolved_agent_name,
                 instructions=instructions,
                 tools=tools,  # type: ignore[arg-type]
             )

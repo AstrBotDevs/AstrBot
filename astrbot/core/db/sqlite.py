@@ -2001,6 +2001,7 @@ class SQLiteDatabase(BaseDatabase):
                     )
                     .values(
                         status="retrying",
+                        attempt=0,
                         next_run_at=next_run_at,
                         error_class=error_class,
                         last_error=last_error,

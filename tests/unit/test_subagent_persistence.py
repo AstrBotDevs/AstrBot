@@ -122,8 +122,12 @@ async def test_sqlite_subagent_task_status_transitions(tmp_path: Path):
         last_error="manual retry requested",
     )
     assert retried_failed is True
+    retried_rows = await db.list_subagent_tasks(status="retrying", limit=10)
+    retried_row = next(row for row in retried_rows if row.task_id == failed_task.task_id)
+    assert retried_row.attempt == 0
     running_failed_retry = await db.mark_subagent_task_running(failed_task.task_id)
     assert running_failed_retry is not None
+    assert running_failed_retry.attempt == 1
     succeeded_after_retry = await db.mark_subagent_task_succeeded(
         failed_task.task_id, result_text="done_after_manual_retry"
     )

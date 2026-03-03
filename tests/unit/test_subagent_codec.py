@@ -113,3 +113,32 @@ def test_encode_decode_roundtrip_with_instructions_has_no_legacy_warning():
     encoded = encode_subagent_config(config)
     _, diagnostics = decode_subagent_config(encoded)
     assert not any("legacy field `agents[0].system_prompt`" in d for d in diagnostics)
+
+
+def test_decode_subagent_config_parses_boolean_strings():
+    config, _ = decode_subagent_config(
+        {
+            "main_enable": "false",
+            "remove_main_duplicate_tools": "1",
+            "agents": [
+                {
+                    "name": "writer",
+                    "enabled": "0",
+                    "instructions": "do work",
+                }
+            ],
+        }
+    )
+    assert config.main_enable is False
+    assert config.remove_main_duplicate_tools is True
+    assert config.agents[0].enabled is False
+
+
+def test_decode_subagent_config_rejects_invalid_boolean_value():
+    with pytest.raises(ValueError):
+        decode_subagent_config(
+            {
+                "main_enable": "not-a-bool",
+                "agents": [{"name": "writer"}],
+            }
+        )
