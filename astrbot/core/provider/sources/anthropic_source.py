@@ -649,10 +649,15 @@ class ProviderAnthropic(Provider):
 
     async def get_models(self) -> list[str]:
         models_str = []
-        models = await self.client.models.list()
-        models = sorted(models.data, key=lambda x: x.id)
-        for model in models:
-            models_str.append(model.id)
+        try:
+            models = await self.client.models.list()
+            models = sorted(models.data, key=lambda x: x.id)
+            for model in models:
+                models_str.append(model.id)
+        except Exception as e:
+            # 部分兼容 Anthropic API 的第三方提供商（如 MiniMax）不支持 /models 端点，
+            # 忽略错误并返回空列表，用户可手动添加模型。
+            logger.warning(f"获取模型列表失败，该提供商可能不支持 /models 端点：{e}")
         return models_str
 
     def set_key(self, key: str) -> None:
