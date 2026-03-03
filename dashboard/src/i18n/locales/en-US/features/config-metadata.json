@@ -361,10 +361,6 @@
         "description": "Callback Server Host",
         "hint": "Callback server host. Leave empty to disable the callback server."
       },
-      "card_template_id": {
-        "description": "Card Template ID",
-        "hint": "Optional. DingTalk interactive card template ID. When enabled, streaming replies will use interactive cards."
-      },
       "discord_activity_name": {
         "description": "Discord Activity Name",
         "hint": "Optional Discord activity name. Leave empty to disable."
