@@ -57,9 +57,16 @@ class ToolsRoute(Route):
         try:
             config = self.tool_mgr.load_mcp_config()
             servers = []
+            mcp_servers = config.get("mcpServers", {})
+
+            if not isinstance(mcp_servers, dict):
+                logger.warning(
+                    f"MCP 服务器配置无效（类型为 {type(mcp_servers).__name__}），应为对象/字典类型，已跳过所有 MCP 服务器"
+                )
+                mcp_servers = {}
 
             # 获取所有服务器并添加它们的工具列表
-            for name, server_config in config["mcpServers"].items():
+            for name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
                     logger.warning(
                         f"MCP 服务器 '{name}' 的配置无效（类型为 {type(server_config).__name__}），已跳过"
