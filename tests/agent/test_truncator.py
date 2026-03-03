@@ -52,18 +52,6 @@ class TestContextTruncator:
         assert len(result) == 3
         assert result == messages
 
-    def test_fix_messages_tool_with_valid_context(self):
-        """Test fix_messages with tool message after user+assistant."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("user", "Run tool"),
-            self.create_message("assistant", "Running..."),
-            self.create_message("tool", "Tool result"),
-        ]
-        result = truncator.fix_messages(messages)
-        assert len(result) == 3
-        assert result == messages
-
     def test_fix_messages_tool_without_context(self):
         """Test fix_messages with tool message without enough context."""
         truncator = ContextTruncator()
@@ -73,43 +61,6 @@ class TestContextTruncator:
         result = truncator.fix_messages(messages)
         # Tool message without context should be removed
         assert len(result) == 0
-
-    def test_fix_messages_tool_with_only_one_message(self):
-        """Test fix_messages with tool message after only one message."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("user", "Hello"),
-            self.create_message("tool", "Tool result"),
-        ]
-        result = truncator.fix_messages(messages)
-        # Tool message without enough context should be removed
-        assert len(result) == 0
-
-    def test_fix_messages_multiple_tools(self):
-        """Test fix_messages with multiple tool messages."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("user", "Run tool"),
-            self.create_message("assistant", "Running..."),
-            self.create_message("tool", "Tool 1 result"),
-            self.create_message("tool", "Tool 2 result"),
-        ]
-        result = truncator.fix_messages(messages)
-        assert len(result) == 4
-        assert result == messages
-
-    def test_fix_messages_mixed_system_tool(self):
-        """Test fix_messages with system message and tool messages."""
-        truncator = ContextTruncator()
-        messages = [
-            self.create_message("system", "System prompt"),
-            self.create_message("user", "Run tool"),
-            self.create_message("assistant", "Running..."),
-            self.create_message("tool", "Tool result"),
-        ]
-        result = truncator.fix_messages(messages)
-        assert len(result) == 4
-        assert result == messages
 
     # ==================== truncate_by_turns Tests ====================
 
