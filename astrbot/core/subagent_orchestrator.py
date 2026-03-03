@@ -82,6 +82,9 @@ class SubAgentOrchestrator:
     def get_config(self) -> SubagentConfig:
         return self._config
 
+    def get_max_nested_depth(self) -> int:
+        return int(self._config.max_nested_depth)
+
     async def submit_handoff(
         self,
         *,

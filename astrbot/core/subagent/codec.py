@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from .models import (
     SubagentAgentSpec,
@@ -8,6 +8,9 @@ from .models import (
     SubagentErrorClassifierConfig,
     ToolsScope,
 )
+
+_DEFAULT_CLASS_ALLOWED = {"fatal", "transient", "retryable"}
+_DefaultClassLiteral = Literal["fatal", "transient", "retryable"]
 
 _CONFIG_KEYS = {
     "main_enable",
@@ -170,9 +173,19 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
         transient_exceptions=[
             str(item).strip() for item in transient_exceptions_raw if str(item).strip()
         ],
-        default_class=str(
-            error_classifier_raw.get("default_class", "transient")
-        ).strip(),
+        default_class=cast(
+            _DefaultClassLiteral,
+            (
+                default_class
+                if (
+                    default_class := str(
+                        error_classifier_raw.get("default_class", "transient")
+                    ).strip()
+                )
+                in _DEFAULT_CLASS_ALLOWED
+                else "transient"
+            ),
+        ),
     )
 
     extensions = {k: v for k, v in raw.items() if k.startswith("x-")}

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import random
+import typing as T
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
@@ -194,14 +195,19 @@ class SubagentRuntime:
         return canceled
 
     async def _run_one(self, task: SubagentTaskData) -> None:
+        db = self._db
+        task_executor = self._task_executor
+        if db is None or task_executor is None:
+            raise RuntimeError("Subagent runtime is not fully initialized.")
+
         lane = self._lane_key(task.umo, task.subagent_name)
         self._emit_event(
             "task_started", task.task_id, task.subagent_name, task.attempt, task.umo
         )
         await self._call_hook("on_task_started", task)
         try:
-            result = await self._task_executor(task)
-            updated = await self._db.mark_subagent_task_succeeded(
+            result = await task_executor(task)
+            updated = await db.mark_subagent_task_succeeded(
                 task.task_id, result_text=result
             )
             if not updated:
@@ -237,7 +243,7 @@ class SubagentRuntime:
             ):
                 delay = self._compute_delay_seconds(task.attempt)
                 next_run = datetime.now(timezone.utc) + timedelta(seconds=delay)
-                updated = await self._db.mark_subagent_task_retrying(
+                updated = await db.mark_subagent_task_retrying(
                     task_id=task.task_id,
                     next_run_at=next_run,
                     error_class=error_class,
@@ -278,7 +284,7 @@ class SubagentRuntime:
                 )
                 return
 
-            updated = await self._db.mark_subagent_task_failed(
+            updated = await db.mark_subagent_task_failed(
                 task_id=task.task_id,
                 error_class=error_class,
                 last_error=str(exc),
@@ -345,15 +351,16 @@ class SubagentRuntime:
         return "transient"
 
     async def _recover_interrupted_running_tasks(self) -> int:
-        if not self._db:
+        db = self._db
+        if not db:
             return 0
-        rows = await self._db.list_subagent_tasks(status="running", limit=10000)
+        rows = await db.list_subagent_tasks(status="running", limit=10000)
         if not rows:
             return 0
         now = datetime.now(timezone.utc)
         recovered = 0
         for row in rows:
-            ok = await self._db.mark_subagent_task_retrying(
+            ok = await db.mark_subagent_task_retrying(
                 task_id=row.task_id,
                 next_run_at=now,
                 error_class="transient",
@@ -367,8 +374,9 @@ class SubagentRuntime:
         hook = getattr(self._hooks, hook_name, None)
         if not callable(hook):
             return
+        typed_hook = T.cast(Callable[..., Awaitable[None]], hook)
         try:
-            await hook(*args, **kwargs)
+            await typed_hook(*args, **kwargs)
         except Exception as exc:
             exc_type = type(exc).__name__
             exc_module = type(exc).__module__

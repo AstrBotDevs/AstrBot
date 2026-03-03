@@ -4,6 +4,7 @@ import json
 import typing as T
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import mcp
@@ -29,7 +30,83 @@ if TYPE_CHECKING:
     from astrbot.core.astr_agent_context import AstrAgentContext
 
 
+@dataclass(slots=True)
+class _HandoffExecutionSettings:
+    runtime: str
+    max_nested_depth: int
+    default_max_steps: int
+    streaming_response: bool
+
+
 class HandoffExecutor:
+    @staticmethod
+    def _safe_int(value: T.Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @classmethod
+    def _get_provider_settings(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> dict[str, T.Any]:
+        ctx = run_context.context.context
+        event = run_context.context.event
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = cfg.get("provider_settings", {})
+        if not isinstance(provider_settings, dict):
+            return {}
+        return provider_settings
+
+    @classmethod
+    def _get_orchestrator(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> T.Any | None:
+        return getattr(run_context.context.context, "subagent_orchestrator", None)
+
+    @classmethod
+    def _resolve_max_nested_depth(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> int:
+        orchestrator = cls._get_orchestrator(run_context)
+        orchestrator_depth_getter = getattr(orchestrator, "get_max_nested_depth", None)
+        if callable(orchestrator_depth_getter):
+            depth = cls._safe_int(orchestrator_depth_getter(), 2)
+            return min(8, max(1, depth))
+
+        ctx = run_context.context.context
+        event = run_context.context.event
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        orchestrator_cfg = cfg.get("subagent_orchestrator", {})
+        raw_depth = (
+            orchestrator_cfg.get("max_nested_depth", 2)
+            if isinstance(orchestrator_cfg, dict)
+            else 2
+        )
+        depth = cls._safe_int(raw_depth, 2)
+        return min(8, max(1, depth))
+
+    @classmethod
+    def _resolve_execution_settings(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> _HandoffExecutionSettings:
+        provider_settings = cls._get_provider_settings(run_context)
+        return _HandoffExecutionSettings(
+            runtime=str(provider_settings.get("computer_use_runtime", "none")),
+            max_nested_depth=cls._resolve_max_nested_depth(run_context),
+            default_max_steps=cls._safe_int(
+                provider_settings.get("max_agent_step", 30), 30
+            ),
+            streaming_response=bool(provider_settings.get("streaming_response", False)),
+        )
+
+    @classmethod
+    def _resolve_agent_max_steps(cls, tool: HandoffTool, default_max_steps: int) -> int:
+        configured_max_step = getattr(tool, "max_steps", None)
+        if isinstance(configured_max_step, int) and configured_max_step > 0:
+            return configured_max_step
+        return default_max_steps
+
     @classmethod
     def collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -134,10 +211,7 @@ class HandoffExecutor:
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
     ) -> ToolSet | None:
-        ctx = run_context.context.context
-        event = run_context.context.event
-        cfg = ctx.get_config(umo=event.unified_msg_origin)
-        provider_settings = cfg.get("provider_settings", {})
+        provider_settings = cls._get_provider_settings(run_context)
         runtime = str(provider_settings.get("computer_use_runtime", "none"))
         runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
 
@@ -204,21 +278,18 @@ class HandoffExecutor:
         args["image_urls"] = image_urls
 
         toolset = cls.build_handoff_toolset(run_context, tool.agent.tools)
+        execution_settings = cls._resolve_execution_settings(run_context)
 
         ctx = run_context.context.context
         event = run_context.context.event
         umo = event.unified_msg_origin
         event_get_extra = getattr(event, "get_extra", None)
         current_depth = (
-            int(event_get_extra("subagent_handoff_depth") or 0)
+            cls._safe_int(event_get_extra("subagent_handoff_depth"), 0)
             if callable(event_get_extra)
             else 0
         )
-        max_depth = int(
-            ctx.get_config(umo=umo)
-            .get("subagent_orchestrator", {})
-            .get("max_nested_depth", 2)
-        )
+        max_depth = execution_settings.max_nested_depth
         if current_depth >= max_depth:
             yield mcp.types.CallToolResult(
                 content=[
@@ -251,13 +322,10 @@ class HandoffExecutor:
                 except Exception:  # noqa: BLE001
                     continue
 
-        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        configured_max_step = getattr(tool, "max_steps", None)
-        if isinstance(configured_max_step, int) and configured_max_step > 0:
-            agent_max_step = configured_max_step
-        else:
-            agent_max_step = int(prov_settings.get("max_agent_step", 30))
-        stream = prov_settings.get("streaming_response", False)
+        agent_max_step = cls._resolve_agent_max_steps(
+            tool, execution_settings.default_max_steps
+        )
+        stream = execution_settings.streaming_response
         event_set_extra = getattr(event, "set_extra", None)
         if callable(event_set_extra):
             event_set_extra("subagent_handoff_depth", current_depth + 1)
