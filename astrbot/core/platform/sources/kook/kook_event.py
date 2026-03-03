@@ -160,11 +160,6 @@ class KookEvent(AstrMessageEvent):
         tasks_result = await asyncio.gather(*file_upload_tasks, return_exceptions=True)
         order_messages: list[OrderMessage] = []
 
-        # 这里如果上传文件的任务有几个报错的
-        # 那么就拿不到message index了
-        # 那只能按结果列表的index来填进去了
-        # 虽然自定义一个exception,里边加一个index字段也不是不行
-        # 但是先这样吧
         for index, result in enumerate(tasks_result):
             if isinstance(result, BaseException):
                 logger.error(f"[Kook] {result}")
@@ -181,13 +176,7 @@ class KookEvent(AstrMessageEvent):
 
         order_messages.sort(key=lambda x: x.index)
 
-        # 考虑到reply可能多次出现在消息链中(虽然大概率不会有人这么用)
-        # 这里还是不对reply进行排序了
-        # order_messages.sort(key=lambda x: 0 if x.reply_id else 1)
-
         reply_id: str | int = ""
-        # TODO 暂时用不了 ExceptionGroup,
-        # 因为pyproject的target-version是"py3.10"
         errors: list[Exception] = []
         for item in order_messages:
             if item.reply_id:
