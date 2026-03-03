@@ -36,7 +36,7 @@ jobs:
           zip -r dist.zip dist
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dist-without-markdown
           path: |
