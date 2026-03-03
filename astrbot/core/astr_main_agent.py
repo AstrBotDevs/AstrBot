@@ -846,6 +846,8 @@ def _apply_sandbox_tools(
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
+    if req.system_prompt is None:
+        req.system_prompt = ""
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
     if booter == "shipyard":
         ep = config.sandbox_cfg.get("shipyard_endpoint", "")

@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -41,8 +42,6 @@ def _discover_bay_credentials(endpoint: str) -> str:
     Returns:
         API key string, or empty string if not found.
     """
-    import os
-
     candidates: list[Path] = []
 
     # 1. BAY_DATA_DIR env var
