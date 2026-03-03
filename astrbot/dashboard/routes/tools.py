@@ -12,21 +12,20 @@ from .route import Response, Route, RouteContext
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
 
-def _extract_mcp_server_config(mcp_servers_value: object) -> dict | str:
+def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
     """从用户提交的 mcpServers 字段中提取服务器配置。
 
-    Returns:
-        dict: 提取成功的服务器配置
-        str: 错误信息
+    Raises:
+        ValueError: 配置不合法
     """
     if not isinstance(mcp_servers_value, dict):
-        return "mcpServers 必须是一个 JSON 对象"
+        raise ValueError("mcpServers 必须是一个 JSON 对象")
     if not mcp_servers_value:
-        return "mcpServers 配置不能为空"
+        raise ValueError("mcpServers 配置不能为空")
     key_0 = next(iter(mcp_servers_value))
     extracted = mcp_servers_value[key_0]
     if not isinstance(extracted, dict):
-        return (
+        raise ValueError(
             "mcpServers 配置格式不正确。请确保 mcpServers 内部的 key 是服务器名称，"
             "其值为包含 command/url 等字段的对象。"
         )
@@ -114,12 +113,12 @@ class ToolsRoute(Route):
             for key, value in server_data.items():
                 if key not in ["name", "active", "tools", "errlogs"]:  # 排除特殊字段
                     if key == "mcpServers":
-                        result = _extract_mcp_server_config(
-                            server_data["mcpServers"]
-                        )
-                        if isinstance(result, str):
-                            return Response().error(result).__dict__
-                        server_config = result
+                        try:
+                            server_config = _extract_mcp_server_config(
+                                server_data["mcpServers"]
+                            )
+                        except ValueError as e:
+                            return Response().error(f"{e!s}").__dict__
                     else:
                         server_config[key] = value
                     has_valid_config = True
@@ -132,7 +131,24 @@ class ToolsRoute(Route):
             if name in config["mcpServers"]:
                 return Response().error(f"服务器 {name} 已存在").__dict__
 
+            try:
+                await self.tool_mgr.test_mcp_server_connection(server_config)
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                return Response().error(f"测试 MCP 连接失败: {e!s}").__dict__
+
             config["mcpServers"][name] = server_config
+
+            def rollback_added_server() -> bool:
+                try:
+                    rollback_config = self.tool_mgr.load_mcp_config()
+                    if name in rollback_config["mcpServers"]:
+                        rollback_config["mcpServers"].pop(name)
+                        return self.tool_mgr.save_mcp_config(rollback_config)
+                    return True
+                except Exception:
+                    logger.error(traceback.format_exc())
+                    return False
 
             if self.tool_mgr.save_mcp_config(config):
                 try:
@@ -142,12 +158,18 @@ class ToolsRoute(Route):
                         timeout=30,
                     )
                 except TimeoutError:
-                    return Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
+                    rollback_ok = rollback_added_server()
+                    err_msg = f"启用 MCP 服务器 {name} 超时。"
+                    if not rollback_ok:
+                        err_msg += " 配置回滚失败，请手动检查配置。"
+                    return Response().error(err_msg).__dict__
                 except Exception as e:
                     logger.error(traceback.format_exc())
-                    return (
-                        Response().error(f"启用 MCP 服务器 {name} 失败: {e!s}").__dict__
-                    )
+                    rollback_ok = rollback_added_server()
+                    err_msg = f"启用 MCP 服务器 {name} 失败: {e!s}"
+                    if not rollback_ok:
+                        err_msg += " 配置回滚失败，请手动检查配置。"
+                    return Response().error(err_msg).__dict__
                 return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
             return Response().error("保存配置失败").__dict__
         except Exception as e:
@@ -198,12 +220,12 @@ class ToolsRoute(Route):
                     "oldName",
                 ]:  # 排除特殊字段
                     if key == "mcpServers":
-                        result = _extract_mcp_server_config(
-                            server_data["mcpServers"]
-                        )
-                        if isinstance(result, str):
-                            return Response().error(result).__dict__
-                        server_config = result
+                        try:
+                            server_config = _extract_mcp_server_config(
+                                server_data["mcpServers"]
+                            )
+                        except ValueError as e:
+                            return Response().error(f"{e!s}").__dict__
                     else:
                         server_config[key] = value
                     only_update_active = False
@@ -335,12 +357,15 @@ class ToolsRoute(Route):
                 return Response().error("无效的 MCP 服务器配置").__dict__
 
             if "mcpServers" in config:
-                keys = list(config["mcpServers"].keys())
-                if not keys:
-                    return Response().error("MCP 服务器配置不能为空").__dict__
-                if len(keys) > 1:
+                mcp_servers = config["mcpServers"]
+                if isinstance(mcp_servers, dict) and len(mcp_servers) > 1:
                     return Response().error("一次只能配置一个 MCP 服务器配置").__dict__
-                config = config["mcpServers"][keys[0]]
+                try:
+                    config = _extract_mcp_server_config(mcp_servers)
+                except ValueError as e:
+                    if str(e) == "mcpServers 配置不能为空":
+                        return Response().error("MCP 服务器配置不能为空").__dict__
+                    return Response().error(f"{e!s}").__dict__
             elif not config:
                 return Response().error("MCP 服务器配置不能为空").__dict__
 
