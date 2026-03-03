@@ -4,134 +4,12 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from _fake_subagent_db import FakeSubagentDb as _FakeDb
 from sqlalchemy.exc import IntegrityError
 
 from astrbot.core.db.po import SubagentTask
 from astrbot.core.subagent.error_classifier import ErrorClassifier
 from astrbot.core.subagent.runtime import SubagentRuntime
-
-
-class _FakeDb:
-    def __init__(self):
-        self.tasks: dict[str, SubagentTask] = {}
-
-    async def create_subagent_task(self, **kwargs) -> SubagentTask:
-        now = datetime.now(timezone.utc)
-        task = SubagentTask(
-            task_id=kwargs["task_id"],
-            idempotency_key=kwargs["idempotency_key"],
-            umo=kwargs["umo"],
-            subagent_name=kwargs["subagent_name"],
-            handoff_tool_name=kwargs["handoff_tool_name"],
-            payload_json=kwargs["payload_json"],
-            max_attempts=kwargs.get("max_attempts", 3),
-            status="pending",
-            attempt=0,
-            next_run_at=now,
-            created_at=now,
-            updated_at=now,
-        )
-        self.tasks[task.task_id] = task
-        return task
-
-    async def get_subagent_task_by_idempotency(self, idempotency_key: str):
-        for task in self.tasks.values():
-            if task.idempotency_key == idempotency_key:
-                return task
-        return None
-
-    async def claim_due_subagent_tasks(self, *, now: datetime, limit: int = 20):
-        rows = [
-            t
-            for t in self.tasks.values()
-            if t.status in {"pending", "retrying"}
-            and (t.next_run_at is None or t.next_run_at <= now)
-        ]
-        rows.sort(key=lambda item: item.created_at)
-        return rows[:limit]
-
-    async def mark_subagent_task_running(self, task_id: str):
-        t = self.tasks.get(task_id)
-        if t is None or t.status not in {"pending", "retrying"}:
-            return None
-        t.status = "running"
-        t.attempt += 1
-        t.updated_at = datetime.now(timezone.utc)
-        return t
-
-    async def mark_subagent_task_retrying(
-        self, *, task_id: str, next_run_at: datetime, error_class: str, last_error: str
-    ):
-        t = self.tasks.get(task_id)
-        if t is None or t.status != "running":
-            return False
-        t.status = "retrying"
-        t.next_run_at = next_run_at
-        t.error_class = error_class
-        t.last_error = last_error
-        t.updated_at = datetime.now(timezone.utc)
-        return True
-
-    async def reschedule_subagent_task(
-        self, *, task_id: str, next_run_at: datetime, error_class: str, last_error: str
-    ):
-        t = self.tasks.get(task_id)
-        if t is None or t.status not in {
-            "failed",
-            "canceled",
-            "succeeded",
-            "pending",
-            "retrying",
-        }:
-            return False
-        t.status = "retrying"
-        t.attempt = 0
-        t.next_run_at = next_run_at
-        t.error_class = error_class
-        t.last_error = last_error
-        t.result_text = None
-        t.finished_at = None
-        t.updated_at = datetime.now(timezone.utc)
-        return True
-
-    async def mark_subagent_task_succeeded(self, task_id: str, *, result_text: str):
-        t = self.tasks.get(task_id)
-        if t is None:
-            return False
-        t.status = "succeeded"
-        t.result_text = result_text
-        t.finished_at = datetime.now(timezone.utc)
-        t.updated_at = t.finished_at
-        return True
-
-    async def mark_subagent_task_failed(
-        self, *, task_id: str, error_class: str, last_error: str
-    ):
-        t = self.tasks.get(task_id)
-        if t is None:
-            return False
-        t.status = "failed"
-        t.error_class = error_class
-        t.last_error = last_error
-        t.finished_at = datetime.now(timezone.utc)
-        t.updated_at = t.finished_at
-        return True
-
-    async def cancel_subagent_task(self, task_id: str):
-        t = self.tasks.get(task_id)
-        if t is None:
-            return False
-        t.status = "canceled"
-        t.finished_at = datetime.now(timezone.utc)
-        t.updated_at = t.finished_at
-        return True
-
-    async def list_subagent_tasks(self, *, status: str | None = None, limit: int = 100):
-        rows = list(self.tasks.values())
-        if status:
-            rows = [r for r in rows if r.status == status]
-        rows.sort(key=lambda item: item.created_at, reverse=True)
-        return rows[:limit]
 
 
 @pytest.mark.asyncio
@@ -335,6 +213,8 @@ async def test_runtime_recovers_running_tasks_after_restart():
     running = await db.mark_subagent_task_running(task_id)
     assert running is not None
     assert db.tasks[task_id].status == "running"
+    # Simulate a stale task by setting updated_at beyond the recovery threshold.
+    db.tasks[task_id].updated_at = datetime.now(timezone.utc) - timedelta(minutes=10)
 
     restarted_runtime = SubagentRuntime(db)
     restarted_runtime.set_task_executor(_executor)
@@ -441,7 +321,9 @@ class _RaceDb(_FakeDb):
             raise IntegrityError(
                 statement="INSERT INTO subagent_tasks ...",
                 params={},
-                orig=Exception("UNIQUE constraint failed: subagent_tasks.idempotency_key"),
+                orig=Exception(
+                    "UNIQUE constraint failed: subagent_tasks.idempotency_key"
+                ),
             )
         return await super().create_subagent_task(**kwargs)
 

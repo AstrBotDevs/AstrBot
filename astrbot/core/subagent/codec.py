@@ -277,6 +277,11 @@ def encode_subagent_config(
             "tools_scope": spec.tools_scope.value,
             "tools": tools,
             "instructions": spec.instructions,
+            # TRANSITIONAL: `system_prompt` is a deprecated mirror of
+            # `instructions`.  Both are emitted during the transition period
+            # so older dashboard versions and plugins continue to work.
+            # Remove `system_prompt` once all consumers migrate to
+            # `instructions`.
             "system_prompt": spec.instructions,
             "max_steps": spec.max_steps,
         }

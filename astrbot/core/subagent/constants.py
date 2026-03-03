@@ -73,6 +73,7 @@ MIN_BATCH_SIZE: int = 1
 # Maximum nested depth for subagent handoffs
 MAX_NESTED_DEPTH_LIMIT: int = 8
 MIN_NESTED_DEPTH_LIMIT: int = 1
+DEFAULT_MAX_NESTED_HANDOFF_DEPTH: int = 2
 
 # Default max steps for subagent execution
 DEFAULT_MAX_STEPS: int = 30

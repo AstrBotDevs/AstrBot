@@ -354,12 +354,17 @@ class SubagentRuntime:
         db = self._db
         if not db:
             return 0
-        rows = await db.list_subagent_tasks(status="running", limit=10000)
+        rows = await db.list_subagent_tasks(status="running", limit=200)
         if not rows:
             return 0
         now = datetime.now(timezone.utc)
+        # Only recover tasks that have been stale for at least 5 minutes;
+        # recently-updated tasks may still be executing on another worker.
+        stale_threshold = timedelta(minutes=5)
         recovered = 0
         for row in rows:
+            if row.updated_at and (now - row.updated_at) < stale_threshold:
+                continue
             ok = await db.mark_subagent_task_retrying(
                 task_id=row.task_id,
                 next_run_at=now,

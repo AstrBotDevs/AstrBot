@@ -138,6 +138,61 @@ class MainAgentBuildConfig:
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
 
+    @classmethod
+    def from_provider_settings(
+        cls,
+        provider_settings: dict,
+        cfg: dict | None = None,
+        **overrides,
+    ) -> MainAgentBuildConfig:
+        """Build config from a ``provider_settings`` dict and an optional
+        top-level config dict *cfg*.
+
+        Any extra keyword argument overrides the corresponding field so that
+        call-sites can still customise individual values (e.g. a different
+        ``tool_call_timeout`` for background tasks).
+        """
+        cfg = cfg or {}
+        ps = provider_settings
+        proactive_cfg = ps.get("proactive_capability", {})
+        file_extract_cfg = ps.get("file_extract", {})
+
+        defaults: dict = dict(
+            tool_call_timeout=int(ps.get("tool_call_timeout", 60)),
+            tool_schema_mode=str(ps.get("tool_schema_mode", "full")),
+            streaming_response=bool(
+                ps.get("streaming_response", ps.get("stream", False))
+            ),
+            sanitize_context_by_modalities=bool(
+                ps.get("sanitize_context_by_modalities", False)
+            ),
+            kb_agentic_mode=bool(cfg.get("kb_agentic_mode", False)),
+            file_extract_enabled=bool(file_extract_cfg.get("enable", False)),
+            file_extract_prov=str(file_extract_cfg.get("provider", "moonshotai")),
+            file_extract_msh_api_key=str(
+                file_extract_cfg.get("moonshotai_api_key", "")
+            ),
+            context_limit_reached_strategy=str(
+                ps.get("context_limit_reached_strategy", "truncate_by_turns")
+            ),
+            llm_compress_instruction=str(ps.get("llm_compress_instruction", "")),
+            llm_compress_keep_recent=int(ps.get("llm_compress_keep_recent", 6)),
+            llm_compress_provider_id=str(ps.get("llm_compress_provider_id", "")),
+            max_context_length=int(ps.get("max_context_length", -1)),
+            dequeue_context_length=int(ps.get("dequeue_context_length", 1)),
+            llm_safety_mode=bool(ps.get("llm_safety_mode", True)),
+            safety_mode_strategy=str(ps.get("safety_mode_strategy", "system_prompt")),
+            computer_use_runtime=str(ps.get("computer_use_runtime", "local")),
+            sandbox_cfg=dict(ps.get("sandbox", {}) or {}),
+            add_cron_tools=bool(proactive_cfg.get("add_cron_tools", True)),
+            provider_settings=ps,
+            subagent_orchestrator=dict(cfg.get("subagent_orchestrator", {}) or {}),
+            timezone=cfg.get("timezone"),
+            max_quoted_fallback_images=int(ps.get("max_quoted_fallback_images", 20)),
+        )
+        defaults.update(overrides)
+        return cls(**defaults)
+
 
 @dataclass(slots=True)
 class MainAgentBuildResult:

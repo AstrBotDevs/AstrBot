@@ -74,23 +74,19 @@ class HandoffExecutor:
     def _resolve_max_nested_depth(
         cls, run_context: ContextWrapper[AstrAgentContext]
     ) -> int:
+        """Resolve max nested handoff depth from the orchestrator.
+
+        Falls back to the default constant if the orchestrator is unavailable.
+        """
         orchestrator = cls._get_orchestrator(run_context)
         orchestrator_depth_getter = getattr(orchestrator, "get_max_nested_depth", None)
         if callable(orchestrator_depth_getter):
             depth = cls._safe_int(orchestrator_depth_getter(), 2)
             return min(MAX_NESTED_DEPTH_LIMIT, max(MIN_NESTED_DEPTH_LIMIT, depth))
 
-        ctx = run_context.context.context
-        event = run_context.context.event
-        cfg = ctx.get_config(umo=event.unified_msg_origin)
-        orchestrator_cfg = cfg.get("subagent_orchestrator", {})
-        raw_depth = (
-            orchestrator_cfg.get("max_nested_depth", 2)
-            if isinstance(orchestrator_cfg, dict)
-            else 2
-        )
-        depth = cls._safe_int(raw_depth, 2)
-        return min(MAX_NESTED_DEPTH_LIMIT, max(MIN_NESTED_DEPTH_LIMIT, depth))
+        from astrbot.core.subagent.constants import DEFAULT_MAX_NESTED_HANDOFF_DEPTH
+
+        return DEFAULT_MAX_NESTED_HANDOFF_DEPTH
 
     @classmethod
     def _resolve_execution_settings(

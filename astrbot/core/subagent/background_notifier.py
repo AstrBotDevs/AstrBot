@@ -60,51 +60,13 @@ async def wake_main_agent_for_background_result(
     cron_event.role = event.role
     cfg = ctx.get_config(umo=event.unified_msg_origin)
     provider_settings = cfg.get("provider_settings", {})
-    proactive_cfg = provider_settings.get("proactive_capability", {})
-    file_extract_cfg = provider_settings.get("file_extract", {})
-    config = MainAgentBuildConfig(
+    config = MainAgentBuildConfig.from_provider_settings(
+        provider_settings,
+        cfg=cfg,
+        # Background tasks use a longer timeout and disable local computer use
+        # by default – these overrides preserve the original behaviour.
         tool_call_timeout=int(provider_settings.get("tool_call_timeout", 3600)),
-        tool_schema_mode=str(provider_settings.get("tool_schema_mode", "full")),
-        streaming_response=bool(
-            provider_settings.get(
-                "streaming_response",
-                provider_settings.get("stream", False),
-            )
-        ),
-        sanitize_context_by_modalities=bool(
-            provider_settings.get("sanitize_context_by_modalities", False)
-        ),
-        kb_agentic_mode=bool(cfg.get("kb_agentic_mode", False)),
-        file_extract_enabled=bool(file_extract_cfg.get("enable", False)),
-        file_extract_prov=str(file_extract_cfg.get("provider", "moonshotai")),
-        file_extract_msh_api_key=str(file_extract_cfg.get("moonshotai_api_key", "")),
-        context_limit_reached_strategy=str(
-            provider_settings.get("context_limit_reached_strategy", "truncate_by_turns")
-        ),
-        llm_compress_instruction=str(
-            provider_settings.get("llm_compress_instruction", "")
-        ),
-        llm_compress_keep_recent=int(
-            provider_settings.get("llm_compress_keep_recent", 6)
-        ),
-        llm_compress_provider_id=str(
-            provider_settings.get("llm_compress_provider_id", "")
-        ),
-        max_context_length=int(provider_settings.get("max_context_length", -1)),
-        dequeue_context_length=int(provider_settings.get("dequeue_context_length", 1)),
-        llm_safety_mode=bool(provider_settings.get("llm_safety_mode", True)),
-        safety_mode_strategy=str(
-            provider_settings.get("safety_mode_strategy", "system_prompt")
-        ),
         computer_use_runtime=str(provider_settings.get("computer_use_runtime", "none")),
-        sandbox_cfg=dict(provider_settings.get("sandbox", {}) or {}),
-        add_cron_tools=bool(proactive_cfg.get("add_cron_tools", True)),
-        provider_settings=provider_settings,
-        subagent_orchestrator=dict(cfg.get("subagent_orchestrator", {}) or {}),
-        timezone=cfg.get("timezone"),
-        max_quoted_fallback_images=int(
-            provider_settings.get("max_quoted_fallback_images", 20)
-        ),
     )
 
     req = ProviderRequest()

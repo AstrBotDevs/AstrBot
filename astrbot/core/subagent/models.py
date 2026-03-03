@@ -35,7 +35,7 @@ def build_safe_handoff_agent_name(display_name: str) -> str:
     if _TOOL_ALLOWED.match(tool_name):
         return candidate
 
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]  # noqa: S324
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
     max_base_len = max(1, 64 - len("transfer_to__") - len(digest))
     trimmed = slug[:max_base_len].strip("_") or "subagent"
     candidate = f"{trimmed}_{digest}"
