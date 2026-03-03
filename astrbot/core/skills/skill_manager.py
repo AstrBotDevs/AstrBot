@@ -86,10 +86,16 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     example_path = ""
     for skill in skills:
         name = str(getattr(skill, "name", "") or "").strip() or "unknown-skill"
+        # 验证 name 格式（防御性编程，防止注入）
+        if not _SKILL_NAME_RE.match(name):
+            name = "unknown-skill"
         description = str(getattr(skill, "description", "") or "").strip()
-        description = description or "No description"
+        # 清理换行符，防止 Indirect Prompt Injection
+        description = (description or "No description").replace("\n", " ").replace("\r", " ")
         path = str(getattr(skill, "path", "") or "").strip()
         path = path or "<skills_root>/<skill_name>/SKILL.md"
+        # 清理路径中的危险字符
+        path = _SAFE_PATH_RE.sub("", path)
         skills_lines.append(f"- **{name}**: {description}\n  File: `{path}`")
         if not example_path:
             example_path = path
