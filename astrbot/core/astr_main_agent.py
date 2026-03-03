@@ -11,7 +11,6 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
 from astrbot.core import logger
-from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.tool import ToolSet
@@ -307,6 +306,7 @@ async def _ensure_persona_and_skills(
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
         return
+    req.system_prompt = req.system_prompt or ""
 
     (
         persona_id,
@@ -373,72 +373,30 @@ async def _ensure_persona_and_skills(
     else:
         req.func_tool.merge(persona_toolset)
 
-    # sub agents integration
-    orch_cfg = plugin_context.get_config().get("subagent_orchestrator", {})
+    # sub agents integration (deterministic mount plan from orchestrator)
     so = plugin_context.subagent_orchestrator
-    if orch_cfg.get("main_enable", False) and so:
-        remove_dup = bool(orch_cfg.get("remove_main_duplicate_tools", False))
+    if so:
+        plan = so.get_mount_plan()
+        so_cfg = so.get_config()
+        cfg_main_enable = getattr(so_cfg, "main_enable", False) is True
+        if plan and cfg_main_enable:
+            if req.func_tool is None:
+                req.func_tool = ToolSet()
 
-        assigned_tools: set[str] = set()
-        agents = orch_cfg.get("agents", [])
-        if isinstance(agents, list):
-            for a in agents:
-                if not isinstance(a, dict):
-                    continue
-                if a.get("enabled", True) is False:
-                    continue
-                persona_tools = None
-                pid = a.get("persona_id")
-                if pid:
-                    persona_tools = next(
-                        (
-                            p.get("tools")
-                            for p in plugin_context.persona_manager.personas_v3
-                            if p["name"] == pid
-                        ),
-                        None,
-                    )
-                tools = a.get("tools", [])
-                if persona_tools is not None:
-                    tools = persona_tools
-                if tools is None:
-                    assigned_tools.update(
-                        [
-                            tool.name
-                            for tool in tmgr.func_list
-                            if not isinstance(tool, HandoffTool)
-                        ]
-                    )
-                    continue
-                if not isinstance(tools, list):
-                    continue
-                for t in tools:
-                    name = str(t).strip()
-                    if name:
-                        assigned_tools.add(name)
+            for tool in plan.handoffs:
+                req.func_tool.add_tool(tool)
 
-        if req.func_tool is None:
-            req.func_tool = ToolSet()
-
-        # add subagent handoff tools
-        for tool in so.handoffs:
-            req.func_tool.add_tool(tool)
-
-        # check duplicates
-        if remove_dup:
-            handoff_names = {tool.name for tool in so.handoffs}
-            for tool_name in assigned_tools:
+            handoff_names = {tool.name for tool in plan.handoffs}
+            for tool_name in plan.main_tool_exclude_set:
                 if tool_name in handoff_names:
                     continue
                 req.func_tool.remove_tool(tool_name)
 
-        router_prompt = (
-            plugin_context.get_config()
-            .get("subagent_orchestrator", {})
-            .get("router_system_prompt", "")
-        ).strip()
-        if router_prompt:
-            req.system_prompt += f"\n{router_prompt}\n"
+            if plan.router_prompt:
+                req.system_prompt += f"\n{plan.router_prompt}\n"
+
+            for diagnostic in plan.diagnostics:
+                logger.warning("Subagent plan diagnostic: %s", diagnostic)
     try:
         event.trace.record(
             "sel_persona",
@@ -846,6 +804,7 @@ def _apply_sandbox_tools(
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
+    system_prompt = req.system_prompt or ""
     booter = config.sandbox_cfg.get("booter", "shipyard_neo")
     if booter == "shipyard":
         ep = config.sandbox_cfg.get("shipyard_endpoint", "")
@@ -863,14 +822,14 @@ def _apply_sandbox_tools(
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".
-        req.system_prompt += (
+        system_prompt += (
             "\n[Shipyard Neo File Path Rule]\n"
             "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
             "always pass paths relative to the sandbox workspace root. "
             "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
         )
 
-        req.system_prompt += (
+        system_prompt += (
             "\n[Neo Skill Lifecycle Workflow]\n"
             "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
             "Preferred sequence:\n"
@@ -912,7 +871,7 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(ROLLBACK_SKILL_RELEASE_TOOL)
         req.func_tool.add_tool(SYNC_SKILL_RELEASE_TOOL)
 
-    req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+    req.system_prompt = f"{system_prompt}\n{SANDBOX_MODE_PROMPT}\n"
 
 
 def _proactive_cron_job_tools(req: ProviderRequest) -> None:

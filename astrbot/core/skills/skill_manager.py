@@ -85,12 +85,14 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     skills_lines: list[str] = []
     example_path = ""
     for skill in skills:
-        description = skill.description or "No description"
-        skills_lines.append(
-            f"- **{skill.name}**: {description}\n  File: `{skill.path}`"
-        )
+        name = str(getattr(skill, "name", "") or "").strip() or "unknown-skill"
+        description = str(getattr(skill, "description", "") or "").strip()
+        description = description or "No description"
+        path = str(getattr(skill, "path", "") or "").strip()
+        path = path or "<skills_root>/<skill_name>/SKILL.md"
+        skills_lines.append(f"- **{name}**: {description}\n  File: `{path}`")
         if not example_path:
-            example_path = skill.path
+            example_path = path
     skills_block = "\n".join(skills_lines)
     # Sanitize example_path — it may originate from sandbox cache (untrusted)
     example_path = _SAFE_PATH_RE.sub("", example_path) if example_path else ""

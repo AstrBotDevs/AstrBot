@@ -166,7 +166,10 @@
                 <v-text-field
                   v-model="agent.name"
                   :label="tm('form.nameLabel')"
-                  :rules="[v => !!v || tm('messages.nameRequired'), v => /^[a-z][a-z0-9_]*$/.test(v) || tm('messages.namePattern')]"
+                  :rules="[
+                    v => !!v || tm('messages.nameRequired'),
+                    v => (v || '').trim().length <= 256 || tm('messages.nameInvalid')
+                  ]"
                   variant="outlined"
                   density="comfortable"
                   hide-details="auto"
@@ -255,6 +258,8 @@ import PersonaSelector from '@/components/shared/PersonaSelector.vue'
 import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
 import { useModuleI18n } from '@/i18n/composables'
 
+type ToolsScope = 'all' | 'none' | 'list' | 'persona'
+
 type SubAgentItem = {
 
   __key: string
@@ -263,6 +268,10 @@ type SubAgentItem = {
   public_description: string
   enabled: boolean
   provider_id?: string
+  tools_scope?: ToolsScope
+  tools?: string[]
+  max_steps?: number
+  instructions?: string
 }
 
 type SubAgentConfig = {
@@ -296,6 +305,20 @@ const mainStateDescription = computed(() =>
   cfg.value.main_enable ? tm('description.enabled') : tm('description.disabled')
 )
 
+function inferToolsScope(a: any): ToolsScope {
+  const explicitScope = (a?.tools_scope ?? '').toString().toLowerCase()
+  if (explicitScope === 'all' || explicitScope === 'none' || explicitScope === 'list' || explicitScope === 'persona') {
+    return explicitScope as ToolsScope
+  }
+  if (Array.isArray(a?.tools)) {
+    return a.tools.length === 0 ? 'none' : 'list'
+  }
+  if ((a?.persona_id ?? '').toString().trim()) {
+    return 'persona'
+  }
+  return 'all'
+}
+
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
@@ -305,8 +328,17 @@ function normalizeConfig(raw: any): SubAgentConfig {
     const name = (a?.name ?? '').toString()
     const persona_id = (a?.persona_id ?? '').toString()
     const public_description = (a?.public_description ?? '').toString()
+    const instructions = (a?.instructions ?? a?.system_prompt ?? '').toString()
     const enabled = a?.enabled !== false
     const provider_id = (a?.provider_id ?? undefined) as string | undefined
+    const tools_scope = inferToolsScope(a)
+    const tools = Array.isArray(a?.tools)
+      ? a.tools.map((t: any) => (t ?? '').toString().trim()).filter((t: string) => !!t)
+      : undefined
+    const max_steps =
+      a?.max_steps === null || a?.max_steps === undefined || a?.max_steps === ''
+        ? undefined
+        : Number(a.max_steps)
 
     return {
       __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
@@ -314,7 +346,11 @@ function normalizeConfig(raw: any): SubAgentConfig {
       persona_id,
       public_description,
       enabled,
-      provider_id
+      provider_id,
+      tools_scope,
+      tools,
+      max_steps: Number.isFinite(max_steps) ? max_steps : undefined,
+      instructions
     }
   })
 
@@ -344,7 +380,11 @@ function addAgent() {
     persona_id: '',
     public_description: '',
     enabled: true,
-    provider_id: undefined
+    provider_id: undefined,
+    tools_scope: 'persona',
+    tools: [],
+    max_steps: undefined,
+    instructions: ''
   })
 }
 
@@ -353,7 +393,6 @@ function removeAgent(idx: number) {
 }
 
 function validateBeforeSave(): boolean {
-  const nameRe = /^[a-z][a-z0-9_]{0,63}$/
   const seen = new Set<string>()
   for (const a of cfg.value.agents) {
     const name = (a.name || '').trim()
@@ -361,7 +400,7 @@ function validateBeforeSave(): boolean {
       toast(tm('messages.nameMissing'), 'warning')
       return false
     }
-    if (!nameRe.test(name)) {
+    if (name.length > 256) {
       toast(tm('messages.nameInvalid'), 'warning')
       return false
     }
@@ -390,7 +429,17 @@ async function save() {
         persona_id: a.persona_id,
         public_description: a.public_description,
         enabled: a.enabled,
-        provider_id: a.provider_id
+        provider_id: a.provider_id,
+        tools_scope: a.tools_scope || inferToolsScope(a),
+        tools:
+          (a.tools_scope || inferToolsScope(a)) === 'list'
+            ? Array.isArray(a.tools)
+              ? a.tools
+              : []
+            : null,
+        max_steps: a.max_steps ?? null,
+        instructions: a.instructions ?? '',
+        system_prompt: a.instructions ?? ''
       }))
     }
 

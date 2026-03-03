@@ -1535,3 +1535,50 @@ class TestApplySandboxTools:
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
+
+
+class TestSubagentMainEnableSource:
+    @pytest.mark.asyncio
+    async def test_subagent_mount_uses_orchestrator_canonical_main_enable(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+        mock_context.get_config.return_value = {
+            "subagent_orchestrator": {"main_enable": False}
+        }
+        mock_context.get_llm_tool_manager.return_value.get_full_tool_set.return_value = (
+            ToolSet()
+        )
+        mock_context.get_llm_tool_manager.return_value.get_func.return_value = None
+
+        handoff_tool = FunctionTool(
+            name="transfer_to_writer",
+            description="handoff",
+            parameters={"type": "object", "properties": {}},
+            handler=None,
+        )
+        plan = MagicMock()
+        plan.handoffs = [handoff_tool]
+        plan.main_tool_exclude_set = set()
+        plan.router_prompt = None
+        plan.diagnostics = []
+
+        orchestrator = MagicMock()
+        orchestrator.get_mount_plan.return_value = plan
+        orchestrator.get_config.return_value = MagicMock(main_enable=True)
+        mock_context.subagent_orchestrator = orchestrator
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        with patch("astrbot.core.astr_main_agent.SkillManager") as mock_skill_mgr_cls:
+            mock_skill_mgr = MagicMock()
+            mock_skill_mgr.list_skills.return_value = []
+            mock_skill_mgr_cls.return_value = mock_skill_mgr
+            await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("transfer_to_writer") is not None

@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
     Preference,
     SessionProjectRelation,
     Stats,
+    SubagentTask,
 )
 
 
@@ -623,6 +624,77 @@ class BaseDatabase(abc.ABC):
     async def list_cron_jobs(self, job_type: str | None = None) -> list[CronJob]:
         """List cron jobs, optionally filtered by job_type."""
         ...
+
+    # ====
+    # Subagent Background Task Management
+    # ====
+
+    @abc.abstractmethod
+    async def create_subagent_task(
+        self,
+        *,
+        task_id: str,
+        idempotency_key: str,
+        umo: str,
+        subagent_name: str,
+        handoff_tool_name: str,
+        payload_json: str,
+        max_attempts: int = 3,
+    ) -> SubagentTask: ...
+
+    @abc.abstractmethod
+    async def get_subagent_task_by_idempotency(
+        self, idempotency_key: str
+    ) -> SubagentTask | None: ...
+
+    @abc.abstractmethod
+    async def claim_due_subagent_tasks(
+        self,
+        *,
+        now: datetime.datetime,
+        limit: int = 20,
+    ) -> list[SubagentTask]: ...
+
+    @abc.abstractmethod
+    async def mark_subagent_task_running(self, task_id: str) -> SubagentTask | None: ...
+
+    @abc.abstractmethod
+    async def mark_subagent_task_retrying(
+        self,
+        *,
+        task_id: str,
+        next_run_at: datetime.datetime,
+        error_class: str,
+        last_error: str,
+    ) -> bool: ...
+
+    @abc.abstractmethod
+    async def mark_subagent_task_succeeded(
+        self,
+        task_id: str,
+        *,
+        result_text: str,
+    ) -> bool: ...
+
+    @abc.abstractmethod
+    async def mark_subagent_task_failed(
+        self,
+        *,
+        task_id: str,
+        error_class: str,
+        last_error: str,
+    ) -> bool: ...
+
+    @abc.abstractmethod
+    async def cancel_subagent_task(self, task_id: str) -> bool: ...
+
+    @abc.abstractmethod
+    async def list_subagent_tasks(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[SubagentTask]: ...
 
     # ====
     # Platform Session Management

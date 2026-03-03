@@ -129,11 +129,15 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             AsyncGenerator[None | mcp.types.CallToolResult, None]
 
         """
+        tool_call_id = tool_args.pop("tool_call_id", None)
         if isinstance(tool, HandoffTool):
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
                 async for r in cls._execute_handoff_background(
-                    tool, run_context, **tool_args
+                    tool,
+                    run_context,
+                    tool_call_id=tool_call_id,
+                    **tool_args,
                 ):
                     yield r
                 return
@@ -202,7 +206,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         event = run_context.context.event
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
-        runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        runtime = str(provider_settings.get("computer_use_runtime", "none"))
         runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
 
         # Keep persona semantics aligned with the main agent: tools=None means
@@ -225,13 +229,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
                 registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
+                if (
+                    registered_tool
+                    and registered_tool.active
+                    and not isinstance(registered_tool, HandoffTool)
+                ):
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool):
+            elif isinstance(tool_name_or_obj, FunctionTool) and not isinstance(
+                tool_name_or_obj, HandoffTool
+            ):
                 toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 
@@ -269,6 +279,30 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         ctx = run_context.context.context
         event = run_context.context.event
         umo = event.unified_msg_origin
+        event_get_extra = getattr(event, "get_extra", None)
+        current_depth = (
+            int(event_get_extra("subagent_handoff_depth") or 0)
+            if callable(event_get_extra)
+            else 0
+        )
+        max_depth = int(
+            ctx.get_config(umo=umo)
+            .get("subagent_orchestrator", {})
+            .get("max_nested_depth", 2)
+        )
+        if current_depth >= max_depth:
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=(
+                            f"error: nested subagent handoff depth limit reached ({max_depth}). "
+                            "Please continue in current agent."
+                        ),
+                    )
+                ]
+            )
+            return
 
         # Use per-subagent provider override if configured; otherwise fall back
         # to the current/default provider resolution.
@@ -292,19 +326,30 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
-        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        configured_max_step = getattr(tool, "max_steps", None)
+        if isinstance(configured_max_step, int) and configured_max_step > 0:
+            agent_max_step = configured_max_step
+        else:
+            agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
-        llm_resp = await ctx.tool_loop_agent(
-            event=event,
-            chat_provider_id=prov_id,
-            prompt=input_,
-            image_urls=image_urls,
-            system_prompt=tool.agent.instructions,
-            tools=toolset,
-            contexts=contexts,
-            max_steps=agent_max_step,
-            stream=stream,
-        )
+        event_set_extra = getattr(event, "set_extra", None)
+        if callable(event_set_extra):
+            event_set_extra("subagent_handoff_depth", current_depth + 1)
+        try:
+            llm_resp = await ctx.tool_loop_agent(
+                event=event,
+                chat_provider_id=prov_id,
+                prompt=input_,
+                image_urls=image_urls,
+                system_prompt=tool.agent.instructions,
+                tools=toolset,
+                contexts=contexts,
+                max_steps=agent_max_step,
+                stream=stream,
+            )
+        finally:
+            if callable(event_set_extra):
+                event_set_extra("subagent_handoff_depth", current_depth)
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
         )
@@ -314,43 +359,84 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: HandoffTool,
         run_context: ContextWrapper[AstrAgentContext],
+        *,
+        tool_call_id: str | None = None,
         **tool_args,
     ):
-        """Execute a handoff as a background task.
-
-        Immediately yields a success response with a task_id, then runs
-        the subagent asynchronously.  When the subagent finishes, a
-        ``CronMessageEvent`` is created so the main LLM can inform the
-        user of the result – the same pattern used by
-        ``_execute_background`` for regular background tasks.
-        """
-        task_id = uuid.uuid4().hex
-
-        async def _run_handoff_in_background() -> None:
-            try:
-                await cls._do_handoff_background(
-                    tool=tool,
-                    run_context=run_context,
-                    task_id=task_id,
-                    **tool_args,
-                )
-            except Exception as e:  # noqa: BLE001
-                logger.error(
-                    f"Background handoff {task_id} ({tool.name}) failed: {e!s}",
-                    exc_info=True,
-                )
-
-        asyncio.create_task(_run_handoff_in_background())
-
-        text_content = mcp.types.TextContent(
-            type="text",
-            text=(
-                f"Background task dedicated to subagent '{tool.agent.name}' submitted. task_id={task_id}. "
-                f"The subagent '{tool.agent.name}' is working on the task on hehalf you. "
-                f"You will be notified when it finishes."
-            ),
+        """Execute a handoff as a background task via subagent orchestrator."""
+        prepared_tool_args = dict(tool_args)
+        prepared_tool_args["image_urls"] = await cls._collect_handoff_image_urls(
+            run_context,
+            prepared_tool_args.get("image_urls"),
         )
-        yield mcp.types.CallToolResult(content=[text_content])
+        orchestrator = getattr(
+            run_context.context.context, "subagent_orchestrator", None
+        )
+        if orchestrator is None:
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=(
+                            "error: subagent orchestrator is not available, "
+                            "background handoff cannot be submitted."
+                        ),
+                    )
+                ]
+            )
+            return
+
+        try:
+            task_id = await orchestrator.submit_handoff(
+                handoff=tool,
+                run_context=run_context,
+                payload=prepared_tool_args,
+                background=True,
+                tool_call_id=tool_call_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Failed to submit handoff to subagent orchestrator runtime: %s",
+                exc,
+                exc_info=True,
+            )
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=(
+                            "error: failed to submit subagent background task to orchestrator."
+                        ),
+                    )
+                ]
+            )
+            return
+
+        if not task_id:
+            yield mcp.types.CallToolResult(
+                content=[
+                    mcp.types.TextContent(
+                        type="text",
+                        text=(
+                            "error: failed to submit subagent background task "
+                            "because orchestrator returned no task id."
+                        ),
+                    )
+                ]
+            )
+            return
+
+        yield mcp.types.CallToolResult(
+            content=[
+                mcp.types.TextContent(
+                    type="text",
+                    text=(
+                        f"Background task dedicated to subagent '{tool.agent.name}' submitted. "
+                        f"task_id={task_id}. You will be notified when it finishes."
+                    ),
+                )
+            ]
+        )
 
     @classmethod
     async def _do_handoff_background(
@@ -480,11 +566,61 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
+        cfg = ctx.get_config(umo=event.unified_msg_origin)
+        provider_settings = cfg.get("provider_settings", {})
+        proactive_cfg = provider_settings.get("proactive_capability", {})
+        file_extract_cfg = provider_settings.get("file_extract", {})
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
-            streaming_response=ctx.get_config()
-            .get("provider_settings", {})
-            .get("stream", False),
+            tool_call_timeout=int(provider_settings.get("tool_call_timeout", 3600)),
+            tool_schema_mode=str(provider_settings.get("tool_schema_mode", "full")),
+            streaming_response=bool(
+                provider_settings.get(
+                    "streaming_response",
+                    provider_settings.get("stream", False),
+                )
+            ),
+            sanitize_context_by_modalities=bool(
+                provider_settings.get("sanitize_context_by_modalities", False)
+            ),
+            kb_agentic_mode=bool(cfg.get("kb_agentic_mode", False)),
+            file_extract_enabled=bool(file_extract_cfg.get("enable", False)),
+            file_extract_prov=str(file_extract_cfg.get("provider", "moonshotai")),
+            file_extract_msh_api_key=str(
+                file_extract_cfg.get("moonshotai_api_key", "")
+            ),
+            context_limit_reached_strategy=str(
+                provider_settings.get(
+                    "context_limit_reached_strategy", "truncate_by_turns"
+                )
+            ),
+            llm_compress_instruction=str(
+                provider_settings.get("llm_compress_instruction", "")
+            ),
+            llm_compress_keep_recent=int(
+                provider_settings.get("llm_compress_keep_recent", 6)
+            ),
+            llm_compress_provider_id=str(
+                provider_settings.get("llm_compress_provider_id", "")
+            ),
+            max_context_length=int(provider_settings.get("max_context_length", -1)),
+            dequeue_context_length=int(
+                provider_settings.get("dequeue_context_length", 1)
+            ),
+            llm_safety_mode=bool(provider_settings.get("llm_safety_mode", True)),
+            safety_mode_strategy=str(
+                provider_settings.get("safety_mode_strategy", "system_prompt")
+            ),
+            computer_use_runtime=str(
+                provider_settings.get("computer_use_runtime", "none")
+            ),
+            sandbox_cfg=dict(provider_settings.get("sandbox", {}) or {}),
+            add_cron_tools=bool(proactive_cfg.get("add_cron_tools", True)),
+            provider_settings=provider_settings,
+            subagent_orchestrator=dict(cfg.get("subagent_orchestrator", {}) or {}),
+            timezone=cfg.get("timezone"),
+            max_quoted_fallback_images=int(
+                provider_settings.get("max_quoted_fallback_images", 20)
+            ),
         )
 
         req = ProviderRequest()

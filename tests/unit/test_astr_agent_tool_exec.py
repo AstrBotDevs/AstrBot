@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import mcp
 import pytest
@@ -12,6 +13,7 @@ class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
+        self.role = "assistant"
 
     def get_extra(self, _key: str):
         return None
@@ -225,6 +227,143 @@ async def test_execute_handoff_skips_renormalize_when_image_urls_prepared(
 
 
 @pytest.mark.asyncio
+async def test_execute_handoff_uses_subagent_max_steps_override(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {"max_agent_step": 30}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        max_steps=5,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["max_steps"] == 5
+
+
+@pytest.mark.asyncio
+async def test_build_handoff_toolset_defaults_runtime_to_none():
+    event = _DummyEvent([])
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    toolset = FunctionToolExecutor._build_handoff_toolset(run_context, [])
+    assert toolset is None
+
+
+@pytest.mark.asyncio
+async def test_wake_main_agent_for_background_result_uses_provider_settings(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    class _Runner:
+        async def step_until_done(self, _max_steps):
+            if False:
+                yield None
+
+        def get_final_llm_resp(self):
+            return SimpleNamespace(completion_text="done")
+
+    async def _fake_get_session_conv(*, event, plugin_context):
+        _ = event
+        _ = plugin_context
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(*, event, plugin_context, config, req):
+        captured["event"] = event
+        captured["plugin_context"] = plugin_context
+        captured["config"] = config
+        captured["req"] = req
+        return SimpleNamespace(agent_runner=_Runner())
+
+    async def _fake_persist_agent_history(*args, **kwargs):
+        _ = args
+        _ = kwargs
+        return None
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        _fake_persist_agent_history,
+    )
+
+    provider_settings = {
+        "tool_call_timeout": 123,
+        "streaming_response": False,
+        "computer_use_runtime": "none",
+        "proactive_capability": {"add_cron_tools": False},
+        "llm_safety_mode": True,
+    }
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": provider_settings,
+            "subagent_orchestrator": {"main_enable": True},
+            "kb_agentic_mode": False,
+            "timezone": "UTC",
+        },
+        conversation_manager=SimpleNamespace(),
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context=run_context,
+        task_id="task_1",
+        tool_name="transfer_to_subagent",
+        result_text="ok",
+        tool_args={"input": "hello"},
+        note="background finished",
+        summary_name="subagent-summary",
+    )
+
+    cfg = captured["config"]
+    assert cfg.tool_call_timeout == 123
+    assert cfg.computer_use_runtime == "none"
+    assert cfg.add_cron_tools is False
+    assert cfg.provider_settings["computer_use_runtime"] == "none"
+
+
+@pytest.mark.asyncio
 async def test_collect_handoff_image_urls_keeps_extensionless_existing_event_file(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -294,3 +433,46 @@ async def test_collect_handoff_image_urls_filters_extensionless_file_outside_tem
     )
 
     assert image_urls == []
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_background_strict_failover_without_orchestrator():
+    run_context = _build_run_context()
+    tool = _DummyTool()
+
+    with patch("astrbot.core.astr_agent_tool_exec.asyncio.create_task") as create_task_mock:
+        results = []
+        async for result in FunctionToolExecutor._execute_handoff_background(
+            tool,
+            run_context,
+            tool_call_id="call_1",
+            input="hello",
+            image_urls=["https://example.com/raw.png"],
+        ):
+            results.append(result)
+
+    assert len(results) == 1
+    assert "error:" in results[0].content[0].text
+    create_task_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_background_strict_failover_submit_error():
+    orchestrator = SimpleNamespace(submit_handoff=AsyncMock(side_effect=RuntimeError("boom")))
+    event = _DummyEvent([])
+    context = SimpleNamespace(subagent_orchestrator=orchestrator)
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    with patch("astrbot.core.astr_agent_tool_exec.asyncio.create_task") as create_task_mock:
+        results = []
+        async for result in FunctionToolExecutor._execute_handoff_background(
+            _DummyTool(),
+            run_context,
+            tool_call_id="call_1",
+            input="hello",
+        ):
+            results.append(result)
+
+    assert len(results) == 1
+    assert "error:" in results[0].content[0].text
+    create_task_mock.assert_not_called()
