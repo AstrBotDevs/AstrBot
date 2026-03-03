@@ -184,6 +184,13 @@ Connect AstrBot to your favorite chat platform.
 | Minimax TTS | Text-to-Speech Services |
 | Volcano Engine TTS | Text-to-Speech Services |
 
+## ❤️ Sponsors
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
+
 ## ❤️ Contributing
 
 Issues and Pull Requests are always welcome! Feel free to submit your changes to this project :)
@@ -201,6 +208,7 @@ git clone https://github.com/AstrBotDevs/AstrBot
 pip install pre-commit
 pre-commit install
 ```
+
 
 ## 🌍 Community
 

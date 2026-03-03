@@ -177,6 +177,10 @@ class PlatformManager:
                     from .sources.line.line_adapter import (
                         LinePlatformAdapter,  # noqa: F401
                     )
+                case "kook":
+                    from .sources.kook.kook_adapter import (
+                        KookPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 t("msg-b4b29344", res=platform_config['type'], e=e),

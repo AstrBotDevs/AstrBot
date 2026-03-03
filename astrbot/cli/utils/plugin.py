@@ -14,22 +14,22 @@ from .version_comparator import VersionComparator
 
 
 class PluginStatus(str, Enum):
-    INSTALLED = "已安装"
-    NEED_UPDATE = "需更新"
-    NOT_INSTALLED = "未安装"
-    NOT_PUBLISHED = "未发布"
+    INSTALLED = "installed"
+    NEED_UPDATE = "needs-update"
+    NOT_INSTALLED = "not-installed"
+    NOT_PUBLISHED = "unpublished"
 
 
 def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
-    """从 Git 仓库下载代码并解压到指定路径"""
+    """Download code from a Git repository and extract to the specified path"""
     temp_dir = Path(tempfile.mkdtemp())
     try:
-        # 解析仓库信息
+        # Parse repository info
         repo_namespace = url.split("/")[-2:]
         author = repo_namespace[0]
         repo = repo_namespace[1]
 
-        # 尝试获取最新的 release
+        # Try to get the latest release
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
         try:
             with httpx.Client(
@@ -41,7 +41,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
                 releases = resp.json()
 
                 if releases:
-                    # 使用最新的 release
+                    # Use the latest release
                     download_url = releases[0]["zipball_url"]
                 else:
                     # 没有 release，使用默认分支
@@ -51,11 +51,11 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
             click.echo(t("msg-c804f59f", e=e))
             download_url = url
 
-        # 应用代理
+        # Apply proxy
         if proxy:
             download_url = f"{proxy}/{download_url}"
 
-        # 下载并解压
+        # Download and extract
         with httpx.Client(
             proxy=proxy if proxy else None,
             follow_redirects=True,
@@ -85,13 +85,13 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
 
 
 def load_yaml_metadata(plugin_dir: Path) -> dict:
-    """从 metadata.yaml 文件加载插件元数据
+    """Load plugin metadata from metadata.yaml file
 
     Args:
-        plugin_dir: 插件目录路径
+        plugin_dir: Plugin directory path
 
     Returns:
-        dict: 包含元数据的字典，如果读取失败则返回空字典
+        dict: Dictionary containing metadata, or empty dict if loading fails
 
     """
     yaml_path = plugin_dir / "metadata.yaml"
@@ -104,28 +104,28 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
 
 
 def build_plug_list(plugins_dir: Path) -> list:
-    """构建插件列表，包含本地和在线插件信息
+    """Build plugin list containing local and online plugin information
 
     Args:
-        plugins_dir (Path): 插件目录路径
+        plugins_dir (Path): Plugin directory path
 
     Returns:
-        list: 包含插件信息的字典列表
+        list: List of dicts containing plugin information
 
     """
-    # 获取本地插件信息
+    # Get local plugin info
     result = []
     if plugins_dir.exists():
         for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
             plugin_dir = plugins_dir / plugin_name
 
-            # 从 metadata.yaml 加载元数据
+            # Load metadata from metadata.yaml
             metadata = load_yaml_metadata(plugin_dir)
 
             if "desc" not in metadata and "description" in metadata:
                 metadata["desc"] = metadata["description"]
 
-            # 如果成功加载元数据，添加到结果列表
+            # If metadata loaded successfully, add to result list
             if metadata and all(
                 k in metadata for k in ["name", "desc", "version", "author", "repo"]
             ):
@@ -141,7 +141,7 @@ def build_plug_list(plugins_dir: Path) -> list:
                     },
                 )
 
-    # 获取在线插件列表
+    # Get online plugin list
     online_plugins = []
     try:
         with httpx.Client() as client:
@@ -163,11 +163,11 @@ def build_plug_list(plugins_dir: Path) -> list:
     except Exception as e:
         click.echo(t("msg-8dbce791", e=e), err=True)
 
-    # 与在线插件比对，更新状态
+    # Compare with online plugins and update status
     online_plugin_names = {plugin["name"] for plugin in online_plugins}
     for local_plugin in result:
         if local_plugin["name"] in online_plugin_names:
-            # 查找对应的在线插件
+            # Find the corresponding online plugin
             online_plugin = next(
                 p for p in online_plugins if p["name"] == local_plugin["name"]
             )
@@ -180,10 +180,10 @@ def build_plug_list(plugins_dir: Path) -> list:
             ):
                 local_plugin["status"] = PluginStatus.NEED_UPDATE
         else:
-            # 本地插件未在线上发布
+            # Local plugin is not published online
             local_plugin["status"] = PluginStatus.NOT_PUBLISHED
 
-    # 添加未安装的在线插件
+    # Add uninstalled online plugins
     for online_plugin in online_plugins:
         if not any(plugin["name"] == online_plugin["name"] for plugin in result):
             result.append(online_plugin)
@@ -197,19 +197,19 @@ def manage_plugin(
     is_update: bool = False,
     proxy: str | None = None,
 ) -> None:
-    """安装或更新插件
+    """Install or update a plugin
 
     Args:
-        plugin (dict): 插件信息字典
-        plugins_dir (Path): 插件目录
-        is_update (bool, optional): 是否为更新操作. 默认为 False
-        proxy (str, optional): 代理服务器地址
+        plugin (dict): Plugin info dict
+        plugins_dir (Path): Plugins directory
+        is_update (bool, optional): Whether this is an update operation. Defaults to False
+        proxy (str, optional): Proxy server address
 
     """
     plugin_name = plugin["name"]
     repo_url = plugin["repo"]
 
-    # 如果是更新且有本地路径，直接使用本地路径
+    # If updating and local path exists, use it directly
     if is_update and plugin.get("local_path"):
         target_path = Path(plugin["local_path"])
     else:
@@ -217,11 +217,11 @@ def manage_plugin(
 
     backup_path = Path(f"{target_path}_backup") if is_update else None
 
-    # 检查插件是否存在
+    # Check if plugin exists
     if is_update and not target_path.exists():
         raise click.ClickException(t("msg-6999155d", plugin_name=plugin_name))
 
-    # 备份现有插件
+    # Backup existing plugin
     if is_update and backup_path is not None and backup_path.exists():
         shutil.rmtree(backup_path)
     if is_update and backup_path is not None:
@@ -233,7 +233,7 @@ def manage_plugin(
         )
         get_git_repo(repo_url, target_path, proxy)
 
-        # 更新成功，删除备份
+        # Update succeeded, delete backup
         if is_update and backup_path is not None and backup_path.exists():
             shutil.rmtree(backup_path)
         click.echo(t("msg-9ac1f4db", plugin_name=plugin_name, res='更新' if is_update else '安装'))

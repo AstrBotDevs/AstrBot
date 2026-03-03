@@ -15,7 +15,7 @@ from .utils.astrbot_path import get_astrbot_data_path
 # 初始化数据存储文件夹
 os.makedirs(get_astrbot_data_path(), exist_ok=True)
 
-DEMO_MODE = os.getenv("DEMO_MODE", False)
+DEMO_MODE = os.getenv("DEMO_MODE", "False").strip().lower() in ("true", "1", "t")
 
 astrbot_config = AstrBotConfig()
 saved_locale = astrbot_config.get("i18n", {}).get("locale", "zh-cn")

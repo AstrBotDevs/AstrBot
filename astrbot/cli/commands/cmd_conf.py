@@ -11,7 +11,7 @@ from ..utils import check_astrbot_root, get_astrbot_root
 
 
 def _validate_log_level(value: str) -> str:
-    """验证日志级别"""
+    """Validate log level"""
     value = value.upper()
     if value not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
         raise click.ClickException(
@@ -21,7 +21,7 @@ def _validate_log_level(value: str) -> str:
 
 
 def _validate_dashboard_port(value: str) -> int:
-    """验证 Dashboard 端口"""
+    """Validate Dashboard port"""
     try:
         port = int(value)
         if port < 1 or port > 65535:
@@ -32,21 +32,21 @@ def _validate_dashboard_port(value: str) -> int:
 
 
 def _validate_dashboard_username(value: str) -> str:
-    """验证 Dashboard 用户名"""
+    """Validate Dashboard username"""
     if not value:
         raise click.ClickException(t("msg-0b62b5ce"))
     return value
 
 
 def _validate_dashboard_password(value: str) -> str:
-    """验证 Dashboard 密码"""
+    """Validate Dashboard password"""
     if not value:
         raise click.ClickException(t("msg-89b5d3d5"))
     return hashlib.md5(value.encode()).hexdigest()
 
 
 def _validate_timezone(value: str) -> str:
-    """验证时区"""
+    """Validate timezone"""
     try:
         zoneinfo.ZoneInfo(value)
     except Exception:
@@ -55,13 +55,13 @@ def _validate_timezone(value: str) -> str:
 
 
 def _validate_callback_api_base(value: str) -> str:
-    """验证回调接口基址"""
+    """Validate callback API base URL"""
     if not value.startswith("http://") and not value.startswith("https://"):
         raise click.ClickException(t("msg-e470e37d"))
     return value
 
 
-# 可通过CLI设置的配置项，配置键到验证器函数的映射
+# Configuration items settable via CLI, mapping config keys to validator functions
 CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
     "timezone": _validate_timezone,
     "log_level": _validate_log_level,
@@ -73,7 +73,7 @@ CONFIG_VALIDATORS: dict[str, Callable[[str], Any]] = {
 
 
 def _load_config() -> dict[str, Any]:
-    """加载或初始化配置文件"""
+    """Load or initialize config file"""
     root = get_astrbot_root()
     if not check_astrbot_root(root):
         raise click.ClickException(
@@ -96,7 +96,7 @@ def _load_config() -> dict[str, Any]:
 
 
 def _save_config(config: dict[str, Any]) -> None:
-    """保存配置文件"""
+    """Save config file"""
     config_path = get_astrbot_root() / "data" / "cmd_config.json"
 
     config_path.write_text(
@@ -106,7 +106,7 @@ def _save_config(config: dict[str, Any]) -> None:
 
 
 def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
-    """设置嵌套字典中的值"""
+    """Set a value in a nested dictionary"""
     parts = path.split(".")
     for part in parts[:-1]:
         if part not in obj:
@@ -120,7 +120,7 @@ def _set_nested_item(obj: dict[str, Any], path: str, value: Any) -> None:
 
 
 def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
-    """获取嵌套字典中的值"""
+    """Get a value from a nested dictionary"""
     parts = path.split(".")
     for part in parts:
         obj = obj[part]
@@ -129,21 +129,21 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 @click.group(name="conf")
 def conf() -> None:
-    """配置管理命令
+    """Configuration management commands
 
-    支持的配置项:
+    Supported config keys:
 
-    - timezone: 时区设置 (例如: Asia/Shanghai)
+    - timezone: Timezone setting (e.g. Asia/Shanghai)
 
-    - log_level: 日志级别 (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+    - log_level: Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)
 
-    - dashboard.port: Dashboard 端口
+    - dashboard.port: Dashboard port
 
-    - dashboard.username: Dashboard 用户名
+    - dashboard.username: Dashboard username
 
-    - dashboard.password: Dashboard 密码
+    - dashboard.password: Dashboard password
 
-    - callback_api_base: 回调接口基址
+    - callback_api_base: Callback API base URL
     """
 
 
@@ -151,7 +151,7 @@ def conf() -> None:
 @click.argument("key")
 @click.argument("value")
 def set_config(key: str, value: str) -> None:
-    """设置配置项的值"""
+    """Set the value of a config item"""
     if key not in CONFIG_VALIDATORS:
         raise click.ClickException(t("msg-e16816cc", key=key))
 
@@ -180,7 +180,7 @@ def set_config(key: str, value: str) -> None:
 @conf.command(name="get")
 @click.argument("key", required=False)
 def get_config(key: str | None = None) -> None:
-    """获取配置项的值，不提供key则显示所有可配置项"""
+    """Get the value of a config item. If no key is provided, show all configurable items"""
     config = _load_config()
 
     if key:

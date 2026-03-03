@@ -105,7 +105,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_image_url(segment: Image) -> str:
         candidate = (segment.url or segment.file or "").strip()
-        if candidate.startswith("http://") or candidate.startswith("https://"):
+        if candidate.startswith("https://"):
             return candidate
         try:
             return await segment.register_to_file_service()
@@ -116,7 +116,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_record_url(segment: Record) -> str:
         candidate = (segment.url or segment.file or "").strip()
-        if candidate.startswith("http://") or candidate.startswith("https://"):
+        if candidate.startswith("https://"):
             return candidate
         try:
             return await segment.register_to_file_service()
@@ -138,7 +138,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_video_url(segment: Video) -> str:
         candidate = (segment.file or "").strip()
-        if candidate.startswith("http://") or candidate.startswith("https://"):
+        if candidate.startswith("https://"):
             return candidate
         try:
             return await segment.register_to_file_service()
@@ -149,9 +149,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_video_preview_url(segment: Video) -> str:
         cover_candidate = (segment.cover or "").strip()
-        if cover_candidate.startswith("http://") or cover_candidate.startswith(
-            "https://"
-        ):
+        if cover_candidate.startswith("https://"):
             return cover_candidate
 
         if cover_candidate:
@@ -192,7 +190,7 @@ class LineMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _resolve_file_url(segment: File) -> str:
-        if segment.url and segment.url.startswith(("http://", "https://")):
+        if segment.url and segment.url.startswith("https://"):
             return segment.url
         try:
             return await segment.register_to_file_service()

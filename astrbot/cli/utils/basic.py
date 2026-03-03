@@ -3,9 +3,12 @@ from pathlib import Path
 
 import click
 
+# Static assets bundled inside the installed wheel (built by hatch_build.py).
+_BUNDLED_DIST = Path(__file__).parent.parent.parent / "dashboard" / "dist"
+
 
 def check_astrbot_root(path: str | Path) -> bool:
-    """检查路径是否为 AstrBot 根目录"""
+    """Check if the path is an AstrBot root directory"""
     if not isinstance(path, Path):
         path = Path(path)
     if not path.exists() or not path.is_dir():
@@ -16,16 +19,21 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 
 def get_astrbot_root() -> Path:
-    """获取Astrbot根目录路径"""
+    """Get the AstrBot root directory path"""
     return Path.cwd()
 
 
 async def check_dashboard(astrbot_root: Path) -> None:
-    """检查是否安装了dashboard"""
+    """Check if the dashboard is installed"""
     from astrbot.core.config.default import VERSION
     from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
     from .version_comparator import VersionComparator
+
+    # If the wheel ships bundled dashboard assets, no network download is needed.
+    if _BUNDLED_DIST.exists():
+        click.echo("Dashboard is bundled with the package – skipping download.")
+        return
 
     try:
         dashboard_version = await get_dashboard_version()
@@ -33,7 +41,7 @@ async def check_dashboard(astrbot_root: Path) -> None:
             case None:
                 click.echo(t("msg-f4e0fd7b"))
                 if click.confirm(
-                    "是否安装管理面板？",
+                    "Install dashboard?",
                     default=True,
                     abort=True,
                 ):

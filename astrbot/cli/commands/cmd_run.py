@@ -12,7 +12,7 @@ from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
 
 async def run_astrbot(astrbot_root: Path) -> None:
-    """运行 AstrBot"""
+    """Run AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
 
@@ -27,11 +27,11 @@ async def run_astrbot(astrbot_root: Path) -> None:
     await core_lifecycle.start()
 
 
-@click.option("--reload", "-r", is_flag=True, help="插件自动重载")
-@click.option("--port", "-p", help="Astrbot Dashboard端口", required=False, type=str)
+@click.option("--reload", "-r", is_flag=True, help="Auto-reload plugins")
+@click.option("--port", "-p", help="AstrBot Dashboard port", required=False, type=str)
 @click.command()
 def run(reload: bool, port: str) -> None:
-    """运行 AstrBot"""
+    """Run AstrBot"""
     try:
         os.environ["ASTRBOT_CLI"] = "1"
         astrbot_root = get_astrbot_root()

@@ -9,16 +9,12 @@ from ..utils import check_dashboard, get_astrbot_root
 
 
 async def initialize_astrbot(astrbot_root: Path) -> None:
-    """执行 AstrBot 初始化逻辑"""
+    """Execute AstrBot initialization logic"""
     dot_astrbot = astrbot_root / ".astrbot"
 
     if not dot_astrbot.exists():
-        click.echo(t("msg-a90a250e", astrbot_root=astrbot_root))
-        click.echo(
-            t("msg-4deda62e"),
-        )
         if click.confirm(
-            f"请检查当前目录是否正确，确认正确请回车: {astrbot_root}",
+            f"Install AstrBot to this directory? {astrbot_root}",
             default=True,
             abort=True,
         ):
@@ -50,6 +46,7 @@ def init() -> None:
     try:
         with lock.acquire():
             asyncio.run(initialize_astrbot(astrbot_root))
+            click.echo("Done! You can now run 'astrbot run' to start AstrBot")
     except Timeout:
         raise click.ClickException(t("msg-eebc39e3"))
 

@@ -71,7 +71,7 @@ jobs:
           zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
 
       - name: Upload dashboard artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           if-no-files-found: error
@@ -132,7 +132,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Download dashboard artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           path: release-assets

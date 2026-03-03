@@ -17,7 +17,7 @@ from ..utils import (
 
 @click.group()
 def plug() -> None:
-    """插件管理"""
+    """Plugin management"""
 
 
 def _get_data_path() -> Path:
@@ -33,7 +33,9 @@ def display_plugins(plugins, title=None, color=None) -> None:
     if title:
         click.echo(t("msg-78b9c276", res=click.style(title, fg=color, bold=True)))
 
-    click.echo(t("msg-83664fcf", val='名称'))
+    click.echo(
+        f"{'Name':<20} {'Version':<10} {'Status':<10} {'Author':<15} {'Description':<30}"
+    )
     click.echo("-" * 85)
 
     for p in plugins:
@@ -46,16 +48,16 @@ def display_plugins(plugins, title=None, color=None) -> None:
 @plug.command()
 @click.argument("name")
 def new(name: str) -> None:
-    """创建新插件"""
+    """Create a new plugin"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins" / name
 
     if plug_path.exists():
         raise click.ClickException(t("msg-1d802ff2", name=name))
 
-    author = click.prompt("请输入插件作者", type=str)
-    desc = click.prompt("请输入插件描述", type=str)
-    version = click.prompt("请输入插件版本", type=str)
+    author = click.prompt("Enter plugin author", type=str)
+    desc = click.prompt("Enter plugin description", type=str)
+    version = click.prompt("Enter plugin version", type=str)
     if not re.match(r"^\d+\.\d+(\.\d+)?$", version.lower().lstrip("v")):
         raise click.ClickException(t("msg-a7be9d23"))
     repo = click.prompt("请输入插件仓库：", type=str)
@@ -79,11 +81,13 @@ def new(name: str) -> None:
             f"repo: {repo}\n",
         )
 
-    # 重写 README.md
+    # Rewrite README.md
     with open(plug_path / "README.md", "w", encoding="utf-8") as f:
-        f.write(f"# {name}\n\n{desc}\n\n# 支持\n\n[帮助文档](https://astrbot.app)\n")
+        f.write(
+            f"# {name}\n\n{desc}\n\n# Support\n\n[Documentation](https://astrbot.app)\n"
+        )
 
-    # 重写 main.py
+    # Rewrite main.py
     with open(plug_path / "main.py", encoding="utf-8") as f:
         content = f.read()
 
@@ -99,37 +103,37 @@ def new(name: str) -> None:
 
 
 @plug.command()
-@click.option("--all", "-a", is_flag=True, help="列出未安装的插件")
+@click.option("--all", "-a", is_flag=True, help="List uninstalled plugins")
 def list(all: bool) -> None:
-    """列出插件"""
+    """List plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
-    # 未发布的插件
+    # Unpublished plugins
     not_published_plugins = [
         p for p in plugins if p["status"] == PluginStatus.NOT_PUBLISHED
     ]
     if not_published_plugins:
-        display_plugins(not_published_plugins, "未发布的插件", "red")
+        display_plugins(not_published_plugins, "Unpublished Plugins", "red")
 
-    # 需要更新的插件
+    # Plugins needing update
     need_update_plugins = [
         p for p in plugins if p["status"] == PluginStatus.NEED_UPDATE
     ]
     if need_update_plugins:
-        display_plugins(need_update_plugins, "需要更新的插件", "yellow")
+        display_plugins(need_update_plugins, "Plugins Needing Update", "yellow")
 
-    # 已安装的插件
+    # Installed plugins
     installed_plugins = [p for p in plugins if p["status"] == PluginStatus.INSTALLED]
     if installed_plugins:
-        display_plugins(installed_plugins, "已安装的插件", "green")
+        display_plugins(installed_plugins, "Installed Plugins", "green")
 
-    # 未安装的插件
+    # Uninstalled plugins
     not_installed_plugins = [
         p for p in plugins if p["status"] == PluginStatus.NOT_INSTALLED
     ]
     if not_installed_plugins and all:
-        display_plugins(not_installed_plugins, "未安装的插件", "blue")
+        display_plugins(not_installed_plugins, "Uninstalled Plugins", "blue")
 
     if (
         not any([not_published_plugins, need_update_plugins, installed_plugins])
@@ -140,9 +144,9 @@ def list(all: bool) -> None:
 
 @plug.command()
 @click.argument("name")
-@click.option("--proxy", help="代理服务器地址")
+@click.option("--proxy", help="Proxy server address")
 def install(name: str, proxy: str | None) -> None:
-    """安装插件"""
+    """Install a plugin"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
@@ -165,7 +169,7 @@ def install(name: str, proxy: str | None) -> None:
 @plug.command()
 @click.argument("name")
 def remove(name: str) -> None:
-    """卸载插件"""
+    """Uninstall a plugin"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
     plugin = next((p for p in plugins if p["name"] == name), None)
@@ -175,7 +179,9 @@ def remove(name: str) -> None:
 
     plugin_path = plugin["local_path"]
 
-    click.confirm(f"确定要卸载插件 {name} 吗?", default=False, abort=True)
+    click.confirm(
+        f"Are you sure you want to uninstall plugin {name}?", default=False, abort=True
+    )
 
     try:
         shutil.rmtree(plugin_path)
@@ -186,9 +192,9 @@ def remove(name: str) -> None:
 
 @plug.command()
 @click.argument("name", required=False)
-@click.option("--proxy", help="Github代理地址")
+@click.option("--proxy", help="GitHub proxy address")
 def update(name: str, proxy: str | None) -> None:
-    """更新插件"""
+    """Update plugins"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
     plugins = build_plug_list(base_path / "plugins")
@@ -226,7 +232,7 @@ def update(name: str, proxy: str | None) -> None:
 @plug.command()
 @click.argument("query")
 def search(query: str) -> None:
-    """搜索插件"""
+    """Search for plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
@@ -242,4 +248,4 @@ def search(query: str) -> None:
         click.echo(t("msg-e32912b8", query=query))
         return
 
-    display_plugins(matched_plugins, f"搜索结果: '{query}'", "cyan")
+    display_plugins(matched_plugins, f"Search results: '{query}'", "cyan")
