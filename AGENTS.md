@@ -21,6 +21,12 @@ Runs on `http://localhost:3000` by default.
 
 ## Test
 
+```bash
+uv run pytest
+```
+
+Please run the tests after modifying the code to ensure everything works as expected and to prevent regressions.
+
 
 
 ## Dev environment tips
