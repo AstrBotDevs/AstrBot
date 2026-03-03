@@ -2,9 +2,12 @@ from pathlib import Path
 
 import click
 
+# Static assets bundled inside the installed wheel (built by hatch_build.py).
+_BUNDLED_DIST = Path(__file__).parent.parent.parent / "dashboard" / "dist"
+
 
 def check_astrbot_root(path: str | Path) -> bool:
-    """检查路径是否为 AstrBot 根目录"""
+    """Check if the path is an AstrBot root directory"""
     if not isinstance(path, Path):
         path = Path(path)
     if not path.exists() or not path.is_dir():
@@ -15,43 +18,48 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 
 def get_astrbot_root() -> Path:
-    """获取Astrbot根目录路径"""
+    """Get the AstrBot root directory path"""
     return Path.cwd()
 
 
 async def check_dashboard(astrbot_root: Path) -> None:
-    """检查是否安装了dashboard"""
+    """Check if the dashboard is installed"""
     from astrbot.core.config.default import VERSION
     from astrbot.core.utils.io import download_dashboard, get_dashboard_version
 
     from .version_comparator import VersionComparator
 
+    # If the wheel ships bundled dashboard assets, no network download is needed.
+    if _BUNDLED_DIST.exists():
+        click.echo("Dashboard is bundled with the package – skipping download.")
+        return
+
     try:
         dashboard_version = await get_dashboard_version()
         match dashboard_version:
             case None:
-                click.echo("未安装管理面板")
+                click.echo("Dashboard is not installed")
                 if click.confirm(
-                    "是否安装管理面板？",
+                    "Install dashboard?",
                     default=True,
                     abort=True,
                 ):
-                    click.echo("正在安装管理面板...")
+                    click.echo("Installing dashboard...")
                     await download_dashboard(
                         path="data/dashboard.zip",
                         extract_path=str(astrbot_root),
                         version=f"v{VERSION}",
                         latest=False,
                     )
-                    click.echo("管理面板安装完成")
+                    click.echo("Dashboard installed successfully")
 
             case str():
                 if VersionComparator.compare_version(VERSION, dashboard_version) <= 0:
-                    click.echo("管理面板已是最新版本")
+                    click.echo("Dashboard is already up to date")
                     return
                 try:
                     version = dashboard_version.split("v")[1]
-                    click.echo(f"管理面板版本: {version}")
+                    click.echo(f"Dashboard version: {version}")
                     await download_dashboard(
                         path="data/dashboard.zip",
                         extract_path=str(astrbot_root),
@@ -59,10 +67,10 @@ async def check_dashboard(astrbot_root: Path) -> None:
                         latest=False,
                     )
                 except Exception as e:
-                    click.echo(f"下载管理面板失败: {e}")
+                    click.echo(f"Failed to download dashboard: {e}")
                     return
     except FileNotFoundError:
-        click.echo("初始化管理面板目录...")
+        click.echo("Initializing dashboard directory...")
         try:
             await download_dashboard(
                 path=str(astrbot_root / "dashboard.zip"),
@@ -70,7 +78,7 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 version=f"v{VERSION}",
                 latest=False,
             )
-            click.echo("管理面板初始化完成")
+            click.echo("Dashboard initialized successfully")
         except Exception as e:
-            click.echo(f"下载管理面板失败: {e}")
+            click.echo(f"Failed to download dashboard: {e}")
             return
