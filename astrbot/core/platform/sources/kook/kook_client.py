@@ -394,6 +394,7 @@ class KookClient:
             async with self._http_client.post(url, data=data) as resp:
                 if resp.status == 200:
                     result: dict = await resp.json()
+                    logger.debug(f"[KOOK] 上传文件响应: {result}")
                     if result.get("code") == 0:
                         logger.info("[KOOK] 上传文件到kook服务器成功")
                         remote_url = result["data"]["url"]

@@ -9,6 +9,7 @@ class KookConfig:
 
     # 基础配置
     token: str
+    bot_nickname: str = ""
     enable: bool = False
     id: str = "kook"
 
@@ -40,6 +41,7 @@ class KookConfig:
             # id=config_dict.get("id", "kook"),
             enable=config_dict.get("enable", False),
             token=config_dict.get("kook_bot_token", ""),
+            bot_nickname=config_dict.get("kook_bot_nickname", ""),
             reconnect_delay=config_dict.get(
                 "kook_reconnect_delay",
                 KookConfig.reconnect_delay,

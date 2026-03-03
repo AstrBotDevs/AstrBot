@@ -590,6 +590,11 @@
         "type": "string",
         "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
       },
+      "kook_bot_nickname": {
+        "description": "Bot Nickname",
+        "type": "string",
+        "hint": "Optional. If the sender nickname matches this value, the message will be ignored to prevent broadcast storms."
+      },
       "kook_reconnect_delay": {
         "description": "Reconnect Delay",
         "type": "int",
