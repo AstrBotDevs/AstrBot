@@ -27,6 +27,7 @@ from .kook_types import (
     KookCardMessage,
     KookCardMessageContainer,
     KookMessageType,
+    KookModuleType,
     OrderMessage,
 )
 
@@ -111,7 +112,7 @@ class KookEvent(AstrMessageEvent):
                                 KookCardMessage(
                                     modules=[
                                         FileModule(
-                                            type="audio",
+                                            type=KookModuleType.AUDIO,
                                             title=title,
                                             src=url,
                                         )
@@ -182,7 +183,7 @@ class KookEvent(AstrMessageEvent):
             if item.reply_id:
                 reply_id = item.reply_id
             if not item.text:
-                logger.debug(f'[Kook] 跳过空消息,类型为"{item.type}"')
+                logger.debug(f'[Kook] 跳过空消息,类型为"{item.type.name}"')
                 continue
             try:
                 await self.client.send_text(

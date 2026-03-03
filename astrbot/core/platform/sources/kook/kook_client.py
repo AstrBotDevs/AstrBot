@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import json
 import os
 import random
 import time
@@ -9,13 +8,23 @@ from pathlib import Path
 
 import aiofiles
 import aiohttp
+import pydantic
 import websockets
 
 from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
 
 from .kook_config import KookConfig
-from .kook_types import KookApiPaths, KookMessageType
+from .kook_types import (
+    KookApiPaths,
+    KookGatewayIndexResponse,
+    KookHelloEventData,
+    KookMessageSignal,
+    KookMessageType,
+    KookResumeAckEventData,
+    KookUserMeResponse,
+    KookWebsocketEvent,
+)
 
 
 class KookClient:
@@ -23,7 +32,8 @@ class KookClient:
         # 数据字段
         self.config = config
         self._bot_id = ""
-        self._bot_name = ""
+        self._bot_username = ""
+        self._bot_nickname = ""
 
         # 资源字段
         self._http_client = aiohttp.ClientSession(
@@ -48,37 +58,50 @@ class KookClient:
         return self._bot_id
 
     @property
-    def bot_name(self):
-        return self._bot_name
+    def bot_nickname(self):
+        return self._bot_nickname
 
-    async def get_bot_info(self) -> str:
-        """获取机器人账号ID"""
+    @property
+    def bot_username(self):
+        return self._bot_username
+
+    async def get_bot_info(self) -> None:
+        """获取机器人账号信息"""
         url = KookApiPaths.USER_ME
 
         try:
             async with self._http_client.get(url) as resp:
                 if resp.status != 200:
-                    logger.error(f"[KOOK] 获取机器人账号ID失败，状态码: {resp.status}")
-                    return ""
+                    logger.error(
+                        f"[KOOK] 获取机器人账号信息失败，状态码: {resp.status} , {await resp.text()}"
+                    )
+                    return
+                try:
+                    resp_content = KookUserMeResponse.from_dict(await resp.json())
+                except pydantic.ValidationError as e:
+                    logger.error(
+                        f"[KOOK] 获取机器人账号信息失败, 响应数据格式错误: \n{e}"
+                    )
+                    logger.error(f"[KOOK] 响应内容: {await resp.text()}")
+                    return
 
-                data = await resp.json()
-                if data.get("code") != 0:
-                    logger.error(f"[KOOK] 获取机器人账号ID失败: {data}")
-                    return ""
+                if not resp_content.success():
+                    logger.error(
+                        f"[KOOK] 获取机器人账号信息失败: {resp_content.model_dump_json()}"
+                    )
+                    return
 
-                bot_id: str = data["data"]["id"]
+                bot_id: str = resp_content.data.id
                 self._bot_id = bot_id
                 logger.info(f"[KOOK] 获取机器人账号ID成功: {bot_id}")
-                bot_name: str = data["data"]["nickname"] or data["data"]["username"]
-                self._bot_name = bot_name
-                logger.info(f"[KOOK] 获取机器人名称成功: {self._bot_name}")
+                self._bot_nickname = resp_content.data.nickname
+                self._bot_username = resp_content.data.username
+                logger.info(f"[KOOK] 获取机器人名称成功: {self._bot_nickname}")
 
-                return bot_id
         except Exception as e:
-            logger.error(f"[KOOK] 获取机器人账号ID异常: {e}")
-            return ""
+            logger.error(f"[KOOK] 获取机器人账号信息异常: {e}")
 
-    async def get_gateway_url(self, resume=False, sn=0, session_id=None):
+    async def get_gateway_url(self, resume=False, sn=0, session_id=None) -> str | None:
         """获取网关连接地址"""
         url = KookApiPaths.GATEWAY_INDEX
 
@@ -96,14 +119,20 @@ class KookClient:
                     logger.error(f"[KOOK] 获取gateway失败，状态码: {resp.status}")
                     return None
 
-                data = await resp.json()
-                if data.get("code") != 0:
-                    logger.error(f"[KOOK] 获取gateway失败: {data}")
+                resp_content = KookGatewayIndexResponse.from_dict(await resp.json())
+                if not resp_content.success():
+                    logger.error(f"[KOOK] 获取gateway失败: {resp_content}")
                     return None
 
-                gateway_url: str = data["data"]["url"]
+                gateway_url: str = resp_content.data.url
                 logger.info(f"[KOOK] 获取gateway成功: {gateway_url.split('?')[0]}")
                 return gateway_url
+
+        except pydantic.ValidationError as e:
+            logger.error(f"[KOOK] 获取gateway失败, 响应数据格式错误: \n{e}")
+            logger.error(f"[KOOK] 原始响应内容: {await resp.text()}")
+            return None
+
         except Exception as e:
             logger.error(f"[KOOK] 获取gateway异常: {e}")
             return None
@@ -156,7 +185,11 @@ class KookClient:
         try:
             while self.running:
                 try:
-                    msg = await asyncio.wait_for(self.ws.recv(), timeout=10)  # type: ignore
+                    if self.ws is None:
+                        logger.error("[KOOK] WebSocket 对象丢失，结束监听流程。")
+                        break
+
+                    msg = await asyncio.wait_for(self.ws.recv(), timeout=10)
 
                     if isinstance(msg, bytes):
                         try:
@@ -166,10 +199,15 @@ class KookClient:
                             continue
                         msg = msg.decode("utf-8")
 
-                    data = json.loads(msg)
+                    event = KookWebsocketEvent.from_json(msg)
 
                     # 处理不同类型的信令
-                    await self._handle_signal(data)
+                    await self._handle_signal(event)
+
+                except pydantic.ValidationError as e:
+                    logger.error(f"[KOOK] 解析WebSocket事件数据格式失败: \n{e}")
+                    logger.error(f"[KOOK] 原始响应内容: {msg}")
+                    continue
 
                 except asyncio.TimeoutError:
                     # 超时检查，继续循环
@@ -187,38 +225,41 @@ class KookClient:
             self.running = False
             self._stop_event.set()
 
-    async def _handle_signal(self, data):
+    async def _handle_signal(self, event: KookWebsocketEvent):
         """处理不同类型的信令"""
-        signal_type = data.get("s")
+        data = event.data
 
-        if signal_type == 0:  # 事件消息
-            # 更新消息序号
-            if "sn" in data:
-                self.last_sn = data["sn"]
-            await self.event_callback(data)
+        match event.signal:
+            case KookMessageSignal.MESSAGE:
+                if event.sn is not None:
+                    self.last_sn = event.sn
+                await self.event_callback(data)
 
-        elif signal_type == 1:  # HELLO握手
-            await self._handle_hello(data)
+            case KookMessageSignal.HELLO:
+                assert isinstance(data, KookHelloEventData)
+                await self._handle_hello(data)
 
-        elif signal_type == 3:  # PONG心跳响应
-            await self._handle_pong(data)
+            case KookMessageSignal.RESUME_ACK:
+                assert isinstance(data, KookResumeAckEventData)
+                await self._handle_resume_ack(data)
 
-        elif signal_type == 5:  # RECONNECT重连指令
-            await self._handle_reconnect(data)
+            case KookMessageSignal.PONG:
+                await self._handle_pong()
 
-        elif signal_type == 6:  # RESUME ACK
-            await self._handle_resume_ack(data)
+            case KookMessageSignal.RECONNECT:
+                await self._handle_reconnect()
 
-        else:
-            logger.debug(f"[KOOK] 未处理的信令类型: {signal_type}")
+            case _:
+                logger.debug(
+                    f"[KOOK] 未处理的信令类型: {event.signal.name}({event.signal.value})"
+                )
 
-    async def _handle_hello(self, data):
+    async def _handle_hello(self, data: KookHelloEventData):
         """处理HELLO握手"""
-        hello_data = data.get("d", {})
-        code = hello_data.get("code", 0)
+        code = data.code
 
         if code == 0:
-            self.session_id = hello_data.get("session_id")
+            self.session_id = data.session_id
             logger.info(f"[KOOK] 握手成功，session_id: {self.session_id}")
             # TODO 重置重连延迟
             # self.reconnect_delay = 1
@@ -228,12 +269,12 @@ class KookClient:
                 logger.error("[KOOK] Token已过期，需要重新获取")
             self.running = False
 
-    async def _handle_pong(self, data):
+    async def _handle_pong(self):
         """处理PONG心跳响应"""
         self.last_heartbeat_time = time.time()
         self.heartbeat_failed_count = 0
 
-    async def _handle_reconnect(self, data):
+    async def _handle_reconnect(self):
         """处理重连指令"""
         logger.warning("[KOOK] 收到重连指令")
         # 清空本地状态
@@ -241,10 +282,9 @@ class KookClient:
         self.session_id = None
         self.running = False
 
-    async def _handle_resume_ack(self, data):
+    async def _handle_resume_ack(self, data: KookResumeAckEventData):
         """处理RESUME确认"""
-        resume_data = data.get("d", {})
-        self.session_id = resume_data.get("session_id")
+        self.session_id = data.session_id
         logger.info(f"[KOOK] Resume成功，session_id: {self.session_id}")
 
     async def _heartbeat_loop(self):
@@ -292,9 +332,16 @@ class KookClient:
 
     async def _send_ping(self):
         """发送心跳PING"""
+        if self.ws is None:
+            logger.warning("[KOOK] 尚未连接kook WebSocket服务器, 跳过发送心跳包流程")
+            return
         try:
-            ping_data = {"s": 2, "sn": self.last_sn}
-            await self.ws.send(json.dumps(ping_data))  # type: ignore
+            ping_data = KookWebsocketEvent(
+                signal=KookMessageSignal.PING,
+                data=None,
+                sn=self.last_sn,
+            )
+            await self.ws.send(ping_data.to_json())
         except Exception as e:
             logger.error(f"[KOOK] 发送心跳失败: {e}")
 
