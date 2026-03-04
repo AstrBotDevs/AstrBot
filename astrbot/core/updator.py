@@ -170,31 +170,17 @@ class AstrBotUpdator(RepoZipUpdator):
             releases.insert(0, nightly_releases[0])
         return releases
 
-    async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
-        if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
-            raise Exception(
-                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
-            )  # 避免版本管理混乱
-
-        version_str = str(version) if version is not None else ""
-        is_nightly = bool(version_str and version_str.lower() == self.NIGHTLY_TAG)
-        is_tag = bool(version_str and version_str.startswith("v"))
-        need_releases = latest or is_tag
-
-        update_data = []
-        target_version = version_str
-        if need_releases:
-            update_data = await self.get_releases(latest=latest if latest else False)
-            if not update_data:
-                raise Exception("未找到可用的发布版本。")
-
-        file_url: str | None = None
-
-        if latest:
+    async def _resolve_update_target(
+        self,
+        mode: str,
+        version_str: str,
+        releases: list,
+    ) -> tuple[str, str]:
+        if mode == "latest":
             latest_release = next(
                 (
                     item
-                    for item in update_data
+                    for item in releases
                     if item.get("tag_name", "").lower() != self.NIGHTLY_TAG
                 ),
                 None,
@@ -205,29 +191,55 @@ class AstrBotUpdator(RepoZipUpdator):
             latest_version = latest_release["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
                 raise Exception("当前已经是最新版本。")
-            file_url = latest_release["zipball_url"]
-            target_version = latest_version
-        elif is_nightly:
-            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
-            target_version = self.NIGHTLY_TAG
-        elif is_tag:
-            # 更新到指定版本
-            for data in update_data:
-                if data["tag_name"] == version_str:
-                    file_url = data["zipball_url"]
-                    break
-            if file_url is None:
-                raise ValueError(f"Requested version tag not found: {version_str}")
-            target_version = version_str
-        else:
-            if len(version_str) != 40:
-                raise Exception("commit hash 长度不正确，应为 40")
-            file_url = (
-                f"https://github.com/AstrBotDevs/AstrBot/archive/{version_str}.zip"
-            )
-            target_version = version_str
+            return latest_version, latest_release["zipball_url"]
 
+        if mode == "nightly":
+            return self.NIGHTLY_TAG, (
+                f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
+            )
+
+        if mode == "tag":
+            for data in releases:
+                if data["tag_name"] == version_str:
+                    return version_str, data["zipball_url"]
+            raise Exception(f"未找到版本号为 {version_str} 的更新文件。")
+
+        if len(version_str) != 40:
+            raise Exception("commit hash 长度不正确，应为 40")
+        return (
+            version_str,
+            f"https://github.com/AstrBotDevs/AstrBot/archive/{version_str}.zip",
+        )
+
+    async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
+        if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
+            raise Exception(
+                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
+            )  # 避免版本管理混乱
+
+        version_str = str(version) if version is not None else ""
         if latest:
+            mode = "latest"
+        elif version_str.lower() == self.NIGHTLY_TAG:
+            mode = "nightly"
+        elif version_str.startswith("v"):
+            mode = "tag"
+        else:
+            mode = "commit"
+
+        releases: list = []
+        if mode in ("latest", "tag"):
+            releases = await self.get_releases(latest=mode == "latest")
+            if not releases:
+                raise Exception("未找到可用的发布版本。")
+
+        target_version, file_url = await self._resolve_update_target(
+            mode,
+            version_str,
+            releases,
+        )
+
+        if mode == "latest":
             logger.info(f"准备更新至最新稳定版本的 AstrBot Core: {target_version}")
         else:
             logger.info(f"准备更新至指定版本的 AstrBot Core: {target_version}")

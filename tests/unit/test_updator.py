@@ -71,6 +71,42 @@ async def test_get_releases_includes_nightly_tag(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_releases_deduplicates_nightly_when_already_in_stable(monkeypatch):
+    updator = AstrBotUpdator()
+
+    stable_nightly_release = {
+        "version": "nightly",
+        "published_at": "2026-03-01T00:00:00Z",
+        "body": "stable nightly",
+        "tag_name": "nightly",
+        "zipball_url": "https://example.com/stable-nightly.zip",
+    }
+    github_nightly_release = {
+        "version": "nightly",
+        "published_at": "2026-03-02T00:00:00Z",
+        "body": "github nightly",
+        "tag_name": "nightly",
+        "zipball_url": "https://example.com/github-nightly.zip",
+    }
+
+    async def mock_fetch_release_info(url: str, latest: bool = True):
+        _ = latest
+        if url == updator.ASTRBOT_RELEASE_API:
+            return [stable_nightly_release]
+        if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
+            return [github_nightly_release]
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
+
+    releases = await updator.get_releases()
+
+    nightly_releases = [item for item in releases if item["tag_name"] == "nightly"]
+    assert len(nightly_releases) == 1
+    assert releases[0]["zipball_url"] == "https://example.com/stable-nightly.zip"
+
+
+@pytest.mark.asyncio
 async def test_check_update_skips_nightly_when_prerelease_disabled(monkeypatch):
     updator = RepoZipUpdator()
 
@@ -103,3 +139,37 @@ async def test_check_update_skips_nightly_when_prerelease_disabled(monkeypatch):
 
     assert release is not None
     assert release.version == "v1.2.3"
+
+
+@pytest.mark.asyncio
+async def test_check_update_returns_none_when_only_prerelease_and_disabled(monkeypatch):
+    updator = RepoZipUpdator()
+
+    async def mock_fetch_release_info(url: str, latest: bool = True):
+        _ = url, latest
+        return [
+            {
+                "version": "nightly",
+                "published_at": "2026-03-02T00:00:00Z",
+                "body": "nightly build",
+                "tag_name": "nightly",
+                "zipball_url": "https://example.com/nightly.zip",
+            },
+            {
+                "version": "v1.2.3-beta.1",
+                "published_at": "2026-03-01T00:00:00Z",
+                "body": "beta build",
+                "tag_name": "v1.2.3-beta.1",
+                "zipball_url": "https://example.com/beta.zip",
+            },
+        ]
+
+    monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
+
+    release = await updator.check_update(
+        "https://example.invalid/releases",
+        "v1.0.0",
+        consider_prerelease=False,
+    )
+
+    assert release is None

@@ -144,7 +144,16 @@ class RepoZipUpdator:
                 sel_release_data = data
                 break
 
-        if not sel_release_data or not tag_name:
+        if sel_release_data is None:
+            if not consider_prerelease:
+                logger.info(
+                    "当前仅有预发布版本，consider_prerelease=False，跳过更新检查。"
+                )
+            else:
+                logger.error("未找到合适的发布版本")
+            return None
+
+        if not tag_name:
             logger.error("未找到合适的发布版本")
             return None
 

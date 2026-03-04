@@ -284,7 +284,7 @@ jobs:
         shell: bash
         run: |
           tag="${{ needs.resolve-release-context.outputs.tag }}"
-          gh release upload "$tag" release-assets/* --clobber
+          gh release upload "$tag" "release-assets/AstrBot-${tag}-dashboard.zip" --clobber
 
   publish-pypi:
     name: Publish PyPI
