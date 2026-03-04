@@ -19,6 +19,7 @@ from PIL import Image
 from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
+_DOWNLOAD_READ_CHUNK_SIZE = 64 * 1024
 
 
 def on_error(func, path, exc_info) -> None:
@@ -197,7 +198,7 @@ async def _stream_to_file(
     known_total = total_size if total_size > 0 else None
 
     while True:
-        chunk = await stream.read(8192)
+        chunk = await stream.read(_DOWNLOAD_READ_CHUNK_SIZE)
         if not chunk:
             break
         await asyncio.to_thread(file_obj.write, chunk)

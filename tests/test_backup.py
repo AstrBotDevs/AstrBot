@@ -275,6 +275,34 @@ class TestAstrBotExporter:
         assert "files/attachments/att_ok.txt" in namelist
         assert "files/attachments/att_missing.txt" not in namelist
 
+    @pytest.mark.asyncio
+    async def test_export_attachments_skips_empty_attachment_id(
+        self, mock_main_db, tmp_path
+    ):
+        """测试附件导出：attachment_id 为空时跳过，避免覆盖冲突。"""
+        exporter = AstrBotExporter(main_db=mock_main_db, kb_manager=None)
+
+        file_a = tmp_path / "a.txt"
+        file_b = tmp_path / "b.txt"
+        file_a.write_text("a", encoding="utf-8")
+        file_b.write_text("b", encoding="utf-8")
+        zip_path = tmp_path / "attachments_empty_id.zip"
+
+        attachments = [
+            {"attachment_id": "", "path": str(file_a)},
+            {"path": str(file_b)},
+            {"attachment_id": "att_ok", "path": str(file_a)},
+        ]
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            await exporter._export_attachments(zf, attachments)
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+
+        assert "files/attachments/att_ok.txt" in namelist
+        assert "files/attachments/.txt" not in namelist
+
 
 class TestAstrBotImporter:
     """AstrBotImporter 类测试"""

@@ -176,7 +176,7 @@ async def test_core_performance_benchmarks(tmp_path: Path) -> None:
         await file_component.get_file()
 
     async def bench_to_thread_exists() -> None:
-        await asyncio.to_thread(Path.exists, exists_path)
+        await asyncio.to_thread(exists_path.exists)
 
     async def bench_export_attachments_existing() -> None:
         if zip_path.exists():

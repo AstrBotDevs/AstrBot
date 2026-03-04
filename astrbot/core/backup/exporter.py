@@ -369,9 +369,14 @@ class AstrBotExporter:
         """在单个线程中批量导出附件，减少高频线程切换。"""
         for attachment in attachments:
             file_path = attachment.get("path", "")
-            attachment_id = attachment.get("attachment_id", "")
+            attachment_id = attachment.get("attachment_id")
             try:
                 if not file_path:
+                    continue
+                if not attachment_id:
+                    logger.warning(
+                        f"跳过附件导出：attachment_id 为空 (path={file_path})"
+                    )
                     continue
                 # 使用 attachment_id 作为文件名
                 ext = os.path.splitext(file_path)[1]
