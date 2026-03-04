@@ -9,6 +9,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
+from typing import BinaryIO
 
 import aiohttp
 import certifi
@@ -18,6 +19,8 @@ from PIL import Image
 from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_temp_path
 
 logger = logging.getLogger("astrbot")
+_DOWNLOAD_READ_CHUNK_SIZE = 64 * 1024
+_DOWNLOAD_FLUSH_THRESHOLD = 256 * 1024
 
 
 def on_error(func, path, exc_info) -> None:
@@ -134,29 +137,18 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
                 if resp.status != 200:
                     raise Exception(f"下载文件失败: {resp.status}")
                 total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
                     print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
                 file_obj = await asyncio.to_thread(Path(path).open, "wb")
                 try:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        await asyncio.to_thread(file_obj.write, chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = (
-                                time.time() - start_time
-                                if time.time() - start_time > 0
-                                else 1
-                            )
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    await _stream_to_file(
+                        resp.content,
+                        file_obj,
+                        total_size=total_size,
+                        start_time=start_time,
+                        show_progress=show_progress,
+                    )
                 finally:
                     await asyncio.to_thread(file_obj.close)
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
@@ -176,29 +168,71 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
                 total_size = int(resp.headers.get("content-length", 0))
-                downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
                     print(f"文件大小: {total_size / 1024:.2f} KB | 文件地址: {url}")
                 file_obj = await asyncio.to_thread(Path(path).open, "wb")
                 try:
-                    while True:
-                        chunk = await resp.content.read(8192)
-                        if not chunk:
-                            break
-                        await asyncio.to_thread(file_obj.write, chunk)
-                        downloaded_size += len(chunk)
-                        if show_progress:
-                            elapsed_time = time.time() - start_time
-                            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-                            print(
-                                f"\r下载进度: {downloaded_size / total_size:.2%} 速度: {speed:.2f} KB/s",
-                                end="",
-                            )
+                    await _stream_to_file(
+                        resp.content,
+                        file_obj,
+                        total_size=total_size,
+                        start_time=start_time,
+                        show_progress=show_progress,
+                    )
                 finally:
                     await asyncio.to_thread(file_obj.close)
     if show_progress:
         print()
+
+
+async def _stream_to_file(
+    stream: aiohttp.StreamReader,
+    file_obj: BinaryIO,
+    *,
+    total_size: int,
+    start_time: float,
+    show_progress: bool,
+) -> None:
+    """Stream HTTP response into file with buffered thread-offloaded writes."""
+    downloaded_size = 0
+    known_total = total_size if total_size > 0 else None
+    buffered = bytearray()
+
+    try:
+        while True:
+            chunk = await stream.read(_DOWNLOAD_READ_CHUNK_SIZE)
+            if not chunk:
+                break
+
+            buffered.extend(chunk)
+            downloaded_size += len(chunk)
+
+            if len(buffered) >= _DOWNLOAD_FLUSH_THRESHOLD:
+                await asyncio.to_thread(file_obj.write, bytes(buffered))
+                buffered.clear()
+
+            if show_progress:
+                _print_download_progress(downloaded_size, known_total, start_time)
+    finally:
+        if buffered:
+            # Ensure buffered data is flushed even on cancellation.
+            await asyncio.shield(asyncio.to_thread(file_obj.write, bytes(buffered)))
+
+
+def _print_download_progress(
+    downloaded_size: int, total_size: int | None, start_time: float
+) -> None:
+    elapsed_time = max(time.time() - start_time, 1e-6)
+    speed = downloaded_size / 1024 / elapsed_time  # KB/s
+
+    if total_size:
+        percent = downloaded_size / total_size
+        msg = f"\r下载进度: {percent:.2%} 速度: {speed:.2f} KB/s"
+    else:
+        msg = f"\r已下载: {downloaded_size} 字节 速度: {speed:.2f} KB/s"
+
+    print(msg, end="")
 
 
 async def file_to_base64(file_path: str) -> str:

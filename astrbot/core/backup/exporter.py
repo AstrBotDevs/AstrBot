@@ -161,10 +161,10 @@ class AstrBotExporter:
                 # 3. 导出配置文件
                 if progress_callback:
                     await progress_callback("config", 0, 100, "正在导出配置文件...")
-                if await asyncio.to_thread(os.path.exists, self.config_path):
-                    config_content = await asyncio.to_thread(
-                        Path(self.config_path).read_text, encoding="utf-8"
-                    )
+                config_content = await asyncio.to_thread(
+                    self._read_text_if_exists, self.config_path
+                )
+                if config_content is not None:
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
                 if progress_callback:
@@ -361,17 +361,44 @@ class AstrBotExporter:
         self, zf: zipfile.ZipFile, attachments: list[dict]
     ) -> None:
         """导出附件文件"""
+        await asyncio.to_thread(self._export_attachments_sync, zf, attachments)
+
+    def _export_attachments_sync(
+        self, zf: zipfile.ZipFile, attachments: list[dict]
+    ) -> None:
+        """在单个线程中批量导出附件，减少高频线程切换。"""
         for attachment in attachments:
+            file_path = attachment.get("path", "")
+            attachment_id = attachment.get("attachment_id")
             try:
-                file_path = attachment.get("path", "")
-                if file_path and await asyncio.to_thread(os.path.exists, file_path):
-                    # 使用 attachment_id 作为文件名
-                    attachment_id = attachment.get("attachment_id", "")
-                    ext = os.path.splitext(file_path)[1]
-                    archive_path = f"files/attachments/{attachment_id}{ext}"
-                    zf.write(file_path, archive_path)
+                if not file_path:
+                    continue
+                if not attachment_id:
+                    logger.warning(
+                        f"跳过附件导出：attachment_id 为空 (path={file_path})"
+                    )
+                    continue
+                # 使用 attachment_id 作为文件名
+                ext = os.path.splitext(file_path)[1]
+                archive_path = f"files/attachments/{attachment_id}{ext}"
+                zf.write(file_path, archive_path)
+            except FileNotFoundError:
+                # 和旧逻辑保持一致：缺失文件直接跳过。
+                continue
+            except OSError as e:
+                logger.warning(
+                    f"导出附件失败 (path={file_path}, attachment_id={attachment_id or 'unknown'}): {e}"
+                )
             except Exception as e:
-                logger.warning(f"导出附件失败: {e}")
+                logger.warning(
+                    f"导出附件时发生非预期错误，已跳过 (path={file_path}, attachment_id={attachment_id or 'unknown'}): {e}"
+                )
+
+    def _read_text_if_exists(self, file_path: str) -> str | None:
+        """Read text file when it exists in a single synchronous call."""
+        if not os.path.exists(file_path):
+            return None
+        return Path(file_path).read_text(encoding="utf-8")
 
     def _model_to_dict(self, record: Any) -> dict:
         """将 SQLModel 实例转换为字典
