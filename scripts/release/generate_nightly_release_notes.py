@@ -7,6 +7,8 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
+from astrbot.core.release_constants import NIGHTLY_TAG
+
 
 def _run_git(*args: str) -> str:
     try:
@@ -54,7 +56,7 @@ def _classify(subject: str) -> str:
 def _write_fallback(output_path: Path) -> None:
     short_sha = _run_git("rev-parse", "--short=8", "HEAD")
     output_path.write_text(
-        f"## What's Changed\n\n- Nightly build from `{short_sha}`\n",
+        f"## What's Changed\n\n- {NIGHTLY_TAG.capitalize()} build from `{short_sha}`\n",
         encoding="utf-8",
     )
 
@@ -85,7 +87,13 @@ def generate_notes(base_tag: str, repo: str, output_path: Path) -> None:
     with output_path.open("w", encoding="utf-8") as file:
         file.write("## What's Changed\n\n")
         file.write(f"- Baseline tag: `{base_tag}`\n")
-        file.write(f"- Nightly commit: `{nightly_commit}`\n\n")
+        file.write(f"- {NIGHTLY_TAG.capitalize()} commit: `{nightly_commit}`\n")
+
+        if not any(sections.values()):
+            file.write(f"- No changes since `{base_tag}`\n\n")
+            return
+
+        file.write("\n")
         for title in ("新增", "修复", "优化", "其他"):
             items = sections.get(title, [])
             if not items:

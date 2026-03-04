@@ -20,6 +20,9 @@ on:
 permissions:
   contents: write
 
+env:
+  NIGHTLY_TAG: nightly
+
 jobs:
   resolve-release-context:
     name: Resolve Release Context
@@ -44,7 +47,7 @@ jobs:
             default_branch="master"
           fi
 
-          if [ "$event_name" = "schedule" ] || { [ "$event_name" = "workflow_dispatch" ] && [ "$input_tag" = "nightly" ]; }; then
+          if [ "$event_name" = "schedule" ] || { [ "$event_name" = "workflow_dispatch" ] && [ "$input_tag" = "$NIGHTLY_TAG" ]; }; then
             ref="refs/heads/${default_branch}"
           elif [ -n "$input_ref" ]; then
             ref="$input_ref"
@@ -71,7 +74,7 @@ jobs:
           fi
 
           if [ "$event_name" = "schedule" ]; then
-            tag="nightly"
+            tag="$NIGHTLY_TAG"
           elif [ "$event_name" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
           elif [ -n "$dispatch_tag" ]; then
@@ -159,7 +162,7 @@ jobs:
           path: dashboard/AstrBot-${{ needs.resolve-release-context.outputs.tag }}-dashboard.zip
 
       - name: Upload dashboard package to Cloudflare R2
-        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' && needs.resolve-release-context.outputs.tag != 'nightly' }}
+        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' && needs.resolve-release-context.outputs.tag != env.NIGHTLY_TAG }}
         env:
           R2_BUCKET_NAME: "astrbot"
           R2_OBJECT_NAME: "astrbot-webui-latest.zip"
@@ -188,8 +191,8 @@ jobs:
     name: Publish GitHub Release
     runs-on: ubuntu-24.04
     concurrency:
-      group: ${{ needs.resolve-release-context.outputs.tag == 'nightly' && 'nightly-release' || format('release-{0}', needs.resolve-release-context.outputs.tag) }}
-      cancel-in-progress: ${{ needs.resolve-release-context.outputs.tag == 'nightly' }}
+      group: ${{ needs.resolve-release-context.outputs.tag == env.NIGHTLY_TAG && 'nightly-release' || format('release-{0}', needs.resolve-release-context.outputs.tag) }}
+      cancel-in-progress: ${{ needs.resolve-release-context.outputs.tag == env.NIGHTLY_TAG }}
     needs:
       - resolve-release-context
       - verify-core
@@ -206,7 +209,7 @@ jobs:
         shell: bash
         run: |
           tag="${{ needs.resolve-release-context.outputs.tag }}"
-          if [ "$tag" = "nightly" ]; then
+          if [ "$tag" = "$NIGHTLY_TAG" ]; then
             if ! short_sha="$(git rev-parse --short=8 HEAD 2>/tmp/git_rev_parse_error.log)"; then
               echo "Failed to resolve HEAD short SHA for nightly title." >&2
               cat /tmp/git_rev_parse_error.log >&2 || true
@@ -216,7 +219,7 @@ jobs:
             if [ -z "$base_version" ]; then
               base_version="v0.0.0"
             fi
-            title="${base_version}-nightly-${short_sha}"
+            title="${base_version}-${NIGHTLY_TAG}-${short_sha}"
           else
             base_version="$tag"
             title="$tag"
@@ -225,7 +228,7 @@ jobs:
           echo "base_version=$base_version" >> "$GITHUB_OUTPUT"
 
       - name: Force-update nightly tag
-        if: ${{ needs.resolve-release-context.outputs.tag == 'nightly' }}
+        if: ${{ needs.resolve-release-context.outputs.tag == env.NIGHTLY_TAG }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -235,8 +238,8 @@ jobs:
             cat /tmp/git_rev_parse_error.log >&2 || true
             exit 1
           fi
-          git tag -f nightly "${current_sha}"
-          git push --force origin refs/tags/nightly
+          git tag -f "$NIGHTLY_TAG" "${current_sha}"
+          git push --force origin "refs/tags/${NIGHTLY_TAG}"
 
       - name: Download dashboard artifact
         uses: actions/download-artifact@v8
@@ -250,7 +253,7 @@ jobs:
         shell: bash
         run: |
           tag="${{ needs.resolve-release-context.outputs.tag }}"
-          if [ "$tag" = "nightly" ]; then
+          if [ "$tag" = "$NIGHTLY_TAG" ]; then
             note_file="$(mktemp)"
             python3 scripts/release/generate_nightly_release_notes.py \
               --base-tag "${{ steps.release-meta.outputs.base_version }}" \
@@ -272,14 +275,14 @@ jobs:
         run: |
           tag="${{ needs.resolve-release-context.outputs.tag }}"
           title="${{ steps.release-meta.outputs.title }}"
-          if [ "$tag" = "nightly" ]; then
+          if [ "$tag" = "$NIGHTLY_TAG" ]; then
             pre_flag="--prerelease"
           else
             pre_flag=""
           fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$title" --notes-file "${{ steps.notes.outputs.file }}" $pre_flag
-          elif [ "$tag" = "nightly" ]; then
+          elif [ "$tag" = "$NIGHTLY_TAG" ]; then
             gh release edit "$tag" --title "$title" --notes-file "${{ steps.notes.outputs.file }}" --prerelease
           fi
 
@@ -307,7 +310,7 @@ jobs:
 
   publish-pypi:
     name: Publish PyPI
-    if: ${{ needs.resolve-release-context.outputs.tag != 'nightly' }}
+    if: ${{ needs.resolve-release-context.outputs.tag != env.NIGHTLY_TAG }}
     runs-on: ubuntu-24.04
     needs:
       - resolve-release-context

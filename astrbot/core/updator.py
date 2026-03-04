@@ -8,10 +8,16 @@ import psutil
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.release_constants import NIGHTLY_TAG
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import download_file
 
-from .zip_updator import FetchReleaseError, ReleaseInfo, RepoZipUpdator
+from .zip_updator import (
+    PRERELEASE_TAG_REGEX,
+    FetchReleaseError,
+    ReleaseInfo,
+    RepoZipUpdator,
+)
 
 
 class AstrBotUpdator(RepoZipUpdator):
@@ -27,7 +33,7 @@ class AstrBotUpdator(RepoZipUpdator):
         self.GITHUB_RELEASE_API = (
             "https://api.github.com/repos/AstrBotDevs/AstrBot/releases"
         )
-        self.NIGHTLY_TAG = "nightly"
+        self.NIGHTLY_TAG = NIGHTLY_TAG
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
@@ -200,7 +206,9 @@ class AstrBotUpdator(RepoZipUpdator):
             (
                 item
                 for item in releases
-                if item.get("tag_name", "").lower() != self.NIGHTLY_TAG
+                if (tag := item.get("tag_name", ""))
+                and tag.lower() != self.NIGHTLY_TAG
+                and not PRERELEASE_TAG_REGEX.search(tag)
             ),
             None,
         )
