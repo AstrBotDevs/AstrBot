@@ -11,7 +11,7 @@ class FileTokenService:
 
     def __init__(self, default_timeout: float = 300) -> None:
         self.lock = asyncio.Lock()
-        self.staged_files = {}  # token: (file_path, expire_time)
+        self.staged_files = {}  # token: (file_path, expire_time, single_use)
         self.default_timeout = default_timeout
 
     async def _cleanup_expired_tokens(self) -> None:
@@ -28,7 +28,13 @@ class FileTokenService:
             await self._cleanup_expired_tokens()
             return file_token not in self.staged_files
 
-    async def register_file(self, file_path: str, timeout: float | None = None) -> str:
+    async def register_file(
+        self,
+        file_path: str,
+        timeout_seconds: float | None = None,
+        single_use: bool = True,
+        **kwargs,
+    ) -> str:
         """向令牌服务注册一个文件。
 
         Args:
@@ -64,16 +70,19 @@ class FileTokenService:
                     f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
 
+            if timeout_seconds is None and "timeout" in kwargs:
+                timeout_seconds = kwargs["timeout"]
+
             file_token = str(uuid.uuid4())
             expire_time = time.time() + (
-                timeout if timeout is not None else self.default_timeout
+                timeout_seconds if timeout_seconds is not None else self.default_timeout
             )
             # 存储转换后的真实路径
-            self.staged_files[file_token] = (local_path, expire_time)
+            self.staged_files[file_token] = (local_path, expire_time, single_use)
             return file_token
 
     async def handle_file(self, file_token: str) -> str:
-        """根据令牌获取文件路径，使用后令牌失效。
+        """根据令牌获取文件路径。
 
         Args:
             file_token(str): 注册时返回的令牌
@@ -92,7 +101,16 @@ class FileTokenService:
             if file_token not in self.staged_files:
                 raise KeyError(f"无效或过期的文件 token: {file_token}")
 
-            file_path, _ = self.staged_files.pop(file_token)
-            if not os.path.exists(file_path):
+            token_payload = self.staged_files[file_token]
+            if len(token_payload) == 2:
+                # Backward compatibility for in-memory payload created before single_use was introduced.
+                file_path, _ = token_payload
+                single_use = True
+            else:
+                file_path, _, single_use = token_payload
+
+            if single_use:
+                self.staged_files.pop(file_token, None)
+            if not await asyncio.to_thread(os.path.exists, file_path):
                 raise FileNotFoundError(f"文件不存在: {file_path}")
             return file_path
