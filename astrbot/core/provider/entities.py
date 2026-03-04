@@ -70,11 +70,7 @@ class ToolCallsResult:
     """函数调用的结果"""
 
     def to_openai_messages(self) -> list[dict]:
-        ret = [
-            self.tool_calls_info.model_dump(),
-            *[item.model_dump() for item in self.tool_calls_result],
-        ]
-        return ret
+        return [item.model_dump() for item in self.to_openai_messages_model()]
 
     def to_openai_messages_model(
         self,
@@ -367,27 +363,17 @@ class LLMResponse:
         else:
             self._completion_text = value
 
-    def to_openai_tool_calls(self) -> list[dict]:
+    def to_openai_tool_calls(self) -> list[dict] | None:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
-        ret = []
-        for idx, tool_call_arg in enumerate(self.tools_call_args):
-            payload = {
-                "id": self.tools_call_ids[idx],
-                "function": {
-                    "name": self.tools_call_name[idx],
-                    "arguments": json.dumps(tool_call_arg),
-                },
-                "type": "function",
-            }
-            if self.tools_call_extra_content.get(self.tools_call_ids[idx]):
-                payload["extra_content"] = self.tools_call_extra_content[
-                    self.tools_call_ids[idx]
-                ]
-            ret.append(payload)
-        return ret
+        res = self.to_openai_to_calls_model()
+        if res is None:
+            return None
+        return [tc.model_dump() for tc in res]
 
-    def to_openai_to_calls_model(self) -> list[ToolCall]:
+    def to_openai_to_calls_model(self) -> list[ToolCall] | None:
         """The same as to_openai_tool_calls but return pydantic model."""
+        if not self.tools_call_args:
+            return None
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
             ret.append(
