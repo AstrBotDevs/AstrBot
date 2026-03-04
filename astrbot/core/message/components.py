@@ -183,14 +183,14 @@ class Record(BaseMessageComponent):
         if not self.file:
             raise Exception(f"not a valid file: {self.file}")
         if self.file.startswith("file:///"):
-            bs64_data = file_to_base64(self.file[8:])
+            bs64_data = await file_to_base64(self.file[8:])
         elif self.file.startswith("http"):
             file_path = await download_image_by_url(self.file)
-            bs64_data = file_to_base64(file_path)
+            bs64_data = await file_to_base64(file_path)
         elif self.file.startswith("base64://"):
             bs64_data = self.file
         elif await asyncio.to_thread(os.path.exists, self.file):
-            bs64_data = file_to_base64(self.file)
+            bs64_data = await file_to_base64(self.file)
         else:
             raise Exception(f"not a valid file: {self.file}")
         bs64_data = bs64_data.removeprefix("base64://")
@@ -474,14 +474,14 @@ class Image(BaseMessageComponent):
         if not url:
             raise ValueError("No valid file or URL provided")
         if url.startswith("file:///"):
-            bs64_data = file_to_base64(url[8:])
+            bs64_data = await file_to_base64(url[8:])
         elif url.startswith("http"):
             image_file_path = await download_image_by_url(url)
-            bs64_data = file_to_base64(image_file_path)
+            bs64_data = await file_to_base64(image_file_path)
         elif url.startswith("base64://"):
             bs64_data = url
         elif await asyncio.to_thread(os.path.exists, url):
-            bs64_data = file_to_base64(url)
+            bs64_data = await file_to_base64(url)
         else:
             raise Exception(f"not a valid file: {url}")
         bs64_data = bs64_data.removeprefix("base64://")

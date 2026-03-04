@@ -201,8 +201,8 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
         print()
 
 
-def file_to_base64(file_path: str) -> str:
-    data_bytes = Path(file_path).read_bytes()
+async def file_to_base64(file_path: str) -> str:
+    data_bytes = await asyncio.to_thread(Path(file_path).read_bytes)
     base64_str = base64.b64encode(data_bytes).decode()
     return "base64://" + base64_str
 
