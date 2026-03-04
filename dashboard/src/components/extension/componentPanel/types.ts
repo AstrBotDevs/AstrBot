@@ -94,10 +94,11 @@ export interface ToolItem {
   name: string;
   description: string;
   active: boolean;
+  is_system?: boolean;
+  toggleable?: boolean;
   parameters?: {
     properties?: Record<string, ToolParameter>;
   };
   origin?: string;
   origin_name?: string;
 }
-

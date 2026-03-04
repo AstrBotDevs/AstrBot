@@ -1,4 +1,5 @@
 import traceback
+from typing import Any
 
 from quart import request
 
@@ -10,6 +11,17 @@ from astrbot.core.star import star_map
 from .route import Response, Route, RouteContext
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
+_TRUE_VALUES = {"1", "true", "yes", "on", "y"}
+
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in _TRUE_VALUES
+    return bool(value)
 
 
 class ToolsRoute(Route):
@@ -32,6 +44,77 @@ class ToolsRoute(Route):
         }
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
+
+    def _serialize_tool(
+        self,
+        tool,
+        *,
+        active: bool | None = None,
+        origin_override: str | None = None,
+        origin_name_override: str | None = None,
+        is_system_override: bool | None = None,
+        core_system_tool_names: set[str] | None = None,
+        toggleable: bool = True,
+    ) -> dict:
+        star = None
+        handler_module_path = getattr(tool, "handler_module_path", None)
+        core_names = core_system_tool_names or set()
+        is_core_handler = not handler_module_path or str(
+            handler_module_path
+        ).startswith("astrbot.core.")
+        is_core_tool = tool.name in core_names and is_core_handler
+
+        if origin_override is not None and origin_name_override is not None:
+            origin = origin_override
+            origin_name = origin_name_override
+        elif isinstance(tool, MCPTool):
+            origin = "mcp"
+            origin_name = getattr(tool, "mcp_server_name", "unknown") or "unknown"
+        elif handler_module_path and star_map.get(handler_module_path):
+            star = star_map[handler_module_path]
+            origin = "plugin"
+            origin_name = star.name
+        elif is_core_tool:
+            origin = "system"
+            origin_name = "AstrBot Core"
+        else:
+            origin = "unknown"
+            origin_name = "unknown"
+
+        if is_system_override is not None:
+            is_system = is_system_override
+        else:
+            is_system = origin == "system"
+
+        return {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+            "active": tool.active if active is None else active,
+            "origin": origin,
+            "origin_name": origin_name,
+            "is_system": is_system,
+            "toggleable": toggleable,
+        }
+
+    @staticmethod
+    def _get_core_system_tool_candidates() -> list:
+        """Gather built-in core tools for optional display in the dashboard."""
+        try:
+            from astrbot.core import astr_main_agent_resources
+            from astrbot.core.tools import cron_tools
+        except Exception:
+            return []
+
+        tools = []
+        for module in (astr_main_agent_resources, cron_tools):
+            for name, value in vars(module).items():
+                if not name.endswith("_TOOL"):
+                    continue
+                if not hasattr(value, "name") or not hasattr(value, "parameters"):
+                    continue
+                tools.append(value)
+        return tools
 
     async def get_mcp_servers(self):
         try:
@@ -321,31 +404,44 @@ class ToolsRoute(Route):
     async def get_tool_list(self):
         """获取所有注册的工具列表"""
         try:
+            include_system_tools = _to_bool(
+                request.args.get("include_system_tools"),
+                default=False,
+            )
             tools = self.tool_mgr.func_list
             tools_dict = []
+            existing_tool_names = set()
+            core_system_tool_candidates = self._get_core_system_tool_candidates()
+            core_system_tool_names = {
+                getattr(tool, "name")
+                for tool in core_system_tool_candidates
+                if getattr(tool, "name", None)
+            }
             for tool in tools:
-                if isinstance(tool, MCPTool):
-                    origin = "mcp"
-                    origin_name = tool.mcp_server_name
-                elif tool.handler_module_path and star_map.get(
-                    tool.handler_module_path
-                ):
-                    star = star_map[tool.handler_module_path]
-                    origin = "plugin"
-                    origin_name = star.name
-                else:
-                    origin = "unknown"
-                    origin_name = "unknown"
-
-                tool_info = {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters,
-                    "active": tool.active,
-                    "origin": origin,
-                    "origin_name": origin_name,
-                }
+                tool_info = self._serialize_tool(
+                    tool,
+                    core_system_tool_names=core_system_tool_names,
+                    toggleable=True,
+                )
                 tools_dict.append(tool_info)
+                existing_tool_names.add(tool_info["name"])
+
+            if include_system_tools:
+                for tool in core_system_tool_candidates:
+                    name = getattr(tool, "name", None)
+                    if not name or name in existing_tool_names:
+                        continue
+                    tools_dict.append(
+                        self._serialize_tool(
+                            tool,
+                            active=False,
+                            origin_override="system",
+                            origin_name_override="AstrBot Core",
+                            is_system_override=True,
+                            toggleable=False,
+                        )
+                    )
+                    existing_tool_names.add(name)
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())

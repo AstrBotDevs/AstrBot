@@ -31,13 +31,18 @@
   "functionTools": {
     "title": "Function Tools",
     "buttons": {
-      "view": "View Tools"
+      "view": "View Tools",
+      "showSystemTools": "Show System Tools",
+      "hideSystemTools": "Hide System Tools"
     },
     "search": "Search function tools",
     "empty": "No function tools available",
     "description": "Function Description",
     "parameters": "Parameter List",
     "noParameters": "This tool has no parameters",
+    "status": {
+      "notConfigurable": "Not configurable"
+    },
     "table": {
       "paramName": "Parameter Name",
       "type": "Type",
