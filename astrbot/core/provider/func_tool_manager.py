@@ -397,14 +397,10 @@ class FunctionToolManager:
             "mcpServers"
         ]
 
-        init_timeout_value = (
-            self._init_timeout_default
-            if init_timeout is None
-            else _resolve_timeout(
-                timeout=init_timeout,
-                env_name=MCP_INIT_TIMEOUT_ENV,
-                default=self._init_timeout_default,
-            )
+        init_timeout_value = _resolve_timeout(
+            timeout=init_timeout,
+            env_name=MCP_INIT_TIMEOUT_ENV,
+            default=self._init_timeout_default,
         )
         timeout_display = f"{init_timeout_value:g}"
 
