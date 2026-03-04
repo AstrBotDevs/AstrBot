@@ -26,6 +26,7 @@ from aiohttp import web
 from astrbot.core.backup.exporter import AstrBotExporter
 from astrbot.core.message.components import File, Image, Record
 from astrbot.core.utils.io import download_file, file_to_base64
+from tests.fixtures.helpers import get_bound_tcp_port
 
 
 @dataclass(slots=True)
@@ -155,9 +156,7 @@ async def test_core_performance_benchmarks(tmp_path: Path) -> None:
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
-    sockets = site._server.sockets  # noqa: SLF001
-    assert sockets
-    port = sockets[0].getsockname()[1]
+    port = get_bound_tcp_port(site)
     download_url = f"http://127.0.0.1:{port}/download.bin"
 
     async def bench_file_to_base64() -> None:

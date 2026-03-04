@@ -2,6 +2,7 @@ from aiohttp import web
 import pytest
 
 from astrbot.core.utils.io import download_file
+from tests.fixtures.helpers import get_bound_tcp_port
 
 
 @pytest.mark.asyncio
@@ -19,9 +20,7 @@ async def test_download_file_downloads_content(tmp_path):
     await site.start()
 
     try:
-        sockets = site._server.sockets  # noqa: SLF001
-        assert sockets
-        port = sockets[0].getsockname()[1]
+        port = get_bound_tcp_port(site)
         url = f"http://127.0.0.1:{port}/file.bin"
 
         out = tmp_path / "downloaded.bin"

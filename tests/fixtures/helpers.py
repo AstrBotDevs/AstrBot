@@ -7,6 +7,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 from unittest.mock import AsyncMock, MagicMock
 
 from astrbot.core.message.components import BaseMessageComponent
@@ -22,6 +23,20 @@ class NoopAwaitable:
         if False:
             yield
         return None
+
+
+def get_bound_tcp_port(site: Any) -> int:
+    """Resolve bound aiohttp TCP site port with public API first."""
+    parsed = urlparse(getattr(site, "name", ""))
+    if parsed.port is not None and parsed.port > 0:
+        return parsed.port
+
+    server = getattr(site, "_server", None)
+    sockets = getattr(server, "sockets", None) if server else None
+    if sockets:
+        return sockets[0].getsockname()[1]
+
+    raise RuntimeError("Unable to resolve bound TCP port from aiohttp site")
 
 
 # ============================================================

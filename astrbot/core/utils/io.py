@@ -191,43 +191,35 @@ async def _stream_to_file(
     total_size: int,
     start_time: float,
     show_progress: bool,
-    chunk_size: int = 8192,
-    flush_threshold: int = 256 * 1024,
 ) -> None:
-    """Stream HTTP response into file with buffered thread-offloaded writes."""
+    """Stream HTTP response into file with thread-offloaded writes."""
     downloaded_size = 0
-    buffered = bytearray()
-    progress_total = total_size if total_size > 0 else None
+    known_total = total_size if total_size > 0 else None
 
     while True:
-        chunk = await stream.read(chunk_size)
+        chunk = await stream.read(8192)
         if not chunk:
             break
-        buffered.extend(chunk)
+        await asyncio.to_thread(file_obj.write, chunk)
+
         downloaded_size += len(chunk)
-
-        if len(buffered) >= flush_threshold:
-            chunk_to_write = bytes(buffered)
-            buffered.clear()
-            await asyncio.to_thread(file_obj.write, chunk_to_write)
-
         if show_progress:
-            elapsed_time = max(time.time() - start_time, 1e-6)
-            speed = downloaded_size / 1024 / elapsed_time  # KB/s
-            if progress_total:
-                percent = downloaded_size / progress_total
-                print(
-                    f"\r下载进度: {percent:.2%} 速度: {speed:.2f} KB/s",
-                    end="",
-                )
-            else:
-                print(
-                    f"\r已下载: {downloaded_size} 字节 速度: {speed:.2f} KB/s",
-                    end="",
-                )
+            _print_download_progress(downloaded_size, known_total, start_time)
 
-    if buffered:
-        await asyncio.to_thread(file_obj.write, bytes(buffered))
+
+def _print_download_progress(
+    downloaded_size: int, total_size: int | None, start_time: float
+) -> None:
+    elapsed_time = max(time.time() - start_time, 1e-6)
+    speed = downloaded_size / 1024 / elapsed_time  # KB/s
+
+    if total_size:
+        percent = downloaded_size / total_size
+        msg = f"\r下载进度: {percent:.2%} 速度: {speed:.2f} KB/s"
+    else:
+        msg = f"\r已下载: {downloaded_size} 字节 速度: {speed:.2f} KB/s"
+
+    print(msg, end="")
 
 
 async def file_to_base64(file_path: str) -> str:
