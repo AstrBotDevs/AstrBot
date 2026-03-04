@@ -87,7 +87,7 @@ astrbot
 
 對於熟悉容器、希望獲得更穩定且更適合正式環境部署方式的使用者，我們推薦使用 Docker / Docker Compose 部署 AstrBot。
 
-請參考官方文件 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)
+請參考官方文件 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
 ### 在雨雲上部署
 
@@ -115,7 +115,7 @@ Replit 部署由社群維護，適合線上示範與輕量試用情境。
 
 ### AUR
 
-AUR 方式面向 Arch Linux 使用者，適合希望透過系統套件管理器安裝 AstrBot 的場景，部署難易度：低。
+AUR 方式面向 Arch Linux 使用者，適合希望透過系統套件管理器安裝 AstrBot 的場景。
 
 在終端執行下方命令安裝 `astrbot-git` 套件，安裝完成後即可啟動使用。
 

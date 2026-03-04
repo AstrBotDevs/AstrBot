@@ -87,7 +87,7 @@ astrbot
 
 For users familiar with containers and looking for a more stable, production-ready deployment method, we recommend deploying AstrBot with Docker / Docker Compose.
 
-Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)
+Please refer to the official documentation: [Deploy AstrBot with Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
 ### Deploy on RainYun
 
@@ -115,7 +115,7 @@ Replit deployment is maintained by the community and is suitable for online demo
 
 ### AUR
 
-AUR deployment targets Arch Linux users who prefer installing AstrBot through the system package workflow. Deployment difficulty: Easy.
+AUR deployment targets Arch Linux users who prefer installing AstrBot through the system package workflow.
 
 Run the command below to install `astrbot-git`, then start AstrBot in your local environment.
 
