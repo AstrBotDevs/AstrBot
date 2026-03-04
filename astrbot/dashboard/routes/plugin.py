@@ -6,6 +6,7 @@ import ssl
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import aiohttp
 import certifi
@@ -738,19 +739,20 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await asyncio.to_thread(os.path.isdir, plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
         readme_path = os.path.join(plugin_dir, "README.md")
 
-        if not os.path.isfile(readme_path):
+        if not await asyncio.to_thread(os.path.isfile, readme_path):
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, encoding="utf-8") as f:
-                readme_content = f.read()
+            readme_content = await asyncio.to_thread(
+                Path(readme_path).read_text, encoding="utf-8"
+            )
 
             return (
                 Response()
@@ -799,7 +801,7 @@ class PluginRoute(Route):
                 plugin_obj.root_dir_name,
             )
 
-        if not os.path.isdir(plugin_dir):
+        if not await asyncio.to_thread(os.path.isdir, plugin_dir):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
@@ -807,10 +809,11 @@ class PluginRoute(Route):
         changelog_names = ["CHANGELOG.md", "changelog.md", "CHANGELOG", "changelog"]
         for name in changelog_names:
             changelog_path = os.path.join(plugin_dir, name)
-            if os.path.isfile(changelog_path):
+            if await asyncio.to_thread(os.path.isfile, changelog_path):
                 try:
-                    with open(changelog_path, encoding="utf-8") as f:
-                        changelog_content = f.read()
+                    changelog_content = await asyncio.to_thread(
+                        Path(changelog_path).read_text, encoding="utf-8"
+                    )
                     return (
                         Response()
                         .ok({"content": changelog_content}, "成功获取更新日志")

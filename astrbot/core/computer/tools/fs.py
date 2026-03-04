@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -111,10 +112,10 @@ class FileUploadTool(FunctionTool):
         )
         try:
             # Check if file exists
-            if not os.path.exists(local_path):
+            if not await asyncio.to_thread(os.path.exists, local_path):
                 return f"Error: File does not exist: {local_path}"
 
-            if not os.path.isfile(local_path):
+            if not await asyncio.to_thread(os.path.isfile, local_path):
                 return f"Error: Path is not a file: {local_path}"
 
             # Use basename if sandbox_filename is not provided

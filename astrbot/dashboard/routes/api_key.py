@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from quart import g, request
 
@@ -59,7 +59,7 @@ class ApiKeyRoute(Route):
             "expires_at": ApiKeyRoute._serialize_datetime(key.expires_at),
             "revoked_at": ApiKeyRoute._serialize_datetime(key.revoked_at),
             "is_revoked": key.revoked_at is not None,
-            "is_expired": bool(expires_at and expires_at < datetime.now(timezone.utc)),
+            "is_expired": bool(expires_at and expires_at < datetime.now(UTC)),
         }
 
     async def list_api_keys(self):
@@ -98,9 +98,7 @@ class ApiKeyRoute(Route):
                 return (
                     Response().error("expires_in_days must be greater than 0").__dict__
                 )
-            expires_at = datetime.now(timezone.utc) + timedelta(
-                days=expires_in_days_int
-            )
+            expires_at = datetime.now(UTC) + timedelta(days=expires_in_days_int)
 
         raw_key = f"abk_{secrets.token_urlsafe(32)}"
         key_hash = self._hash_key(raw_key)

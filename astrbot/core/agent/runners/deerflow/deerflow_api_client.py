@@ -139,7 +139,7 @@ class DeerFlowAPIClient:
     ) -> None:
         await self.close()
 
-    async def create_thread(self, timeout: float = 20) -> dict[str, Any]:
+    async def create_thread(self, timeout_seconds: float = 20) -> dict[str, Any]:
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads"
         payload = {"metadata": {}}
@@ -147,7 +147,7 @@ class DeerFlowAPIClient:
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=timeout_seconds,
             proxy=self.proxy,
         ) as resp:
             if resp.status not in (200, 201):
@@ -161,7 +161,7 @@ class DeerFlowAPIClient:
         self,
         thread_id: str,
         payload: dict[str, Any],
-        timeout: float = 120,
+        timeout_seconds: float = 120,
     ) -> AsyncGenerator[dict[str, Any], None]:
         session = self._get_session()
         url = f"{self.api_base}/api/langgraph/threads/{thread_id}/runs/stream"
@@ -183,9 +183,9 @@ class DeerFlowAPIClient:
         # Use socket read timeout so active heartbeats/chunks can keep the stream alive.
         stream_timeout = ClientTimeout(
             total=None,
-            connect=min(timeout, 30),
-            sock_connect=min(timeout, 30),
-            sock_read=timeout,
+            connect=min(timeout_seconds, 30),
+            sock_connect=min(timeout_seconds, 30),
+            sock_read=timeout_seconds,
         )
         async with session.post(
             url,

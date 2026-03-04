@@ -7,7 +7,7 @@ import shutil
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from astrbot.core.utils.astrbot_path import (
@@ -175,7 +175,7 @@ class SkillManager:
 
     def _save_sandbox_skills_cache(self, cache: dict) -> None:
         cache["version"] = _SANDBOX_SKILLS_CACHE_VERSION
-        cache["updated_at"] = datetime.now(timezone.utc).isoformat()
+        cache["updated_at"] = datetime.now(UTC).isoformat()
         with open(self.sandbox_skills_cache_path, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False, indent=2)
 

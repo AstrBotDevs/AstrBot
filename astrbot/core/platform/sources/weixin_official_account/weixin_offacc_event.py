@@ -12,6 +12,13 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 
+def _upload_media_from_path(
+    client: WeChatClient, media_type: str, file_path: str
+) -> dict:
+    with open(file_path, "rb") as f:
+        return client.media.upload(media_type, f)
+
+
 class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
     def __init__(
         self,
@@ -101,24 +108,63 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
 
-                with open(img_path, "rb") as f:
+                try:
+                    response = await asyncio.to_thread(
+                        _upload_media_from_path,
+                        self.client,
+                        "image",
+                        img_path,
+                    )
+                except Exception as e:
+                    logger.error(f"微信公众平台上传图片失败: {e}")
+                    await self.send(
+                        MessageChain().message(f"微信公众平台上传图片失败: {e}"),
+                    )
+                    return
+                logger.debug(f"微信公众平台上传图片返回: {response}")
+
+                if active_send_mode:
+                    self.client.message.send_image(
+                        message_obj.sender.user_id,
+                        response["media_id"],
+                    )
+                else:
+                    reply = ImageReply(
+                        media_id=response["media_id"],
+                        message=cast(dict, self.message_obj.raw_message)["message"],
+                    )
+                    xml = reply.render()
+                    future = cast(dict, self.message_obj.raw_message)["future"]
+                    assert isinstance(future, asyncio.Future)
+                    future.set_result(xml)
+
+            elif isinstance(comp, Record):
+                record_path = await comp.convert_to_file_path()
+                record_path_amr = await convert_audio_to_amr(record_path)
+
+                try:
                     try:
-                        response = self.client.media.upload("image", f)
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "voice",
+                            record_path_amr,
+                        )
                     except Exception as e:
-                        logger.error(f"微信公众平台上传图片失败: {e}")
+                        logger.error(f"微信公众平台上传语音失败: {e}")
                         await self.send(
-                            MessageChain().message(f"微信公众平台上传图片失败: {e}"),
+                            MessageChain().message(f"微信公众平台上传语音失败: {e}"),
                         )
                         return
-                    logger.debug(f"微信公众平台上传图片返回: {response}")
+                    logger.info(f"微信公众平台上传语音返回: {response}")
 
                     if active_send_mode:
-                        self.client.message.send_image(
+                        self.client.message.send_voice(
                             message_obj.sender.user_id,
                             response["media_id"],
                         )
                     else:
-                        reply = ImageReply(
+                        reply = VoiceReply(
                             media_id=response["media_id"],
                             message=cast(dict, self.message_obj.raw_message)["message"],
                         )
@@ -126,44 +172,9 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         future = cast(dict, self.message_obj.raw_message)["future"]
                         assert isinstance(future, asyncio.Future)
                         future.set_result(xml)
-
-            elif isinstance(comp, Record):
-                record_path = await comp.convert_to_file_path()
-                record_path_amr = await convert_audio_to_amr(record_path)
-
-                try:
-                    with open(record_path_amr, "rb") as f:
-                        try:
-                            response = self.client.media.upload("voice", f)
-                        except Exception as e:
-                            logger.error(f"微信公众平台上传语音失败: {e}")
-                            await self.send(
-                                MessageChain().message(
-                                    f"微信公众平台上传语音失败: {e}"
-                                ),
-                            )
-                            return
-                        logger.info(f"微信公众平台上传语音返回: {response}")
-
-                        if active_send_mode:
-                            self.client.message.send_voice(
-                                message_obj.sender.user_id,
-                                response["media_id"],
-                            )
-                        else:
-                            reply = VoiceReply(
-                                media_id=response["media_id"],
-                                message=cast(dict, self.message_obj.raw_message)[
-                                    "message"
-                                ],
-                            )
-                            xml = reply.render()
-                            future = cast(dict, self.message_obj.raw_message)["future"]
-                            assert isinstance(future, asyncio.Future)
-                            future.set_result(xml)
                 finally:
-                    if record_path_amr != record_path and os.path.exists(
-                        record_path_amr
+                    if record_path_amr != record_path and await asyncio.to_thread(
+                        os.path.exists, record_path_amr
                     ):
                         try:
                             os.remove(record_path_amr)

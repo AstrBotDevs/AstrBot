@@ -1,3 +1,4 @@
+import asyncio
 import os
 import re
 import shutil
@@ -182,7 +183,7 @@ class SkillsRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
         finally:
-            if temp_path and os.path.exists(temp_path):
+            if temp_path and await asyncio.to_thread(os.path.exists, temp_path):
                 try:
                     os.remove(temp_path)
                 except Exception:

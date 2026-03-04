@@ -4,11 +4,12 @@
 导出格式为 JSON，这是数据库无关的方案，支持未来向 MySQL/PostgreSQL 迁移。
 """
 
+import asyncio
 import hashlib
 import json
 import os
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -83,7 +84,7 @@ class AstrBotExporter:
             output_dir = get_astrbot_backups_path()
 
         # 确保输出目录存在
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(Path(output_dir).mkdir, parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         zip_filename = f"astrbot_backup_{timestamp}.zip"
@@ -160,9 +161,10 @@ class AstrBotExporter:
                 # 3. 导出配置文件
                 if progress_callback:
                     await progress_callback("config", 0, 100, "正在导出配置文件...")
-                if os.path.exists(self.config_path):
-                    with open(self.config_path, encoding="utf-8") as f:
-                        config_content = f.read()
+                if await asyncio.to_thread(os.path.exists, self.config_path):
+                    config_content = await asyncio.to_thread(
+                        Path(self.config_path).read_text, encoding="utf-8"
+                    )
                     zf.writestr("config/cmd_config.json", config_content)
                     self._add_checksum("config/cmd_config.json", config_content)
                 if progress_callback:
@@ -199,7 +201,7 @@ class AstrBotExporter:
         except Exception as e:
             logger.error(f"备份导出失败: {e}")
             # 清理失败的文件
-            if os.path.exists(zip_path):
+            if await asyncio.to_thread(os.path.exists, zip_path):
                 os.remove(zip_path)
             raise
 
@@ -317,7 +319,7 @@ class AstrBotExporter:
 
         for dir_name, dir_path in backup_directories.items():
             full_path = Path(dir_path)
-            if not full_path.exists():
+            if not await asyncio.to_thread(full_path.exists):
                 logger.debug(f"目录不存在，跳过: {full_path}")
                 continue
 
@@ -362,7 +364,7 @@ class AstrBotExporter:
         for attachment in attachments:
             try:
                 file_path = attachment.get("path", "")
-                if file_path and os.path.exists(file_path):
+                if file_path and await asyncio.to_thread(os.path.exists, file_path):
                     # 使用 attachment_id 作为文件名
                     attachment_id = attachment.get("attachment_id", "")
                     ext = os.path.splitext(file_path)[1]
@@ -446,7 +448,7 @@ class AstrBotExporter:
         manifest = {
             "version": BACKUP_MANIFEST_VERSION,
             "astrbot_version": VERSION,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "origin": "exported",  # 标记备份来源：exported=本实例导出, uploaded=用户上传
             "schema_version": {
                 "main_db": "v4",

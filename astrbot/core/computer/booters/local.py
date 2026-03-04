@@ -59,7 +59,7 @@ class LocalShellComponent(ShellComponent):
         command: str,
         cwd: str | None = None,
         env: dict[str, str] | None = None,
-        timeout: int | None = 30,
+        timeout_seconds: int | None = 30,
         shell: bool = True,
         background: bool = False,
     ) -> dict[str, Any]:
@@ -87,7 +87,7 @@ class LocalShellComponent(ShellComponent):
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
-                timeout=timeout,
+                timeout=timeout_seconds,
                 capture_output=True,
                 text=True,
             )
@@ -106,14 +106,14 @@ class LocalPythonComponent(PythonComponent):
         self,
         code: str,
         kernel_id: str | None = None,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             try:
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
-                    timeout=timeout,
+                    timeout=timeout_seconds,
                     capture_output=True,
                     text=True,
                 )

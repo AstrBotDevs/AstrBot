@@ -729,7 +729,7 @@ class KnowledgeBaseRoute(Route):
                     )
                 finally:
                     # 清理临时文件
-                    if os.path.exists(temp_file_path):
+                    if await asyncio.to_thread(os.path.exists, temp_file_path):
                         os.remove(temp_file_path)
 
             # 获取知识库

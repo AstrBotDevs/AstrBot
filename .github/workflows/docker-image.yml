@@ -25,6 +25,18 @@ jobs:
           fetch-depth: 1
           fetch-tag: true
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.13.0'
+          cache: "pnpm"
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
       - name: Check for new commits today
         if: github.event_name == 'schedule'
         id: check-commits
@@ -46,12 +58,10 @@ jobs:
 
       - name: Build Dashboard
         run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
-          cd ..
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run build
+          mkdir -p dashboard/dist/assets
+          echo $(git rev-parse HEAD) > dashboard/dist/assets/version
           mkdir -p data
           cp -r dashboard/dist data/
 
@@ -123,6 +133,18 @@ jobs:
           fetch-depth: 1
           fetch-tag: true
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.13.0'
+          cache: "pnpm"
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
       - name: Get latest tag (only on manual trigger)
         id: get-latest-tag
         if: github.event_name == 'workflow_dispatch'
@@ -153,12 +175,10 @@ jobs:
 
       - name: Build Dashboard
         run: |
-          cd dashboard
-          npm install
-          npm run build
-          mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
-          cd ..
+          pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run build
+          mkdir -p dashboard/dist/assets
+          echo $(git rev-parse HEAD) > dashboard/dist/assets/version
           mkdir -p data
           cp -r dashboard/dist data/
 

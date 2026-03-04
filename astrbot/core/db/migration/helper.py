@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from astrbot.api import logger, sp
@@ -22,7 +23,7 @@ async def check_migration_needed_v4(db_helper: BaseDatabase) -> bool:
     data_dir = get_astrbot_data_path()
     data_v3_db = os.path.join(data_dir, "data_v3.db")
 
-    if not os.path.exists(data_v3_db):
+    if not await asyncio.to_thread(os.path.exists, data_v3_db):
         return False
     migration_done = await db_helper.get_preference(
         "global",
