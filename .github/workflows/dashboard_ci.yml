@@ -28,6 +28,7 @@ jobs:
       - name: Install and build
         run: |
           pnpm --dir dashboard install --frozen-lockfile
+          pnpm --dir dashboard run typecheck
           pnpm --dir dashboard run build
 
       - name: Inject Commit SHA
