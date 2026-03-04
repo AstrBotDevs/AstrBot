@@ -1,10 +1,7 @@
-import asyncio
 import os
 import sys
 import time
-from json import JSONDecodeError
 
-import aiohttp
 import psutil
 
 from astrbot.core import logger
@@ -156,39 +153,16 @@ class AstrBotUpdator(RepoZipUpdator):
         )
         return await self._with_nightly_release(releases)
 
-    @staticmethod
-    def _is_expected_nightly_fetch_error(exc: BaseException) -> bool:
-        expected_errors = (
-            asyncio.TimeoutError,
-            aiohttp.ClientError,
-            JSONDecodeError,
-            ValueError,
-        )
-        to_check = [exc]
-        checked: set[int] = set()
-        while to_check:
-            current = to_check.pop()
-            if id(current) in checked:
-                continue
-            checked.add(id(current))
-            if isinstance(current, expected_errors):
-                return True
-            if current.__cause__:
-                to_check.append(current.__cause__)
-            if current.__context__:
-                to_check.append(current.__context__)
-        return False
-
     async def _with_nightly_release(self, releases: list) -> list:
+        nightly_release_url = f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}"
         try:
-            nightly_releases = await self.fetch_release_info(
-                f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}",
-            )
+            nightly_releases = await self.fetch_release_info(nightly_release_url)
         except Exception as e:
-            if self._is_expected_nightly_fetch_error(e):
-                logger.warning(f"获取 nightly 发布信息失败（网络/解析错误）: {e}")
-                return releases
-            raise
+            logger.warning(
+                "获取 nightly 发布信息失败，跳过 nightly 合并。"
+                f"url={nightly_release_url}, error_type={type(e).__name__}, detail={e}",
+            )
+            return releases
 
         if nightly_releases and all(
             item.get("tag_name") != self.NIGHTLY_TAG for item in releases
@@ -208,6 +182,7 @@ class AstrBotUpdator(RepoZipUpdator):
         need_releases = latest or is_tag
 
         update_data = []
+        target_version = version_str
         if need_releases:
             update_data = await self.get_releases(latest=latest if latest else False)
             if not update_data:
@@ -231,8 +206,10 @@ class AstrBotUpdator(RepoZipUpdator):
             if self.compare_version(VERSION, latest_version) >= 0:
                 raise Exception("当前已经是最新版本。")
             file_url = latest_release["zipball_url"]
+            target_version = latest_version
         elif is_nightly:
             file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
+            target_version = self.NIGHTLY_TAG
         elif is_tag:
             # 更新到指定版本
             for data in update_data:
@@ -241,13 +218,19 @@ class AstrBotUpdator(RepoZipUpdator):
                     break
             if file_url is None:
                 raise ValueError(f"Requested version tag not found: {version_str}")
+            target_version = version_str
         else:
             if len(version_str) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
             file_url = (
                 f"https://github.com/AstrBotDevs/AstrBot/archive/{version_str}.zip"
             )
-        logger.info(f"准备更新至指定版本的 AstrBot Core: {version_str}")
+            target_version = version_str
+
+        if latest:
+            logger.info(f"准备更新至最新稳定版本的 AstrBot Core: {target_version}")
+        else:
+            logger.info(f"准备更新至指定版本的 AstrBot Core: {target_version}")
 
         if proxy:
             proxy = proxy.removesuffix("/")

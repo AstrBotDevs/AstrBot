@@ -35,9 +35,13 @@ jobs:
           event_name="${{ github.event_name }}"
           input_tag="${{ inputs.tag }}"
           input_ref="${{ inputs.ref }}"
+          default_branch="${{ github.event.repository.default_branch }}"
+          if [ -z "$default_branch" ]; then
+            default_branch="master"
+          fi
 
           if [ "$event_name" = "schedule" ] || { [ "$event_name" = "workflow_dispatch" ] && [ "$input_tag" = "nightly" ]; }; then
-            ref="refs/heads/master"
+            ref="refs/heads/${default_branch}"
           elif [ -n "$input_ref" ]; then
             ref="$input_ref"
           else
