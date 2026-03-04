@@ -1,9 +1,7 @@
 import os
 import sys
 import time
-from json import JSONDecodeError
 
-import aiohttp
 import psutil
 
 from astrbot.core import logger
@@ -18,26 +16,17 @@ from astrbot.core.utils.io import download_file
 
 from .zip_updator import (
     PRERELEASE_TAG_REGEX,
-    FetchReleaseError,
     ReleaseInfo,
     RepoZipUpdator,
 )
 
 
-class InvalidUpdateTargetError(ValueError):
-    """Raised when update target arguments are invalid."""
+class AstrBotUpdateError(RuntimeError):
+    """Domain error for update-related failures."""
 
-
-class NoAvailableReleaseError(RuntimeError):
-    """Raised when no eligible release can be selected."""
-
-
-class AlreadyUpToDateError(RuntimeError):
-    """Raised when current version is already the latest stable version."""
-
-
-class UpdateFileNotFoundError(RuntimeError):
-    """Raised when no update file exists for a requested tag/version."""
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 class AstrBotUpdator(RepoZipUpdator):
@@ -172,32 +161,20 @@ class AstrBotUpdator(RepoZipUpdator):
             consider_prerelease,
         )
 
-    async def get_releases(self, include_nightly: bool = False) -> list[dict]:
-        releases = await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
-        if not include_nightly:
-            return releases
+    async def get_releases(self) -> list[dict]:
+        return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
+    async def get_releases_with_nightly(self) -> list[dict]:
+        releases = await self.get_releases()
         nightly_release_url = f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}"
-        expected_error_types = (
-            TimeoutError,
-            aiohttp.ClientError,
-            JSONDecodeError,
-            FetchReleaseError,
-        )
         try:
             nightly_releases = await self.fetch_release_info(nightly_release_url)
         except Exception as e:
-            if isinstance(e, expected_error_types):
-                logger.warning(
-                    "获取 nightly 发布信息失败，跳过 nightly。"
-                    f"url={nightly_release_url}, error_type={type(e).__name__}, detail={e}",
-                )
-                return releases
-            logger.exception(
-                "获取 nightly 发布信息出现非预期异常。"
-                f"url={nightly_release_url}, error_type={type(e).__name__}",
+            logger.warning(
+                "获取 nightly 发布信息失败，跳过 nightly。"
+                f"url={nightly_release_url}, error_type={type(e).__name__}, detail={e}",
             )
-            raise
+            return releases
 
         if not nightly_releases:
             return releases
@@ -215,15 +192,16 @@ class AstrBotUpdator(RepoZipUpdator):
         version_str = str(version).strip() if version is not None else ""
 
         if latest and version_str:
-            raise InvalidUpdateTargetError(
-                "latest=True 时不能同时指定 version，请将 latest 设为 False。"
+            raise AstrBotUpdateError(
+                "invalid_target",
+                "latest=True 时不能同时指定 version，请将 latest 设为 False。",
             )
 
         if latest:
             return "latest", ""
 
         if not version_str:
-            raise InvalidUpdateTargetError("未指定有效的更新目标。")
+            raise AstrBotUpdateError("invalid_target", "未指定有效的更新目标。")
 
         if version_str.lower() == self.NIGHTLY_TAG:
             return "nightly", self.NIGHTLY_TAG
@@ -232,53 +210,10 @@ class AstrBotUpdator(RepoZipUpdator):
             return "tag", version_str
 
         if len(version_str) != 40:
-            raise InvalidUpdateTargetError("commit hash 长度不正确，应为 40")
+            raise AstrBotUpdateError(
+                "invalid_target", "commit hash 长度不正确，应为 40"
+            )
         return "commit", version_str
-
-    async def _resolve_latest_target(self) -> tuple[str, str]:
-        releases = await self.get_releases()
-        latest_release = next(
-            (
-                item
-                for item in releases
-                if (tag := item.get("tag_name", ""))
-                and not PRERELEASE_TAG_REGEX.search(tag)
-            ),
-            None,
-        )
-        if latest_release is None:
-            raise NoAvailableReleaseError("未找到可用的发布版本。")
-
-        latest_version = latest_release["tag_name"]
-        if self.compare_version(VERSION, latest_version) >= 0:
-            raise AlreadyUpToDateError("当前已经是最新版本。")
-        return latest_version, latest_release["zipball_url"]
-
-    async def _resolve_nightly_target(self) -> tuple[str, str]:
-        releases = await self.get_releases(include_nightly=True)
-        nightly_release = next(
-            (
-                item
-                for item in releases
-                if item.get("tag_name", "").lower() == self.NIGHTLY_TAG
-            ),
-            None,
-        )
-        if nightly_release is not None:
-            return self.NIGHTLY_TAG, nightly_release["zipball_url"]
-        return self.NIGHTLY_TAG, (
-            f"{self.GITHUB_ARCHIVE_BASE}/refs/tags/{self.NIGHTLY_TAG}.zip"
-        )
-
-    async def _resolve_tag_target(self, version_str: str) -> tuple[str, str]:
-        releases = await self.get_releases()
-        for data in releases:
-            if data.get("tag_name") == version_str:
-                return version_str, data["zipball_url"]
-        raise UpdateFileNotFoundError(f"未找到版本号为 {version_str} 的更新文件。")
-
-    def _resolve_commit_target(self, version_str: str) -> tuple[str, str]:
-        return version_str, f"{self.GITHUB_ARCHIVE_BASE}/{version_str}.zip"
 
     async def _resolve_update_target(
         self,
@@ -286,13 +221,52 @@ class AstrBotUpdator(RepoZipUpdator):
         version: str | None,
     ) -> tuple[str, str]:
         kind, value = self._parse_update_target(latest, version)
+
         if kind == "latest":
-            return await self._resolve_latest_target()
+            releases = await self.get_releases()
+            latest_release = next(
+                (
+                    item
+                    for item in releases
+                    if (tag := item.get("tag_name", ""))
+                    and not PRERELEASE_TAG_REGEX.search(tag)
+                ),
+                None,
+            )
+            if latest_release is None:
+                raise AstrBotUpdateError("no_release", "未找到可用的发布版本。")
+            latest_version = latest_release["tag_name"]
+            if self.compare_version(VERSION, latest_version) >= 0:
+                raise AstrBotUpdateError("up_to_date", "当前已经是最新版本。")
+            return latest_version, latest_release["zipball_url"]
+
         if kind == "nightly":
-            return await self._resolve_nightly_target()
+            releases = await self.get_releases_with_nightly()
+            nightly_release = next(
+                (
+                    item
+                    for item in releases
+                    if item.get("tag_name", "").lower() == self.NIGHTLY_TAG
+                ),
+                None,
+            )
+            if nightly_release is not None:
+                return self.NIGHTLY_TAG, nightly_release["zipball_url"]
+            return self.NIGHTLY_TAG, (
+                f"{self.GITHUB_ARCHIVE_BASE}/refs/tags/{self.NIGHTLY_TAG}.zip"
+            )
+
         if kind == "tag":
-            return await self._resolve_tag_target(value)
-        return self._resolve_commit_target(value)
+            releases = await self.get_releases()
+            for data in releases:
+                if data.get("tag_name") == value:
+                    return value, data["zipball_url"]
+            raise AstrBotUpdateError(
+                "file_not_found",
+                f"未找到版本号为 {value} 的更新文件。",
+            )
+
+        return value, f"{self.GITHUB_ARCHIVE_BASE}/{value}.zip"
 
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
@@ -305,8 +279,10 @@ class AstrBotUpdator(RepoZipUpdator):
                 latest,
                 version,
             )
-        except InvalidUpdateTargetError as e:
-            raise InvalidUpdateTargetError(f"更新参数错误: {e}") from e
+        except AstrBotUpdateError as e:
+            if e.reason == "invalid_target":
+                raise AstrBotUpdateError("invalid_target", f"更新参数错误: {e}") from e
+            raise
 
         logger.info(f"准备更新至 AstrBot Core: {target_version}")
 

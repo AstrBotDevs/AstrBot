@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import ast
+import importlib.util
 from pathlib import Path
-from typing import Any
 
 
 def _constants_file() -> Path:
@@ -16,42 +15,30 @@ def _constants_file() -> Path:
 
 def load_release_constants(*names: str) -> dict[str, str]:
     constants_path = _constants_file()
-    source = constants_path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(constants_path))
+    spec = importlib.util.spec_from_file_location(
+        "astrbot_core_release_constants_tmp",
+        constants_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load spec for {constants_path}")
 
-    wanted = set(names)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+
     values: dict[str, str] = {}
+    missing: list[str] = []
 
-    for node in tree.body:
-        target_name: str | None = None
-        value_node: Any | None = None
-
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    target_name = target.id
-                    break
-            value_node = node.value
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            target_name = node.target.id
-            value_node = node.value
-
-        if not target_name or target_name not in wanted:
+    for name in names:
+        value = getattr(module, name, None)
+        if not isinstance(value, str):
+            missing.append(name)
             continue
-        if not isinstance(value_node, ast.Constant) or not isinstance(
-            value_node.value,
-            str,
-        ):
+        value = value.strip()
+        if not value:
+            missing.append(name)
             continue
+        values[name] = value
 
-        value = value_node.value.strip()
-        if value:
-            values[target_name] = value
-
-        if len(values) == len(wanted):
-            break
-
-    missing = [name for name in names if name not in values]
     if missing:
         missing_str = ", ".join(missing)
         raise RuntimeError(

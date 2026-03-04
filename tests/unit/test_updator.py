@@ -1,6 +1,6 @@
 import pytest
 
-from astrbot.core.updator import AstrBotUpdator, InvalidUpdateTargetError
+from astrbot.core.updator import AstrBotUpdateError, AstrBotUpdator
 from astrbot.core.zip_updator import FetchReleaseError, RepoZipUpdator
 
 
@@ -142,11 +142,10 @@ async def test_resolve_update_target_nightly_uses_archive_fallback(monkeypatch):
     updator = AstrBotUpdator()
     updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
 
-    async def mock_get_releases(include_nightly: bool = False):
-        _ = include_nightly
+    async def mock_get_releases_with_nightly():
         return []
 
-    monkeypatch.setattr(updator, "get_releases", mock_get_releases)
+    monkeypatch.setattr(updator, "get_releases_with_nightly", mock_get_releases_with_nightly)
 
     target_version, file_url = await updator._resolve_update_target(
         latest=False,
@@ -204,7 +203,7 @@ async def test_get_releases_includes_nightly_tag(monkeypatch):
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases(include_nightly=True)
+    releases = await updator.get_releases_with_nightly()
 
     assert releases[0]["tag_name"] == "nightly"
     assert releases[1]["tag_name"] == "v9.9.9"
@@ -238,7 +237,7 @@ async def test_get_releases_deduplicates_nightly_when_already_in_stable(monkeypa
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases(include_nightly=True)
+    releases = await updator.get_releases_with_nightly()
 
     nightly_releases = [item for item in releases if item["tag_name"] == "nightly"]
     assert len(nightly_releases) == 1
@@ -288,8 +287,7 @@ async def test_resolve_update_target_skips_prerelease_tags_for_latest(monkeypatc
         },
     ]
 
-    async def mock_get_releases(include_nightly: bool = False):
-        assert include_nightly is False
+    async def mock_get_releases():
         return releases
 
     monkeypatch.setattr(updator, "get_releases", mock_get_releases)
@@ -308,7 +306,7 @@ async def test_resolve_update_target_rejects_version_when_latest_true():
     updator = AstrBotUpdator()
 
     with pytest.raises(
-        InvalidUpdateTargetError,
+        AstrBotUpdateError,
         match="latest=True 时不能同时指定 version，请将 latest 设为 False。",
     ):
         await updator._resolve_update_target(
@@ -337,13 +335,15 @@ async def test_get_releases_with_nightly_skips_expected_nightly_fetch_error(monk
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases(include_nightly=True)
+    releases = await updator.get_releases_with_nightly()
     assert len(releases) == 1
     assert releases[0]["tag_name"] == "v9.9.9"
 
 
 @pytest.mark.asyncio
-async def test_get_releases_with_nightly_raises_for_unexpected_nightly_error(monkeypatch):
+async def test_get_releases_with_nightly_falls_back_on_unexpected_nightly_error(
+    monkeypatch,
+):
     updator = AstrBotUpdator()
     stable_release = {
         "version": "v9.9.9",
@@ -362,8 +362,9 @@ async def test_get_releases_with_nightly_raises_for_unexpected_nightly_error(mon
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    with pytest.raises(KeyError):
-        await updator.get_releases(include_nightly=True)
+    releases = await updator.get_releases_with_nightly()
+    assert len(releases) == 1
+    assert releases[0]["tag_name"] == "v9.9.9"
 
 
 @pytest.mark.asyncio
