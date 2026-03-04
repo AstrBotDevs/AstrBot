@@ -142,11 +142,11 @@ async def test_resolve_update_target_nightly_uses_archive_fallback(monkeypatch):
     updator = AstrBotUpdator()
     updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
 
-    async def mock_get_releases(*, include_nightly: bool):
+    async def mock_get_releases(include_nightly: bool = False):
         _ = include_nightly
         return []
 
-    monkeypatch.setattr(updator, "_get_releases", mock_get_releases)
+    monkeypatch.setattr(updator, "get_releases", mock_get_releases)
 
     target_version, file_url = await updator._resolve_update_target(
         latest=False,
@@ -204,7 +204,7 @@ async def test_get_releases_includes_nightly_tag(monkeypatch):
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases_with_nightly()
+    releases = await updator.get_releases(include_nightly=True)
 
     assert releases[0]["tag_name"] == "nightly"
     assert releases[1]["tag_name"] == "v9.9.9"
@@ -238,7 +238,7 @@ async def test_get_releases_deduplicates_nightly_when_already_in_stable(monkeypa
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases_with_nightly()
+    releases = await updator.get_releases(include_nightly=True)
 
     nightly_releases = [item for item in releases if item["tag_name"] == "nightly"]
     assert len(nightly_releases) == 1
@@ -288,11 +288,11 @@ async def test_resolve_update_target_skips_prerelease_tags_for_latest(monkeypatc
         },
     ]
 
-    async def mock_get_releases(*, include_nightly: bool):
+    async def mock_get_releases(include_nightly: bool = False):
         assert include_nightly is False
         return releases
 
-    monkeypatch.setattr(updator, "_get_releases", mock_get_releases)
+    monkeypatch.setattr(updator, "get_releases", mock_get_releases)
     monkeypatch.setattr(updator, "compare_version", lambda _current, _target: -1)
 
     target_version, file_url = await updator._resolve_update_target(
@@ -337,7 +337,7 @@ async def test_get_releases_with_nightly_skips_expected_nightly_fetch_error(monk
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases_with_nightly()
+    releases = await updator.get_releases(include_nightly=True)
     assert len(releases) == 1
     assert releases[0]["tag_name"] == "v9.9.9"
 
@@ -363,7 +363,7 @@ async def test_get_releases_with_nightly_raises_for_unexpected_nightly_error(mon
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
     with pytest.raises(KeyError):
-        await updator.get_releases_with_nightly()
+        await updator.get_releases(include_nightly=True)
 
 
 @pytest.mark.asyncio

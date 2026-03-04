@@ -79,7 +79,7 @@ class UpdateRoute(Route):
 
     async def get_releases(self):
         try:
-            ret = await self.astrbot_updator.get_releases_with_nightly()
+            ret = await self.astrbot_updator.get_releases(include_nightly=True)
             return Response().ok(ret).__dict__
         except Exception as e:
             logger.error(f"/api/update/releases: {traceback.format_exc()}")

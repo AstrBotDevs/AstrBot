@@ -28,6 +28,7 @@ jobs:
       checkout_ref: ${{ steps.checkout-ref.outputs.ref }}
       tag: ${{ steps.tag.outputs.tag }}
       nightly_tag: ${{ steps.nightly-tag.outputs.nightly_tag }}
+      repo_slug: ${{ steps.repo-slug.outputs.repo_slug }}
     steps:
       - name: Checkout repository for constants
         uses: actions/checkout@v6
@@ -38,41 +39,23 @@ jobs:
         id: nightly-tag
         shell: bash
         run: |
-          nightly_tag="$(
-            python3 - <<'PY'
-            import ast
-            from pathlib import Path
-
-            constants_path = Path("astrbot/core/release_constants.py")
-            source = constants_path.read_text(encoding="utf-8")
-            tree = ast.parse(source, filename=str(constants_path))
-
-            nightly_tag = ""
-            for node in tree.body:
-                if isinstance(node, ast.Assign):
-                    targets = [t for t in node.targets if isinstance(t, ast.Name)]
-                    if any(t.id == "NIGHTLY_TAG" for t in targets):
-                        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                            nightly_tag = node.value.value.strip()
-                        break
-                if isinstance(node, ast.AnnAssign):
-                    if isinstance(node.target, ast.Name) and node.target.id == "NIGHTLY_TAG":
-                        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                            nightly_tag = node.value.value.strip()
-                        break
-
-            if not nightly_tag:
-                raise SystemExit(
-                    "Failed to parse NIGHTLY_TAG from astrbot/core/release_constants.py."
-                )
-            print(nightly_tag)
-            PY
-          )"
+          nightly_tag="$(python3 scripts/release/print_release_constant.py NIGHTLY_TAG)"
           if [ -z "$nightly_tag" ]; then
             echo "Failed to resolve NIGHTLY_TAG from astrbot/core/release_constants.py." >&2
             exit 1
           fi
           echo "nightly_tag=$nightly_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve repository slug
+        id: repo-slug
+        shell: bash
+        run: |
+          repo_slug="$(python3 scripts/release/print_release_constant.py GITHUB_REPO_SLUG)"
+          if [ -z "$repo_slug" ]; then
+            echo "Failed to resolve GITHUB_REPO_SLUG from astrbot/core/release_constants.py." >&2
+            exit 1
+          fi
+          echo "repo_slug=$repo_slug" >> "$GITHUB_OUTPUT"
 
       - name: Resolve checkout ref
         id: checkout-ref
@@ -305,7 +288,7 @@ jobs:
             note_file="$(mktemp)"
             python3 scripts/release/generate_nightly_release_notes.py \
               --base-tag "${{ steps.release-meta.outputs.base_version }}" \
-              --repo "${{ github.repository }}" \
+              --repo "${{ needs.resolve-release-context.outputs.repo_slug }}" \
               --output "$note_file"
           else
             note_file="changelogs/${tag}.md"
