@@ -79,6 +79,21 @@ def test_normalize_release_payload_raises_when_all_entries_invalid():
         )
 
 
+def test_normalize_release_payload_error_contains_context():
+    updator = RepoZipUpdator()
+    malformed_payload = ["invalid-release-item"]
+
+    with pytest.raises(FetchReleaseError) as exc_info:
+        updator._normalize_release_payload(
+            malformed_payload,
+            "https://example.invalid/releases",
+        )
+
+    error = exc_info.value
+    assert error.url == "https://example.invalid/releases"
+    assert error.detail is not None
+
+
 @pytest.mark.asyncio
 async def test_update_supports_nightly_tag(monkeypatch, tmp_path):
     updator = AstrBotUpdator()
@@ -108,6 +123,35 @@ async def test_update_supports_nightly_tag(monkeypatch, tmp_path):
     assert captured["path"] == "temp.zip"
     assert captured["zip_path"] == "temp.zip"
     assert captured["target_dir"] == str(tmp_path)
+
+
+def test_resolve_nightly_target_uses_repo_from_release_api():
+    updator = AstrBotUpdator()
+    updator.GITHUB_RELEASE_API = (
+        "https://api.github.com/repos/example-org/example-repo/releases"
+    )
+
+    target_version, file_url = updator._resolve_nightly_target()
+    assert target_version == "nightly"
+    assert (
+        file_url
+        == "https://github.com/example-org/example-repo/archive/refs/tags/nightly.zip"
+    )
+
+
+def test_resolve_commit_target_uses_repo_from_release_api():
+    updator = AstrBotUpdator()
+    updator.GITHUB_RELEASE_API = (
+        "https://api.github.com/repos/example-org/example-repo/releases"
+    )
+    version_str = "1234567890123456789012345678901234567890"
+
+    target_version, file_url = updator._resolve_commit_target(version_str)
+    assert target_version == version_str
+    assert (
+        file_url
+        == "https://github.com/example-org/example-repo/archive/1234567890123456789012345678901234567890.zip"
+    )
 
 
 @pytest.mark.asyncio

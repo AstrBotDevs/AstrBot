@@ -43,6 +43,32 @@ class ReleaseInfo:
 class FetchReleaseError(Exception):
     """Expected errors while fetching release metadata from remote services."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        url: str | None = None,
+        status_code: int | None = None,
+        detail: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.url = url
+        self.status_code = status_code
+        self.detail = detail
+
+    def __str__(self) -> str:
+        context_parts = []
+        if self.url:
+            context_parts.append(f"url={self.url}")
+        if self.status_code is not None:
+            context_parts.append(f"status_code={self.status_code}")
+        if self.detail:
+            context_parts.append(f"detail={self.detail}")
+        if not context_parts:
+            return self.message
+        return f"{self.message} ({', '.join(context_parts)})"
+
 
 class RepoZipUpdator:
     def __init__(self, repo_mirror: str = "") -> None:
@@ -59,7 +85,11 @@ class RepoZipUpdator:
             logger.error(
                 f"版本信息格式异常，期望列表或字典，实际为: {type(result).__name__}, url: {url}",
             )
-            raise FetchReleaseError("版本信息格式异常")
+            raise FetchReleaseError(
+                "版本信息格式异常",
+                url=url,
+                detail=f"top_level_type={type(result).__name__}",
+            )
 
         if not releases:
             return []
@@ -107,7 +137,11 @@ class RepoZipUpdator:
             )
 
         if not normalized:
-            raise FetchReleaseError("版本信息全部无效")
+            raise FetchReleaseError(
+                "版本信息全部无效",
+                url=url,
+                detail=f"invalid_entries={invalid_entry_count}, total_entries={len(releases)}",
+            )
 
         return normalized
 
@@ -135,13 +169,25 @@ class RepoZipUpdator:
                     logger.error(
                         f"请求 {url} 失败，状态码: {response.status}, 内容: {text}",
                     )
-                    raise FetchReleaseError(f"请求失败，状态码: {response.status}")
+                    raise FetchReleaseError(
+                        "请求失败",
+                        url=url,
+                        status_code=response.status,
+                        detail=text[:500],
+                    )
                 result = await response.json()
         except FetchReleaseError:
             raise
         except (TimeoutError, aiohttp.ClientError, JSONDecodeError) as e:
-            logger.error(f"解析版本信息时发生异常: {e}")
-            raise FetchReleaseError("解析版本信息失败") from e
+            logger.error(
+                "解析版本信息时发生异常。"
+                f"url={url}, error_type={type(e).__name__}, detail={e}",
+            )
+            raise FetchReleaseError(
+                "解析版本信息失败",
+                url=url,
+                detail=f"{type(e).__name__}: {e}",
+            ) from e
 
         return self._normalize_release_payload(result, url)
 

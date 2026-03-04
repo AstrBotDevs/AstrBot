@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 from json import JSONDecodeError
@@ -220,10 +221,19 @@ class AstrBotUpdator(RepoZipUpdator):
             raise Exception("当前已经是最新版本。")
         return latest_version, latest_release["zipball_url"]
 
-    def _resolve_nightly_target(self) -> tuple[str, str]:
-        return self.NIGHTLY_TAG, (
-            f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
+    def _resolve_github_archive_base(self) -> str:
+        match = re.search(
+            r"/repos/([^/]+)/([^/]+)/releases/?$",
+            self.GITHUB_RELEASE_API,
         )
+        if match is None:
+            raise Exception("GITHUB_RELEASE_API 格式不正确，无法解析仓库信息。")
+        owner, repo = match.groups()
+        return f"https://github.com/{owner}/{repo}/archive"
+
+    def _resolve_nightly_target(self) -> tuple[str, str]:
+        archive_base = self._resolve_github_archive_base()
+        return self.NIGHTLY_TAG, (f"{archive_base}/refs/tags/{self.NIGHTLY_TAG}.zip")
 
     async def _resolve_tag_target(self, version_str: str) -> tuple[str, str]:
         releases = await self.get_releases()
@@ -235,9 +245,10 @@ class AstrBotUpdator(RepoZipUpdator):
     def _resolve_commit_target(self, version_str: str) -> tuple[str, str]:
         if len(version_str) != 40:
             raise Exception("commit hash 长度不正确，应为 40")
+        archive_base = self._resolve_github_archive_base()
         return (
             version_str,
-            f"https://github.com/AstrBotDevs/AstrBot/archive/{version_str}.zip",
+            f"{archive_base}/{version_str}.zip",
         )
 
     async def _resolve_update_target(
