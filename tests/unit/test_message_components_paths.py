@@ -1,10 +1,13 @@
 import base64
 import os
+from pathlib import Path
 
 import pytest
+from aiohttp import web
 
 from astrbot.core.message import components as components_module
 from astrbot.core.message.components import File, Image, Record
+from tests.fixtures.helpers import get_bound_tcp_port
 
 
 @pytest.mark.asyncio
@@ -102,3 +105,74 @@ async def test_record_convert_to_base64_maps_permission_error(monkeypatch):
     record = Record(file="/tmp/forbidden-record")
     with pytest.raises(Exception, match="not a valid file"):
         await record.convert_to_base64()
+
+
+@pytest.mark.asyncio
+async def test_image_convert_to_file_path_from_base64_creates_absolute_file():
+    payload = b"image-base64-payload"
+    image = Image(file=f"base64://{base64.b64encode(payload).decode()}")
+
+    resolved = await image.convert_to_file_path()
+    resolved_path = Path(resolved)
+
+    assert resolved_path.is_absolute()
+    assert resolved_path.exists()
+    assert resolved_path.read_bytes() == payload
+
+
+@pytest.mark.asyncio
+async def test_record_convert_to_file_path_from_base64_creates_absolute_file():
+    payload = b"record-base64-payload"
+    record = Record(file=f"base64://{base64.b64encode(payload).decode()}")
+
+    resolved = await record.convert_to_file_path()
+    resolved_path = Path(resolved)
+
+    assert resolved_path.is_absolute()
+    assert resolved_path.exists()
+    assert resolved_path.read_bytes() == payload
+
+
+async def _serve_payload(payload: bytes, route: str):
+    async def handle(_request):
+        return web.Response(body=payload)
+
+    app = web.Application()
+    app.router.add_get(route, handle)
+    runner = web.AppRunner(app, access_log=None)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    return runner, get_bound_tcp_port(site)
+
+
+@pytest.mark.asyncio
+async def test_image_convert_to_file_path_from_http_creates_absolute_file():
+    payload = b"image-http-payload"
+    runner, port = await _serve_payload(payload, "/img.bin")
+    try:
+        image = Image(file=f"http://127.0.0.1:{port}/img.bin")
+        resolved = await image.convert_to_file_path()
+        resolved_path = Path(resolved)
+
+        assert resolved_path.is_absolute()
+        assert resolved_path.exists()
+        assert resolved_path.read_bytes() == payload
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_record_convert_to_file_path_from_http_creates_absolute_file():
+    payload = b"record-http-payload"
+    runner, port = await _serve_payload(payload, "/record.bin")
+    try:
+        record = Record(file=f"http://127.0.0.1:{port}/record.bin")
+        resolved = await record.convert_to_file_path()
+        resolved_path = Path(resolved)
+
+        assert resolved_path.is_absolute()
+        assert resolved_path.exists()
+        assert resolved_path.read_bytes() == payload
+    finally:
+        await runner.cleanup()

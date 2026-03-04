@@ -26,7 +26,12 @@ class NoopAwaitable:
 
 
 def get_bound_tcp_port(site: Any) -> int:
-    """Resolve bound aiohttp TCP site port with public API first."""
+    """Resolve the bound aiohttp TCP site port for tests.
+
+    We prefer the public ``site.name`` first. Some aiohttp test setups with
+    ephemeral ports may not expose a usable port there, so we fall back to
+    ``site._server.sockets`` as a test-only compatibility path.
+    """
     parsed = urlparse(getattr(site, "name", ""))
     if parsed.port is not None and parsed.port > 0:
         return parsed.port
