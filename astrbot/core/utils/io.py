@@ -20,6 +20,7 @@ from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_t
 
 logger = logging.getLogger("astrbot")
 _DOWNLOAD_READ_CHUNK_SIZE = 64 * 1024
+_DOWNLOAD_FLUSH_THRESHOLD = 256 * 1024
 
 
 def on_error(func, path, exc_info) -> None:
@@ -193,19 +194,30 @@ async def _stream_to_file(
     start_time: float,
     show_progress: bool,
 ) -> None:
-    """Stream HTTP response into file with thread-offloaded writes."""
+    """Stream HTTP response into file with buffered thread-offloaded writes."""
     downloaded_size = 0
     known_total = total_size if total_size > 0 else None
+    buffered = bytearray()
 
-    while True:
-        chunk = await stream.read(_DOWNLOAD_READ_CHUNK_SIZE)
-        if not chunk:
-            break
-        await asyncio.to_thread(file_obj.write, chunk)
+    try:
+        while True:
+            chunk = await stream.read(_DOWNLOAD_READ_CHUNK_SIZE)
+            if not chunk:
+                break
 
-        downloaded_size += len(chunk)
-        if show_progress:
-            _print_download_progress(downloaded_size, known_total, start_time)
+            buffered.extend(chunk)
+            downloaded_size += len(chunk)
+
+            if len(buffered) >= _DOWNLOAD_FLUSH_THRESHOLD:
+                await asyncio.to_thread(file_obj.write, bytes(buffered))
+                buffered.clear()
+
+            if show_progress:
+                _print_download_progress(downloaded_size, known_total, start_time)
+    finally:
+        if buffered:
+            # Ensure buffered data is flushed even on cancellation.
+            await asyncio.shield(asyncio.to_thread(file_obj.write, bytes(buffered)))
 
 
 def _print_download_progress(

@@ -389,6 +389,10 @@ class AstrBotExporter:
                 logger.warning(
                     f"导出附件失败 (path={file_path}, attachment_id={attachment_id or 'unknown'}): {e}"
                 )
+            except Exception as e:
+                logger.warning(
+                    f"导出附件时发生非预期错误，已跳过 (path={file_path}, attachment_id={attachment_id or 'unknown'}): {e}"
+                )
 
     def _read_text_if_exists(self, file_path: str) -> str | None:
         """Read text file when it exists in a single synchronous call."""

@@ -303,6 +303,41 @@ class TestAstrBotExporter:
         assert "files/attachments/att_ok.txt" in namelist
         assert "files/attachments/.txt" not in namelist
 
+    @pytest.mark.asyncio
+    async def test_export_attachments_keeps_best_effort_on_unexpected_write_error(
+        self, mock_main_db, tmp_path
+    ):
+        """测试附件导出：单个非 OSError 写入异常不会中断后续附件导出。"""
+        exporter = AstrBotExporter(main_db=mock_main_db, kb_manager=None)
+
+        file_a = tmp_path / "a.txt"
+        file_b = tmp_path / "b.txt"
+        file_a.write_text("a", encoding="utf-8")
+        file_b.write_text("b", encoding="utf-8")
+        zip_path = tmp_path / "attachments_best_effort.zip"
+
+        attachments = [
+            {"attachment_id": "att_boom", "path": str(file_a)},
+            {"attachment_id": "att_ok", "path": str(file_b)},
+        ]
+
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            original_write = zf.write
+
+            def flaky_write(filename, arcname=None, *args, **kwargs):
+                if arcname == "files/attachments/att_boom.txt":
+                    raise RuntimeError("boom")
+                return original_write(filename, arcname, *args, **kwargs)
+
+            with patch.object(zf, "write", side_effect=flaky_write):
+                await exporter._export_attachments(zf, attachments)
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            namelist = zf.namelist()
+
+        assert "files/attachments/att_boom.txt" not in namelist
+        assert "files/attachments/att_ok.txt" in namelist
+
 
 class TestAstrBotImporter:
     """AstrBotImporter 类测试"""
