@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import time
@@ -7,6 +8,7 @@ import psutil
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.release_constants import (
+    ASTRBOT_RELEASE_API,
     GITHUB_ARCHIVE_BASE,
     GITHUB_RELEASE_API,
     NIGHTLY_TAG,
@@ -20,6 +22,8 @@ from .zip_updator import (
     ReleaseInfo,
     RepoZipUpdator,
 )
+
+ASYNC_TIMEOUT_ERROR = asyncio.TimeoutError
 
 
 class AstrBotUpdateError(RuntimeError):
@@ -55,7 +59,7 @@ class AstrBotUpdator(RepoZipUpdator):
     def __init__(self, repo_mirror: str = "") -> None:
         super().__init__(repo_mirror)
         self.MAIN_PATH = get_astrbot_path()
-        self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
+        self.ASTRBOT_RELEASE_API = ASTRBOT_RELEASE_API
         self.GITHUB_RELEASE_API = GITHUB_RELEASE_API
         self.GITHUB_ARCHIVE_BASE = GITHUB_ARCHIVE_BASE
         self.NIGHTLY_TAG = NIGHTLY_TAG
@@ -188,6 +192,7 @@ class AstrBotUpdator(RepoZipUpdator):
         except (
             FetchReleaseError,
             TimeoutError,
+            ASYNC_TIMEOUT_ERROR,
             OSError,
         ) as e:
             logger.warning(

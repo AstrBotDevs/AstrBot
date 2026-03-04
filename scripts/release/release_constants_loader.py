@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import importlib
-import sys
+import importlib.machinery
+import importlib.util
 from functools import lru_cache
 from pathlib import Path
+from types import ModuleType
 
 
 def _constants_file() -> Path:
@@ -16,14 +17,17 @@ def _constants_file() -> Path:
 
 
 @lru_cache(maxsize=1)
-def _release_constants_module():
-    try:
-        return importlib.import_module("astrbot.core.release_constants")
-    except ModuleNotFoundError:
-        constants_dir = str(_constants_file().parent)
-        if constants_dir not in sys.path:
-            sys.path.insert(0, constants_dir)
-        return importlib.import_module("release_constants")
+def _release_constants_module() -> ModuleType:
+    constants_path = _constants_file()
+    module_name = "astrbot_core_release_constants_loader"
+    loader = importlib.machinery.SourceFileLoader(module_name, str(constants_path))
+    spec = importlib.util.spec_from_loader(module_name, loader)
+    if spec is None:
+        raise RuntimeError(f"Failed to load spec for {constants_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
 
 
 def load_release_constants(*names: str) -> dict[str, str]:
