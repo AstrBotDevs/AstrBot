@@ -2,6 +2,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, cast, override
 
 import quart
@@ -340,8 +341,7 @@ class WecomPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
@@ -396,8 +396,7 @@ class WecomPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
@@ -409,8 +408,7 @@ class WecomPlatformAdapter(Platform):
 
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")

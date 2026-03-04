@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -294,8 +295,7 @@ if __name__ == "__main__":
         client = CozeAPIClient(api_key=api_key)
 
         try:
-            with open("README.md", "rb") as f:
-                file_data = f.read()
+            file_data = await asyncio.to_thread(Path("README.md").read_bytes)
             file_id = await client.upload_file(file_data)
             print(f"Uploaded file_id: {file_id}")
             async for event in client.chat_messages(

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shutil
@@ -372,12 +373,12 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     splitting into `apply` and `scan` phases.
     """
     skills_root = Path(get_astrbot_skills_path())
-    if not skills_root.is_dir():
+    if not await asyncio.to_thread(skills_root.is_dir):
         return
     local_skill_dirs = _list_local_skill_dirs(skills_root)
 
     temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
 

@@ -2,6 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from astrbot.core.agent.message import ContentPart, Message
@@ -267,8 +268,9 @@ class TTSProvider(AbstractProvider):
                         # 调用原有的 get_audio 方法获取音频文件路径
                         audio_path = await self.get_audio(accumulated_text)
                         # 读取音频文件内容
-                        with open(audio_path, "rb") as f:
-                            audio_data = f.read()
+                        audio_data = await asyncio.to_thread(
+                            Path(audio_path).read_bytes
+                        )
                         await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
                         # 出错时也要发送 None 结束标记

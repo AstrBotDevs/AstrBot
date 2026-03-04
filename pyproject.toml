@@ -99,8 +99,6 @@ ignore = [
   "F403",
   "F405",
   "E501",
-  "ASYNC230", # TODO: handle ASYNC230 in AstrBot
-  "ASYNC240", # TODO: handle ASYNC240 in AstrBot
 ]
 
 [tool.pyright]

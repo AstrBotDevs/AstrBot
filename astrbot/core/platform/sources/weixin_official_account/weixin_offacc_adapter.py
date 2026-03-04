@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 from typing import Any, cast, override
 
 import quart
@@ -462,8 +463,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixin_offacc_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = os.path.join(

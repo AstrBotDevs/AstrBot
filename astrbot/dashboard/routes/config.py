@@ -1103,7 +1103,9 @@ class ConfigRoute(Route):
         if not files:
             return Response().error("No files uploaded").__dict__
 
-        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        storage_root_path = await asyncio.to_thread(
+            Path(get_astrbot_plugin_data_path()).resolve, strict=False
+        )
         plugin_root_path = (storage_root_path / name).resolve(strict=False)
         try:
             plugin_root_path.relative_to(storage_root_path)
@@ -1179,7 +1181,9 @@ class ConfigRoute(Route):
         if not md:
             return Response().error(f"Plugin {name} not found").__dict__
 
-        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        storage_root_path = await asyncio.to_thread(
+            Path(get_astrbot_plugin_data_path()).resolve, strict=False
+        )
         plugin_root_path = (storage_root_path / name).resolve(strict=False)
         try:
             plugin_root_path.relative_to(storage_root_path)
@@ -1207,7 +1211,9 @@ class ConfigRoute(Route):
         if not meta or meta.get("type") != "file":
             return Response().error("Config item not found or not file type").__dict__
 
-        storage_root_path = Path(get_astrbot_plugin_data_path()).resolve(strict=False)
+        storage_root_path = await asyncio.to_thread(
+            Path(get_astrbot_plugin_data_path()).resolve, strict=False
+        )
         plugin_root_path = (storage_root_path / name).resolve(strict=False)
         try:
             plugin_root_path.relative_to(storage_root_path)
@@ -1375,7 +1381,7 @@ class ConfigRoute(Route):
             logo_file_path = os.path.join(plugin_dir, platform.logo_path)
 
             # 检查文件是否存在并注册令牌
-            if os.path.exists(logo_file_path):
+            if await asyncio.to_thread(os.path.exists, logo_file_path):
                 logo_token = await file_token_service.register_file(
                     logo_file_path,
                     timeout=3600,

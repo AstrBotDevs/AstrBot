@@ -67,7 +67,7 @@ class FileTokenService:
             if legacy_timeout is not None:
                 timeout_seconds = float(legacy_timeout)
 
-            if not os.path.exists(local_path):
+            if not await asyncio.to_thread(os.path.exists, local_path):
                 raise FileNotFoundError(
                     f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
@@ -101,6 +101,6 @@ class FileTokenService:
                 raise KeyError(f"无效或过期的文件 token: {file_token}")
 
             file_path, _ = self.staged_files.pop(file_token)
-            if not os.path.exists(file_path):
+            if not await asyncio.to_thread(os.path.exists, file_path):
                 raise FileNotFoundError(f"文件不存在: {file_path}")
             return file_path

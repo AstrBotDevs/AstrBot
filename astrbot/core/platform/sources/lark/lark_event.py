@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import json
 import os
 import uuid
 from io import BytesIO
+from pathlib import Path
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
@@ -136,7 +138,7 @@ class LarkMessageEvent(AstrMessageEvent):
         Returns:
             成功返回file_key，失败返回None
         """
-        if not path or not os.path.exists(path):
+        if not path or not await asyncio.to_thread(os.path.exists, path):
             logger.error(f"[Lark] 文件不存在: {path}")
             return None
 
@@ -145,36 +147,32 @@ class LarkMessageEvent(AstrMessageEvent):
             return None
 
         try:
-            with open(path, "rb") as file_obj:
-                body_builder = (
-                    CreateFileRequestBody.builder()
-                    .file_type(file_type)
-                    .file_name(os.path.basename(path))
-                    .file(file_obj)
-                )
-                if duration is not None:
-                    body_builder.duration(duration)
+            file_obj = BytesIO(await asyncio.to_thread(Path(path).read_bytes))
+            body_builder = (
+                CreateFileRequestBody.builder()
+                .file_type(file_type)
+                .file_name(os.path.basename(path))
+                .file(file_obj)
+            )
+            if duration is not None:
+                body_builder.duration(duration)
 
-                request = (
-                    CreateFileRequest.builder()
-                    .request_body(body_builder.build())
-                    .build()
-                )
-                response = await lark_client.im.v1.file.acreate(request)
+            request = (
+                CreateFileRequest.builder().request_body(body_builder.build()).build()
+            )
+            response = await lark_client.im.v1.file.acreate(request)
 
-                if not response.success():
-                    logger.error(
-                        f"[Lark] 无法上传文件({response.code}): {response.msg}"
-                    )
-                    return None
+            if not response.success():
+                logger.error(f"[Lark] 无法上传文件({response.code}): {response.msg}")
+                return None
 
-                if response.data is None:
-                    logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
-                    return None
+            if response.data is None:
+                logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
+                return None
 
-                file_key = response.data.file_key
-                logger.debug(f"[Lark] 文件上传成功: {file_key}")
-                return file_key
+            file_key = response.data.file_key
+            logger.debug(f"[Lark] 文件上传成功: {file_key}")
+            return file_key
 
         except Exception as e:
             logger.error(f"[Lark] 无法打开或上传文件: {e}")
@@ -207,8 +205,9 @@ class LarkMessageEvent(AstrMessageEvent):
                         temp_dir,
                         f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
                     )
-                    with open(file_path, "wb") as f:
-                        f.write(BytesIO(image_data).getvalue())
+                    await asyncio.to_thread(
+                        Path(file_path).write_bytes, BytesIO(image_data).getvalue()
+                    )
                 else:
                     file_path = comp.file if comp.file else ""
 
@@ -217,7 +216,9 @@ class LarkMessageEvent(AstrMessageEvent):
                         logger.error("[Lark] 图片路径为空，无法上传")
                         continue
                     try:
-                        image_file = open(file_path, "rb")
+                        image_file = BytesIO(
+                            await asyncio.to_thread(Path(file_path).read_bytes)
+                        )
                     except Exception as e:
                         logger.error(f"[Lark] 无法打开图片文件: {e}")
                         continue
@@ -412,7 +413,9 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"[Lark] 无法获取音频文件路径: {e}")
             return
 
-        if not original_audio_path or not os.path.exists(original_audio_path):
+        if not original_audio_path or not await asyncio.to_thread(
+            os.path.exists, original_audio_path
+        ):
             logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
             return
 
@@ -442,7 +445,9 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         # 清理转换后的临时音频文件
-        if converted_audio_path and os.path.exists(converted_audio_path):
+        if converted_audio_path and await asyncio.to_thread(
+            os.path.exists, converted_audio_path
+        ):
             try:
                 os.remove(converted_audio_path)
                 logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
@@ -485,7 +490,9 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"[Lark] 无法获取视频文件路径: {e}")
             return
 
-        if not original_video_path or not os.path.exists(original_video_path):
+        if not original_video_path or not await asyncio.to_thread(
+            os.path.exists, original_video_path
+        ):
             logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
             return
 
@@ -515,7 +522,9 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         # 清理转换后的临时视频文件
-        if converted_video_path and os.path.exists(converted_video_path):
+        if converted_video_path and await asyncio.to_thread(
+            os.path.exists, converted_video_path
+        ):
             try:
                 os.remove(converted_video_path)
                 logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")

@@ -8,6 +8,7 @@ import threading
 import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -373,15 +374,24 @@ class FunctionToolManager:
         data_dir = get_astrbot_data_path()
 
         mcp_json_file = os.path.join(data_dir, "mcp_server.json")
-        if not os.path.exists(mcp_json_file):
+        if not await asyncio.to_thread(os.path.exists, mcp_json_file):
             # 配置文件不存在错误处理
-            with open(mcp_json_file, "w", encoding="utf-8") as f:
-                json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
+            config_text = json.dumps(DEFAULT_MCP_CONFIG, ensure_ascii=False, indent=4)
+            await asyncio.to_thread(
+                Path(mcp_json_file).write_text,
+                config_text,
+                encoding="utf-8",
+            )
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return MCPInitSummary(total=0, success=0, failed=[])
 
-        with open(mcp_json_file, encoding="utf-8") as f:
-            mcp_server_json_obj: dict[str, dict] = json.load(f)["mcpServers"]
+        mcp_json_content = await asyncio.to_thread(
+            Path(mcp_json_file).read_text,
+            encoding="utf-8",
+        )
+        mcp_server_json_obj: dict[str, dict] = json.loads(mcp_json_content)[
+            "mcpServers"
+        ]
 
         init_timeout = self._init_timeout_default
         timeout_display = f"{init_timeout:g}"

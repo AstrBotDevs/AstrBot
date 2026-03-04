@@ -86,7 +86,7 @@ class LiveChatSession:
 
             self.temp_audio_path = audio_path
             logger.info(
-                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {os.path.getsize(audio_path)} bytes"
+                f"[Live Chat] 音频文件已保存: {audio_path}, 大小: {await asyncio.to_thread(os.path.getsize, audio_path)} bytes"
             )
             return audio_path, time.time() - start_time
 

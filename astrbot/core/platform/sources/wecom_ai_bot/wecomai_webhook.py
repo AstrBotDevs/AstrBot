@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import mimetypes
@@ -103,7 +104,9 @@ class WecomAIBotWebhookClient:
     async def upload_media(
         self, file_path: Path, media_type: Literal["file", "voice"]
     ) -> str:
-        if not file_path.exists() or not file_path.is_file():
+        if not await asyncio.to_thread(file_path.exists) or not await asyncio.to_thread(
+            file_path.is_file
+        ):
             raise WecomAIBotWebhookError(f"文件不存在: {file_path}")
 
         content_type = (
@@ -112,7 +115,7 @@ class WecomAIBotWebhookClient:
         form = aiohttp.FormData()
         form.add_field(
             "media",
-            file_path.read_bytes(),
+            await asyncio.to_thread(file_path.read_bytes),
             filename=file_path.name,
             content_type=content_type,
         )

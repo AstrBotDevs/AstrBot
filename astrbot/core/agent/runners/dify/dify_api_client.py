@@ -1,6 +1,8 @@
+import asyncio
 import codecs
 import json
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from aiohttp import ClientResponse, ClientSession, FormData
@@ -134,14 +136,13 @@ class DifyAPIClient:
             # 使用文件路径
             import os
 
-            with open(file_path, "rb") as f:
-                file_content = f.read()
-                form.add_field(
-                    "file",
-                    file_content,
-                    filename=os.path.basename(file_path),
-                    content_type=mime_type or "application/octet-stream",
-                )
+            file_content = await asyncio.to_thread(Path(file_path).read_bytes)
+            form.add_field(
+                "file",
+                file_content,
+                filename=os.path.basename(file_path),
+                content_type=mime_type or "application/octet-stream",
+            )
         else:
             raise ValueError("file_path 和 file_data 不能同时为 None")
 

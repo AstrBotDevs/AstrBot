@@ -499,7 +499,8 @@ class MisskeyPlatformAdapter(Platform):
                     # 清理临时文件
                     if local_path and isinstance(local_path, str):
                         data_temp = get_astrbot_temp_path()
-                        if local_path.startswith(data_temp) and os.path.exists(
+                        if local_path.startswith(data_temp) and await asyncio.to_thread(
+                            os.path.exists,
                             local_path,
                         ):
                             try:

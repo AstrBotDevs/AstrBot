@@ -3,6 +3,7 @@ import json
 import random
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, NoReturn
 
 try:
@@ -555,22 +556,19 @@ class MisskeyAPI:
                 form.add_field("folderId", str(folder_id))
 
             try:
-                f = open(file_path, "rb")
+                file_bytes = await asyncio.to_thread(Path(file_path).read_bytes)
             except FileNotFoundError as e:
                 logger.error(f"[Misskey API] 本地文件不存在: {file_path}")
                 raise APIError(f"File not found: {file_path}") from e
 
-            try:
-                form.add_field("file", f, filename=filename)
-                async with self.session.post(url, data=form) as resp:
-                    result = await self._process_response(resp, "drive/files/create")
-                    file_id = FileIDExtractor.extract_file_id(result)
-                    logger.debug(
-                        f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}",
-                    )
-                    return {"id": file_id, "raw": result}
-            finally:
-                f.close()
+            form.add_field("file", file_bytes, filename=filename)
+            async with self.session.post(url, data=form) as resp:
+                result = await self._process_response(resp, "drive/files/create")
+                file_id = FileIDExtractor.extract_file_id(result)
+                logger.debug(
+                    f"[Misskey API] 本地文件上传成功: {filename} -> {file_id}",
+                )
+                return {"id": file_id, "raw": result}
         except aiohttp.ClientError as e:
             logger.error(f"[Misskey API] 文件上传网络错误: {e}")
             raise APIConnectionError(f"Upload failed: {e}") from e

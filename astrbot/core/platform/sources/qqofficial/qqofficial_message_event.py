@@ -339,7 +339,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
 
         # 处理文件数据
-        if os.path.exists(file_source):
+        if await asyncio.to_thread(os.path.exists, file_source):
             # 读取本地文件
             async with aiofiles.open(file_source, "rb") as f:
                 file_content = await f.read()
