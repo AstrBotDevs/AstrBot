@@ -63,6 +63,8 @@ class RepoZipUpdator:
                     )
                     raise Exception(f"请求失败，状态码: {response.status}")
                 result = await response.json()
+            if isinstance(result, dict):
+                result = [result]
             if not result:
                 return []
             # if latest:
@@ -119,16 +121,19 @@ class RepoZipUpdator:
         consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
+        if not update_data:
+            return None
 
+        tag_name = ""
         sel_release_data = None
         if consider_prerelease:
             tag_name = update_data[0]["tag_name"]
             sel_release_data = update_data[0]
         else:
             for data in update_data:
-                # 跳过带有 alpha、beta 等预发布标签的版本
+                # 跳过带有 alpha、beta、nightly 等预发布标签的版本
                 if re.search(
-                    r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
+                    r"[\-_.]?(alpha|beta|rc|dev|nightly|pre|preview)[\-_.]?\d*$",
                     data["tag_name"],
                     re.IGNORECASE,
                 ):

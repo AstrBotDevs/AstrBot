@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "v*"
+  schedule:
+    # Daily at 00:00 UTC
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       ref:
@@ -26,7 +29,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -53,13 +56,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
 
       - name: Resolve tag
         id: tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            tag="nightly"
+          elif [ "${{ github.event_name }}" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
           elif [ -n "${{ inputs.tag }}" ]; then
             tag="${{ inputs.tag }}"
@@ -92,16 +97,19 @@ jobs:
           echo "${{ steps.tag.outputs.tag }}" > dashboard/dist/assets/version
           cd dashboard
           zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
+          cp "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist.zip
 
       - name: Upload dashboard artifact
         uses: actions/upload-artifact@v7
         with:
           name: Dashboard-${{ steps.tag.outputs.tag }}
           if-no-files-found: error
-          path: dashboard/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
+          path: |
+            dashboard/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
+            dashboard/dist.zip
 
       - name: Upload dashboard package to Cloudflare R2
-        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' }}
+        if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' && steps.tag.outputs.tag != 'nightly' }}
         env:
           R2_BUCKET_NAME: "astrbot"
           R2_OBJECT_NAME: "astrbot-webui-latest.zip"
@@ -137,13 +145,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
 
       - name: Resolve tag
         id: tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            tag="nightly"
+          elif [ "${{ github.event_name }}" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
           elif [ -n "${{ inputs.tag }}" ]; then
             tag="${{ inputs.tag }}"
@@ -155,6 +165,29 @@ jobs:
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release title
+        id: release-meta
+        shell: bash
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          if [ "$tag" = "nightly" ]; then
+            short_sha="$(git rev-parse --short=12 HEAD)"
+            title="${short_sha}-nightly"
+          else
+            title="$tag"
+          fi
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+
+      - name: Force-update nightly tag
+        if: ${{ steps.tag.outputs.tag == 'nightly' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          current_sha="$(git rev-parse HEAD)"
+          git tag -f nightly "${current_sha}"
+          git push --force origin refs/tags/nightly
 
       - name: Download dashboard artifact
         uses: actions/download-artifact@v8
@@ -180,8 +213,16 @@ jobs:
         shell: bash
         run: |
           tag="${{ steps.tag.outputs.tag }}"
+          title="${{ steps.release-meta.outputs.title }}"
+          if [ "$tag" = "nightly" ]; then
+            pre_flag="--prerelease"
+          else
+            pre_flag=""
+          fi
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --title "$tag" --notes-file "${{ steps.notes.outputs.file }}"
+            gh release create "$tag" --title "$title" --notes-file "${{ steps.notes.outputs.file }}" $pre_flag
+          elif [ "$tag" = "nightly" ]; then
+            gh release edit "$tag" --title "$title" --notes-file "${{ steps.notes.outputs.file }}" --prerelease
           fi
 
       - name: Remove stale assets from release
@@ -192,7 +233,7 @@ jobs:
           tag="${{ steps.tag.outputs.tag }}"
           while IFS= read -r asset; do
             case "$asset" in
-              *.AppImage|*.dmg|*.zip|*.exe|*.blockmap)
+              AstrBot-*-dashboard.zip)
                 gh release delete-asset "$tag" "$asset" -y || true
                 ;;
             esac
@@ -208,6 +249,7 @@ jobs:
 
   publish-pypi:
     name: Publish PyPI
+    if: ${{ github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.tag != 'nightly') }}
     runs-on: ubuntu-24.04
     needs:
       - publish-release
@@ -216,13 +258,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
 
       - name: Resolve tag
         id: tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            tag="nightly"
+          elif [ "${{ github.event_name }}" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
           elif [ -n "${{ inputs.tag }}" ]; then
             tag="${{ inputs.tag }}"

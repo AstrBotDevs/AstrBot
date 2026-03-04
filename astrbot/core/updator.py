@@ -22,6 +22,10 @@ class AstrBotUpdator(RepoZipUpdator):
         super().__init__(repo_mirror)
         self.MAIN_PATH = get_astrbot_path()
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
+        self.GITHUB_RELEASE_API = (
+            "https://api.github.com/repos/AstrBotDevs/AstrBot/releases"
+        )
+        self.NIGHTLY_TAG = "nightly"
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
@@ -142,10 +146,23 @@ class AstrBotUpdator(RepoZipUpdator):
         )
 
     async def get_releases(self) -> list:
-        return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
+        releases = await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
+
+        try:
+            nightly_releases = await self.fetch_release_info(
+                f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}",
+            )
+            if nightly_releases and all(
+                item.get("tag_name") != self.NIGHTLY_TAG for item in releases
+            ):
+                releases.insert(0, nightly_releases[0])
+        except Exception as e:
+            logger.warning(f"获取 nightly 发布信息失败: {e}")
+
+        return releases
 
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
-        update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
+        update_data = []
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
@@ -154,12 +171,22 @@ class AstrBotUpdator(RepoZipUpdator):
             )  # 避免版本管理混乱
 
         if latest:
+            update_data = await self.fetch_release_info(
+                self.ASTRBOT_RELEASE_API, latest
+            )
+            if not update_data:
+                raise Exception("未找到可用的发布版本。")
             latest_version = update_data[0]["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
                 raise Exception("当前已经是最新版本。")
             file_url = update_data[0]["zipball_url"]
+        elif str(version).lower() == self.NIGHTLY_TAG:
+            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
         elif str(version).startswith("v"):
             # 更新到指定版本
+            update_data = await self.fetch_release_info(
+                self.ASTRBOT_RELEASE_API, latest
+            )
             for data in update_data:
                 if data["tag_name"] == version:
                     file_url = data["zipball_url"]

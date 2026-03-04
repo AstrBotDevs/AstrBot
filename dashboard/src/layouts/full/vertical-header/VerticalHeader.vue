@@ -210,7 +210,7 @@ function handleUpdateClick() {
 
 // 检测是否为预发布版本
 const isPreRelease = (version: string) => {
-  const preReleaseKeywords = ['alpha', 'beta', 'rc', 'pre', 'preview', 'dev'];
+  const preReleaseKeywords = ['alpha', 'beta', 'rc', 'pre', 'preview', 'dev', 'nightly'];
   const lowerVersion = version.toLowerCase();
   return preReleaseKeywords.some(keyword => lowerVersion.includes(keyword));
 };
