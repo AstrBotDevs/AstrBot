@@ -48,7 +48,7 @@ class RepoZipUpdator:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
 
-    async def fetch_release_info(self, url: str, latest: bool = True) -> list:
+    async def fetch_release_info(self, url: str) -> list:
         """请求版本信息。
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
         """
@@ -84,29 +84,8 @@ class RepoZipUpdator:
             result = [result]
         if not result:
             return []
-        # if latest:
-        #     ret = self.github_api_release_parser([result[0]])
-        # else:
-        #     ret = self.github_api_release_parser(result)
         ret = []
         for release in result:
-            ret.append(
-                {
-                    "version": release["name"],
-                    "published_at": release["published_at"],
-                    "body": release["body"],
-                    "tag_name": release["tag_name"],
-                    "zipball_url": release["zipball_url"],
-                },
-            )
-        return ret
-
-    def github_api_release_parser(self, releases: list) -> list:
-        """解析 GitHub API 返回的 releases 信息。
-        返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
-        """
-        ret = []
-        for release in releases:
             ret.append(
                 {
                     "version": release["name"],

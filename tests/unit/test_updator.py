@@ -54,8 +54,7 @@ async def test_get_releases_includes_nightly_tag(monkeypatch):
         "zipball_url": "https://example.com/nightly.zip",
     }
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = latest
+    async def mock_fetch_release_info(url: str):
         if url == updator.ASTRBOT_RELEASE_API:
             return [stable_release]
         if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
@@ -89,8 +88,7 @@ async def test_get_releases_deduplicates_nightly_when_already_in_stable(monkeypa
         "zipball_url": "https://example.com/github-nightly.zip",
     }
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = latest
+    async def mock_fetch_release_info(url: str):
         if url == updator.ASTRBOT_RELEASE_API:
             return [stable_nightly_release]
         if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
@@ -117,15 +115,14 @@ async def test_get_releases_returns_stable_only(monkeypatch):
         "zipball_url": "https://example.com/stable.zip",
     }
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = latest
+    async def mock_fetch_release_info(url: str):
         if url == updator.ASTRBOT_RELEASE_API:
             return [stable_release]
         raise AssertionError(f"unexpected URL: {url}")
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases(latest=True)
+    releases = await updator.get_releases()
     assert len(releases) == 1
     assert releases[0]["tag_name"] == "v9.9.9"
 
@@ -134,8 +131,8 @@ async def test_get_releases_returns_stable_only(monkeypatch):
 async def test_get_nightly_release_returns_none_for_expected_fetch_error(monkeypatch):
     updator = AstrBotUpdator()
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = url, latest
+    async def mock_fetch_release_info(url: str):
+        _ = url
         raise FetchReleaseError("请求失败，状态码: 404")
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
@@ -148,8 +145,8 @@ async def test_get_nightly_release_returns_none_for_expected_fetch_error(monkeyp
 async def test_get_nightly_release_raises_for_unexpected_error(monkeypatch):
     updator = AstrBotUpdator()
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = url, latest
+    async def mock_fetch_release_info(url: str):
+        _ = url
         raise KeyError("unexpected")
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
@@ -162,8 +159,8 @@ async def test_get_nightly_release_raises_for_unexpected_error(monkeypatch):
 async def test_check_update_skips_nightly_when_prerelease_disabled(monkeypatch):
     updator = RepoZipUpdator()
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = url, latest
+    async def mock_fetch_release_info(url: str):
+        _ = url
         return [
             {
                 "version": "nightly",
@@ -197,8 +194,8 @@ async def test_check_update_skips_nightly_when_prerelease_disabled(monkeypatch):
 async def test_check_update_returns_none_when_only_prerelease_and_disabled(monkeypatch):
     updator = RepoZipUpdator()
 
-    async def mock_fetch_release_info(url: str, latest: bool = True):
-        _ = url, latest
+    async def mock_fetch_release_info(url: str):
+        _ = url
         return [
             {
                 "version": "nightly",

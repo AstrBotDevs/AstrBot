@@ -77,7 +77,11 @@ jobs:
           elif [ -n "$dispatch_tag" ]; then
             tag="$dispatch_tag"
           else
-            tag="$(git describe --tags --abbrev=0)"
+            if ! tag="$(git describe --tags --abbrev=0 2>/tmp/git_describe_error.log)"; then
+              echo "Failed to resolve tag via git describe. Ensure repository history and tags are available." >&2
+              cat /tmp/git_describe_error.log >&2 || true
+              exit 1
+            fi
           fi
           if [ -z "$tag" ]; then
             echo "Failed to resolve tag." >&2
@@ -203,7 +207,11 @@ jobs:
         run: |
           tag="${{ needs.resolve-release-context.outputs.tag }}"
           if [ "$tag" = "nightly" ]; then
-            short_sha="$(git rev-parse --short=8 HEAD)"
+            if ! short_sha="$(git rev-parse --short=8 HEAD 2>/tmp/git_rev_parse_error.log)"; then
+              echo "Failed to resolve HEAD short SHA for nightly title." >&2
+              cat /tmp/git_rev_parse_error.log >&2 || true
+              exit 1
+            fi
             base_version="$(git tag --list 'v*' --sort=-version:refname | grep -E '^v[0-9]+(\.[0-9]+)*$' | head -n1)"
             if [ -z "$base_version" ]; then
               base_version="v0.0.0"
@@ -222,7 +230,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          current_sha="$(git rev-parse HEAD)"
+          if ! current_sha="$(git rev-parse HEAD 2>/tmp/git_rev_parse_error.log)"; then
+            echo "Failed to resolve HEAD SHA before updating nightly tag." >&2
+            cat /tmp/git_rev_parse_error.log >&2 || true
+            exit 1
+          fi
           git tag -f nightly "${current_sha}"
           git push --force origin refs/tags/nightly
 

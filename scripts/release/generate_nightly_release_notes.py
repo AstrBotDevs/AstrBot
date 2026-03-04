@@ -9,12 +9,18 @@ from pathlib import Path
 
 
 def _run_git(*args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or "").strip()
+        stdout = (e.stdout or "").strip()
+        detail = stderr or stdout or "no output"
+        raise RuntimeError(f"git {' '.join(args)} failed: {detail}") from e
     return result.stdout.strip()
 
 
@@ -59,14 +65,14 @@ def generate_notes(base_tag: str, repo: str, output_path: Path) -> None:
         _write_fallback(output_path)
         return
 
-    result = subprocess.run(
-        ["git", "log", "--no-merges", "--pretty=format:%h%x1f%s", f"{base_tag}..HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
+    log_output = _run_git(
+        "log",
+        "--no-merges",
+        "--pretty=format:%h%x1f%s",
+        f"{base_tag}..HEAD",
     )
     sections: dict[str, list[str]] = defaultdict(list)
-    for line in result.stdout.splitlines():
+    for line in log_output.splitlines():
         if not line.strip() or "\x1f" not in line:
             continue
         short_sha, subject = line.split("\x1f", 1)
@@ -98,7 +104,10 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Output markdown path.")
     args = parser.parse_args()
 
-    generate_notes(args.base_tag.strip(), args.repo.strip(), Path(args.output))
+    try:
+        generate_notes(args.base_tag.strip(), args.repo.strip(), Path(args.output))
+    except Exception as e:
+        raise SystemExit(f"Failed to generate nightly release notes: {e}") from e
 
 
 if __name__ == "__main__":

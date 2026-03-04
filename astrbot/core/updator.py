@@ -147,8 +147,8 @@ class AstrBotUpdator(RepoZipUpdator):
             consider_prerelease,
         )
 
-    async def get_releases(self, latest: bool = True) -> list:
-        return await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
+    async def get_releases(self) -> list:
+        return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
     @staticmethod
     def _is_expected_nightly_fetch_error(exc: BaseException) -> bool:
@@ -185,8 +185,8 @@ class AstrBotUpdator(RepoZipUpdator):
             return None
         return nightly_releases[0]
 
-    async def get_releases_with_nightly(self, latest: bool = True) -> list:
-        releases = await self.get_releases(latest=latest)
+    async def get_releases_with_nightly(self) -> list:
+        releases = await self.get_releases()
         nightly_release = await self.get_nightly_release()
         if nightly_release and all(
             item.get("tag_name") != self.NIGHTLY_TAG for item in releases
@@ -195,7 +195,7 @@ class AstrBotUpdator(RepoZipUpdator):
         return releases
 
     async def _resolve_latest_target(self) -> tuple[str, str]:
-        releases = await self.get_releases(latest=True)
+        releases = await self.get_releases()
         latest_release = next(
             (
                 item
@@ -218,7 +218,7 @@ class AstrBotUpdator(RepoZipUpdator):
         )
 
     async def _resolve_tag_target(self, version_str: str) -> tuple[str, str]:
-        releases = await self.get_releases(latest=False)
+        releases = await self.get_releases()
         for data in releases:
             if data["tag_name"] == version_str:
                 return version_str, data["zipball_url"]
