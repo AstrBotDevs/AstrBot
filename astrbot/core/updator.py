@@ -208,7 +208,20 @@ class AstrBotUpdator(RepoZipUpdator):
         latest: bool,
         version: str | None,
     ) -> tuple[str, str]:
+        """Resolve target version and download URL.
+
+        Supported combinations:
+        - latest=True, version="" => latest stable release
+        - latest=False, version="nightly" => nightly release
+        - latest=False, version="v*" => explicit tag release
+        - latest=False, version="<40-char commit>" => commit archive
+        """
         version_str = str(version).strip() if version is not None else ""
+
+        if latest and version_str:
+            raise Exception(
+                "latest=True 时不能同时指定 version，请将 latest 设为 False。"
+            )
 
         if (
             not latest
@@ -220,7 +233,7 @@ class AstrBotUpdator(RepoZipUpdator):
                 raise Exception("commit hash 长度不正确，应为 40")
             return version_str, f"{self.GITHUB_ARCHIVE_BASE}/{version_str}.zip"
 
-        include_nightly = version_str.lower() == self.NIGHTLY_TAG
+        include_nightly = (not latest) and version_str.lower() == self.NIGHTLY_TAG
         releases = await self._fetch_all_releases(include_nightly=include_nightly)
 
         if latest:

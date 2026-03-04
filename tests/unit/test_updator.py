@@ -303,6 +303,20 @@ async def test_resolve_update_target_skips_prerelease_tags_for_latest(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_resolve_update_target_rejects_version_when_latest_true():
+    updator = AstrBotUpdator()
+
+    with pytest.raises(
+        Exception,
+        match="latest=True 时不能同时指定 version，请将 latest 设为 False。",
+    ):
+        await updator._resolve_update_target(
+            latest=True,
+            version="nightly",
+        )
+
+
+@pytest.mark.asyncio
 async def test_get_nightly_release_returns_none_for_expected_fetch_error(monkeypatch):
     updator = AstrBotUpdator()
 
