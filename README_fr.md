@@ -73,7 +73,7 @@ AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègr
 
 ### Déploiement en un clic
 
-Pour les utilisateurs qui veulent découvrir AstrBot rapidement, sont familiers avec la ligne de commande et peuvent installer eux-mêmes l'environnement `uv`, nous recommandons la méthode de déploiement en un clic avec `uv` ⚡️ :
+Pour les utilisateurs qui veulent découvrir AstrBot rapidement, qui sont familiers avec la ligne de commande et peuvent installer eux-mêmes l'environnement `uv`, nous recommandons la méthode de déploiement en un clic avec `uv` ⚡️ :
 
 ```bash
 uv tool install astrbot
