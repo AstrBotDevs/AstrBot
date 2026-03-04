@@ -203,7 +203,7 @@ class Record(BaseMessageComponent):
         else:
             try:
                 bs64_data = await file_to_base64(self.file)
-            except (FileNotFoundError, IsADirectoryError) as exc:
+            except OSError as exc:
                 raise Exception(f"not a valid file: {self.file}") from exc
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data
@@ -500,7 +500,7 @@ class Image(BaseMessageComponent):
         else:
             try:
                 bs64_data = await file_to_base64(url)
-            except (FileNotFoundError, IsADirectoryError) as exc:
+            except OSError as exc:
                 raise Exception(f"not a valid file: {url}") from exc
         bs64_data = bs64_data.removeprefix("base64://")
         return bs64_data

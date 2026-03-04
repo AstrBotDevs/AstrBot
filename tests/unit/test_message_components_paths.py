@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from astrbot.core.message import components as components_module
 from astrbot.core.message.components import File, Image, Record
 
 
@@ -77,3 +78,27 @@ async def test_record_convert_to_base64_reads_existing_local_file(tmp_path):
     encoded = await record.convert_to_base64()
 
     assert base64.b64decode(encoded) == raw
+
+
+@pytest.mark.asyncio
+async def test_image_convert_to_base64_maps_permission_error(monkeypatch):
+    async def _raise_permission_error(_path: str) -> str:
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(components_module, "file_to_base64", _raise_permission_error)
+
+    image = Image(file="/tmp/forbidden-image")
+    with pytest.raises(Exception, match="not a valid file"):
+        await image.convert_to_base64()
+
+
+@pytest.mark.asyncio
+async def test_record_convert_to_base64_maps_permission_error(monkeypatch):
+    async def _raise_permission_error(_path: str) -> str:
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(components_module, "file_to_base64", _raise_permission_error)
+
+    record = Record(file="/tmp/forbidden-record")
+    with pytest.raises(Exception, match="not a valid file"):
+        await record.convert_to_base64()
