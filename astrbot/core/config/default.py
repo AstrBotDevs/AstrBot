@@ -1171,6 +1171,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": ["lmstudio"],
                         "api_base": "http://127.0.0.1:1234/v1",
+                        "timeout": 120,
                         "proxy": "",
                         "custom_headers": {},
                     },

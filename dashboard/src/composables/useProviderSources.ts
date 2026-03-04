@@ -39,6 +39,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const { tm, showMessage } = options
 
   const confirmDialog = useConfirmDialog()
+  const sourceTemplateExcludedKeys = new Set([
+    'id',
+    'enable',
+    'model',
+    'provider_source_id',
+    'modalities',
+    'custom_extra_body'
+  ])
 
   async function askForConfirmation(message: string) {
     return askForConfirmationDialog(message, confirmDialog)
@@ -355,15 +363,62 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function extractSourceFieldsFromTemplate(template: Record<string, any>) {
     const sourceFields: Record<string, any> = {}
-    const excludeKeys = ['id', 'enable', 'model', 'provider_source_id', 'modalities', 'custom_extra_body']
 
     for (const [key, value] of Object.entries(template)) {
-      if (!excludeKeys.includes(key)) {
+      if (!sourceTemplateExcludedKeys.has(key)) {
         sourceFields[key] = value
       }
     }
 
     return sourceFields
+  }
+
+  function resolveSourceTemplate(
+    source: Record<string, any>,
+    templates: Record<string, any>
+  ): Record<string, any> | null {
+    const templateList = Object.values(templates || {}) as Record<string, any>[]
+    if (!source || templateList.length === 0) return null
+
+    const exactIdMatch = templateList.find((template) => {
+      const idMatches = source.id === template.id || source.id?.startsWith(`${template.id}_`)
+      if (!idMatches) return false
+      return (
+        template.provider === source.provider
+        && template.type === source.type
+        && template.provider_type === source.provider_type
+      )
+    })
+    if (exactIdMatch) return exactIdMatch
+
+    const strictCandidates = templateList.filter((template) =>
+      template.provider === source.provider
+      && template.type === source.type
+      && template.provider_type === source.provider_type
+    )
+
+    if (strictCandidates.length === 1) {
+      return strictCandidates[0]
+    }
+
+    return null
+  }
+
+  function hydrateSourceWithTemplateDefaults(
+    source: Record<string, any>,
+    templates: Record<string, any>
+  ): Record<string, any> {
+    const template = resolveSourceTemplate(source, templates)
+    if (!template) return source
+
+    const hydratedSource = { ...source }
+    for (const [key, value] of Object.entries(template)) {
+      if (sourceTemplateExcludedKeys.has(key)) continue
+      if (!(key in hydratedSource)) {
+        hydratedSource[key] = value
+      }
+    }
+    return hydratedSource
   }
 
   function generateUniqueSourceId(baseId: string) {
@@ -611,10 +666,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await axios.get('/api/config/provider/template')
       if (response.data.status === 'ok') {
         configSchema.value = response.data.data.config_schema || {}
-        if (configSchema.value.provider?.config_template) {
-          providerTemplates.value = configSchema.value.provider.config_template
-        }
-        providerSources.value = response.data.data.provider_sources || []
+        const templates = configSchema.value.provider?.config_template || {}
+        providerTemplates.value = templates
+        providerSources.value = (response.data.data.provider_sources || []).map((source: Record<string, any>) =>
+          hydrateSourceWithTemplateDefaults(source, templates)
+        )
         providers.value = response.data.data.providers || []
       }
     } catch (error) {
