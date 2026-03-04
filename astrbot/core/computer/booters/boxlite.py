@@ -88,7 +88,7 @@ class MockShipyardSandboxClient:
                 "error": f"Connection error: {str(e)}",
                 "message": "File upload failed",
             }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {
                 "success": False,
                 "error": "File upload timeout",

@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -446,7 +446,7 @@ class AstrBotExporter:
         manifest = {
             "version": BACKUP_MANIFEST_VERSION,
             "astrbot_version": VERSION,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "origin": "exported",  # 标记备份来源：exported=本实例导出, uploaded=用户上传
             "schema_version": {
                 "main_db": "v4",

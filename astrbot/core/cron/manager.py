@@ -1,7 +1,7 @@
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
@@ -192,7 +192,7 @@ class CronJobManager:
         job = await self.db.get_cron_job(job_id)
         if not job or not job.enabled:
             return
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         await self.db.update_cron_job(
             job_id, status="running", last_run_at=start_time, last_error=None
         )

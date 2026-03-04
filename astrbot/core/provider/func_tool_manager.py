@@ -198,7 +198,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"连接超时: {timeout}秒"
     except Exception as e:
         return False, f"{e!s}"
@@ -451,7 +451,7 @@ class FunctionToolManager:
         cfg: dict,
         *,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float,
+        timeout_seconds: float,
     ) -> None:
         """Initialize MCP server with timeout and register task/event together.
 
@@ -461,7 +461,7 @@ class FunctionToolManager:
         async with self._runtime_lock:
             if name in self._mcp_server_runtime or name in self._mcp_starting:
                 logger.warning(
-                    f"MCP 服务 {name} 已在运行，忽略本次启用请求（timeout={timeout:g}）。"
+                    f"MCP 服务 {name} 已在运行，忽略本次启用请求（timeout={timeout_seconds:g}）。"
                 )
                 self._log_safe_mcp_debug_config(cfg)
                 return
@@ -474,11 +474,11 @@ class FunctionToolManager:
         try:
             mcp_client = await asyncio.wait_for(
                 self._init_mcp_client(name, cfg),
-                timeout=timeout,
+                timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MCPInitTimeoutError(
-                f"MCP 服务 {name} 初始化超时（{timeout:g} 秒）"
+                f"MCP 服务 {name} 初始化超时（{timeout_seconds:g} 秒）"
             ) from exc
         except Exception:
             logger.error(f"初始化 MCP 客户端 {name} 失败", exc_info=True)
@@ -511,7 +511,7 @@ class FunctionToolManager:
     async def _shutdown_runtimes(
         self,
         runtimes: list[_MCPServerRuntime],
-        timeout: float,
+        timeout_seconds: float,
         *,
         strict: bool = True,
     ) -> list[str]:
@@ -530,9 +530,9 @@ class FunctionToolManager:
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
-                timeout=timeout,
+                timeout=timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pending_names = [
                 runtime.name
                 for runtime in runtimes
@@ -543,10 +543,10 @@ class FunctionToolManager:
                     task.cancel()
             await asyncio.gather(*lifecycle_tasks, return_exceptions=True)
             if strict:
-                raise MCPShutdownTimeoutError(pending_names, timeout)
+                raise MCPShutdownTimeoutError(pending_names, timeout_seconds)
             logger.warning(
                 "MCP 服务关闭超时（%s 秒），以下服务未完全关闭：%s",
-                f"{timeout:g}",
+                f"{timeout_seconds:g}",
                 ", ".join(pending_names),
             )
             return pending_names
@@ -657,7 +657,8 @@ class FunctionToolManager:
         name: str,
         config: dict,
         shutdown_event: asyncio.Event | None = None,
-        timeout: float | int | str | None = None,
+        timeout_seconds: float | int | str | None = None,
+        **kwargs: Any,
     ) -> None:
         """Enable a new MCP server and initialize it.
 
@@ -665,18 +666,22 @@ class FunctionToolManager:
             name: The name of the MCP server.
             config: Configuration for the MCP server.
             shutdown_event: Event to signal when the MCP client should shut down.
-            timeout: Timeout in seconds for initialization.
+            timeout_seconds: Timeout in seconds for initialization.
                 Uses ASTRBOT_MCP_ENABLE_TIMEOUT by default (separate from init timeout).
 
         Raises:
             MCPInitTimeoutError: If initialization does not complete within timeout.
             Exception: If there is an error during initialization.
         """
-        if timeout is None:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = legacy_timeout
+
+        if timeout_seconds is None:
             timeout_value = self._enable_timeout_default
         else:
             timeout_value = _resolve_timeout(
-                timeout=timeout,
+                timeout=timeout_seconds,
                 env_name=ENABLE_MCP_TIMEOUT_ENV,
                 default=self._enable_timeout_default,
             )
@@ -684,36 +689,45 @@ class FunctionToolManager:
             name=name,
             cfg=config,
             shutdown_event=shutdown_event,
-            timeout=timeout_value,
+            timeout_seconds=timeout_value,
         )
 
     async def disable_mcp_server(
         self,
         name: str | None = None,
-        timeout: float = 10,
+        timeout_seconds: float = 10,
+        **kwargs: Any,
     ) -> None:
         """Disable an MCP server by its name.
 
         Args:
             name (str): The name of the MCP server to disable. If None, ALL MCP servers will be disabled.
-            timeout (int): Timeout.
+            timeout_seconds (int): Timeout.
 
         Raises:
             MCPShutdownTimeoutError: If shutdown does not complete within timeout.
                 Only raised when disabling a specific server (name is not None).
 
         """
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = float(legacy_timeout)
+
         if name:
             async with self._runtime_lock:
                 runtime = self._mcp_server_runtime.get(name)
             if runtime is None:
                 return
 
-            await self._shutdown_runtimes([runtime], timeout, strict=True)
+            await self._shutdown_runtimes(
+                [runtime], timeout_seconds=timeout_seconds, strict=True
+            )
         else:
             async with self._runtime_lock:
                 runtimes = list(self._mcp_server_runtime.values())
-            await self._shutdown_runtimes(runtimes, timeout, strict=False)
+            await self._shutdown_runtimes(
+                runtimes, timeout_seconds=timeout_seconds, strict=False
+            )
 
     def _warn_on_timeout_mismatch(
         self,

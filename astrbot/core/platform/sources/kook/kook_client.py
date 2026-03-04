@@ -171,7 +171,7 @@ class KookClient:
                     # 处理不同类型的信令
                     await self._handle_signal(data)
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # 超时检查，继续循环
                     continue
                 except websockets.exceptions.ConnectionClosed:

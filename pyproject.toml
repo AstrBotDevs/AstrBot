@@ -99,16 +99,8 @@ ignore = [
   "F403",
   "F405",
   "E501",
-  "ASYNC109", # TODO: migrate timeout params to asyncio.timeout progressively
   "ASYNC230", # TODO: handle ASYNC230 in AstrBot
   "ASYNC240", # TODO: handle ASYNC240 in AstrBot
-  "UP017",    # TODO: migrate timezone.utc to datetime.UTC progressively
-  "UP035",    # TODO: typing_extensions imports cleanup for 3.12 baseline
-  "UP036",    # TODO: remove obsolete version guards incrementally
-  "UP040",    # TODO: migrate TypeAlias to type statements gradually
-  "UP041",    # TODO: migrate aliased TimeoutError usage gradually
-  "UP042",    # TODO: migrate str+Enum to StrEnum gradually
-  "UP046",    # TODO: migrate Generic class syntax to type parameters
 ]
 
 [tool.pyright]

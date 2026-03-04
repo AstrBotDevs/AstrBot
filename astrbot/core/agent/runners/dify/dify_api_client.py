@@ -47,20 +47,20 @@ class DifyAPIClient:
         response_mode: str = "streaming",
         conversation_id: str = "",
         files: list[dict[str, Any]] | None = None,
-        timeout: float = 60,
+        timeout_seconds: float = 60,
     ) -> AsyncGenerator[dict[str, Any], None]:
         if files is None:
             files = []
         url = f"{self.api_base}/chat-messages"
         payload = locals()
         payload.pop("self")
-        payload.pop("timeout")
+        payload.pop("timeout_seconds")
         logger.info(f"chat_messages payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=timeout_seconds,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()
@@ -76,20 +76,20 @@ class DifyAPIClient:
         user: str,
         response_mode: str = "streaming",
         files: list[dict[str, Any]] | None = None,
-        timeout: float = 60,
+        timeout_seconds: float = 60,
     ):
         if files is None:
             files = []
         url = f"{self.api_base}/workflows/run"
         payload = locals()
         payload.pop("self")
-        payload.pop("timeout")
+        payload.pop("timeout_seconds")
         logger.info(f"workflow_run payload: {payload}")
         async with self.session.post(
             url,
             json=payload,
             headers=self.headers,
-            timeout=timeout,
+            timeout=timeout_seconds,
         ) as resp:
             if resp.status != 200:
                 text = await resp.text()

@@ -2,7 +2,7 @@ import abc
 import asyncio
 import os
 from collections.abc import AsyncGenerator
-from typing import TypeAlias, Union
+from typing import Any
 
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
@@ -15,13 +15,9 @@ from astrbot.core.provider.entities import (
 from astrbot.core.provider.register import provider_cls_map
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 
-Providers: TypeAlias = Union[
-    "Provider",
-    "STTProvider",
-    "TTSProvider",
-    "EmbeddingProvider",
-    "RerankProvider",
-]
+type Providers = (
+    "Provider" | "STTProvider" | "TTSProvider" | "EmbeddingProvider" | "RerankProvider"
+)
 
 
 class AbstractProvider(abc.ABC):
@@ -188,10 +184,13 @@ class Provider(AbstractProvider):
 
         return dicts
 
-    async def test(self, timeout: float = 45.0) -> None:
+    async def test(self, timeout_seconds: float = 45.0, **kwargs: Any) -> None:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = float(legacy_timeout)
         await asyncio.wait_for(
             self.text_chat(prompt="REPLY `PONG` ONLY"),
-            timeout=timeout,
+            timeout=timeout_seconds,
         )
 
 

@@ -12,7 +12,7 @@ import os
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -675,9 +675,9 @@ class AstrBotImporter:
         if isinstance(value, datetime):
             dt = value
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             else:
-                dt = dt.astimezone(timezone.utc)
+                dt = dt.astimezone(UTC)
             return dt.isoformat()
         if isinstance(value, str):
             timestamp = value.strip()
@@ -688,9 +688,9 @@ class AstrBotImporter:
             try:
                 dt = datetime.fromisoformat(timestamp)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 else:
-                    dt = dt.astimezone(timezone.utc)
+                    dt = dt.astimezone(UTC)
                 return dt.isoformat()
             except ValueError:
                 return None

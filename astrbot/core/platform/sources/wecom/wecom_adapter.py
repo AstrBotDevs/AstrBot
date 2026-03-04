@@ -1,9 +1,8 @@
 import asyncio
 import os
-import sys
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, cast, override
 
 import quart
 from requests import Response
@@ -32,11 +31,6 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 from .wecom_event import WecomPlatformEvent
 from .wecom_kf import WeChatKF
 from .wecom_kf_message import WeChatKFMessage
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class WecomServer:
