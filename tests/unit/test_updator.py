@@ -125,11 +125,9 @@ async def test_update_supports_nightly_tag(monkeypatch, tmp_path):
     assert captured["target_dir"] == str(tmp_path)
 
 
-def test_resolve_nightly_target_uses_repo_from_release_api():
+def test_resolve_nightly_target_uses_archive_base():
     updator = AstrBotUpdator()
-    updator.GITHUB_RELEASE_API = (
-        "https://api.github.com/repos/example-org/example-repo/releases"
-    )
+    updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
 
     target_version, file_url = updator._resolve_nightly_target()
     assert target_version == "nightly"
@@ -139,11 +137,9 @@ def test_resolve_nightly_target_uses_repo_from_release_api():
     )
 
 
-def test_resolve_commit_target_uses_repo_from_release_api():
+def test_resolve_commit_target_uses_archive_base():
     updator = AstrBotUpdator()
-    updator.GITHUB_RELEASE_API = (
-        "https://api.github.com/repos/example-org/example-repo/releases"
-    )
+    updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
     version_str = "1234567890123456789012345678901234567890"
 
     target_version, file_url = updator._resolve_commit_target(version_str)
@@ -247,7 +243,7 @@ async def test_get_releases_returns_stable_only(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_resolve_latest_target_skips_prerelease_tags(monkeypatch):
+async def test_resolve_update_target_skips_prerelease_tags_for_latest(monkeypatch):
     updator = AstrBotUpdator()
     releases = [
         {
@@ -272,7 +268,10 @@ async def test_resolve_latest_target_skips_prerelease_tags(monkeypatch):
     monkeypatch.setattr(updator, "get_releases", mock_get_releases)
     monkeypatch.setattr(updator, "compare_version", lambda _current, _target: -1)
 
-    target_version, file_url = await updator._resolve_latest_target()
+    target_version, file_url = await updator._resolve_update_target(
+        latest=True,
+        version=None,
+    )
     assert target_version == "v9.9.8"
     assert file_url == "https://example.com/stable.zip"
 

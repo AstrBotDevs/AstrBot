@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import time
 from json import JSONDecodeError
@@ -34,6 +33,7 @@ class AstrBotUpdator(RepoZipUpdator):
         self.GITHUB_RELEASE_API = (
             "https://api.github.com/repos/AstrBotDevs/AstrBot/releases"
         )
+        self.GITHUB_ARCHIVE_BASE = "https://github.com/AstrBotDevs/AstrBot/archive"
         self.NIGHTLY_TAG = NIGHTLY_TAG
 
     def terminate_child_processes(self) -> None:
@@ -201,51 +201,14 @@ class AstrBotUpdator(RepoZipUpdator):
             releases.insert(0, nightly_release)
         return releases
 
-    async def _resolve_latest_target(self) -> tuple[str, str]:
-        releases = await self.get_releases()
-        latest_release = next(
-            (
-                item
-                for item in releases
-                if (tag := item.get("tag_name", ""))
-                and tag.lower() != self.NIGHTLY_TAG
-                and not PRERELEASE_TAG_REGEX.search(tag)
-            ),
-            None,
-        )
-        if latest_release is None:
-            raise Exception("未找到可用的发布版本。")
-
-        latest_version = latest_release["tag_name"]
-        if self.compare_version(VERSION, latest_version) >= 0:
-            raise Exception("当前已经是最新版本。")
-        return latest_version, latest_release["zipball_url"]
-
-    def _resolve_github_archive_base(self) -> str:
-        match = re.search(
-            r"/repos/([^/]+)/([^/]+)/releases/?$",
-            self.GITHUB_RELEASE_API,
-        )
-        if match is None:
-            raise Exception("GITHUB_RELEASE_API 格式不正确，无法解析仓库信息。")
-        owner, repo = match.groups()
-        return f"https://github.com/{owner}/{repo}/archive"
-
     def _resolve_nightly_target(self) -> tuple[str, str]:
-        archive_base = self._resolve_github_archive_base()
+        archive_base = self.GITHUB_ARCHIVE_BASE
         return self.NIGHTLY_TAG, (f"{archive_base}/refs/tags/{self.NIGHTLY_TAG}.zip")
-
-    async def _resolve_tag_target(self, version_str: str) -> tuple[str, str]:
-        releases = await self.get_releases()
-        for data in releases:
-            if data["tag_name"] == version_str:
-                return version_str, data["zipball_url"]
-        raise Exception(f"未找到版本号为 {version_str} 的更新文件。")
 
     def _resolve_commit_target(self, version_str: str) -> tuple[str, str]:
         if len(version_str) != 40:
             raise Exception("commit hash 长度不正确，应为 40")
-        archive_base = self._resolve_github_archive_base()
+        archive_base = self.GITHUB_ARCHIVE_BASE
         return (
             version_str,
             f"{archive_base}/{version_str}.zip",
@@ -256,16 +219,37 @@ class AstrBotUpdator(RepoZipUpdator):
         latest: bool,
         version: str | None,
     ) -> tuple[str, str]:
-        version_str = str(version) if version is not None else ""
+        version_str = str(version).strip() if version is not None else ""
 
         if latest:
-            return await self._resolve_latest_target()
+            releases = await self.get_releases()
+            latest_release = next(
+                (
+                    item
+                    for item in releases
+                    if (tag := item.get("tag_name", ""))
+                    and tag.lower() != self.NIGHTLY_TAG
+                    and not PRERELEASE_TAG_REGEX.search(tag)
+                ),
+                None,
+            )
+            if latest_release is None:
+                raise Exception("未找到可用的发布版本。")
+
+            latest_version = latest_release["tag_name"]
+            if self.compare_version(VERSION, latest_version) >= 0:
+                raise Exception("当前已经是最新版本。")
+            return latest_version, latest_release["zipball_url"]
 
         if version_str.lower() == self.NIGHTLY_TAG:
             return self._resolve_nightly_target()
 
         if version_str.startswith("v"):
-            return await self._resolve_tag_target(version_str)
+            releases = await self.get_releases()
+            for data in releases:
+                if data.get("tag_name") == version_str:
+                    return version_str, data["zipball_url"]
+            raise Exception(f"未找到版本号为 {version_str} 的更新文件。")
 
         return self._resolve_commit_target(version_str)
 
