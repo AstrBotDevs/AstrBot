@@ -3,6 +3,7 @@ import re
 import shutil
 import ssl
 import zipfile
+from json import JSONDecodeError
 from typing import NoReturn
 
 import aiohttp
@@ -38,6 +39,10 @@ class ReleaseInfo:
         return f"\n{self.body}\n\n版本: {self.version} | 发布于: {self.published_at}"
 
 
+class FetchReleaseError(Exception):
+    """Expected errors while fetching release metadata from remote services."""
+
+
 class RepoZipUpdator:
     def __init__(self, repo_mirror: str = "") -> None:
         self.repo_mirror = repo_mirror
@@ -67,30 +72,33 @@ class RepoZipUpdator:
                     logger.error(
                         f"请求 {url} 失败，状态码: {response.status}, 内容: {text}",
                     )
-                    raise Exception(f"请求失败，状态码: {response.status}")
+                    raise FetchReleaseError(f"请求失败，状态码: {response.status}")
                 result = await response.json()
-            if isinstance(result, dict):
-                result = [result]
-            if not result:
-                return []
-            # if latest:
-            #     ret = self.github_api_release_parser([result[0]])
-            # else:
-            #     ret = self.github_api_release_parser(result)
-            ret = []
-            for release in result:
-                ret.append(
-                    {
-                        "version": release["name"],
-                        "published_at": release["published_at"],
-                        "body": release["body"],
-                        "tag_name": release["tag_name"],
-                        "zipball_url": release["zipball_url"],
-                    },
-                )
-        except Exception as e:
+        except FetchReleaseError:
+            raise
+        except (TimeoutError, aiohttp.ClientError, JSONDecodeError) as e:
             logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败") from e
+            raise FetchReleaseError("解析版本信息失败") from e
+
+        if isinstance(result, dict):
+            result = [result]
+        if not result:
+            return []
+        # if latest:
+        #     ret = self.github_api_release_parser([result[0]])
+        # else:
+        #     ret = self.github_api_release_parser(result)
+        ret = []
+        for release in result:
+            ret.append(
+                {
+                    "version": release["name"],
+                    "published_at": release["published_at"],
+                    "body": release["body"],
+                    "tag_name": release["tag_name"],
+                    "zipball_url": release["zipball_url"],
+                },
+            )
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:

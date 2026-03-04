@@ -1,7 +1,7 @@
 import pytest
 
 from astrbot.core.updator import AstrBotUpdator
-from astrbot.core.zip_updator import RepoZipUpdator
+from astrbot.core.zip_updator import FetchReleaseError, RepoZipUpdator
 
 
 @pytest.mark.asyncio
@@ -136,7 +136,7 @@ async def test_get_nightly_release_returns_none_for_expected_fetch_error(monkeyp
 
     async def mock_fetch_release_info(url: str, latest: bool = True):
         _ = url, latest
-        raise Exception("请求失败，状态码: 404")
+        raise FetchReleaseError("请求失败，状态码: 404")
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
