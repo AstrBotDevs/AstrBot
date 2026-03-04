@@ -214,51 +214,51 @@ jobs:
               echo "- Nightly build from \`$(git rev-parse --short=8 HEAD)\`" >> "$note_file"
             else
               BASE_TAG="$base_tag" NOTE_FILE="$note_file" REPO="${{ github.repository }}" python3 - <<'PY'
-              import os
-              import subprocess
-              from collections import defaultdict
+          import os
+          import subprocess
+          from collections import defaultdict
 
-              base_tag = os.environ["BASE_TAG"]
-              note_file = os.environ["NOTE_FILE"]
-              repo = os.environ["REPO"]
+          base_tag = os.environ["BASE_TAG"]
+          note_file = os.environ["NOTE_FILE"]
+          repo = os.environ["REPO"]
 
-              result = subprocess.run(
-                  ["git", "log", "--no-merges", "--pretty=format:%h%x1f%s", f"{base_tag}..HEAD"],
-                  capture_output=True,
-                  text=True,
-                  check=True,
-              )
+          result = subprocess.run(
+              ["git", "log", "--no-merges", "--pretty=format:%h%x1f%s", f"{base_tag}..HEAD"],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
 
-              sections = defaultdict(list)
+          sections = defaultdict(list)
 
-              def classify(subject: str) -> str:
-                  s = subject.lower().strip()
-                  if s.startswith("feat") or "新增" in subject:
-                      return "新增"
-                  if s.startswith("fix") or "修复" in subject:
-                      return "修复"
-                  if s.startswith("perf") or s.startswith("refactor") or "优化" in subject:
-                      return "优化"
-                  return "其他"
+          def classify(subject: str) -> str:
+              s = subject.lower().strip()
+              if s.startswith("feat") or "新增" in subject:
+                  return "新增"
+              if s.startswith("fix") or "修复" in subject:
+                  return "修复"
+              if s.startswith("perf") or s.startswith("refactor") or "优化" in subject:
+                  return "优化"
+              return "其他"
 
-              for line in result.stdout.splitlines():
-                  if not line.strip():
+          for line in result.stdout.splitlines():
+              if not line.strip():
+                  continue
+              short_sha, subject = line.split("\x1f", 1)
+              commit_link = f"https://github.com/{repo}/commit/{short_sha}"
+              sections[classify(subject)].append(f"- {subject} ([`{short_sha}`]({commit_link}))")
+
+          with open(note_file, "w", encoding="utf-8") as f:
+              f.write("## What's Changed\n\n")
+              f.write(f"- Baseline tag: `{base_tag}`\n")
+              f.write(f"- Nightly commit: `{subprocess.check_output(['git', 'rev-parse', '--short=8', 'HEAD'], text=True).strip()}`\n\n")
+              for title in ("新增", "修复", "优化", "其他"):
+                  items = sections.get(title, [])
+                  if not items:
                       continue
-                  short_sha, subject = line.split("\x1f", 1)
-                  commit_link = f"https://github.com/{repo}/commit/{short_sha}"
-                  sections[classify(subject)].append(f"- {subject} ([`{short_sha}`]({commit_link}))")
-
-              with open(note_file, "w", encoding="utf-8") as f:
-                  f.write("## What's Changed\n\n")
-                  f.write(f"- Baseline tag: `{base_tag}`\n")
-                  f.write(f"- Nightly commit: `{subprocess.check_output(['git', 'rev-parse', '--short=8', 'HEAD'], text=True).strip()}`\n\n")
-                  for title in ("新增", "修复", "优化", "其他"):
-                      items = sections.get(title, [])
-                      if not items:
-                          continue
-                      f.write(f"### {title}\n")
-                      f.write("\n".join(items))
-                      f.write("\n\n")
+                  f.write(f"### {title}\n")
+                  f.write("\n".join(items))
+                  f.write("\n\n")
           PY
             fi
           else
