@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import argparse
 
-from release_constants_loader import load_release_constant
+if __package__:
+    from .release_constants_loader import load_release_constant
+else:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from scripts.release.release_constants_loader import load_release_constant
 
 
 def main() -> None:

@@ -174,7 +174,11 @@ class RepoZipUpdator:
                 result = await response.json()
         except FetchReleaseError:
             raise
-        except (TimeoutError, aiohttp.ClientError, JSONDecodeError) as e:
+        except (
+            TimeoutError,
+            aiohttp.ClientError,
+            JSONDecodeError,
+        ) as e:
             logger.error(
                 "解析版本信息时发生异常。"
                 f"url={url}, error_type={type(e).__name__}, detail={e}",

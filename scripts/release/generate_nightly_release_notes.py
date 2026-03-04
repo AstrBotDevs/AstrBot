@@ -7,7 +7,13 @@ import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from release_constants_loader import load_release_constants
+if __package__:
+    from .release_constants_loader import load_release_constants
+else:
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from scripts.release.release_constants_loader import load_release_constants
 
 _constants = load_release_constants("NIGHTLY_TAG", "GITHUB_REPO_SLUG")
 NIGHTLY_TAG = _constants["NIGHTLY_TAG"]

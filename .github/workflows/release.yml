@@ -39,7 +39,7 @@ jobs:
         id: nightly-tag
         shell: bash
         run: |
-          nightly_tag="$(python3 scripts/release/print_release_constant.py NIGHTLY_TAG)"
+          nightly_tag="$(python3 -m scripts.release.print_release_constant NIGHTLY_TAG)"
           if [ -z "$nightly_tag" ]; then
             echo "Failed to resolve NIGHTLY_TAG from astrbot/core/release_constants.py." >&2
             exit 1
@@ -50,7 +50,7 @@ jobs:
         id: repo-slug
         shell: bash
         run: |
-          repo_slug="$(python3 scripts/release/print_release_constant.py GITHUB_REPO_SLUG)"
+          repo_slug="$(python3 -m scripts.release.print_release_constant GITHUB_REPO_SLUG)"
           if [ -z "$repo_slug" ]; then
             echo "Failed to resolve GITHUB_REPO_SLUG from astrbot/core/release_constants.py." >&2
             exit 1
@@ -303,7 +303,7 @@ jobs:
           if [ "$tag" = "$nightly_tag" ]; then
             note_file="$(mktemp)"
             if [ -f "scripts/release/generate_nightly_release_notes.py" ]; then
-              python3 scripts/release/generate_nightly_release_notes.py \
+              python3 -m scripts.release.generate_nightly_release_notes \
                 --base-tag "${{ steps.release-meta.outputs.base_version }}" \
                 --repo "${{ needs.resolve-release-context.outputs.repo_slug }}" \
                 --output "$note_file"
