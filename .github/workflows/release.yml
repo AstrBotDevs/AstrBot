@@ -259,7 +259,7 @@ jobs:
                       f.write(f"### {title}\n")
                       f.write("\n".join(items))
                       f.write("\n\n")
-              PY
+          PY
             fi
           else
             note_file="changelogs/${tag}.md"
