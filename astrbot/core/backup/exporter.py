@@ -368,20 +368,22 @@ class AstrBotExporter:
     ) -> None:
         """在单个线程中批量导出附件，减少高频线程切换。"""
         for attachment in attachments:
+            file_path = attachment.get("path", "")
+            attachment_id = attachment.get("attachment_id", "")
             try:
-                file_path = attachment.get("path", "")
                 if not file_path:
                     continue
                 # 使用 attachment_id 作为文件名
-                attachment_id = attachment.get("attachment_id", "")
                 ext = os.path.splitext(file_path)[1]
                 archive_path = f"files/attachments/{attachment_id}{ext}"
                 zf.write(file_path, archive_path)
             except FileNotFoundError:
                 # 和旧逻辑保持一致：缺失文件直接跳过。
                 continue
-            except Exception as e:
-                logger.warning(f"导出附件失败: {e}")
+            except OSError as e:
+                logger.warning(
+                    f"导出附件失败 (path={file_path}, attachment_id={attachment_id or 'unknown'}): {e}"
+                )
 
     def _read_text_if_exists(self, file_path: str) -> str | None:
         """Read text file when it exists in a single synchronous call."""

@@ -1,3 +1,4 @@
+import base64
 import os
 
 import pytest
@@ -52,3 +53,27 @@ async def test_record_convert_to_base64_raises_on_missing_file(tmp_path):
 
     with pytest.raises(Exception, match="not a valid file"):
         await record.convert_to_base64()
+
+
+@pytest.mark.asyncio
+async def test_image_convert_to_base64_reads_existing_local_file(tmp_path):
+    raw = b"image-bytes"
+    file_path = tmp_path / "exists_image.bin"
+    file_path.write_bytes(raw)
+
+    image = Image(file=str(file_path))
+    encoded = await image.convert_to_base64()
+
+    assert base64.b64decode(encoded) == raw
+
+
+@pytest.mark.asyncio
+async def test_record_convert_to_base64_reads_existing_local_file(tmp_path):
+    raw = b"record-bytes"
+    file_path = tmp_path / "exists_record.bin"
+    file_path.write_bytes(raw)
+
+    record = Record(file=str(file_path))
+    encoded = await record.convert_to_base64()
+
+    assert base64.b64decode(encoded) == raw

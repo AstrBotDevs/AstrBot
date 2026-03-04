@@ -9,6 +9,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
+from typing import BinaryIO
 
 import aiohttp
 import certifi
@@ -185,18 +186,18 @@ async def download_file(url: str, path: str, show_progress: bool = False) -> Non
 
 async def _stream_to_file(
     stream: aiohttp.StreamReader,
-    file_obj,
+    file_obj: BinaryIO,
     *,
     total_size: int,
     start_time: float,
     show_progress: bool,
     chunk_size: int = 8192,
     flush_threshold: int = 256 * 1024,
-) -> int:
+) -> None:
     """Stream HTTP response into file with buffered thread-offloaded writes."""
     downloaded_size = 0
     buffered = bytearray()
-    progress_total = max(total_size, 1)
+    progress_total = total_size if total_size > 0 else None
 
     while True:
         chunk = await stream.read(chunk_size)
@@ -213,15 +214,20 @@ async def _stream_to_file(
         if show_progress:
             elapsed_time = max(time.time() - start_time, 1e-6)
             speed = downloaded_size / 1024 / elapsed_time  # KB/s
-            print(
-                f"\r下载进度: {downloaded_size / progress_total:.2%} 速度: {speed:.2f} KB/s",
-                end="",
-            )
+            if progress_total:
+                percent = downloaded_size / progress_total
+                print(
+                    f"\r下载进度: {percent:.2%} 速度: {speed:.2f} KB/s",
+                    end="",
+                )
+            else:
+                print(
+                    f"\r已下载: {downloaded_size} 字节 速度: {speed:.2f} KB/s",
+                    end="",
+                )
 
     if buffered:
         await asyncio.to_thread(file_obj.write, bytes(buffered))
-
-    return downloaded_size
 
 
 async def file_to_base64(file_path: str) -> str:
