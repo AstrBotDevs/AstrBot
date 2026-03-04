@@ -158,22 +158,21 @@ class AstrBotUpdator(RepoZipUpdator):
             aiohttp.ClientError,
             JSONDecodeError,
         )
-        to_check = [exc]
-        checked: set[int] = set()
-        while to_check:
-            current = to_check.pop()
-            if id(current) in checked:
-                continue
-            checked.add(id(current))
-            if isinstance(current, expected_types):
+
+        def _matches(error: BaseException | None) -> bool:
+            if error is None:
+                return False
+            if isinstance(error, expected_types):
                 return True
-            if str(current).startswith("请求失败，状态码:"):
+            if str(error).startswith("请求失败，状态码:"):
                 return True
-            if current.__cause__:
-                to_check.append(current.__cause__)
-            if current.__context__:
-                to_check.append(current.__context__)
-        return False
+            return False
+
+        return (
+            _matches(exc)
+            or _matches(getattr(exc, "__cause__", None))
+            or _matches(getattr(exc, "__context__", None))
+        )
 
     async def get_nightly_release(self) -> dict | None:
         nightly_release_url = f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}"
@@ -205,7 +204,7 @@ class AstrBotUpdator(RepoZipUpdator):
             releases.insert(0, nightly_release)
         return releases
 
-    async def _resolve_latest(self, releases: list) -> tuple[str, str]:
+    def _resolve_latest(self, releases: list) -> tuple[str, str]:
         latest_release = next(
             (
                 item
@@ -222,12 +221,12 @@ class AstrBotUpdator(RepoZipUpdator):
             raise Exception("当前已经是最新版本。")
         return latest_version, latest_release["zipball_url"]
 
-    async def _resolve_nightly(self) -> tuple[str, str]:
+    def _resolve_nightly(self) -> tuple[str, str]:
         return self.NIGHTLY_TAG, (
             f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
         )
 
-    async def _resolve_tag(self, releases: list, version_str: str) -> tuple[str, str]:
+    def _resolve_tag(self, releases: list, version_str: str) -> tuple[str, str]:
         for data in releases:
             if data["tag_name"] == version_str:
                 return version_str, data["zipball_url"]
@@ -250,12 +249,12 @@ class AstrBotUpdator(RepoZipUpdator):
         version_str = str(version) if version is not None else ""
         if latest:
             releases = await self.get_releases(latest=True)
-            target_version, file_url = await self._resolve_latest(releases)
+            target_version, file_url = self._resolve_latest(releases)
         elif version_str.lower() == self.NIGHTLY_TAG:
-            target_version, file_url = await self._resolve_nightly()
+            target_version, file_url = self._resolve_nightly()
         elif version_str.startswith("v"):
             releases = await self.get_releases(latest=False)
-            target_version, file_url = await self._resolve_tag(releases, version_str)
+            target_version, file_url = self._resolve_tag(releases, version_str)
         else:
             target_version, file_url = self._resolve_commit(version_str)
 
