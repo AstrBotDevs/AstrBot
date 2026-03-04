@@ -4,6 +4,54 @@ from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.zip_updator import FetchReleaseError, RepoZipUpdator
 
 
+def test_normalize_release_payload_raises_on_missing_fields():
+    updator = RepoZipUpdator()
+    malformed_payload = [
+        {
+            "name": "v1.0.0",
+            "published_at": "2026-03-01T00:00:00Z",
+            "tag_name": "v1.0.0",
+            "zipball_url": "https://example.com/v1.0.0.zip",
+        }
+    ]
+
+    with pytest.raises(FetchReleaseError, match="版本信息字段缺失"):
+        updator._normalize_release_payload(
+            malformed_payload,
+            "https://example.invalid/releases",
+        )
+
+
+def test_normalize_release_payload_raises_on_invalid_item_type():
+    updator = RepoZipUpdator()
+
+    with pytest.raises(FetchReleaseError, match="版本信息格式异常"):
+        updator._normalize_release_payload(
+            ["invalid-release-item"],
+            "https://example.invalid/releases",
+        )
+
+
+def test_normalize_release_payload_accepts_valid_payload():
+    updator = RepoZipUpdator()
+    payload = {
+        "name": "v1.0.0",
+        "published_at": "2026-03-01T00:00:00Z",
+        "body": "release body",
+        "tag_name": "v1.0.0",
+        "zipball_url": "https://example.com/v1.0.0.zip",
+    }
+
+    releases = updator._normalize_release_payload(
+        payload,
+        "https://example.invalid/releases",
+    )
+
+    assert len(releases) == 1
+    assert releases[0]["tag_name"] == "v1.0.0"
+    assert releases[0]["version"] == "v1.0.0"
+
+
 @pytest.mark.asyncio
 async def test_update_supports_nightly_tag(monkeypatch, tmp_path):
     updator = AstrBotUpdator()

@@ -48,6 +48,56 @@ class RepoZipUpdator:
         self.repo_mirror = repo_mirror
         self.rm_on_error = on_error
 
+    @staticmethod
+    def _normalize_release_payload(result: object, url: str) -> list:
+        if isinstance(result, dict):
+            releases = [result]
+        elif isinstance(result, list):
+            releases = result
+        else:
+            logger.error(
+                f"版本信息格式异常，期望列表或字典，实际为: {type(result).__name__}, url: {url}",
+            )
+            raise FetchReleaseError("版本信息格式异常")
+
+        if not releases:
+            return []
+
+        required_fields = (
+            "name",
+            "published_at",
+            "body",
+            "tag_name",
+            "zipball_url",
+        )
+        normalized = []
+        for idx, release in enumerate(releases):
+            if not isinstance(release, dict):
+                logger.error(
+                    f"版本信息第 {idx} 项格式异常，期望字典，实际为: {type(release).__name__}, url: {url}",
+                )
+                raise FetchReleaseError("版本信息格式异常")
+
+            missing_fields = [
+                field for field in required_fields if field not in release
+            ]
+            if missing_fields:
+                logger.error(
+                    f"版本信息第 {idx} 项缺少字段: {missing_fields}, url: {url}",
+                )
+                raise FetchReleaseError("版本信息字段缺失")
+
+            normalized.append(
+                {
+                    "version": release["name"] or release["tag_name"],
+                    "published_at": release["published_at"],
+                    "body": release["body"],
+                    "tag_name": release["tag_name"],
+                    "zipball_url": release["zipball_url"],
+                },
+            )
+        return normalized
+
     async def fetch_release_info(self, url: str) -> list:
         """请求版本信息。
         返回一个列表，每个元素是一个字典，包含版本号、发布时间、更新内容、commit hash等信息。
@@ -80,22 +130,7 @@ class RepoZipUpdator:
             logger.error(f"解析版本信息时发生异常: {e}")
             raise FetchReleaseError("解析版本信息失败") from e
 
-        if isinstance(result, dict):
-            result = [result]
-        if not result:
-            return []
-        ret = []
-        for release in result:
-            ret.append(
-                {
-                    "version": release["name"],
-                    "published_at": release["published_at"],
-                    "body": release["body"],
-                    "tag_name": release["tag_name"],
-                    "zipball_url": release["zipball_url"],
-                },
-            )
-        return ret
+        return self._normalize_release_payload(result, url)
 
     def unzip(self) -> NoReturn:
         raise NotImplementedError
