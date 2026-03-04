@@ -10,14 +10,10 @@ import aiohttp
 import certifi
 
 from astrbot.core import logger
-from astrbot.core.release_constants import NIGHTLY_TAG
+from astrbot.core.release_constants import PRERELEASE_TAG_REGEX
 from astrbot.core.utils.io import download_file, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
-PRERELEASE_TAG_REGEX = re.compile(
-    rf"[\-_.]?(alpha|beta|rc|dev|{re.escape(NIGHTLY_TAG)}|pre|preview)[\-_.]?\d*$",
-    re.IGNORECASE,
-)
 # Keep this rule aligned with dashboard/src/layouts/full/vertical-header/VerticalHeader.vue.
 
 

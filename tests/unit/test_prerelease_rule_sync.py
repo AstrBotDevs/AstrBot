@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from astrbot.core.zip_updator import PRERELEASE_TAG_REGEX
+from astrbot.core.release_constants import PRERELEASE_TAG_REGEX
 
 
 def test_prerelease_rule_is_synced_with_dashboard():

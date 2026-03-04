@@ -30,10 +30,10 @@ jobs:
       nightly_tag: ${{ steps.nightly-tag.outputs.nightly_tag }}
       repo_slug: ${{ steps.repo-slug.outputs.repo_slug }}
     steps:
-      - name: Checkout repository for constants
+      - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Resolve nightly tag
         id: nightly-tag
@@ -88,11 +88,23 @@ jobs:
 
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout repository at release ref
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ steps.checkout-ref.outputs.ref }}
+      - name: Switch repository to release ref
+        shell: bash
+        run: |
+          target_ref="${{ steps.checkout-ref.outputs.ref }}"
+          if [ -z "$target_ref" ]; then
+            echo "Resolved checkout ref is empty." >&2
+            exit 1
+          fi
+
+          if ! git checkout --force "$target_ref" >/tmp/git_checkout_ref.log 2>&1; then
+            if ! git fetch --force origin "$target_ref" >/tmp/git_fetch_ref.log 2>&1; then
+              echo "Failed to fetch checkout ref: $target_ref" >&2
+              cat /tmp/git_fetch_ref.log >&2 || true
+              exit 1
+            fi
+            git checkout --force FETCH_HEAD
+          fi
 
       - name: Resolve tag
         id: tag

@@ -142,10 +142,12 @@ async def test_resolve_update_target_nightly_uses_archive_fallback(monkeypatch):
     updator = AstrBotUpdator()
     updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
 
-    async def mock_get_releases_with_nightly():
-        return []
+    async def mock_fetch_release_info(url: str):
+        if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
+            raise FetchReleaseError("请求失败")
+        raise AssertionError(f"unexpected URL: {url}")
 
-    monkeypatch.setattr(updator, "get_releases_with_nightly", mock_get_releases_with_nightly)
+    monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
     target_version, file_url = await updator._resolve_update_target(
         latest=False,
@@ -341,7 +343,7 @@ async def test_get_releases_with_nightly_skips_expected_nightly_fetch_error(monk
 
 
 @pytest.mark.asyncio
-async def test_get_releases_with_nightly_falls_back_on_unexpected_nightly_error(
+async def test_get_releases_with_nightly_raises_for_unexpected_nightly_error(
     monkeypatch,
 ):
     updator = AstrBotUpdator()
@@ -362,9 +364,8 @@ async def test_get_releases_with_nightly_falls_back_on_unexpected_nightly_error(
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases_with_nightly()
-    assert len(releases) == 1
-    assert releases[0]["tag_name"] == "v9.9.9"
+    with pytest.raises(KeyError):
+        await updator.get_releases_with_nightly()
 
 
 @pytest.mark.asyncio
