@@ -30,11 +30,16 @@ def test_prerelease_rule_matches_expected_examples():
         "v1.2.3-nightly",
         "v1.2.3-pre",
         "v1.2.3-preview",
+        "v1.2.3-ALPHA",
+        "v1.2.3-Beta.1",
+        "v1.2.3-NIGHTLY",
     )
     stable_tags = (
         "v1.2.3",
         "v1.2.3+build.1",
         "v1.2.3-release",
+        "v1.2.3-alphaish",
+        "v1.2.3-previewed",
     )
 
     for tag in prerelease_tags:
