@@ -9,6 +9,51 @@ export interface UseProviderSourcesOptions {
   showMessage: (message: string, color?: string) => void
 }
 
+type ProviderSourceLike = {
+  id?: string
+  provider?: string
+  type?: string
+  provider_type?: string
+  [key: string]: any
+}
+
+type ProviderSourceTemplate = ProviderSourceLike & {
+  id: string
+  provider: string
+  type: string
+  provider_type: string
+}
+
+type ProviderSourceTemplates = Record<string, ProviderSourceTemplate>
+
+function toProviderSourceTemplates(rawTemplates: unknown): ProviderSourceTemplates {
+  if (!rawTemplates || typeof rawTemplates !== 'object') {
+    return {}
+  }
+
+  const templates: ProviderSourceTemplates = {}
+  for (const [templateName, value] of Object.entries(rawTemplates as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') {
+      continue
+    }
+
+    const template = value as ProviderSourceLike
+    if (
+      typeof template.id !== 'string'
+      || typeof template.provider !== 'string'
+      || typeof template.type !== 'string'
+      || typeof template.provider_type !== 'string'
+    ) {
+      console.warn('[ProviderSources] Skip invalid provider template shape', { templateName })
+      continue
+    }
+
+    templates[templateName] = template as ProviderSourceTemplate
+  }
+
+  return templates
+}
+
 export function resolveDefaultTab(value?: string) {
   const normalized = (value || '').toLowerCase()
 
@@ -68,7 +113,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const testingProviders = ref<string[]>([])
   const isSourceModified = ref(false)
   const configSchema = ref<Record<string, any>>({})
-  const providerTemplates = ref<Record<string, any>>({})
+  const providerTemplates = ref<ProviderSourceTemplates>({})
   const manualModelId = ref('')
   const modelSearch = ref('')
 
@@ -361,7 +406,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     isSourceModified.value = false
   }
 
-  function extractSourceFieldsFromTemplate(template: Record<string, any>) {
+  function extractSourceFieldsFromTemplate(template: ProviderSourceTemplate) {
     const sourceFields: Record<string, any> = {}
 
     for (const [key, value] of Object.entries(template)) {
@@ -374,11 +419,20 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   function resolveSourceTemplate(
-    source: Record<string, any>,
-    templates: Record<string, any>
-  ): Record<string, any> | null {
-    const templateList = Object.values(templates || {}) as Record<string, any>[]
-    if (!source || templateList.length === 0) return null
+    source: ProviderSourceLike,
+    templates: ProviderSourceTemplates
+  ): ProviderSourceTemplate | null {
+    const templateList = Object.values(templates || {})
+    if (
+      !source
+      || typeof source.id !== 'string'
+      || typeof source.provider !== 'string'
+      || typeof source.type !== 'string'
+      || typeof source.provider_type !== 'string'
+      || templateList.length === 0
+    ) {
+      return null
+    }
 
     const exactIdMatch = templateList.find((template) => {
       const idMatches = source.id === template.id || source.id?.startsWith(`${template.id}_`)
@@ -401,13 +455,26 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return strictCandidates[0]
     }
 
+    if (strictCandidates.length > 1) {
+      console.warn(
+        '[ProviderSources] Multiple templates matched provider source; skip hydration to avoid ambiguity',
+        {
+          sourceId: source.id,
+          provider: source.provider,
+          type: source.type,
+          providerType: source.provider_type,
+          candidateTemplateIds: strictCandidates.map((candidate) => candidate.id)
+        }
+      )
+    }
+
     return null
   }
 
   function hydrateSourceWithTemplateDefaults(
-    source: Record<string, any>,
-    templates: Record<string, any>
-  ): Record<string, any> {
+    source: ProviderSourceLike,
+    templates: ProviderSourceTemplates
+  ): ProviderSourceLike {
     const template = resolveSourceTemplate(source, templates)
     if (!template) return source
 
@@ -666,9 +733,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await axios.get('/api/config/provider/template')
       if (response.data.status === 'ok') {
         configSchema.value = response.data.data.config_schema || {}
-        const templates = configSchema.value.provider?.config_template || {}
+        const templates = toProviderSourceTemplates(configSchema.value.provider?.config_template)
         providerTemplates.value = templates
-        providerSources.value = (response.data.data.provider_sources || []).map((source: Record<string, any>) =>
+        providerSources.value = (response.data.data.provider_sources || []).map((source: ProviderSourceLike) =>
           hydrateSourceWithTemplateDefaults(source, templates)
         )
         providers.value = response.data.data.providers || []
