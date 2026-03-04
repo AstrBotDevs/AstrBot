@@ -1,7 +1,8 @@
 import asyncio
 import os
 import re
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import telegramify_markdown
 from telegram import ReactionTypeCustomEmoji, ReactionTypeEmoji
@@ -10,7 +11,6 @@ from telegram.error import BadRequest
 from telegram.ext import ExtBot
 
 from astrbot import logger
-from astrbot.core.utils.metrics import Metric
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     At,
@@ -22,6 +22,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.core.utils.metrics import Metric
 
 
 class TelegramPlatformEvent(AstrMessageEvent):
@@ -546,7 +547,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                                 parse_mode="MarkdownV2",
                             )
                             last_sent_text = draft_text
-                        except Exception as e:
+                        except Exception:
                             # markdownify 对未闭合语法可能失败，回退纯文本
                             try:
                                 await self._send_message_draft(
