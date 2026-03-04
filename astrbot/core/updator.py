@@ -161,6 +161,14 @@ class AstrBotUpdator(RepoZipUpdator):
 
         return releases
 
+    @staticmethod
+    def _ensure_file_url_for_version(
+        version: str | None,
+        file_url: str | None,
+    ) -> None:
+        if version and version.startswith("v") and file_url is None:
+            raise ValueError(f"Requested version tag not found: {version}")
+
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
         update_data = []
         file_url = None
@@ -190,8 +198,7 @@ class AstrBotUpdator(RepoZipUpdator):
             for data in update_data:
                 if data["tag_name"] == version:
                     file_url = data["zipball_url"]
-            if not file_url:
-                raise Exception(f"未找到版本号为 {version} 的更新文件。")
+            self._ensure_file_url_for_version(version, file_url)
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")

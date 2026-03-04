@@ -20,6 +20,9 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_CHECKOUT_REF: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
+
 jobs:
   verify-core:
     name: Verify Core Quality Gate
@@ -29,7 +32,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
+          ref: ${{ env.RELEASE_CHECKOUT_REF }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -56,7 +59,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
+          ref: ${{ env.RELEASE_CHECKOUT_REF }}
 
       - name: Resolve tag
         id: tag
@@ -145,7 +148,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
+          ref: ${{ env.RELEASE_CHECKOUT_REF }}
 
       - name: Resolve tag
         id: tag
@@ -179,9 +182,11 @@ jobs:
             fi
             title="${base_version}-nightly-${short_sha}"
           else
+            base_version="$tag"
             title="$tag"
           fi
           echo "title=$title" >> "$GITHUB_OUTPUT"
+          echo "base_version=$base_version" >> "$GITHUB_OUTPUT"
 
       - name: Force-update nightly tag
         if: ${{ steps.tag.outputs.tag == 'nightly' }}
@@ -207,8 +212,8 @@ jobs:
           tag="${{ steps.tag.outputs.tag }}"
           if [ "$tag" = "nightly" ]; then
             note_file="$(mktemp)"
-            base_tag="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
-            if [ -z "$base_tag" ]; then
+            base_tag="${{ steps.release-meta.outputs.base_version }}"
+            if [ -z "$base_tag" ] || ! git rev-parse "$base_tag" >/dev/null 2>&1; then
               echo "## What's Changed" > "$note_file"
               echo >> "$note_file"
               echo "- Nightly build from \`$(git rev-parse --short=8 HEAD)\`" >> "$note_file"
@@ -321,7 +326,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tag == 'nightly')) && 'refs/heads/master' || inputs.ref || github.ref }}
+          ref: ${{ env.RELEASE_CHECKOUT_REF }}
 
       - name: Resolve tag
         id: tag

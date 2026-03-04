@@ -12,6 +12,12 @@ from astrbot.core import logger
 from astrbot.core.utils.io import download_file, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
+PRERELEASE_TAG_REGEX = re.compile(
+    r"[\-_.]?(alpha|beta|rc|dev|nightly|pre|preview)[\-_.]?\d*$",
+    re.IGNORECASE,
+)
+# Keep this rule aligned with dashboard/src/layouts/full/vertical-header/VerticalHeader.vue.
+
 
 class ReleaseInfo:
     version: str
@@ -132,11 +138,7 @@ class RepoZipUpdator:
         else:
             for data in update_data:
                 # 跳过带有 alpha、beta、nightly 等预发布标签的版本
-                if re.search(
-                    r"[\-_.]?(alpha|beta|rc|dev|nightly|pre|preview)[\-_.]?\d*$",
-                    data["tag_name"],
-                    re.IGNORECASE,
-                ):
+                if PRERELEASE_TAG_REGEX.search(data["tag_name"]):
                     continue
                 tag_name = data["tag_name"]
                 sel_release_data = data
