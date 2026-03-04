@@ -90,7 +90,7 @@ class RepoZipUpdator:
                 )
         except Exception as e:
             logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败")
+            raise Exception("解析版本信息失败") from e
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:

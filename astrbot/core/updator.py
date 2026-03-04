@@ -1,7 +1,10 @@
+import asyncio
 import os
 import sys
 import time
+from json import JSONDecodeError
 
+import aiohttp
 import psutil
 
 from astrbot.core import logger
@@ -145,65 +148,106 @@ class AstrBotUpdator(RepoZipUpdator):
             consider_prerelease,
         )
 
-    async def get_releases(self) -> list:
-        releases = await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
+    async def get_releases(self, latest: bool | None = None) -> list:
+        release_latest = True if latest is None else latest
+        releases = await self.fetch_release_info(
+            self.ASTRBOT_RELEASE_API,
+            release_latest,
+        )
+        return await self._with_nightly_release(releases)
 
+    @staticmethod
+    def _is_expected_nightly_fetch_error(exc: BaseException) -> bool:
+        expected_errors = (
+            asyncio.TimeoutError,
+            aiohttp.ClientError,
+            JSONDecodeError,
+            ValueError,
+        )
+        to_check = [exc]
+        checked: set[int] = set()
+        while to_check:
+            current = to_check.pop()
+            if id(current) in checked:
+                continue
+            checked.add(id(current))
+            if isinstance(current, expected_errors):
+                return True
+            if current.__cause__:
+                to_check.append(current.__cause__)
+            if current.__context__:
+                to_check.append(current.__context__)
+        return False
+
+    async def _with_nightly_release(self, releases: list) -> list:
         try:
             nightly_releases = await self.fetch_release_info(
                 f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}",
             )
-            if nightly_releases and all(
-                item.get("tag_name") != self.NIGHTLY_TAG for item in releases
-            ):
-                releases.insert(0, nightly_releases[0])
         except Exception as e:
-            logger.warning(f"获取 nightly 发布信息失败: {e}")
+            if self._is_expected_nightly_fetch_error(e):
+                logger.warning(f"获取 nightly 发布信息失败（网络/解析错误）: {e}")
+                return releases
+            raise
 
+        if nightly_releases and all(
+            item.get("tag_name") != self.NIGHTLY_TAG for item in releases
+        ):
+            releases.insert(0, nightly_releases[0])
         return releases
 
-    @staticmethod
-    def _ensure_file_url_for_version(
-        version: str | None,
-        file_url: str | None,
-    ) -> None:
-        if version and version.startswith("v") and file_url is None:
-            raise ValueError(f"Requested version tag not found: {version}")
-
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
-        update_data = []
-        file_url = None
-
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
             raise Exception(
                 "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
             )  # 避免版本管理混乱
 
-        if latest:
-            update_data = await self.fetch_release_info(
-                self.ASTRBOT_RELEASE_API, latest
-            )
+        version_str = str(version) if version is not None else ""
+        is_nightly = bool(version_str and version_str.lower() == self.NIGHTLY_TAG)
+        is_tag = bool(version_str and version_str.startswith("v"))
+        need_releases = latest or is_tag
+
+        update_data = []
+        if need_releases:
+            update_data = await self.get_releases(latest=latest if latest else False)
             if not update_data:
                 raise Exception("未找到可用的发布版本。")
-            latest_version = update_data[0]["tag_name"]
+
+        file_url: str | None = None
+
+        if latest:
+            latest_release = next(
+                (
+                    item
+                    for item in update_data
+                    if item.get("tag_name", "").lower() != self.NIGHTLY_TAG
+                ),
+                None,
+            )
+            if latest_release is None:
+                raise Exception("未找到可用的发布版本。")
+
+            latest_version = latest_release["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
                 raise Exception("当前已经是最新版本。")
-            file_url = update_data[0]["zipball_url"]
-        elif str(version).lower() == self.NIGHTLY_TAG:
+            file_url = latest_release["zipball_url"]
+        elif is_nightly:
             file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/refs/tags/{self.NIGHTLY_TAG}.zip"
-        elif str(version).startswith("v"):
+        elif is_tag:
             # 更新到指定版本
-            update_data = await self.fetch_release_info(
-                self.ASTRBOT_RELEASE_API, latest
-            )
             for data in update_data:
-                if data["tag_name"] == version:
+                if data["tag_name"] == version_str:
                     file_url = data["zipball_url"]
-            self._ensure_file_url_for_version(version, file_url)
+                    break
+            if file_url is None:
+                raise ValueError(f"Requested version tag not found: {version_str}")
         else:
-            if len(str(version)) != 40:
+            if len(version_str) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
-        logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
+            file_url = (
+                f"https://github.com/AstrBotDevs/AstrBot/archive/{version_str}.zip"
+            )
+        logger.info(f"准备更新至指定版本的 AstrBot Core: {version_str}")
 
         if proxy:
             proxy = proxy.removesuffix("/")
