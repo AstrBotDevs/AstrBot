@@ -535,18 +535,24 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     if draft_text != last_sent_text:
                         try:
                             md = telegramify_markdown.markdownify(
-                                draft_text, normalize_whitespace=False,
+                                draft_text,
+                                normalize_whitespace=False,
                             )
                             await self._send_message_draft(
-                                user_name, draft_id, md,
-                                message_thread_id, parse_mode="MarkdownV2",
+                                user_name,
+                                draft_id,
+                                md,
+                                message_thread_id,
+                                parse_mode="MarkdownV2",
                             )
                             last_sent_text = draft_text
                         except Exception as e:
                             # markdownify 对未闭合语法可能失败，回退纯文本
                             try:
                                 await self._send_message_draft(
-                                    user_name, draft_id, draft_text,
+                                    user_name,
+                                    draft_id,
+                                    draft_text,
                                     message_thread_id,
                                 )
                                 last_sent_text = draft_text
@@ -572,7 +578,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     if delta:
                         # 用 emoji 清空 draft 显示，避免 draft 和真实消息同时可见
                         await self._send_message_draft(
-                            user_name, draft_id, "\u23f3",
+                            user_name,
+                            draft_id,
+                            "\u23f3",
                             message_thread_id,
                         )
                         await self._send_final_segment(delta, payload)
@@ -592,7 +600,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
         # 流式结束：用 emoji 清空 draft，然后发真实消息持久化
         if delta:
             await self._send_message_draft(
-                user_name, draft_id, "\u23f3",
+                user_name,
+                draft_id,
+                "\u23f3",
                 message_thread_id,
             )
             await self._send_final_segment(delta, payload)
