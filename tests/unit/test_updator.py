@@ -64,7 +64,7 @@ async def test_get_releases_includes_nightly_tag(monkeypatch):
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases()
+    releases = await updator.get_releases_with_nightly()
 
     assert releases[0]["tag_name"] == "nightly"
     assert releases[1]["tag_name"] == "v9.9.9"
@@ -99,11 +99,63 @@ async def test_get_releases_deduplicates_nightly_when_already_in_stable(monkeypa
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    releases = await updator.get_releases()
+    releases = await updator.get_releases_with_nightly()
 
     nightly_releases = [item for item in releases if item["tag_name"] == "nightly"]
     assert len(nightly_releases) == 1
     assert releases[0]["zipball_url"] == "https://example.com/stable-nightly.zip"
+
+
+@pytest.mark.asyncio
+async def test_get_releases_returns_stable_only(monkeypatch):
+    updator = AstrBotUpdator()
+    stable_release = {
+        "version": "v9.9.9",
+        "published_at": "2026-03-01T00:00:00Z",
+        "body": "stable",
+        "tag_name": "v9.9.9",
+        "zipball_url": "https://example.com/stable.zip",
+    }
+
+    async def mock_fetch_release_info(url: str, latest: bool = True):
+        _ = latest
+        if url == updator.ASTRBOT_RELEASE_API:
+            return [stable_release]
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
+
+    releases = await updator.get_releases(latest=True)
+    assert len(releases) == 1
+    assert releases[0]["tag_name"] == "v9.9.9"
+
+
+@pytest.mark.asyncio
+async def test_get_nightly_release_returns_none_for_expected_fetch_error(monkeypatch):
+    updator = AstrBotUpdator()
+
+    async def mock_fetch_release_info(url: str, latest: bool = True):
+        _ = url, latest
+        raise Exception("请求失败，状态码: 404")
+
+    monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
+
+    release = await updator.get_nightly_release()
+    assert release is None
+
+
+@pytest.mark.asyncio
+async def test_get_nightly_release_raises_for_unexpected_error(monkeypatch):
+    updator = AstrBotUpdator()
+
+    async def mock_fetch_release_info(url: str, latest: bool = True):
+        _ = url, latest
+        raise KeyError("unexpected")
+
+    monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
+
+    with pytest.raises(KeyError):
+        await updator.get_nightly_release()
 
 
 @pytest.mark.asyncio
