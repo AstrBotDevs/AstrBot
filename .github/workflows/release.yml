@@ -108,7 +108,8 @@ jobs:
           VERSION_TAG: ${{ steps.tag.outputs.tag }}
         shell: bash
         run: |
-          curl https://rclone.org/install.sh | sudo bash
+          sudo apt-get update
+          sudo apt-get install -y rclone
 
           mkdir -p ~/.config/rclone
           cat <<EOF > ~/.config/rclone/rclone.conf
