@@ -19,7 +19,7 @@
 
 <div>
 <img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
+<img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
 <img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
 <a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFZIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
@@ -73,7 +73,7 @@ AstrBot est une plateforme de chatbot Agent tout-en-un open source qui s'intègr
 
 ### Déploiement en un clic
 
-Pour les utilisateurs qui souhaitent découvrir AstrBot rapidement, nous recommandons la méthode de déploiement en un clic avec `uv` ⚡️ :
+Pour les utilisateurs qui veulent découvrir AstrBot rapidement, qui sont familiers avec la ligne de commande et peuvent installer eux-mêmes l'environnement `uv`, nous recommandons la méthode de déploiement en un clic avec `uv` ⚡️ :
 
 ```bash
 uv tool install astrbot
@@ -85,45 +85,47 @@ astrbot
 
 ### Déploiement Docker
 
-Pour les utilisateurs qui veulent un déploiement plus stable et prêt pour la production, nous recommandons d'utiliser Docker / Docker Compose pour déployer AstrBot.
+Pour les utilisateurs familiers avec les conteneurs et qui souhaitent une méthode plus stable et adaptée à la production, nous recommandons de déployer AstrBot avec Docker / Docker Compose.
 
-Veuillez consulter la documentation officielle : [Déployer AstrBot avec Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
+Veuillez consulter la documentation officielle [Déployer AstrBot avec Docker](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
 
 ### Déployer sur RainYun
 
-Pour les utilisateurs qui souhaitent déployer AstrBot en un clic sans gérer le serveur, nous recommandons le service de déploiement cloud en un clic de RainYun ☁️ :
+Pour les utilisateurs qui souhaitent déployer AstrBot en un clic sans gérer le serveur eux-mêmes, nous recommandons le service de déploiement cloud en un clic de RainYun ☁️ :
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### Application de bureau (Tauri)
+### Déploiement de l'application de bureau
 
-Pour les utilisateurs qui veulent déployer AstrBot sur desktop, utilisent principalement AstrBot ChatUI et utilisent rarement les plugins AstrBot, nous recommandons AstrBot App :
+Pour les utilisateurs qui veulent utiliser AstrBot sur desktop et passer principalement par ChatUI, nous recommandons AstrBot App.
 
-Dépôt de l'application de bureau : [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop).
+Accédez à [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) pour télécharger et installer l'application ; cette méthode est conçue pour un usage desktop et n'est pas recommandée pour les scénarios serveur.
 
-Prend en charge plusieurs architectures système, installation directe, prête à l'emploi. Solution de déploiement bureau en un clic, particulièrement adaptée aux débutants. Non recommandée pour les serveurs.
+### Déploiement avec le lanceur
 
-### Déploiement en un clic avec le lanceur (AstrBot Launcher)
+Également sur desktop, pour les utilisateurs qui souhaitent un déploiement rapide avec isolation d'environnement et multi-instances, nous recommandons AstrBot Launcher.
 
-Pour les utilisateurs qui veulent une solution de déploiement rapide et multi-instances avec isolation d'environnement, nous recommandons d'utiliser AstrBot Launcher :
-
-Accédez au dépôt [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) et installez le package correspondant à votre système depuis la dernière release.
-
-Une solution de déploiement rapide et multi-instances avec isolation d'environnement.
+Accédez à [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) pour télécharger et installer.
 
 ### Déployer sur Replit
 
-Méthode de déploiement contribuée par la communauté.
+Le déploiement sur Replit est maintenu par la communauté et convient aux démonstrations en ligne et aux essais légers.
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
 ### AUR
 
+Le mode AUR s'adresse aux utilisateurs Arch Linux qui préfèrent installer AstrBot via le gestionnaire de paquets système.
+
+Exécutez la commande ci-dessous pour installer `astrbot-git`, puis lancez AstrBot localement.
+
 ```bash
 yay -S astrbot-git
 ```
 
-**Autres méthodes de déploiement** : [Déploiement BT-Panel](https://astrbot.app/deploy/astrbot/btpanel.html) | [Déploiement 1Panel](https://astrbot.app/deploy/astrbot/1panel.html) | [Déploiement CasaOS](https://astrbot.app/deploy/astrbot/casaos.html) | [Déploiement manuel](https://astrbot.app/deploy/astrbot/cli.html)
+**Autres méthodes de déploiement**
+
+Si vous avez besoin d'une gestion par panneau ou d'une personnalisation plus poussée, consultez [Déploiement BT-Panel](https://astrbot.app/deploy/astrbot/btpanel.html) pour une installation via BT Panel, [Déploiement 1Panel](https://astrbot.app/deploy/astrbot/1panel.html) pour le marketplace 1Panel, [Déploiement CasaOS](https://astrbot.app/deploy/astrbot/casaos.html) pour un déploiement visuel sur NAS/serveur domestique, et [Déploiement manuel](https://astrbot.app/deploy/astrbot/cli.html) pour une installation complète depuis les sources avec `uv`.
 
 ## Plateformes de messagerie prises en charge
 

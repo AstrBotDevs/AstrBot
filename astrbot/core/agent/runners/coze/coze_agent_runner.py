@@ -1,7 +1,7 @@
 import base64
 import json
-import sys
 import typing as T
+from typing import override
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -17,11 +17,6 @@ from ...response import AgentResponseData
 from ...run_context import ContextWrapper, TContext
 from ..base import AgentResponse, AgentState, BaseAgentRunner
 from .coze_api_client import CozeAPIClient
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class CozeAgentRunner(BaseAgentRunner[TContext]):
@@ -251,7 +246,7 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
             conversation_id=conversation_id,
             auto_save_history=self.auto_save_history,
             stream=True,
-            timeout=self.timeout,
+            timeout_seconds=self.timeout,
         ):
             event_type = chunk.get("event")
             data = chunk.get("data", {})

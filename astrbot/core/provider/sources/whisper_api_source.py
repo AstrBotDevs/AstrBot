@@ -1,5 +1,7 @@
+import asyncio
 import os
 import uuid
+from pathlib import Path
 
 from openai import NOT_GIVEN, AsyncOpenAI
 
@@ -44,8 +46,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
         amr_header = b"#!AMR"
 
         try:
-            with open(file_path, "rb") as f:
-                file_header = f.read(8)
+            file_header = (await asyncio.to_thread(Path(file_path).read_bytes))[:8]
         except FileNotFoundError:
             return None
 
@@ -73,7 +74,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             await download_file(audio_url, path)
             audio_url = path
 
-        if not os.path.exists(audio_url):
+        if not await asyncio.to_thread(os.path.exists, audio_url):
             raise FileNotFoundError(f"文件不存在: {audio_url}")
 
         if audio_url.endswith(".amr") or audio_url.endswith(".silk") or is_tencent:
@@ -100,13 +101,14 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
+        audio_bytes = await asyncio.to_thread(Path(audio_url).read_bytes)
         result = await self.client.audio.transcriptions.create(
             model=self.model_name,
-            file=("audio.wav", open(audio_url, "rb")),
+            file=("audio.wav", audio_bytes),
         )
 
         # remove temp file
-        if output_path and os.path.exists(output_path):
+        if output_path and await asyncio.to_thread(os.path.exists, output_path):
             try:
                 os.remove(audio_url)
             except Exception as e:

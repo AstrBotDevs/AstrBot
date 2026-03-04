@@ -269,7 +269,11 @@ class ProviderManager:
 
         return provider
 
-    async def initialize(self) -> None:
+    async def initialize(
+        self,
+        *,
+        init_timeout: float | int | str | None = None,
+    ) -> None:
         # 逐个初始化提供商
         for provider_config in self.providers_config:
             try:
@@ -338,7 +342,8 @@ class ProviderManager:
             "on",
         }
         mcp_init_summary = await self.llm_tools.init_mcp_clients(
-            raise_on_all_failed=strict_mcp_init
+            raise_on_all_failed=strict_mcp_init,
+            init_timeout=init_timeout,
         )
         if (
             mcp_init_summary.total > 0

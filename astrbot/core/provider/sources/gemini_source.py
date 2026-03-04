@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import cast
 
 from google import genai
@@ -924,9 +925,10 @@ class ProviderGoogleGenAI(Provider):
         """将图片转换为 base64"""
         if image_url.startswith("base64://"):
             return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
+        image_bs64 = base64.b64encode(
+            await asyncio.to_thread(Path(image_url).read_bytes)
+        ).decode("utf-8")
+        return "data:image/jpeg;base64," + image_bs64
 
     async def terminate(self) -> None:
         if self.client:

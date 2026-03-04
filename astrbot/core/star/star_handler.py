@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Generic, Literal, TypeVar, overload
+from typing import Any, Literal, TypeVar, overload
 
 from .filter import HandlerFilter
 from .star import star_map
@@ -11,7 +11,7 @@ from .star import star_map
 T = TypeVar("T", bound="StarHandlerMetadata")
 
 
-class StarHandlerRegistry(Generic[T]):
+class StarHandlerRegistry[T: "StarHandlerMetadata"]:
     def __init__(self) -> None:
         self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
@@ -227,7 +227,7 @@ H = TypeVar("H", bound=Callable[..., Any])
 
 
 @dataclass
-class StarHandlerMetadata(Generic[H]):
+class StarHandlerMetadata[H: Callable[..., Any]]:
     """描述一个 Star 所注册的某一个 Handler。"""
 
     event_type: EventType

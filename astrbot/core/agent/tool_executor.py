@@ -1,13 +1,13 @@
 from collections.abc import AsyncGenerator
-from typing import Any, Generic
+from typing import Any
 
 import mcp
 
-from .run_context import ContextWrapper, TContext
+from .run_context import ContextWrapper
 from .tool import FunctionTool
 
 
-class BaseFunctionToolExecutor(Generic[TContext]):
+class BaseFunctionToolExecutor[TContext]:
     @classmethod
     async def execute(
         cls,

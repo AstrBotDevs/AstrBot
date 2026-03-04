@@ -53,14 +53,12 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
     async def get_timestamped_path(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
         return str(temp_dir / timestamp)
 
     async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
-        with open(file_path, "rb") as f:
-            file_header = f.read(8)
-
+        file_header = (await asyncio.to_thread(Path(file_path).read_bytes))[:8]
         if silk_header in file_header:
             return True
         return False
@@ -76,7 +74,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
                 await download_file(audio_url, path)
                 audio_url = path
 
-            if not os.path.isfile(audio_url):
+            if not await asyncio.to_thread(os.path.isfile, audio_url):
                 raise FileNotFoundError(f"文件不存在: {audio_url}")
 
             if audio_url.endswith((".amr", ".silk")) or is_tencent:

@@ -339,7 +339,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
 
         # 处理文件数据
-        if os.path.exists(file_source):
+        if await asyncio.to_thread(os.path.exists, file_source):
             # 读取本地文件
             async with aiofiles.open(file_source, "rb") as f:
                 file_content = await f.read()
@@ -421,15 +421,15 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 plain_text += i.text
             elif isinstance(i, Image) and not image_base64:
                 if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:])
+                    image_base64 = await file_to_base64(i.file[8:])
                     image_file_path = i.file[8:]
                 elif i.file and i.file.startswith("http"):
                     image_file_path = await download_image_by_url(i.file)
-                    image_base64 = file_to_base64(image_file_path)
+                    image_base64 = await file_to_base64(image_file_path)
                 elif i.file and i.file.startswith("base64://"):
                     image_base64 = i.file
                 elif i.file:
-                    image_base64 = file_to_base64(i.file)
+                    image_base64 = await file_to_base64(i.file)
                 else:
                     raise ValueError("Unsupported image file format")
                 image_base64 = image_base64.removeprefix("base64://")

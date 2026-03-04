@@ -19,7 +19,7 @@
 
 <div>
 <img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
+<img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
 <img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
 <a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFZIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0LjYxNTZDNS4zMTUwMiAxNC4zOTk5IDUuNjAxNTYgMTQuMTEzNCA1LjYwMTU2IDEzLjc1OTlWMTEuMDM5OUM1LjYwMTU2IDEwLjY4NjQgNS4zMTUwMiAxMC4zOTk5IDQuOTYxNTYgMTAuMzk5OVoiIGZpbGw9IiNmZmYiLz4KPHBhdGggZD0iTTEzLjc1ODQgMS42MDAxSDExLjAzODRDMTAuNjg1IDEuNjAwMSAxMC4zOTg0IDEuODg2NjQgMTAuMzk4NCAyLjI0MDFWNC45NjAxQzEwLjM5ODQgNS4zMTM1NiAxMC42ODUgNS42MDAxIDExLjAzODQgNS42MDAxSDEzLjc1ODRDMTQuMTExOSA1LjYwMDEgMTQuMzk4NCA1LjMxMzU2IDE0LjM5ODQgNC45NjAxVjIuMjQwMUMxNC4zOTg0IDEuODg2NjQgMTQuMTExOSAxLjYwMDEgMTMuNzU4NCAxLjYwMDFZIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDRMNCAxMlpFIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
@@ -73,7 +73,7 @@ AstrBot は、主要なインスタントメッセージングアプリと統合
 
 ### ワンクリックデプロイ
 
-AstrBot を素早く試したいユーザーには、`uv` を使ったワンクリックデプロイをおすすめします ⚡️:
+AstrBot を素早く試したいユーザーで、コマンドラインに慣れており `uv` 環境を自分でインストールできる場合は、`uv` のワンクリックデプロイをおすすめします ⚡️:
 
 ```bash
 uv tool install astrbot
@@ -85,45 +85,47 @@ astrbot
 
 ### Docker デプロイ
 
-より安定した本番向けのデプロイを求めるユーザーには、Docker / Docker Compose で AstrBot をデプロイすることをおすすめします。
+コンテナ運用に慣れており、より安定した本番向けのデプロイ方法を求めるユーザーには、Docker / Docker Compose での AstrBot デプロイをおすすめします。
 
 公式ドキュメント [Docker を使用した AstrBot のデプロイ](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) をご参照ください。
 
 ### 雨云でのデプロイ
 
-サーバー管理をせずに AstrBot をワンクリックでデプロイしたいユーザーには、雨云のワンクリッククラウドデプロイサービスをおすすめします ☁️:
+AstrBot をワンクリックでデプロイしたく、サーバーを自分で管理したくないユーザーには、雨云のワンクリッククラウドデプロイサービスをおすすめします ☁️:
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### デスクトップクライアント（Tauri）
+### デスクトップアプリのデプロイ
 
-デスクトップで AstrBot を使いたいユーザーで、主に AstrBot ChatUI を利用し、AstrBot プラグインの利用頻度が低い場合は、AstrBot App の利用をおすすめします:
+デスクトップで AstrBot を使い、主に ChatUI を入口として利用するユーザーには、AstrBot App をおすすめします。
 
-デスクトップアプリのリポジトリ [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+[AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) からダウンロードしてインストールしてください。この方式はデスクトップ向けであり、サーバー用途には推奨されません。
 
-マルチシステムアーキテクチャに対応し、インストーラーですぐ利用可能。初心者にも使いやすいワンクリックのデスクトップデプロイ方式です。サーバー用途には推奨されません。
+### ランチャーのデプロイ
 
-### ランチャーによるワンクリックデプロイ（AstrBot Launcher）
+同じくデスクトップで、素早くデプロイしつつ環境を分離して多重起動したいユーザーには、AstrBot Launcher をおすすめします。
 
-高速デプロイと環境分離されたマルチインスタンス運用を求めるユーザーには、AstrBot Launcher の利用をおすすめします:
-
-[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) リポジトリにアクセスし、最新リリースからお使いの OS 向けパッケージをインストールしてください。
-
-高速デプロイと環境分離されたマルチインスタンス運用を実現できます。
+[AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) からダウンロードしてインストールしてください。
 
 ### Replit でのデプロイ
 
-コミュニティ貢献によるデプロイ方法。
+Replit デプロイはコミュニティ提供の方式で、オンラインデモや軽量な試用に向いています。
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
 ### AUR
 
+AUR 方式は Arch Linux ユーザー向けで、システムのパッケージ運用に合わせて AstrBot を導入したい場合に適しています。
+
+次のコマンドで `astrbot-git` をインストールし、ローカル環境で AstrBot を起動してください。
+
 ```bash
 yay -S astrbot-git
 ```
 
-**その他のデプロイ方法**：[宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html) | [1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html) | [CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html) | [手動デプロイ](https://astrbot.app/deploy/astrbot/cli.html)
+**その他のデプロイ方法**
+
+パネル操作での導入やより高度なカスタマイズが必要な場合は、[宝塔パネルデプロイ](https://astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 経由の導入）、[1Panel デプロイ](https://astrbot.app/deploy/astrbot/1panel.html)（1Panel アプリマーケット経由）、[CasaOS デプロイ](https://astrbot.app/deploy/astrbot/casaos.html)（NAS / ホームサーバー向け可視化導入）、[手動デプロイ](https://astrbot.app/deploy/astrbot/cli.html)（`uv` とソースベースのフルカスタム導入）を参照してください。
 
 ## サポートされているメッセージプラットフォーム
 

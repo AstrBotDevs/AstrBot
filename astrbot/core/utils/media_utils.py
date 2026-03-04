@@ -108,7 +108,7 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
+            if output_path and await asyncio.to_thread(os.path.exists, output_path):
                 try:
                     os.remove(output_path)
                     logger.debug(
@@ -183,7 +183,7 @@ async def convert_video_format(
 
         if process.returncode != 0:
             # 清理可能已生成但无效的临时文件
-            if output_path and os.path.exists(output_path):
+            if output_path and await asyncio.to_thread(os.path.exists, output_path):
                 try:
                     os.remove(output_path)
                     logger.debug(
@@ -231,7 +231,7 @@ async def convert_audio_format(
 
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_audio_{uuid.uuid4().hex}.{output_format}")
 
     args = ["ffmpeg", "-y", "-i", audio_path]
@@ -249,7 +249,7 @@ async def convert_audio_format(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and await asyncio.to_thread(os.path.exists, output_path):
                 try:
                     os.remove(output_path)
                 except OSError as e:
@@ -287,7 +287,7 @@ async def extract_video_cover(
     """从视频中提取封面图（JPG）。"""
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_cover_{uuid.uuid4().hex}.jpg")
 
     try:
@@ -306,7 +306,7 @@ async def extract_video_cover(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
+            if output_path and await asyncio.to_thread(os.path.exists, output_path):
                 try:
                     os.remove(output_path)
                 except OSError as e:

@@ -17,7 +17,7 @@
 
 <div>
 <img src="https://img.shields.io/github/v/release/AstrBotDevs/AstrBot?color=76bad9" href="https://github.com/AstrBotDevs/AstrBot/releases/latest">
-<img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="python">
+<img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
 <img src="https://deepwiki.com/badge.svg" href="https://deepwiki.com/AstrBotDevs/AstrBot">
 <a href="https://zread.ai/AstrBotDevs/AstrBot" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
 <a href="https://hub.docker.com/r/soulter/astrbot"><img alt="Docker pull" src="https://img.shields.io/docker/pulls/soulter/astrbot.svg?color=76bad9"/></a>
@@ -73,7 +73,7 @@ AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、
 
 ### 一键部署
 
-对于想快速体验 AstrBot 的用户，我们推荐使用 `uv` 一键部署方式 ⚡️：
+对于想快速体验 AstrBot、且熟悉命令行并能够自行安装 `uv` 环境的用户，我们推荐使用 `uv` 一键部署方式 ⚡️。
 
 ```bash
 uv tool install astrbot
@@ -85,9 +85,9 @@ astrbot
 
 ### Docker 部署
 
-对于希望获得更稳定、更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
+对于熟悉容器、希望获得更稳定且更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
 
-请参阅官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot) 。
+请参考官方文档 [使用 Docker 部署 AstrBot](https://astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
 ### 在 雨云 上部署
 
@@ -95,35 +95,37 @@ astrbot
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
-### 桌面客户端（Tauri）
+### 桌面客户端部署
 
-对于希望在桌面部署 AstrBot、以 AstrBot ChatUI 为主要使用方式、较少使用 AstrBot 插件的用户，我们推荐使用 AstrBot App：
+对于希望在桌面端使用 AstrBot、并以 ChatUI 为主要入口的用户，我们推荐使用 AstrBot App。
 
-桌面应用仓库 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop)。
+前往 [AstrBot-desktop](https://github.com/AstrBotDevs/AstrBot-desktop) 下载并安装；该方式面向桌面使用，不推荐服务器场景。
 
-支持多系统架构，安装包直接安装，开箱即用，最适合新手和懒人的一键桌面部署方案，不推荐服务器场景。
+### 启动器部署
 
-### 启动器一键部署（AstrBot Launcher）
+同样在桌面端，希望快速部署并实现环境隔离多开的用户，我们推荐使用 AstrBot Launcher。
 
-对于希望快速部署并实现环境隔离多开的用户，我们推荐使用 AstrBot Launcher：
-
-进入 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 仓库，在 Releases 页最新版本下找到对应的系统安装包安装即可。
-
-一个快速部署和多开方案，实现环境隔离。
+前往 [AstrBot Launcher](https://github.com/Raven95676/astrbot-launcher) 下载并安装。
 
 ### 在 Replit 上部署
 
-社区贡献的部署方式。
+Replit 部署由社区维护，适合在线演示和轻量试用场景。
 
 [![Run on Repl.it](https://repl.it/badge/github/AstrBotDevs/AstrBot)](https://repl.it/github/AstrBotDevs/AstrBot)
 
 ### AUR
 
+AUR 方式面向 Arch Linux 用户，适合希望通过系统包管理器安装 AstrBot 的场景。
+
+在终端执行下方命令安装 `astrbot-git` 包，安装完成后即可启动使用。
+
 ```bash
 yay -S astrbot-git
 ```
 
-**更多部署方式**：[宝塔面板](https://astrbot.app/deploy/astrbot/btpanel.html) | [1Panel](https://astrbot.app/deploy/astrbot/1panel.html) | [CasaOS](https://astrbot.app/deploy/astrbot/casaos.html) | [手动部署](https://astrbot.app/deploy/astrbot/cli.html)
+**更多部署方式**
+
+若你需要面板化或更高自定义部署，可参考 [宝塔面板](https://astrbot.app/deploy/astrbot/btpanel.html)（BT Panel 应用商店安装）、[1Panel](https://astrbot.app/deploy/astrbot/1panel.html)（1Panel 应用商店安装）、[CasaOS](https://astrbot.app/deploy/astrbot/casaos.html)（NAS / 家庭服务器可视化部署）和 [手动部署](https://astrbot.app/deploy/astrbot/cli.html)（基于源码与 `uv` 的完整自定义安装）。
 
 ## 支持的消息平台
 

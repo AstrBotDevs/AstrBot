@@ -2,7 +2,6 @@ import asyncio
 import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Generic
 
 from tenacity import (
     before_sleep_log,
@@ -16,7 +15,6 @@ from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
-from .run_context import TContext
 from .tool import FunctionTool
 
 
@@ -161,7 +159,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, await _format_http_error(response)
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
@@ -425,7 +423,7 @@ class MCPClient:
         self.running_event.set()
 
 
-class MCPTool(FunctionTool, Generic[TContext]):
+class MCPTool[TContext](FunctionTool):
     """A function tool that calls an MCP service."""
 
     def __init__(

@@ -104,7 +104,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_image_url(segment: Image) -> str:
         candidate = (segment.url or segment.file or "").strip()
-        if candidate.startswith("http://") or candidate.startswith("https://"):
+        if candidate.startswith("https://"):
             return candidate
         try:
             return await segment.register_to_file_service()
@@ -115,7 +115,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_record_url(segment: Record) -> str:
         candidate = (segment.url or segment.file or "").strip()
-        if candidate.startswith("http://") or candidate.startswith("https://"):
+        if candidate.startswith("https://"):
             return candidate
         try:
             return await segment.register_to_file_service()
@@ -137,7 +137,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_video_url(segment: Video) -> str:
         candidate = (segment.file or "").strip()
-        if candidate.startswith("http://") or candidate.startswith("https://"):
+        if candidate.startswith("https://"):
             return candidate
         try:
             return await segment.register_to_file_service()
@@ -148,9 +148,7 @@ class LineMessageEvent(AstrMessageEvent):
     @staticmethod
     async def _resolve_video_preview_url(segment: Video) -> str:
         cover_candidate = (segment.cover or "").strip()
-        if cover_candidate.startswith("http://") or cover_candidate.startswith(
-            "https://"
-        ):
+        if cover_candidate.startswith("https://"):
             return cover_candidate
 
         if cover_candidate:
@@ -163,7 +161,7 @@ class LineMessageEvent(AstrMessageEvent):
         try:
             video_path = await segment.convert_to_file_path()
             temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
             thumb_path = temp_dir / f"line_video_preview_{uuid.uuid4().hex}.jpg"
 
             process = await asyncio.create_subprocess_exec(
@@ -191,7 +189,7 @@ class LineMessageEvent(AstrMessageEvent):
 
     @staticmethod
     async def _resolve_file_url(segment: File) -> str:
-        if segment.url and segment.url.startswith(("http://", "https://")):
+        if segment.url and segment.url.startswith("https://"):
             return segment.url
         try:
             return await segment.register_to_file_service()
@@ -203,8 +201,8 @@ class LineMessageEvent(AstrMessageEvent):
     async def _resolve_file_size(segment: File) -> int:
         try:
             file_path = await segment.get_file(allow_return_url=False)
-            if file_path and os.path.exists(file_path):
-                return int(os.path.getsize(file_path))
+            if file_path and await asyncio.to_thread(os.path.exists, file_path):
+                return int(await asyncio.to_thread(os.path.getsize, file_path))
         except Exception as e:
             logger.debug("[LINE] resolve file size failed: %s", e)
         return 0

@@ -12,6 +12,13 @@ from astrbot.core.utils.media_utils import convert_audio_to_amr
 from .wecom_kf_message import WeChatKFMessage
 
 
+def _upload_media_from_path(
+    client: WeChatClient, media_type: str, file_path: str
+) -> dict:
+    with open(file_path, "rb") as f:
+        return client.media.upload(media_type, f)
+
+
 class WecomPlatformEvent(AstrMessageEvent):
     def __init__(
         self,
@@ -100,45 +107,52 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
 
-                    with open(img_path, "rb") as f:
-                        try:
-                            response = self.client.media.upload("image", f)
-                        except Exception as e:
-                            logger.error(f"微信客服上传图片失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"微信客服上传图片失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"微信客服上传图片返回: {response}")
-                        kf_message_api.send_image(
-                            user_id,
-                            self.get_self_id(),
-                            response["media_id"],
+                    try:
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "image",
+                            img_path,
                         )
+                    except Exception as e:
+                        logger.error(f"微信客服上传图片失败: {e}")
+                        await self.send(
+                            MessageChain().message(f"微信客服上传图片失败: {e}"),
+                        )
+                        return
+                    logger.debug(f"微信客服上传图片返回: {response}")
+                    kf_message_api.send_image(
+                        user_id,
+                        self.get_self_id(),
+                        response["media_id"],
+                    )
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
-                        with open(record_path_amr, "rb") as f:
-                            try:
-                                response = self.client.media.upload("voice", f)
-                            except Exception as e:
-                                logger.error(f"微信客服上传语音失败: {e}")
-                                await self.send(
-                                    MessageChain().message(
-                                        f"微信客服上传语音失败: {e}"
-                                    ),
-                                )
-                                return
-                            logger.info(f"微信客服上传语音返回: {response}")
-                            kf_message_api.send_voice(
-                                user_id,
-                                self.get_self_id(),
-                                response["media_id"],
+                        try:
+                            response = await asyncio.to_thread(
+                                _upload_media_from_path,
+                                self.client,
+                                "voice",
+                                record_path_amr,
                             )
+                        except Exception as e:
+                            logger.error(f"微信客服上传语音失败: {e}")
+                            await self.send(
+                                MessageChain().message(f"微信客服上传语音失败: {e}"),
+                            )
+                            return
+                        logger.info(f"微信客服上传语音返回: {response}")
+                        kf_message_api.send_voice(
+                            user_id,
+                            self.get_self_id(),
+                            response["media_id"],
+                        )
                     finally:
-                        if record_path_amr != record_path and os.path.exists(
+                        if record_path_amr != record_path and await asyncio.to_thread(
+                            os.path.exists,
                             record_path_amr,
                         ):
                             try:
@@ -148,39 +162,47 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
 
-                    with open(file_path, "rb") as f:
-                        try:
-                            response = self.client.media.upload("file", f)
-                        except Exception as e:
-                            logger.error(f"微信客服上传文件失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"微信客服上传文件失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"微信客服上传文件返回: {response}")
-                        kf_message_api.send_file(
-                            user_id,
-                            self.get_self_id(),
-                            response["media_id"],
+                    try:
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "file",
+                            file_path,
                         )
+                    except Exception as e:
+                        logger.error(f"微信客服上传文件失败: {e}")
+                        await self.send(
+                            MessageChain().message(f"微信客服上传文件失败: {e}"),
+                        )
+                        return
+                    logger.debug(f"微信客服上传文件返回: {response}")
+                    kf_message_api.send_file(
+                        user_id,
+                        self.get_self_id(),
+                        response["media_id"],
+                    )
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
 
-                    with open(video_path, "rb") as f:
-                        try:
-                            response = self.client.media.upload("video", f)
-                        except Exception as e:
-                            logger.error(f"微信客服上传视频失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"微信客服上传视频失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"微信客服上传视频返回: {response}")
-                        kf_message_api.send_video(
-                            user_id,
-                            self.get_self_id(),
-                            response["media_id"],
+                    try:
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "video",
+                            video_path,
                         )
+                    except Exception as e:
+                        logger.error(f"微信客服上传视频失败: {e}")
+                        await self.send(
+                            MessageChain().message(f"微信客服上传视频失败: {e}"),
+                        )
+                        return
+                    logger.debug(f"微信客服上传视频返回: {response}")
+                    kf_message_api.send_video(
+                        user_id,
+                        self.get_self_id(),
+                        response["media_id"],
+                    )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
         else:
@@ -199,45 +221,52 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
 
-                    with open(img_path, "rb") as f:
-                        try:
-                            response = self.client.media.upload("image", f)
-                        except Exception as e:
-                            logger.error(f"企业微信上传图片失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"企业微信上传图片失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"企业微信上传图片返回: {response}")
-                        self.client.message.send_image(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            response["media_id"],
+                    try:
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "image",
+                            img_path,
                         )
+                    except Exception as e:
+                        logger.error(f"企业微信上传图片失败: {e}")
+                        await self.send(
+                            MessageChain().message(f"企业微信上传图片失败: {e}"),
+                        )
+                        return
+                    logger.debug(f"企业微信上传图片返回: {response}")
+                    self.client.message.send_image(
+                        message_obj.self_id,
+                        message_obj.session_id,
+                        response["media_id"],
+                    )
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
-                        with open(record_path_amr, "rb") as f:
-                            try:
-                                response = self.client.media.upload("voice", f)
-                            except Exception as e:
-                                logger.error(f"企业微信上传语音失败: {e}")
-                                await self.send(
-                                    MessageChain().message(
-                                        f"企业微信上传语音失败: {e}"
-                                    ),
-                                )
-                                return
-                            logger.info(f"企业微信上传语音返回: {response}")
-                            self.client.message.send_voice(
-                                message_obj.self_id,
-                                message_obj.session_id,
-                                response["media_id"],
+                        try:
+                            response = await asyncio.to_thread(
+                                _upload_media_from_path,
+                                self.client,
+                                "voice",
+                                record_path_amr,
                             )
+                        except Exception as e:
+                            logger.error(f"企业微信上传语音失败: {e}")
+                            await self.send(
+                                MessageChain().message(f"企业微信上传语音失败: {e}"),
+                            )
+                            return
+                        logger.info(f"企业微信上传语音返回: {response}")
+                        self.client.message.send_voice(
+                            message_obj.self_id,
+                            message_obj.session_id,
+                            response["media_id"],
+                        )
                     finally:
-                        if record_path_amr != record_path and os.path.exists(
+                        if record_path_amr != record_path and await asyncio.to_thread(
+                            os.path.exists,
                             record_path_amr,
                         ):
                             try:
@@ -247,39 +276,47 @@ class WecomPlatformEvent(AstrMessageEvent):
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
 
-                    with open(file_path, "rb") as f:
-                        try:
-                            response = self.client.media.upload("file", f)
-                        except Exception as e:
-                            logger.error(f"企业微信上传文件失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"企业微信上传文件失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"企业微信上传文件返回: {response}")
-                        self.client.message.send_file(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            response["media_id"],
+                    try:
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "file",
+                            file_path,
                         )
+                    except Exception as e:
+                        logger.error(f"企业微信上传文件失败: {e}")
+                        await self.send(
+                            MessageChain().message(f"企业微信上传文件失败: {e}"),
+                        )
+                        return
+                    logger.debug(f"企业微信上传文件返回: {response}")
+                    self.client.message.send_file(
+                        message_obj.self_id,
+                        message_obj.session_id,
+                        response["media_id"],
+                    )
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
 
-                    with open(video_path, "rb") as f:
-                        try:
-                            response = self.client.media.upload("video", f)
-                        except Exception as e:
-                            logger.error(f"企业微信上传视频失败: {e}")
-                            await self.send(
-                                MessageChain().message(f"企业微信上传视频失败: {e}"),
-                            )
-                            return
-                        logger.debug(f"企业微信上传视频返回: {response}")
-                        self.client.message.send_video(
-                            message_obj.self_id,
-                            message_obj.session_id,
-                            response["media_id"],
+                    try:
+                        response = await asyncio.to_thread(
+                            _upload_media_from_path,
+                            self.client,
+                            "video",
+                            video_path,
                         )
+                    except Exception as e:
+                        logger.error(f"企业微信上传视频失败: {e}")
+                        await self.send(
+                            MessageChain().message(f"企业微信上传视频失败: {e}"),
+                        )
+                        return
+                    logger.debug(f"企业微信上传视频返回: {response}")
+                    self.client.message.send_video(
+                        message_obj.self_id,
+                        message_obj.session_id,
+                        response["media_id"],
+                    )
                 else:
                     logger.warning(f"还没实现这个消息类型的发送逻辑: {comp.type}。")
 
