@@ -347,7 +347,10 @@ class FunctionToolManager:
             logger.debug(f"  主机: {scheme}://{host}{port}")
 
     async def init_mcp_clients(
-        self, raise_on_all_failed: bool = False
+        self,
+        raise_on_all_failed: bool = False,
+        *,
+        init_timeout: float | int | str | None = None,
     ) -> MCPInitSummary:
         """从项目根目录读取 mcp_server.json 文件，初始化 MCP 服务列表。文件格式如下：
         ```
@@ -368,6 +371,7 @@ class FunctionToolManager:
         ```
 
         Timeout behavior:
+        - 显式 `init_timeout` 参数优先（用于测试或调用方覆盖）。
         - 初始化超时使用环境变量 ASTRBOT_MCP_INIT_TIMEOUT 或默认值。
         - 动态启用超时使用 ASTRBOT_MCP_ENABLE_TIMEOUT（独立于初始化超时）。
         """
@@ -393,8 +397,16 @@ class FunctionToolManager:
             "mcpServers"
         ]
 
-        init_timeout = self._init_timeout_default
-        timeout_display = f"{init_timeout:g}"
+        init_timeout_value = (
+            self._init_timeout_default
+            if init_timeout is None
+            else _resolve_timeout(
+                timeout=init_timeout,
+                env_name=MCP_INIT_TIMEOUT_ENV,
+                default=self._init_timeout_default,
+            )
+        )
+        timeout_display = f"{init_timeout_value:g}"
 
         active_configs: list[tuple[str, dict, asyncio.Event]] = []
         for name, cfg in mcp_server_json_obj.items():
@@ -413,7 +425,7 @@ class FunctionToolManager:
                     name=name,
                     cfg=cfg,
                     shutdown_event=shutdown_event,
-                    timeout_seconds=init_timeout,
+                    timeout_seconds=init_timeout_value,
                 ),
                 name=f"mcp-init:{name}",
             )
