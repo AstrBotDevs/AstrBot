@@ -35,6 +35,13 @@ const handleInstall = (plugin) => {
   emit("install", plugin);
 };
 
+const handlePluginLogoError = (event) => {
+  const target = event?.target;
+  if (!target || target.dataset.fallbackApplied === "1") return;
+  target.dataset.fallbackApplied = "1";
+  target.src = props.defaultPluginIcon;
+};
+
 </script>
 
 <template>
@@ -75,6 +82,7 @@ const handleInstall = (plugin) => {
         <img
           :src="plugin?.logo || defaultPluginIcon"
           :alt="plugin.name"
+          @error="handlePluginLogoError"
           style="
             height: 75px;
             width: 75px;

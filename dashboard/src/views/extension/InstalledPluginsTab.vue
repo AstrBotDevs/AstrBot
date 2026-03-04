@@ -3,6 +3,13 @@ import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 
+const handlePluginLogoError = (event) => {
+  const target = event?.target;
+  if (!target || target.dataset.fallbackApplied === "1") return;
+  target.dataset.fallbackApplied = "1";
+  target.src = defaultPluginIcon;
+};
+
 const props = defineProps({
   state: {
     type: Object,
@@ -318,6 +325,7 @@ const {
                           <img
                             :src="item.logo"
                             :alt="item.name"
+                            @error="handlePluginLogoError"
                             style="
                               height: 40px;
                               width: 40px;
