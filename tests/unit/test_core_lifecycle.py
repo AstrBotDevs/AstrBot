@@ -373,7 +373,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 new_callable=AsyncMock,
             ),
         ):
-            await lifecycle.initialize()
+            await lifecycle.initialize(mcp_init_timeout=3.5)
 
         # Verify database initialized
         mock_db.initialize.assert_awaited_once()
@@ -388,7 +388,7 @@ class TestAstrBotCoreLifecycleInitialize:
         mock_persona_mgr.initialize.assert_awaited_once()
 
         # Verify provider manager initialized
-        mock_provider_manager.initialize.assert_awaited_once()
+        mock_provider_manager.initialize.assert_awaited_once_with(init_timeout=3.5)
 
         # Verify platform manager initialized
         mock_platform_manager.initialize.assert_awaited_once()
