@@ -452,11 +452,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     draft_text = delta[: self.MAX_MESSAGE_LENGTH]
                     if draft_text != last_sent_text:
                         try:
+                            markdown_text = telegramify_markdown.markdownify(
+                                draft_text,
+                                normalize_whitespace=False,
+                            )
                             await self._send_message_draft(
                                 user_name,
                                 draft_id,
-                                draft_text,
+                                markdown_text,
                                 message_thread_id,
+                                parse_mode="MarkdownV2",
                             )
                             last_sent_text = draft_text
                         except Exception:
