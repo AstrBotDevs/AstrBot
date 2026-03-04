@@ -830,7 +830,7 @@ class FunctionToolManager:
         config: dict,
         *,
         max_concurrency: int = 5,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
     ) -> tuple[int, dict[str, str]]:
         sem = asyncio.Semaphore(max_concurrency)
         failures: dict[str, str] = {}
@@ -843,7 +843,7 @@ class FunctionToolManager:
                     await self.enable_mcp_server(
                         name=name,
                         config=config["mcpServers"][name],
-                        timeout=timeout,
+                        timeout=timeout_seconds,
                     )
                     return True
                 except Exception as e:
