@@ -74,7 +74,11 @@ jobs:
             default_branch="master"
           fi
 
-          if [ "$event_name" = "schedule" ] || { [ "$event_name" = "workflow_dispatch" ] && [ "$input_tag" = "$nightly_tag" ]; }; then
+          if [ "$event_name" = "schedule" ]; then
+            ref="refs/heads/${default_branch}"
+          elif [ "$event_name" = "workflow_dispatch" ] && [ -n "$input_ref" ]; then
+            ref="$input_ref"
+          elif [ "$event_name" = "workflow_dispatch" ] && [ "$input_tag" = "$nightly_tag" ]; then
             ref="refs/heads/${default_branch}"
           elif [ -n "$input_ref" ]; then
             ref="$input_ref"
@@ -286,10 +290,22 @@ jobs:
           nightly_tag="${{ needs.resolve-release-context.outputs.nightly_tag }}"
           if [ "$tag" = "$nightly_tag" ]; then
             note_file="$(mktemp)"
-            python3 scripts/release/generate_nightly_release_notes.py \
-              --base-tag "${{ steps.release-meta.outputs.base_version }}" \
-              --repo "${{ needs.resolve-release-context.outputs.repo_slug }}" \
-              --output "$note_file"
+            if [ -f "scripts/release/generate_nightly_release_notes.py" ]; then
+              python3 scripts/release/generate_nightly_release_notes.py \
+                --base-tag "${{ steps.release-meta.outputs.base_version }}" \
+                --repo "${{ needs.resolve-release-context.outputs.repo_slug }}" \
+                --output "$note_file"
+            else
+              short_sha="$(git rev-parse --short=8 HEAD)"
+              echo "Nightly notes script is missing at this ref; using fallback notes."
+              {
+                echo "## What's Changed"
+                echo ""
+                echo "- Baseline tag: \`${{ steps.release-meta.outputs.base_version }}\`"
+                echo "- Nightly commit: \`$short_sha\`"
+                echo "- No changes summary generator available in this ref."
+              } > "$note_file"
+            fi
           else
             note_file="changelogs/${tag}.md"
             if [ ! -f "$note_file" ]; then
