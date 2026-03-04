@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-from enum import Enum, auto
 from json import JSONDecodeError
 
 import aiohttp
@@ -21,11 +20,8 @@ from .zip_updator import (
 )
 
 
-class UpdateMode(Enum):
-    LATEST_STABLE = auto()
-    NIGHTLY = auto()
-    TAG = auto()
-    COMMIT = auto()
+class InvalidUpdateTargetError(ValueError):
+    """Raised when update target arguments are invalid."""
 
 
 class AstrBotUpdator(RepoZipUpdator):
@@ -165,7 +161,11 @@ class AstrBotUpdator(RepoZipUpdator):
     async def get_releases(self) -> list:
         return await self.fetch_release_info(self.ASTRBOT_RELEASE_API)
 
-    async def get_nightly_release(self) -> dict | None:
+    async def _get_releases(self, include_nightly: bool) -> list[dict]:
+        releases = await self.get_releases()
+        if not include_nightly:
+            return releases
+
         nightly_release_url = f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}"
         expected_error_types = (
             TimeoutError,
@@ -181,7 +181,7 @@ class AstrBotUpdator(RepoZipUpdator):
                     "获取 nightly 发布信息失败，跳过 nightly。"
                     f"url={nightly_release_url}, error_type={type(e).__name__}, detail={e}",
                 )
-                return None
+                return releases
             logger.exception(
                 "获取 nightly 发布信息出现非预期异常。"
                 f"url={nightly_release_url}, error_type={type(e).__name__}",
@@ -189,126 +189,76 @@ class AstrBotUpdator(RepoZipUpdator):
             raise
 
         if not nightly_releases:
-            return None
-        return nightly_releases[0]
-
-    async def _fetch_all_releases(self, include_nightly: bool) -> list:
-        releases = await self.get_releases()
-        if not include_nightly:
             return releases
 
-        nightly_release = await self.get_nightly_release()
-        if nightly_release and all(
-            item.get("tag_name") != self.NIGHTLY_TAG for item in releases
-        ):
+        nightly_release = nightly_releases[0]
+        if all(item.get("tag_name") != self.NIGHTLY_TAG for item in releases):
             releases.insert(0, nightly_release)
         return releases
 
     async def get_releases_with_nightly(self) -> list:
-        return await self._fetch_all_releases(include_nightly=True)
-
-    def _detect_update_mode(
-        self,
-        latest: bool,
-        version: str | None,
-    ) -> tuple[UpdateMode, str]:
-        version_str = str(version).strip() if version is not None else ""
-
-        if latest and version_str:
-            raise Exception(
-                "latest=True 时不能同时指定 version，请将 latest 设为 False。"
-            )
-
-        if latest:
-            return UpdateMode.LATEST_STABLE, ""
-
-        if not version_str:
-            raise Exception("未指定有效的更新目标。")
-
-        if version_str.lower() == self.NIGHTLY_TAG:
-            return UpdateMode.NIGHTLY, self.NIGHTLY_TAG
-
-        if version_str.startswith("v"):
-            return UpdateMode.TAG, version_str
-
-        if len(version_str) == 40:
-            return UpdateMode.COMMIT, version_str
-
-        raise Exception("commit hash 长度不正确，应为 40")
-
-    @staticmethod
-    def _pick_latest_stable(releases: list[dict]) -> dict | None:
-        return next(
-            (
-                item
-                for item in releases
-                if (tag := item.get("tag_name", ""))
-                and not PRERELEASE_TAG_REGEX.search(tag)
-            ),
-            None,
-        )
-
-    def _resolve_latest_stable(self, releases: list[dict]) -> tuple[str, str]:
-        latest_release = self._pick_latest_stable(releases)
-        if latest_release is None:
-            raise Exception("未找到可用的发布版本。")
-
-        latest_version = latest_release["tag_name"]
-        if self.compare_version(VERSION, latest_version) >= 0:
-            raise Exception("当前已经是最新版本。")
-        return latest_version, latest_release["zipball_url"]
-
-    def _resolve_nightly(self, releases: list[dict]) -> tuple[str, str]:
-        nightly_release = next(
-            (
-                item
-                for item in releases
-                if item.get("tag_name", "").lower() == self.NIGHTLY_TAG
-            ),
-            None,
-        )
-        if nightly_release is not None:
-            return self.NIGHTLY_TAG, nightly_release["zipball_url"]
-        return self.NIGHTLY_TAG, (
-            f"{self.GITHUB_ARCHIVE_BASE}/refs/tags/{self.NIGHTLY_TAG}.zip"
-        )
-
-    @staticmethod
-    def _resolve_tag(releases: list[dict], tag: str) -> tuple[str, str]:
-        for data in releases:
-            if data.get("tag_name") == tag:
-                return tag, data["zipball_url"]
-        raise Exception(f"未找到版本号为 {tag} 的更新文件。")
-
-    def _resolve_commit(self, commit_hash: str) -> tuple[str, str]:
-        return commit_hash, f"{self.GITHUB_ARCHIVE_BASE}/{commit_hash}.zip"
+        return await self._get_releases(include_nightly=True)
 
     async def _resolve_update_target(
         self,
         latest: bool,
         version: str | None,
     ) -> tuple[str, str]:
-        mode, value = self._detect_update_mode(latest, version)
+        version_str = str(version).strip() if version is not None else ""
 
-        releases: list[dict] | None = None
-        if mode in {UpdateMode.LATEST_STABLE, UpdateMode.NIGHTLY, UpdateMode.TAG}:
-            releases = await self._fetch_all_releases(
-                include_nightly=(mode == UpdateMode.NIGHTLY),
+        if latest and version_str:
+            raise InvalidUpdateTargetError(
+                "latest=True 时不能同时指定 version，请将 latest 设为 False。"
             )
 
-        if mode == UpdateMode.LATEST_STABLE:
-            assert releases is not None
-            return self._resolve_latest_stable(releases)
-        if mode == UpdateMode.NIGHTLY:
-            assert releases is not None
-            return self._resolve_nightly(releases)
-        if mode == UpdateMode.TAG:
-            assert releases is not None
-            return self._resolve_tag(releases, value)
-        if mode == UpdateMode.COMMIT:
-            return self._resolve_commit(value)
+        if latest:
+            releases = await self._get_releases(include_nightly=False)
+            latest_release = next(
+                (
+                    item
+                    for item in releases
+                    if (tag := item.get("tag_name", ""))
+                    and not PRERELEASE_TAG_REGEX.search(tag)
+                ),
+                None,
+            )
+            if latest_release is None:
+                raise Exception("未找到可用的发布版本。")
 
-        raise Exception("未指定有效的更新目标。")
+            latest_version = latest_release["tag_name"]
+            if self.compare_version(VERSION, latest_version) >= 0:
+                raise Exception("当前已经是最新版本。")
+            return latest_version, latest_release["zipball_url"]
+
+        if not version_str:
+            raise InvalidUpdateTargetError("未指定有效的更新目标。")
+
+        if version_str.lower() == self.NIGHTLY_TAG:
+            releases = await self._get_releases(include_nightly=True)
+            nightly_release = next(
+                (
+                    item
+                    for item in releases
+                    if item.get("tag_name", "").lower() == self.NIGHTLY_TAG
+                ),
+                None,
+            )
+            if nightly_release is not None:
+                return self.NIGHTLY_TAG, nightly_release["zipball_url"]
+            return self.NIGHTLY_TAG, (
+                f"{self.GITHUB_ARCHIVE_BASE}/refs/tags/{self.NIGHTLY_TAG}.zip"
+            )
+
+        if version_str.startswith("v"):
+            releases = await self._get_releases(include_nightly=False)
+            for data in releases:
+                if data.get("tag_name") == version_str:
+                    return version_str, data["zipball_url"]
+            raise Exception(f"未找到版本号为 {version_str} 的更新文件。")
+
+        if len(version_str) != 40:
+            raise InvalidUpdateTargetError("commit hash 长度不正确，应为 40")
+        return version_str, f"{self.GITHUB_ARCHIVE_BASE}/{version_str}.zip"
 
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):

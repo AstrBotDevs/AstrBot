@@ -1,6 +1,6 @@
 import pytest
 
-from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.updator import AstrBotUpdator, InvalidUpdateTargetError
 from astrbot.core.zip_updator import FetchReleaseError, RepoZipUpdator
 
 
@@ -142,11 +142,11 @@ async def test_resolve_update_target_nightly_uses_archive_fallback(monkeypatch):
     updator = AstrBotUpdator()
     updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
 
-    async def mock_fetch_all_releases(*, include_nightly: bool):
+    async def mock_get_releases(*, include_nightly: bool):
         _ = include_nightly
         return []
 
-    monkeypatch.setattr(updator, "_fetch_all_releases", mock_fetch_all_releases)
+    monkeypatch.setattr(updator, "_get_releases", mock_get_releases)
 
     target_version, file_url = await updator._resolve_update_target(
         latest=False,
@@ -288,10 +288,11 @@ async def test_resolve_update_target_skips_prerelease_tags_for_latest(monkeypatc
         },
     ]
 
-    async def mock_get_releases():
+    async def mock_get_releases(*, include_nightly: bool):
+        assert include_nightly is False
         return releases
 
-    monkeypatch.setattr(updator, "get_releases", mock_get_releases)
+    monkeypatch.setattr(updator, "_get_releases", mock_get_releases)
     monkeypatch.setattr(updator, "compare_version", lambda _current, _target: -1)
 
     target_version, file_url = await updator._resolve_update_target(
@@ -307,7 +308,7 @@ async def test_resolve_update_target_rejects_version_when_latest_true():
     updator = AstrBotUpdator()
 
     with pytest.raises(
-        Exception,
+        InvalidUpdateTargetError,
         match="latest=True 时不能同时指定 version，请将 latest 设为 False。",
     ):
         await updator._resolve_update_target(
@@ -317,31 +318,52 @@ async def test_resolve_update_target_rejects_version_when_latest_true():
 
 
 @pytest.mark.asyncio
-async def test_get_nightly_release_returns_none_for_expected_fetch_error(monkeypatch):
+async def test_get_releases_with_nightly_skips_expected_nightly_fetch_error(monkeypatch):
     updator = AstrBotUpdator()
+    stable_release = {
+        "version": "v9.9.9",
+        "published_at": "2026-03-01T00:00:00Z",
+        "body": "stable",
+        "tag_name": "v9.9.9",
+        "zipball_url": "https://example.com/stable.zip",
+    }
 
     async def mock_fetch_release_info(url: str):
-        _ = url
-        raise FetchReleaseError("请求失败，状态码: 404")
+        if url == updator.ASTRBOT_RELEASE_API:
+            return [stable_release]
+        if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
+            raise FetchReleaseError("请求失败，状态码: 404")
+        raise AssertionError(f"unexpected URL: {url}")
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
-    release = await updator.get_nightly_release()
-    assert release is None
+    releases = await updator.get_releases_with_nightly()
+    assert len(releases) == 1
+    assert releases[0]["tag_name"] == "v9.9.9"
 
 
 @pytest.mark.asyncio
-async def test_get_nightly_release_raises_for_unexpected_error(monkeypatch):
+async def test_get_releases_with_nightly_raises_for_unexpected_nightly_error(monkeypatch):
     updator = AstrBotUpdator()
+    stable_release = {
+        "version": "v9.9.9",
+        "published_at": "2026-03-01T00:00:00Z",
+        "body": "stable",
+        "tag_name": "v9.9.9",
+        "zipball_url": "https://example.com/stable.zip",
+    }
 
     async def mock_fetch_release_info(url: str):
-        _ = url
-        raise KeyError("unexpected")
+        if url == updator.ASTRBOT_RELEASE_API:
+            return [stable_release]
+        if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
+            raise KeyError("unexpected")
+        raise AssertionError(f"unexpected URL: {url}")
 
     monkeypatch.setattr(updator, "fetch_release_info", mock_fetch_release_info)
 
     with pytest.raises(KeyError):
-        await updator.get_nightly_release()
+        await updator.get_releases_with_nightly()
 
 
 @pytest.mark.asyncio
