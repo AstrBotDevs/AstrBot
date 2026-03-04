@@ -3,11 +3,51 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import subprocess
 from collections import defaultdict
 from pathlib import Path
 
-from astrbot.core.release_constants import NIGHTLY_TAG
+
+def _load_nightly_tag() -> str:
+    constants_path = (
+        Path(__file__).resolve().parents[2]
+        / "astrbot"
+        / "core"
+        / "release_constants.py"
+    )
+    source = constants_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(constants_path))
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = [
+                target for target in node.targets if isinstance(target, ast.Name)
+            ]
+            if any(target.id == "NIGHTLY_TAG" for target in targets):
+                if isinstance(node.value, ast.Constant) and isinstance(
+                    node.value.value, str
+                ):
+                    nightly_tag = node.value.value.strip()
+                    if nightly_tag:
+                        return nightly_tag
+                break
+        if isinstance(node, ast.AnnAssign):
+            if (
+                isinstance(node.target, ast.Name)
+                and node.target.id == "NIGHTLY_TAG"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                nightly_tag = node.value.value.strip()
+                if nightly_tag:
+                    return nightly_tag
+            break
+    raise RuntimeError(
+        "Failed to parse NIGHTLY_TAG from astrbot/core/release_constants.py"
+    )
+
+
+NIGHTLY_TAG = _load_nightly_tag()
 
 
 def _run_git(*args: str) -> str:
