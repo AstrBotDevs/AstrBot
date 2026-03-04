@@ -345,7 +345,11 @@ class PluginRoute(Route):
             if token := self._logo_cache.get(logo_path):
                 if not await file_token_service.check_token_expired(token):
                     return self._logo_cache[logo_path]
-            token = await file_token_service.register_file(logo_path, timeout=300)
+            token = await file_token_service.register_file(
+                logo_path,
+                timeout=300,
+                single_use=False,
+            )
             self._logo_cache[logo_path] = token
             return token
         except Exception as e:
