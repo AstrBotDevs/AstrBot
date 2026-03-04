@@ -146,16 +146,13 @@ jobs:
           echo "${{ needs.resolve-release-context.outputs.tag }}" > dashboard/dist/assets/version
           cd dashboard
           zip -r "AstrBot-${{ needs.resolve-release-context.outputs.tag }}-dashboard.zip" dist
-          cp "AstrBot-${{ needs.resolve-release-context.outputs.tag }}-dashboard.zip" dist.zip
 
       - name: Upload dashboard artifact
         uses: actions/upload-artifact@v7
         with:
           name: Dashboard-${{ needs.resolve-release-context.outputs.tag }}
           if-no-files-found: error
-          path: |
-            dashboard/AstrBot-${{ needs.resolve-release-context.outputs.tag }}-dashboard.zip
-            dashboard/dist.zip
+          path: dashboard/AstrBot-${{ needs.resolve-release-context.outputs.tag }}-dashboard.zip
 
       - name: Upload dashboard package to Cloudflare R2
         if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' && needs.resolve-release-context.outputs.tag != 'nightly' }}
