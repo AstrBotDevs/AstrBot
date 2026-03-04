@@ -184,13 +184,44 @@ jobs:
   publish-pypi:
     name: Publish PyPI
     runs-on: ubuntu-24.04
-    needs: publish-release
+    needs:
+      - publish-release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(git describe --tags --abbrev=0)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "Failed to resolve tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download dashboard artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: Dashboard-${{ steps.tag.outputs.tag }}
+          path: dashboard-artifact
+
+      - name: Unpack dashboard dist into package tree
+        shell: bash
+        run: |
+          mkdir -p astrbot/dashboard/dist
+          unzip -q "dashboard-artifact/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" -d dashboard-artifact/unpacked
+          cp -r dashboard-artifact/unpacked/dist/. astrbot/dashboard/dist/
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -203,6 +234,8 @@ jobs:
 
       - name: Build package
         shell: bash
+        # Dashboard assets are already in astrbot/dashboard/dist/;
+        # ASTRBOT_BUILD_DASHBOARD is intentionally unset so the hatch hook skips npm.
         run: uv build
 
       - name: Publish to PyPI

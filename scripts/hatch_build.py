@@ -1,13 +1,20 @@
 """
 Custom Hatchling build hook.
 
-During `hatch build` (or `pip wheel`), this hook:
+Only runs when the environment variable ASTRBOT_BUILD_DASHBOARD=1 is set,
+so that `uv sync` / editable installs are never affected.
+
+Usage:
+    ASTRBOT_BUILD_DASHBOARD=1 uv build
+
+When enabled, this hook:
 1. Runs `npm run build` inside the `dashboard/` directory.
 2. Copies the resulting `dashboard/dist/` tree into
    `astrbot/dashboard/dist/` so the static assets are shipped
    inside the Python wheel.
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -20,6 +27,11 @@ class CustomBuildHook(BuildHookInterface):
     PLUGIN_NAME = "custom"
 
     def initialize(self, version: str, build_data: dict) -> None:
+        # Only run when explicitly requested (e.g. during CI / release builds).
+        # This prevents `uv sync` / editable installs from triggering npm.
+        if os.environ.get("ASTRBOT_BUILD_DASHBOARD", "").strip() != "1":
+            return
+
         root = Path(self.root)
         dashboard_src = root / "dashboard"
         dist_src = dashboard_src / "dist"
