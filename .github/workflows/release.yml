@@ -33,8 +33,12 @@ jobs:
         shell: bash
         run: |
           event_name="${{ github.event_name }}"
-          input_tag="${{ inputs.tag }}"
-          input_ref="${{ inputs.ref }}"
+          input_tag=""
+          input_ref=""
+          if [ "$event_name" = "workflow_dispatch" ]; then
+            input_tag="$(jq -r '.inputs.tag // ""' "$GITHUB_EVENT_PATH")"
+            input_ref="$(jq -r '.inputs.ref // ""' "$GITHUB_EVENT_PATH")"
+          fi
           default_branch="${{ github.event.repository.default_branch }}"
           if [ -z "$default_branch" ]; then
             default_branch="master"
@@ -60,12 +64,18 @@ jobs:
         id: tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          event_name="${{ github.event_name }}"
+          dispatch_tag=""
+          if [ "$event_name" = "workflow_dispatch" ]; then
+            dispatch_tag="$(jq -r '.inputs.tag // ""' "$GITHUB_EVENT_PATH")"
+          fi
+
+          if [ "$event_name" = "schedule" ]; then
             tag="nightly"
-          elif [ "${{ github.event_name }}" = "push" ]; then
+          elif [ "$event_name" = "push" ]; then
             tag="${GITHUB_REF_NAME}"
-          elif [ -n "${{ inputs.tag }}" ]; then
-            tag="${{ inputs.tag }}"
+          elif [ -n "$dispatch_tag" ]; then
+            tag="$dispatch_tag"
           else
             tag="$(git describe --tags --abbrev=0)"
           fi
