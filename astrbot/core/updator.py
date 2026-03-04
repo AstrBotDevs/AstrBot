@@ -165,11 +165,7 @@ class AstrBotUpdator(RepoZipUpdator):
             JSONDecodeError,
             FetchReleaseError,
         )
-        if isinstance(exc, expected_types):
-            return True
-
-        cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
-        return isinstance(cause, expected_types)
+        return isinstance(exc, expected_types)
 
     async def get_nightly_release(self) -> dict | None:
         nightly_release_url = f"{self.GITHUB_RELEASE_API}/tags/{self.NIGHTLY_TAG}"
@@ -192,8 +188,11 @@ class AstrBotUpdator(RepoZipUpdator):
             return None
         return nightly_releases[0]
 
-    async def get_releases_with_nightly(self) -> list:
+    async def _fetch_all_releases(self, include_nightly: bool) -> list:
         releases = await self.get_releases()
+        if not include_nightly:
+            return releases
+
         nightly_release = await self.get_nightly_release()
         if nightly_release and all(
             item.get("tag_name") != self.NIGHTLY_TAG for item in releases
@@ -201,18 +200,8 @@ class AstrBotUpdator(RepoZipUpdator):
             releases.insert(0, nightly_release)
         return releases
 
-    def _resolve_nightly_target(self) -> tuple[str, str]:
-        archive_base = self.GITHUB_ARCHIVE_BASE
-        return self.NIGHTLY_TAG, (f"{archive_base}/refs/tags/{self.NIGHTLY_TAG}.zip")
-
-    def _resolve_commit_target(self, version_str: str) -> tuple[str, str]:
-        if len(version_str) != 40:
-            raise Exception("commit hash 长度不正确，应为 40")
-        archive_base = self.GITHUB_ARCHIVE_BASE
-        return (
-            version_str,
-            f"{archive_base}/{version_str}.zip",
-        )
+    async def get_releases_with_nightly(self) -> list:
+        return await self._fetch_all_releases(include_nightly=True)
 
     async def _resolve_update_target(
         self,
@@ -221,14 +210,25 @@ class AstrBotUpdator(RepoZipUpdator):
     ) -> tuple[str, str]:
         version_str = str(version).strip() if version is not None else ""
 
+        if (
+            not latest
+            and version_str
+            and version_str.lower() != self.NIGHTLY_TAG
+            and not version_str.startswith("v")
+        ):
+            if len(version_str) != 40:
+                raise Exception("commit hash 长度不正确，应为 40")
+            return version_str, f"{self.GITHUB_ARCHIVE_BASE}/{version_str}.zip"
+
+        include_nightly = version_str.lower() == self.NIGHTLY_TAG
+        releases = await self._fetch_all_releases(include_nightly=include_nightly)
+
         if latest:
-            releases = await self.get_releases()
             latest_release = next(
                 (
                     item
                     for item in releases
                     if (tag := item.get("tag_name", ""))
-                    and tag.lower() != self.NIGHTLY_TAG
                     and not PRERELEASE_TAG_REGEX.search(tag)
                 ),
                 None,
@@ -242,16 +242,30 @@ class AstrBotUpdator(RepoZipUpdator):
             return latest_version, latest_release["zipball_url"]
 
         if version_str.lower() == self.NIGHTLY_TAG:
-            return self._resolve_nightly_target()
+            nightly_release = next(
+                (
+                    item
+                    for item in releases
+                    if item.get("tag_name", "").lower() == self.NIGHTLY_TAG
+                ),
+                None,
+            )
+            if nightly_release is not None:
+                return self.NIGHTLY_TAG, nightly_release["zipball_url"]
+            return self.NIGHTLY_TAG, (
+                f"{self.GITHUB_ARCHIVE_BASE}/refs/tags/{self.NIGHTLY_TAG}.zip"
+            )
 
         if version_str.startswith("v"):
-            releases = await self.get_releases()
             for data in releases:
                 if data.get("tag_name") == version_str:
                     return version_str, data["zipball_url"]
             raise Exception(f"未找到版本号为 {version_str} 的更新文件。")
 
-        return self._resolve_commit_target(version_str)
+        if version_str:
+            raise Exception("commit hash 长度不正确，应为 40")
+
+        raise Exception("未指定有效的更新目标。")
 
     async def update(self, reboot=False, latest=True, version=None, proxy="") -> None:
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):

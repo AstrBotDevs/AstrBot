@@ -103,8 +103,20 @@ async def test_update_supports_nightly_tag(monkeypatch, tmp_path):
         captured["url"] = url
         captured["path"] = path
 
-    async def mock_fetch_release_info(*args, **kwargs):
-        raise AssertionError("nightly update should not fetch stable release list")
+    async def mock_fetch_release_info(url: str):
+        if url == updator.ASTRBOT_RELEASE_API:
+            return []
+        if url == f"{updator.GITHUB_RELEASE_API}/tags/{updator.NIGHTLY_TAG}":
+            return [
+                {
+                    "version": "nightly",
+                    "published_at": "2026-03-02T00:00:00Z",
+                    "body": "nightly",
+                    "tag_name": "nightly",
+                    "zipball_url": "https://example.com/nightly.zip",
+                }
+            ]
+        raise AssertionError(f"unexpected URL: {url}")
 
     def mock_unzip_file(zip_path: str, target_dir: str):
         captured["zip_path"] = zip_path
@@ -119,17 +131,27 @@ async def test_update_supports_nightly_tag(monkeypatch, tmp_path):
 
     await updator.update(latest=False, version="nightly")
 
-    assert captured["url"].endswith("/archive/refs/tags/nightly.zip")
+    assert captured["url"] == "https://example.com/nightly.zip"
     assert captured["path"] == "temp.zip"
     assert captured["zip_path"] == "temp.zip"
     assert captured["target_dir"] == str(tmp_path)
 
 
-def test_resolve_nightly_target_uses_archive_base():
+@pytest.mark.asyncio
+async def test_resolve_update_target_nightly_uses_archive_fallback(monkeypatch):
     updator = AstrBotUpdator()
     updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
 
-    target_version, file_url = updator._resolve_nightly_target()
+    async def mock_fetch_all_releases(*, include_nightly: bool):
+        _ = include_nightly
+        return []
+
+    monkeypatch.setattr(updator, "_fetch_all_releases", mock_fetch_all_releases)
+
+    target_version, file_url = await updator._resolve_update_target(
+        latest=False,
+        version="nightly",
+    )
     assert target_version == "nightly"
     assert (
         file_url
@@ -137,12 +159,16 @@ def test_resolve_nightly_target_uses_archive_base():
     )
 
 
-def test_resolve_commit_target_uses_archive_base():
+@pytest.mark.asyncio
+async def test_resolve_update_target_commit_uses_archive_base():
     updator = AstrBotUpdator()
     updator.GITHUB_ARCHIVE_BASE = "https://github.com/example-org/example-repo/archive"
     version_str = "1234567890123456789012345678901234567890"
 
-    target_version, file_url = updator._resolve_commit_target(version_str)
+    target_version, file_url = await updator._resolve_update_target(
+        latest=False,
+        version=version_str,
+    )
     assert target_version == version_str
     assert (
         file_url
