@@ -128,7 +128,7 @@ def _sanitize_proxy_url(proxy: str) -> str:
                 )
             )
     except Exception:
-        pass
+        return "****"
     return proxy
 
 
