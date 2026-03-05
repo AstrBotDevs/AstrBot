@@ -364,10 +364,6 @@
         "description": "回调服务器主机",
         "hint": "回调服务器主机。留空则不启用回调服务器。"
       },
-      "card_template_id": {
-        "description": "卡片模板 ID",
-        "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。"
-      },
       "discord_activity_name": {
         "description": "Discord 活动名称",
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
