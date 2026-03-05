@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
@@ -53,6 +54,13 @@ class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
 
 
+@dataclass
+class UnifiedWebhook:
+    handler: Callable[..., Awaitable[Any]]
+    methods: list[str]
+    desc: str = ""
+
+
 class Context:
     """暴露给插件的接口上下文。"""
 
@@ -77,6 +85,8 @@ class Context:
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
+        self.registered_unified_webhooks: dict[str, UnifiedWebhook] = {}
+
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
         self._config = config
@@ -518,6 +528,31 @@ class Context:
                 self.registered_web_apis[idx] = (route, view_handler, methods, desc)
                 return
         self.registered_web_apis.append((route, view_handler, methods, desc))
+
+    def register_unified_webhook(
+        self,
+        webhook_uuid: str,
+        view_handler: Callable[..., Awaitable[Any]],
+        methods: list[str] | None = None,
+        desc: str = "",
+    ) -> None:
+        """注册统一 Webhook 回调。
+
+        Args:
+            webhook_uuid: Webhook 唯一标识。
+            view_handler: 异步视图处理函数。
+            methods: HTTP 方法列表，默认 ["GET", "POST"]。
+            desc: 回调描述。
+
+        Note:
+            如果相同 webhook_uuid 已注册，会覆盖原有回调。
+        """
+        normalized_methods = [method.upper() for method in (methods or ["GET", "POST"])]
+        self.registered_unified_webhooks[webhook_uuid] = UnifiedWebhook(
+            handler=view_handler,
+            methods=normalized_methods,
+            desc=desc,
+        )
 
     """
     以下的方法已经不推荐使用。请从 AstrBot 文档查看更好的注册方式。
