@@ -82,7 +82,7 @@ class WecomAIQueueMgr:
             del self.pending_responses[session_id]
             logger.debug(f"[WecomAI] 移除待处理响应: {session_id}")
         if mark_finished:
-            self.completed_streams[session_id] = asyncio.get_event_loop().time()
+            self.completed_streams[session_id] = asyncio.get_running_loop().time()
             logger.debug(f"[WecomAI] 标记流已结束: {session_id}")
 
     def remove_queue(self, session_id: str):
@@ -135,7 +135,7 @@ class WecomAIQueueMgr:
         """
         self.pending_responses[session_id] = {
             "callback_params": callback_params,
-            "timestamp": asyncio.get_event_loop().time(),
+            "timestamp": asyncio.get_running_loop().time(),
         }
         logger.debug(f"[WecomAI] 设置待处理响应: {session_id}")
 
@@ -160,7 +160,7 @@ class WecomAIQueueMgr:
         finished_at = self.completed_streams.get(session_id)
         if finished_at is None:
             return False
-        if asyncio.get_event_loop().time() - finished_at > max_age_seconds:
+        if asyncio.get_running_loop().time() - finished_at > max_age_seconds:
             self.completed_streams.pop(session_id, None)
             return False
         return True
@@ -172,7 +172,7 @@ class WecomAIQueueMgr:
             max_age_seconds: 最大存活时间（秒）
 
         """
-        current_time = asyncio.get_event_loop().time()
+        current_time = asyncio.get_running_loop().time()
         expired_sessions = []
 
         for session_id, response_data in self.pending_responses.items():

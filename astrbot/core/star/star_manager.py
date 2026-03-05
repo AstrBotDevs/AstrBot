@@ -1374,7 +1374,7 @@ class PluginManager:
             return
 
         if "__del__" in star_metadata.star_cls_type.__dict__:
-            asyncio.get_event_loop().run_in_executor(
+            asyncio.get_running_loop().run_in_executor(
                 None,
                 star_metadata.star_cls.__del__,
             )

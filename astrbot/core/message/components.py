@@ -676,21 +676,28 @@ class File(BaseMessageComponent):
 
         if self.url:
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    logger.warning(
-                        "不可以在异步上下文中同步等待下载! "
-                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
-                    )
-                    return ""
-                # 等待下载完成
-                loop.run_until_complete(self._download_file())
+                # 检查是否有正在运行的 event loop
+                asyncio.get_running_loop()
+                logger.warning(
+                    "不可以在异步上下文中同步等待下载! "
+                    "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                    "请使用 await get_file() 代替直接获取 <File>.file 字段",
+                )
+                return ""
+            except RuntimeError:
+                # 没有运行中的 event loop，可以同步执行
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    # 等待下载完成
+                    loop.run_until_complete(self._download_file())
+                except Exception as e:
+                    logger.error(f"文件下载失败: {e}")
+                finally:
+                    loop.close()
 
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
-            except Exception as e:
-                logger.error(f"文件下载失败: {e}")
 
         return ""
 
