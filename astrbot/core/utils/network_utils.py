@@ -80,6 +80,21 @@ def log_connection_failure(
         logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
 
 
+def _is_socks_proxy(proxy: str) -> bool:
+    """Check if the proxy URL is a SOCKS proxy.
+
+    Args:
+        proxy: The proxy URL string
+
+    Returns:
+        True if the proxy is a SOCKS proxy (socks4://, socks5://, socks5h://)
+    """
+    proxy_lower = proxy.lower()
+    return proxy_lower.startswith("socks4://") or proxy_lower.startswith(
+        "socks5://"
+    ) or proxy_lower.startswith("socks5h://")
+
+
 def create_proxy_client(
     provider_label: str,
     proxy: str | None = None,
@@ -95,8 +110,26 @@ def create_proxy_client(
 
     Returns:
         An httpx.AsyncClient configured with the proxy, or None if no proxy
+
+    Raises:
+        ImportError: If SOCKS proxy is used but socksio is not installed
     """
-    if proxy:
-        logger.info(f"[{provider_label}] 使用代理: {proxy}")
-        return httpx.AsyncClient(proxy=proxy)
-    return None
+    if not proxy:
+        return None
+
+    logger.info(f"[{provider_label}] 使用代理: {proxy}")
+
+    # Check for SOCKS proxy and provide helpful error if socksio is not installed
+    if _is_socks_proxy(proxy):
+        try:
+            import socksio  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                f"使用 SOCKS 代理需要安装 socksio 包。请运行以下命令安装：\n"
+                f"  pip install 'httpx[socks]'\n"
+                f"或者：\n"
+                f"  pip install socksio\n"
+                f"代理地址: {proxy}"
+            ) from None
+
+    return httpx.AsyncClient(proxy=proxy)
