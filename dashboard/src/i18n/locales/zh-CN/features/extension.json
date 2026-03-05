@@ -49,6 +49,9 @@
     "selectFile": "选择文件",
     "refresh": "刷新",
     "updateAll": "更新全部插件",
+    "sharePlugin": "分享插件",
+    "confirmShare": "确认分享",
+    "importPlugin": "导入插件",
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
   },

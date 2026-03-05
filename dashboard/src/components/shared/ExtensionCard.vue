@@ -21,6 +21,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  shareMode: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -219,7 +223,7 @@ const viewChangelog = () => {
                 }}</span>
               </v-tooltip>
             </template>
-            <template v-else>
+            <template v-else-if="marketMode">
               <div class="extension-market-menu-wrap">
                 <v-menu offset-y>
                   <template v-slot:activator="{ props: menuProps }">
@@ -338,7 +342,7 @@ const viewChangelog = () => {
     </v-card-text>
 
     <v-card-actions class="extension-actions" @click.stop>
-      <template v-if="!marketMode">
+      <template v-if="!marketMode && !shareMode">
         <v-spacer></v-spacer>
         <v-tooltip location="top" :text="tm('buttons.viewDocs')">
           <template v-slot:activator="{ props: actionProps }">
@@ -421,7 +425,7 @@ const viewChangelog = () => {
           </v-list-item>
         </StyledMenu>
       </template>
-      <template v-else>
+      <template v-else-if="marketMode">
         <v-btn color="primary" size="small" @click="viewReadme">
           {{ tm("buttons.viewDocs") }}
         </v-btn>

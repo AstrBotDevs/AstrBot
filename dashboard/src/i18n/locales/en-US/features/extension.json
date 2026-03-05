@@ -49,6 +49,9 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
+    "sharePlugin": "Share Plugin",
+    "confirmShare": "Confirm Share",
+    "importPlugin": "Import Plugin",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },

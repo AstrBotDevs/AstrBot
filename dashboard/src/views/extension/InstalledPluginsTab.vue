@@ -96,6 +96,8 @@ const {
   totalPages,
   paginatedPlugins,
   updatableExtensions,
+  isShareMode,
+  toggleShareMode,
   toggleShowReserved,
   toast,
   resetLoadingDialog,
@@ -208,6 +210,20 @@ const {
                 >
                   <v-icon>mdi-update</v-icon>
                   {{ tm("buttons.updateAll") }}
+                </v-btn>
+
+                <v-btn class="ml-2" variant="tonal" @click="toggleShareMode">
+                  <v-icon>mdi-share-variant</v-icon>
+                  {{
+                    isShareMode
+                      ? tm("buttons.confirmShare")
+                      : tm("buttons.sharePlugin")
+                  }}
+                </v-btn>
+
+                <v-btn class="ml-2" variant="tonal">
+                  <v-icon>mdi-file-import</v-icon>
+                  {{ tm("buttons.importPlugin") }}
                 </v-btn>
 
               </v-col>
@@ -463,7 +479,7 @@ const {
                     <template v-slot:item.actions="{ item }">
                       <div class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1">
                         <v-btn
-                          v-if="!item.activated"
+                          v-if="!isShareMode && !item.activated"
                           size="small"
                           variant="tonal"
                           color="success"
@@ -474,7 +490,7 @@ const {
                           {{ tm("buttons.enable") }}
                         </v-btn>
                         <v-btn
-                          v-else
+                          v-else-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="error"
@@ -486,6 +502,7 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="primary"
@@ -497,6 +514,7 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="primary"
@@ -508,6 +526,7 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="!isShareMode"
                           size="small"
                           variant="tonal"
                           color="info"
@@ -519,7 +538,7 @@ const {
                           {{ tm("buttons.viewDocs") }}
                         </v-btn>
 
-                        <StyledMenu location="bottom end" offset="8">
+                        <StyledMenu v-if="!isShareMode" location="bottom end" offset="8">
                           <template #activator="{ props: menuProps }">
                             <v-btn
                               v-bind="menuProps"
@@ -601,6 +620,7 @@ const {
                   >
                     <ExtensionCard
                       :extension="extension"
+                      :share-mode="isShareMode"
                       class="rounded-lg"
                       style="background-color: rgb(var(--v-theme-mcpCardBg))"
                       @configure="openExtensionConfig(extension.name)"

@@ -126,6 +126,10 @@ export const useExtensionPage = () => {
     return false;
   };
   const showReserved = ref(getInitialShowReserved());
+  const isShareMode = ref(false);
+  const toggleShareMode = () => {
+    isShareMode.value = !isShareMode.value;
+  };
   const snack_message = ref("");
   const snack_show = ref(false);
   const snack_success = ref("success");
@@ -1580,6 +1584,8 @@ export const useExtensionPage = () => {
     totalPages,
     paginatedPlugins,
     updatableExtensions,
+    isShareMode,
+    toggleShareMode,
     toggleShowReserved,
     toast,
     resetLoadingDialog,
