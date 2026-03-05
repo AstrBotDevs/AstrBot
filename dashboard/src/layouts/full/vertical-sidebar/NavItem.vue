@@ -38,7 +38,7 @@ const isItemActive = computed(() => {
     </template>
 
     <!-- children -->
-    <template v-for="(child, index) in item.children" :key="index">
+    <template v-for="(child, index) in item.children" :key="child.title || child.to || `child-${index}`">
       <NavItem :item="child" :level="(level || 0) + 1" />
     </template>
   </v-list-group>

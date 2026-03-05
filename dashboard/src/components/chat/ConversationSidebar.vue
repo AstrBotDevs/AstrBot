@@ -37,7 +37,7 @@
             @deleteProject="$emit('deleteProject', $event)"
         />
 
-        <div style="overflow-y: auto; flex-grow: 1;"
+        <div style="overflow-y: auto; flex-grow: 1; overscroll-behavior-y: contain;"
             v-if="!sidebarCollapsed || isMobile">
             <v-card v-if="sessions.length > 0" flat style="background-color: transparent;">
                 <v-list density="compact" nav class="conversation-list"
@@ -324,6 +324,13 @@ function handleTransportModeChange(mode: string | null) {
     opacity: 0;
     visibility: hidden;
     transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+    .conversation-actions {
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
 }
 
 .edit-title-btn,

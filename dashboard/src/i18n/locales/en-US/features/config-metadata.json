@@ -161,6 +161,22 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
+          "shipyard_neo_endpoint": {
+            "description": "Shipyard Neo API Endpoint",
+            "hint": "Bay API address, default http://127.0.0.1:8114."
+          },
+          "shipyard_neo_access_token": {
+            "description": "Shipyard Neo Access Token",
+            "hint": "Bay API Key (sk-bay-...). Leave empty for auto-discovery from credentials.json."
+          },
+          "shipyard_neo_profile": {
+            "description": "Shipyard Neo Profile",
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+          },
+          "shipyard_neo_ttl": {
+            "description": "Shipyard Neo Sandbox TTL",
+            "hint": "Sandbox time-to-live in seconds."
+          },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
             "hint": "API access address for Shipyard service."
@@ -354,7 +370,8 @@
         "hint": "Optional Discord activity name. Leave empty to disable."
       },
       "discord_command_register": {
-        "description": "Auto-register plugin commands as Discord slash commands"
+        "description": "Register Discord slash commands",
+        "hint": "When enabled, AstrBot will automatically register plugin commands as Discord slash commands"
       },
       "discord_proxy": {
         "description": "Discord Proxy URL",
@@ -567,6 +584,51 @@
       "only_use_webhook_url_to_send": {
         "description": "Send Replies via Webhook Only",
         "hint": "When enabled, all WeCom AI Bot replies are sent through msg_push_webhook_url. The message push webhook supports more message types (such as images, files, etc.). If you do not need the typing effect, it is strongly recommended to use this option. "
+      },
+      "kook_bot_token": {
+        "description": "Bot Token",
+        "type": "string",
+        "hint": "Required. The Bot Token obtained from the KOOK Developer Platform."
+      },
+      "kook_bot_nickname": {
+        "description": "Bot Nickname",
+        "type": "string",
+        "hint": "Optional. If the sender nickname matches this value, the message will be ignored to prevent broadcast storms."
+      },
+      "kook_reconnect_delay": {
+        "description": "Reconnect Delay",
+        "type": "int",
+        "hint": "Delay time for reconnection (seconds), using an exponential backoff strategy."
+      },
+      "kook_max_reconnect_delay": {
+        "description": "Max Reconnect Delay",
+        "type": "int",
+        "hint": "The maximum value for reconnection delay (seconds)."
+      },
+      "kook_max_retry_delay": {
+        "description": "Max Retry Delay",
+        "type": "int",
+        "hint": "The maximum delay time for retries (seconds)."
+      },
+      "kook_heartbeat_interval": {
+        "description": "Heartbeat Interval",
+        "type": "int",
+        "hint": "The interval time for heartbeat detection (seconds)."
+      },
+      "kook_heartbeat_timeout": {
+        "description": "Heartbeat Timeout",
+        "type": "int",
+        "hint": "The timeout duration for heartbeat detection (seconds)."
+      },
+      "kook_max_heartbeat_failures": {
+        "description": "Max Heartbeat Failures",
+        "type": "int",
+        "hint": "Maximum allowed heartbeat failures; the connection will be dropped if exceeded."
+      },
+      "kook_max_consecutive_failures": {
+        "description": "Max Consecutive Failures",
+        "type": "int",
+        "hint": "Maximum allowed consecutive failures; retries will stop if exceeded."
       }
     },
     "general": {
@@ -719,6 +781,17 @@
             "emojis": {
               "description": "Emoji List (Unicode)",
               "hint": "Telegram only supports a fixed reaction set, reference: [https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)"
+            }
+          }
+        },
+        "discord": {
+          "pre_ack_emoji": {
+            "enable": {
+              "description": "[Discord] Enable Pre-acknowledgment Emoji"
+            },
+            "emojis": {
+              "description": "Emoji List (Unicode or Custom Emoji Name)",
+              "hint": "Enter Unicode emoji symbols, e.g., 👍, 🤔, ⏳"
             }
           }
         }

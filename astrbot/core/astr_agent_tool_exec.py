@@ -291,6 +291,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
+        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
+        agent_max_step = int(prov_settings.get("max_agent_step", 30))
+        stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -299,9 +302,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             system_prompt=tool.agent.instructions,
             tools=toolset,
             contexts=contexts,
-            max_steps=30,
-            run_hooks=tool.agent.run_hooks,
-            stream=ctx.get_config().get("provider_settings", {}).get("stream", False),
+            max_steps=agent_max_step,
+            stream=stream,
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]

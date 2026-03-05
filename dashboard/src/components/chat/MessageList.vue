@@ -965,6 +965,7 @@ export default {
     height: 100%;
     max-height: 100%;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
     padding: 16px;
     display: flex;
     flex-direction: column;

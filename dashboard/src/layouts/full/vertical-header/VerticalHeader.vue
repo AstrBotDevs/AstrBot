@@ -468,6 +468,12 @@ onMounted(async () => {
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
+    <!-- 移动端 chat sidebar 展开按钮 - 仅在 chat 模式下的小屏幕显示 -->
+    <v-btn v-if="customizer.viewMode === 'chat'" class="hidden-lg-and-up ms-1" icon rounded="sm" variant="flat"
+      @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()">
+      <v-icon>mdi-menu</v-icon>
+    </v-btn>
+
     <div class="logo-container" :class="{ 'mobile-logo': $vuetify.display.xs, 'chat-mode-logo': customizer.viewMode === 'chat' }" @click="handleLogoClick">
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
@@ -488,13 +494,13 @@ onMounted(async () => {
       </small>
     </div>
     
-    <!-- Bot/Chat 模式切换按钮 -->
+    <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
     <v-btn-toggle
       v-model="viewMode"
       mandatory
       variant="outlined"
       density="compact"
-      class="mr-4"
+      class="mr-4 hidden-xs"
       color="primary"
     >
       <v-btn value="bot" size="small">
@@ -522,6 +528,30 @@ onMounted(async () => {
         >
           <v-icon>mdi-dots-vertical</v-icon>
         </v-btn>
+      </template>
+
+      <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
+      <template v-if="$vuetify.display.xs">
+        <div class="mobile-mode-toggle-wrapper">
+          <v-btn-toggle
+            v-model="viewMode"
+            mandatory
+            variant="outlined"
+            density="compact"
+            color="primary"
+            class="mobile-mode-toggle"
+          >
+            <v-btn value="bot" size="small">
+              <v-icon start>mdi-robot</v-icon>
+              Bot
+            </v-btn>
+            <v-btn value="chat" size="small">
+              <v-icon start>mdi-chat</v-icon>
+              Chat
+            </v-btn>
+          </v-btn-toggle>
+        </div>
+        <v-divider class="my-1" />
       </template>
 
       <!-- 语言切换 -->
@@ -888,6 +918,10 @@ onMounted(async () => {
   margin-left: 22px;
 }
 
+.mobile-logo.chat-mode-logo {
+  margin-left: 4px;
+}
+
 .logo-text {
   font-size: 24px;
   font-weight: 1000;
@@ -924,6 +958,20 @@ onMounted(async () => {
 .language-flag {
   font-size: 16px;
   margin-right: 8px;
+}
+
+.mobile-mode-toggle-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 8px 12px 4px;
+}
+
+.mobile-mode-toggle {
+  width: 100%;
+}
+
+.mobile-mode-toggle .v-btn {
+  flex: 1;
 }
 
 /* 移动端对话框标题样式 */

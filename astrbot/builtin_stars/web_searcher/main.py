@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from readability import Document
 
 from astrbot.api import AstrBotConfig, llm_tool, logger, sp, star
-from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.provider import ProviderRequest
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -195,15 +195,6 @@ class Main(star.Star):
                         "Error: Tavily web searcher does not return any results.",
                     )
                 return results
-
-    @filter.command("websearch")
-    async def websearch(self, event: AstrMessageEvent, oper: str | None = None) -> None:
-        """网页搜索指令（已废弃）"""
-        event.set_result(
-            MessageEventResult().message(
-                "此指令已经被废弃，请在 WebUI 中开启或关闭网页搜索功能。",
-            ),
-        )
 
     @llm_tool(name="web_search")
     async def search_from_search_engine(

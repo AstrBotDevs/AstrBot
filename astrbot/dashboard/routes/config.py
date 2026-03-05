@@ -206,12 +206,110 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
+def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
+    """Compare and log Computer/sandbox configuration changes."""
+    old_ps = old_config.get("provider_settings", {})
+    new_ps = new_config.get("provider_settings", {})
+
+    # Check computer_use_runtime
+    old_runtime = old_ps.get("computer_use_runtime", "none")
+    new_runtime = new_ps.get("computer_use_runtime", "none")
+    if old_runtime != new_runtime:
+        logger.info(
+            "[Computer] Config changed: computer_use_runtime %s -> %s",
+            old_runtime,
+            new_runtime,
+        )
+
+    # Check sandbox sub-keys
+    old_sandbox = old_ps.get("sandbox", {})
+    new_sandbox = new_ps.get("sandbox", {})
+    all_keys = set(old_sandbox.keys()) | set(new_sandbox.keys())
+    for key in sorted(all_keys):
+        old_val = old_sandbox.get(key)
+        new_val = new_sandbox.get(key)
+        if old_val != new_val:
+            # Mask tokens/secrets in log output
+            if "token" in key or "secret" in key:
+                old_display = "***" if old_val else "(empty)"
+                new_display = "***" if new_val else "(empty)"
+            else:
+                old_display = old_val
+                new_display = new_val
+            logger.info(
+                "[Computer] Config changed: sandbox.%s %s -> %s",
+                key,
+                old_display,
+                new_display,
+            )
+
+
+async def _validate_neo_connectivity(
+    post_config: dict,
+) -> str | None:
+    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
+
+    Returns a warning message string if Bay isn't reachable, or None if
+    everything looks fine (or Neo isn't configured).
+    """
+    ps = post_config.get("provider_settings", {})
+    runtime = ps.get("computer_use_runtime", "none")
+    sandbox = ps.get("sandbox", {})
+    booter = sandbox.get("booter", "")
+
+    # Only check when sandbox mode + shipyard_neo is selected
+    if runtime != "sandbox" or booter != "shipyard_neo":
+        return None
+
+    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
+    if not endpoint:
+        return "⚠️ Shipyard Neo endpoint 未设置"
+
+    access_token = sandbox.get("shipyard_neo_access_token", "")
+    if not access_token:
+        # Try auto-discovery
+        from astrbot.core.computer.computer_client import _discover_bay_credentials
+
+        access_token = _discover_bay_credentials(endpoint)
+
+    if not access_token:
+        return (
+            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
+            "或确保 Bay 的 credentials.json 可被自动发现。"
+        )
+
+    # Connectivity check
+    import aiohttp
+
+    health_url = f"{endpoint}/health"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    return (
+                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                        f"请确认 Bay 正在运行: {endpoint}"
+                    )
+    except Exception:
+        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+
+    return None
+
+
 def save_config(
     post_config: dict, config: AstrBotConfig, is_core: bool = False
 ) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
+
+    # Snapshot old Computer config for change detection
+    if is_core:
+        _log_computer_config_changes(dict(config), post_config)
+
     try:
         if is_core:
             errors, post_config = validate_config(
@@ -928,6 +1026,11 @@ class ConfigRoute(Route):
 
             await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+
+            # Non-blocking Bay connectivity check
+            warning = await _validate_neo_connectivity(config)
+            if warning:
+                return Response().ok(None, f"保存成功。{warning}").__dict__
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
