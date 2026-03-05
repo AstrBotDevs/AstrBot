@@ -1,7 +1,5 @@
-import httpx
 from openai import AsyncOpenAI
 
-from astrbot import logger
 from astrbot.core.utils.network_utils import create_proxy_client
 
 from ..entities import ProviderType

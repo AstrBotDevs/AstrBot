@@ -1,10 +1,8 @@
 import os
 import uuid
 
-import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
-from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.network_utils import create_proxy_client
 

@@ -73,9 +73,12 @@ def log_connection_failure(
 
     if effective_proxy:
         sanitized_proxy = _sanitize_proxy_url(effective_proxy)
+        error_text = str(error)
+        if effective_proxy:
+            error_text = error_text.replace(effective_proxy, sanitized_proxy)
         logger.error(
             f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {sanitized_proxy}，错误: {error}"
+            f"代理地址: {sanitized_proxy}，错误: {error_text}"
         )
     else:
         logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
@@ -94,27 +97,36 @@ def _is_socks_proxy(proxy: str) -> bool:
 
 
 def _sanitize_proxy_url(proxy: str) -> str:
-    """Sanitize proxy URL by masking password for safe logging.
+    """Sanitize proxy URL by masking credentials for safe logging.
 
     Args:
         proxy: The proxy URL string
 
     Returns:
-        Sanitized proxy URL with password masked (e.g., "http://user:****@host:port")
+        Sanitized proxy URL with credentials masked (e.g., "http://****@host:port")
     """
     try:
         from urllib.parse import urlparse, urlunparse
 
         parsed = urlparse(proxy)
-        if parsed.password:
-            # Replace password with asterisks
-            netloc = f"{parsed.username}:****@{parsed.hostname}"
+        # Any userinfo in netloc should be masked to avoid leaking tokens/passwords.
+        if "@" in parsed.netloc and parsed.hostname:
+            host = parsed.hostname
+            if ":" in host and not host.startswith("["):
+                host = f"[{host}]"
+            netloc = f"****@{host}"
             if parsed.port:
                 netloc += f":{parsed.port}"
-            sanitized = urlunparse(
-                (parsed.scheme, netloc, parsed.path, "", "", "")
+            return urlunparse(
+                (
+                    parsed.scheme,
+                    netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
             )
-            return sanitized
     except Exception:
         pass
     return proxy
