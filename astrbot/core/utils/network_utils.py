@@ -72,9 +72,10 @@ def log_connection_failure(
         )
 
     if effective_proxy:
+        sanitized_proxy = _sanitize_proxy_url(effective_proxy)
         logger.error(
             f"[{provider_label}] 网络/代理连接失败 ({error_type})。"
-            f"代理地址: {effective_proxy}，错误: {error}"
+            f"代理地址: {sanitized_proxy}，错误: {error}"
         )
     else:
         logger.error(f"[{provider_label}] 网络连接失败 ({error_type})。错误: {error}")
@@ -89,10 +90,34 @@ def _is_socks_proxy(proxy: str) -> bool:
     Returns:
         True if the proxy is a SOCKS proxy (socks4://, socks5://, socks5h://)
     """
-    proxy_lower = proxy.lower()
-    return proxy_lower.startswith("socks4://") or proxy_lower.startswith(
-        "socks5://"
-    ) or proxy_lower.startswith("socks5h://")
+    return proxy.lower().startswith(("socks4://", "socks5://", "socks5h://"))
+
+
+def _sanitize_proxy_url(proxy: str) -> str:
+    """Sanitize proxy URL by masking password for safe logging.
+
+    Args:
+        proxy: The proxy URL string
+
+    Returns:
+        Sanitized proxy URL with password masked (e.g., "http://user:****@host:port")
+    """
+    try:
+        from urllib.parse import urlparse, urlunparse
+
+        parsed = urlparse(proxy)
+        if parsed.password:
+            # Replace password with asterisks
+            netloc = f"{parsed.username}:****@{parsed.hostname}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            sanitized = urlunparse(
+                (parsed.scheme, netloc, parsed.path, "", "", "")
+            )
+            return sanitized
+    except Exception:
+        pass
+    return proxy
 
 
 def create_proxy_client(
@@ -117,7 +142,8 @@ def create_proxy_client(
     if not proxy:
         return None
 
-    logger.info(f"[{provider_label}] 使用代理: {proxy}")
+    sanitized_proxy = _sanitize_proxy_url(proxy)
+    logger.info(f"[{provider_label}] 使用代理: {sanitized_proxy}")
 
     # Check for SOCKS proxy and provide helpful error if socksio is not installed
     if _is_socks_proxy(proxy):
@@ -129,7 +155,7 @@ def create_proxy_client(
                 f"  pip install 'httpx[socks]'\n"
                 f"或者：\n"
                 f"  pip install socksio\n"
-                f"代理地址: {proxy}"
+                f"代理地址: {sanitized_proxy}"
             ) from None
 
     return httpx.AsyncClient(proxy=proxy)
