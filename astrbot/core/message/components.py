@@ -689,8 +689,8 @@ class File(BaseMessageComponent):
                 try:
                     # 使用 asyncio.run 安全地创建和关闭事件循环
                     asyncio.run(self._download_file())
-                except Exception as e:
-                    logger.error(f"文件下载失败: {e}")
+                except Exception:
+                    logger.exception("文件下载失败")
 
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
