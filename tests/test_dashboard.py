@@ -8,6 +8,7 @@ import pytest_asyncio
 from quart import Quart
 
 from astrbot.core import LogBroker
+from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
@@ -145,9 +146,7 @@ async def test_plugins(
     monkeypatch.setattr(
         core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_update
-    )
+    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
 
     try:
         # 插件安装
@@ -158,7 +157,9 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+        assert data["status"] == "ok", (
+            f"安装失败: {data.get('message', 'unknown error')}"
+        )
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -295,6 +296,72 @@ async def test_tools_toggle_rejects_system_tools(
     data = await response.get_json()
     assert data["status"] == "error"
     assert "不可配置" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_tools_toggle_allows_mcp_tool_with_system_name_collision(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    collision_name = "astrbot_core_fake_system_tool_for_collision_test"
+    fake_system_tool = SimpleNamespace(
+        name=collision_name,
+        description="fake core system tool",
+        parameters={"type": "object", "properties": {}},
+        active=True,
+    )
+    fake_mcp_tool = MCPTool(
+        mcp_tool=SimpleNamespace(
+            name=collision_name,
+            description="fake mcp tool",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        mcp_client=SimpleNamespace(),
+        mcp_server_name="fake_server",
+    )
+    monkeypatch.setattr(
+        ToolsRoute,
+        "_get_core_system_tool_candidates",
+        staticmethod(lambda: [fake_system_tool]),
+    )
+    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
+    monkeypatch.setattr(tool_mgr, "func_list", [fake_mcp_tool])
+    monkeypatch.setattr(
+        tool_mgr,
+        "get_func",
+        lambda name: fake_mcp_tool if name == collision_name else None,
+    )
+    monkeypatch.setattr(
+        tool_mgr, "deactivate_llm_tool", lambda name: name == collision_name
+    )
+
+    list_response = await test_client.get(
+        "/api/tools/list?include_system_tools=true",
+        headers=authenticated_header,
+    )
+    assert list_response.status_code == 200
+    list_data = await list_response.get_json()
+    assert list_data["status"] == "ok"
+    target = next(
+        (item for item in list_data["data"] if item["name"] == collision_name),
+        None,
+    )
+    assert target is not None
+    assert target["origin"] == "mcp"
+    assert target["is_system"] is False
+    assert target["toggleable"] is True
+
+    toggle_response = await test_client.post(
+        "/api/tools/toggle-tool",
+        json={"name": collision_name, "activate": False},
+        headers=authenticated_header,
+    )
+    assert toggle_response.status_code == 200
+    toggle_data = await toggle_response.get_json()
+    assert toggle_data["status"] == "ok"
 
 
 @pytest.mark.asyncio

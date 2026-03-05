@@ -45,6 +45,29 @@ class ToolsRoute(Route):
         self.register_routes()
         self.tool_mgr = self.core_lifecycle.provider_manager.llm_tools
 
+    def _is_core_system_tool(
+        self,
+        tool: Any | None,
+        *,
+        core_system_tool_names: set[str] | None = None,
+    ) -> bool:
+        if tool is None:
+            return False
+        if isinstance(tool, MCPTool):
+            return False
+
+        handler_module_path = getattr(tool, "handler_module_path", None)
+        if handler_module_path and star_map.get(handler_module_path):
+            return False
+
+        core_names = core_system_tool_names or self._get_core_system_tool_names()
+        if getattr(tool, "name", None) not in core_names:
+            return False
+
+        return not handler_module_path or str(handler_module_path).startswith(
+            "astrbot.core."
+        )
+
     def _serialize_tool(
         self,
         tool,
@@ -58,11 +81,10 @@ class ToolsRoute(Route):
     ) -> dict:
         star = None
         handler_module_path = getattr(tool, "handler_module_path", None)
-        core_names = core_system_tool_names or set()
-        is_core_handler = not handler_module_path or str(
-            handler_module_path
-        ).startswith("astrbot.core.")
-        is_core_tool = tool.name in core_names and is_core_handler
+        is_core_tool = self._is_core_system_tool(
+            tool,
+            core_system_tool_names=core_system_tool_names,
+        )
 
         if origin_override is not None and origin_name_override is not None:
             origin = origin_override
@@ -460,7 +482,15 @@ class ToolsRoute(Route):
             if not tool_name or action is None:
                 return Response().error("缺少必要参数: name 或 action").__dict__
 
-            if tool_name in self._get_core_system_tool_names():
+            core_system_tool_names = self._get_core_system_tool_names()
+            target_tool = self.tool_mgr.get_func(tool_name)
+
+            if target_tool is None and tool_name in core_system_tool_names:
+                return Response().error("系统工具不可配置。").__dict__
+            if self._is_core_system_tool(
+                target_tool,
+                core_system_tool_names=core_system_tool_names,
+            ):
                 return Response().error("系统工具不可配置。").__dict__
 
             if action:
