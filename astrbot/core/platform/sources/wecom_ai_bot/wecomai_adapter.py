@@ -321,9 +321,16 @@ class WecomAIBotAdapter(Platform):
                     return None
 
     def _extract_session_id(self, message_data: dict[str, Any]) -> str:
-        """从消息数据中提取会话ID"""
-        user_id = message_data.get("from", {}).get("userid", "default_user")
-        return format_session_id("wecomai", user_id)
+        """从消息数据中提取会话ID
+        群聊使用 chatid，单聊使用 userid
+        """
+        chattype = message_data.get("chattype", "single")
+        if chattype == "group":
+            chat_id = message_data.get("chatid", "default_group")
+            return format_session_id("wecomai", chat_id)
+        else:
+            user_id = message_data.get("from", {}).get("userid", "default_user")
+            return format_session_id("wecomai", user_id)
 
     async def _enqueue_message(
         self,
