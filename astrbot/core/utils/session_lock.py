@@ -1,36 +1,57 @@
 import asyncio
+import threading
+import weakref
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+
+
+@dataclass
+class _LoopLockState:
+    """单个事件循环的锁状态"""
+
+    access_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+    lock_count: dict[str, int] = field(default_factory=lambda: defaultdict(int))
 
 
 class SessionLockManager:
     def __init__(self) -> None:
-        self._locks: dict[str, asyncio.Lock] = {}
-        self._lock_count: dict[str, int] = defaultdict(int)
-        self._access_lock: asyncio.Lock | None = None
+        self._state_guard = threading.Lock()
+        self._loop_states: weakref.WeakKeyDictionary[
+            asyncio.AbstractEventLoop, _LoopLockState
+        ] = weakref.WeakKeyDictionary()
 
-    def _get_access_lock(self) -> asyncio.Lock:
-        """延迟初始化 access lock，确保在有 event loop 时创建"""
-        if self._access_lock is None:
-            self._access_lock = asyncio.Lock()
-        return self._access_lock
+    def _get_loop_state(self) -> _LoopLockState:
+        """获取当前事件循环的锁状态，确保锁绑定到正确的 loop"""
+        loop = asyncio.get_running_loop()
+        with self._state_guard:
+            state = self._loop_states.get(loop)
+            if state is None:
+                state = _LoopLockState()
+                self._loop_states[loop] = state
+            return state
 
     @asynccontextmanager
     async def acquire_lock(self, session_id: str):
-        access_lock = self._get_access_lock()
-        async with access_lock:
-            lock = self._locks.setdefault(session_id, asyncio.Lock())
-            self._lock_count[session_id] += 1
+        state = self._get_loop_state()
+
+        async with state.access_lock:
+            lock = state.locks.get(session_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                state.locks[session_id] = lock
+            state.lock_count[session_id] += 1
 
         try:
             async with lock:
                 yield
         finally:
-            async with self._get_access_lock():
-                self._lock_count[session_id] -= 1
-                if self._lock_count[session_id] == 0:
-                    self._locks.pop(session_id, None)
-                    self._lock_count.pop(session_id, None)
+            async with state.access_lock:
+                state.lock_count[session_id] -= 1
+                if state.lock_count[session_id] == 0:
+                    state.locks.pop(session_id, None)
+                    state.lock_count.pop(session_id, None)
 
 
 session_lock_manager = SessionLockManager()

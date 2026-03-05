@@ -686,15 +686,11 @@ class File(BaseMessageComponent):
                 return ""
             except RuntimeError:
                 # 没有运行中的 event loop，可以同步执行
-                # 创建临时 loop 但不设置为全局，避免干扰其他 asyncio 使用
-                loop = asyncio.new_event_loop()
                 try:
-                    # 等待下载完成
-                    loop.run_until_complete(self._download_file())
+                    # 使用 asyncio.run 安全地创建和关闭事件循环
+                    asyncio.run(self._download_file())
                 except Exception as e:
                     logger.error(f"文件下载失败: {e}")
-                finally:
-                    loop.close()
 
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
