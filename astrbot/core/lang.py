@@ -46,7 +46,7 @@ class Lang:
         if not namespace:
             raise ValueError("Namespace must not be empty.")
         if "." in namespace:
-            raise ValueError(t("msg-f66527da"))
+            raise ValueError("Namespace cannot contain '.'")
 
     @staticmethod
     def _collect_files(base_dir: Path, files: list[str] | None) -> list[str]:
@@ -84,12 +84,15 @@ class Lang:
     def _build_localization(
         self, base_dir: Path, locale: str, files: list[str] | None
     ) -> tuple[FluentLocalization, list[str]]:
+        """
+            
+        """
         if not base_dir.exists() or not base_dir.is_dir():
-            raise ValueError(t("msg-b3665aee", base_dir=base_dir))
+            raise ValueError(f"Base directory {base_dir} does not exist or is not a directory")
 
         available_locales = [d.name for d in base_dir.iterdir() if d.is_dir()]
         if not available_locales:
-            raise ValueError(t("msg-3fe89e6a", base_dir=base_dir))
+            raise ValueError(f"No available locales found in {base_dir}")
 
         matched_locale = self._match_locale(available_locales, locale)
         merged_files = self._collect_files(base_dir, files)
@@ -172,7 +175,7 @@ class Lang:
         self._validate_namespace(namespace)
         with self._lock:
             if namespace in self.namespace_paths and not replace:
-                raise ValueError(t("msg-c79b2c75", namespace=namespace))
+                raise ValueError(f"Namespace {namespace} already exists")
 
             self.namespace_paths[namespace] = Path(path)
             if files is None:
@@ -185,9 +188,9 @@ class Lang:
         self._validate_namespace(namespace)
         with self._lock:
             if namespace == self.default_namespace:
-                raise ValueError(t("msg-7db3fccf"))
+                raise ValueError("Cannot unregister the default namespace")
             if namespace not in self.namespace_paths:
-                raise ValueError(t("msg-3d066f64", namespace=namespace))
+                raise ValueError(f"Namespace {namespace} does not exist")
 
             self.namespace_paths.pop(namespace, None)
             self.namespace_files.pop(namespace, None)
@@ -238,4 +241,4 @@ class Lang:
         return l10n.format_value(real_key, kwargs)
 
 
-t = Lang(locale="zh-cn")
+t = Lang(locale="en-us")
