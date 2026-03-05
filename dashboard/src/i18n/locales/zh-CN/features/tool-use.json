@@ -32,8 +32,7 @@
     "title": "函数工具",
     "buttons": {
       "view": "查看工具",
-      "showSystemTools": "显示系统工具",
-      "hideSystemTools": "隐藏系统工具"
+      "showSystemTools": "显示系统工具"
     },
     "search": "搜索函数工具",
     "empty": "没有可用的函数工具",

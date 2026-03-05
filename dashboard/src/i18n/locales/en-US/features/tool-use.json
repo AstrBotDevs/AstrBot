@@ -32,8 +32,7 @@
     "title": "Function Tools",
     "buttons": {
       "view": "View Tools",
-      "showSystemTools": "Show System Tools",
-      "hideSystemTools": "Hide System Tools"
+      "showSystemTools": "Show System Tools"
     },
     "search": "Search function tools",
     "empty": "No function tools available",

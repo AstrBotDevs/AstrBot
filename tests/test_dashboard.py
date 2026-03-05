@@ -12,10 +12,10 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.dashboard.routes.tools import ToolsRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
-    MockPluginConfig,
     create_mock_updater_install,
     create_mock_updater_update,
 )
@@ -227,6 +227,74 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok"
     # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_tools_list_includes_system_tools_when_requested(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    fake_system_tool = SimpleNamespace(
+        name="astrbot_core_fake_system_tool_for_test",
+        description="fake core system tool",
+        parameters={"type": "object", "properties": {}},
+        active=True,
+    )
+    monkeypatch.setattr(
+        ToolsRoute,
+        "_get_core_system_tool_candidates",
+        staticmethod(lambda: [fake_system_tool]),
+    )
+
+    response = await test_client.get(
+        "/api/tools/list?include_system_tools=true",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    target = next(
+        (item for item in data["data"] if item["name"] == fake_system_tool.name),
+        None,
+    )
+    assert target is not None
+    assert target["origin"] == "system"
+    assert target["origin_name"] == "AstrBot Core"
+    assert target["is_system"] is True
+    assert target["toggleable"] is False
+
+
+@pytest.mark.asyncio
+async def test_tools_toggle_rejects_system_tools(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    fake_system_tool = SimpleNamespace(
+        name="astrbot_core_fake_system_tool_for_toggle_test",
+        description="fake core system tool",
+        parameters={"type": "object", "properties": {}},
+        active=True,
+    )
+    monkeypatch.setattr(
+        ToolsRoute,
+        "_get_core_system_tool_candidates",
+        staticmethod(lambda: [fake_system_tool]),
+    )
+
+    response = await test_client.post(
+        "/api/tools/toggle-tool",
+        json={"name": fake_system_tool.name, "activate": False},
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "不可配置" in data["message"]
 
 
 @pytest.mark.asyncio

@@ -116,6 +116,13 @@ class ToolsRoute(Route):
                 tools.append(value)
         return tools
 
+    def _get_core_system_tool_names(self) -> set[str]:
+        return {
+            getattr(tool, "name")
+            for tool in self._get_core_system_tool_candidates()
+            if getattr(tool, "name", None)
+        }
+
     async def get_mcp_servers(self):
         try:
             config = self.tool_mgr.load_mcp_config()
@@ -412,11 +419,7 @@ class ToolsRoute(Route):
             tools_dict = []
             existing_tool_names = set()
             core_system_tool_candidates = self._get_core_system_tool_candidates()
-            core_system_tool_names = {
-                getattr(tool, "name")
-                for tool in core_system_tool_candidates
-                if getattr(tool, "name", None)
-            }
+            core_system_tool_names = self._get_core_system_tool_names()
             for tool in tools:
                 tool_info = self._serialize_tool(
                     tool,
@@ -456,6 +459,9 @@ class ToolsRoute(Route):
 
             if not tool_name or action is None:
                 return Response().error("缺少必要参数: name 或 action").__dict__
+
+            if tool_name in self._get_core_system_tool_names():
+                return Response().error("系统工具不可配置。").__dict__
 
             if action:
                 try:
