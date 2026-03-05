@@ -318,7 +318,7 @@ class ProviderOpenAIOfficial(Provider):
                 for tool_call in choice.delta.tool_calls:
                     # 使用 getattr 处理 type 字段可能完全缺失的情况
                     tool_type = getattr(tool_call, "type", None)
-                    if tool_type is None or tool_type == "":
+                    if (tool_type is None or tool_type == "") and tool_call.function is not None:
                         logger.debug(
                             f"[{self.get_model()}] tool_call.type is missing or empty in chunk {chunk_index} "
                             f"(provider: {self.provider_config.get('id', 'unknown')}), "
