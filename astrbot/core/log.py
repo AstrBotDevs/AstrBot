@@ -175,6 +175,10 @@ class LogManager:
     _trace_sink_id: int | None = None
     _NOISY_LOGGER_LEVELS: dict[str, int] = {
         "aiosqlite": logging.WARNING,
+        "filelock": logging.WARNING,
+        "asyncio": logging.WARNING,
+        "tzlocal": logging.WARNING,
+        "apscheduler": logging.WARNING,
     }
 
     @classmethod
