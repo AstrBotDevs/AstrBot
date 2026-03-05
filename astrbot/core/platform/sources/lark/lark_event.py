@@ -724,6 +724,21 @@ class LarkMessageEvent(AstrMessageEvent):
         else:
             logger.debug(f"[Lark] 流式模式已关闭: {card_id}")
 
+    async def _fallback_send_streaming(self, generator, use_fallback: bool = False):
+        """回退到非流式发送：缓冲全部文本后一次性发送，并保留父类副作用。"""
+        buffer = None
+        async for chain in generator:
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+
+        if buffer:
+            buffer.squash_plain()
+            await self.send(buffer)
+
+        await super().send_streaming(generator, use_fallback)
+
     async def send_streaming(self, generator, use_fallback: bool = False):
         """使用 CardKit 流式卡片实现打字机效果。
 
@@ -734,18 +749,8 @@ class LarkMessageEvent(AstrMessageEvent):
         # Step 1: 创建流式卡片实体
         card_id = await self._create_streaming_card()
         if not card_id:
-            # 回退: 缓冲所有内容一次性发送
             logger.warning("[Lark] 无法创建流式卡片，回退到非流式发送")
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if buffer:
-                buffer.squash_plain()
-                await self.send(buffer)
-            await super().send_streaming(generator, use_fallback)
+            await self._fallback_send_streaming(generator, use_fallback)
             return
 
         # Step 2: 发送卡片消息
@@ -755,16 +760,7 @@ class LarkMessageEvent(AstrMessageEvent):
         )
         if not sent:
             logger.error("[Lark] 发送流式卡片消息失败，回退到非流式发送")
-            buffer = None
-            async for chain in generator:
-                if not buffer:
-                    buffer = chain
-                else:
-                    buffer.chain.extend(chain.chain)
-            if buffer:
-                buffer.squash_plain()
-                await self.send(buffer)
-            await super().send_streaming(generator, use_fallback)
+            await self._fallback_send_streaming(generator, use_fallback)
             return
 
         logger.info("[Lark] 流式输出: 使用 CardKit 流式卡片")
@@ -772,13 +768,13 @@ class LarkMessageEvent(AstrMessageEvent):
         # Step 3: 解耦发送循环 (Event-driven, 参考 Telegram Draft 路径)
         sequence = 0
         delta = ""
+        last_sent = ""
         done = False
         text_changed = asyncio.Event()
 
         async def _sender_loop() -> None:
             """信号驱动的文本发送循环，有新内容就发，RTT 自然限流。"""
-            nonlocal sequence
-            last_sent = ""
+            nonlocal sequence, last_sent
             while not done:
                 await text_changed.wait()
                 text_changed.clear()
@@ -808,8 +804,8 @@ class LarkMessageEvent(AstrMessageEvent):
             text_changed.set()
             await sender_task
 
-        # Step 4: 最终更新 + 关闭流式模式
-        if delta:
+        # Step 4: 必要时补发最终文本 + 关闭流式模式
+        if delta and delta != last_sent:
             sequence += 1
             await self._update_streaming_text(card_id, delta, sequence)
 
