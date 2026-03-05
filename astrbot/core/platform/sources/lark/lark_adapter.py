@@ -34,7 +34,7 @@ from .server import LarkWebhookServer
 
 
 @register_platform_adapter(
-    "lark", "飞书机器人官方 API 适配器", support_streaming_message=False
+    "lark", "飞书机器人官方 API 适配器", support_streaming_message=True
 )
 class LarkPlatformAdapter(Platform):
     def __init__(
@@ -52,6 +52,7 @@ class LarkPlatformAdapter(Platform):
 
         # socket or webhook
         self.connection_mode = platform_config.get("lark_connection_mode", "socket")
+        self.enable_streaming = platform_config.get("lark_enable_streaming", False)
 
         if not self.bot_name:
             logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
@@ -491,7 +492,7 @@ class LarkPlatformAdapter(Platform):
             name="lark",
             description="飞书机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
-            support_streaming_message=False,
+            support_streaming_message=self.enable_streaming,
         )
 
     async def convert_msg(self, event: lark.im.v1.P2ImMessageReceiveV1) -> None:

@@ -423,6 +423,10 @@
         "description": "Verification Token",
         "hint": "Token for verifying Lark callback requests."
       },
+      "lark_enable_streaming": {
+        "description": "Enable Streaming Output",
+        "hint": "When enabled, LLM replies will appear with a typewriter effect. Requires 'Create and Update Cards (cardkit:card:write)' permission in the Lark developer console. Requires Lark client \u2265 7.20; older versions will only show a title and upgrade prompt."
+      },
       "misskey_allow_insecure_downloads": {
         "description": "Allow Insecure Downloads (Disable SSL Verification)",
         "hint": "If remote servers have certificate issues, SSL verification will be disabled as a fallback. Use only when necessary due to security risks."

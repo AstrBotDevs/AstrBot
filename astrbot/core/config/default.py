@@ -364,6 +364,7 @@ CONFIG_METADATA_2 = {
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
                         "lark_connection_mode": "socket",  # webhook, socket
+                        "lark_enable_streaming": False,
                         "webhook_uuid": "",
                         "lark_encrypt_key": "",
                         "lark_verification_token": "",
@@ -504,6 +505,11 @@ CONFIG_METADATA_2 = {
                         "condition": {
                             "lark_connection_mode": "webhook",
                         },
+                    },
+                    "lark_enable_streaming": {
+                        "description": "启用流式输出",
+                        "type": "bool",
+                        "hint": "启用后，LLM 回复将以“打字机”效果逐步输出。需要在飞书开发者后台为应用开通「创建与更新卡片(cardkit:card:write)」权限。飞书客户端需 ≥ 7.20 版本，低版本将只显示标题和升级提示。",
                     },
                     "is_sandbox": {
                         "description": "沙箱模式",
