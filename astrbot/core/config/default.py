@@ -129,6 +129,17 @@ DEFAULT_CONFIG = {
         "proactive_capability": {
             "add_cron_tools": True,
         },
+        "extension_install": {
+            "enable": True,
+            "default_mode": "secure",
+            "allowlist": [],
+            "blocklist": [],
+            "confirmation_required_non_allowlist": True,
+            "confirmation_token_ttl_seconds": 900,
+            "pending_cleanup_interval_seconds": 300,
+            "confirm_keywords": ["确认安装", "拒绝安装"],
+            "allowed_roles": ["admin", "owner"],
+        },
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {

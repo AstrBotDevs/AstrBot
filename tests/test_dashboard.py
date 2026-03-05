@@ -10,12 +10,13 @@ from quart import Quart
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.extensions import InstallResultStatus
+from astrbot.core.extensions.runtime import get_extension_orchestrator
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
-    MockPluginConfig,
     create_mock_updater_install,
     create_mock_updater_update,
 )
@@ -145,9 +146,7 @@ async def test_plugins(
     monkeypatch.setattr(
         core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_update
-    )
+    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
 
     try:
         # 插件安装
@@ -158,7 +157,18 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+        if data["status"] == "pending":
+            orchestrator = get_extension_orchestrator(core_lifecycle_td.star_context)
+            confirm_result = await orchestrator.confirm(
+                operation_id_or_token=data["data"]["token"],
+                actor_id="whatevertogo",
+                actor_role="admin",
+            )
+            assert confirm_result.status == InstallResultStatus.SUCCESS
+        else:
+            assert data["status"] == "ok", (
+                f"安装失败: {data.get('message', 'unknown error')}"
+            )
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)

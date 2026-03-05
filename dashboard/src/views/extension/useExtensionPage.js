@@ -1209,6 +1209,16 @@ export const useExtensionPage = () => {
       return false;
     }
 
+    if (resData.status === "pending") {
+      const opId = resData.data?.operation_id || "";
+      const token = resData.data?.token || "";
+      const pendingMessage = `${resData.message}\noperation_id: ${opId}\ntoken: ${token}\n请在聊天中明确表达确认/拒绝意图并附带 token，或使用 /extend confirm <token|operation_id>。`;
+      onLoadingDialogResult(2, pendingMessage, -1);
+      toast(pendingMessage, "warning");
+      await refreshExtensionsAfterInstallFailure();
+      return false;
+    }
+
     if (toastStatus) {
       toast(resData.message, resData.status === "ok" ? "success" : "error");
     }
@@ -1236,6 +1246,7 @@ export const useExtensionPage = () => {
 
     return axios.post("/api/plugin/install", {
       url: extension_url.value,
+      provider: "git",
       proxy: getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
@@ -1252,10 +1263,12 @@ export const useExtensionPage = () => {
     dialog.value = false;
     await getExtensions();
 
-    viewReadme({
-      name: resData.data.name,
-      repo: resData.data.repo || null,
-    });
+    if (resData?.data?.name) {
+      viewReadme({
+        name: resData.data.name,
+        repo: resData.data.repo || null,
+      });
+    }
 
     await checkAndPromptConflicts();
   };

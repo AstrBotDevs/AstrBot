@@ -3,6 +3,7 @@
 from .admin import AdminCommands
 from .alter_cmd import AlterCmdCommands
 from .conversation import ConversationCommands
+from .extension import ExtensionCommands
 from .help import HelpCommand
 from .llm import LLMCommands
 from .persona import PersonaCommands
@@ -17,6 +18,7 @@ __all__ = [
     "AdminCommands",
     "AlterCmdCommands",
     "ConversationCommands",
+    "ExtensionCommands",
     "HelpCommand",
     "LLMCommands",
     "PersonaCommands",

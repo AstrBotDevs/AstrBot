@@ -1,10 +1,14 @@
+import re
+
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.core.star.filter.command import GreedyStr
 
 from .commands import (
     AdminCommands,
     AlterCmdCommands,
     ConversationCommands,
+    ExtensionCommands,
     HelpCommand,
     LLMCommands,
     PersonaCommands,
@@ -18,6 +22,10 @@ from .commands import (
 
 
 class Main(star.Star):
+    _TOKEN_PATTERN = re.compile(
+        r"(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{16,64})(?![A-Za-z0-9_-])"
+    )
+
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
@@ -28,11 +36,98 @@ class Main(star.Star):
         self.conversation_c = ConversationCommands(self.context)
         self.provider_c = ProviderCommands(self.context)
         self.persona_c = PersonaCommands(self.context)
+        self.extension_c = ExtensionCommands(self.context)
         self.alter_cmd_c = AlterCmdCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.t2i_c = T2ICommand(self.context)
         self.tts_c = TTSCommand(self.context)
         self.sid_c = SIDCommand(self.context)
+
+    def _get_extension_confirm_keywords(self) -> tuple[str, str]:
+        config = self.context.get_config()
+        provider_settings = config.get("provider_settings", {})
+        extension_cfg = provider_settings.get("extension_install", {})
+        keywords = extension_cfg.get("confirm_keywords", [])
+        if isinstance(keywords, list) and len(keywords) >= 2:
+            confirm_keyword = str(keywords[0]).strip() or "确认安装"
+            deny_keyword = str(keywords[1]).strip() or "拒绝安装"
+            return confirm_keyword, deny_keyword
+        return "确认安装", "拒绝安装"
+
+    @staticmethod
+    def _normalize_intent_text(raw_text: str) -> str:
+        text = raw_text.lower()
+        for ch in [",", ".", "!", "?", "，", "。", "！", "？", "；", ";", "：", ":"]:
+            text = text.replace(ch, " ")
+        return " ".join(text.split())
+
+    @classmethod
+    def _extract_token_from_message(cls, raw_text: str) -> str:
+        match = cls._TOKEN_PATTERN.search(raw_text)
+        return match.group(1) if match else ""
+
+    @staticmethod
+    def _contains_intent_word(normalized: str, word: str) -> bool:
+        if not word:
+            return False
+        is_ascii_word = all(
+            ch.isascii() and (ch.isalnum() or ch in {"_", "-"}) for ch in word
+        )
+        if not is_ascii_word:
+            return word in normalized
+        parts = normalized.split()
+        return word in parts
+
+    def _detect_install_intent(self, raw_text: str) -> str | None:
+        normalized = self._normalize_intent_text(raw_text)
+        confirm_keyword, deny_keyword = self._get_extension_confirm_keywords()
+
+        deny_words = {
+            deny_keyword.lower(),
+            "deny",
+            "denied",
+            "reject",
+            "rejected",
+            "cancel",
+            "abort",
+            "stop",
+            "no",
+            "refuse",
+            "拒绝",
+            "取消",
+            "不要",
+            "不同意",
+            "否认",
+            "停止",
+        }
+        confirm_words = {
+            confirm_keyword.lower(),
+            "confirm",
+            "confirmed",
+            "approve",
+            "approved",
+            "accept",
+            "accepted",
+            "allow",
+            "proceed",
+            "yes",
+            "ok",
+            "okay",
+            "sure",
+            "确认",
+            "同意",
+            "批准",
+            "允许",
+            "继续",
+            "可以",
+            "好的",
+            "行",
+        }
+        if any(self._contains_intent_word(normalized, word) for word in deny_words):
+            return "deny"
+        if any(self._contains_intent_word(normalized, word) for word in confirm_words):
+            return "confirm"
+        return None
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent) -> None:
@@ -76,6 +171,64 @@ class Main(star.Star):
     async def plugin_help(self, event: AstrMessageEvent, plugin_name: str = "") -> None:
         """获取插件帮助"""
         await self.plugin_c.plugin_help(event, plugin_name)
+
+    @filter.command_group("extend")
+    def extend(self) -> None:
+        """能力扩展管理"""
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @extend.command("search")
+    async def extend_search(
+        self, event: AstrMessageEvent, query: GreedyStr = ""
+    ) -> None:
+        """搜索可安装扩展"""
+        await self.extension_c.extend_search(event, query)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @extend.command("install")
+    async def extend_install(
+        self, event: AstrMessageEvent, target: GreedyStr = ""
+    ) -> None:
+        """安装扩展"""
+        await self.extension_c.extend_install(event, target)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @extend.command("confirm")
+    async def extend_confirm(
+        self, event: AstrMessageEvent, operation_id_or_token: str = ""
+    ) -> None:
+        """确认安装待办"""
+        await self.extension_c.extend_confirm(event, operation_id_or_token)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @extend.command("deny")
+    async def extend_deny(
+        self, event: AstrMessageEvent, operation_id_or_token: str = ""
+    ) -> None:
+        """拒绝安装待办"""
+        await self.extension_c.extend_deny(event, operation_id_or_token)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @extend.command("pending")
+    async def extend_pending(self, event: AstrMessageEvent, kind: str = "") -> None:
+        """查看安装待确认列表"""
+        await self.extension_c.extend_pending(event, kind)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.regex(r"^.*[A-Za-z0-9_-]{16,}.*$")
+    async def handle_install_confirmation_intent(self, event: AstrMessageEvent) -> None:
+        """Natural-language intent based install confirmation/rejection."""
+        message = event.get_message_str().strip()
+        if message.startswith("/"):
+            return
+        token = self._extract_token_from_message(message)
+        if not token:
+            return
+        intent = self._detect_install_intent(message)
+        if intent == "confirm":
+            await self.extension_c.extend_confirm(event, token)
+        elif intent == "deny":
+            await self.extension_c.extend_deny(event, token)
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent) -> None:

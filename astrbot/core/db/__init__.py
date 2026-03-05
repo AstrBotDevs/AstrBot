@@ -15,6 +15,7 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     CronJob,
+    PendingOperation,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -534,6 +535,73 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def delete_command_conflicts(self, ids: list[int]) -> None:
         """Delete conflict records."""
+        ...
+
+    @abc.abstractmethod
+    async def create_pending_operation(
+        self,
+        *,
+        operation_id: str,
+        token: str,
+        requester_id: str,
+        requester_role: str,
+        kind: str,
+        provider: str,
+        target: str,
+        payload: dict,
+        status: str,
+        reason: str | None,
+        decision: str | None,
+        expires_at: datetime.datetime,
+    ) -> PendingOperation:
+        """Create a pending operation record."""
+        ...
+
+    @abc.abstractmethod
+    async def get_pending_operation_by_operation_id(
+        self, operation_id: str
+    ) -> PendingOperation | None:
+        """Get pending operation by public operation id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_pending_operation_by_token(
+        self, token: str
+    ) -> PendingOperation | None:
+        """Get pending operation by confirmation token."""
+        ...
+
+    @abc.abstractmethod
+    async def list_pending_operations(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+    ) -> list[PendingOperation]:
+        """List pending operations."""
+        ...
+
+    @abc.abstractmethod
+    async def update_pending_operation(
+        self,
+        operation_id: str,
+        *,
+        status: str | None = None,
+        decision: str | None = None,
+        reason: str | None = None,
+        error: str | None = None,
+        confirmed_by: str | None = None,
+        confirmed_at: datetime.datetime | None = None,
+        payload: dict | None = None,
+    ) -> PendingOperation | None:
+        """Update pending operation and return latest row."""
+        ...
+
+    @abc.abstractmethod
+    async def expire_pending_operations(
+        self, *, before: datetime.datetime | None = None
+    ) -> int:
+        """Mark pending operations as expired and return affected rows."""
         ...
 
     # @abc.abstractmethod

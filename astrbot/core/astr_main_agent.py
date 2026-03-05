@@ -51,6 +51,12 @@ from astrbot.core.astr_main_agent_resources import (
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.extensions.llm_tools import (
+    EXTENSION_CONFIRM_TOOL,
+    EXTENSION_DENY_TOOL,
+    EXTENSION_INSTALL_TOOL,
+    EXTENSION_SEARCH_TOOL,
+)
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -925,6 +931,21 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
 
 
+def _apply_extension_hub_tools(req: ProviderRequest, cfg: dict) -> None:
+    provider_settings = cfg
+    if "provider_settings" in cfg and isinstance(cfg["provider_settings"], dict):
+        provider_settings = cfg["provider_settings"]
+    install_cfg = provider_settings.get("extension_install", {})
+    if install_cfg.get("enable", True) is False:
+        return
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+    req.func_tool.add_tool(EXTENSION_SEARCH_TOOL)
+    req.func_tool.add_tool(EXTENSION_INSTALL_TOOL)
+    req.func_tool.add_tool(EXTENSION_CONFIRM_TOOL)
+    req.func_tool.add_tool(EXTENSION_DENY_TOOL)
+
+
 def _get_compress_provider(
     config: MainAgentBuildConfig, plugin_context: Context
 ) -> Provider | None:
@@ -1162,6 +1183,7 @@ async def build_main_agent(
 
     if config.add_cron_tools:
         _proactive_cron_job_tools(req)
+    _apply_extension_hub_tools(req, config.provider_settings)
 
     if event.platform_meta.support_proactive_message:
         if req.func_tool is None:

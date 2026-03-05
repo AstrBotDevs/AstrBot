@@ -710,6 +710,13 @@ export default {
                 .then(response => {
                     if (response.data.status === 'ok') {
                         this.checkPlugin();
+                    } else if (response.data.status === 'pending') {
+                        const opId = response.data.data?.operation_id || '';
+                        const token = response.data.data?.token || '';
+                        this.showSnackbar(
+                            `${response.data.message || this.tm('messages.installFailed')}\noperation_id: ${opId}\ntoken: ${token}`,
+                            'warning',
+                        );
                     } else {
                         this.showSnackbar(response.data.message || this.tm('messages.installFailed'), 'error');
                     }

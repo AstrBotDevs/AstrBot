@@ -435,6 +435,44 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
     )
 
 
+class PendingOperation(TimestampMixin, SQLModel, table=True):
+    """Persisted pending operations for extension install confirmations."""
+
+    __tablename__ = "pending_operations"  # type: ignore
+
+    id: int | None = Field(
+        default=None,
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+    )
+    operation_id: str = Field(max_length=64, nullable=False, unique=True)
+    token: str = Field(max_length=64, nullable=False, unique=True)
+    requester_id: str = Field(max_length=255, nullable=False)
+    requester_role: str = Field(max_length=64, nullable=False)
+    kind: str = Field(max_length=32, nullable=False)
+    provider: str = Field(max_length=64, nullable=False, default="")
+    target: str = Field(max_length=1024, nullable=False)
+    payload: dict = Field(default_factory=dict, sa_type=JSON)
+    status: str = Field(max_length=32, nullable=False, default="pending")
+    reason: str | None = Field(default=None, max_length=255)
+    decision: str | None = Field(default=None, max_length=64)
+    error: str | None = Field(default=None, sa_type=Text)
+    confirmed_by: str | None = Field(default=None, max_length=255)
+    confirmed_at: datetime | None = Field(default=None)
+    expires_at: datetime = Field(nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "operation_id",
+            name="uix_pending_operation_id",
+        ),
+        UniqueConstraint(
+            "token",
+            name="uix_pending_operation_token",
+        ),
+    )
+
+
 @dataclass
 class Conversation:
     """LLM 对话类
