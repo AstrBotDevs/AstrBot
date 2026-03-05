@@ -11,6 +11,7 @@ import VueApexCharts from 'vue3-apexcharts';
 import print from 'vue3-print-nb';
 import { loader } from '@guolao/vue-monaco-editor'
 import axios from 'axios';
+import { initBackendLogLangLocale } from '@/utils/logLangLocale'
 
 // 初始化新的i18n系统，等待完成后再挂载应用
 setupI18n().then(() => {
@@ -90,6 +91,9 @@ axios.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Initialize backend log language as early as possible.
+void initBackendLogLangLocale();
 
 // Keep fetch() calls consistent with axios by automatically attaching the JWT.
 // Some parts of the UI use fetch directly; without this, those requests will 401.

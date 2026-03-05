@@ -2,6 +2,11 @@
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
 import axios from 'axios';
+import {
+  getOrInitLogLangLocale,
+  setBackendLogLangLocale,
+  setStoredLogLangLocale
+} from '@/utils/logLangLocale'
 
 const { tm } = useModuleI18n('features/console');
 </script>
@@ -81,7 +86,7 @@ export default {
   data() {
     return {
       autoScrollEnabled: true,
-      logLangLocale: localStorage.getItem('logLangLocale') || 'zh-CN',
+      logLangLocale: getOrInitLogLangLocale(),
       logLanguageItems: [
         { value: 'zh-CN', title: '🇨🇳 简体中文' },
         { value: 'en-US', title: '🇺🇸 English' },
@@ -127,16 +132,11 @@ export default {
       this.logLangLocale = langLocale;
 
       try {
-        const response = await axios.post('/api/setLang', { lang: langLocale });
-        const ok =
-          response?.data?.status ? response.data.status === 'ok' :
-          response?.data?.code ? response.data.code === 200 :
-          true;
-
-        if (ok) {
-          localStorage.setItem('logLangLocale', langLocale);
+        const result = await setBackendLogLangLocale(langLocale)
+        if (result.ok) {
+          setStoredLogLangLocale(langLocale)
         } else {
-          console.error('Failed to set language on server:', response?.data?.message);
+          console.error('Failed to set language on server:', result.message)
           this.logLangLocale = previousLocale;
         }
       } catch (error) {

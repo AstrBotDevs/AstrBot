@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { router } from '@/router';
 import axios from 'axios';
+import { initBackendLogLangLocale } from '@/utils/logLangLocale'
 
 export const useAuthStore = defineStore({
   id: 'auth',
@@ -25,6 +26,7 @@ export const useAuthStore = defineStore({
         localStorage.setItem('user', this.username);
         localStorage.setItem('token', res.data.data.token);
         localStorage.setItem('change_pwd_hint', res.data.data?.change_pwd_hint);
+        void initBackendLogLangLocale()
         router.push(this.returnUrl || '/dashboard/default');
       } catch (error) {
         return Promise.reject(error);
