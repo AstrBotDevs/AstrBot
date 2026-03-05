@@ -686,8 +686,8 @@ class File(BaseMessageComponent):
                 return ""
             except RuntimeError:
                 # 没有运行中的 event loop，可以同步执行
+                # 创建临时 loop 但不设置为全局，避免干扰其他 asyncio 使用
                 loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
                 try:
                     # 等待下载完成
                     loop.run_until_complete(self._download_file())
