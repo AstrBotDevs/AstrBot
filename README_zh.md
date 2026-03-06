@@ -83,6 +83,15 @@ astrbot
 
 > 需要安装 [uv](https://docs.astral.sh/uv/)。
 
+> [!NOTE]
+> 对于 macOS 用户：由于 macOS 安全检查，首次运行 `astrbot` 命令可能需要较长时间（约 10-20 秒）。
+
+更新 `astrbot`：
+
+```bash
+uv tool upgrade astrbot
+```
+
 ### Docker 部署
 
 对于熟悉容器、希望获得更稳定且更适合生产环境部署方式的用户，我们推荐使用 Docker / Docker Compose 部署 AstrBot。
@@ -209,6 +218,8 @@ pre-commit install
 
 ### QQ 群组
 
+- 9 群: 1076659624 (新)
+- 10 群: 1078079676 (新)
 - 1 群：322154837
 - 3 群：630166526
 - 5 群：822130018

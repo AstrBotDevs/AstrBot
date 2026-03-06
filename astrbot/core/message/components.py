@@ -556,13 +556,36 @@ class Reply(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: str = ComponentType.Poke
-    id: int | None = 0
-    qq: int | None = 0
+    type: ComponentType = ComponentType.Poke
+    _type: str | int = "126"
+    id: int | str | None = 0
+    qq: int | str | None = 0  # deprecated: legacy field, kept for compatibility
 
-    def __init__(self, type: str, **_) -> None:
-        type = f"Poke:{type}"
-        super().__init__(type=type, **_)
+    def __init__(self, poke_type: str | int | None = None, **_) -> None:
+        # Backward compatible with old signature: Poke(type="poke", ...)
+        legacy_type = _.pop("type", None)
+        if poke_type is None:
+            poke_type = legacy_type
+        if poke_type in (None, "", "poke", "Poke"):
+            poke_type = "126"
+        super().__init__(_type=str(poke_type), **_)
+
+    def target_id(self) -> str | None:
+        """Return normalized target id, compatible with old `qq` field."""
+        for value in (self.id, self.qq):
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text and text != "0":
+                return text
+        return None
+
+    def toDict(self):
+        target_id = self.target_id()
+        data = {"type": str(self._type or "126")}
+        if target_id:
+            data["id"] = target_id
+        return {"type": "poke", "data": data}
 
 
 class Forward(BaseMessageComponent):

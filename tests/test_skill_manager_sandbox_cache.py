@@ -102,6 +102,55 @@ def test_sandbox_cached_skill_respects_active_and_display_path(
 
     with pytest.raises(PermissionError):
         mgr.set_skill_active("browser-automation", False)
+
     active_skills = mgr.list_skills(runtime="sandbox", active_only=True)
     assert len(active_skills) == 1
     assert active_skills[0].name == "browser-automation"
+
+
+def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(
+    monkeypatch,
+    tmp_path: Path,
+):
+    data_dir = tmp_path / "data"
+    temp_dir = tmp_path / "temp"
+    skills_root = tmp_path / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    mgr = SkillManager(skills_root=str(skills_root))
+    _write_skill(skills_root, "custom-local", "local description")
+    mgr.set_sandbox_skills_cache(
+        [
+            {
+                "name": "custom-local",
+                "description": "cached description should be overridden",
+                "path": "/app/skills/custom-local/SKILL.md",
+            },
+            {
+                "name": "python-sandbox",
+                "description": "ship built-in",
+                "path": "/app/skills/python-sandbox/SKILL.md",
+            },
+        ]
+    )
+
+    skills = mgr.list_skills(runtime="sandbox", show_sandbox_path=False)
+    by_name = {item.name: item for item in skills}
+
+    assert sorted(by_name) == ["custom-local", "python-sandbox"]
+    assert by_name["custom-local"].description == "local description"
+    local_skill_path = Path(by_name["custom-local"].path)
+    assert local_skill_path.is_relative_to(skills_root)
+    assert local_skill_path == skills_root / "custom-local" / "SKILL.md"
+    assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
