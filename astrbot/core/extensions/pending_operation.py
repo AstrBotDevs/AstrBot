@@ -14,8 +14,8 @@
 
 状态流转:
 pending -> running -> success/failed
-       \-> rejected
-       \-> expired (自动)
+       -> rejected
+       -> expired (自动)
 """
 from __future__ import annotations
 
