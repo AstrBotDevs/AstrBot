@@ -41,7 +41,7 @@ def _make_provider(overrides: dict | None = None) -> OpenAIRerankProvider:
         "id": "test-openai-rerank",
         "type": "openai_rerank",
         "rerank_api_key": "test-key",
-        "rerank_api_base": "https://api.example.com/v1/rerank",
+        "rerank_api_url": "https://api.example.com/v1/rerank",
         "rerank_model": "test-model",
         "timeout": 30,
     }
@@ -55,7 +55,7 @@ def test_init_requires_api_key_and_url():
         _make_provider({"rerank_api_key": ""})
 
     with pytest.raises(ValueError, match="API URL"):
-        _make_provider({"rerank_api_base": ""})
+        _make_provider({"rerank_api_url": ""})
 
 
 @pytest.mark.asyncio

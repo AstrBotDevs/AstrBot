@@ -1620,7 +1620,7 @@ CONFIG_METADATA_2 = {
                         "provider_type": "rerank",
                         "enable": True,
                         "rerank_api_key": "",
-                        "rerank_api_base": "https://api.example.com/v1/rerank",
+                        "rerank_api_url": "https://api.example.com/v1/rerank",
                         "rerank_model": "",
                         "timeout": 30,
                     },
@@ -1659,9 +1659,14 @@ CONFIG_METADATA_2 = {
                         "condition": {"provider": "xai"},
                     },
                     "rerank_api_base": {
-                        "description": "重排序模型 API 地址",
+                        "description": "重排序模型 API Base URL",
                         "type": "string",
-                        "hint": "通用 Rerank / NewAPI 兼容接口需填写完整请求 URL（例如 https://api.example.com/v1/rerank）；AstrBot 不会自动补全 /v1/rerank。",
+                        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。",
+                    },
+                    "rerank_api_url": {
+                        "description": "通用 Rerank 完整请求 URL",
+                        "type": "string",
+                        "hint": "仅对通用 Rerank 适配器生效。请填写完整请求 URL（例如 https://api.example.com/v1/rerank）。",
                     },
                     "rerank_api_key": {
                         "description": "API Key",

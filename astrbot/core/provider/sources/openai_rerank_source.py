@@ -16,7 +16,7 @@ from ..register import register_provider_adapter
     provider_type=ProviderType.RERANK,
     default_config_tmpl={
         "rerank_api_key": "",
-        "rerank_api_base": "https://api.example.com/v1/rerank",
+        "rerank_api_url": "https://api.example.com/v1/rerank",
         "rerank_model": "",
         "timeout": 30,
     },
@@ -27,7 +27,10 @@ class OpenAIRerankProvider(RerankProvider):
         super().__init__(provider_config, provider_settings)
 
         self.api_key = str(provider_config.get("rerank_api_key", "")).strip()
-        self.api_url = str(provider_config.get("rerank_api_base", "")).strip()
+        self.api_url = str(
+            provider_config.get("rerank_api_url")
+            or provider_config.get("rerank_api_base", "")
+        ).strip()
         self.model = str(provider_config.get("rerank_model", "")).strip()
         self.timeout = int(provider_config.get("timeout", 30))
 
