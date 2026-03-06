@@ -9,7 +9,7 @@
             prepend-icon="mdi-upload"
             class="me-2"
             variant="tonal"
-            @click="uploadDialog = true"
+            @click="openUploadDialog"
           >
             {{ tm("skills.upload") }}
           </v-btn>
@@ -211,8 +211,8 @@
                 <v-btn
                   size="x-small"
                   variant="tonal"
-                  @click="viewPayload(item.payload_ref)"
                   :disabled="!item.payload_ref"
+                  @click="viewPayload(item.payload_ref)"
                 >
                   Payload
                 </v-btn>
@@ -271,24 +271,143 @@
       </template>
     </v-container>
 
-    <v-dialog v-model="uploadDialog" max-width="520px">
-      <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm("skills.uploadDialogTitle") }}</v-card-title>
-        <v-card-text>
-          <small class="text-grey">{{ tm("skills.uploadHint") }}</small>
-          <v-file-input
-            v-model="uploadFile"
-            accept=".zip"
-            :label="tm('skills.selectFile')"
-            prepend-icon="mdi-folder-zip-outline"
-            variant="outlined"
-            class="mt-4"
-            :multiple="false"
+    <v-dialog v-model="uploadDialog" max-width="880px" :persistent="uploading">
+      <v-card class="skills-upload-dialog">
+        <v-card-title class="skills-upload-dialog__header px-6 pt-6 pb-2">
+          <div class="skills-upload-dialog__heading">
+            <div class="text-h4 font-weight-medium">{{ tm("skills.uploadDialogTitle") }}</div>
+            <p class="skills-upload-dialog__description mt-3 mb-0">
+              {{ tm("skills.uploadHint") }}
+            </p>
+          </div>
+          <v-btn
+            class="skills-upload-dialog__close"
+            icon="mdi-close"
+            variant="text"
+            :disabled="uploading"
+            @click="closeUploadDialog"
           />
+        </v-card-title>
+
+        <v-card-text class="px-6 pb-5 pt-2">
+          <div class="skills-upload-structure-note">
+            <v-icon size="18">mdi-information-outline</v-icon>
+            <span>{{ tm("skills.structureRequirement") }}</span>
+          </div>
+
+          <div class="skills-upload-capabilities">
+            <div class="skills-upload-capability">
+              <div class="skills-upload-capability__icon">
+                <v-icon size="18">mdi-layers-outline</v-icon>
+              </div>
+              <span>{{ tm("skills.abilityMultiple") }}</span>
+            </div>
+            <div class="skills-upload-capability">
+              <div class="skills-upload-capability__icon">
+                <v-icon size="18">mdi-shield-check-outline</v-icon>
+              </div>
+              <span>{{ tm("skills.abilityValidate") }}</span>
+            </div>
+            <div class="skills-upload-capability">
+              <div class="skills-upload-capability__icon">
+                <v-icon size="18">mdi-skip-next-circle-outline</v-icon>
+              </div>
+              <span>{{ tm("skills.abilitySkip") }}</span>
+            </div>
+          </div>
+
+          <div
+            class="skills-dropzone"
+            :class="{ 'skills-dropzone--dragover': isUploadDragging }"
+            @click="openUploadPicker"
+            @dragover.prevent="isUploadDragging = true"
+            @dragleave.prevent="isUploadDragging = false"
+            @drop.prevent="handleUploadDrop"
+          >
+            <div class="skills-dropzone__icon">
+              <v-icon size="34">mdi-folder-zip-outline</v-icon>
+            </div>
+            <div class="text-h6 font-weight-medium">{{ tm("skills.dropzoneTitle") }}</div>
+            <div class="skills-dropzone__subtitle">{{ tm("skills.dropzoneAction") }}</div>
+            <div class="skills-dropzone__hint">{{ tm("skills.dropzoneHint") }}</div>
+            <input
+              ref="uploadInput"
+              type="file"
+              multiple
+              hidden
+              accept=".zip"
+              @change="handleUploadSelection"
+            />
+          </div>
+
+          <div v-if="uploadItems.length > 0" class="skills-upload-summary">
+            <v-chip size="small" variant="flat" class="skills-upload-summary__chip">
+              {{ tm("skills.summaryTotal", { count: uploadStateCounts.total }) }}
+            </v-chip>
+            <v-chip size="small" variant="flat" class="skills-upload-summary__chip">
+              {{ tm("skills.summaryReady", { count: uploadStateCounts.waiting + uploadStateCounts.uploading }) }}
+            </v-chip>
+            <v-chip size="small" variant="flat" class="skills-upload-summary__chip skills-upload-summary__chip--success">
+              {{ tm("skills.summarySuccess", { count: uploadStateCounts.success }) }}
+            </v-chip>
+            <v-chip size="small" variant="flat" class="skills-upload-summary__chip skills-upload-summary__chip--error">
+              {{ tm("skills.summaryFailed", { count: uploadStateCounts.error }) }}
+            </v-chip>
+            <v-chip size="small" variant="flat" class="skills-upload-summary__chip">
+              {{ tm("skills.summarySkipped", { count: uploadStateCounts.skipped }) }}
+            </v-chip>
+          </div>
+
+          <div v-if="uploadItems.length > 0" class="skills-upload-list">
+            <div class="skills-upload-list__header">
+              <span>{{ tm("skills.fileListTitle") }}</span>
+            </div>
+            <div
+              v-for="item in uploadItems"
+              :key="item.id"
+              class="skills-upload-row"
+            >
+              <div class="skills-upload-row__meta">
+                <div class="skills-upload-row__name">{{ item.name }}</div>
+                <div class="skills-upload-row__size">{{ formatFileSize(item.size) }}</div>
+                <div class="skills-upload-row__message">
+                  {{ item.validationMessage }}
+                </div>
+              </div>
+              <div class="skills-upload-row__actions">
+                <v-chip
+                  size="small"
+                  variant="flat"
+                  :class="statusChipClass(item.status)"
+                >
+                  {{ uploadStatusLabel(item.status) }}
+                </v-chip>
+                <v-btn
+                  icon="mdi-close"
+                  size="small"
+                  variant="text"
+                  :disabled="uploading || item.status === 'uploading'"
+                  @click="removeUploadItem(item.id)"
+                />
+              </div>
+            </div>
+          </div>
+          <div v-else class="skills-upload-empty">
+            {{ tm("skills.fileListEmpty") }}
+          </div>
         </v-card-text>
-        <v-card-actions class="d-flex justify-end">
-          <v-btn variant="text" @click="uploadDialog = false">{{ tm("skills.cancel") }}</v-btn>
-          <v-btn color="primary" :loading="uploading" :disabled="!uploadFile" @click="uploadSkill">
+
+        <v-card-actions class="justify-end px-6 pb-5 pt-0">
+          <v-btn variant="text" :disabled="uploading" @click="closeUploadDialog">
+            {{ tm("skills.cancel") }}
+          </v-btn>
+          <v-btn
+            color="success"
+            variant="flat"
+            :loading="uploading"
+            :disabled="!hasUploadableItems"
+            @click="uploadSkillBatch"
+          >
             {{ tm("skills.confirmUpload") }}
           </v-btn>
         </v-card-actions>
@@ -332,6 +451,12 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import ItemCard from "@/components/shared/ItemCard.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 
+const STATUS_WAITING = "waiting";
+const STATUS_UPLOADING = "uploading";
+const STATUS_SUCCESS = "success";
+const STATUS_ERROR = "error";
+const STATUS_SKIPPED = "skipped";
+
 export default {
   name: "SkillsSection",
   components: { ItemCard },
@@ -346,7 +471,9 @@ export default {
     const sandboxCache = reactive({ ready: false, count: 0, updated_at: null });
     const uploading = ref(false);
     const uploadDialog = ref(false);
-    const uploadFile = ref(null);
+    const uploadInput = ref(null);
+    const uploadItems = ref([]);
+    const isUploadDragging = ref(false);
     const itemLoading = reactive({});
     const deleteDialog = ref(false);
     const deleting = ref(false);
@@ -369,6 +496,7 @@ export default {
 
     const neoEnabled = ref(false);
     const neoUnavailableMessage = ref("");
+    let nextUploadItemId = 0;
 
     const candidateStatusItems = computed(() => [
       { title: tm("skills.neoAll"), value: "" },
@@ -388,6 +516,26 @@ export default {
     ]);
 
     const activeReleaseCount = computed(() => neoReleases.value.filter((item) => item?.is_active).length);
+    const uploadStateCounts = computed(() =>
+      uploadItems.value.reduce(
+        (counts, item) => {
+          counts.total += 1;
+          counts[item.status] += 1;
+          return counts;
+        },
+        {
+          total: 0,
+          [STATUS_WAITING]: 0,
+          [STATUS_UPLOADING]: 0,
+          [STATUS_SUCCESS]: 0,
+          [STATUS_ERROR]: 0,
+          [STATUS_SKIPPED]: 0,
+        },
+      ),
+    );
+    const hasUploadableItems = computed(() =>
+      uploadItems.value.some((item) => item.status === STATUS_WAITING || item.status === STATUS_ERROR),
+    );
 
     const candidateHeaders = computed(() => [
       { title: "ID", key: "id", width: "180px" },
@@ -450,6 +598,153 @@ export default {
       return [];
     };
 
+    const formatFileSize = (size) => {
+      if (!Number.isFinite(size) || size <= 0) return "0 B";
+      if (size < 1024) return `${size} B`;
+      if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    };
+
+    const normalizeUploadName = (name) => String(name || "").trim().toLowerCase();
+
+    const buildUploadItem = (file, status, validationMessage) => ({
+      id: `upload-${nextUploadItemId++}`,
+      file,
+      name: file.name,
+      size: file.size,
+      status,
+      validationMessage,
+      filenameKey: normalizeUploadName(file.name),
+    });
+
+    const uploadStatusLabel = (status) => {
+      if (status === STATUS_UPLOADING) return tm("skills.statusUploading");
+      if (status === STATUS_SUCCESS) return tm("skills.statusSuccess");
+      if (status === STATUS_ERROR) return tm("skills.statusError");
+      if (status === STATUS_SKIPPED) return tm("skills.statusSkipped");
+      return tm("skills.statusWaiting");
+    };
+
+    const statusChipClass = (status) => `skills-status-chip skills-status-chip--${status}`;
+
+    const resetUploadState = () => {
+      uploadItems.value = [];
+      isUploadDragging.value = false;
+      if (uploadInput.value) {
+        uploadInput.value.value = "";
+      }
+    };
+
+    const openUploadDialog = () => {
+      uploadDialog.value = true;
+    };
+
+    const closeUploadDialog = () => {
+      if (uploading.value) return;
+      uploadDialog.value = false;
+    };
+
+    const openUploadPicker = () => {
+      if (uploading.value) return;
+      uploadInput.value?.click();
+    };
+
+    const addUploadFiles = (filesToAdd) => {
+      const existingNames = new Set(uploadItems.value.map((item) => item.filenameKey));
+      const nextItems = [];
+
+      for (const file of filesToAdd) {
+        if (!file?.name) continue;
+        const filenameKey = normalizeUploadName(file.name);
+
+        if (existingNames.has(filenameKey)) {
+          nextItems.push(
+            buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationDuplicate")),
+          );
+          continue;
+        }
+
+        existingNames.add(filenameKey);
+        if (!/\.zip$/i.test(file.name)) {
+          nextItems.push(
+            buildUploadItem(file, STATUS_SKIPPED, tm("skills.validationZipOnly")),
+          );
+          continue;
+        }
+
+        nextItems.push(
+          buildUploadItem(file, STATUS_WAITING, tm("skills.validationReady")),
+        );
+      }
+
+      if (nextItems.length > 0) {
+        uploadItems.value = [...uploadItems.value, ...nextItems];
+      }
+    };
+
+    const handleUploadSelection = (event) => {
+      const selected = Array.from(event?.target?.files || []);
+      addUploadFiles(selected);
+      if (uploadInput.value) {
+        uploadInput.value.value = "";
+      }
+    };
+
+    const handleUploadDrop = (event) => {
+      isUploadDragging.value = false;
+      addUploadFiles(Array.from(event?.dataTransfer?.files || []));
+    };
+
+    const removeUploadItem = (itemId) => {
+      uploadItems.value = uploadItems.value.filter((item) => item.id !== itemId);
+    };
+
+    const takeFirstMatch = (matchMap, filenameKey) => {
+      const matches = matchMap.get(filenameKey) || [];
+      const entry = matches.shift() || null;
+      if (matches.length === 0) {
+        matchMap.delete(filenameKey);
+      }
+      return entry;
+    };
+
+    const buildResultMap = (items = []) => {
+      const resultMap = new Map();
+      for (const item of items) {
+        const filenameKey = normalizeUploadName(item?.filename);
+        if (!filenameKey) continue;
+        if (!resultMap.has(filenameKey)) {
+          resultMap.set(filenameKey, []);
+        }
+        resultMap.get(filenameKey).push(item);
+      }
+      return resultMap;
+    };
+
+    const applyUploadResults = (attemptedItems, payload) => {
+      const succeededMap = buildResultMap(payload?.succeeded);
+      const failedMap = buildResultMap(payload?.failed);
+
+      for (const item of attemptedItems) {
+        const successEntry = takeFirstMatch(succeededMap, item.filenameKey);
+        if (successEntry) {
+          item.status = STATUS_SUCCESS;
+          item.validationMessage = tm("skills.validationUploadedAs", { name: successEntry.name || item.name });
+          continue;
+        }
+
+        const failedEntry = takeFirstMatch(failedMap, item.filenameKey);
+        if (failedEntry) {
+          item.status = STATUS_ERROR;
+          item.validationMessage = failedEntry.error || tm("skills.validationUploadFailed");
+          continue;
+        }
+
+        item.status = STATUS_ERROR;
+        item.validationMessage = tm("skills.validationNoResult");
+      }
+    };
+
     const fetchSkills = async () => {
       loading.value = true;
       try {
@@ -472,26 +767,44 @@ export default {
       }
     };
 
-    const uploadSkill = async () => {
-      if (!uploadFile.value) return;
+    const uploadSkillBatch = async () => {
+      const attemptedItems = uploadItems.value.filter(
+        (item) => item.status === STATUS_WAITING || item.status === STATUS_ERROR,
+      );
+      if (attemptedItems.length === 0) return;
+
       uploading.value = true;
+      for (const item of attemptedItems) {
+        item.status = STATUS_UPLOADING;
+        item.validationMessage = tm("skills.validationUploading");
+      }
+
       try {
         const formData = new FormData();
-        const file = Array.isArray(uploadFile.value) ? uploadFile.value[0] : uploadFile.value;
-        if (!file) {
-          uploading.value = false;
-          return;
+        for (const item of attemptedItems) {
+          formData.append("files", item.file);
         }
-        formData.append("file", file);
-        const res = await axios.post("/api/skills/upload", formData, {
+
+        const res = await axios.post("/api/skills/batch-upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        handleApiResponse(res, tm("skills.uploadSuccess"), tm("skills.uploadFailed"), async () => {
-          uploadDialog.value = false;
-          uploadFile.value = null;
+
+        const payload = res?.data?.data || {};
+        applyUploadResults(attemptedItems, payload);
+
+        const succeededCount = Array.isArray(payload.succeeded) ? payload.succeeded.length : 0;
+        const failedCount = Array.isArray(payload.failed) ? payload.failed.length : 0;
+        const responseColor = res?.data?.status === "error" ? "error" : failedCount > 0 ? "warning" : "success";
+        showMessage(res?.data?.message || tm("skills.uploadSuccess"), responseColor);
+
+        if (succeededCount > 0) {
           await fetchSkills();
-        });
+        }
       } catch (_err) {
+        for (const item of attemptedItems) {
+          item.status = STATUS_ERROR;
+          item.validationMessage = tm("skills.validationUploadFailed");
+        }
         showMessage(tm("skills.uploadFailed"), "error");
       } finally {
         uploading.value = false;
@@ -606,9 +919,9 @@ export default {
         const res = await axios.get("/api/config/get");
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
-        const runtime = providerSettings?.computer_use_runtime || "local";
+        const currentRuntime = providerSettings?.computer_use_runtime || "local";
         const booter = providerSettings?.sandbox?.booter || "";
-        neoEnabled.value = runtime === "sandbox" && booter === "shipyard_neo";
+        neoEnabled.value = currentRuntime === "sandbox" && booter === "shipyard_neo";
       } catch (_err) {
         neoEnabled.value = false;
       }
@@ -803,6 +1116,12 @@ export default {
       }
     });
 
+    watch(uploadDialog, (isOpen) => {
+      if (!isOpen && !uploading.value) {
+        resetUploadState();
+      }
+    });
+
     onMounted(async () => {
       await Promise.all([fetchSkills(), loadNeoAvailability()]);
       if (neoEnabled.value) {
@@ -819,7 +1138,11 @@ export default {
       runtime,
       sandboxCache,
       uploadDialog,
-      uploadFile,
+      uploadInput,
+      uploadItems,
+      uploadStateCounts,
+      hasUploadableItems,
+      isUploadDragging,
       uploading,
       itemLoading,
       deleteDialog,
@@ -837,9 +1160,18 @@ export default {
       candidateHeaders,
       releaseHeaders,
       payloadDialog,
+      formatFileSize,
+      uploadStatusLabel,
+      statusChipClass,
+      openUploadDialog,
+      closeUploadDialog,
+      openUploadPicker,
+      handleUploadSelection,
+      handleUploadDrop,
+      removeUploadItem,
       refreshCurrentMode,
       fetchNeoData,
-      uploadSkill,
+      uploadSkillBatch,
       downloadSkill,
       toggleSkill,
       confirmDelete,
@@ -881,6 +1213,241 @@ export default {
   word-break: break-all;
 }
 
+.skills-upload-dialog {
+  border-radius: 24px;
+  background: linear-gradient(180deg, #fcfcf8 0%, #f7f7f3 100%);
+  border: 1px solid rgba(125, 137, 121, 0.12);
+  box-shadow: 0 24px 60px rgba(59, 67, 57, 0.08);
+}
+
+.skills-upload-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.skills-upload-dialog__heading {
+  flex: 1;
+  min-width: 0;
+  padding-right: 20px;
+}
+
+.skills-upload-dialog__description {
+  max-width: 100%;
+  color: rgba(56, 64, 54, 0.78);
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.skills-upload-dialog__close {
+  flex: 0 0 auto;
+  margin-right: -6px;
+  margin-top: -4px;
+}
+
+.skills-upload-structure-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(141, 151, 137, 0.18);
+  background: rgba(240, 244, 238, 0.92);
+  color: #586457;
+  line-height: 1.6;
+}
+
+.skills-upload-capabilities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.skills-upload-capability {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(140, 151, 137, 0.18);
+  background: rgba(244, 246, 241, 0.92);
+  color: #5a655c;
+}
+
+.skills-upload-capability__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: #eaf0e8;
+  color: #647266;
+}
+
+.skills-dropzone {
+  padding: 36px 24px;
+  border-radius: 22px;
+  border: 1.5px dashed #c6cfc2;
+  background: linear-gradient(180deg, rgba(252, 252, 248, 0.96), rgba(244, 247, 242, 0.96));
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+}
+
+.skills-dropzone:hover,
+.skills-dropzone--dragover {
+  border-color: #96aa97;
+  background: linear-gradient(180deg, rgba(248, 251, 246, 0.98), rgba(239, 245, 238, 0.98));
+  transform: translateY(-1px);
+}
+
+.skills-dropzone__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 18px;
+  border-radius: 20px;
+  background: #e9f0e7;
+  color: #647966;
+}
+
+.skills-dropzone__subtitle {
+  margin-top: 10px;
+  color: rgba(64, 73, 62, 0.78);
+}
+
+.skills-dropzone__hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: rgba(87, 97, 84, 0.68);
+}
+
+.skills-upload-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.skills-upload-summary__chip {
+  background: #eef1ea;
+  color: #5d665c;
+}
+
+.skills-upload-summary__chip--success {
+  background: #e4eee5;
+  color: #4b6350;
+}
+
+.skills-upload-summary__chip--error {
+  background: #f2e6e2;
+  color: #8b5d54;
+}
+
+.skills-upload-list {
+  margin-top: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(137, 147, 133, 0.16);
+  background: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+}
+
+.skills-upload-list__header {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(137, 147, 133, 0.12);
+  color: #4a5449;
+  font-weight: 600;
+}
+
+.skills-upload-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.skills-upload-row + .skills-upload-row {
+  border-top: 1px solid rgba(137, 147, 133, 0.12);
+}
+
+.skills-upload-row__meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.skills-upload-row__name {
+  font-weight: 600;
+  color: #313930;
+  word-break: break-all;
+}
+
+.skills-upload-row__size {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(74, 84, 73, 0.58);
+}
+
+.skills-upload-row__message {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(74, 84, 73, 0.78);
+}
+
+.skills-upload-row__actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.skills-status-chip {
+  min-width: 74px;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.skills-status-chip--waiting {
+  background: #eceeea;
+  color: #5f6760;
+}
+
+.skills-status-chip--uploading {
+  background: #e8efea;
+  color: #506858;
+}
+
+.skills-status-chip--success {
+  background: #e4efe5;
+  color: #4b6350;
+}
+
+.skills-status-chip--error {
+  background: #f2e6e2;
+  color: #8a5a50;
+}
+
+.skills-status-chip--skipped {
+  background: #efefed;
+  color: #666b65;
+}
+
+.skills-upload-empty {
+  margin-top: 16px;
+  padding: 20px 18px;
+  border-radius: 20px;
+  border: 1px dashed rgba(148, 157, 143, 0.28);
+  background: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  color: rgba(88, 98, 85, 0.72);
+}
+
 .payload-preview {
   max-height: 480px;
   overflow: auto;
@@ -890,6 +1457,7 @@ export default {
   border-radius: 8px;
   font-size: 12px;
 }
+
 .neo-filter-card {
   border-radius: 14px;
   border-color: rgba(var(--v-theme-primary), 0.25);
@@ -906,5 +1474,30 @@ export default {
 
 .neo-data-table :deep(tbody tr:hover) {
   background: rgba(var(--v-theme-primary), 0.04);
+}
+
+@media (max-width: 860px) {
+  .skills-upload-capabilities {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .skills-upload-dialog__header {
+    gap: 12px;
+  }
+
+  .skills-upload-dialog__heading {
+    padding-right: 0;
+  }
+
+  .skills-upload-row {
+    flex-direction: column;
+  }
+
+  .skills-upload-row__actions {
+    justify-content: space-between;
+    align-items: center;
+  }
 }
 </style>
