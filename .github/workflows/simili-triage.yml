@@ -23,9 +23,13 @@ jobs:
         with:
           script: |
             const labels = (context.payload.issue.labels || []).map(label => label.name);
+            const action = context.payload.action;
+            const labeledName = context.payload.label?.name ?? '';
             const included = labels.includes('bug') || labels.includes('enhancement');
             const excluded = ['plugin-publish', 'no-simili'].some(label => labels.includes(label));
-            const eligible = included && !excluded;
+            const triggerEligible =
+              action !== 'labeled' || ['bug', 'enhancement'].includes(labeledName);
+            const eligible = included && !excluded && triggerEligible;
 
             core.setOutput('eligible', eligible ? 'true' : 'false');
 
@@ -33,7 +37,7 @@ jobs:
               core.notice(`Simili triage enabled for issue #${context.payload.issue.number}.`);
             } else {
               core.notice(
-                `Simili triage skipped for issue #${context.payload.issue.number}. Labels: ${labels.join(', ') || '(none)'}`,
+                `Simili triage skipped for issue #${context.payload.issue.number}. Action: ${action}. Labels: ${labels.join(', ') || '(none)'}`,
               );
             }
 
@@ -94,3 +98,57 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           QDRANT_URL: ${{ secrets.QDRANT_URL }}
           QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+
+      - name: Apply potential duplicate fallback label
+        if: steps.gate.outputs.eligible == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.payload.issue.number;
+
+            const issue = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number,
+            });
+
+            const existingLabels = (issue.data.labels || []).map(label =>
+              typeof label === 'string' ? label : label.name,
+            );
+
+            if (existingLabels.includes('potential-duplicate')) {
+              core.notice(`Issue #${issue_number} already has potential-duplicate.`);
+              return;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const latestSimiliReport = comments
+              .filter(comment => comment.body?.includes('<!-- simili-bot-report -->'))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+
+            if (!latestSimiliReport) {
+              core.notice(`No Simili report comment found for issue #${issue_number}.`);
+              return;
+            }
+
+            if (!latestSimiliReport.body.includes('**Possible Duplicate**')) {
+              core.notice(`Latest Simili report for issue #${issue_number} is not a duplicate warning.`);
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number,
+              labels: ['potential-duplicate'],
+            });
+
+            core.notice(`Added potential-duplicate to issue #${issue_number} based on Simili report fallback.`);
