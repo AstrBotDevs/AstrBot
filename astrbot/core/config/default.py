@@ -1616,7 +1616,7 @@ CONFIG_METADATA_2 = {
                     "通用 Rerank": {
                         "id": "openai_rerank",
                         "type": "openai_rerank",
-                        "provider": "openai",
+                        "provider": "generic",
                         "provider_type": "rerank",
                         "enable": True,
                         "rerank_api_key": "",

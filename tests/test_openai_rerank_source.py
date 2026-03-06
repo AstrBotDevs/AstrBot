@@ -115,3 +115,15 @@ async def test_rerank_rejects_unsupported_document_types():
             )
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_terminate_closes_and_nulls_client():
+    provider = _make_provider()
+    mock_client = _MockClient(_MockResponse({}))
+    provider.client = mock_client
+
+    await provider.terminate()
+
+    assert mock_client.closed is True
+    assert provider.client is None

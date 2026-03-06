@@ -9,6 +9,9 @@ from ..entities import ProviderType, RerankResult
 from ..provider import RerankProvider
 from ..register import register_provider_adapter
 
+DocumentInput = str | Mapping[str, Any]
+NormalizedDocument = str | dict[str, Any]
+
 
 @register_provider_adapter(
     "openai_rerank",
@@ -23,6 +26,8 @@ from ..register import register_provider_adapter
     provider_display_name="通用 Rerank",
 )
 class OpenAIRerankProvider(RerankProvider):
+    _ERROR_RESPONSE_SNIPPET_MAX_CHARS = 200
+
     def __init__(self, provider_config: dict, provider_settings: dict) -> None:
         super().__init__(provider_config, provider_settings)
 
@@ -39,20 +44,21 @@ class OpenAIRerankProvider(RerankProvider):
         if not self.api_key:
             raise ValueError("通用 Rerank API Key 不能为空。")
 
-        self.client = aiohttp.ClientSession(
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=aiohttp.ClientTimeout(total=self.timeout),
-        )
+        self.client: aiohttp.ClientSession | None = None
+        self.client_headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        self.client_timeout = aiohttp.ClientTimeout(total=self.timeout)
 
         self.set_model(self.model)
         logger.info(f"AstrBot 通用 Rerank 初始化完成。API URL: {self.api_url}")
 
     @staticmethod
-    def _normalize_documents(documents: list[Any]) -> list[str | dict[str, Any]]:
-        normalized_documents: list[str | dict[str, Any]] = []
+    def _normalize_documents(
+        documents: list[DocumentInput],
+    ) -> list[NormalizedDocument]:
+        normalized_documents: list[NormalizedDocument] = []
         for index, document in enumerate(documents):
             if isinstance(document, str):
                 normalized_documents.append(document)
@@ -69,7 +75,7 @@ class OpenAIRerankProvider(RerankProvider):
     def _build_payload(
         self,
         query: str,
-        documents: list[str | dict[str, Any]],
+        documents: list[NormalizedDocument],
         top_n: int | None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -132,10 +138,25 @@ class OpenAIRerankProvider(RerankProvider):
 
         return parsed_results
 
+    async def _get_client(self) -> aiohttp.ClientSession:
+        if self.client is None or self.client.closed:
+            self.client = aiohttp.ClientSession(
+                headers=self.client_headers,
+                timeout=self.client_timeout,
+            )
+        return self.client
+
+    @classmethod
+    def _truncate_error_response(cls, response_text: str) -> str:
+        snippet = response_text[: cls._ERROR_RESPONSE_SNIPPET_MAX_CHARS]
+        if len(response_text) > cls._ERROR_RESPONSE_SNIPPET_MAX_CHARS:
+            return f"{snippet}...[truncated]"
+        return snippet
+
     async def rerank(
         self,
         query: str,
-        documents: list[str],
+        documents: list[DocumentInput],
         top_n: int | None = None,
     ) -> list[RerankResult]:
         if not documents:
@@ -143,22 +164,25 @@ class OpenAIRerankProvider(RerankProvider):
         if not query.strip():
             logger.warning("通用 Rerank 查询文本为空，返回空结果。")
             return []
-        if not self.client:
-            logger.error("通用 Rerank 客户端会话已关闭，返回空结果。")
-            return []
 
         payload = self._build_payload(
             query=query,
             documents=self._normalize_documents(documents),
             top_n=top_n,
         )
+        client = await self._get_client()
 
         try:
-            async with self.client.post(self.api_url, json=payload) as response:
+            async with client.post(self.api_url, json=payload) as response:
                 if response.status >= 400:
                     response_text = await response.text()
+                    logger.warning(
+                        "通用 Rerank API 请求失败: HTTP %s, body snippet: %s",
+                        response.status,
+                        self._truncate_error_response(response_text),
+                    )
                     raise RuntimeError(
-                        f"通用 Rerank API 请求失败: HTTP {response.status}, {response_text}"
+                        f"通用 Rerank API 请求失败: HTTP {response.status}"
                     )
 
                 response_data = await response.json(content_type=None)
