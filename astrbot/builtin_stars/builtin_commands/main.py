@@ -22,6 +22,17 @@ from .commands import (
 
 
 class Main(star.Star):
+    # 预定义的意图关键词，避免每次调用重新创建
+    _DENY_WORDS = frozenset({
+        "deny", "denied", "reject", "rejected", "cancel", "abort", "stop", "no", "refuse",
+        "拒绝", "取消", "不要", "不同意", "否认", "停止",
+    })
+    _CONFIRM_WORDS = frozenset({
+        "confirm", "confirmed", "approve", "approved", "accept", "accepted", "allow",
+        "proceed", "yes", "ok", "okay", "sure",
+        "确认", "同意", "批准", "允许", "继续", "可以", "好的", "行",
+    })
+
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
@@ -73,47 +84,10 @@ class Main(star.Star):
         normalized = self._normalize_intent_text(raw_text)
         confirm_keyword, deny_keyword = self._get_extension_confirm_keywords()
 
-        deny_words = {
-            deny_keyword.lower(),
-            "deny",
-            "denied",
-            "reject",
-            "rejected",
-            "cancel",
-            "abort",
-            "stop",
-            "no",
-            "refuse",
-            "拒绝",
-            "取消",
-            "不要",
-            "不同意",
-            "否认",
-            "停止",
-        }
-        confirm_words = {
-            confirm_keyword.lower(),
-            "confirm",
-            "confirmed",
-            "approve",
-            "approved",
-            "accept",
-            "accepted",
-            "allow",
-            "proceed",
-            "yes",
-            "ok",
-            "okay",
-            "sure",
-            "确认",
-            "同意",
-            "批准",
-            "允许",
-            "继续",
-            "可以",
-            "好的",
-            "行",
-        }
+        # 合并配置的关键词和预定义关键词
+        deny_words = self._DENY_WORDS | {deny_keyword.lower()}
+        confirm_words = self._CONFIRM_WORDS | {confirm_keyword.lower()}
+
         has_deny = any(
             self._contains_intent_word(normalized, word) for word in deny_words
         )
