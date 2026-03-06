@@ -35,6 +35,7 @@ from .route import Response, Route, RouteContext
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
+DEFAULT_PLUGIN_PROVIDER = "git"
 
 
 @dataclass
@@ -473,7 +474,14 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
-        provider = str(post_data.get("provider", "git") or "git").strip().lower()
+        provider = (
+            str(
+                post_data.get("provider", DEFAULT_PLUGIN_PROVIDER)
+                or DEFAULT_PLUGIN_PROVIDER
+            )
+            .strip()
+            .lower()
+        )
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -488,6 +496,7 @@ class PluginRoute(Route):
                     kind=ExtensionKind.PLUGIN,
                     target=repo_url,
                     provider=provider,
+                    conversation_id=f"dashboard:{getattr(g, 'username', 'dashboard-admin')}",
                     requester_id=str(getattr(g, "username", "dashboard-admin")),
                     requester_role="admin",
                     metadata={
@@ -499,10 +508,9 @@ class PluginRoute(Route):
             if result.status == InstallResultStatus.PENDING:
                 return {
                     "status": "pending",
-                    "message": "安装请求等待确认",
+                    "message": "安装请求等待确认，请在聊天中使用 /extend confirm <operation_id> 确认",
                     "data": {
                         "operation_id": result.operation_id,
-                        "token": result.token,
                     },
                 }
             if result.status == InstallResultStatus.SUCCESS:

@@ -71,6 +71,10 @@ class ExtensionInstallOrchestrator:
         init=False,
         default_factory=lambda: defaultdict(asyncio.Lock),
     )
+    _conversation_locks: defaultdict[str, asyncio.Lock] = field(
+        init=False,
+        default_factory=lambda: defaultdict(asyncio.Lock),
+    )
 
     def __post_init__(self) -> None:
         if self.catalog_service is None:
@@ -157,12 +161,30 @@ class ExtensionInstallOrchestrator:
         async with lock:
             return await install_callable()
 
+    async def _run_with_conversation_lock(
+        self,
+        conversation_key: str,
+        operation_callable: Callable[[], Awaitable[InstallResult]],
+    ) -> InstallResult:
+        lock = self._conversation_locks[conversation_key]
+        async with lock:
+            return await operation_callable()
+
+    @staticmethod
+    def _conversation_key(request: InstallRequest) -> str:
+        conversation_id = request.conversation_id.strip()
+        if conversation_id:
+            return conversation_id
+        requester_id = request.requester_id.strip() or "anonymous"
+        return f"manual:{request.kind.value}:{requester_id}"
+
     async def install(self, request: InstallRequest) -> InstallResult:
         candidate = await self._resolve_candidate(request)
         metadata = dict(candidate.install_payload.get("metadata", {}))
         metadata.update(request.metadata)
         candidate.install_payload["metadata"] = metadata
         decision = self.policy_engine.evaluate(request, candidate)
+        conversation_key = self._conversation_key(request)
         target_key = (
             f"{candidate.kind.value}:{candidate.provider}:{candidate.identifier}"
         )
@@ -176,21 +198,31 @@ class ExtensionInstallOrchestrator:
         if decision.action == PolicyAction.REQUIRE_CONFIRMATION:
 
             async def _create_or_get_pending() -> InstallResult:
-                for operation in await self.pending_service.list_pending(
-                    kind=request.kind
-                ):
+                operation = await self.pending_service.get_active_by_conversation(
+                    conversation_key
+                )
+                if operation is not None:
                     if (
-                        operation.provider == candidate.provider
+                        operation.kind == request.kind.value
+                        and operation.provider == candidate.provider
                         and operation.target == candidate.identifier
                     ):
                         return InstallResult(
                             status=InstallResultStatus.PENDING,
                             message="existing pending operation",
                             operation_id=operation.operation_id,
-                            token=operation.token,
                         )
+                    return InstallResult(
+                        status=InstallResultStatus.FAILED,
+                        message=(
+                            "a pending install already exists for this conversation; "
+                            "confirm or reject it before starting another install"
+                        ),
+                        operation_id=operation.operation_id,
+                    )
 
                 pending = await self.pending_service.create(
+                    conversation_id=conversation_key,
                     requester_id=request.requester_id,
                     requester_role=request.requester_role,
                     kind=request.kind,
@@ -211,10 +243,11 @@ class ExtensionInstallOrchestrator:
                     status=InstallResultStatus.PENDING,
                     message="confirmation required",
                     operation_id=pending.operation_id,
-                    token=pending.token,
                 )
 
-            return await self._run_with_target_lock(target_key, _create_or_get_pending)
+            return await self._run_with_conversation_lock(
+                conversation_key, _create_or_get_pending
+            )
 
         async def _do_install() -> InstallResult:
             try:
@@ -312,22 +345,44 @@ class ExtensionInstallOrchestrator:
                 status=InstallResultStatus.DENIED,
                 message="actor role is not allowed",
             )
-        confirmed = await self.pending_service.confirm(
+        started = await self.pending_service.start(
             operation_id_or_token,
             confirmed_by=actor_id,
         )
-        if confirmed is None:
+        if started is None:
             return InstallResult(
                 status=InstallResultStatus.FAILED,
                 message="operation cannot be confirmed",
                 operation_id=operation.operation_id,
             )
-        return await self._execute_pending_operation(confirmed)
+        return await self._execute_pending_operation(started)
+
+    async def confirm_for_conversation(
+        self,
+        *,
+        conversation_id: str,
+        actor_id: str,
+        actor_role: str,
+    ) -> InstallResult:
+        operation = await self.pending_service.get_active_by_conversation(
+            conversation_id
+        )
+        if operation is None:
+            return InstallResult(
+                status=InstallResultStatus.FAILED,
+                message="pending operation not found for conversation",
+            )
+        return await self.confirm(
+            operation_id_or_token=operation.operation_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
 
     async def deny(
         self,
         *,
         operation_id_or_token: str,
+        actor_id: str | None = None,
         actor_role: str,
         reason: str = "rejected by user",
     ) -> InstallResult:
@@ -349,6 +404,29 @@ class ExtensionInstallOrchestrator:
             status=InstallResultStatus.DENIED,
             message="operation rejected",
             operation_id=operation.operation_id,
+        )
+
+    async def deny_for_conversation(
+        self,
+        *,
+        conversation_id: str,
+        actor_id: str,
+        actor_role: str,
+        reason: str = "rejected by user",
+    ) -> InstallResult:
+        operation = await self.pending_service.get_active_by_conversation(
+            conversation_id
+        )
+        if operation is None:
+            return InstallResult(
+                status=InstallResultStatus.FAILED,
+                message="pending operation not found for conversation",
+            )
+        return await self.deny(
+            operation_id_or_token=operation.operation_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            reason=reason,
         )
 
     async def pending(

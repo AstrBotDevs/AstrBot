@@ -543,6 +543,7 @@ class BaseDatabase(abc.ABC):
         *,
         operation_id: str,
         token: str,
+        conversation_id: str,
         requester_id: str,
         requester_role: str,
         kind: str,
@@ -577,8 +578,16 @@ class BaseDatabase(abc.ABC):
         *,
         status: str | None = None,
         kind: str | None = None,
+        conversation_id: str | None = None,
     ) -> list[PendingOperation]:
         """List pending operations."""
+        ...
+
+    @abc.abstractmethod
+    async def get_active_pending_operation_by_conversation(
+        self, conversation_id: str
+    ) -> PendingOperation | None:
+        """Get the active pending operation for a conversation."""
         ...
 
     @abc.abstractmethod

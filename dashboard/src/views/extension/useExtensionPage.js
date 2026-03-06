@@ -1211,8 +1211,7 @@ export const useExtensionPage = () => {
 
     if (resData.status === "pending") {
       const opId = resData.data?.operation_id || "";
-      const token = resData.data?.token || "";
-      const pendingMessage = `${resData.message}\noperation_id: ${opId}\ntoken: ${token}\n请在聊天中明确表达确认/拒绝意图并附带 token，或使用 /extend confirm <token|operation_id>。`;
+      const pendingMessage = `${resData.message}\noperation_id: ${opId}\n请在聊天中确认或拒绝，或使用 /extend confirm <operation_id>。`;
       onLoadingDialogResult(2, pendingMessage, -1);
       toast(pendingMessage, "warning");
       await refreshExtensionsAfterInstallFailure();

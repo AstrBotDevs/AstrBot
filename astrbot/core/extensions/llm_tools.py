@@ -131,6 +131,7 @@ class ExtensionInstallTool(FunctionTool[AstrAgentContext]):
                 kind=kind,
                 target=target,
                 provider=provider,
+                conversation_id=context.context.event.unified_msg_origin,
                 requester_id=context.context.event.get_sender_id(),
                 requester_role=context.context.event.role,
             )
@@ -140,96 +141,10 @@ class ExtensionInstallTool(FunctionTool[AstrAgentContext]):
                 "status": result.status.value,
                 "message": result.message,
                 "operation_id": result.operation_id,
-                "token": result.token,
                 "data": result.data,
-            }
-        )
-
-
-@dataclass
-class ExtensionConfirmTool(FunctionTool[AstrAgentContext]):
-    name: str = "astrbot_extension_confirm"
-    description: str = "Confirm a pending extension installation operation."
-    parameters: dict = Field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "operation_id_or_token": {
-                    "type": "string",
-                    "description": "Pending operation id or one-time token.",
-                }
-            },
-            "required": ["operation_id_or_token"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> ToolExecResult:
-        denied = check_admin_permission(context, "extension confirmation")
-        if denied:
-            return denied
-        operation_id_or_token = str(kwargs.get("operation_id_or_token", "")).strip()
-        if not operation_id_or_token:
-            return "error: operation_id_or_token cannot be empty."
-        orchestrator = get_extension_orchestrator(context.context.context)
-        result = await orchestrator.confirm(
-            operation_id_or_token=operation_id_or_token,
-            actor_id=context.context.event.get_sender_id(),
-            actor_role=context.context.event.role,
-        )
-        return _json_result(
-            {
-                "status": result.status.value,
-                "message": result.message,
-                "operation_id": result.operation_id,
-                "data": result.data,
-            }
-        )
-
-
-@dataclass
-class ExtensionDenyTool(FunctionTool[AstrAgentContext]):
-    name: str = "astrbot_extension_deny"
-    description: str = "Reject a pending extension installation operation."
-    parameters: dict = Field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {
-                "operation_id_or_token": {
-                    "type": "string",
-                    "description": "Pending operation id or one-time token.",
-                }
-            },
-            "required": ["operation_id_or_token"],
-        }
-    )
-
-    async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
-    ) -> ToolExecResult:
-        denied = check_admin_permission(context, "extension rejection")
-        if denied:
-            return denied
-        operation_id_or_token = str(kwargs.get("operation_id_or_token", "")).strip()
-        if not operation_id_or_token:
-            return "error: operation_id_or_token cannot be empty."
-        orchestrator = get_extension_orchestrator(context.context.context)
-        result = await orchestrator.deny(
-            operation_id_or_token=operation_id_or_token,
-            actor_role=context.context.event.role,
-            reason="rejected by LLM tool",
-        )
-        return _json_result(
-            {
-                "status": result.status.value,
-                "message": result.message,
-                "operation_id": result.operation_id,
             }
         )
 
 
 EXTENSION_SEARCH_TOOL = ExtensionSearchTool()
 EXTENSION_INSTALL_TOOL = ExtensionInstallTool()
-EXTENSION_CONFIRM_TOOL = ExtensionConfirmTool()
-EXTENSION_DENY_TOOL = ExtensionDenyTool()

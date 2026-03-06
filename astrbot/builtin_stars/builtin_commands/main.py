@@ -1,7 +1,7 @@
-import re
-
 from astrbot.api import star
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
+from astrbot.core.extensions import InstallResultStatus
+from astrbot.core.extensions.runtime import get_extension_orchestrator
 from astrbot.core.star.filter.command import GreedyStr
 
 from .commands import (
@@ -22,10 +22,6 @@ from .commands import (
 
 
 class Main(star.Star):
-    _TOKEN_PATTERN = re.compile(
-        r"(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{16,64})(?![A-Za-z0-9_-])"
-    )
-
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
@@ -60,11 +56,6 @@ class Main(star.Star):
         for ch in [",", ".", "!", "?", "，", "。", "！", "？", "；", ";", "：", ":"]:
             text = text.replace(ch, " ")
         return " ".join(text.split())
-
-    @classmethod
-    def _extract_token_from_message(cls, raw_text: str) -> str:
-        match = cls._TOKEN_PATTERN.search(raw_text)
-        return match.group(1) if match else ""
 
     @staticmethod
     def _contains_intent_word(normalized: str, word: str) -> bool:
@@ -128,6 +119,11 @@ class Main(star.Star):
         if any(self._contains_intent_word(normalized, word) for word in confirm_words):
             return "confirm"
         return None
+
+    def _is_install_confirmation_candidate_message(self, raw_text: str) -> bool:
+        if raw_text.startswith("/"):
+            return False
+        return self._detect_install_intent(raw_text) is not None
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent) -> None:
@@ -215,20 +211,43 @@ class Main(star.Star):
         await self.extension_c.extend_pending(event, kind)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.regex(r"^.*[A-Za-z0-9_-]{16,}.*$")
+    @filter.regex(r"^.+$")
     async def handle_install_confirmation_intent(self, event: AstrMessageEvent) -> None:
         """Natural-language intent based install confirmation/rejection."""
         message = event.get_message_str().strip()
-        if message.startswith("/"):
-            return
-        token = self._extract_token_from_message(message)
-        if not token:
+        if not self._is_install_confirmation_candidate_message(message):
             return
         intent = self._detect_install_intent(message)
+        orchestrator = get_extension_orchestrator(self.context)
         if intent == "confirm":
-            await self.extension_c.extend_confirm(event, token)
+            result = await orchestrator.confirm_for_conversation(
+                conversation_id=event.unified_msg_origin,
+                actor_id=event.get_sender_id(),
+                actor_role=event.role,
+            )
+            if result.status == InstallResultStatus.SUCCESS:
+                event.set_result(
+                    MessageEventResult().message(
+                        "Confirmation accepted, install completed."
+                    )
+                )
+            elif result.status != InstallResultStatus.FAILED:
+                event.set_result(
+                    MessageEventResult().message(
+                        f"Confirmation denied: {result.message}"
+                    )
+                )
         elif intent == "deny":
-            await self.extension_c.extend_deny(event, token)
+            result = await orchestrator.deny_for_conversation(
+                conversation_id=event.unified_msg_origin,
+                actor_id=event.get_sender_id(),
+                actor_role=event.role,
+                reason="rejected by chat confirmation",
+            )
+            if result.status == InstallResultStatus.DENIED:
+                event.set_result(
+                    MessageEventResult().message("Install operation rejected.")
+                )
 
     @filter.command("t2i")
     async def t2i(self, event: AstrMessageEvent) -> None:

@@ -52,8 +52,6 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.extensions.llm_tools import (
-    EXTENSION_CONFIRM_TOOL,
-    EXTENSION_DENY_TOOL,
     EXTENSION_INSTALL_TOOL,
     EXTENSION_SEARCH_TOOL,
 )
@@ -942,8 +940,6 @@ def _apply_extension_hub_tools(req: ProviderRequest, cfg: dict) -> None:
         req.func_tool = ToolSet()
     req.func_tool.add_tool(EXTENSION_SEARCH_TOOL)
     req.func_tool.add_tool(EXTENSION_INSTALL_TOOL)
-    req.func_tool.add_tool(EXTENSION_CONFIRM_TOOL)
-    req.func_tool.add_tool(EXTENSION_DENY_TOOL)
 
 
 def _get_compress_provider(

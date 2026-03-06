@@ -14,11 +14,14 @@ class ExtensionCommands:
         self.context = context
 
     @staticmethod
-    def _parse_cli(raw: str) -> tuple[str, str, list[str]]:
+    def _parse_cli(raw: str) -> tuple[str, str, list[str]] | None:
         kind = "plugin"
         provider = ""
         positional: list[str] = []
-        args = shlex.split(raw)
+        try:
+            args = shlex.split(raw)
+        except ValueError:
+            return None
         i = 0
         while i < len(args):
             token = args[i]
@@ -44,7 +47,15 @@ class ExtensionCommands:
     async def extend_search(
         self, event: AstrMessageEvent, query: GreedyStr = ""
     ) -> None:
-        kind, provider, positional = self._parse_cli(query)
+        parsed = self._parse_cli(query)
+        if parsed is None:
+            event.set_result(
+                MessageEventResult().message(
+                    "Invalid arguments: unmatched quotes detected."
+                )
+            )
+            return
+        kind, provider, positional = parsed
         kind_enum = self._parse_kind(kind)
         if kind_enum is None:
             event.set_result(
@@ -80,7 +91,15 @@ class ExtensionCommands:
     async def extend_install(
         self, event: AstrMessageEvent, target: GreedyStr = ""
     ) -> None:
-        kind, provider, positional = self._parse_cli(target)
+        parsed = self._parse_cli(target)
+        if parsed is None:
+            event.set_result(
+                MessageEventResult().message(
+                    "Invalid arguments: unmatched quotes detected."
+                )
+            )
+            return
+        kind, provider, positional = parsed
         kind_enum = self._parse_kind(kind)
         if kind_enum is None:
             event.set_result(
@@ -102,6 +121,7 @@ class ExtensionCommands:
                 kind=kind_enum,
                 target=install_target,
                 provider=provider,
+                conversation_id=event.unified_msg_origin,
                 requester_id=event.get_sender_id(),
                 requester_role=event.role,
             )
@@ -111,8 +131,8 @@ class ExtensionCommands:
                 MessageEventResult().message(
                     "Install request is pending confirmation.\n"
                     f"operation_id: {result.operation_id}\n"
-                    f"token: {result.token}\n"
-                    "Use /extend confirm <token|operation_id>, or reply with a clear confirm/deny intent plus the token."
+                    "Reply in chat with a clear confirmation or rejection, "
+                    "or use /extend confirm <operation_id> as an admin fallback."
                 )
             )
             return
@@ -138,7 +158,7 @@ class ExtensionCommands:
     ) -> None:
         if not operation_id_or_token:
             event.set_result(
-                MessageEventResult().message("/extend confirm <token|operation_id>")
+                MessageEventResult().message("/extend confirm <operation_id>")
             )
             return
         orchestrator = get_extension_orchestrator(self.context)
@@ -168,12 +188,13 @@ class ExtensionCommands:
     ) -> None:
         if not operation_id_or_token:
             event.set_result(
-                MessageEventResult().message("/extend deny <token|operation_id>")
+                MessageEventResult().message("/extend deny <operation_id>")
             )
             return
         orchestrator = get_extension_orchestrator(self.context)
         result = await orchestrator.deny(
             operation_id_or_token=operation_id_or_token.strip(),
+            actor_id=event.get_sender_id(),
             actor_role=event.role,
             reason="rejected by command",
         )
@@ -208,7 +229,7 @@ class ExtensionCommands:
         for operation in operations[:20]:
             lines.append(
                 f"- [{operation.kind}/{operation.provider}] {operation.target} "
-                f"(operation_id={operation.operation_id}, token={operation.token})"
+                f"(operation_id={operation.operation_id})"
             )
         if len(operations) > 20:
             lines.append(f"... and {len(operations) - 20} more.")

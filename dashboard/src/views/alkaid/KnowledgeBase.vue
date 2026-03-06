@@ -712,9 +712,8 @@ export default {
                         this.checkPlugin();
                     } else if (response.data.status === 'pending') {
                         const opId = response.data.data?.operation_id || '';
-                        const token = response.data.data?.token || '';
                         this.showSnackbar(
-                            `${response.data.message || this.tm('messages.installFailed')}\noperation_id: ${opId}\ntoken: ${token}`,
+                            `${response.data.message || this.tm('messages.installFailed')}\noperation_id: ${opId}\n请在聊天中确认或拒绝，或使用 /extend confirm <operation_id>。`,
                             'warning',
                         );
                     } else {

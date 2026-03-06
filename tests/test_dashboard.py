@@ -160,8 +160,8 @@ async def test_plugins(
         if data["status"] == "pending":
             orchestrator = get_extension_orchestrator(core_lifecycle_td.star_context)
             confirm_result = await orchestrator.confirm(
-                operation_id_or_token=data["data"]["token"],
-                actor_id="whatevertogo",
+                operation_id_or_token=data["data"]["operation_id"],
+                actor_id="dashboard_test_actor",
                 actor_role="admin",
             )
             assert confirm_result.status == InstallResultStatus.SUCCESS

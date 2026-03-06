@@ -36,6 +36,7 @@ class InstallRequest:
     kind: ExtensionKind
     target: str
     provider: str = ""
+    conversation_id: str = ""
     requester_id: str = ""
     requester_role: str = "member"
     metadata: dict[str, Any] = field(default_factory=dict)

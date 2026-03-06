@@ -32,6 +32,7 @@ class PendingOperationService:
     async def create(
         self,
         *,
+        conversation_id: str,
         requester_id: str,
         requester_role: str,
         kind: ExtensionKind,
@@ -49,6 +50,7 @@ class PendingOperationService:
         return await self.db.create_pending_operation(
             operation_id=operation_id,
             token=token,
+            conversation_id=conversation_id,
             requester_id=requester_id,
             requester_role=requester_role,
             kind=kind.value,
@@ -66,6 +68,24 @@ class PendingOperationService:
 
     async def get_by_token(self, token: str) -> PendingOperation | None:
         return await self.db.get_pending_operation_by_token(token)
+
+    async def get_active_by_conversation(
+        self, conversation_id: str
+    ) -> PendingOperation | None:
+        await self.expire_pending_operations()
+        operation = await self.db.get_active_pending_operation_by_conversation(
+            conversation_id
+        )
+        if operation is None:
+            return None
+        if self._is_expired(operation):
+            await self.db.update_pending_operation(
+                operation.operation_id,
+                status="expired",
+                reason="token expired",
+            )
+            return None
+        return operation
 
     async def list_pending(
         self, *, kind: ExtensionKind | None = None
@@ -93,7 +113,7 @@ class PendingOperationService:
             return operation
         return operation
 
-    async def confirm(
+    async def start(
         self, operation_id_or_token: str, *, confirmed_by: str
     ) -> PendingOperation | None:
         operation = await self.get_by_operation_id_or_token(operation_id_or_token)
@@ -103,7 +123,7 @@ class PendingOperationService:
             return None
         return await self.db.update_pending_operation(
             operation.operation_id,
-            status="confirmed",
+            status="running",
             confirmed_by=confirmed_by,
             confirmed_at=datetime.now(timezone.utc),
         )

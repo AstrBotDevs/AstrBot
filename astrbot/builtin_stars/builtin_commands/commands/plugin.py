@@ -76,6 +76,7 @@ class PluginCommands:
                         kind=ExtensionKind.PLUGIN,
                         target=plugin_repo,
                         provider="git",
+                        conversation_id=event.unified_msg_origin,
                         requester_id=event.get_sender_id(),
                         requester_role=event.role,
                     )
@@ -85,8 +86,8 @@ class PluginCommands:
                         MessageEventResult().message(
                             "安装请求已创建，等待确认。\n"
                             f"operation_id: {result.operation_id}\n"
-                            f"token: {result.token}\n"
-                            "请使用 /extend confirm <token|operation_id>，或在聊天中明确表达确认/拒绝并附带 token。"
+                            "请直接在聊天中确认或拒绝，或使用 "
+                            "/extend confirm <operation_id> 作为管理员兜底。"
                         )
                     )
                     return

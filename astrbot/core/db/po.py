@@ -447,6 +447,7 @@ class PendingOperation(TimestampMixin, SQLModel, table=True):
     )
     operation_id: str = Field(max_length=64, nullable=False, unique=True)
     token: str = Field(max_length=64, nullable=False, unique=True)
+    conversation_id: str = Field(max_length=512, nullable=False, default="")
     requester_id: str = Field(max_length=255, nullable=False)
     requester_role: str = Field(max_length=64, nullable=False)
     kind: str = Field(max_length=32, nullable=False)

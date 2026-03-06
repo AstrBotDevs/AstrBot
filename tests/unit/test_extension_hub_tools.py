@@ -15,8 +15,8 @@ def test_apply_extension_hub_tools_enabled() -> None:
     names = req.func_tool.names()
     assert "astrbot_extension_search" in names
     assert "astrbot_extension_install" in names
-    assert "astrbot_extension_confirm" in names
-    assert "astrbot_extension_deny" in names
+    assert "astrbot_extension_confirm" not in names
+    assert "astrbot_extension_deny" not in names
 
 
 def test_apply_extension_hub_tools_disabled() -> None:

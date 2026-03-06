@@ -17,12 +17,6 @@ def _build_main(config: dict | None = None) -> Main:
     return main
 
 
-def test_extract_token_from_message() -> None:
-    token = "AbCdEfghijklmnop_123456"
-    msg = f"yes, please install it {token}"
-    assert Main._extract_token_from_message(msg) == token
-
-
 def test_detect_confirm_intent_multilingual() -> None:
     main = _build_main()
     assert main._detect_install_intent("yes please proceed") == "confirm"
@@ -52,3 +46,14 @@ def test_detect_intent_no_false_positive_from_token() -> None:
     main = _build_main()
     token_like = "anon_token_abcdefghijklmnopqrstuvwxyz"
     assert main._detect_install_intent(token_like) is None
+
+
+def test_confirmation_candidate_requires_confirmation_intent() -> None:
+    main = _build_main()
+    assert main._is_install_confirmation_candidate_message(
+        "yes proceed with the install"
+    )
+    assert main._is_install_confirmation_candidate_message("不要安装这个")
+    assert not main._is_install_confirmation_candidate_message(
+        "I bought a laptop today"
+    )
