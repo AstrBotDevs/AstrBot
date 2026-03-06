@@ -228,7 +228,7 @@
     "structureRequirement": "The most common failure is an invalid archive structure. Each zip must contain exactly one top-level folder such as `skillname/`, and that folder must include `SKILL.md`.",
     "abilityMultiple": "Upload multiple zip files at once",
     "abilityValidate": "Validate `SKILL.md` automatically",
-    "abilitySkip": "Skip invalid files automatically",
+    "abilitySkip": "Automatically skip duplicate files.",
     "selectFile": "Select file",
     "selectFiles": "Select files (multiple allowed)",
     "dropzoneTitle": "Drag multiple zip files here",

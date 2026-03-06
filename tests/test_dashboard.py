@@ -644,3 +644,70 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
     ]
     assert data["data"]["failed"] == []
     assert (skills_dir / "demo_skill" / "SKILL.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_partial_success(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        if "ok_skill" in zip_path:
+            return "ok_skill"
+        raise RuntimeError("install failed")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    boundary = "----AstrBotBatchBoundary"
+    body = (
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="ok_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode("utf-8")
+        + b"fake-zip-1\r\n"
+        + (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="bad_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode("utf-8")
+        + b"fake-zip-2\r\n"
+        + f"--{boundary}--\r\n".encode("utf-8")
+    )
+    headers = dict(authenticated_header)
+    headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=headers,
+        data=body,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "Partial success: 1/2 skill(s) uploaded."
+    assert data["data"]["total"] == 2
+    assert data["data"]["succeeded"] == [{"filename": "ok_skill.zip", "name": "ok_skill"}]
+    assert data["data"]["failed"] == [
+        {"filename": "bad_skill.zip", "error": "install failed"}
+    ]

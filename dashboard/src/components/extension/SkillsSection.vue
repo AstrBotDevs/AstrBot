@@ -1229,16 +1229,19 @@ export default {
 }
 
 .skills-upload-dialog__header {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 16px;
+  white-space: normal;
+  overflow: visible;
 }
 
 .skills-upload-dialog__heading {
-  flex: 1;
   min-width: 0;
-  padding-right: 20px;
+  padding-right: 0;
+  white-space: normal;
 }
 
 .skills-upload-dialog__description {
@@ -1246,12 +1249,12 @@ export default {
   color: rgba(56, 64, 54, 0.78);
   line-height: 1.7;
   word-break: break-word;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .skills-upload-dialog__close {
-  flex: 0 0 auto;
-  margin-right: -6px;
-  margin-top: -4px;
+  align-self: flex-start;
 }
 
 .skills-upload-structure-note {

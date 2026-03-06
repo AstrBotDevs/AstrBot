@@ -199,7 +199,6 @@ class SkillsRoute(Route):
                 .__dict__
             )
 
-        temp_paths = []
         try:
             files = await request.files
             file_list = files.getlist("files")
@@ -227,9 +226,10 @@ class SkillsRoute(Route):
                         )
                         continue
 
-                    temp_path = os.path.join(temp_dir, f"batch_{uuid.uuid4().hex}_{filename}")
+                    temp_path = os.path.join(
+                        temp_dir, f"batch_{uuid.uuid4().hex}_{filename}"
+                    )
                     await file.save(temp_path)
-                    temp_paths.append(temp_path)
 
                     skill_name = skill_mgr.install_skill_from_zip(
                         temp_path, overwrite=True
@@ -242,8 +242,6 @@ class SkillsRoute(Route):
                     if temp_path and os.path.exists(temp_path):
                         try:
                             os.remove(temp_path)
-                            if temp_path in temp_paths:
-                                temp_paths.remove(temp_path)
                         except Exception:
                             pass
 
@@ -251,7 +249,9 @@ class SkillsRoute(Route):
                 try:
                     await sync_skills_to_active_sandboxes()
                 except Exception:
-                    logger.warning("Failed to sync uploaded skills to active sandboxes.")
+                    logger.warning(
+                        "Failed to sync uploaded skills to active sandboxes."
+                    )
 
             total = len(file_list)
             success_count = len(succeeded)
@@ -297,13 +297,6 @@ class SkillsRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
-        finally:
-            for temp_path in temp_paths:
-                if os.path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except Exception:
-                        pass
 
     async def download_skill(self):
         try:
