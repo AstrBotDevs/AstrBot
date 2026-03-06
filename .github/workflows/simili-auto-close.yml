@@ -22,7 +22,6 @@ permissions:
 
 jobs:
   auto-close:
-    if: github.event_name == 'workflow_dispatch' || vars.SIMILI_AUTO_CLOSE_ENABLED == 'true'
     runs-on: ubuntu-latest
     env:
       SIMILI_VERSION: v0.2.0-rc.1
