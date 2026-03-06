@@ -1,0 +1,101 @@
+name: Simili Auto-Close Duplicates
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in dry-run mode without changing issues."
+        required: false
+        default: true
+        type: boolean
+      grace_period_minutes:
+        description: "Optional grace period override in minutes. Leave empty to use config."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  auto-close:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ensure Simili labels exist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              {
+                name: 'potential-duplicate',
+                color: 'fbca04',
+                description: 'Marked by Simili as a possible duplicate pending human review.',
+              },
+              {
+                name: 'no-simili',
+                color: 'c2e0c6',
+                description: 'Exclude this issue from Simili duplicate triage.',
+              },
+            ];
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ...label,
+                });
+              }
+            }
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Simili CLI extension
+        run: gh extension install similigh/simili-bot || gh extension upgrade similigh/simili-bot
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Run Simili auto-close
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          GRACE_PERIOD_INPUT: ${{ inputs.grace_period_minutes }}
+        run: |
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+
+          GRACE_ARGS=()
+          if [ -n "$GRACE_PERIOD_INPUT" ]; then
+            if [[ "$GRACE_PERIOD_INPUT" =~ ^[0-9]+$ ]]; then
+              GRACE_ARGS=("--grace-period-minutes" "$GRACE_PERIOD_INPUT")
+            else
+              echo "::warning::grace_period_minutes must be a positive integer; ignoring '$GRACE_PERIOD_INPUT'"
+            fi
+          fi
+
+          gh simili auto-close \
+            --repo "${{ github.repository }}" \
+            --config .github/simili.yaml \
+            $DRY_RUN_FLAG \
+            "${GRACE_ARGS[@]}"
