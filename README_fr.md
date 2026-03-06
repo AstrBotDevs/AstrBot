@@ -83,6 +83,15 @@ astrbot
 
 > [uv](https://docs.astral.sh/uv/) doit être installé.
 
+> [!NOTE]
+> Pour les utilisateurs macOS : en raison des vérifications de sécurité de macOS, la première exécution de la commande `astrbot` peut prendre plus de temps (environ 10-20s).
+
+Mettre à jour `astrbot` :
+
+```bash
+uv tool upgrade astrbot
+```
+
 ### Déploiement Docker
 
 Pour les utilisateurs familiers avec les conteneurs et qui souhaitent une méthode plus stable et adaptée à la production, nous recommandons de déployer AstrBot avec Docker / Docker Compose.
