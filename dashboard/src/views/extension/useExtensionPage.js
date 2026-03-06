@@ -146,7 +146,7 @@ export const useExtensionPage = () => {
     isShareMode.value = true;
     selectedSharePluginNames.value = new Set();
   };
-  const encodeShareCode = async (payload) => {
+  const encodeShareCode = (payload) => {
     const rawJson = JSON.stringify(payload);
     const compressed = compressToEncodedURIComponent(rawJson);
     if (!compressed) {
@@ -154,7 +154,7 @@ export const useExtensionPage = () => {
     }
     return `${SHARE_CODE_LZ_PREFIX}${compressed}`;
   };
-  const decodeShareCode = async (rawCode) => {
+  const decodeShareCode = (rawCode) => {
     if (rawCode.startsWith(SHARE_CODE_LZ_PREFIX)) {
       const encodedPart = rawCode.slice(SHARE_CODE_LZ_PREFIX.length);
       const decompressed = decompressFromEncodedURIComponent(encodedPart);
@@ -164,6 +164,13 @@ export const useExtensionPage = () => {
       return decompressed;
     }
     return rawCode;
+  };
+  const normalizePluginNames = (pluginNames = []) =>
+    pluginNames.filter((name) => typeof name === "string" && name.length > 0);
+  const updateSelectedSharePlugins = (updater) => {
+    const nextSelected = new Set(selectedSharePluginNames.value);
+    updater(nextSelected);
+    selectedSharePluginNames.value = nextSelected;
   };
   const confirmShareSelection = async () => {
     const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
@@ -182,7 +189,7 @@ export const useExtensionPage = () => {
       return;
     }
 
-    const shareCode = await encodeShareCode({
+    const shareCode = encodeShareCode({
       repos: uniqueRepos,
     });
 
@@ -206,46 +213,42 @@ export const useExtensionPage = () => {
     if (!isShareMode.value || !pluginName) {
       return;
     }
-    const nextSelected = new Set(selectedSharePluginNames.value);
-    if (nextSelected.has(pluginName)) {
-      nextSelected.delete(pluginName);
-    } else {
-      nextSelected.add(pluginName);
-    }
-    selectedSharePluginNames.value = nextSelected;
+    updateSelectedSharePlugins((nextSelected) => {
+      if (nextSelected.has(pluginName)) {
+        nextSelected.delete(pluginName);
+      } else {
+        nextSelected.add(pluginName);
+      }
+    });
   };
   const toggleShareSelectAll = (pluginNames = []) => {
     if (!isShareMode.value) {
       return;
     }
-    const names = pluginNames.filter((name) => typeof name === "string" && name.length > 0);
+    const names = normalizePluginNames(pluginNames);
     if (names.length === 0) {
       return;
     }
-    const allSelected = names.every((name) => selectedSharePluginNames.value.has(name));
-    if (allSelected) {
-      const nextSelected = new Set(selectedSharePluginNames.value);
-      names.forEach((name) => nextSelected.delete(name));
-      selectedSharePluginNames.value = nextSelected;
-      return;
-    }
-    const nextSelected = new Set(selectedSharePluginNames.value);
-    names.forEach((name) => nextSelected.add(name));
-    selectedSharePluginNames.value = nextSelected;
+    const allSelected = names.every((name) =>
+      selectedSharePluginNames.value.has(name),
+    );
+    updateSelectedSharePlugins((nextSelected) => {
+      if (allSelected) {
+        names.forEach((name) => nextSelected.delete(name));
+        return;
+      }
+      names.forEach((name) => nextSelected.add(name));
+    });
   };
   const areAllSharePluginsSelected = (pluginNames = []) => {
-    const names = pluginNames.filter((name) => typeof name === "string" && name.length > 0);
+    const names = normalizePluginNames(pluginNames);
     if (names.length === 0) {
       return false;
     }
     return names.every((name) => selectedSharePluginNames.value.has(name));
   };
-  const isSharePluginSelected = (pluginName) => {
-    if (!pluginName) {
-      return false;
-    }
-    return selectedSharePluginNames.value.has(pluginName);
-  };
+  const isSharePluginSelected = (pluginName) =>
+    !!pluginName && selectedSharePluginNames.value.has(pluginName);
   const selectedSharePluginCount = computed(
     () => selectedSharePluginNames.value.size,
   );
@@ -1355,7 +1358,7 @@ export const useExtensionPage = () => {
     return true;
   };
 
-  const performInstallRequest = async ({ source, ignoreVersionCheck }) => {
+  const performInstallRequest = async ({ source, ignoreVersionCheck, url }) => {
     if (source === "file") {
       const formData = new FormData();
       formData.append("file", upload_file.value);
@@ -1367,21 +1370,87 @@ export const useExtensionPage = () => {
       });
     }
 
+    const targetUrl =
+      typeof url === "string" && url.trim().length > 0 ? url : extension_url.value;
     return axios.post("/api/plugin/install", {
-      url: extension_url.value,
+      url: targetUrl,
       proxy: getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
   };
 
-  const parseShareCodeRepos = async (rawCode) => {
-    const decodedContent = await decodeShareCode(rawCode);
+  const parseShareCodeRepos = (rawCode) => {
+    const decodedContent = decodeShareCode(rawCode);
     const parsed = JSON.parse(decodedContent);
     const repos = Array.isArray(parsed?.repos) ? parsed.repos : [];
     return repos
       .filter((repo) => typeof repo === "string")
       .map((repo) => repo.trim())
       .filter((repo) => repo.length > 0);
+  };
+  const installReposBatch = async (
+    repos,
+    { ignoreVersionCheck, onProgress } = {},
+  ) => {
+    let completedCount = 0;
+    const installTasks = repos.map(async (repoUrl) => {
+      try {
+        const res = await performInstallRequest({
+          source: "url",
+          ignoreVersionCheck,
+          url: repoUrl,
+        });
+        const resData = res.data || {};
+        if (resData.status === "ok") {
+          return { success: true, url: repoUrl };
+        }
+        return {
+          success: false,
+          url: repoUrl,
+          message: resData.message || tm("messages.installFailed"),
+        };
+      } catch (err) {
+        return {
+          success: false,
+          url: repoUrl,
+          message: resolveErrorMessage(err, tm("messages.installFailed")),
+        };
+      } finally {
+        completedCount += 1;
+        onProgress?.({
+          current: completedCount,
+          total: repos.length,
+          repoUrl,
+        });
+      }
+    });
+
+    const settledResults = await Promise.allSettled(installTasks);
+    const failedItems = [];
+    let successCount = 0;
+
+    settledResults.forEach((result) => {
+      if (result.status === "fulfilled") {
+        if (result.value.success) {
+          successCount += 1;
+          return;
+        }
+        failedItems.push({
+          url: result.value.url,
+          message: result.value.message || tm("messages.installFailed"),
+        });
+        return;
+      }
+      failedItems.push({
+        url: tm("status.unknown"),
+        message: resolveErrorMessage(result.reason, tm("messages.installFailed")),
+      });
+    });
+
+    return {
+      successCount,
+      failedItems,
+    };
   };
 
   const installFromShareCode = async (ignoreVersionCheck = false) => {
@@ -1393,7 +1462,7 @@ export const useExtensionPage = () => {
 
     let repos = [];
     try {
-      repos = await parseShareCodeRepos(rawCode);
+      repos = parseShareCodeRepos(rawCode);
     } catch (error) {
       toast(tm("messages.invalidShareCode"), "error");
       return;
@@ -1413,39 +1482,22 @@ export const useExtensionPage = () => {
     loadingDialog.progressTotal = uniqueRepos.length;
     loadingDialog.progressLabel = "";
 
-    const failedItems = [];
     let successCount = 0;
-    const previousExtensionUrl = extension_url.value;
-
-    for (const repoUrl of uniqueRepos) {
-      loadingDialog.progressLabel = repoUrl;
-      try {
-        extension_url.value = repoUrl;
-        const res = await performInstallRequest({
-          source: "url",
-          ignoreVersionCheck,
-        });
-        const resData = res.data || {};
-        if (resData.status === "ok") {
-          successCount += 1;
-        } else {
-          failedItems.push({
-            url: repoUrl,
-            message: resData.message || tm("messages.installFailed"),
-          });
-        }
-      } catch (err) {
-        failedItems.push({
-          url: repoUrl,
-          message: resolveErrorMessage(err, tm("messages.installFailed")),
-        });
-      } finally {
-        loadingDialog.progressCurrent += 1;
-      }
+    let failedItems = [];
+    try {
+      const batchResult = await installReposBatch(uniqueRepos, {
+        ignoreVersionCheck,
+        onProgress: ({ current, total, repoUrl }) => {
+          loadingDialog.progressCurrent = current;
+          loadingDialog.progressTotal = total;
+          loadingDialog.progressLabel = repoUrl;
+        },
+      });
+      successCount = batchResult.successCount;
+      failedItems = batchResult.failedItems;
+    } finally {
+      loading_.value = false;
     }
-
-    extension_url.value = previousExtensionUrl;
-    loading_.value = false;
 
     if (successCount > 0) {
       await getExtensions();

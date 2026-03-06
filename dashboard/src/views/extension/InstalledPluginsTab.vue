@@ -163,6 +163,10 @@ const handleShareRowClick = (item) => {
   if (!isShareMode.value || !item?.name) {
     return;
   }
+  const selectedText = window.getSelection?.()?.toString() || "";
+  if (selectedText.trim().length > 0) {
+    return;
+  }
   toggleSharePluginSelection(item.name);
 };
 

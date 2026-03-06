@@ -594,8 +594,8 @@ const handleCardClick = () => {
   opacity: 1;
   transform: none;
   box-shadow:
-    0 0 0 2px rgba(var(--v-theme-success), 0.5),
-    inset 0 0 0 999px rgba(var(--v-theme-success), 0.03);
+    0 0 0 2px rgba(var(--v-theme-primary), 0.5),
+    inset 0 0 0 999px rgba(var(--v-theme-primary), 0.03);
 }
 
 </style>
