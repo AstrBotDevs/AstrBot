@@ -251,52 +251,61 @@ export const useExtensionPage = () => {
     pinyin(s ?? "", { pattern: "first", toneType: "none" })
       .toLowerCase()
       .replace(/\s+/g, "");
-  const marketCustomFilter = (value, query, item) => {
+  const marketCustomFilter = (value, query) => {
     const q = normalizeStr(query);
     if (!q) return true;
     const looseQuery = normalizeLoose(query);
-  
-    const candidates = new Set();
-    if (value != null) candidates.add(String(value));
-    if (item?.name) candidates.add(String(item.name));
-    if (item?.trimmedName) candidates.add(String(item.trimmedName));
-    if (item?.display_name) candidates.add(String(item.display_name));
-    if (item?.desc) candidates.add(String(item.desc));
-    if (item?.author) candidates.add(String(item.author));
-  
-    for (const v of candidates) {
-      const nv = normalizeStr(v);
-      if (nv.includes(q)) return true;
 
-      const lv = normalizeLoose(v);
-      if (looseQuery && lv.includes(looseQuery)) return true;
+    if (value == null) return false;
+    const text = String(value);
+    const nv = normalizeStr(text);
+    if (nv.includes(q)) return true;
 
-      const pv = toPinyinText(v);
-      if (pv.includes(q)) return true;
-      const iv = toInitials(v);
-      if (iv.includes(q)) return true;
-    }
+    const lv = normalizeLoose(text);
+    if (looseQuery && lv.includes(looseQuery)) return true;
+
+    const pv = toPinyinText(text);
+    if (pv.includes(q)) return true;
+    const iv = toInitials(text);
+    if (iv.includes(q)) return true;
+
     return false;
   };
 
   const matchesPluginSearch = (plugin, query) => {
+    const q = normalizeStr(query);
+    if (!q) return true;
+    const looseQuery = normalizeLoose(query);
+
     const supportPlatforms = Array.isArray(plugin?.support_platforms)
       ? plugin.support_platforms.join(" ")
       : "";
     const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
 
-    return (
-      marketCustomFilter(plugin?.name, query, plugin) ||
-      marketCustomFilter(plugin?.trimmedName, query, plugin) ||
-      marketCustomFilter(plugin?.display_name, query, plugin) ||
-      marketCustomFilter(plugin?.desc, query, plugin) ||
-      marketCustomFilter(plugin?.author, query, plugin) ||
-      marketCustomFilter(plugin?.repo, query, plugin) ||
-      marketCustomFilter(plugin?.version, query, plugin) ||
-      marketCustomFilter(plugin?.astrbot_version, query, plugin) ||
-      marketCustomFilter(supportPlatforms, query, plugin) ||
-      marketCustomFilter(tags, query, plugin)
-    );
+    const candidates = new Set([
+      plugin?.name,
+      plugin?.trimmedName,
+      plugin?.display_name,
+      plugin?.desc,
+      plugin?.author,
+      plugin?.repo,
+      plugin?.version,
+      plugin?.astrbot_version,
+      supportPlatforms,
+      tags,
+    ]);
+
+    for (const v of candidates) {
+      if (v == null) continue;
+      const value = String(v);
+
+      if (normalizeStr(value).includes(q)) return true;
+      if (looseQuery && normalizeLoose(value).includes(looseQuery)) return true;
+      if (toPinyinText(value).includes(q)) return true;
+      if (toInitials(value).includes(q)) return true;
+    }
+
+    return false;
   };
   
   const plugin_handler_info_headers = computed(() => [
