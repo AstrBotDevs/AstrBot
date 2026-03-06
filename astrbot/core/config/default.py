@@ -163,6 +163,7 @@ DEFAULT_CONFIG = {
         "dual_output": False,
         "use_file_service": False,
         "trigger_probability": 1.0,
+        "tts_all_messages": False,
     },
     "provider_ltm_settings": {
         "group_icl_enable": False,
@@ -1305,6 +1306,7 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                         "proxy": "",
+                        "filter_regex": "",
                     },
                     "Genie TTS": {
                         "id": "genie_tts",
@@ -1318,6 +1320,7 @@ CONFIG_METADATA_2 = {
                         "genie_refer_audio_path": "",
                         "genie_refer_text": "",
                         "timeout": 20,
+                        "filter_regex": "",
                     },
                     "Edge TTS": {
                         "id": "edge_tts",
@@ -1362,6 +1365,7 @@ CONFIG_METADATA_2 = {
                             "gsv_parallel_infer": True,
                             "gsv_repetition_penalty": 1.35,
                             "gsv_media_type": "wav",
+                            "filter_regex": "",
                         },
                     },
                     "GSVI TTS(API)": {
@@ -1374,6 +1378,7 @@ CONFIG_METADATA_2 = {
                         "emotion": "default",
                         "enable": False,
                         "timeout": 20,
+                        "filter_regex": "",
                     },
                     "FishAudio TTS(API)": {
                         "id": "fishaudio_tts",
@@ -1387,6 +1392,7 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
                         "proxy": "",
+                        "filter_regex": "",
                     },
                     "阿里云百炼 TTS(API)": {
                         "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
@@ -1399,6 +1405,7 @@ CONFIG_METADATA_2 = {
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
+                        "filter_regex": "",
                     },
                     "Azure TTS": {
                         "id": "azure_tts",
@@ -1414,6 +1421,7 @@ CONFIG_METADATA_2 = {
                         "azure_tts_subscription_key": "",
                         "azure_tts_region": "eastus",
                         "proxy": "",
+                        "filter_regex": "",
                     },
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
@@ -1437,6 +1445,7 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
                         "proxy": "",
+                        "filter_regex": "",
                     },
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
@@ -1452,6 +1461,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
                         "proxy": "",
+                        "filter_regex": "",
                     },
                     "Gemini TTS": {
                         "id": "gemini_tts",
@@ -1466,6 +1476,7 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
+                        "filter_regex": "",
                     },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
@@ -1545,6 +1556,11 @@ CONFIG_METADATA_2 = {
                     },
                 },
                 "items": {
+                    "filter_regex": {
+                        "description": "文本过滤正则表达式",
+                        "type": "string",
+                        "hint": r"在送入该 TTS 引擎前，使用此正则过滤文本。例如填写 `\(.*?\)|\（.*?\）` 可过滤所有括号内的动作描写。",
+                    },
                     "genie_onnx_model_dir": {
                         "description": "ONNX Model Directory",
                         "type": "string",
@@ -2632,6 +2648,14 @@ CONFIG_METADATA_3 = {
                         "description": "启用文本转语音",
                         "type": "bool",
                         "hint": "TTS 总开关",
+                    },
+                    "provider_tts_settings.tts_all_messages": {
+                        "description": "转换所有文本消息为语音",
+                        "type": "bool",
+                        "hint": "开启后，不仅仅是 AI 的回复，所有通过 AstrBot 发送的文本消息（包括插件被动回复和主动推送）都会被转为语音。",
+                        "condition": {
+                            "provider_tts_settings.enable": True,
+                        },
                     },
                     "provider_tts_settings.provider_id": {
                         "description": "默认文本转语音模型",

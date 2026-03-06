@@ -256,10 +256,12 @@ class ResultDecorateStage(Stage):
             tts_provider = self.ctx.plugin_manager.context.get_using_tts_provider(
                 event.unified_msg_origin,
             )
-
+            tts_all_messages = self.ctx.astrbot_config.get(
+                "provider_tts_settings", {}
+            ).get("tts_all_messages", False)
             should_tts = (
                 bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
-                and result.is_llm_result()
+                and (result.is_llm_result() or tts_all_messages)
                 and await SessionServiceManager.should_process_tts_request(event)
                 and random.random() <= self.tts_trigger_probability
                 and tts_provider
@@ -283,8 +285,42 @@ class ResultDecorateStage(Stage):
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
                         try:
-                            logger.info(f"TTS 请求: {comp.text}")
-                            audio_path = await tts_provider.get_audio(comp.text)
+                            # 正则过滤逻辑
+                            text_to_read = comp.text
+                            # 找出当前正在使用的 TTS ID
+                            tts_provider_id = self.ctx.astrbot_config.get(
+                                "provider_tts_settings", {}
+                            ).get("provider_id", "")
+                            filter_regex = ""
+
+                            # 在服务商列表里，找到正在使用的正则配置
+                            for p_cfg in self.ctx.astrbot_config.get("provider", []):
+                                if p_cfg.get("id") == tts_provider_id:
+                                    filter_regex = p_cfg.get("filter_regex", "")
+                                    break
+
+                            # 替换过滤
+                            if filter_regex:
+                                try:
+                                    text_to_read = re.sub(
+                                        filter_regex, "", text_to_read
+                                    )
+                                    if text_to_read != comp.text:
+                                        logger.debug(
+                                            f"原文本: {comp.text} -> 过滤后: {text_to_read}"
+                                        )
+                                except re.error as e:
+                                    logger.error(
+                                        f"正则表达式错误 '{filter_regex}': {e}"
+                                    )
+                            if not text_to_read.strip():
+                                logger.debug("文本已被完全过滤，跳过此段 TTS 生成。")
+                                new_chain.append(comp)
+                                continue
+
+                            logger.info(f"TTS 请求: {text_to_read}")
+                            audio_path = await tts_provider.get_audio(text_to_read)
+
                             logger.info(f"TTS 结果: {audio_path}")
                             if not audio_path:
                                 logger.error(

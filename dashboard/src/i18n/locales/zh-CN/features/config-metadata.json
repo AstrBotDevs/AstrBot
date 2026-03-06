@@ -64,6 +64,10 @@
           "description": "启用文本转语音",
           "hint": "TTS 总开关"
         },
+        "provider_tts_settings.tts_all_messages": {
+          "description": "转换所有文本消息为语音",
+          "hint": "开启后，不仅仅是 AI 的回复，所有通过 AstrBot 发送的文本消息（包括插件被动回复和主动推送）都会被转为语音。"
+        },
         "provider_id": {
           "description": "默认文本转语音模型"
         },
@@ -919,6 +923,10 @@
   },
   "provider_group": {
     "provider": {
+      "filter_regex": {
+        "description": "文本过滤正则表达式",
+        "hint": "在送入该 TTS 引擎前，使用此正则过滤文本。例如填写 `\\(.*?\\)|\\（.*?\\）` 可过滤所有括号内的动作描写。"
+      },
       "genie_onnx_model_dir": {
         "description": "ONNX Model Directory",
         "hint": "The directory path containing the ONNX model files"
