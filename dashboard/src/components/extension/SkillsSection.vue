@@ -403,12 +403,17 @@
           </div>
         </v-card-text>
 
-        <v-card-actions class="skills-upload-dialog__actions justify-end px-6 pb-5 pt-0">
-          <v-btn variant="text" :disabled="uploading" @click="closeUploadDialog">
+        <v-card-actions class="skills-upload-dialog__actions justify-end px-6 pb-3 pt-2">
+          <v-btn
+            class="skills-upload-dialog__action-btn skills-upload-dialog__action-btn--cancel"
+            variant="flat"
+            :disabled="uploading"
+            @click="closeUploadDialog"
+          >
             {{ tm("skills.cancel") }}
           </v-btn>
           <v-btn
-            color="success"
+            class="skills-upload-dialog__action-btn skills-upload-dialog__action-btn--confirm"
             variant="flat"
             :loading="uploading"
             :disabled="!hasUploadableItems"
@@ -1276,8 +1281,32 @@ export default {
 
 .skills-upload-dialog__actions {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border-top: 1px solid rgba(137, 147, 133, 0.16);
   background: rgba(247, 249, 244, 0.96);
+}
+
+.skills-upload-dialog__action-btn {
+  min-width: 96px;
+  height: 38px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.skills-upload-dialog__action-btn--cancel {
+  border: 1px solid rgba(137, 147, 133, 0.22);
+  background: #edf1eb;
+  color: #5b665b;
+}
+
+.skills-upload-dialog__action-btn--confirm {
+  background: linear-gradient(180deg, #62ce98 0%, #4fbe87 100%);
+  color: #ffffff;
+  box-shadow: 0 6px 14px rgba(79, 169, 122, 0.24);
 }
 
 .skills-upload-structure-note {
