@@ -241,6 +241,8 @@ export const useExtensionPage = () => {
   
   // 插件市场拼音搜索
   const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
+  const normalizeLoose = (s) =>
+    normalizeStr(s).replace(/[\s_-]+/g, "").replace(/[()（）【】\[\]{}·•]+/g, "");
   const toPinyinText = (s) =>
     pinyin(s ?? "", { toneType: "none" })
       .toLowerCase()
@@ -252,6 +254,7 @@ export const useExtensionPage = () => {
   const marketCustomFilter = (value, query, item) => {
     const q = normalizeStr(query);
     if (!q) return true;
+    const looseQuery = normalizeLoose(query);
   
     const candidates = new Set();
     if (value != null) candidates.add(String(value));
@@ -264,12 +267,36 @@ export const useExtensionPage = () => {
     for (const v of candidates) {
       const nv = normalizeStr(v);
       if (nv.includes(q)) return true;
+
+      const lv = normalizeLoose(v);
+      if (looseQuery && lv.includes(looseQuery)) return true;
+
       const pv = toPinyinText(v);
       if (pv.includes(q)) return true;
       const iv = toInitials(v);
       if (iv.includes(q)) return true;
     }
     return false;
+  };
+
+  const matchesPluginSearch = (plugin, query) => {
+    const supportPlatforms = Array.isArray(plugin?.support_platforms)
+      ? plugin.support_platforms.join(" ")
+      : "";
+    const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
+
+    return (
+      marketCustomFilter(plugin?.name, query, plugin) ||
+      marketCustomFilter(plugin?.trimmedName, query, plugin) ||
+      marketCustomFilter(plugin?.display_name, query, plugin) ||
+      marketCustomFilter(plugin?.desc, query, plugin) ||
+      marketCustomFilter(plugin?.author, query, plugin) ||
+      marketCustomFilter(plugin?.repo, query, plugin) ||
+      marketCustomFilter(plugin?.version, query, plugin) ||
+      marketCustomFilter(plugin?.astrbot_version, query, plugin) ||
+      marketCustomFilter(supportPlatforms, query, plugin) ||
+      marketCustomFilter(tags, query, plugin)
+    );
   };
   
   const plugin_handler_info_headers = computed(() => [
@@ -351,20 +378,7 @@ export const useExtensionPage = () => {
 
     if (pluginSearch.value) {
       const search = normalizeStr(pluginSearch.value);
-      filtered = plugins.filter((plugin) => {
-        const supportPlatforms = Array.isArray(plugin.support_platforms)
-          ? plugin.support_platforms.join(" ")
-          : "";
-
-        return (
-          marketCustomFilter(plugin.name, search, plugin) ||
-          marketCustomFilter(plugin.display_name, search, plugin) ||
-          marketCustomFilter(plugin.desc, search, plugin) ||
-          marketCustomFilter(plugin.author, search, plugin) ||
-          marketCustomFilter(supportPlatforms, search, plugin) ||
-          marketCustomFilter(plugin.astrbot_version, search, plugin)
-        );
-      });
+      filtered = plugins.filter((plugin) => matchesPluginSearch(plugin, search));
     }
 
     return sortPluginsByName([...filtered]);
@@ -376,15 +390,10 @@ export const useExtensionPage = () => {
       return pluginMarketData.value;
     }
   
-    const search = debouncedMarketSearch.value.toLowerCase();
-    return pluginMarketData.value.filter((plugin) => {
-      // 使用自定义过滤器
-      return (
-        marketCustomFilter(plugin.name, search, plugin) ||
-        marketCustomFilter(plugin.desc, search, plugin) ||
-        marketCustomFilter(plugin.author, search, plugin)
-      );
-    });
+    const search = normalizeStr(debouncedMarketSearch.value);
+    return pluginMarketData.value.filter((plugin) =>
+      matchesPluginSearch(plugin, search),
+    );
   });
   
   // 所有插件列表，推荐插件排在前面
