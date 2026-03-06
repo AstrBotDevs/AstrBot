@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import traceback
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -226,7 +227,7 @@ class SkillsRoute(Route):
                         )
                         continue
 
-                    temp_path = os.path.join(temp_dir, f"batch_{filename}")
+                    temp_path = os.path.join(temp_dir, f"batch_{uuid.uuid4().hex}_{filename}")
                     await file.save(temp_path)
                     temp_paths.append(temp_path)
 
@@ -246,10 +247,11 @@ class SkillsRoute(Route):
                         except Exception:
                             pass
 
-            try:
-                await sync_skills_to_active_sandboxes()
-            except Exception:
-                logger.warning("Failed to sync uploaded skills to active sandboxes.")
+            if succeeded:
+                try:
+                    await sync_skills_to_active_sandboxes()
+                except Exception:
+                    logger.warning("Failed to sync uploaded skills to active sandboxes.")
 
             total = len(file_list)
             success_count = len(succeeded)

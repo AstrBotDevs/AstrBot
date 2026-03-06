@@ -319,7 +319,12 @@
           <div
             class="skills-dropzone"
             :class="{ 'skills-dropzone--dragover': isUploadDragging }"
+            role="button"
+            tabindex="0"
+            :aria-label="tm('skills.dropzoneTitle')"
             @click="openUploadPicker"
+            @keydown.enter="openUploadPicker"
+            @keydown.space.prevent="openUploadPicker"
             @dragover.prevent="isUploadDragging = true"
             @dragleave.prevent="isUploadDragging = false"
             @drop.prevent="handleUploadDrop"
@@ -692,6 +697,9 @@ export default {
 
     const handleUploadDrop = (event) => {
       isUploadDragging.value = false;
+      if (uploading.value) {
+        return;
+      }
       addUploadFiles(Array.from(event?.dataTransfer?.files || []));
     };
 
