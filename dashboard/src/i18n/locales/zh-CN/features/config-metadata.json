@@ -64,7 +64,7 @@
           "description": "启用文本转语音",
           "hint": "TTS 总开关"
         },
-        "provider_tts_settings.tts_all_messages": {
+        "tts_all_messages": {
           "description": "转换所有文本消息为语音",
           "hint": "开启后，不仅仅是 AI 的回复，所有通过 AstrBot 发送的文本消息（包括插件被动回复和主动推送）都会被转为语音。"
         },
