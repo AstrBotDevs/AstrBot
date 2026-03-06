@@ -4,6 +4,11 @@ from pathlib import Path
 
 import click
 
+from astrbot.core.star.plugin_search import (
+    get_plugin_search_result_limit,
+    search_plugin_records,
+)
+
 from ..utils import (
     PluginStatus,
     build_plug_list,
@@ -233,18 +238,17 @@ def update(name: str, proxy: str | None) -> None:
 
 @plug.command()
 @click.argument("query")
-def search(query: str) -> None:
+@click.option("--limit", type=int, default=None, help="Maximum number of results")
+def search(query: str, limit: int | None) -> None:
     """Search for plugins"""
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
-    matched_plugins = [
-        p
-        for p in plugins
-        if query.lower() in p["name"].lower()
-        or query.lower() in p["desc"].lower()
-        or query.lower() in p["author"].lower()
-    ]
+    matched_plugins = search_plugin_records(
+        plugins,
+        query,
+        limit=get_plugin_search_result_limit(override=limit),
+    )
 
     if not matched_plugins:
         click.echo(f"No plugins matching '{query}' found")

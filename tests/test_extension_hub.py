@@ -49,6 +49,27 @@ class _FakeAdapter:
         return {"name": candidate.name, "identifier": candidate.identifier}
 
 
+class _BulkFakeAdapter:
+    provider = "fake"
+    kind = ExtensionKind.PLUGIN
+
+    async def search(self, query: str) -> list[InstallCandidate]:
+        return [
+            InstallCandidate(
+                kind=self.kind,
+                provider=self.provider,
+                identifier=f"https://github.com/example/demo-{idx}",
+                name=f"demo-plugin-{idx}",
+                description=f"demo {idx}",
+                source="fake",
+            )
+            for idx in range(10)
+        ]
+
+    async def install(self, candidate: InstallCandidate) -> dict:
+        return {"name": candidate.name, "identifier": candidate.identifier}
+
+
 def _build_policy_config() -> dict:
     return {
         "provider_settings": {
@@ -451,5 +472,37 @@ async def test_mcp_install_todo_status(tmp_path: Path) -> None:
         )
         assert result.status == InstallResultStatus.FAILED
         assert "TODO" in result.message
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_search_uses_default_limit(tmp_path: Path) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        orchestrator = ExtensionInstallOrchestrator(
+            policy_engine=ExtensionPolicyEngine(_build_policy_config()),
+            pending_service=PendingOperationService(db, token_ttl_seconds=300),
+            adapters=[_BulkFakeAdapter()],
+        )
+        results = await orchestrator.search(ExtensionKind.PLUGIN, "demo")
+        assert len(results) == 6
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_search_respects_explicit_limit(tmp_path: Path) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        orchestrator = ExtensionInstallOrchestrator(
+            policy_engine=ExtensionPolicyEngine(_build_policy_config()),
+            pending_service=PendingOperationService(db, token_ttl_seconds=300),
+            adapters=[_BulkFakeAdapter()],
+        )
+        results = await orchestrator.search(ExtensionKind.PLUGIN, "demo", limit=3)
+        assert len(results) == 3
     finally:
         await db.engine.dispose()

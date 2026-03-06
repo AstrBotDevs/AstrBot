@@ -14,9 +14,10 @@ class ExtensionCommands:
         self.context = context
 
     @staticmethod
-    def _parse_cli(raw: str) -> tuple[str, str, list[str]] | None:
+    def _parse_cli(raw: str) -> tuple[str, str, str, list[str]] | None:
         kind = "plugin"
         provider = ""
+        limit = ""
         positional: list[str] = []
         try:
             args = shlex.split(raw)
@@ -33,9 +34,13 @@ class ExtensionCommands:
                 provider = args[i + 1]
                 i += 2
                 continue
+            if token == "--limit" and i + 1 < len(args):
+                limit = args[i + 1]
+                i += 2
+                continue
             positional.append(token)
             i += 1
-        return kind.strip().lower(), provider.strip().lower(), positional
+        return kind.strip().lower(), provider.strip().lower(), limit.strip(), positional
 
     @staticmethod
     def _parse_kind(kind: str) -> ExtensionKind | None:
@@ -43,6 +48,18 @@ class ExtensionCommands:
             return ExtensionKind(kind)
         except ValueError:
             return None
+
+    @staticmethod
+    def _parse_limit(raw_limit: str) -> tuple[int | None, str | None]:
+        if not raw_limit:
+            return None, None
+        try:
+            parsed = int(raw_limit)
+        except ValueError:
+            return None, "Invalid limit. Use a positive integer."
+        if parsed <= 0:
+            return None, "Invalid limit. Use a positive integer."
+        return parsed, None
 
     async def extend_search(
         self, event: AstrMessageEvent, query: GreedyStr = ""
@@ -55,7 +72,11 @@ class ExtensionCommands:
                 )
             )
             return
-        kind, provider, positional = parsed
+        kind, provider, raw_limit, positional = parsed
+        limit, limit_error = self._parse_limit(raw_limit)
+        if limit_error is not None:
+            event.set_result(MessageEventResult().message(limit_error))
+            return
         kind_enum = self._parse_kind(kind)
         if kind_enum is None:
             event.set_result(
@@ -66,13 +87,18 @@ class ExtensionCommands:
         if not query_text:
             event.set_result(
                 MessageEventResult().message(
-                    "/extend search <query> [--kind plugin|skill|mcp] [--provider <name>]"
+                    "/extend search <query> [--kind plugin|skill|mcp] [--provider <name>] [--limit <n>]"
                 )
             )
             return
 
         orchestrator = get_extension_orchestrator(self.context)
-        candidates = await orchestrator.search(kind_enum, query_text, provider=provider)
+        candidates = await orchestrator.search(
+            kind_enum,
+            query_text,
+            provider=provider,
+            limit=limit,
+        )
         if not candidates:
             event.set_result(
                 MessageEventResult().message("No extension candidates found.")
@@ -80,12 +106,10 @@ class ExtensionCommands:
             return
 
         lines = ["Extension search results:"]
-        for idx, candidate in enumerate(candidates[:10], start=1):
+        for idx, candidate in enumerate(candidates, start=1):
             lines.append(
                 f"{idx}. [{candidate.kind.value}/{candidate.provider}] {candidate.name} -> {candidate.identifier}"
             )
-        if len(candidates) > 10:
-            lines.append(f"... and {len(candidates) - 10} more.")
         event.set_result(MessageEventResult().message("\n".join(lines)).use_t2i(False))
 
     async def extend_install(
@@ -99,7 +123,7 @@ class ExtensionCommands:
                 )
             )
             return
-        kind, provider, positional = parsed
+        kind, provider, _, positional = parsed
         kind_enum = self._parse_kind(kind)
         if kind_enum is None:
             event.set_result(

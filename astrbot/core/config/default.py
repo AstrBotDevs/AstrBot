@@ -132,6 +132,7 @@ DEFAULT_CONFIG = {
         "extension_install": {
             "enable": True,
             "default_mode": "secure",
+            "search_result_limit": 6,
             "allowlist": [],
             "blocklist": [],
             "confirmation_required_non_allowlist": True,

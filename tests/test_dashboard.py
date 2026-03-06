@@ -212,6 +212,31 @@ async def test_plugins(
 
 
 @pytest.mark.asyncio
+async def test_plugin_market_list_query_uses_backend_filter(
+    app: Quart, authenticated_header: dict
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/plugin/market_list?query=astrbot_plugin_url_2_knowledge_base&limit=1",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    items = data["data"]
+    assert isinstance(items, dict)
+    assert len(items) <= 1
+    if items:
+        first_key = next(iter(items))
+        first_item = items[first_key]
+        assert (
+            "astrbot_plugin_url_2_knowledge_base" in first_key
+            or "astrbot_plugin_url_2_knowledge_base" in str(first_item.get("name", ""))
+            or "astrbot_plugin_url_2_knowledge_base" in str(first_item.get("desc", ""))
+        )
+
+
+@pytest.mark.asyncio
 async def test_commands_api(app: Quart, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()

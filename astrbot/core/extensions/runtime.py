@@ -5,6 +5,7 @@ from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.star.context import Context
+from astrbot.core.star.plugin_search import get_plugin_search_result_limit
 
 from .adapters import McpTodoAdapter, PluginAdapter, SkillAdapter
 from .orchestrator import ExtensionInstallOrchestrator
@@ -86,9 +87,11 @@ def get_extension_orchestrator(context: Context) -> ExtensionInstallOrchestrator
         db=context.get_db(),
         token_ttl_seconds=_read_ttl_seconds(config),
     )
+    # TODO: Unify this backend limit with the frontend extension market config.
     orchestrator = ExtensionInstallOrchestrator(
         policy_engine=ExtensionPolicyEngine(config),
         pending_service=pending_service,
+        search_result_limit=get_plugin_search_result_limit(config),
         adapters=[
             PluginAdapter(context),
             SkillAdapter(context),

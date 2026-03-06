@@ -53,12 +53,19 @@ class ExtensionCatalogService:
         return None
 
     async def search(
-        self, kind: ExtensionKind, query: str, provider: str = ""
+        self,
+        kind: ExtensionKind,
+        query: str,
+        provider: str = "",
+        limit: int | None = None,
     ) -> list[InstallCandidate]:
         adapter = self.get_adapter(kind, provider or None)
         if adapter is None:
             return []
-        return await adapter.search(query)
+        candidates = await adapter.search(query)
+        if limit is None:
+            return candidates
+        return candidates[:limit]
 
 
 @dataclass(slots=True)
@@ -67,6 +74,7 @@ class ExtensionInstallOrchestrator:
     pending_service: PendingOperationService
     adapters: list[ExtensionAdapter] = field(default_factory=list)
     catalog_service: ExtensionCatalogService | None = None
+    search_result_limit: int = 6
     _target_locks: defaultdict[str, asyncio.Lock] = field(
         init=False,
         default_factory=lambda: defaultdict(asyncio.Lock),
@@ -89,12 +97,26 @@ class ExtensionInstallOrchestrator:
             return None
         return self.catalog_service.get_adapter(kind, provider)
 
+    def _resolve_search_limit(self, limit: int | None = None) -> int:
+        if limit is not None:
+            return max(1, limit)
+        return max(1, self.search_result_limit)
+
     async def search(
-        self, kind: ExtensionKind, query: str, provider: str = ""
+        self,
+        kind: ExtensionKind,
+        query: str,
+        provider: str = "",
+        limit: int | None = None,
     ) -> list[InstallCandidate]:
         if self.catalog_service is None:
             return []
-        return await self.catalog_service.search(kind, query, provider=provider)
+        return await self.catalog_service.search(
+            kind,
+            query,
+            provider=provider,
+            limit=self._resolve_search_limit(limit),
+        )
 
     async def _resolve_candidate(self, request: InstallRequest) -> InstallCandidate:
         adapter = self._get_adapter(request.kind, request.provider or None)

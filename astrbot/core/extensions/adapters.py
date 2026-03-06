@@ -11,6 +11,10 @@ import aiohttp
 from astrbot.core import logger
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.star.context import Context
+from astrbot.core.star.plugin_search import (
+    search_plugin_market_records,
+    search_plugin_records,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 from .model import ExtensionKind, InstallCandidate
@@ -58,16 +62,7 @@ class PluginAdapter(ExtensionAdapter):
             return []
 
         raw_data: Any = cache_obj.get("data", cache_obj)
-        items: list[dict[str, Any]] = []
-        if isinstance(raw_data, dict):
-            for key, value in raw_data.items():
-                if isinstance(value, dict):
-                    item = dict(value)
-                    item.setdefault("name", key)
-                    items.append(item)
-        elif isinstance(raw_data, list):
-            items = [item for item in raw_data if isinstance(item, dict)]
-        else:
+        if not isinstance(raw_data, (dict, list)):
             logger.warning(
                 "Unexpected plugin market cache format: data_type=%s path=%s",
                 type(raw_data).__name__,
@@ -76,7 +71,8 @@ class PluginAdapter(ExtensionAdapter):
             return []
 
         candidates: list[InstallCandidate] = []
-        for item in items:
+        matched_records = search_plugin_market_records(raw_data, query)
+        for item in matched_records:
             name = str(item.get("name", "") or item.get("display_name", "")).strip()
             desc = str(item.get("desc", "") or item.get("description", "")).strip()
             repo = str(item.get("repo", "")).strip()
@@ -100,34 +96,42 @@ class PluginAdapter(ExtensionAdapter):
             )
         logger.debug(
             "Loaded plugin market cache candidates: total_items=%d matched=%d query=%s",
-            len(items),
+            len(raw_data),
             len(candidates),
             query,
         )
         return candidates
 
     async def search(self, query: str) -> list[InstallCandidate]:
-        candidates: list[InstallCandidate] = []
-
+        installed_records = []
         for plugin in self.context.get_all_stars():
             repo = plugin.repo or ""
             if not repo:
                 continue
-            keyword_blob = " ".join(
-                [plugin.name or "", plugin.desc or "", plugin.author or "", repo]
+            installed_records.append(
+                {
+                    "name": plugin.name,
+                    "display_name": getattr(plugin, "display_name", "") or "",
+                    "desc": plugin.desc,
+                    "author": plugin.author,
+                    "repo": repo,
+                    "version": plugin.version,
+                    "source": "installed",
+                }
             )
-            if not _candidate_match(keyword_blob, query):
-                continue
+
+        candidates: list[InstallCandidate] = []
+        for item in search_plugin_records(installed_records, query):
             candidates.append(
                 InstallCandidate(
                     kind=self.kind,
                     provider=self.provider,
-                    identifier=repo or plugin.name,
-                    name=plugin.name,
-                    description=plugin.desc,
-                    version=plugin.version,
+                    identifier=str(item.get("repo", "") or item.get("name", "")),
+                    name=str(item.get("name", "")),
+                    description=str(item.get("desc", "")),
+                    version=str(item.get("version", "")),
                     source="installed",
-                    install_payload={"repo": repo},
+                    install_payload={"repo": str(item.get("repo", ""))},
                 )
             )
 

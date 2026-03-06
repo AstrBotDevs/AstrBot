@@ -39,6 +39,11 @@ class ExtensionSearchTool(FunctionTool[AstrAgentContext]):
                     "type": "string",
                     "description": "Optional provider filter.",
                 },
+                "limit": {
+                    "type": "integer",
+                    "description": "Optional max number of results to return.",
+                    "minimum": 1,
+                },
             },
             "required": ["query", "kind"],
         }
@@ -57,12 +62,22 @@ class ExtensionSearchTool(FunctionTool[AstrAgentContext]):
             kind = _parse_kind(str(kwargs.get("kind", "")))
         except ValueError:
             return "error: kind must be one of plugin|skill|mcp."
+        raw_limit = kwargs.get("limit")
+        limit: int | None = None
+        if raw_limit is not None:
+            try:
+                limit = int(raw_limit)
+            except (TypeError, ValueError):
+                return "error: limit must be a positive integer."
+            if limit <= 0:
+                return "error: limit must be a positive integer."
 
         orchestrator = get_extension_orchestrator(context.context.context)
         candidates = await orchestrator.search(
             kind=kind,
             query=query,
             provider=str(kwargs.get("provider", "")).strip(),
+            limit=limit,
         )
         return _json_result(
             {

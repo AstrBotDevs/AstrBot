@@ -20,6 +20,10 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.plugin_search import (
+    filter_plugin_market_payload,
+    get_plugin_search_result_limit,
+)
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import (
     PluginManager,
@@ -159,6 +163,14 @@ class PluginRoute(Route):
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
+        query = request.args.get("query", "").strip()
+        raw_limit = request.args.get("limit", "").strip()
+        limit: int | None = None
+        if raw_limit:
+            try:
+                limit = max(1, int(raw_limit))
+            except ValueError:
+                return Response().error("limit must be a positive integer").__dict__
 
         # 构建注册表源信息
         source = self._build_registry_source(custom)
@@ -171,7 +183,15 @@ class PluginRoute(Route):
                 cached_data = self._load_plugin_cache(source.cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
-                    return Response().ok(cached_data).__dict__
+                    return (
+                        Response()
+                        .ok(
+                            self._filter_market_payload(
+                                cached_data, query=query, limit=limit
+                            )
+                        )
+                        .__dict__
+                    )
 
         # 尝试获取远程数据
         remote_data = None
@@ -211,7 +231,17 @@ class PluginRoute(Route):
                             remote_data,
                             current_md5,
                         )
-                        return Response().ok(remote_data).__dict__
+                        return (
+                            Response()
+                            .ok(
+                                self._filter_market_payload(
+                                    remote_data,
+                                    query=query,
+                                    limit=limit,
+                                )
+                            )
+                            .__dict__
+                        )
                     logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
@@ -222,9 +252,30 @@ class PluginRoute(Route):
 
         if cached_data:
             logger.warning("远程插件市场数据获取失败，使用缓存数据")
-            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+            return (
+                Response()
+                .ok(
+                    self._filter_market_payload(cached_data, query=query, limit=limit),
+                    "使用缓存数据，可能不是最新版本",
+                )
+                .__dict__
+            )
 
         return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+
+    def _filter_market_payload(
+        self, data: dict | list, *, query: str, limit: int | None
+    ) -> dict | list:
+        if not query:
+            return data
+        return filter_plugin_market_payload(
+            data,
+            query,
+            limit=get_plugin_search_result_limit(
+                self.core_lifecycle.astrbot_config,
+                override=limit,
+            ),
+        )
 
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
         """构建注册表源信息"""
