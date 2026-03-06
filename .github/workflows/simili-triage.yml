@@ -86,7 +86,7 @@ jobs:
 
       - name: Run Simili triage
         if: steps.gate.outputs.eligible == 'true'
-        uses: similigh/simili-bot@v1
+        uses: similigh/simili-bot@v0.2.0-rc.1
         with:
           config_path: .github/simili.yaml
         env:
