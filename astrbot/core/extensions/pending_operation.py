@@ -1,3 +1,22 @@
+"""
+挂起操作服务模块
+
+本模块管理扩展安装的挂起状态，核心功能包括:
+
+1. **创建挂起操作**: 当安装需要确认时创建 PendingOperation
+2. **状态查询**: 按 ID、令牌、会话查询挂起操作
+3. **生命周期管理**: 自动过期、启动、拒绝操作
+
+关键设计:
+- 每个挂起操作绑定到特定会话 (conversation_id)
+- 支持短前缀匹配 (最少 4 字符) 方便命令行操作
+- 令牌用于 Web 确认链接
+
+状态流转:
+pending -> running -> success/failed
+       \-> rejected
+       \-> expired (自动)
+"""
 from __future__ import annotations
 
 import secrets
@@ -14,6 +33,14 @@ from .model import ExtensionKind
 
 @dataclass(slots=True)
 class PendingOperationService:
+    """挂起操作服务
+
+    管理需要用户确认的安装请求的生命周期。
+
+    Attributes:
+        db: 数据库实例
+        token_ttl_seconds: 确认令牌有效期（默认 15 分钟）
+    """
     db: BaseDatabase
     token_ttl_seconds: int = 900
 
@@ -72,6 +99,10 @@ class PendingOperationService:
     async def get_active_by_conversation(
         self, conversation_id: str
     ) -> PendingOperation | None:
+        """获取指定会话中的活跃挂起操作
+
+        用于会话级别的确认/拒绝流程。每个会话同一时间只应有一个挂起操作。
+        """
         await self.expire_pending_operations()
         operation = await self.db.get_active_pending_operation_by_conversation(
             conversation_id
@@ -107,6 +138,13 @@ class PendingOperationService:
         )
 
     async def get_by_operation_id_prefix(self, prefix: str) -> PendingOperation | None:
+        """通过操作 ID 前缀查找挂起操作
+
+        支持用户输入短 ID（至少 4 字符）来操作挂起记录，
+        例如: /extend confirm abcd1234
+
+        只有当前缀唯一匹配时才返回结果。
+        """
         if len(prefix) < 4:
             return None
         operations = await self.list_pending()
@@ -118,6 +156,13 @@ class PendingOperationService:
     async def get_by_operation_id_or_token(
         self, operation_id_or_token: str
     ) -> PendingOperation | None:
+        """通过 ID、令牌或前缀查找挂起操作
+
+        查找顺序:
+        1. 完整操作 ID
+        2. 确认令牌
+        3. 操作 ID 前缀（至少 4 字符）
+        """
         operation = await self.get_by_id(operation_id_or_token)
         if operation is None:
             operation = await self.get_by_token(operation_id_or_token)

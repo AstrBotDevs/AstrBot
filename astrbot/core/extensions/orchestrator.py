@@ -1,3 +1,31 @@
+"""
+Extension Hub 安装编排器模块
+
+本模块实现了插件/技能/MCP 扩展的统一安装管理，核心功能包括:
+
+1. **安装流程控制**: 搜索、解析、安装扩展的完整生命周期
+2. **策略执行**: 基于角色和配置的安装权限控制
+3. **确认工作流**: 支持需要用户确认的安装请求（会话级别绑定）
+4. **并发安全**: 通过目标锁和会话锁保证安装操作的原子性
+
+主要组件:
+- ExtensionAdapter: 适配器协议，定义搜索和安装接口
+- ExtensionCatalogService: 扩展目录服务，聚合多个适配器
+- ExtensionInstallOrchestrator: 核心编排器，协调安装流程
+
+工作流程:
+1. 用户/AI 发起安装请求 (install)
+2. 策略引擎评估是否需要确认 (REQUIRE_CONFIRMATION / ALLOW / DENY)
+3. 若需确认，创建 PendingOperation 并绑定到会话
+4. 用户通过自然语言或命令确认/拒绝
+5. 执行实际安装或清理挂起记录
+
+相关提交:
+- 350fdf13: Extension Hub v1 初始实现
+- e64503cf: 会话级别确认工作流
+- f3f79deb: 可配置搜索结果限制
+- ef0bc377: 增强 deny 工具和用户消息
+"""
 from __future__ import annotations
 
 import asyncio
@@ -22,16 +50,30 @@ from .policy import ExtensionPolicyEngine
 
 
 class ExtensionAdapter(Protocol):
+    """扩展适配器协议
+
+    定义了扩展搜索和安装的标准接口。每种扩展类型（plugin/skill/mcp）
+    都需要实现此协议。参见 adapters.py 中的具体实现。
+
+    Attributes:
+        provider: 适配器提供者标识，如 "astrbot"、"mcp_todo"
+        kind: 扩展类型 (PLUGIN / SKILL / MCP)
+    """
+
     provider: str
     kind: ExtensionKind
 
     async def search(self, query: str) -> list[InstallCandidate]: ...
-
     async def install(self, candidate: InstallCandidate) -> dict[str, Any]: ...
 
 
 @dataclass(slots=True)
 class ExtensionCatalogService:
+    """扩展目录服务
+
+    聚合多个适配器，提供统一的搜索入口。支持按类型和提供者
+    查找对应的适配器，并对搜索结果进行数量限制。
+    """
     adapters: list[ExtensionAdapter]
     _adapter_map: dict[tuple[ExtensionKind, str], ExtensionAdapter] = field(
         init=False,
@@ -70,6 +112,24 @@ class ExtensionCatalogService:
 
 @dataclass(slots=True)
 class ExtensionInstallOrchestrator:
+    """扩展安装编排器
+
+    核心职责:
+    1. 协调扩展的搜索和安装流程
+    2. 执行策略引擎的权限判定
+    3. 管理待确认的安装操作 (PendingOperation)
+    4. 处理用户确认/拒绝请求
+
+    并发控制:
+    - _target_locks: 按安装目标加锁，防止同一扩展被并发安装
+    - _conversation_locks: 按会话加锁，保证同一会话只有一个待处理安装
+
+    Attributes:
+        policy_engine: 策略引擎，评估安装权限
+        pending_service: 待处理操作服务，管理挂起状态
+        adapters: 已注册的扩展适配器列表
+        search_result_limit: 默认搜索结果数量限制 (默认 6)
+    """
     policy_engine: ExtensionPolicyEngine
     pending_service: PendingOperationService
     adapters: list[ExtensionAdapter] = field(default_factory=list)
@@ -103,6 +163,7 @@ class ExtensionInstallOrchestrator:
         return max(1, self.search_result_limit)
 
     def _is_allowed_role(self, actor_role: str) -> bool:
+        """检查角色是否在允许列表中"""
         return actor_role in set(self.policy_engine.config.allowed_roles or [])
 
     def _can_deny_operation(
@@ -112,6 +173,14 @@ class ExtensionInstallOrchestrator:
         actor_id: str | None,
         actor_role: str,
     ) -> bool:
+        """检查操作者是否有权拒绝某个挂起操作
+
+        权限规则:
+        1. 允许列表中的角色可以直接拒绝
+        2. 操作的原始请求者可以拒绝自己的请求
+
+        该设计允许普通用户取消自己发起的安装请求，而不仅限于管理员。
+        """
         if self._is_allowed_role(actor_role):
             return True
         if actor_id and operation.requester_id == actor_id:
@@ -217,6 +286,18 @@ class ExtensionInstallOrchestrator:
         return f"manual:{request.kind.value}:{requester_id}"
 
     async def install(self, request: InstallRequest) -> InstallResult:
+        """处理安装请求，执行策略判定和安装流程
+
+        Args:
+            request: 安装请求，包含目标、类型、发起者信息等
+
+        Returns:
+            InstallResult: 安装结果，状态可能是:
+                - SUCCESS: 安装成功
+                - PENDING: 需要确认，等待用户响应
+                - DENIED: 被策略拒绝
+                - FAILED: 安装失败
+        """
         candidate = await self._resolve_candidate(request)
         metadata = dict(candidate.install_payload.get("metadata", {}))
         metadata.update(request.metadata)
@@ -384,6 +465,19 @@ class ExtensionInstallOrchestrator:
         actor_id: str,
         actor_role: str,
     ) -> InstallResult:
+        """确认一个挂起的安装操作
+
+        只有 allowed_roles 中的角色才能确认安装。
+        确认后立即执行实际安装。
+
+        Args:
+            operation_id_or_token: 操作 ID 或确认令牌
+            actor_id: 确认者 ID
+            actor_role: 确认者角色
+
+        Returns:
+            InstallResult: 安装结果
+        """
         operation = await self.pending_service.get_by_operation_id_or_token(
             operation_id_or_token
         )
@@ -416,6 +510,15 @@ class ExtensionInstallOrchestrator:
         actor_id: str,
         actor_role: str,
     ) -> InstallResult:
+        """确认指定会话中的挂起安装
+
+        通过会话 ID 查找挂起操作并确认。用于自然语言确认流程。
+
+        Args:
+            conversation_id: 会话 ID
+            actor_id: 确认者 ID
+            actor_role: 确认者角色
+        """
         operation = await self.pending_service.get_active_by_conversation(
             conversation_id
         )
@@ -438,6 +541,18 @@ class ExtensionInstallOrchestrator:
         actor_role: str,
         reason: str = "rejected by user",
     ) -> InstallResult:
+        """拒绝一个挂起的安装操作
+
+        权限规则:
+        - allowed_roles 中的角色可以拒绝任何操作
+        - 操作的原始请求者可以拒绝自己的请求
+
+        Args:
+            operation_id_or_token: 操作 ID 或令牌
+            actor_id: 拒绝者 ID (可选)
+            actor_role: 拒绝者角色
+            reason: 拒绝原因
+        """
         operation = await self.pending_service.get_by_operation_id_or_token(
             operation_id_or_token
         )
@@ -477,6 +592,17 @@ class ExtensionInstallOrchestrator:
         actor_role: str,
         reason: str = "rejected by user",
     ) -> InstallResult:
+        """拒绝指定会话中的所有挂起安装
+
+        用于用户在会话中发送"取消"或"不要安装"等拒绝意图时调用。
+        会拒绝该会话中所有有权拒绝的挂起操作。
+
+        Args:
+            conversation_id: 会话 ID
+            actor_id: 拒绝者 ID
+            actor_role: 拒绝者角色
+            reason: 拒绝原因
+        """
         operations = await self.pending_service.list_pending_by_conversation(
             conversation_id
         )
@@ -527,6 +653,17 @@ class ExtensionInstallOrchestrator:
         kind: ExtensionKind | None = None,
         reason: str = "rejected by agent",
     ) -> InstallResult:
+        """拒绝所有挂起的安装操作
+
+        用于管理员或 AI 清理所有待确认的安装请求。
+        可按扩展类型过滤。
+
+        Args:
+            actor_id: 拒绝者 ID
+            actor_role: 拒绝者角色
+            kind: 可选的扩展类型过滤
+            reason: 拒绝原因
+        """
         operations = await self.pending_service.list_pending(kind=kind)
         authorized_operations = [
             operation
