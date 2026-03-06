@@ -15,7 +15,7 @@ llm:
   model: "gemini-2.5-flash"
 
 defaults:
-  similarity_threshold: 0.65
+  similarity_threshold: 0.7
   max_similar_to_show: 5
   duplicate_candidates: 5
 
