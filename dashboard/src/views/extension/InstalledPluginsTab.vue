@@ -158,6 +158,25 @@ const {
   handleLocaleChange,
   searchDebounceTimer,
 } = props.state;
+
+const handleShareRowClick = (item) => {
+  if (!isShareMode.value || !item?.name) {
+    return;
+  }
+  toggleSharePluginSelection(item.name);
+};
+
+const getShareRowProps = ({ item }) => {
+  if (!item?.name || !isShareMode.value) {
+    return {};
+  }
+  return {
+    class: isSharePluginSelected(item.name)
+      ? "share-row-selected"
+      : "share-row-unselected",
+    onClick: () => handleShareRowClick(item),
+  };
+};
 </script>
 
 <template>
@@ -358,12 +377,16 @@ const {
               <div v-if="isListView">
                 <v-card class="rounded-lg overflow-hidden elevation-0">
                   <v-data-table
-                    class="plugin-list-table"
+                    :class="[
+                      'plugin-list-table',
+                      { 'plugin-list-share-mode': isShareMode },
+                    ]"
                     :headers="pluginHeaders"
                     :items="filteredPlugins"
                     :loading="loading_"
                     item-key="name"
                     hover
+                    :row-props="getShareRowProps"
                   >
                     <template v-slot:loader>
                       <v-row class="py-8 d-flex align-center justify-center">
@@ -523,11 +546,29 @@ const {
                     </template>
 
                     <template v-slot:item.author="{ item }">
-                      <div class="text-body-2">{{ item.author }}</div>
+                      <div class="d-flex align-center text-body-2 h-100">
+                        {{ item.author }}
+                      </div>
                     </template>
 
                     <template v-slot:item.actions="{ item }">
                       <div class="table-action-row d-flex align-center flex-nowrap justify-start ga-2 py-1">
+                        <div
+                          v-if="isShareMode"
+                          class="share-select-switch d-flex align-center h-100"
+                          @click.stop
+                        >
+                          <v-switch
+                            :model-value="isSharePluginSelected(item.name)"
+                            color="primary"
+                            density="compact"
+                            hide-details
+                            inset
+                            @click.stop
+                            @update:model-value="toggleSharePluginSelection(item.name)"
+                          ></v-switch>
+                        </div>
+
                         <v-btn
                           v-if="!isShareMode && !item.activated"
                           size="small"
@@ -748,6 +789,35 @@ const {
 
 .plugin-list-table :deep(td) {
   vertical-align: top;
+}
+
+.plugin-list-table :deep(td:nth-child(3)) {
+  vertical-align: middle;
+}
+
+.plugin-list-share-mode :deep(td:last-child) {
+  vertical-align: middle;
+}
+
+.plugin-list-share-mode :deep(.v-data-table__td),
+.plugin-list-share-mode :deep(.v-data-table__th),
+.plugin-list-share-mode :deep(.v-data-table__tr),
+.plugin-list-share-mode :deep(.v-data-table__td *) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.plugin-list-table :deep(.share-row-unselected) {
+  opacity: 0.55;
+}
+
+.plugin-list-table :deep(.share-row-selected) {
+  opacity: 1;
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.share-select-switch :deep(.v-switch) {
+  margin: 0;
 }
 
 @media (max-width: 1400px) {

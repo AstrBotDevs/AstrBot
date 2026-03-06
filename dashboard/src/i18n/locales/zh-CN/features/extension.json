@@ -232,7 +232,7 @@
     "selectFile": "选择文件",
     "enterUrl": "输入插件仓库链接",
     "enterShareCode": "粘贴分享码",
-    "shareCodePlaceholder": "{\"repos\":[\"https://github.com/example/repo\"]}"
+    "shareCodePlaceholder": "astrbot-share:压缩后的分享码内容"
   },
   "skills": {
     "modeLocal": "本地 Skills",

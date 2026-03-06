@@ -232,7 +232,7 @@
     "selectFile": "Select File",
     "enterUrl": "Enter extension repository URL",
     "enterShareCode": "Paste share code",
-    "shareCodePlaceholder": "{\"repos\":[\"https://github.com/example/repo\"]}"
+    "shareCodePlaceholder": "astrbot-share:encoded-content"
   },
   "skills": {
     "modeLocal": "Local Skills",
