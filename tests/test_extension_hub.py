@@ -3,13 +3,18 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlmodel import select
 
 from astrbot.core.db.po import PendingOperation
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.extensions.adapters import McpTodoAdapter, _is_git_repository_locator
+from astrbot.core.extensions.adapters import (
+    McpTodoAdapter,
+    PluginAdapter,
+    _is_git_repository_locator,
+)
 from astrbot.core.extensions.model import (
     ExtensionKind,
     InstallCandidate,
@@ -406,6 +411,129 @@ async def test_orchestrator_reject_clears_conversation_pending(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_reject_clears_all_conversation_pending(
+    tmp_path: Path,
+) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        store = PendingOperationService(db, token_ttl_seconds=300)
+        orchestrator = ExtensionInstallOrchestrator(
+            policy_engine=ExtensionPolicyEngine(_build_policy_config()),
+            pending_service=store,
+            adapters=[_FakeAdapter(identifier="https://github.com/example/demo")],
+        )
+        await store.create(
+            conversation_id="conv-1",
+            requester_id="u1",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo-1",
+            payload={"x": 1},
+            reason="need_confirm",
+        )
+        await store.create(
+            conversation_id="conv-1",
+            requester_id="u1",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo-2",
+            payload={"x": 2},
+            reason="need_confirm",
+        )
+
+        denied = await orchestrator.deny_for_conversation(
+            conversation_id="conv-1",
+            actor_id="u1",
+            actor_role="admin",
+        )
+
+        assert denied.status == InstallResultStatus.DENIED
+        assert denied.data["count"] == 2
+        assert await store.get_active_by_conversation("conv-1") is None
+        operations = await db.list_pending_operations()
+        assert all(operation.status == "rejected" for operation in operations)
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_deny_all_rejects_pending_operations(tmp_path: Path) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        store = PendingOperationService(db, token_ttl_seconds=300)
+        orchestrator = ExtensionInstallOrchestrator(
+            policy_engine=ExtensionPolicyEngine(_build_policy_config()),
+            pending_service=store,
+            adapters=[_FakeAdapter(identifier="https://github.com/example/demo")],
+        )
+        await store.create(
+            conversation_id="conv-1",
+            requester_id="u1",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo-1",
+            payload={"x": 1},
+            reason="need_confirm",
+        )
+        await store.create(
+            conversation_id="conv-2",
+            requester_id="u2",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo-2",
+            payload={"x": 2},
+            reason="need_confirm",
+        )
+
+        denied = await orchestrator.deny_all(actor_id="u1", actor_role="admin")
+
+        assert denied.status == InstallResultStatus.DENIED
+        assert denied.data["count"] == 2
+        operations = await db.list_pending_operations()
+        assert all(operation.status == "rejected" for operation in operations)
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_deny_all_requires_allowed_role(tmp_path: Path) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        store = PendingOperationService(db, token_ttl_seconds=300)
+        orchestrator = ExtensionInstallOrchestrator(
+            policy_engine=ExtensionPolicyEngine(_build_policy_config()),
+            pending_service=store,
+            adapters=[_FakeAdapter(identifier="https://github.com/example/demo")],
+        )
+        await store.create(
+            conversation_id="conv-1",
+            requester_id="u1",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo-1",
+            payload={"x": 1},
+            reason="need_confirm",
+        )
+
+        denied = await orchestrator.deny_all(actor_id="u2", actor_role="member")
+
+        assert denied.status == InstallResultStatus.DENIED
+        assert "not allowed" in denied.message
+        operations = await db.list_pending_operations()
+        assert operations[0].status == "pending"
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_confirm_for_conversation_rejects_unauthorized_actor(
     tmp_path: Path,
 ) -> None:
@@ -506,3 +634,53 @@ async def test_orchestrator_search_respects_explicit_limit(tmp_path: Path) -> No
         assert len(results) == 3
     finally:
         await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_plugin_adapter_search_filters_installed_plugins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_file = tmp_path / "plugins.json"
+    cache_file.write_text(
+        """
+        {
+          "data": {
+            "installed_plugin": {
+              "name": "installed_plugin",
+              "desc": "already installed",
+              "author": "alice",
+              "repo": "https://github.com/example/installed-plugin"
+            },
+            "fresh_plugin": {
+              "name": "fresh_plugin",
+              "desc": "new candidate",
+              "author": "bob",
+              "repo": "https://github.com/example/fresh-plugin"
+            }
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "astrbot.core.extensions.adapters.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    context = SimpleNamespace(
+        get_all_stars=lambda: [
+            SimpleNamespace(
+                name="installed_plugin",
+                display_name="Installed Plugin",
+                desc="already installed",
+                author="alice",
+                repo="https://github.com/example/installed-plugin",
+                version="1.0.0",
+            )
+        ]
+    )
+    adapter = PluginAdapter(context)
+
+    results = await adapter.search("plugin")
+
+    assert [candidate.name for candidate in results] == ["fresh_plugin"]
+    assert all(candidate.source != "installed" for candidate in results)

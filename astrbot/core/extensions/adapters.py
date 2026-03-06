@@ -120,22 +120,15 @@ class PluginAdapter(ExtensionAdapter):
                 }
             )
 
-        candidates: list[InstallCandidate] = []
-        for item in search_plugin_records(installed_records, query):
-            candidates.append(
-                InstallCandidate(
-                    kind=self.kind,
-                    provider=self.provider,
-                    identifier=str(item.get("repo", "") or item.get("name", "")),
-                    name=str(item.get("name", "")),
-                    description=str(item.get("desc", "")),
-                    version=str(item.get("version", "")),
-                    source="installed",
-                    install_payload={"repo": str(item.get("repo", ""))},
-                )
+        installed_matches = search_plugin_records(installed_records, query)
+        seen = {
+            (
+                self.provider,
+                str(item.get("repo", "") or item.get("name", "")),
             )
-
-        seen = {(c.provider, c.identifier) for c in candidates}
+            for item in installed_matches
+        }
+        candidates: list[InstallCandidate] = []
         for candidate in self._get_market_cache_candidates(query):
             key = (candidate.provider, candidate.identifier)
             if key in seen:

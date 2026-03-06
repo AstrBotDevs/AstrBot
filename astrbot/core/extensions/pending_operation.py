@@ -96,12 +96,33 @@ class PendingOperationService:
             kind=kind.value if kind else None,
         )
 
+    async def list_pending_by_conversation(
+        self, conversation_id: str, *, kind: ExtensionKind | None = None
+    ) -> list[PendingOperation]:
+        await self.expire_pending_operations()
+        return await self.db.list_pending_operations(
+            status="pending",
+            kind=kind.value if kind else None,
+            conversation_id=conversation_id,
+        )
+
+    async def get_by_operation_id_prefix(self, prefix: str) -> PendingOperation | None:
+        if len(prefix) < 4:
+            return None
+        operations = await self.list_pending()
+        matches = [op for op in operations if op.operation_id.startswith(prefix)]
+        if len(matches) == 1:
+            return matches[0]
+        return None
+
     async def get_by_operation_id_or_token(
         self, operation_id_or_token: str
     ) -> PendingOperation | None:
         operation = await self.get_by_id(operation_id_or_token)
         if operation is None:
             operation = await self.get_by_token(operation_id_or_token)
+        if operation is None:
+            operation = await self.get_by_operation_id_prefix(operation_id_or_token)
         if operation is not None and operation.status == "pending":
             if self._is_expired(operation):
                 await self.db.update_pending_operation(

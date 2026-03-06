@@ -102,6 +102,22 @@ class ExtensionInstallOrchestrator:
             return max(1, limit)
         return max(1, self.search_result_limit)
 
+    def _is_allowed_role(self, actor_role: str) -> bool:
+        return actor_role in set(self.policy_engine.config.allowed_roles or [])
+
+    def _can_deny_operation(
+        self,
+        operation: PendingOperation,
+        *,
+        actor_id: str | None,
+        actor_role: str,
+    ) -> bool:
+        if self._is_allowed_role(actor_role):
+            return True
+        if actor_id and operation.requester_id == actor_id:
+            return True
+        return False
+
     async def search(
         self,
         kind: ExtensionKind,
@@ -233,6 +249,13 @@ class ExtensionInstallOrchestrator:
                             status=InstallResultStatus.PENDING,
                             message="existing pending operation",
                             operation_id=operation.operation_id,
+                            data={
+                                "candidate_name": candidate.name,
+                                "candidate_description": candidate.description,
+                                "candidate_identifier": candidate.identifier,
+                                "candidate_kind": candidate.kind.value,
+                                "candidate_provider": candidate.provider,
+                            },
                         )
                     return InstallResult(
                         status=InstallResultStatus.FAILED,
@@ -265,6 +288,13 @@ class ExtensionInstallOrchestrator:
                     status=InstallResultStatus.PENDING,
                     message="confirmation required",
                     operation_id=pending.operation_id,
+                    data={
+                        "candidate_name": candidate.name,
+                        "candidate_description": candidate.description,
+                        "candidate_identifier": candidate.identifier,
+                        "candidate_kind": candidate.kind.value,
+                        "candidate_provider": candidate.provider,
+                    },
                 )
 
             return await self._run_with_conversation_lock(
@@ -362,7 +392,7 @@ class ExtensionInstallOrchestrator:
                 status=InstallResultStatus.FAILED,
                 message="pending operation not found",
             )
-        if actor_role not in set(self.policy_engine.config.allowed_roles or []):
+        if not self._is_allowed_role(actor_role):
             return InstallResult(
                 status=InstallResultStatus.DENIED,
                 message="actor role is not allowed",
@@ -408,13 +438,23 @@ class ExtensionInstallOrchestrator:
         actor_role: str,
         reason: str = "rejected by user",
     ) -> InstallResult:
-        if actor_role not in set(self.policy_engine.config.allowed_roles or []):
+        operation = await self.pending_service.get_by_operation_id_or_token(
+            operation_id_or_token
+        )
+        if operation is None:
+            return InstallResult(
+                status=InstallResultStatus.FAILED,
+                message="operation cannot be rejected",
+            )
+        if not self._can_deny_operation(
+            operation, actor_id=actor_id, actor_role=actor_role
+        ):
             return InstallResult(
                 status=InstallResultStatus.DENIED,
-                message="actor role is not allowed",
+                message="actor is not allowed to reject this operation",
             )
         operation = await self.pending_service.reject(
-            operation_id_or_token,
+            operation.operation_id,
             reason=reason,
         )
         if operation is None:
@@ -426,6 +466,7 @@ class ExtensionInstallOrchestrator:
             status=InstallResultStatus.DENIED,
             message="operation rejected",
             operation_id=operation.operation_id,
+            data={"count": 1},
         )
 
     async def deny_for_conversation(
@@ -436,19 +477,86 @@ class ExtensionInstallOrchestrator:
         actor_role: str,
         reason: str = "rejected by user",
     ) -> InstallResult:
-        operation = await self.pending_service.get_active_by_conversation(
+        operations = await self.pending_service.list_pending_by_conversation(
             conversation_id
         )
-        if operation is None:
+        if not operations:
             return InstallResult(
                 status=InstallResultStatus.FAILED,
                 message="pending operation not found for conversation",
             )
-        return await self.deny(
-            operation_id_or_token=operation.operation_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
-            reason=reason,
+        authorized_operations = [
+            operation
+            for operation in operations
+            if self._can_deny_operation(
+                operation, actor_id=actor_id, actor_role=actor_role
+            )
+        ]
+        if not authorized_operations:
+            return InstallResult(
+                status=InstallResultStatus.DENIED,
+                message="actor is not allowed to reject operations in this conversation",
+            )
+        rejected_count = 0
+        last_operation_id: str | None = None
+        for operation in authorized_operations:
+            rejected = await self.pending_service.reject(
+                operation.operation_id,
+                reason=reason,
+            )
+            if rejected is not None:
+                rejected_count += 1
+                last_operation_id = rejected.operation_id
+        if rejected_count == 0:
+            return InstallResult(
+                status=InstallResultStatus.FAILED,
+                message="operation cannot be rejected",
+            )
+        return InstallResult(
+            status=InstallResultStatus.DENIED,
+            message=f"rejected {rejected_count} operation(s)",
+            operation_id=last_operation_id,
+            data={"count": rejected_count},
+        )
+
+    async def deny_all(
+        self,
+        *,
+        actor_id: str,
+        actor_role: str,
+        kind: ExtensionKind | None = None,
+        reason: str = "rejected by agent",
+    ) -> InstallResult:
+        operations = await self.pending_service.list_pending(kind=kind)
+        authorized_operations = [
+            operation
+            for operation in operations
+            if self._can_deny_operation(
+                operation, actor_id=actor_id, actor_role=actor_role
+            )
+        ]
+        if not authorized_operations:
+            return InstallResult(
+                status=InstallResultStatus.DENIED,
+                message="actor is not allowed to reject pending operations",
+            )
+        rejected_count = 0
+        for operation in authorized_operations:
+            rejected = await self.pending_service.reject(
+                operation.operation_id,
+                reason=reason,
+            )
+            if rejected is not None:
+                rejected_count += 1
+        if rejected_count == 0:
+            return InstallResult(
+                status=InstallResultStatus.FAILED,
+                message="no pending operations were rejected",
+            )
+        return InstallResult(
+            status=InstallResultStatus.DENIED,
+            message=f"rejected {rejected_count} operation(s)",
+            data={"count": rejected_count},
         )
 
     async def pending(

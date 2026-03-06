@@ -107,9 +107,14 @@ class ExtensionCommands:
 
         lines = ["Extension search results:"]
         for idx, candidate in enumerate(candidates, start=1):
-            lines.append(
-                f"{idx}. [{candidate.kind.value}/{candidate.provider}] {candidate.name} -> {candidate.identifier}"
-            )
+            line = f"{idx}. {candidate.name}"
+            if candidate.description:
+                line += f" - {candidate.description}"
+            if candidate.version:
+                line += f" (v{candidate.version})"
+            line += f"\n   /extend install {candidate.identifier} --kind {candidate.kind.value}"
+            lines.append(line)
+        lines.append("\nCopy the command above to install, or ask me directly.")
         event.set_result(MessageEventResult().message("\n".join(lines)).use_t2i(False))
 
     async def extend_install(
@@ -151,20 +156,23 @@ class ExtensionCommands:
             )
         )
         if result.status == InstallResultStatus.PENDING:
+            name = result.data.get("candidate_name", install_target)
+            desc = result.data.get("candidate_description", "")
+            op_short = (result.operation_id or "")[:8]
+            lines = [f"Pending confirmation: {name}"]
+            if desc:
+                lines.append(f"Description: {desc}")
+            lines.append("\nReply with a confirmation or rejection in chat.")
+            if op_short:
+                lines.append(f"Admin fallback: /extend confirm {op_short}")
             event.set_result(
-                MessageEventResult().message(
-                    "Install request is pending confirmation.\n"
-                    f"operation_id: {result.operation_id}\n"
-                    "Reply in chat with a clear confirmation or rejection, "
-                    "or use /extend confirm <operation_id> as an admin fallback."
-                )
+                MessageEventResult().message("\n".join(lines)).use_t2i(False)
             )
             return
 
         if result.status == InstallResultStatus.SUCCESS:
-            event.set_result(
-                MessageEventResult().message("Install completed successfully.")
-            )
+            name = result.data.get("name", install_target)
+            event.set_result(MessageEventResult().message(f"Install completed: {name}"))
             return
 
         if result.status == InstallResultStatus.DENIED:
@@ -192,9 +200,11 @@ class ExtensionCommands:
             actor_role=event.role,
         )
         if result.status == InstallResultStatus.SUCCESS:
+            name = result.data.get("name", "")
+            suffix = f": {name}" if name else ""
             event.set_result(
                 MessageEventResult().message(
-                    "Confirmation accepted, install completed."
+                    f"Confirmation accepted, install completed{suffix}."
                 )
             )
             return
@@ -210,21 +220,40 @@ class ExtensionCommands:
     async def extend_deny(
         self, event: AstrMessageEvent, operation_id_or_token: str = ""
     ) -> None:
-        if not operation_id_or_token:
-            event.set_result(
-                MessageEventResult().message("/extend deny <operation_id>")
-            )
-            return
         orchestrator = get_extension_orchestrator(self.context)
-        result = await orchestrator.deny(
-            operation_id_or_token=operation_id_or_token.strip(),
-            actor_id=event.get_sender_id(),
-            actor_role=event.role,
-            reason="rejected by command",
-        )
+        normalized = operation_id_or_token.strip().lower()
+        if not operation_id_or_token.strip():
+            result = await orchestrator.deny_for_conversation(
+                conversation_id=event.unified_msg_origin,
+                actor_id=event.get_sender_id(),
+                actor_role=event.role,
+                reason="rejected by command",
+            )
+        elif normalized in {"all", "--all"}:
+            result = await orchestrator.deny_all(
+                actor_id=event.get_sender_id(),
+                actor_role=event.role,
+                reason="rejected by command",
+            )
+        elif normalized in {"conversation", "current", "--conversation"}:
+            result = await orchestrator.deny_for_conversation(
+                conversation_id=event.unified_msg_origin,
+                actor_id=event.get_sender_id(),
+                actor_role=event.role,
+                reason="rejected by command",
+            )
+        else:
+            result = await orchestrator.deny(
+                operation_id_or_token=operation_id_or_token.strip(),
+                actor_id=event.get_sender_id(),
+                actor_role=event.role,
+                reason="rejected by command",
+            )
         if result.status == InstallResultStatus.DENIED:
             event.set_result(
-                MessageEventResult().message("Install operation rejected.")
+                MessageEventResult().message(
+                    f"Install operation rejected. count={result.data.get('count', 1)}"
+                )
             )
             return
         event.set_result(

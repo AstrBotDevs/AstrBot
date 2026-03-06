@@ -114,9 +114,17 @@ class Main(star.Star):
             "好的",
             "行",
         }
-        if any(self._contains_intent_word(normalized, word) for word in deny_words):
+        has_deny = any(
+            self._contains_intent_word(normalized, word) for word in deny_words
+        )
+        has_confirm = any(
+            self._contains_intent_word(normalized, word) for word in confirm_words
+        )
+        if has_deny and has_confirm:
+            return None
+        if has_deny:
             return "deny"
-        if any(self._contains_intent_word(normalized, word) for word in confirm_words):
+        if has_confirm:
             return "confirm"
         return None
 
@@ -217,8 +225,19 @@ class Main(star.Star):
         message = event.get_message_str().strip()
         if not self._is_install_confirmation_candidate_message(message):
             return
-        intent = self._detect_install_intent(message)
+
         orchestrator = get_extension_orchestrator(self.context)
+        pending = await orchestrator.pending_service.get_active_by_conversation(
+            event.unified_msg_origin
+        )
+        if pending is None:
+            return
+
+        intent = self._detect_install_intent(message)
+        if intent is None:
+            return
+
+        target_label = f"[{pending.kind}] {pending.target}"
         if intent == "confirm":
             result = await orchestrator.confirm_for_conversation(
                 conversation_id=event.unified_msg_origin,
@@ -228,7 +247,7 @@ class Main(star.Star):
             if result.status == InstallResultStatus.SUCCESS:
                 event.set_result(
                     MessageEventResult().message(
-                        "Confirmation accepted, install completed."
+                        f"Confirmed {target_label}, install completed."
                     )
                 )
             elif result.status != InstallResultStatus.FAILED:
@@ -246,7 +265,7 @@ class Main(star.Star):
             )
             if result.status == InstallResultStatus.DENIED:
                 event.set_result(
-                    MessageEventResult().message("Install operation rejected.")
+                    MessageEventResult().message(f"Rejected {target_label}.")
                 )
 
     @filter.command("t2i")

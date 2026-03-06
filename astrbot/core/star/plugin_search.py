@@ -15,6 +15,7 @@ def get_plugin_search_result_limit(
     *,
     override: int | None = None,
 ) -> int:
+    # TODO: Add a configurable max_limit clamp for bot-controlled search expansion.
     if override is not None:
         return max(1, int(override))
     if config is None:
