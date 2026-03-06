@@ -20,6 +20,7 @@ from ..register import register_provider_adapter
 
 TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
+AZURE_TTS_SUBSCRIPTION_KEY_PATTERN = r"^[a-zA-Z0-9]{32,84}$"
 
 
 class OTTSProvider:
@@ -116,7 +117,7 @@ class AzureNativeProvider(TTSProvider):
             "azure_tts_subscription_key",
             "",
         ).strip()
-        if not re.fullmatch(r"^[a-zA-Z0-9]{32}$", self.subscription_key):
+        if not re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, self.subscription_key):
             raise ValueError("无效的Azure订阅密钥")
         self.region = provider_config.get("azure_tts_region", "eastus").strip()
         self.endpoint = (
@@ -235,9 +236,9 @@ class AzureTTSProvider(TTSProvider):
                 raise ValueError(error_msg) from e
             except KeyError as e:
                 raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
-        if re.fullmatch(r"^[a-zA-Z0-9]{32}$", key_value):
+        if re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, key_value):
             return AzureNativeProvider(config, self.provider_settings)
-        raise ValueError("订阅密钥格式无效，应为32位字母数字或other[...]格式")
+        raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
         if isinstance(self.provider, OTTSProvider):
