@@ -350,22 +350,19 @@ export const useExtensionPage = () => {
     let filtered = plugins;
 
     if (pluginSearch.value) {
-      const search = pluginSearch.value.toLowerCase();
+      const search = normalizeStr(pluginSearch.value);
       filtered = plugins.filter((plugin) => {
-        const pluginName = (plugin.name ?? "").toLowerCase();
-        const pluginDesc = (plugin.desc ?? "").toLowerCase();
-        const pluginAuthor = (plugin.author ?? "").toLowerCase();
         const supportPlatforms = Array.isArray(plugin.support_platforms)
-          ? plugin.support_platforms.join(" ").toLowerCase()
+          ? plugin.support_platforms.join(" ")
           : "";
-        const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
 
         return (
-          pluginName.includes(search) ||
-          pluginDesc.includes(search) ||
-          pluginAuthor.includes(search) ||
-          supportPlatforms.includes(search) ||
-          astrbotVersion.includes(search)
+          marketCustomFilter(plugin.name, search, plugin) ||
+          marketCustomFilter(plugin.display_name, search, plugin) ||
+          marketCustomFilter(plugin.desc, search, plugin) ||
+          marketCustomFilter(plugin.author, search, plugin) ||
+          marketCustomFilter(supportPlatforms, search, plugin) ||
+          marketCustomFilter(plugin.astrbot_version, search, plugin)
         );
       });
     }
