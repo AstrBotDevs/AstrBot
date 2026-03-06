@@ -662,6 +662,30 @@ class TestModalitiesFix:
         assert len(req.image_urls) == 1
         assert req.func_tool is not None
 
+    def test_modalities_fix_empty_modalities_keeps_image_and_tools(self, mock_provider):
+        """Test modality fix keeps content when modalities are not explicitly configured."""
+        module = ama
+        mock_provider.provider_config = {"modalities": []}
+        tool_set = ToolSet()
+        tool_set.add_tool(
+            FunctionTool(
+                name="dummy_tool",
+                description="dummy",
+                parameters={"type": "object", "properties": {}},
+            )
+        )
+        req = ProviderRequest(
+            prompt="Hello",
+            image_urls=["/path/to/image.jpg"],
+            func_tool=tool_set,
+        )
+
+        module._modalities_fix(mock_provider, req)
+
+        assert req.prompt == "Hello"
+        assert len(req.image_urls) == 1
+        assert req.func_tool is not None
+
 
 class TestSanitizeContextByModalities:
     """Tests for _sanitize_context_by_modalities function."""

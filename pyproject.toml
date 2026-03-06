@@ -64,6 +64,10 @@ dependencies = [
   "shipyard-neo-sdk>=0.2.0",
   "python-socks>=2.8.0",
   "packaging>=24.2",
+  "edge-tts>=7.2.7",
+  "crypto>=1.4.1",
+  "whisper>=1.1.10",
+  "volcengine-python-sdk[ark]>=5.0.17",
 ]
 
 [dependency-groups]

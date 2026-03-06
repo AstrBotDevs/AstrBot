@@ -83,6 +83,15 @@ astrbot
 
 > [uv](https://docs.astral.sh/uv/) のインストールが必要です。
 
+> [!NOTE]
+> macOS ユーザーの場合：macOS のセキュリティチェックにより、`astrbot` コマンドの初回実行に時間がかかる場合があります（約 10〜20 秒）。
+
+`astrbot` の更新：
+
+```bash
+uv tool upgrade astrbot
+```
+
 ### Docker デプロイ
 
 コンテナ運用に慣れており、より安定した本番向けのデプロイ方法を求めるユーザーには、Docker / Docker Compose での AstrBot デプロイをおすすめします。

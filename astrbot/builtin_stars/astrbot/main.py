@@ -68,7 +68,9 @@ class Main(star.Star):
                         event.unified_msg_origin,
                         session_curr_cid,
                     )
-
+                    
+                    logger.debug(f"主动回复 - 会话 ID: {session_curr_cid}, 对话内容: {conv}")
+                    logger.debug(f"主动回复 - 消息对象: {event.message_obj}")
                     prompt = event.message_str
 
                     if not conv:
