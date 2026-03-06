@@ -226,7 +226,7 @@
     "uploadDialogTitle": "上传 Skills",
     "uploadHint": "支持批量上传 zip 技能包，也支持拖拽批量上传 zip 技能包。系统会自动校验目录结构，并给出逐个文件的结果。",
     "structureRequirement": "常见失败原因是压缩包结构不正确。每个 zip 必须只包含一个顶层目录，例如 `skillname/`，且该目录下必须存在 `SKILL.md`。",
-    "abilityMultiple": "支持一次上传多个 zip 文件",
+    "abilityMultiple": "支持一次上传多个zip文件",
     "abilityValidate": "自动校验 `SKILL.md`",
     "abilitySkip": "自动跳过重复文件",
     "selectFile": "选择文件",
