@@ -405,16 +405,18 @@
 
         <v-card-actions class="skills-upload-dialog__actions justify-end px-6 pb-3 pt-2">
           <v-btn
-            class="skills-upload-dialog__action-btn skills-upload-dialog__action-btn--cancel"
-            variant="flat"
+            class="skills-upload-dialog__action-btn"
+            variant="tonal"
+            color="secondary"
             :disabled="uploading"
             @click="closeUploadDialog"
           >
             {{ tm("skills.cancel") }}
           </v-btn>
           <v-btn
-            class="skills-upload-dialog__action-btn skills-upload-dialog__action-btn--confirm"
+            class="skills-upload-dialog__action-btn"
             variant="flat"
+            color="primary"
             :loading="uploading"
             :disabled="!hasUploadableItems"
             @click="uploadSkillBatch"
@@ -1232,7 +1234,7 @@ export default {
   flex-direction: column;
   max-height: min(88vh, 960px);
   border-radius: 24px;
-  background: linear-gradient(180deg, #fcfcf8 0%, #f7f7f3 100%);
+  background: #f7f9f8;
   border: 1px solid rgba(125, 137, 121, 0.12);
   box-shadow: 0 24px 60px rgba(59, 67, 57, 0.08);
   overflow: hidden;
@@ -1297,18 +1299,6 @@ export default {
   text-transform: none;
 }
 
-.skills-upload-dialog__action-btn--cancel {
-  border: 1px solid rgba(137, 147, 133, 0.22);
-  background: #edf1eb;
-  color: #5b665b;
-}
-
-.skills-upload-dialog__action-btn--confirm {
-  background: linear-gradient(180deg, #62ce98 0%, #4fbe87 100%);
-  color: #ffffff;
-  box-shadow: 0 6px 14px rgba(79, 169, 122, 0.24);
-}
-
 .skills-upload-structure-note {
   display: flex;
   align-items: center;
@@ -1356,7 +1346,7 @@ export default {
   padding: 36px 24px;
   border-radius: 22px;
   border: 1.5px dashed #c6cfc2;
-  background: linear-gradient(180deg, rgba(252, 252, 248, 0.96), rgba(244, 247, 242, 0.96));
+  background: rgba(255, 255, 255, 0.82);
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
@@ -1365,7 +1355,7 @@ export default {
 .skills-dropzone:hover,
 .skills-dropzone--dragover {
   border-color: #96aa97;
-  background: linear-gradient(180deg, rgba(248, 251, 246, 0.98), rgba(239, 245, 238, 0.98));
+  background: rgba(226, 239, 248, 0.62);
   transform: translateY(-1px);
 }
 

@@ -620,6 +620,8 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
             "---\nname: demo-skill\ndescription: Demo skill\n---\n",
         )
         zf.writestr("demo_skill/notes.txt", "hello")
+        zf.writestr("__MACOSX/demo_skill/._SKILL.md", "")
+        zf.writestr("__MACOSX/._demo_skill", "")
     archive.seek(0)
 
     test_client = app.test_client()
@@ -683,15 +685,15 @@ async def test_batch_upload_skills_partial_success(
             f"--{boundary}\r\n"
             'Content-Disposition: form-data; name="files"; filename="ok_skill.zip"\r\n'
             "Content-Type: application/zip\r\n\r\n"
-        ).encode("utf-8")
+        ).encode()
         + b"fake-zip-1\r\n"
         + (
             f"--{boundary}\r\n"
             'Content-Disposition: form-data; name="files"; filename="bad_skill.zip"\r\n'
             "Content-Type: application/zip\r\n\r\n"
-        ).encode("utf-8")
+        ).encode()
         + b"fake-zip-2\r\n"
-        + f"--{boundary}--\r\n".encode("utf-8")
+        + f"--{boundary}--\r\n".encode()
     )
     headers = dict(authenticated_header)
     headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
@@ -707,7 +709,9 @@ async def test_batch_upload_skills_partial_success(
     assert data["status"] == "ok"
     assert data["message"] == "Partial success: 1/2 skill(s) uploaded."
     assert data["data"]["total"] == 2
-    assert data["data"]["succeeded"] == [{"filename": "ok_skill.zip", "name": "ok_skill"}]
+    assert data["data"]["succeeded"] == [
+        {"filename": "ok_skill.zip", "name": "ok_skill"}
+    ]
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
     ]
