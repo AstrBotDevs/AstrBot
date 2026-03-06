@@ -263,6 +263,10 @@ export const useExtensionPage = () => {
     title: "",
     statusCode: 0, // 0: loading, 1: success, 2: error,
     result: "",
+    progressEnabled: false,
+    progressCurrent: 0,
+    progressTotal: 0,
+    progressLabel: "",
   });
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
@@ -623,11 +627,16 @@ export const useExtensionPage = () => {
     loadingDialog.title = tm("dialogs.loading.title");
     loadingDialog.statusCode = 0;
     loadingDialog.result = "";
+    loadingDialog.progressEnabled = false;
+    loadingDialog.progressCurrent = 0;
+    loadingDialog.progressTotal = 0;
+    loadingDialog.progressLabel = "";
   };
   
   const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
     loadingDialog.statusCode = statusCode;
     loadingDialog.result = result;
+    loadingDialog.progressEnabled = false;
     if (timeToClose === -1) return;
     setTimeout(resetLoadingDialog, timeToClose);
   };
@@ -1399,13 +1408,18 @@ export const useExtensionPage = () => {
     loading_.value = true;
     loadingDialog.title = tm("status.loading");
     loadingDialog.show = true;
+    loadingDialog.progressEnabled = true;
+    loadingDialog.progressCurrent = 0;
+    loadingDialog.progressTotal = uniqueRepos.length;
+    loadingDialog.progressLabel = "";
 
     const failedItems = [];
     let successCount = 0;
     const previousExtensionUrl = extension_url.value;
 
-    try {
-      for (const repoUrl of uniqueRepos) {
+    for (const repoUrl of uniqueRepos) {
+      loadingDialog.progressLabel = repoUrl;
+      try {
         extension_url.value = repoUrl;
         const res = await performInstallRequest({
           source: "url",
@@ -1414,22 +1428,24 @@ export const useExtensionPage = () => {
         const resData = res.data || {};
         if (resData.status === "ok") {
           successCount += 1;
-          continue;
+        } else {
+          failedItems.push({
+            url: repoUrl,
+            message: resData.message || tm("messages.installFailed"),
+          });
         }
+      } catch (err) {
         failedItems.push({
           url: repoUrl,
-          message: resData.message || tm("messages.installFailed"),
+          message: resolveErrorMessage(err, tm("messages.installFailed")),
         });
+      } finally {
+        loadingDialog.progressCurrent += 1;
       }
-    } catch (err) {
-      failedItems.push({
-        url: extension_url.value || tm("status.unknown"),
-        message: resolveErrorMessage(err, tm("messages.installFailed")),
-      });
-    } finally {
-      extension_url.value = previousExtensionUrl;
-      loading_.value = false;
     }
+
+    extension_url.value = previousExtensionUrl;
+    loading_.value = false;
 
     if (successCount > 0) {
       await getExtensions();

@@ -307,10 +307,24 @@ const {
       <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
         <v-progress-linear
           v-if="loadingDialog.statusCode === 0"
-          indeterminate
+          :indeterminate="!loadingDialog.progressEnabled"
+          :model-value="
+            loadingDialog.progressTotal > 0
+              ? (loadingDialog.progressCurrent / loadingDialog.progressTotal) * 100
+              : 0
+          "
           color="primary"
           class="mb-4"
         ></v-progress-linear>
+        <div
+          v-if="loadingDialog.statusCode === 0 && loadingDialog.progressEnabled"
+          class="text-caption text-medium-emphasis mb-3"
+        >
+          {{ loadingDialog.progressCurrent }} / {{ loadingDialog.progressTotal }}
+          <span v-if="loadingDialog.progressLabel">
+            · {{ loadingDialog.progressLabel }}
+          </span>
+        </div>
 
         <div v-if="loadingDialog.statusCode !== 0" class="py-8 text-center">
           <v-icon
@@ -673,6 +687,7 @@ const {
                 class="rounded-lg"
                 :placeholder="tm('upload.shareCodePlaceholder')"
               ></v-textarea>
+              <ProxySelector></ProxySelector>
             </div>
           </v-window-item>
         </v-window>
