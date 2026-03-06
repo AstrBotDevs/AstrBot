@@ -276,9 +276,6 @@
         <v-card-title class="skills-upload-dialog__header px-6 pt-6 pb-2">
           <div class="skills-upload-dialog__heading">
             <div class="text-h4 font-weight-medium">{{ tm("skills.uploadDialogTitle") }}</div>
-            <p class="skills-upload-dialog__description mt-3 mb-0">
-              {{ tm("skills.uploadHint") }}
-            </p>
           </div>
           <v-btn
             class="skills-upload-dialog__close"
@@ -290,6 +287,10 @@
         </v-card-title>
 
         <v-card-text class="skills-upload-dialog__body px-6 pb-5 pt-2">
+          <p class="skills-upload-dialog__description skills-upload-dialog__description--body">
+            {{ tm("skills.uploadHint") }}
+          </p>
+
           <div class="skills-upload-structure-note">
             <v-icon size="18">mdi-information-outline</v-icon>
             <span>{{ tm("skills.structureRequirement") }}</span>
@@ -1257,6 +1258,12 @@ export default {
   overflow-wrap: anywhere;
 }
 
+.skills-upload-dialog__description--body {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
 .skills-upload-dialog__close {
   align-self: flex-start;
 }
@@ -1529,6 +1536,10 @@ export default {
   .skills-upload-row__actions {
     justify-content: space-between;
     align-items: center;
+  }
+
+  .skills-upload-dialog__description--body {
+    font-size: 14px;
   }
 }
 </style>
