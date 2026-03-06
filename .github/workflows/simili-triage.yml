@@ -1,0 +1,90 @@
+name: Simili Duplicate Triage
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: simili-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Evaluate issue eligibility
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = (context.payload.issue.labels || []).map(label => label.name);
+            const included = labels.includes('bug') || labels.includes('enhancement');
+            const excluded = ['plugin-publish', 'no-simili'].some(label => labels.includes(label));
+            const eligible = included && !excluded;
+
+            core.setOutput('eligible', eligible ? 'true' : 'false');
+
+            if (eligible) {
+              core.notice(`Simili triage enabled for issue #${context.payload.issue.number}.`);
+            } else {
+              core.notice(
+                `Simili triage skipped for issue #${context.payload.issue.number}. Labels: ${labels.join(', ') || '(none)'}`,
+              );
+            }
+
+      - name: Ensure Simili labels exist
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              {
+                name: 'potential-duplicate',
+                color: 'fbca04',
+                description: 'Marked by Simili as a possible duplicate pending human review.',
+              },
+              {
+                name: 'no-simili',
+                color: 'c2e0c6',
+                description: 'Exclude this issue from Simili duplicate triage.',
+              },
+            ];
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ...label,
+                });
+              }
+            }
+
+      - name: Checkout repository
+        if: steps.gate.outputs.eligible == 'true'
+        uses: actions/checkout@v4
+
+      - name: Run Simili triage
+        if: steps.gate.outputs.eligible == 'true'
+        uses: similigh/simili-bot@v1
+        with:
+          config_path: .github/simili.yaml
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
