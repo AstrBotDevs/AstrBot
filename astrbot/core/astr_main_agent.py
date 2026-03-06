@@ -663,9 +663,24 @@ async def _decorate_llm_request(
 
 
 def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
+    modalities = provider.provider_config.get("modalities")
+    modalities_unknown = not isinstance(modalities, list) or len(modalities) == 0
+
     if req.image_urls:
-        provider_cfg = provider.provider_config.get("modalities", ["image"])
-        if "image" not in provider_cfg:
+        if not modalities_unknown and "image" not in modalities:
+            provider_id = provider.provider_config.get("id", "<unknown>")
+            provider_model = provider.get_model()
+            image_count = len(req.image_urls)
+            image_preview = req.image_urls[:3]
+            logger.debug(
+                "Downgrading image input to text placeholder. "
+                "provider_id=%s, model=%s, modalities=%s, image_count=%d, image_preview=%s",
+                provider_id,
+                provider_model,
+                modalities,
+                image_count,
+                image_preview,
+            )
             logger.debug(
                 "Provider %s does not support image, using placeholder.", provider
             )
@@ -677,8 +692,7 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
                 req.prompt = placeholder
             req.image_urls = []
     if req.func_tool:
-        provider_cfg = provider.provider_config.get("modalities", ["tool_use"])
-        if "tool_use" not in provider_cfg:
+        if not modalities_unknown and "tool_use" not in modalities:
             logger.debug(
                 "Provider %s does not support tool_use, clearing tools.", provider
             )
@@ -996,6 +1010,7 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
+    logger.debug(f"req received in build_main_agent: {req}")
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
@@ -1003,12 +1018,24 @@ async def build_main_agent(
 
     if req is None:
         if event.get_extra("provider_request"):
+            logger.debug("Using existing provider_request from event extras.")
             req = event.get_extra("provider_request")
             assert isinstance(req, ProviderRequest), (
                 "provider_request 必须是 ProviderRequest 类型。"
             )
             if req.conversation:
                 req.contexts = json.loads(req.conversation.history)
+            for comp in event.message_obj.message:
+                if isinstance(comp, Image):
+                    req.image_urls.append(comp.url)
+                elif isinstance(comp, File):
+                    file_path = await comp.get_file()
+                    file_name = comp.name or os.path.basename(file_path)
+                    req.extra_user_content_parts.append(
+                        TextPart(
+                            text=f"[File Attachment: name {file_name}, path {file_path}]"
+                        )
+                    )
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1025,10 +1052,9 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    image_path = await comp.convert_to_file_path()
-                    req.image_urls.append(image_path)
+                    req.image_urls.append(comp.url)
                     req.extra_user_content_parts.append(
-                        TextPart(text=f"[Image Attachment: path {image_path}]")
+                        TextPart(text=f"[Image Attachment: url {comp.url}]")
                     )
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
@@ -1118,7 +1144,8 @@ async def build_main_agent(
             req.conversation = conversation
             req.contexts = json.loads(conversation.history)
             event.set_extra("provider_request", req)
-
+    logger.debug(f"image_urls extracted for build_main_agent: {req.image_urls}")
+    logger.debug(f"Constructed provider request: {req}")
     if isinstance(req.contexts, str):
         req.contexts = json.loads(req.contexts)
     req.image_urls = normalize_and_dedupe_strings(req.image_urls)
