@@ -27,6 +27,7 @@ const customizer = useCustomizerStore();
 const theme = useTheme();
 const { t } = useI18n();
 const route = useRoute();
+const LAST_BOT_ROUTE_KEY = 'astrbot:last_bot_route';
 let dialog = ref(false);
 let accountWarning = ref(false)
 let updateStatusDialog = ref(false);
@@ -402,15 +403,21 @@ const viewMode = computed({
 });
 
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
-watch(() => customizer.viewMode, (newMode, oldMode) => {
-  if (newMode === 'bot' && oldMode === 'chat') {
-    // 从 chat 模式切换到 bot 模式时，跳转到首页
-    if (route.path !== '/') {
-      router.push('/');
-    }
+// 保存 bot 模式的最後路由
+watch(route, (newRoute) => {
+  if (customizer.viewMode === 'bot') {
+    localStorage.setItem(LAST_BOT_ROUTE_KEY, newRoute.fullPath);
   }
 });
 
+// 監聽 viewMode 切換
+watch(() => customizer.viewMode, (newMode, oldMode) => {
+  if (newMode === 'bot' && oldMode === 'chat') {
+    // 從 chat 切換回 bot，跳轉到最後一次的 bot 路由
+    const lastBotRoute = localStorage.getItem(LAST_BOT_ROUTE_KEY) || '/';
+    router.push(lastBotRoute);
+  }
+});
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
