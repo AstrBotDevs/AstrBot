@@ -285,6 +285,22 @@ class ExtensionInstallOrchestrator:
         requester_id = request.requester_id.strip() or "anonymous"
         return f"manual:{request.kind.value}:{requester_id}"
 
+    @staticmethod
+    def _target_key(candidate: InstallCandidate) -> str:
+        """构建安装目标的唯一标识键"""
+        return f"{candidate.kind.value}:{candidate.provider}:{candidate.identifier}"
+
+    @staticmethod
+    def _candidate_data(candidate: InstallCandidate) -> dict[str, Any]:
+        """构建候选人信息字典，用于 InstallResult.data"""
+        return {
+            "candidate_name": candidate.name,
+            "candidate_description": candidate.description,
+            "candidate_identifier": candidate.identifier,
+            "candidate_kind": candidate.kind.value,
+            "candidate_provider": candidate.provider,
+        }
+
     async def install(self, request: InstallRequest) -> InstallResult:
         """处理安装请求，执行策略判定和安装流程
 
@@ -304,9 +320,7 @@ class ExtensionInstallOrchestrator:
         candidate.install_payload["metadata"] = metadata
         decision = self.policy_engine.evaluate(request, candidate)
         conversation_key = self._conversation_key(request)
-        target_key = (
-            f"{candidate.kind.value}:{candidate.provider}:{candidate.identifier}"
-        )
+        target_key = self._target_key(candidate)
 
         if decision.action == PolicyAction.DENY:
             return InstallResult(
@@ -330,13 +344,7 @@ class ExtensionInstallOrchestrator:
                             status=InstallResultStatus.PENDING,
                             message="existing pending operation",
                             operation_id=operation.operation_id,
-                            data={
-                                "candidate_name": candidate.name,
-                                "candidate_description": candidate.description,
-                                "candidate_identifier": candidate.identifier,
-                                "candidate_kind": candidate.kind.value,
-                                "candidate_provider": candidate.provider,
-                            },
+                            data=self._candidate_data(candidate),
                         )
                     return InstallResult(
                         status=InstallResultStatus.FAILED,
@@ -369,13 +377,7 @@ class ExtensionInstallOrchestrator:
                     status=InstallResultStatus.PENDING,
                     message="confirmation required",
                     operation_id=pending.operation_id,
-                    data={
-                        "candidate_name": candidate.name,
-                        "candidate_description": candidate.description,
-                        "candidate_identifier": candidate.identifier,
-                        "candidate_kind": candidate.kind.value,
-                        "candidate_provider": candidate.provider,
-                    },
+                    data=self._candidate_data(candidate),
                 )
 
             return await self._run_with_conversation_lock(
@@ -413,31 +415,21 @@ class ExtensionInstallOrchestrator:
         try:
             candidate = self._candidate_from_payload(candidate_payload)
         except Exception as exc:  # noqa: BLE001
-            await self.pending_service.db.update_pending_operation(
-                operation.operation_id,
-                status="failed",
-                error=f"invalid pending payload: {exc}",
+            await self.pending_service.mark_failed(
+                operation.operation_id, error=f"invalid pending payload: {exc}"
             )
             return InstallResult(
                 status=InstallResultStatus.FAILED,
                 message=f"invalid pending payload: {exc}",
                 operation_id=operation.operation_id,
             )
-        target_key = (
-            f"{candidate.kind.value}:{candidate.provider}:{candidate.identifier}"
-        )
+        target_key = self._target_key(candidate)
 
         async def _do_install() -> InstallResult:
-            await self.pending_service.db.update_pending_operation(
-                operation.operation_id,
-                status="running",
-            )
+            await self.pending_service.mark_running(operation.operation_id)
             try:
                 result = await self._execute_install(candidate)
-                await self.pending_service.db.update_pending_operation(
-                    operation.operation_id,
-                    status="success",
-                )
+                await self.pending_service.mark_success(operation.operation_id)
                 return InstallResult(
                     status=InstallResultStatus.SUCCESS,
                     message="install completed",
@@ -445,10 +437,8 @@ class ExtensionInstallOrchestrator:
                     data=result,
                 )
             except Exception as exc:  # noqa: BLE001
-                await self.pending_service.db.update_pending_operation(
-                    operation.operation_id,
-                    status="failed",
-                    error=str(exc),
+                await self.pending_service.mark_failed(
+                    operation.operation_id, error=str(exc)
                 )
                 return InstallResult(
                     status=InstallResultStatus.FAILED,

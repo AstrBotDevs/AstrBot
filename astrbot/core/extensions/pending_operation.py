@@ -207,3 +207,39 @@ class PendingOperationService:
             status="rejected",
             reason=reason,
         )
+
+    async def mark_running(self, operation_id: str) -> PendingOperation | None:
+        """将操作状态标记为运行中"""
+        return await self.db.update_pending_operation(
+            operation_id, status="running"
+        )
+
+    async def mark_success(self, operation_id: str) -> PendingOperation | None:
+        """将操作状态标记为成功"""
+        return await self.db.update_pending_operation(
+            operation_id, status="success"
+        )
+
+    async def mark_failed(
+        self, operation_id: str, error: str = ""
+    ) -> PendingOperation | None:
+        """将操作状态标记为失败"""
+        return await self.db.update_pending_operation(
+            operation_id, status="failed", error=error
+        )
+
+    async def mark_running(self, operation_id: str) -> PendingOperation | None:
+        """标记操作为运行中"""
+        return await self.db.update_pending_operation(operation_id, status="running")
+
+    async def mark_success(self, operation_id: str) -> PendingOperation | None:
+        """标记操作为成功"""
+        return await self.db.update_pending_operation(operation_id, status="success")
+
+    async def mark_failed(
+        self, operation_id: str, error: str = ""
+    ) -> PendingOperation | None:
+        """标记操作为失败"""
+        return await self.db.update_pending_operation(
+            operation_id, status="failed", error=error
+        )
