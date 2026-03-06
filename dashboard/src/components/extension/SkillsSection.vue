@@ -289,7 +289,7 @@
           />
         </v-card-title>
 
-        <v-card-text class="px-6 pb-5 pt-2">
+        <v-card-text class="skills-upload-dialog__body px-6 pb-5 pt-2">
           <div class="skills-upload-structure-note">
             <v-icon size="18">mdi-information-outline</v-icon>
             <span>{{ tm("skills.structureRequirement") }}</span>
@@ -402,7 +402,7 @@
           </div>
         </v-card-text>
 
-        <v-card-actions class="justify-end px-6 pb-5 pt-0">
+        <v-card-actions class="skills-upload-dialog__actions justify-end px-6 pb-5 pt-0">
           <v-btn variant="text" :disabled="uploading" @click="closeUploadDialog">
             {{ tm("skills.cancel") }}
           </v-btn>
@@ -1222,10 +1222,14 @@ export default {
 }
 
 .skills-upload-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: min(88vh, 960px);
   border-radius: 24px;
   background: linear-gradient(180deg, #fcfcf8 0%, #f7f7f3 100%);
   border: 1px solid rgba(125, 137, 121, 0.12);
   box-shadow: 0 24px 60px rgba(59, 67, 57, 0.08);
+  overflow: hidden;
 }
 
 .skills-upload-dialog__header {
@@ -1255,6 +1259,18 @@ export default {
 
 .skills-upload-dialog__close {
   align-self: flex-start;
+}
+
+.skills-upload-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.skills-upload-dialog__actions {
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(137, 147, 133, 0.16);
+  background: rgba(247, 249, 244, 0.96);
 }
 
 .skills-upload-structure-note {
@@ -1494,6 +1510,10 @@ export default {
 }
 
 @media (max-width: 640px) {
+  .skills-upload-dialog {
+    max-height: 92vh;
+  }
+
   .skills-upload-dialog__header {
     gap: 12px;
   }
