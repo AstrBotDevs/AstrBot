@@ -24,6 +24,8 @@ jobs:
   auto-close:
     if: github.event_name == 'workflow_dispatch' || vars.SIMILI_AUTO_CLOSE_ENABLED == 'true'
     runs-on: ubuntu-latest
+    env:
+      SIMILI_VERSION: v0.2.0-rc.1
 
     steps:
       - name: Ensure Simili labels exist
@@ -72,13 +74,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Build Simili CLI
-        run: go build -o simili-cli ./cmd/simili/main.go
+      - name: Download Simili CLI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$SIMILI_VERSION" \
+            --repo similigh/simili-bot \
+            --pattern "simili-bot_*_linux_amd64.tar.gz" \
+            --output simili-bot.tar.gz
+          tar -xzf simili-bot.tar.gz simili
+          chmod +x ./simili
 
       - name: Run Simili auto-close
         shell: bash
@@ -104,7 +110,7 @@ jobs:
             fi
           fi
 
-          ./simili-cli auto-close \
+          ./simili auto-close \
             --repo "${{ github.repository }}" \
             --config .github/simili.yaml \
             $DRY_RUN_FLAG \
