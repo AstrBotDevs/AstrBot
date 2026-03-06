@@ -1008,8 +1008,8 @@
         "hint": "启用后，将通过 xAI 的 Chat Completions 原生 Live Search 进行联网检索（按需计费）。仅对 xAI 提供商生效。"
       },
       "rerank_api_base": {
-        "description": "重排序模型 API Base URL",
-        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
+        "description": "重排序模型 API 地址",
+        "hint": "通用 Rerank / NewAPI 兼容接口需填写完整请求 URL（例如 https://api.example.com/v1/rerank）；AstrBot 不会自动补全 /v1/rerank。"
       },
       "rerank_api_key": {
         "description": "API Key",

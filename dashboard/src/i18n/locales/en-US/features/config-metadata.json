@@ -1005,8 +1005,8 @@
         "hint": "When enabled, uses xAI Chat Completions native Live Search for web queries (billed on demand). Only applies to xAI providers."
       },
       "rerank_api_base": {
-        "description": "Rerank Model API Base URL",
-        "hint": "AstrBot appends /v1/rerank to the request URL."
+        "description": "Rerank Model API URL",
+        "hint": "For the generic Rerank / NewAPI-compatible adapter, enter the full request URL (for example, https://api.example.com/v1/rerank); AstrBot will not append /v1/rerank automatically."
       },
       "rerank_api_key": {
         "description": "API Key",

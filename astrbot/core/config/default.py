@@ -1010,7 +1010,7 @@ CONFIG_METADATA_2 = {
                 "config_template": {
                     "OpenAI": {
                         "id": "openai",
-                        "provider": "openai",
+                        "provider": "generic",
                         "type": "openai_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
@@ -1613,6 +1613,17 @@ CONFIG_METADATA_2 = {
                         "return_documents": False,
                         "instruct": "",
                     },
+                    "通用 Rerank": {
+                        "id": "openai_rerank",
+                        "type": "openai_rerank",
+                        "provider": "openai",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "https://api.example.com/v1/rerank",
+                        "rerank_model": "",
+                        "timeout": 30,
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -1648,9 +1659,9 @@ CONFIG_METADATA_2 = {
                         "condition": {"provider": "xai"},
                     },
                     "rerank_api_base": {
-                        "description": "重排序模型 API Base URL",
+                        "description": "重排序模型 API 地址",
                         "type": "string",
-                        "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。",
+                        "hint": "通用 Rerank / NewAPI 兼容接口需填写完整请求 URL（例如 https://api.example.com/v1/rerank）；AstrBot 不会自动补全 /v1/rerank。",
                     },
                     "rerank_api_key": {
                         "description": "API Key",

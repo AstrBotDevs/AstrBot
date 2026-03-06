@@ -466,6 +466,10 @@ class ProviderManager:
                 from .sources.bailian_rerank_source import (
                     BailianRerankProvider as BailianRerankProvider,
                 )
+            case "openai_rerank":
+                from .sources.openai_rerank_source import (
+                    OpenAIRerankProvider as OpenAIRerankProvider,
+                )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果
