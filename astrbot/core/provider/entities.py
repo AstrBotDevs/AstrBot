@@ -372,7 +372,13 @@ class LLMResponse:
 
     def to_openai_to_calls_model(self) -> list[ToolCall] | None:
         """The same as to_openai_tool_calls but return pydantic model."""
-        if not self.tools_call_args:
+        if (
+            not self.tools_call_args
+            or not self.tools_call_name
+            or not self.tools_call_ids
+            or len(self.tools_call_args) != len(self.tools_call_name)
+            or len(self.tools_call_args) != len(self.tools_call_ids)
+        ):
             return None
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):

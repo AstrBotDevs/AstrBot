@@ -1,14 +1,16 @@
-import pytest
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
-from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
-from astrbot.core.agent.run_context import ContextWrapper
+
+import pytest
+
 from astrbot.core.agent.hooks import BaseAgentRunHooks
-from astrbot.core.agent.tool import ToolSet, FunctionTool
+from astrbot.core.agent.message import ToolCall
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
-from astrbot.core.agent.message import Message, ToolCall
+
 
 def test_llm_response_tool_calls_none_and_empty_list_behaviour():
     """
@@ -34,6 +36,7 @@ def test_llm_response_tool_calls_none_and_empty_list_behaviour():
 
     assert response_empty.to_openai_tool_calls() is None
     assert response_empty.to_openai_to_calls_model() is None
+
 
 def test_llm_response_tool_calls_non_empty_list_behaviour():
     """
@@ -65,11 +68,26 @@ def test_llm_response_tool_calls_non_empty_list_behaviour():
     assert tool_calls[0]["id"] == "call_1"
     assert tool_calls[0]["function"]["name"] == "test_tool"
     assert tool_calls[0]["function"]["arguments"] == json.dumps(tools_call_args[0])
-    
+
     assert isinstance(tool_calls_model[0], ToolCall)
     assert tool_calls_model[0].id == "call_1"
     assert tool_calls_model[0].function.name == "test_tool"
     assert tool_calls_model[0].function.arguments == json.dumps(tools_call_args[0])
+
+
+def test_llm_response_tool_calls_mismatched_metadata_returns_none():
+    """Incomplete tool call metadata should not serialize into OpenAI tool calls."""
+    response = LLMResponse(
+        role="assistant",
+        completion_text="test",
+        tools_call_args=[{}],
+        tools_call_name=["test_tool"],
+        tools_call_ids=[],
+    )
+
+    assert response.to_openai_tool_calls() is None
+    assert response.to_openai_to_calls_model() is None
+
 
 class MockSkillsLikeProvider(Provider):
     def __init__(self, fail_with_none=False):
@@ -88,7 +106,7 @@ class MockSkillsLikeProvider(Provider):
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
-        # 第一次调用：模拟 skills_like 模式下的轻量级调用，返回工具名但无参数
+        # First call: simulate the lightweight skills_like tool selection response.
         if self.call_count == 1:
             return LLMResponse(
                 role="assistant",
@@ -96,9 +114,9 @@ class MockSkillsLikeProvider(Provider):
                 tools_call_name=["test_tool"],
                 tools_call_ids=["call_1"],
                 tools_call_args=[{}],
-                usage=TokenUsage(output=5)
+                usage=TokenUsage(output=5),
             )
-        # 第二次调用：模拟 LLM 异常响应，不返回任何工具调用
+        # Second call: simulate an abnormal LLM response without tool calls.
         if self.fail_with_none:
             return LLMResponse(
                 role="assistant",
@@ -106,86 +124,95 @@ class MockSkillsLikeProvider(Provider):
                 tools_call_name=None,
                 tools_call_ids=None,
                 tools_call_args=None,
-                usage=TokenUsage(output=5)
+                usage=TokenUsage(output=5),
             )
-        else:
-            return LLMResponse(
-                role="assistant",
-                completion_text="Wait, I changed my mind.",
-                tools_call_name=[],
-                tools_call_ids=[],
-                tools_call_args=[],
-                usage=TokenUsage(output=5)
-            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text="Wait, I changed my mind.",
+            tools_call_name=[],
+            tools_call_ids=[],
+            tools_call_args=[],
+            usage=TokenUsage(output=5),
+        )
 
     async def text_chat_stream(self, **kwargs):
         yield await self.text_chat(**kwargs)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fail_with_none", [True, False])
 async def test_skills_like_empty_requery_fix(fail_with_none):
     """
-    测试在 skills_like 模式下，如果二次参数补全请求返回空（[] 或 None），
-    系统是否能正确处理而不产生非法的空 tool_calls 列表，
-    并且最终保留的 tool_calls 对应第一次调用而没有被空结果覆盖。
+    Verify that an empty second parameter re-query ([] or None) in
+    skills_like mode never produces an illegal empty tool_calls list and
+    still preserves the original tool call from the first response.
     """
     provider = MockSkillsLikeProvider(fail_with_none=fail_with_none)
-    
-    # 准备工具
+
+    # Prepare a single callable tool.
     tool = FunctionTool(
         name="test_tool",
         description="A test tool",
         parameters={"type": "object", "properties": {"p": {"type": "string"}}},
-        handler=AsyncMock()
+        handler=AsyncMock(),
     )
     tool_set = ToolSet(tools=[tool])
-    
-    # 准备 Runner
+
+    # Prepare the runner and a minimal wrapped context.
     runner = ToolLoopAgentRunner()
     request = ProviderRequest(prompt="Use tool", func_tool=tool_set)
-    # 模拟 ContextWrapper
+
+    # Mock the wrapped execution context.
     mock_context = MagicMock()
     run_context = ContextWrapper(context=mock_context)
     hooks = BaseAgentRunHooks()
-    
+
     await runner.reset(
         provider=provider,
         request=request,
         run_context=run_context,
         tool_executor=MagicMock(),
         agent_hooks=hooks,
-        tool_schema_mode="skills_like"
+        tool_schema_mode="skills_like",
     )
-    
-    # 执行一步
+
+    # Execute one runner step.
     async for _ in runner.step():
         pass
-    
-    # 确认 Provider 被调用了两次，以证明重试（re-query）路径生效
-    assert provider.call_count == 2, "Provider should be called twice to exercise the re-query path"
-    
-    # 验证逻辑层修复：
-    # 虽然 Provider 第二次返回了空，但 runner 应该保留或安全处理第一次的结果
+
+    # Confirm the provider was called twice so the re-query path ran.
+    assert provider.call_count == 2, (
+        "Provider should be called twice to exercise the re-query path"
+    )
+
+    # Even when the second response is empty, the runner should keep the
+    # original tool-calling result instead of recording an empty tool_calls list.
     assistant_msgs = [m for m in runner.run_context.messages if m.role == "assistant"]
-    assert assistant_msgs, "应至少有一条 assistant 消息"
-    
-    # 所有 assistant 消息要么没有 tool_calls 字段，要么为非空列表
+    assert assistant_msgs, "Expected at least one assistant message"
+
+    # Every assistant message should either omit tool_calls or keep them non-empty.
     for msg in assistant_msgs:
         if hasattr(msg, "tool_calls") and msg.tool_calls is not None:
-            assert len(msg.tool_calls) > 0, f"Assistant message has illegal empty tool_calls list!"
-            
-    # 最后一条 assistant 消息应保留有效的 tool_calls，且为第一次调用的工具
+            assert len(msg.tool_calls) > 0, (
+                "Assistant message has an illegal empty tool_calls list"
+            )
+
+    # The last assistant message should still carry the original tool call.
     final_assistant = assistant_msgs[-1]
-    assert final_assistant.tool_calls, "最终 assistant 消息必须包含有效的 tool_calls"
-    
-    # 检查第一个 tool call 的内容是否符合预期（来自第一轮响应）
+    assert final_assistant.tool_calls, (
+        "The final assistant message must keep a valid tool_calls payload"
+    )
+
+    # Verify that the retained tool call is the original first-round result.
     tc = final_assistant.tool_calls[0]
     if isinstance(tc, dict):
         assert tc["function"]["name"] == "test_tool"
         assert tc["id"] == "call_1"
     else:
-        # ToolCall object
         assert tc.function.name == "test_tool"
         assert tc.id == "call_1"
 
-    print(f"TEST PASSED (fail_with_none={fail_with_none}): Verified that no empty tool_calls list was generated and first call was retained.")
+    print(
+        f"TEST PASSED (fail_with_none={fail_with_none}): Verified that no empty tool_calls list was generated and the first tool call was retained."
+    )
