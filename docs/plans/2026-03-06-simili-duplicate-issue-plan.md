@@ -43,7 +43,7 @@ Recommended rollout order:
 1. Let `simili-triage.yml` run on new issue activity.
 2. Trigger `simili-auto-close.yml` manually with `dry_run=true`.
 3. Review the dry-run output for skipped and closable issues.
-4. Enable the scheduled auto-close behavior once the results look correct.
+4. Set repository variable `SIMILI_AUTO_CLOSE_ENABLED=true` once the results look correct.
 
 ## Operations and rollback
 
@@ -55,6 +55,6 @@ gh workflow run simili-auto-close.yml -f dry_run=true
 
 Temporary rollback options:
 
-- Disable the scheduled trigger in `simili-auto-close.yml`.
+- Set repository variable `SIMILI_AUTO_CLOSE_ENABLED=false`.
 - Add the `no-simili` label to any issue that should never be triaged by Simili.
 - If needed, disable `simili-triage.yml` entirely until Qdrant or model credentials are fixed.

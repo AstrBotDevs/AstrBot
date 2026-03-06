@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   auto-close:
+    if: github.event_name == 'workflow_dispatch' || vars.SIMILI_AUTO_CLOSE_ENABLED == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -54,25 +55,34 @@ jobs:
                   throw error;
                 }
 
-                await github.rest.issues.createLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ...label,
-                });
+                try {
+                  await github.rest.issues.createLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ...label,
+                  });
+                } catch (createError) {
+                  if (createError.status !== 422) {
+                    throw createError;
+                  }
+                }
               }
             }
 
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Simili CLI extension
-        run: gh extension install similigh/simili-bot || gh extension upgrade similigh/simili-bot
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build Simili CLI
+        run: go build -o simili-cli ./cmd/simili/main.go
 
       - name: Run Simili auto-close
+        shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -94,7 +104,7 @@ jobs:
             fi
           fi
 
-          gh simili auto-close \
+          ./simili-cli auto-close \
             --repo "${{ github.repository }}" \
             --config .github/simili.yaml \
             $DRY_RUN_FLAG \
