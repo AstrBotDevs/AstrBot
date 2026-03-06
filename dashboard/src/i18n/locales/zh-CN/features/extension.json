@@ -12,7 +12,7 @@
     "installedAstrBotPlugins": "已安装的 AstrBot 插件"
   },
   "failedPlugins": {
-    "title": "加载失败插件（{count}）",
+    "title": "加载失败插件({count})",
     "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
     "columns": {
       "plugin": "插件",
@@ -51,6 +51,11 @@
     "updateAll": "更新全部插件",
     "sharePlugin": "分享插件",
     "confirmShare": "确认分享",
+    "confirmShareWithCount": "确认分享（{count}）",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "select": "选择",
+    "deselect": "取消选择",
     "importPlugin": "导入插件",
     "deleteSource": "删除源",
     "reshuffle": "随机一发"
@@ -160,6 +165,7 @@
       "title": "安装插件",
       "fromFile": "从文件安装",
       "fromUrl": "从链接安装",
+      "fromShareCode": "从分享码导入",
       "supportPlatformsCount": "支持 {count} 个平台"
     },
     "danger_warning": {
@@ -210,13 +216,23 @@
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
-    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
+    "fillShareCode": "请粘贴分享码",
+    "invalidShareCode": "分享码格式无效",
+    "noRepoInShareCode": "分享码中没有仓库链接",
+    "shareImportSuccess": "成功导入 {count} 个插件",
+    "shareImportPartial": "已导入 {success} 个插件，失败 {failed} 个",
+    "noShareableRepos": "选中的插件中没有可分享的仓库链接",
+    "shareCodeCopied": "分享码已复制到剪贴板",
+    "shareCodeCopyFailed": "复制分享码失败，已生成内容："
   },
   "upload": {
     "fromFile": "从文件安装",
     "fromUrl": "从链接安装",
     "selectFile": "选择文件",
-    "enterUrl": "输入插件仓库链接"
+    "enterUrl": "输入插件仓库链接",
+    "enterShareCode": "粘贴分享码",
+    "shareCodePlaceholder": "{\"repos\":[\"https://github.com/example/repo\"]}"
   },
   "skills": {
     "modeLocal": "本地 Skills",
@@ -314,6 +330,9 @@
     "pairs": "对指令冲突",
     "goToManage": "前往处理",
     "later": "稍后处理"
+  },
+  "share": {
+    "selectedCount": "已选择 {count} 个插件"
   },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"

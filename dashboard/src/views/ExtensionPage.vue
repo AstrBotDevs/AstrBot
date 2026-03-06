@@ -74,6 +74,7 @@ const {
   dialog,
   upload_file,
   uploadTab,
+  shareCodeInput,
   showPluginFullName,
   marketSearch,
   debouncedMarketSearch,
@@ -142,6 +143,7 @@ const {
   continueInstallIgnoringVersionWarning,
   cancelInstallOnVersionWarning,
   newExtension,
+  installFromShareCode,
   normalizePlatformList,
   getPlatformDisplayList,
   resolveSelectedInstallPlugin,
@@ -556,6 +558,7 @@ const {
         <v-tabs v-model="uploadTab" color="primary">
           <v-tab value="file">{{ tm("dialogs.install.fromFile") }}</v-tab>
           <v-tab value="url">{{ tm("dialogs.install.fromUrl") }}</v-tab>
+          <v-tab value="shareCode">{{ tm("dialogs.install.fromShareCode") }}</v-tab>
         </v-tabs>
 
         <v-window v-model="uploadTab" class="mt-4">
@@ -658,6 +661,20 @@ const {
               <ProxySelector></ProxySelector>
             </div>
           </v-window-item>
+
+          <v-window-item value="shareCode">
+            <div class="pa-4">
+              <v-textarea
+                v-model="shareCodeInput"
+                :label="tm('upload.enterShareCode')"
+                variant="outlined"
+                auto-grow
+                rows="6"
+                class="rounded-lg"
+                :placeholder="tm('upload.shareCodePlaceholder')"
+              ></v-textarea>
+            </div>
+          </v-window-item>
         </v-window>
       </div>
 
@@ -666,9 +683,11 @@ const {
         <v-btn color="grey" variant="text" @click="dialog = false">{{
           tm("buttons.cancel")
         }}</v-btn>
-        <v-btn color="primary" variant="text" @click="newExtension">{{
-          tm("buttons.install")
-        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="text"
+          @click="uploadTab === 'shareCode' ? installFromShareCode() : newExtension()"
+        >{{ tm("buttons.install") }}</v-btn>
       </div>
     </div>
   </v-dialog>

@@ -51,6 +51,11 @@
     "updateAll": "Update All",
     "sharePlugin": "Share Plugin",
     "confirmShare": "Confirm Share",
+    "confirmShareWithCount": "Confirm Share ({count})",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "select": "Select",
+    "deselect": "Deselect",
     "importPlugin": "Import Plugin",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
@@ -160,6 +165,7 @@
       "title": "Install Extension",
       "fromFile": "Install from File",
       "fromUrl": "Install from URL",
+      "fromShareCode": "Import from Share Code",
       "supportPlatformsCount": "Supports {count} Platforms"
     },
     "danger_warning": {
@@ -210,13 +216,23 @@
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "fillShareCode": "Please paste the share code",
+    "invalidShareCode": "Invalid share code format",
+    "noRepoInShareCode": "No repository links found in share code",
+    "shareImportSuccess": "Successfully imported {count} plugins",
+    "shareImportPartial": "Imported {success} plugins, {failed} failed",
+    "noShareableRepos": "No shareable repository links found in selected plugins",
+    "shareCodeCopied": "Share code copied to clipboard",
+    "shareCodeCopyFailed": "Failed to copy share code. Generated content:"
   },
   "upload": {
     "fromFile": "Install from File",
     "fromUrl": "Install from URL",
     "selectFile": "Select File",
-    "enterUrl": "Enter extension repository URL"
+    "enterUrl": "Enter extension repository URL",
+    "enterShareCode": "Paste share code",
+    "shareCodePlaceholder": "{\"repos\":[\"https://github.com/example/repo\"]}"
   },
   "skills": {
     "modeLocal": "Local Skills",
@@ -314,6 +330,9 @@
     "pairs": "command conflicts",
     "goToManage": "Go to Manage",
     "later": "Later"
+  },
+  "share": {
+    "selectedCount": "Selected {count} plugins"
   },
   "pluginChangelog": {
     "menuTitle": "View Changelog"

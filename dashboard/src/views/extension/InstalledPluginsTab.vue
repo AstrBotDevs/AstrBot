@@ -97,7 +97,14 @@ const {
   paginatedPlugins,
   updatableExtensions,
   isShareMode,
+  selectedSharePluginCount,
   toggleShareMode,
+  cancelShareMode,
+  confirmShareSelection,
+  toggleShareSelectAll,
+  areAllSharePluginsSelected,
+  toggleSharePluginSelection,
+  isSharePluginSelected,
   toggleShowReserved,
   toast,
   resetLoadingDialog,
@@ -212,20 +219,63 @@ const {
                   {{ tm("buttons.updateAll") }}
                 </v-btn>
 
-                <v-btn class="ml-2" variant="tonal" @click="toggleShareMode">
+                <v-btn
+                  class="ml-2"
+                  variant="tonal"
+                  color="primary"
+                  @click="toggleShareMode"
+                >
                   <v-icon>mdi-share-variant</v-icon>
-                  {{
-                    isShareMode
-                      ? tm("buttons.confirmShare")
-                      : tm("buttons.sharePlugin")
-                  }}
+                  {{ tm("buttons.sharePlugin") }}
                 </v-btn>
 
-                <v-btn class="ml-2" variant="tonal">
-                  <v-icon>mdi-file-import</v-icon>
-                  {{ tm("buttons.importPlugin") }}
-                </v-btn>
+              </v-col>
+            </v-row>
 
+            <v-row v-if="isShareMode" class="mb-4">
+              <v-col cols="12">
+                <v-card class="rounded-lg" variant="tonal" color="primary">
+                  <v-card-text class="d-flex align-center justify-space-between flex-wrap ga-2">
+                    <div class="text-body-1 font-weight-medium">
+                      {{ tm("share.selectedCount", { count: selectedSharePluginCount }) }}
+                    </div>
+                    <div class="d-flex align-center ga-2">
+                      <v-btn
+                        variant="outlined"
+                        @click="
+                          toggleShareSelectAll(
+                            filteredPlugins.map((plugin) => plugin.name),
+                          )
+                        "
+                      >
+                        {{
+                          areAllSharePluginsSelected(
+                            filteredPlugins.map((plugin) => plugin.name),
+                          )
+                            ? tm('buttons.deselectAll')
+                            : tm('buttons.selectAll')
+                        }}
+                      </v-btn>
+                      <v-btn variant="outlined" @click="cancelShareMode">
+                        {{ tm("buttons.cancel") }}
+                      </v-btn>
+                      <v-btn
+                        color="primary"
+                        variant="flat"
+                        :disabled="selectedSharePluginCount === 0"
+                        @click="confirmShareSelection"
+                      >
+                        {{
+                          selectedSharePluginCount > 0
+                            ? tm("buttons.confirmShareWithCount", {
+                                count: selectedSharePluginCount,
+                              })
+                            : tm("buttons.confirmShare")
+                        }}
+                      </v-btn>
+                    </div>
+                  </v-card-text>
+                </v-card>
               </v-col>
             </v-row>
 
@@ -621,8 +671,10 @@ const {
                     <ExtensionCard
                       :extension="extension"
                       :share-mode="isShareMode"
+                      :selected="isSharePluginSelected(extension.name)"
                       class="rounded-lg"
                       style="background-color: rgb(var(--v-theme-mcpCardBg))"
+                      @select="toggleSharePluginSelection(extension.name)"
                       @configure="openExtensionConfig(extension.name)"
                       @uninstall="
                         (ext, options) => uninstallExtension(ext.name, options)

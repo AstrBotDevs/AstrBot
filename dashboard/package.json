@@ -27,6 +27,7 @@
     "js-md5": "^0.8.3",
     "katex": "^0.16.27",
     "lodash": "4.17.21",
+    "lz-string": "^1.5.0",
     "markdown-it": "^14.1.0",
     "markstream-vue": "^0.0.6",
     "mermaid": "^11.12.2",

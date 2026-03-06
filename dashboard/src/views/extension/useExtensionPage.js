@@ -1,4 +1,8 @@
 import axios from "axios";
+import {
+  compressToEncodedURIComponent,
+  decompressFromEncodedURIComponent,
+} from "lz-string";
 import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
@@ -7,6 +11,8 @@ import { resolveErrorMessage } from "@/utils/errorUtils";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
+
+const SHARE_CODE_LZ_PREFIX = "astrbot-share:";
 
 const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
   const showRandomPlugins = ref(true);
@@ -127,9 +133,122 @@ export const useExtensionPage = () => {
   };
   const showReserved = ref(getInitialShowReserved());
   const isShareMode = ref(false);
-  const toggleShareMode = () => {
-    isShareMode.value = !isShareMode.value;
+  const selectedSharePluginNames = ref(new Set());
+  const cancelShareMode = () => {
+    isShareMode.value = false;
+    selectedSharePluginNames.value = new Set();
   };
+  const toggleShareMode = () => {
+    if (isShareMode.value) {
+      cancelShareMode();
+      return;
+    }
+    isShareMode.value = true;
+    selectedSharePluginNames.value = new Set();
+  };
+  const encodeShareCode = async (payload) => {
+    const rawJson = JSON.stringify(payload);
+    const compressed = compressToEncodedURIComponent(rawJson);
+    if (!compressed) {
+      return rawJson;
+    }
+    return `${SHARE_CODE_LZ_PREFIX}${compressed}`;
+  };
+  const decodeShareCode = async (rawCode) => {
+    if (rawCode.startsWith(SHARE_CODE_LZ_PREFIX)) {
+      const encodedPart = rawCode.slice(SHARE_CODE_LZ_PREFIX.length);
+      const decompressed = decompressFromEncodedURIComponent(encodedPart);
+      if (!decompressed) {
+        throw new Error("Invalid lz share code");
+      }
+      return decompressed;
+    }
+    return rawCode;
+  };
+  const confirmShareSelection = async () => {
+    const data = Array.isArray(extension_data?.data) ? extension_data.data : [];
+    const selectedNames = selectedSharePluginNames.value;
+    const repos = data
+      .filter((extension) => selectedNames.has(extension.name))
+      .map((extension) => (extension.repo ?? "").trim())
+      .filter((repo) => repo.length > 0);
+    const uniqueRepos = [...new Set(repos)].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+
+    if (uniqueRepos.length === 0) {
+      toast(tm("messages.noShareableRepos"), "warning");
+      cancelShareMode();
+      return;
+    }
+
+    const shareCode = await encodeShareCode({
+      repos: uniqueRepos,
+    });
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(shareCode);
+      toast(tm("messages.shareCodeCopied"), "success");
+    } catch (error) {
+      toast(
+        `${tm("messages.shareCodeCopyFailed")} ${shareCode}`,
+        "warning",
+      );
+      console.error("Failed to copy share code:", error);
+    } finally {
+      cancelShareMode();
+    }
+  };
+  const toggleSharePluginSelection = (pluginName) => {
+    if (!isShareMode.value || !pluginName) {
+      return;
+    }
+    const nextSelected = new Set(selectedSharePluginNames.value);
+    if (nextSelected.has(pluginName)) {
+      nextSelected.delete(pluginName);
+    } else {
+      nextSelected.add(pluginName);
+    }
+    selectedSharePluginNames.value = nextSelected;
+  };
+  const toggleShareSelectAll = (pluginNames = []) => {
+    if (!isShareMode.value) {
+      return;
+    }
+    const names = pluginNames.filter((name) => typeof name === "string" && name.length > 0);
+    if (names.length === 0) {
+      return;
+    }
+    const allSelected = names.every((name) => selectedSharePluginNames.value.has(name));
+    if (allSelected) {
+      const nextSelected = new Set(selectedSharePluginNames.value);
+      names.forEach((name) => nextSelected.delete(name));
+      selectedSharePluginNames.value = nextSelected;
+      return;
+    }
+    const nextSelected = new Set(selectedSharePluginNames.value);
+    names.forEach((name) => nextSelected.add(name));
+    selectedSharePluginNames.value = nextSelected;
+  };
+  const areAllSharePluginsSelected = (pluginNames = []) => {
+    const names = pluginNames.filter((name) => typeof name === "string" && name.length > 0);
+    if (names.length === 0) {
+      return false;
+    }
+    return names.every((name) => selectedSharePluginNames.value.has(name));
+  };
+  const isSharePluginSelected = (pluginName) => {
+    if (!pluginName) {
+      return false;
+    }
+    return selectedSharePluginNames.value.has(pluginName);
+  };
+  const selectedSharePluginCount = computed(
+    () => selectedSharePluginNames.value.size,
+  );
   const snack_message = ref("");
   const snack_show = ref(false);
   const snack_success = ref("success");
@@ -226,6 +345,7 @@ export const useExtensionPage = () => {
   const dialog = ref(false);
   const upload_file = ref(null);
   const uploadTab = ref("file");
+  const shareCodeInput = ref("");
   const showPluginFullName = ref(false);
   const marketSearch = ref("");
   const debouncedMarketSearch = ref("");
@@ -1245,6 +1365,102 @@ export const useExtensionPage = () => {
     });
   };
 
+  const parseShareCodeRepos = async (rawCode) => {
+    const decodedContent = await decodeShareCode(rawCode);
+    const parsed = JSON.parse(decodedContent);
+    const repos = Array.isArray(parsed?.repos) ? parsed.repos : [];
+    return repos
+      .filter((repo) => typeof repo === "string")
+      .map((repo) => repo.trim())
+      .filter((repo) => repo.length > 0);
+  };
+
+  const installFromShareCode = async (ignoreVersionCheck = false) => {
+    const rawCode = (shareCodeInput.value ?? "").trim();
+    if (!rawCode) {
+      toast(tm("messages.fillShareCode"), "error");
+      return;
+    }
+
+    let repos = [];
+    try {
+      repos = await parseShareCodeRepos(rawCode);
+    } catch (error) {
+      toast(tm("messages.invalidShareCode"), "error");
+      return;
+    }
+
+    const uniqueRepos = [...new Set(repos)];
+    if (uniqueRepos.length === 0) {
+      toast(tm("messages.noRepoInShareCode"), "error");
+      return;
+    }
+
+    loading_.value = true;
+    loadingDialog.title = tm("status.loading");
+    loadingDialog.show = true;
+
+    const failedItems = [];
+    let successCount = 0;
+    const previousExtensionUrl = extension_url.value;
+
+    try {
+      for (const repoUrl of uniqueRepos) {
+        extension_url.value = repoUrl;
+        const res = await performInstallRequest({
+          source: "url",
+          ignoreVersionCheck,
+        });
+        const resData = res.data || {};
+        if (resData.status === "ok") {
+          successCount += 1;
+          continue;
+        }
+        failedItems.push({
+          url: repoUrl,
+          message: resData.message || tm("messages.installFailed"),
+        });
+      }
+    } catch (err) {
+      failedItems.push({
+        url: extension_url.value || tm("status.unknown"),
+        message: resolveErrorMessage(err, tm("messages.installFailed")),
+      });
+    } finally {
+      extension_url.value = previousExtensionUrl;
+      loading_.value = false;
+    }
+
+    if (successCount > 0) {
+      await getExtensions();
+      await checkAndPromptConflicts();
+    }
+
+    const failedCount = failedItems.length;
+    if (failedCount === 0) {
+      onLoadingDialogResult(
+        1,
+        tm("messages.shareImportSuccess", { count: successCount }),
+      );
+      dialog.value = false;
+      shareCodeInput.value = "";
+      return;
+    }
+
+    const failureSummary = failedItems
+      .map((item) => `${item.url}: ${item.message}`)
+      .join("\n");
+    onLoadingDialogResult(
+      2,
+      tm("messages.shareImportPartial", {
+        success: successCount,
+        failed: failedCount,
+      }),
+      -1,
+    );
+    toast(failureSummary, "warning");
+  };
+
   const finalizeSuccessfulInstall = async (resData, source) => {
     if (source === "file") {
       upload_file.value = null;
@@ -1471,6 +1687,11 @@ export const useExtensionPage = () => {
       await checkInstallCompatibility();
     },
   );
+
+  const openShareCodeImportDialog = () => {
+    dialog.value = true;
+    uploadTab.value = "shareCode";
+  };
   
   watch(
     () => route.fullPath,
@@ -1556,6 +1777,7 @@ export const useExtensionPage = () => {
     dialog,
     upload_file,
     uploadTab,
+    shareCodeInput,
     showPluginFullName,
     marketSearch,
     debouncedMarketSearch,
@@ -1585,7 +1807,14 @@ export const useExtensionPage = () => {
     paginatedPlugins,
     updatableExtensions,
     isShareMode,
+    selectedSharePluginCount,
     toggleShareMode,
+    cancelShareMode,
+    confirmShareSelection,
+    toggleShareSelectAll,
+    areAllSharePluginsSelected,
+    toggleSharePluginSelection,
+    isSharePluginSelected,
     toggleShowReserved,
     toast,
     resetLoadingDialog,
@@ -1633,6 +1862,8 @@ export const useExtensionPage = () => {
     continueInstallIgnoringVersionWarning,
     cancelInstallOnVersionWarning,
     newExtension,
+    installFromShareCode,
+    openShareCodeImportDialog,
     normalizePlatformList,
     getPlatformDisplayList,
     resolveSelectedInstallPlugin,

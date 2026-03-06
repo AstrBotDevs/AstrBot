@@ -25,6 +25,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selected: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -38,6 +42,7 @@ const emit = defineEmits([
   "view-handlers",
   "view-readme",
   "view-changelog",
+  "select",
 ]);
 
 const reveal = ref(false);
@@ -130,27 +135,56 @@ const viewChangelog = () => {
   emit("view-changelog", props.extension);
 };
 
+const handleSwitchToggle = () => {
+  if (props.shareMode) {
+    emit("select", props.extension);
+    return;
+  }
+  toggleActivation();
+};
+
+const handleCardClick = () => {
+  if (!props.shareMode) {
+    return;
+  }
+  const selectedText = window.getSelection?.()?.toString() || "";
+  if (selectedText.trim().length > 0) {
+    return;
+  }
+  emit("select", props.extension);
+};
+
 </script>
 
 <template>
-  <v-card
-    class="mx-auto d-flex flex-column h-100"
-    elevation="0"
-    height="100%"
-    :style="{
-      position: 'relative',
-      backgroundColor:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? marketMode
-            ? '#f8f0dd'
-            : '#ffffff'
-          : '#282833',
-      color:
-        useCustomizerStore().uiTheme === 'PurpleTheme'
-          ? '#000000dd'
-          : '#ffffff',
+  <div
+    :class="{
+      'share-mode-card': shareMode,
     }"
+    @click="handleCardClick"
   >
+    <v-card
+      class="mx-auto d-flex flex-column h-100"
+      :class="{
+        'share-mode-selected': shareMode && selected,
+        'share-mode-unselected': shareMode && !selected,
+      }"
+      elevation="0"
+      height="100%"
+      :style="{
+        position: 'relative',
+        backgroundColor:
+          useCustomizerStore().uiTheme === 'PurpleTheme'
+            ? marketMode
+              ? '#f8f0dd'
+              : '#ffffff'
+            : '#282833',
+        color:
+          useCustomizerStore().uiTheme === 'PurpleTheme'
+            ? '#000000dd'
+            : '#ffffff',
+      }"
+    >
     <v-card-text
       style="
         padding: 16px;
@@ -209,17 +243,23 @@ const viewChangelog = () => {
                 <template v-slot:activator="{ props: tooltipProps }">
                   <div v-bind="tooltipProps" class="extension-switch-wrap" @click.stop>
                     <v-switch
-                      :model-value="extension.activated"
-                      color="success"
+                      :model-value="shareMode ? selected : extension.activated"
+                      :color="shareMode ? 'primary' : 'success'"
                       density="compact"
                       hide-details
                       inset
-                      @update:model-value="toggleActivation"
+                      @update:model-value="handleSwitchToggle"
                     ></v-switch>
                   </div>
                 </template>
                 <span>{{
-                  extension.activated ? tm("buttons.disable") : tm("buttons.enable")
+                  shareMode
+                    ? selected
+                      ? tm("buttons.deselect")
+                      : tm("buttons.select")
+                    : extension.activated
+                      ? tm("buttons.disable")
+                      : tm("buttons.enable")
                 }}</span>
               </v-tooltip>
             </template>
@@ -341,97 +381,99 @@ const viewChangelog = () => {
       </div>
     </v-card-text>
 
-    <v-card-actions class="extension-actions" @click.stop>
-      <template v-if="!marketMode && !shareMode">
-        <v-spacer></v-spacer>
-        <v-tooltip location="top" :text="tm('buttons.viewDocs')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-book-open-page-variant"
-              size="small"
-              variant="tonal"
-              color="info"
-              @click="viewReadme"
-            ></v-btn>
-          </template>
-        </v-tooltip>
+      <v-card-actions class="extension-actions" @click.stop>
+        <template v-if="!marketMode && !shareMode">
+          <v-spacer></v-spacer>
+          <v-tooltip location="top" :text="tm('buttons.viewDocs')">
+            <template v-slot:activator="{ props: actionProps }">
+              <v-btn
+                v-bind="actionProps"
+                icon="mdi-book-open-page-variant"
+                size="small"
+                variant="tonal"
+                color="info"
+                @click="viewReadme"
+              ></v-btn>
+            </template>
+          </v-tooltip>
 
-        <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-cog"
-              size="small"
-              variant="tonal"
-              color="primary"
-              @click="configure"
-            ></v-btn>
-          </template>
-        </v-tooltip>
+          <v-tooltip location="top" :text="tm('card.actions.pluginConfig')">
+            <template v-slot:activator="{ props: actionProps }">
+              <v-btn
+                v-bind="actionProps"
+                icon="mdi-cog"
+                size="small"
+                variant="tonal"
+                color="primary"
+                @click="configure"
+              ></v-btn>
+            </template>
+          </v-tooltip>
 
-        <v-tooltip v-if="extension?.repo" location="top" :text="tm('buttons.viewRepo')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-github"
-              size="small"
-              variant="tonal"
-              color="secondary"
-              :href="extension.repo"
-              target="_blank"
-            ></v-btn>
-          </template>
-        </v-tooltip>
+          <v-tooltip v-if="extension?.repo" location="top" :text="tm('buttons.viewRepo')">
+            <template v-slot:activator="{ props: actionProps }">
+              <v-btn
+                v-bind="actionProps"
+                icon="mdi-github"
+                size="small"
+                variant="tonal"
+                color="secondary"
+                :href="extension.repo"
+                target="_blank"
+              ></v-btn>
+            </template>
+          </v-tooltip>
 
-        <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
-          <template v-slot:activator="{ props: actionProps }">
-            <v-btn
-              v-bind="actionProps"
-              icon="mdi-refresh"
-              size="small"
-              variant="tonal"
-              color="primary"
-              @click="reloadExtension"
-            ></v-btn>
-          </template>
-        </v-tooltip>
+          <v-tooltip location="top" :text="tm('card.actions.reloadPlugin')">
+            <template v-slot:activator="{ props: actionProps }">
+              <v-btn
+                v-bind="actionProps"
+                icon="mdi-refresh"
+                size="small"
+                variant="tonal"
+                color="primary"
+                @click="reloadExtension"
+              ></v-btn>
+            </template>
+          </v-tooltip>
 
-        <StyledMenu location="top end" offset="8">
-          <template #activator="{ props: menuProps }">
-            <v-btn
-              v-bind="menuProps"
-              icon="mdi-dots-horizontal"
-              size="small"
-              variant="tonal"
-              color="secondary"
-            ></v-btn>
-          </template>
+          <StyledMenu location="top end" offset="8">
+            <template #activator="{ props: menuProps }">
+              <v-btn
+                v-bind="menuProps"
+                icon="mdi-dots-horizontal"
+                size="small"
+                variant="tonal"
+                color="secondary"
+              ></v-btn>
+            </template>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click="viewHandlers">
-            <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
-          </v-list-item>
+            <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click="viewHandlers">
+              <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
+            </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
-            <v-list-item-title>{{
-              extension.has_update
-                ? tm("card.actions.updateTo") + " " + extension.online_version
-                : tm("card.actions.reinstall")
-            }}</v-list-item-title>
-          </v-list-item>
+            <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click="updateExtension">
+              <v-list-item-title>{{
+                extension.has_update
+                  ? tm("card.actions.updateTo") + " " + extension.online_version
+                  : tm("card.actions.reinstall")
+              }}</v-list-item-title>
+            </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
-            <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
-          </v-list-item>
-        </StyledMenu>
-      </template>
-      <template v-else-if="marketMode">
-        <v-btn color="primary" size="small" @click="viewReadme">
-          {{ tm("buttons.viewDocs") }}
-        </v-btn>
-      </template>
-    </v-card-actions>
-  </v-card>
+            <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click="uninstallExtension">
+              <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
+            </v-list-item>
+          </StyledMenu>
+        </template>
+        <template v-else-if="marketMode">
+          <v-btn color="primary" size="small" @click="viewReadme">
+            {{ tm("buttons.viewDocs") }}
+          </v-btn>
+        </template>
+      </v-card-actions>
+
+    </v-card>
+  </div>
 
   <!-- 卸载确认对话框 -->
   <UninstallConfirmDialog
@@ -530,4 +572,30 @@ const viewChangelog = () => {
   gap: 8px;
   justify-content: flex-end;
 }
+
+.share-mode-card {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.share-mode-card * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.share-mode-unselected {
+  opacity: 0.45;
+  filter: grayscale(0.25);
+}
+
+.share-mode-selected {
+  opacity: 1;
+  transform: none;
+  box-shadow:
+    0 0 0 2px rgba(var(--v-theme-success), 0.5),
+    inset 0 0 0 999px rgba(var(--v-theme-success), 0.03);
+}
+
 </style>
