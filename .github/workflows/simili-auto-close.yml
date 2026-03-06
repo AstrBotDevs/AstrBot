@@ -89,6 +89,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           QDRANT_URL: ${{ secrets.QDRANT_URL }}
@@ -110,7 +111,7 @@ jobs:
           fi
 
           ./simili auto-close \
-            --repo "${{ github.repository }}" \
+            --repo "$GITHUB_REPO" \
             --config .github/simili.yaml \
             $DRY_RUN_FLAG \
             "${GRACE_ARGS[@]}"

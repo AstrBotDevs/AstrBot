@@ -42,6 +42,7 @@ jobs:
             }
 
       - name: Ensure Simili labels exist
+        if: steps.gate.outputs.eligible == 'true'
         uses: actions/github-script@v7
         with:
           script: |
