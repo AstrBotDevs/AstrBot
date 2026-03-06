@@ -24,9 +24,14 @@ from astrbot.core.star.context import Context
 def test_apply_extension_hub_tools_enabled() -> None:
     req = ProviderRequest(prompt="hi")
     req.func_tool = ToolSet()
-    cfg = {"provider_settings": {"extension_install": {"enable": True}}}
+    cfg = {"provider_settings": {"extension_install": {"enable": False}}}
 
-    _apply_extension_hub_tools(req, cfg)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "astrbot.core.astr_main_agent.sp.get",
+            lambda *args, **kwargs: [],
+        )
+        _apply_extension_hub_tools(req, cfg)
 
     names = req.func_tool.names()
     assert "astrbot_extension_search" in names
@@ -39,9 +44,16 @@ def test_apply_extension_hub_tools_enabled() -> None:
 def test_apply_extension_hub_tools_disabled() -> None:
     req = ProviderRequest(prompt="hi")
     req.func_tool = ToolSet()
-    cfg = {"provider_settings": {"extension_install": {"enable": False}}}
+    cfg = {"provider_settings": {}}
 
-    _apply_extension_hub_tools(req, cfg)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "astrbot.core.astr_main_agent.sp.get",
+            lambda *args, **kwargs: [
+                "astrbot.builtin_stars.builtin_extension_hub.main"
+            ],
+        )
+        _apply_extension_hub_tools(req, cfg)
 
     assert "astrbot_extension_search" not in req.func_tool.names()
 
@@ -49,11 +61,16 @@ def test_apply_extension_hub_tools_disabled() -> None:
 def test_apply_extension_hub_tools_disabled_with_provider_settings_only() -> None:
     req = ProviderRequest(prompt="hi")
     req.func_tool = ToolSet()
-    provider_settings = {"extension_install": {"enable": False}}
+    provider_settings = {"extension_install": {"enable": True}}
 
-    _apply_extension_hub_tools(req, provider_settings)
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "astrbot.core.astr_main_agent.sp.get",
+            lambda *args, **kwargs: [],
+        )
+        _apply_extension_hub_tools(req, provider_settings)
 
-    assert "astrbot_extension_search" not in req.func_tool.names()
+    assert "astrbot_extension_search" in req.func_tool.names()
 
 
 def test_extension_search_tool_exposes_optional_limit_for_bot_control() -> None:

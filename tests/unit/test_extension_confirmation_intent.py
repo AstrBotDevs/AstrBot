@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from astrbot.builtin_stars.builtin_commands.main import Main
+from astrbot.builtin_stars.builtin_extension_hub.main import Main
 
 
 class _FakeContext:

@@ -10,7 +10,7 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -86,6 +86,8 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+
+EXTENSION_HUB_PLUGIN_MODULE_PATH = "astrbot.builtin_stars.builtin_extension_hub.main"
 
 
 @dataclass(slots=True)
@@ -932,11 +934,13 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
 
 
 def _apply_extension_hub_tools(req: ProviderRequest, cfg: dict) -> None:
-    provider_settings = cfg
-    if "provider_settings" in cfg and isinstance(cfg["provider_settings"], dict):
-        provider_settings = cfg["provider_settings"]
-    install_cfg = provider_settings.get("extension_install", {})
-    if install_cfg.get("enable", True) is False:
+    inactivated_plugins = sp.get(
+        "inactivated_plugins",
+        [],
+        scope="global",
+        scope_id="global",
+    )
+    if EXTENSION_HUB_PLUGIN_MODULE_PATH in inactivated_plugins:
         return
     if req.func_tool is None:
         req.func_tool = ToolSet()

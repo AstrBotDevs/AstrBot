@@ -237,6 +237,19 @@ async def test_plugin_market_list_query_uses_backend_filter(
 
 
 @pytest.mark.asyncio
+async def test_builtin_extension_hub_is_listed_as_plugin(
+    app: Quart, authenticated_header: dict
+):
+    test_client = app.test_client()
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    plugins = data["data"]
+    assert any(plugin["name"] == "builtin_extension_hub" for plugin in plugins)
+
+
+@pytest.mark.asyncio
 async def test_commands_api(app: Quart, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()
