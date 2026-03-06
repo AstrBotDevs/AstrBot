@@ -20,7 +20,7 @@ from ..register import register_provider_adapter
 
 TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
-AZURE_TTS_SUBSCRIPTION_KEY_PATTERN = r"^[a-zA-Z0-9]{32,84}$"
+AZURE_TTS_SUBSCRIPTION_KEY_PATTERN = r"^(?:[a-zA-Z0-9]{32}|[a-zA-Z0-9]{84})$"
 
 
 class OTTSProvider:
