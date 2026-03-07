@@ -85,9 +85,6 @@ class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
 
-DEFAULT_TOOL_EXECUTOR_POLL_INTERVAL = 0.1
-
-
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -164,15 +161,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context = run_context
         self._aborted = False
         self._abort_signal = asyncio.Event()
-        self._tool_executor_poll_interval = max(
-            float(
-                kwargs.pop(
-                    "tool_executor_poll_interval",
-                    DEFAULT_TOOL_EXECUTOR_POLL_INTERVAL,
-                )
-            ),
-            0.01,
-        )
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
 
@@ -1005,54 +993,53 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=MessageChain(type="aborted")),
         )
 
-    async def _cancel_tool_iteration(
-        self,
-        executor: T.Any,
-        next_result_task: asyncio.Task[T.Any] | None,
-    ) -> None:
-        if next_result_task is not None and not next_result_task.done():
-            next_result_task.cancel()
-            with suppress(asyncio.CancelledError, StopAsyncIteration):
-                await next_result_task
-
-        close_executor = getattr(executor, "aclose", None)
-        if close_executor is not None:
-            with suppress(asyncio.CancelledError, RuntimeError, StopAsyncIteration):
-                await close_executor()
-
     async def _iter_tool_executor_results(
         self,
         executor: T.Any,
     ) -> T.AsyncGenerator[T.Any, None]:
-        poll_interval = self._tool_executor_poll_interval
-
         while True:
             if self._is_stop_requested():
-                await self._cancel_tool_iteration(executor, None)
+                close_executor = getattr(executor, "aclose", None)
+                if close_executor is not None:
+                    with suppress(
+                        asyncio.CancelledError, RuntimeError, StopAsyncIteration
+                    ):
+                        await close_executor()
                 raise _ToolExecutionInterrupted(
                     "Tool execution interrupted before reading the next tool result."
                 )
 
             next_result_task = asyncio.create_task(anext(executor))
+            abort_task = asyncio.create_task(self._abort_signal.wait())
             try:
-                while not next_result_task.done():
-                    if self._is_stop_requested():
-                        await self._cancel_tool_iteration(executor, next_result_task)
-                        raise _ToolExecutionInterrupted(
-                            "Tool execution interrupted by a stop request."
-                        )
+                done, _ = await asyncio.wait(
+                    {next_result_task, abort_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
 
-                    done, _ = await asyncio.wait(
-                        {next_result_task},
-                        timeout=poll_interval,
+                if abort_task in done:
+                    if not next_result_task.done():
+                        next_result_task.cancel()
+                        with suppress(asyncio.CancelledError, StopAsyncIteration):
+                            await next_result_task
+
+                    close_executor = getattr(executor, "aclose", None)
+                    if close_executor is not None:
+                        with suppress(
+                            asyncio.CancelledError, RuntimeError, StopAsyncIteration
+                        ):
+                            await close_executor()
+
+                    raise _ToolExecutionInterrupted(
+                        "Tool execution interrupted by a stop request."
                     )
-                    if done:
-                        break
 
                 try:
                     yield next_result_task.result()
                 except StopAsyncIteration:
                     return
             finally:
-                if self._is_stop_requested() and not next_result_task.done():
-                    await self._cancel_tool_iteration(executor, next_result_task)
+                if not abort_task.done():
+                    abort_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await abort_task
