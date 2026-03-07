@@ -26,6 +26,7 @@ Extension Hub 安装编排器模块
 - f3f79deb: 可配置搜索结果限制
 - ef0bc377: 增强 deny 工具和用户消息
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -74,6 +75,7 @@ class ExtensionCatalogService:
     聚合多个适配器，提供统一的搜索入口。支持按类型和提供者
     查找对应的适配器，并对搜索结果进行数量限制。
     """
+
     adapters: list[ExtensionAdapter]
     _adapter_map: dict[tuple[ExtensionKind, str], ExtensionAdapter] = field(
         init=False,
@@ -130,6 +132,7 @@ class ExtensionInstallOrchestrator:
         adapters: 已注册的扩展适配器列表
         search_result_limit: 默认搜索结果数量限制 (默认 6)
     """
+
     policy_engine: ExtensionPolicyEngine
     pending_service: PendingOperationService
     adapters: list[ExtensionAdapter] = field(default_factory=list)

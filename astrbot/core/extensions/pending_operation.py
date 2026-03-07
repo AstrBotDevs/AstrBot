@@ -17,6 +17,7 @@ pending -> running -> success/failed
        -> rejected
        -> expired (自动)
 """
+
 from __future__ import annotations
 
 import secrets
@@ -41,6 +42,7 @@ class PendingOperationService:
         db: 数据库实例
         token_ttl_seconds: 确认令牌有效期（默认 15 分钟）
     """
+
     db: BaseDatabase
     token_ttl_seconds: int = 900
 
@@ -210,15 +212,11 @@ class PendingOperationService:
 
     async def mark_running(self, operation_id: str) -> PendingOperation | None:
         """将操作状态标记为运行中"""
-        return await self.db.update_pending_operation(
-            operation_id, status="running"
-        )
+        return await self.db.update_pending_operation(operation_id, status="running")
 
     async def mark_success(self, operation_id: str) -> PendingOperation | None:
         """将操作状态标记为成功"""
-        return await self.db.update_pending_operation(
-            operation_id, status="success"
-        )
+        return await self.db.update_pending_operation(operation_id, status="success")
 
     async def mark_failed(
         self, operation_id: str, error: str = ""

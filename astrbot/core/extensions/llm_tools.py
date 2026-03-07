@@ -19,6 +19,7 @@ Extension Hub LLM 工具模块
 - e64503cf: 会话级别确认工作流
 - ef0bc377: 新增 deny 和 deny_all 工具
 """
+
 from __future__ import annotations
 
 import json
@@ -55,6 +56,7 @@ class ExtensionSearchTool(FunctionTool[AstrAgentContext]):
         provider: 可选的提供者过滤
         limit: 可选的结果数量限制，AI 可根据搜索广度选择
     """
+
     name: str = "astrbot_extension_search"
     description: str = (
         "Search extension candidates (plugin/skill/mcp) for on-demand capability "
@@ -149,6 +151,7 @@ class ExtensionInstallTool(FunctionTool[AstrAgentContext]):
     重要: 当状态为 PENDING 时，AI 不应向用户展示原始 operation_id，
     而应使用 candidate_name 和 candidate_description 展示友好信息。
     """
+
     name: str = "astrbot_extension_install"
     description: str = (
         "Install plugin/skill extensions with policy enforcement and confirmation flow. "
@@ -236,6 +239,7 @@ class ExtensionDenyTool(FunctionTool[AstrAgentContext]):
     - 提供 operation_id: 拒绝指定操作
     - 不提供 operation_id: 拒绝当前会话中的所有挂起操作
     """
+
     name: str = "astrbot_extension_deny"
     description: str = (
         "Reject a pending extension install request. This can reject a single "
@@ -295,6 +299,7 @@ class ExtensionDenyAllTool(FunctionTool[AstrAgentContext]):
             - "all": 全局所有挂起操作
         kind: 可选的扩展类型过滤
     """
+
     name: str = "astrbot_extension_deny_all"
     description: str = (
         "Reject multiple pending extension install requests. Use scope=conversation "

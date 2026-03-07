@@ -9,6 +9,7 @@ SSL 上下文构建工具
 
 注意: 若 certifi 加载失败，会回退到系统默认信任库。
 """
+
 import logging
 import ssl
 from typing import Any
