@@ -530,10 +530,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield await self._finalize_aborted_step(llm_resp)
                 return
 
-            if self._is_stop_requested():
-                yield await self._finalize_aborted_step(llm_resp)
-                return
-
             # 将结果添加到上下文中
             parts = []
             if llm_resp.reasoning_content or llm_resp.reasoning_signature:
@@ -649,10 +645,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
-            if self._is_stop_requested():
-                raise _ToolExecutionInterrupted(
-                    "Tool execution interrupted before the next tool started."
-                )
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
@@ -836,9 +828,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
-            except _ToolExecutionInterrupted:
-                raise
             except Exception as e:
+                if isinstance(e, _ToolExecutionInterrupted):
+                    raise
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
                     func_tool_id,
@@ -993,18 +985,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             data=AgentResponseData(chain=MessageChain(type="aborted")),
         )
 
+    async def _close_executor(self, executor: T.Any) -> None:
+        close_executor = getattr(executor, "aclose", None)
+        if close_executor is None:
+            return
+        with suppress(asyncio.CancelledError, RuntimeError, StopAsyncIteration):
+            await close_executor()
+
     async def _iter_tool_executor_results(
         self,
         executor: T.Any,
     ) -> T.AsyncGenerator[T.Any, None]:
         while True:
             if self._is_stop_requested():
-                close_executor = getattr(executor, "aclose", None)
-                if close_executor is not None:
-                    with suppress(
-                        asyncio.CancelledError, RuntimeError, StopAsyncIteration
-                    ):
-                        await close_executor()
+                await self._close_executor(executor)
                 raise _ToolExecutionInterrupted(
                     "Tool execution interrupted before reading the next tool result."
                 )
@@ -1023,12 +1017,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         with suppress(asyncio.CancelledError, StopAsyncIteration):
                             await next_result_task
 
-                    close_executor = getattr(executor, "aclose", None)
-                    if close_executor is not None:
-                        with suppress(
-                            asyncio.CancelledError, RuntimeError, StopAsyncIteration
-                        ):
-                            await close_executor()
+                    await self._close_executor(executor)
 
                     raise _ToolExecutionInterrupted(
                         "Tool execution interrupted by a stop request."
