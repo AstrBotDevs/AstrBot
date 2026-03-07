@@ -154,6 +154,7 @@ yay -S astrbot-git
 | **LINE** | 官方维护 |
 | **Satori** | 官方维护 |
 | **Misskey** | 官方维护 |
+| **微博私信** | 官方维护 |
 | **Whatsapp (将支持)** | 官方维护 |
 | [**Matrix**](https://github.com/stevessr/astrbot_plugin_matrix_adapter) | 社区维护 |
 | [**KOOK**](https://github.com/wuyan1003/astrbot_plugin_kook_adapter) | 社区维护 |
