@@ -85,6 +85,9 @@ class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
 
 
+DEFAULT_TOOL_EXECUTOR_POLL_INTERVAL = 0.1
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -162,6 +165,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._stop_requested = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
+        self._tool_executor_poll_interval = max(
+            float(
+                kwargs.pop(
+                    "tool_executor_poll_interval",
+                    DEFAULT_TOOL_EXECUTOR_POLL_INTERVAL,
+                )
+            ),
+            0.01,
+        )
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
 
@@ -528,10 +540,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             data=AgentResponseData(chain=chain),
                         )
             except _ToolExecutionInterrupted:
-                self.request_stop()
+                yield await self._finalize_aborted_step(llm_resp)
+                return
 
             if self._stop_requested:
-                yield await self._finalize_aborted_step()
+                yield await self._finalize_aborted_step(llm_resp)
                 return
 
             # 将结果添加到上下文中
@@ -1009,7 +1022,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         executor: T.Any,
     ) -> T.AsyncGenerator[T.Any, None]:
-        poll_interval = 0.1
+        poll_interval = self._tool_executor_poll_interval
 
         while True:
             if self._stop_requested:

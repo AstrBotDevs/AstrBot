@@ -132,21 +132,29 @@ class MockAbortableStreamProvider(MockProvider):
         )
 
 
-class MockHandoffProvider(MockProvider):
-    def __init__(self, handoff_tool_name: str):
+class MockToolCallProvider(MockProvider):
+    def __init__(self, tool_name: str, tool_args: dict[str, str] | None = None):
         super().__init__()
-        self.handoff_tool_name = handoff_tool_name
+        self.tool_name = tool_name
+        self.tool_args = tool_args or {}
+        self.abort_signal = None
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
+        self.abort_signal = kwargs.get("abort_signal")
         return LLMResponse(
             role="assistant",
             completion_text="",
-            tools_call_name=[self.handoff_tool_name],
-            tools_call_args=[{"input": "delegate this task"}],
-            tools_call_ids=["call_handoff"],
+            tools_call_name=[self.tool_name],
+            tools_call_args=[self.tool_args],
+            tools_call_ids=[f"call_{self.tool_name}"],
             usage=TokenUsage(input_other=10, output=5),
         )
+
+
+class MockHandoffProvider(MockToolCallProvider):
+    def __init__(self, handoff_tool_name: str):
+        super().__init__(handoff_tool_name, {"input": "delegate this task"})
 
 
 class MockHooks(BaseAgentRunHooks):
@@ -197,6 +205,21 @@ class BlockingSubagentContext:
         return {"provider_settings": {}}
 
     async def tool_loop_agent(self, **_kwargs):
+        self.started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+
+
+class BlockingToolState:
+    def __init__(self):
+        self.started = asyncio.Event()
+        self.cancelled = False
+
+    async def handler(self, event, query: str = ""):
+        del event, query
         self.started.set()
         try:
             await asyncio.Future()
@@ -538,16 +561,69 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
     step_iter = runner.step()
     first_resp = await step_iter.__anext__()
     assert first_resp.type == "tool_call"
+    assert provider.abort_signal is runner._abort_signal
+    assert provider.abort_signal is not None
 
     pending_resp = asyncio.create_task(step_iter.__anext__())
     await asyncio.wait_for(subagent_context.started.wait(), timeout=5)
 
     runner.request_stop()
+    assert provider.abort_signal.is_set() is True
 
     aborted_resp = await asyncio.wait_for(pending_resp, timeout=1)
     assert aborted_resp.type == "aborted"
     assert runner.was_aborted() is True
     assert subagent_context.cancelled is True
+
+    with pytest.raises(StopAsyncIteration):
+        await step_iter.__anext__()
+
+
+@pytest.mark.asyncio
+async def test_stop_interrupts_pending_regular_tool(mock_hooks):
+    tool_state = BlockingToolState()
+    event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
+    tool = FunctionTool(
+        name="long_tool",
+        description="A long-running test tool",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=tool_state.handler,
+    )
+    provider = MockToolCallProvider(tool.name, {"query": "slow"})
+    request = ProviderRequest(
+        prompt="run a slow tool",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=SimpleNamespace())
+        ),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    step_iter = runner.step()
+    first_resp = await step_iter.__anext__()
+    assert first_resp.type == "tool_call"
+    assert provider.abort_signal is runner._abort_signal
+    assert provider.abort_signal is not None
+
+    pending_resp = asyncio.create_task(step_iter.__anext__())
+    await asyncio.wait_for(tool_state.started.wait(), timeout=5)
+
+    runner.request_stop()
+    assert provider.abort_signal.is_set() is True
+
+    aborted_resp = await asyncio.wait_for(pending_resp, timeout=5)
+    assert aborted_resp.type == "aborted"
+    assert runner.was_aborted() is True
+    assert tool_state.cancelled is True
 
     with pytest.raises(StopAsyncIteration):
         await step_iter.__anext__()
