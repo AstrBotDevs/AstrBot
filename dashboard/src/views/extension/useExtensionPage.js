@@ -1,9 +1,15 @@
 import axios from "axios";
-import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { resolveErrorMessage } from "@/utils/errorUtils";
+import {
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
+} from "@/utils/pluginSearch";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
@@ -240,71 +246,6 @@ export const useExtensionPage = () => {
   });
   
   // 插件市场拼音搜索
-  const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
-  const normalizeLoose = (s) =>
-    normalizeStr(s).replace(/[\s_-]+/g, "").replace(/[()（）【】\[\]{}·•]+/g, "");
-  const toPinyinText = (s) =>
-    pinyin(s ?? "", { toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const toInitials = (s) =>
-    pinyin(s ?? "", { pattern: "first", toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const buildSearchQuery = (raw) => {
-    const norm = normalizeStr(raw);
-    if (!norm) return null;
-    return {
-      norm,
-      loose: normalizeLoose(raw),
-    };
-  };
-  const matchesText = (value, query) => {
-    if (value == null || !query?.norm) return false;
-    const text = String(value);
-
-    const nv = normalizeStr(text);
-    if (nv.includes(query.norm)) return true;
-
-    const lv = normalizeLoose(text);
-    if (query.loose && lv.includes(query.loose)) return true;
-
-    const pv = toPinyinText(text);
-    if (pv.includes(query.norm)) return true;
-
-    const iv = toInitials(text);
-    if (iv.includes(query.norm)) return true;
-
-    return false;
-  };
-
-  const matchesPluginSearch = (plugin, query) => {
-    if (!query) return true;
-
-    const supportPlatforms = Array.isArray(plugin?.support_platforms)
-      ? plugin.support_platforms.join(" ")
-      : "";
-    const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
-
-    const candidates = [
-      plugin?.name,
-      plugin?.trimmedName,
-      plugin?.display_name,
-      plugin?.desc,
-      plugin?.author,
-      plugin?.repo,
-      plugin?.version,
-      plugin?.astrbot_version,
-      supportPlatforms,
-      tags,
-    ];
-
-    for (const v of candidates) {
-      if (matchesText(v, query)) return true;
-    }
-
-    return false;
-  };
   
   const plugin_handler_info_headers = computed(() => [
     { title: tm("table.headers.eventType"), key: "event_type_h" },

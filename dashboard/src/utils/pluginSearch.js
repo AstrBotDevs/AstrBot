@@ -1,0 +1,68 @@
+import { pinyin } from "pinyin-pro";
+
+export const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
+
+export const normalizeLoose = (s) =>
+  normalizeStr(s).replace(/[\s_-]+/g, "").replace(/[()（）【】\[\]{}·•]+/g, "");
+
+export const toPinyinText = (s) =>
+  pinyin(s ?? "", { toneType: "none" })
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
+export const toInitials = (s) =>
+  pinyin(s ?? "", { pattern: "first", toneType: "none" })
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
+export const buildSearchQuery = (raw) => {
+  const norm = normalizeStr(raw);
+  if (!norm) return null;
+  return {
+    norm,
+    loose: normalizeLoose(raw),
+  };
+};
+
+export const matchesText = (value, query) => {
+  if (value == null || !query?.norm) return false;
+  const text = String(value);
+
+  const normalizedValue = normalizeStr(text);
+  if (normalizedValue.includes(query.norm)) return true;
+
+  const looseValue = normalizeLoose(text);
+  if (query.loose && looseValue.includes(query.loose)) return true;
+
+  const pinyinValue = toPinyinText(text);
+  if (pinyinValue.includes(query.norm)) return true;
+
+  const initialsValue = toInitials(text);
+  if (initialsValue.includes(query.norm)) return true;
+
+  return false;
+};
+
+export const matchesPluginSearch = (plugin, query) => {
+  if (!query) return true;
+
+  const supportPlatforms = Array.isArray(plugin?.support_platforms)
+    ? plugin.support_platforms.join(" ")
+    : "";
+  const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
+
+  const candidates = [
+    plugin?.name,
+    plugin?.trimmedName,
+    plugin?.display_name,
+    plugin?.desc,
+    plugin?.author,
+    plugin?.repo,
+    plugin?.version,
+    plugin?.astrbot_version,
+    supportPlatforms,
+    tags,
+  ];
+
+  return candidates.some((candidate) => matchesText(candidate, query));
+};
