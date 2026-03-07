@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import sys
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
@@ -43,6 +45,22 @@ def _prepare_config(config: dict) -> dict:
         config = config["mcpServers"][first_key]
     config.pop("active", None)
     return config
+
+
+def _prepare_stdio_env(config: dict) -> dict:
+    """Preserve Windows executable resolution for stdio subprocesses."""
+    if sys.platform != "win32":
+        return config
+
+    pathext = os.environ.get("PATHEXT")
+    if not pathext:
+        return config
+
+    prepared = config.copy()
+    env = dict(prepared.get("env") or {})
+    env.setdefault("PATHEXT", pathext)
+    prepared["env"] = env
+    return prepared
 
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
@@ -210,6 +228,7 @@ class MCPClient:
                 )
 
         else:
+            cfg = _prepare_stdio_env(cfg)
             server_params = mcp.StdioServerParameters(
                 **cfg,
             )
