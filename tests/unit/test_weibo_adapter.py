@@ -6,6 +6,7 @@ import pytest
 
 import astrbot.api.message_components as Comp
 from astrbot.api.event import MessageChain
+from astrbot.core.platform.manager import BUILTIN_PLATFORM_TYPES
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.weibo.weibo_adapter import (
     WeiboPlatformAdapter,
@@ -31,6 +32,11 @@ def weibo_adapter(tmp_path: Path) -> WeiboPlatformAdapter:
         asyncio.Queue(),
     )
     adapter._inbound_dir = tmp_path
+
+    async def write_attachment_buffer(saved_path: Path, buffer: bytes) -> None:
+        saved_path.write_bytes(buffer)
+
+    adapter._write_attachment_buffer = write_attachment_buffer  # type: ignore[method-assign]
     return adapter
 
 
@@ -126,3 +132,11 @@ async def test_render_message_chain_degrades_unsupported_media(
     assert "hello" in rendered
     assert "[图片: demo.png]" in rendered
     assert "[文件: demo.txt]" in rendered
+
+
+def test_builtin_platform_types_contains_weibo() -> None:
+    assert "weibo" in BUILTIN_PLATFORM_TYPES
+
+
+def test_default_ws_endpoint_uses_wss(weibo_adapter: WeiboPlatformAdapter) -> None:
+    assert weibo_adapter.ws_endpoint.startswith("wss://")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -27,13 +28,22 @@ class WeiboMessageEvent(AstrMessageEvent):
         await self._adapter.send_message_chain(self.get_sender_id(), message)
         await super().send(message)
 
-    async def send_streaming(self, generator, use_fallback: bool = False) -> None:
-        buffer = ""
+    async def send_streaming(
+        self,
+        generator: AsyncGenerator[MessageChain, None],
+        use_fallback: bool = False,
+    ) -> None:
+        await super().send_streaming(generator, use_fallback=use_fallback)
+
+        buffer_parts: list[str] = []
         async for chain in generator:
-            buffer += await self._adapter._render_message_chain(chain)
-        if buffer.strip():
+            rendered = await self._adapter._render_message_chain(chain)
+            if rendered:
+                buffer_parts.append(rendered)
+
+        final_text = "".join(buffer_parts).strip()
+        if final_text:
             await self._adapter.send_message_chain(
                 self.get_sender_id(),
-                MessageChain().message(buffer),
+                MessageChain().message(final_text),
             )
-        await super().send_streaming(generator, use_fallback=use_fallback)

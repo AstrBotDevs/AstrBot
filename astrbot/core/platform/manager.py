@@ -2,6 +2,7 @@ import asyncio
 import traceback
 from asyncio import Queue
 from dataclasses import dataclass
+from importlib import import_module
 
 from astrbot.core import logger
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -11,6 +12,39 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
+
+PLATFORM_IMPORTS: dict[str, tuple[str, str]] = {
+    "aiocqhttp": (
+        ".sources.aiocqhttp.aiocqhttp_platform_adapter",
+        "AiocqhttpAdapter",
+    ),
+    "qq_official": (
+        ".sources.qqofficial.qqofficial_platform_adapter",
+        "QQOfficialPlatformAdapter",
+    ),
+    "qq_official_webhook": (
+        ".sources.qqofficial_webhook.qo_webhook_adapter",
+        "QQOfficialWebhookPlatformAdapter",
+    ),
+    "lark": (".sources.lark.lark_adapter", "LarkPlatformAdapter"),
+    "dingtalk": (".sources.dingtalk.dingtalk_adapter", "DingtalkPlatformAdapter"),
+    "telegram": (".sources.telegram.tg_adapter", "TelegramPlatformAdapter"),
+    "wecom": (".sources.wecom.wecom_adapter", "WecomPlatformAdapter"),
+    "wecom_ai_bot": (".sources.wecom_ai_bot.wecomai_adapter", "WecomAIBotAdapter"),
+    "weixin_official_account": (
+        ".sources.weixin_official_account.weixin_offacc_adapter",
+        "WeixinOfficialAccountPlatformAdapter",
+    ),
+    "discord": (".sources.discord.discord_platform_adapter", "DiscordPlatformAdapter"),
+    "misskey": (".sources.misskey.misskey_adapter", "MisskeyPlatformAdapter"),
+    "slack": (".sources.slack.slack_adapter", "SlackAdapter"),
+    "satori": (".sources.satori.satori_adapter", "SatoriPlatformAdapter"),
+    "line": (".sources.line.line_adapter", "LinePlatformAdapter"),
+    "kook": (".sources.kook.kook_adapter", "KookPlatformAdapter"),
+    "weibo": (".sources.weibo.weibo_adapter", "WeiboPlatformAdapter"),
+}
+
+BUILTIN_PLATFORM_TYPES: tuple[str, ...] = tuple(PLATFORM_IMPORTS)
 
 
 @dataclass
@@ -101,71 +135,23 @@ class PlatformManager:
 
     def dynamic_import_platform(self, platform_type: str) -> None:
         """动态导入平台适配器模块。"""
-        match platform_type:
-            case "aiocqhttp":
-                from .sources.aiocqhttp.aiocqhttp_platform_adapter import (
-                    AiocqhttpAdapter as AiocqhttpAdapter,
-                )
-            case "qq_official":
-                from .sources.qqofficial.qqofficial_platform_adapter import (
-                    QQOfficialPlatformAdapter as QQOfficialPlatformAdapter,
-                )
-            case "qq_official_webhook":
-                from .sources.qqofficial_webhook.qo_webhook_adapter import (
-                    QQOfficialWebhookPlatformAdapter as QQOfficialWebhookPlatformAdapter,
-                )
-            case "lark":
-                from .sources.lark.lark_adapter import (
-                    LarkPlatformAdapter as LarkPlatformAdapter,
-                )
-            case "dingtalk":
-                from .sources.dingtalk.dingtalk_adapter import (
-                    DingtalkPlatformAdapter as DingtalkPlatformAdapter,
-                )
-            case "telegram":
-                from .sources.telegram.tg_adapter import (
-                    TelegramPlatformAdapter as TelegramPlatformAdapter,
-                )
-            case "wecom":
-                from .sources.wecom.wecom_adapter import (
-                    WecomPlatformAdapter as WecomPlatformAdapter,
-                )
-            case "wecom_ai_bot":
-                from .sources.wecom_ai_bot.wecomai_adapter import (
-                    WecomAIBotAdapter as WecomAIBotAdapter,
-                )
-            case "weixin_official_account":
-                from .sources.weixin_official_account.weixin_offacc_adapter import (
-                    WeixinOfficialAccountPlatformAdapter as WeixinOfficialAccountPlatformAdapter,
-                )
-            case "discord":
-                from .sources.discord.discord_platform_adapter import (
-                    DiscordPlatformAdapter as DiscordPlatformAdapter,
-                )
-            case "misskey":
-                from .sources.misskey.misskey_adapter import (
-                    MisskeyPlatformAdapter as MisskeyPlatformAdapter,
-                )
-            case "slack":
-                from .sources.slack.slack_adapter import SlackAdapter as SlackAdapter
-            case "satori":
-                from .sources.satori.satori_adapter import (
-                    SatoriPlatformAdapter as SatoriPlatformAdapter,
-                )
-            case "line":
-                from .sources.line.line_adapter import (
-                    LinePlatformAdapter as LinePlatformAdapter,
-                )
-            case "kook":
-                from .sources.kook.kook_adapter import (
-                    KookPlatformAdapter as KookPlatformAdapter,
-                )
-            case "weibo":
-                from .sources.weibo.weibo_adapter import (
-                    WeiboPlatformAdapter as WeiboPlatformAdapter,
-                )
-            case _:
-                raise ImportError(f"未知的平台适配器类型: {platform_type}")
+        try:
+            module_path, class_name = PLATFORM_IMPORTS[platform_type]
+        except KeyError as exc:
+            raise ImportError(f"未知的平台适配器类型: {platform_type}") from exc
+
+        module = import_module(module_path, package=__package__)
+        getattr(module, class_name)
+
+    def preload_builtin_platforms(self) -> None:
+        """预加载内置平台适配器，确保注册表完整。"""
+        for platform_type in BUILTIN_PLATFORM_TYPES:
+            if platform_type in platform_cls_map:
+                continue
+            try:
+                self.dynamic_import_platform(platform_type)
+            except ImportError:
+                logger.debug(f"预加载平台适配器失败: {platform_type}")
 
     async def load_platform(self, platform_config: dict) -> None:
         """实例化一个平台"""

@@ -1452,33 +1452,7 @@ class ConfigRoute(Route):
         ]["metadata"]["platform"]
 
         # 预加载内置平台适配器，确保配置页能展示全部平台选项
-        builtin_platform_types = [
-            "aiocqhttp",
-            "qq_official",
-            "qq_official_webhook",
-            "lark",
-            "dingtalk",
-            "telegram",
-            "wecom",
-            "wecom_ai_bot",
-            "weixin_official_account",
-            "discord",
-            "misskey",
-            "slack",
-            "satori",
-            "line",
-            "kook",
-            "weibo",
-        ]
-        for platform_type in builtin_platform_types:
-            if platform_type in platform_cls_map:
-                continue
-            try:
-                self.core_lifecycle.platform_manager.dynamic_import_platform(
-                    platform_type
-                )
-            except ImportError:
-                logger.debug(f"预加载平台适配器失败: {platform_type}")
+        self.core_lifecycle.platform_manager.preload_builtin_platforms()
 
         # 平台适配器的默认配置模板注入
         platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][

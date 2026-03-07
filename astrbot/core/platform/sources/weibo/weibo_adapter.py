@@ -14,6 +14,7 @@ from time import time
 from typing import Any, cast
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+import aiofiles
 import aiohttp
 
 import astrbot.api.message_components as Comp
@@ -33,7 +34,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from .weibo_event import WeiboMessageEvent
 
 DEFAULT_TOKEN_ENDPOINT = "http://open-im.api.weibo.com/open/auth/ws_token"
-DEFAULT_WS_ENDPOINT = "ws://open-im.api.weibo.com/ws/stream"
+DEFAULT_WS_ENDPOINT = "wss://open-im.api.weibo.com/ws/stream"
 DEFAULT_HEARTBEAT_SEC = 30
 DEFAULT_CONNECT_TIMEOUT_SEC = 20
 DEFAULT_TEXT_CHUNK_LIMIT = 2000
@@ -369,7 +370,7 @@ class WeiboPlatformAdapter(Platform):
                         timeout=reconnect_delay,
                     )
                     break
-                except TimeoutError:
+                except asyncio.TimeoutError:
                     reconnect_delay = min(
                         reconnect_delay * 2,
                         self.reconnect_max_delay_sec,
@@ -586,6 +587,10 @@ class WeiboPlatformAdapter(Platform):
             return True
         return sender_id in self.allow_from
 
+    async def _write_attachment_buffer(self, saved_path: Path, buffer: bytes) -> None:
+        async with aiofiles.open(saved_path, "wb") as file:
+            await file.write(buffer)
+
     async def _send_reject_message(self, sender_id: str) -> None:
         reject_message = str(self.config.get("reject_message", "")).strip()
         if not reject_message:
@@ -741,7 +746,7 @@ class WeiboPlatformAdapter(Platform):
             filename = f"{filename}{suffix}"
 
         saved_path = self._inbound_dir / f"{uuid.uuid4().hex}_{filename}"
-        saved_path.write_bytes(buffer)
+        await self._write_attachment_buffer(saved_path, buffer)
 
         if default_kind == "image" and mime_type in SUPPORTED_IMAGE_MIME_TYPES:
             return Comp.Image.fromFileSystem(str(saved_path)), f"[图片: {filename}]"
