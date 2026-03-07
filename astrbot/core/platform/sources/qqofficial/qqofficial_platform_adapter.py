@@ -36,10 +36,24 @@ class botClient(Client):
     def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
 
+    def _get_sender_id(self, message) -> str:
+        """Extract sender ID from different message types."""
+        if hasattr(message, 'author') and hasattr(message.author, 'id'):
+            return str(message.author.id)
+        if hasattr(message, 'author') and hasattr(message.author, 'user_openid'):
+            return str(message.author.user_openid)
+        if hasattr(message, 'author') and hasattr(message.author, 'member_openid'):
+            return str(message.author.member_openid)
+        return ""
+
     # 收到群消息
     async def on_group_at_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
+        sender_id = self._get_sender_id(message)
+        content = getattr(message, 'content', '') or ""
+        if await self.platform._is_duplicate_message(message.id, content, sender_id):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -50,6 +64,10 @@ class botClient(Client):
 
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
+        sender_id = self._get_sender_id(message)
+        content = getattr(message, 'content', '') or ""
+        if await self.platform._is_duplicate_message(message.id, content, sender_id):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -62,6 +80,10 @@ class botClient(Client):
     async def on_direct_message_create(
         self, message: botpy.message.DirectMessage
     ) -> None:
+        sender_id = self._get_sender_id(message)
+        content = getattr(message, 'content', '') or ""
+        if await self.platform._is_duplicate_message(message.id, content, sender_id):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -71,6 +93,10 @@ class botClient(Client):
 
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
+        sender_id = self._get_sender_id(message)
+        content = getattr(message, 'content', '') or ""
+        if await self.platform._is_duplicate_message(message.id, content, sender_id):
+            return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -105,6 +131,9 @@ class QQOfficialPlatformAdapter(Platform):
         qq_group = platform_config["enable_group_c2c"]
         guild_dm = platform_config["enable_guild_direct_message"]
 
+        # Lock for thread-safe deduplication
+        self._dedup_lock = asyncio.Lock()
+
         if qq_group:
             self.intents = botpy.Intents(
                 public_messages=True,
@@ -125,6 +154,60 @@ class QQOfficialPlatformAdapter(Platform):
         self.client.set_platform(self)
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
+
+        # Message deduplication
+        self.message_id_timestamps: dict[str, float] = {}
+
+    def _clean_expired_messages(self) -> None:
+        """Clean up message IDs older than 30 minutes."""
+        current_time = time.time()
+        expired_keys = [
+            msg_id
+            for msg_id, timestamp in self.message_id_timestamps.items()
+            if current_time - timestamp > 1800
+        ]
+        for msg_id in expired_keys:
+            del self.message_id_timestamps[msg_id]
+
+    async def _is_duplicate_message(self, message_id: str, content: str = "", sender_id: str = "") -> bool:
+        """Check if message has already been processed (thread-safe).
+
+        Args:
+            message_id: The message ID from botpy
+            content: Message content for additional deduplication
+            sender_id: Sender ID for additional deduplication
+
+        Returns:
+            True if duplicate, False if new message.
+        """
+        async with self._dedup_lock:
+            self._clean_expired_messages()
+            
+            current_time = time.time()
+            
+            # Primary check: by message_id (exact match)
+            if message_id in self.message_id_timestamps:
+                logger.info(f"[QQOfficial] Duplicate message detected (by ID): {message_id[:50]}...")
+                return True
+            
+            # Secondary check: content + sender (no time window, rely on message_id cleanup)
+            if content and sender_id:
+                content_key = f"{sender_id}:{content[:50]}"
+                
+                if content_key in self.message_id_timestamps:
+                    logger.info(f"[QQOfficial] Duplicate message detected (by content): {content_key}")
+                    return True
+            
+            # Register the message
+            self.message_id_timestamps[message_id] = current_time
+            
+            # Also register content key if available
+            if content and sender_id:
+                content_key = f"{sender_id}:{content[:50]}"
+                self.message_id_timestamps[content_key] = current_time
+            
+            logger.info(f"[QQOfficial] New message registered: {message_id[:50]}...")
+            return False
 
     async def send_by_session(
         self,
