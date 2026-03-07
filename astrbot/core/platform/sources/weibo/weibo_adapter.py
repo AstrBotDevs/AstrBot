@@ -555,7 +555,7 @@ class WeiboPlatformAdapter(Platform):
         if explicit_message_id:
             return explicit_message_id
 
-        digest = hashlib.sha1(
+        digest = hashlib.blake2b(
             json.dumps(
                 {
                     "fromUserId": payload.get("fromUserId"),
@@ -567,6 +567,7 @@ class WeiboPlatformAdapter(Platform):
                 sort_keys=True,
                 default=str,
             ).encode("utf-8"),
+            digest_size=16,
         ).hexdigest()
         return f"weibo_inbound_{digest[:16]}"
 

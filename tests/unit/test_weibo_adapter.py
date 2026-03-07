@@ -140,3 +140,21 @@ def test_builtin_platform_types_contains_weibo() -> None:
 
 def test_default_ws_endpoint_uses_wss(weibo_adapter: WeiboPlatformAdapter) -> None:
     assert weibo_adapter.ws_endpoint.startswith("wss://")
+
+
+def test_resolve_inbound_message_id_is_stable_without_message_id(
+    weibo_adapter: WeiboPlatformAdapter,
+) -> None:
+    payload = {
+        "messageId": "",
+        "fromUserId": "12345",
+        "text": "hello",
+        "timestamp": 1710000000,
+        "input": [],
+    }
+
+    first = weibo_adapter._resolve_inbound_message_id(payload)
+    second = weibo_adapter._resolve_inbound_message_id(payload)
+
+    assert first == second
+    assert first.startswith("weibo_inbound_")
