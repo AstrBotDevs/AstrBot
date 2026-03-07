@@ -2,10 +2,6 @@ import { pinyin } from "pinyin-pro";
 
 // Small bounded cache to avoid repeated pinyin conversion work during search.
 const MAX_SEARCH_CACHE_SIZE = 500;
-const normalizedTextCache = new Map();
-const looseTextCache = new Map();
-const pinyinTextCache = new Map();
-const initialsCache = new Map();
 const HAN_IDEOGRAPH_RE = /\p{Unified_Ideograph}/u;
 
 export const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -16,68 +12,49 @@ const normalizeLooseFromNormalized = (normalized) =>
 export const normalizeLoose = (s) =>
   normalizeLooseFromNormalized(normalizeStr(s));
 
-const setCacheValue = (cache, key, value) => {
-  if (cache.has(key)) {
-    cache.delete(key);
-  }
-  cache.set(key, value);
+const memoizeLRU = (fn, maxSize = MAX_SEARCH_CACHE_SIZE) => {
+  const cache = new Map();
 
-  if (cache.size > MAX_SEARCH_CACHE_SIZE) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey !== undefined) {
-      cache.delete(oldestKey);
+  return (raw) => {
+    const key = (raw ?? "").toString();
+    if (cache.has(key)) {
+      const value = cache.get(key);
+      cache.delete(key);
+      cache.set(key, value);
+      return value;
     }
-  }
+
+    const value = fn(key);
+    cache.set(key, value);
+
+    if (cache.size > maxSize) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        cache.delete(oldestKey);
+      }
+    }
+
+    return value;
+  };
 };
 
-const getNormalizedText = (s) => {
-  const text = (s ?? "").toString();
-  if (normalizedTextCache.has(text)) {
-    return normalizedTextCache.get(text);
-  }
+const getNormalizedText = memoizeLRU(normalizeStr);
 
-  const result = normalizeStr(text);
-  setCacheValue(normalizedTextCache, text, result);
-  return result;
-};
+const getLooseText = memoizeLRU((text) =>
+  normalizeLooseFromNormalized(getNormalizedText(text)),
+);
 
-const getLooseText = (s) => {
-  const text = (s ?? "").toString();
-  if (looseTextCache.has(text)) {
-    return looseTextCache.get(text);
-  }
-
-  const normalizedText = getNormalizedText(text);
-  const result = normalizeLooseFromNormalized(normalizedText);
-  setCacheValue(looseTextCache, text, result);
-  return result;
-};
-
-export const toPinyinText = (s) => {
-  const text = (s ?? "").toString();
-  if (pinyinTextCache.has(text)) {
-    return pinyinTextCache.get(text);
-  }
-
-  const result = pinyin(text, { toneType: "none" })
+export const toPinyinText = memoizeLRU((text) =>
+  pinyin(text, { toneType: "none" })
     .toLowerCase()
-    .replace(/\s+/g, "");
-  setCacheValue(pinyinTextCache, text, result);
-  return result;
-};
+    .replace(/\s+/g, ""),
+);
 
-export const toInitials = (s) => {
-  const text = (s ?? "").toString();
-  if (initialsCache.has(text)) {
-    return initialsCache.get(text);
-  }
-
-  const result = pinyin(text, { pattern: "first", toneType: "none" })
+export const toInitials = memoizeLRU((text) =>
+  pinyin(text, { pattern: "first", toneType: "none" })
     .toLowerCase()
-    .replace(/\s+/g, "");
-  setCacheValue(initialsCache, text, result);
-  return result;
-};
+    .replace(/\s+/g, ""),
+);
 
 export const buildSearchQuery = (raw) => {
   const norm = getNormalizedText(raw);
@@ -93,10 +70,10 @@ export const matchesText = (value, query) => {
   const text = String(value);
 
   const normalizedValue = getNormalizedText(text);
-  if (normalizedValue.includes(query.norm)) return true;
+  const looseValue = query.loose ? getLooseText(text) : null;
 
-  const looseValue = getLooseText(text);
-  if (query.loose && looseValue.includes(query.loose)) return true;
+  if (normalizedValue.includes(query.norm)) return true;
+  if (query.loose && looseValue?.includes(query.loose)) return true;
 
   if (!HAN_IDEOGRAPH_RE.test(text)) return false;
 
