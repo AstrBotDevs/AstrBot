@@ -4,6 +4,7 @@ import sys
 import time
 import traceback
 import typing as T
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field
 
@@ -83,6 +84,14 @@ class FollowUpTicket:
 
 class _ToolExecutionInterrupted(Exception):
     """Raised when a running tool call is interrupted by a stop request."""
+
+
+ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
+
+USER_INTERRUPTION_MESSAGE = (
+    "[SYSTEM: User actively interrupted the response generation. "
+    "Partial output before interruption is preserved.]"
+)
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
@@ -407,7 +416,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 if self._is_stop_requested():
                     llm_resp_result = LLMResponse(
                         role="assistant",
-                        completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                        completion_text=USER_INTERRUPTION_MESSAGE,
                         reasoning_content=llm_response.reasoning_content,
                         reasoning_signature=llm_response.reasoning_signature,
                     )
@@ -954,7 +963,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.role != "assistant":
             llm_resp = LLMResponse(
                 role="assistant",
-                completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+                completion_text=USER_INTERRUPTION_MESSAGE,
             )
         self.final_llm_resp = llm_resp
         self._aborted = True
@@ -994,8 +1003,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_tool_executor_results(
         self,
-        executor: T.Any,
-    ) -> T.AsyncGenerator[T.Any, None]:
+        executor: AsyncIterator[ToolExecutorResultT],
+    ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
         while True:
             if self._is_stop_requested():
                 await self._close_executor(executor)
