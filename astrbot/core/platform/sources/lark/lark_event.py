@@ -737,7 +737,8 @@ class LarkMessageEvent(AstrMessageEvent):
             buffer.squash_plain()
             await self.send(buffer)
 
-        await super().send_streaming(generator, use_fallback)
+        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+        self._has_send_oper = True
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         """使用 CardKit 流式卡片实现打字机效果。
@@ -746,6 +747,12 @@ class LarkMessageEvent(AstrMessageEvent):
         使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
         发送频率由网络 RTT 自然限流。
         """
+        # Guard: 如果平台未配置支持流式输出，直接回退
+        if not getattr(self.platform_meta, "support_streaming_message", False):
+            logger.debug("[Lark] 流式输出未启用，回退到非流式发送")
+            await self._fallback_send_streaming(generator, use_fallback)
+            return
+
         # Step 1: 创建流式卡片实体
         card_id = await self._create_streaming_card()
         if not card_id:
@@ -778,11 +785,14 @@ class LarkMessageEvent(AstrMessageEvent):
             while not done:
                 await text_changed.wait()
                 text_changed.clear()
-                if delta and delta != last_sent:
+                snapshot = delta
+                if snapshot and snapshot != last_sent:
                     sequence += 1
-                    ok = await self._update_streaming_text(card_id, delta, sequence)
+                    ok = await self._update_streaming_text(card_id, snapshot, sequence)
                     if ok:
-                        last_sent = delta
+                        last_sent = snapshot
+                    if delta != snapshot:
+                        text_changed.set()
 
         sender_task = asyncio.create_task(_sender_loop())
 
@@ -813,7 +823,5 @@ class LarkMessageEvent(AstrMessageEvent):
         await self._close_streaming_mode(card_id, sequence)
 
         # Step 5: 内联父类 send_streaming 的副作用
-        asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
-        )
+        await Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
         self._has_send_oper = True
