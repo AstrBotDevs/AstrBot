@@ -5,13 +5,13 @@
  * Build script that:
  * 1. Scans src/ for all mdi-* icon names used in .vue/.ts files
  * 2. Resolves their Unicode codepoints from @mdi/font CSS
- * 3. Subsets the MDI woff2 font to include only those glyphs (via pyftsubset)
+ * 3. Subsets the MDI font to include only those glyphs (via subset-font, pure JS)
  * 4. Generates a minimal CSS file with only the needed icon classes
  * 5. Outputs to src/assets/mdi-subset/
  */
-import { execSync } from "child_process";
-import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from "fs";
 import { join, resolve, extname } from "path";
+import subsetFont from "subset-font";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const SRC = join(ROOT, "src");
@@ -24,6 +24,9 @@ const MDI_TTF = join(
     "node_modules/@mdi/font/fonts/materialdesignicons-webfont.ttf"
 );
 const OUT_DIR = join(ROOT, "src/assets/mdi-subset");
+
+// Ensure output directory exists
+mkdirSync(OUT_DIR, { recursive: true });
 
 // ── Step 1: Scan source files for mdi-* icon names ──────────────────────────
 function collectFiles(dir, exts) {
@@ -42,14 +45,16 @@ function collectFiles(dir, exts) {
 const sourceFiles = collectFiles(SRC, [".vue", ".ts", ".js"]);
 const iconPattern = /mdi-[a-z][a-z0-9-]*/g;
 const usedIcons = new Set();
+const utilityClasses = new Set([
+    "mdi-set", "mdi-spin", "mdi-rotate-45", "mdi-rotate-90", "mdi-rotate-135",
+    "mdi-rotate-180", "mdi-rotate-225", "mdi-rotate-270", "mdi-rotate-315",
+    "mdi-flip-h", "mdi-flip-v", "mdi-light", "mdi-dark", "mdi-inactive",
+    "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px",
+]);
 for (const file of sourceFiles) {
     const content = readFileSync(file, "utf-8");
     for (const match of content.matchAll(iconPattern)) {
-        // Exclude pseudo-classes like mdi-set, mdi-spin (utility classes, not icons)
-        if (!["mdi-set", "mdi-spin", "mdi-rotate-45", "mdi-rotate-90", "mdi-rotate-135",
-            "mdi-rotate-180", "mdi-rotate-225", "mdi-rotate-270", "mdi-rotate-315",
-            "mdi-flip-h", "mdi-flip-v", "mdi-light", "mdi-dark", "mdi-inactive",
-            "mdi-18px", "mdi-24px", "mdi-36px", "mdi-48px"].includes(match[0])) {
+        if (!utilityClasses.has(match[0])) {
             usedIcons.add(match[0]);
         }
     }
@@ -68,14 +73,14 @@ for (const match of mdiCSS.matchAll(classPattern)) {
 console.log(`📦 MDI font CSS contains ${iconMap.size} icon definitions`);
 
 // ── Step 3: Resolve codepoints for used icons ───────────────────────────────
-const codepoints = [];
 const resolvedIcons = [];
 const missingIcons = [];
+const subsetChars = [];
 for (const icon of usedIcons) {
     const cp = iconMap.get(icon);
     if (cp) {
-        codepoints.push(`U+${cp}`);
         resolvedIcons.push(icon);
+        subsetChars.push(String.fromCodePoint(parseInt(cp, 16)));
     } else {
         missingIcons.push(icon);
     }
@@ -84,42 +89,29 @@ for (const icon of usedIcons) {
 if (missingIcons.length > 0) {
     console.warn(`⚠️  ${missingIcons.length} icons not found in MDI CSS:`, missingIcons.join(", "));
 }
-console.log(`🔍 Resolved ${codepoints.length} codepoints for subsetting`);
+console.log(`🔍 Resolved ${resolvedIcons.length} codepoints for subsetting`);
 
-// Always include the base glyph ranges needed for the font to work
-// U+F0000-F FFFF is the private use area where MDI places glyphs
-const unicodeRange = [
-    "U+0020",          // space
-    ...codepoints,
-].join(",");
+// Add space character
+subsetChars.push(" ");
+const subsetText = subsetChars.join("");
 
-// ── Step 4: Subset font with pyftsubset ─────────────────────────────────────
+// ── Step 4: Subset font with subset-font (pure JS/WASM) ────────────────────
+const fontBuffer = readFileSync(MDI_TTF);
+
+console.log(`🔧 Subsetting font to woff2...`);
+const woff2Buffer = await subsetFont(fontBuffer, subsetText, {
+    targetFormat: "woff2",
+});
+
+console.log(`🔧 Subsetting font to woff...`);
+const woffBuffer = await subsetFont(fontBuffer, subsetText, {
+    targetFormat: "woff",
+});
+
 const outWoff2 = join(OUT_DIR, "materialdesignicons-webfont-subset.woff2");
 const outWoff = join(OUT_DIR, "materialdesignicons-webfont-subset.woff");
-
-const pyftsubsetCmd = [
-    "pyftsubset",
-    `"${MDI_TTF}"`,
-    `--unicodes="${unicodeRange}"`,
-    `--output-file="${outWoff2}"`,
-    "--flavor=woff2",
-    "--no-hinting",
-    "--desubroutinize",
-].join(" ");
-console.log(`🔧 Running pyftsubset for woff2...`);
-execSync(pyftsubsetCmd, { stdio: "inherit" });
-
-const pyftsubsetWoffCmd = [
-    "pyftsubset",
-    `"${MDI_TTF}"`,
-    `--unicodes="${unicodeRange}"`,
-    `--output-file="${outWoff}"`,
-    "--flavor=woff",
-    "--no-hinting",
-    "--desubroutinize",
-].join(" ");
-console.log(`🔧 Running pyftsubset for woff...`);
-execSync(pyftsubsetWoffCmd, { stdio: "inherit" });
+writeFileSync(outWoff2, woff2Buffer);
+writeFileSync(outWoff, woffBuffer);
 
 // ── Step 5: Generate subset CSS ─────────────────────────────────────────────
 let css = `/* Auto-generated MDI subset – ${resolvedIcons.length} icons */
@@ -174,7 +166,7 @@ writeFileSync(outCSS, css);
 
 // ── Report ──────────────────────────────────────────────────────────────────
 const origSize = statSync(MDI_TTF).size;
-const subsetWoff2Size = statSync(outWoff2).size;
+const subsetWoff2Size = woff2Buffer.length;
 console.log(`\n📊 Results:`);
 console.log(`   Original TTF font: ${(origSize / 1024).toFixed(1)} KB`);
 console.log(`   Subset WOFF2:      ${(subsetWoff2Size / 1024).toFixed(1)} KB`);

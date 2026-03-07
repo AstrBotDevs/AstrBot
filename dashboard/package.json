@@ -63,6 +63,7 @@
     "prettier": "3.0.2",
     "sass": "1.66.1",
     "sass-loader": "13.3.2",
+    "subset-font": "^2.4.0",
     "typescript": "5.1.6",
     "vite": "4.4.9",
     "vite-plugin-webfont-dl": "^3.12.0",
