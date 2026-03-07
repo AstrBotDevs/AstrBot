@@ -1,19 +1,38 @@
 import { pinyin } from "pinyin-pro";
 
+const pinyinTextCache = new Map();
+const initialsCache = new Map();
+
 export const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
 
 export const normalizeLoose = (s) =>
   normalizeStr(s).replace(/[\s_-]+/g, "").replace(/[()（）【】\[\]{}·•]+/g, "");
 
-export const toPinyinText = (s) =>
-  pinyin(s ?? "", { toneType: "none" })
-    .toLowerCase()
-    .replace(/\s+/g, "");
+export const toPinyinText = (s) => {
+  const text = (s ?? "").toString();
+  if (pinyinTextCache.has(text)) {
+    return pinyinTextCache.get(text);
+  }
 
-export const toInitials = (s) =>
-  pinyin(s ?? "", { pattern: "first", toneType: "none" })
+  const result = pinyin(text, { toneType: "none" })
     .toLowerCase()
     .replace(/\s+/g, "");
+  pinyinTextCache.set(text, result);
+  return result;
+};
+
+export const toInitials = (s) => {
+  const text = (s ?? "").toString();
+  if (initialsCache.has(text)) {
+    return initialsCache.get(text);
+  }
+
+  const result = pinyin(text, { pattern: "first", toneType: "none" })
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  initialsCache.set(text, result);
+  return result;
+};
 
 export const buildSearchQuery = (raw) => {
   const norm = normalizeStr(raw);
@@ -43,15 +62,13 @@ export const matchesText = (value, query) => {
   return false;
 };
 
-export const matchesPluginSearch = (plugin, query) => {
-  if (!query) return true;
-
+export const getPluginSearchFields = (plugin) => {
   const supportPlatforms = Array.isArray(plugin?.support_platforms)
     ? plugin.support_platforms.join(" ")
     : "";
   const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
 
-  const candidates = [
+  return [
     plugin?.name,
     plugin?.trimmedName,
     plugin?.display_name,
@@ -63,6 +80,12 @@ export const matchesPluginSearch = (plugin, query) => {
     supportPlatforms,
     tags,
   ];
+};
 
-  return candidates.some((candidate) => matchesText(candidate, query));
+export const matchesPluginSearch = (plugin, query) => {
+  if (!query) return true;
+
+  return getPluginSearchFields(plugin).some((candidate) =>
+    matchesText(candidate, query),
+  );
 };
