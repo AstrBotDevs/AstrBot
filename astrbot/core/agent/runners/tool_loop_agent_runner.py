@@ -4,6 +4,7 @@ import sys
 import time
 import traceback
 import typing as T
+from contextlib import suppress
 from dataclasses import dataclass, field
 
 from mcp.types import (
@@ -78,6 +79,10 @@ class FollowUpTicket:
     text: str
     consumed: bool = False
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
+
+
+class _ToolExecutionInterrupted(Exception):
+    """Raised when a running tool call is interrupted by a stop request."""
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
@@ -156,6 +161,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.run_context = run_context
         self._stop_requested = False
         self._aborted = False
+        self._abort_signal = asyncio.Event()
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
 
@@ -208,6 +214,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "func_tool": self.req.func_tool,
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
+            "abort_signal": self._abort_signal,
         }
         if include_model:
             # For primary provider we keep explicit model selection if provided.
@@ -423,43 +430,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 return
 
         if self._stop_requested:
-            logger.info("Agent execution was requested to stop by user.")
-            llm_resp = llm_resp_result
-            if llm_resp.role != "assistant":
-                llm_resp = LLMResponse(
-                    role="assistant",
-                    completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
-                )
-            self.final_llm_resp = llm_resp
-            self._aborted = True
-            self._transition_state(AgentState.DONE)
-            self.stats.end_time = time.time()
-
-            parts = []
-            if llm_resp.reasoning_content or llm_resp.reasoning_signature:
-                parts.append(
-                    ThinkPart(
-                        think=llm_resp.reasoning_content,
-                        encrypted=llm_resp.reasoning_signature,
-                    )
-                )
-            if llm_resp.completion_text:
-                parts.append(TextPart(text=llm_resp.completion_text))
-            if parts:
-                self.run_context.messages.append(
-                    Message(role="assistant", content=parts)
-                )
-
-            try:
-                await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
-            except Exception as e:
-                logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
-
-            yield AgentResponse(
-                type="aborted",
-                data=AgentResponseData(chain=MessageChain(type="aborted")),
-            )
-            self._resolve_unconsumed_follow_ups()
+            yield await self._finalize_aborted_step(llm_resp_result)
             return
 
         # 处理 LLM 响应
@@ -534,27 +505,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
-            async for result in self._handle_function_tools(self.req, llm_resp):
-                if result.kind == "tool_call_result_blocks":
-                    if result.tool_call_result_blocks is not None:
-                        tool_call_result_blocks = result.tool_call_result_blocks
-                elif result.kind == "cached_image":
-                    if result.cached_image is not None:
-                        # Collect cached image info
-                        cached_images.append(result.cached_image)
-                elif result.kind == "message_chain":
-                    chain = result.message_chain
-                    if chain is None or chain.type is None:
-                        # should not happen
-                        continue
-                    if chain.type == "tool_direct_result":
-                        ar_type = "tool_call_result"
-                    else:
-                        ar_type = chain.type
-                    yield AgentResponse(
-                        type=ar_type,
-                        data=AgentResponseData(chain=chain),
-                    )
+            try:
+                async for result in self._handle_function_tools(self.req, llm_resp):
+                    if result.kind == "tool_call_result_blocks":
+                        if result.tool_call_result_blocks is not None:
+                            tool_call_result_blocks = result.tool_call_result_blocks
+                    elif result.kind == "cached_image":
+                        if result.cached_image is not None:
+                            # Collect cached image info
+                            cached_images.append(result.cached_image)
+                    elif result.kind == "message_chain":
+                        chain = result.message_chain
+                        if chain is None or chain.type is None:
+                            # should not happen
+                            continue
+                        if chain.type == "tool_direct_result":
+                            ar_type = "tool_call_result"
+                        else:
+                            ar_type = chain.type
+                        yield AgentResponse(
+                            type=ar_type,
+                            data=AgentResponseData(chain=chain),
+                        )
+            except _ToolExecutionInterrupted:
+                self.request_stop()
+
+            if self._stop_requested:
+                yield await self._finalize_aborted_step()
+                return
 
             # 将结果添加到上下文中
             parts = []
@@ -671,6 +649,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            if self._stop_requested:
+                raise _ToolExecutionInterrupted(
+                    "Tool execution interrupted before the next tool started."
+                )
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
@@ -754,7 +736,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
                 _final_resp: CallToolResult | None = None
-                async for resp in executor:  # type: ignore
+                async for resp in self._iter_tool_executor_results(executor):  # type: ignore
                     if isinstance(resp, CallToolResult):
                         res = resp
                         _final_resp = resp
@@ -854,6 +836,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
+            except _ToolExecutionInterrupted:
+                raise
             except Exception as e:
                 logger.warning(traceback.format_exc())
                 _append_tool_call_result(
@@ -957,9 +941,103 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     def request_stop(self) -> None:
         self._stop_requested = True
+        self._abort_signal.set()
 
     def was_aborted(self) -> bool:
         return self._aborted
 
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
+
+    async def _finalize_aborted_step(
+        self,
+        llm_resp: LLMResponse | None = None,
+    ) -> AgentResponse:
+        logger.info("Agent execution was requested to stop by user.")
+        if llm_resp is None:
+            llm_resp = LLMResponse(role="assistant", completion_text="")
+        if llm_resp.role != "assistant":
+            llm_resp = LLMResponse(
+                role="assistant",
+                completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
+            )
+        self.final_llm_resp = llm_resp
+        self._aborted = True
+        self._transition_state(AgentState.DONE)
+        self.stats.end_time = time.time()
+
+        parts = []
+        if llm_resp.reasoning_content or llm_resp.reasoning_signature:
+            parts.append(
+                ThinkPart(
+                    think=llm_resp.reasoning_content,
+                    encrypted=llm_resp.reasoning_signature,
+                )
+            )
+        if llm_resp.completion_text:
+            parts.append(TextPart(text=llm_resp.completion_text))
+        if parts:
+            self.run_context.messages.append(Message(role="assistant", content=parts))
+
+        try:
+            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+        except Exception as e:
+            logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+
+        self._resolve_unconsumed_follow_ups()
+        return AgentResponse(
+            type="aborted",
+            data=AgentResponseData(chain=MessageChain(type="aborted")),
+        )
+
+    async def _cancel_tool_iteration(
+        self,
+        executor: T.Any,
+        next_result_task: asyncio.Task[T.Any] | None,
+    ) -> None:
+        if next_result_task is not None and not next_result_task.done():
+            next_result_task.cancel()
+            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                await next_result_task
+
+        close_executor = getattr(executor, "aclose", None)
+        if close_executor is not None:
+            with suppress(asyncio.CancelledError, RuntimeError, StopAsyncIteration):
+                await close_executor()
+
+    async def _iter_tool_executor_results(
+        self,
+        executor: T.Any,
+    ) -> T.AsyncGenerator[T.Any, None]:
+        poll_interval = 0.1
+
+        while True:
+            if self._stop_requested:
+                await self._cancel_tool_iteration(executor, None)
+                raise _ToolExecutionInterrupted(
+                    "Tool execution interrupted before reading the next tool result."
+                )
+
+            next_result_task = asyncio.create_task(anext(executor))
+            try:
+                while not next_result_task.done():
+                    if self._stop_requested:
+                        await self._cancel_tool_iteration(executor, next_result_task)
+                        raise _ToolExecutionInterrupted(
+                            "Tool execution interrupted by a stop request."
+                        )
+
+                    done, _ = await asyncio.wait(
+                        {next_result_task},
+                        timeout=poll_interval,
+                    )
+                    if done:
+                        break
+
+                try:
+                    yield next_result_task.result()
+                except StopAsyncIteration:
+                    return
+            finally:
+                if self._stop_requested and not next_result_task.done():
+                    await self._cancel_tool_iteration(executor, next_result_task)

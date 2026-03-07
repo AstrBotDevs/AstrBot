@@ -1,5 +1,7 @@
+import asyncio
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,10 +9,13 @@ import pytest
 # 将项目根目录添加到 sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
 from astrbot.core.provider.provider import Provider
 
@@ -127,6 +132,23 @@ class MockAbortableStreamProvider(MockProvider):
         )
 
 
+class MockHandoffProvider(MockProvider):
+    def __init__(self, handoff_tool_name: str):
+        super().__init__()
+        self.handoff_tool_name = handoff_tool_name
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=[self.handoff_tool_name],
+            tools_call_args=[{"input": "delegate this task"}],
+            tools_call_ids=["call_handoff"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockHooks(BaseAgentRunHooks):
     """模拟钩子函数"""
 
@@ -161,6 +183,26 @@ class MockEvent:
 class MockAgentContext:
     def __init__(self, event):
         self.event = event
+
+
+class BlockingSubagentContext:
+    def __init__(self):
+        self.started = asyncio.Event()
+        self.cancelled = False
+
+    async def get_current_chat_provider_id(self, _umo: str) -> str:
+        return "provider-id"
+
+    def get_config(self, **_kwargs):
+        return {"provider_settings": {}}
+
+    async def tool_loop_agent(self, **_kwargs):
+        self.started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
 
 
 @pytest.fixture
@@ -464,6 +506,51 @@ async def test_stop_signal_returns_aborted_and_persists_partial_message(
     # When interrupted, the runner replaces completion_text with a system message
     assert "interrupted" in final_resp.completion_text.lower()
     assert runner.run_context.messages[-1].role == "assistant"
+
+
+@pytest.mark.asyncio
+async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
+    subagent_context = BlockingSubagentContext()
+    event = MockEvent("webchat:FriendMessage:webchat!user!session", "user")
+    handoff_tool = HandoffTool(
+        Agent(name="subagent", instructions="subagent-instructions", tools=[]),
+        tool_description="Delegate tasks to the subagent.",
+    )
+    provider = MockHandoffProvider(handoff_tool.name)
+    request = ProviderRequest(
+        prompt="delegate",
+        func_tool=ToolSet(tools=[handoff_tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(
+            context=SimpleNamespace(event=event, context=subagent_context)
+        ),
+        tool_executor=FunctionToolExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    step_iter = runner.step()
+    first_resp = await step_iter.__anext__()
+    assert first_resp.type == "tool_call"
+
+    pending_resp = asyncio.create_task(step_iter.__anext__())
+    await asyncio.wait_for(subagent_context.started.wait(), timeout=1)
+
+    runner.request_stop()
+
+    aborted_resp = await asyncio.wait_for(pending_resp, timeout=1)
+    assert aborted_resp.type == "aborted"
+    assert runner.was_aborted() is True
+    assert subagent_context.cancelled is True
+
+    with pytest.raises(StopAsyncIteration):
+        await step_iter.__anext__()
 
 
 @pytest.mark.asyncio
