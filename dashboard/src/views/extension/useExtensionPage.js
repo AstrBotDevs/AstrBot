@@ -251,38 +251,42 @@ export const useExtensionPage = () => {
     pinyin(s ?? "", { pattern: "first", toneType: "none" })
       .toLowerCase()
       .replace(/\s+/g, "");
-  const marketCustomFilter = (value, query) => {
-    const q = normalizeStr(query);
-    if (!q) return true;
-    const looseQuery = normalizeLoose(query);
-
-    if (value == null) return false;
+  const buildSearchQuery = (raw) => {
+    const norm = normalizeStr(raw);
+    if (!norm) return null;
+    return {
+      norm,
+      loose: normalizeLoose(raw),
+    };
+  };
+  const matchesText = (value, query) => {
+    if (value == null || !query?.norm) return false;
     const text = String(value);
+
     const nv = normalizeStr(text);
-    if (nv.includes(q)) return true;
+    if (nv.includes(query.norm)) return true;
 
     const lv = normalizeLoose(text);
-    if (looseQuery && lv.includes(looseQuery)) return true;
+    if (query.loose && lv.includes(query.loose)) return true;
 
     const pv = toPinyinText(text);
-    if (pv.includes(q)) return true;
+    if (pv.includes(query.norm)) return true;
+
     const iv = toInitials(text);
-    if (iv.includes(q)) return true;
+    if (iv.includes(query.norm)) return true;
 
     return false;
   };
 
   const matchesPluginSearch = (plugin, query) => {
-    const q = normalizeStr(query);
-    if (!q) return true;
-    const looseQuery = normalizeLoose(query);
+    if (!query) return true;
 
     const supportPlatforms = Array.isArray(plugin?.support_platforms)
       ? plugin.support_platforms.join(" ")
       : "";
     const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
 
-    const candidates = new Set([
+    const candidates = [
       plugin?.name,
       plugin?.trimmedName,
       plugin?.display_name,
@@ -293,16 +297,10 @@ export const useExtensionPage = () => {
       plugin?.astrbot_version,
       supportPlatforms,
       tags,
-    ]);
+    ];
 
     for (const v of candidates) {
-      if (v == null) continue;
-      const value = String(v);
-
-      if (normalizeStr(value).includes(q)) return true;
-      if (looseQuery && normalizeLoose(value).includes(looseQuery)) return true;
-      if (toPinyinText(value).includes(q)) return true;
-      if (toInitials(value).includes(q)) return true;
+      if (matchesText(v, query)) return true;
     }
 
     return false;
@@ -383,25 +381,23 @@ export const useExtensionPage = () => {
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
     const plugins = filteredExtensions.value;
-    let filtered = plugins;
-
-    if (pluginSearch.value) {
-      const search = normalizeStr(pluginSearch.value);
-      filtered = plugins.filter((plugin) => matchesPluginSearch(plugin, search));
-    }
+    const query = buildSearchQuery(pluginSearch.value);
+    const filtered = query
+      ? plugins.filter((plugin) => matchesPluginSearch(plugin, query))
+      : plugins;
 
     return sortPluginsByName([...filtered]);
   });
   
   // 过滤后的插件市场数据（带搜索）
   const filteredMarketPlugins = computed(() => {
-    if (!debouncedMarketSearch.value) {
+    const query = buildSearchQuery(debouncedMarketSearch.value);
+    if (!query) {
       return pluginMarketData.value;
     }
-  
-    const search = normalizeStr(debouncedMarketSearch.value);
+
     return pluginMarketData.value.filter((plugin) =>
-      matchesPluginSearch(plugin, search),
+      matchesPluginSearch(plugin, query),
     );
   });
   
@@ -1578,7 +1574,6 @@ export const useExtensionPage = () => {
     normalizeStr,
     toPinyinText,
     toInitials,
-    marketCustomFilter,
     plugin_handler_info_headers,
     pluginHeaders,
     filteredExtensions,
