@@ -1,7 +1,5 @@
 import { pinyin } from "pinyin-pro";
 
-// Small bounded cache to avoid repeated pinyin conversion work during search.
-const MAX_SEARCH_CACHE_SIZE = 500;
 const HAN_IDEOGRAPH_RE = /\p{Unified_Ideograph}/u;
 
 export const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
@@ -12,45 +10,34 @@ const normalizeLooseFromNormalized = (normalized) =>
 export const normalizeLoose = (s) =>
   normalizeLooseFromNormalized(normalizeStr(s));
 
-const memoizeLRU = (fn, maxSize = MAX_SEARCH_CACHE_SIZE) => {
+const memoizeStringFn = (fn) => {
   const cache = new Map();
 
   return (raw) => {
     const key = (raw ?? "").toString();
     if (cache.has(key)) {
-      const value = cache.get(key);
-      cache.delete(key);
-      cache.set(key, value);
-      return value;
+      return cache.get(key);
     }
 
     const value = fn(key);
     cache.set(key, value);
-
-    if (cache.size > maxSize) {
-      const oldestKey = cache.keys().next().value;
-      if (oldestKey !== undefined) {
-        cache.delete(oldestKey);
-      }
-    }
-
     return value;
   };
 };
 
-const getNormalizedText = memoizeLRU(normalizeStr);
+const getNormalizedText = memoizeStringFn(normalizeStr);
 
-const getLooseText = memoizeLRU((text) =>
+const getLooseText = memoizeStringFn((text) =>
   normalizeLooseFromNormalized(getNormalizedText(text)),
 );
 
-export const toPinyinText = memoizeLRU((text) =>
+export const toPinyinText = memoizeStringFn((text) =>
   pinyin(text, { toneType: "none" })
     .toLowerCase()
     .replace(/\s+/g, ""),
 );
 
-export const toInitials = memoizeLRU((text) =>
+export const toInitials = memoizeStringFn((text) =>
   pinyin(text, { pattern: "first", toneType: "none" })
     .toLowerCase()
     .replace(/\s+/g, ""),
