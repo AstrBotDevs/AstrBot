@@ -1,8 +1,4 @@
 import axios from "axios";
-import {
-  compressToEncodedURIComponent,
-  decompressFromEncodedURIComponent,
-} from "lz-string";
 import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
@@ -11,8 +7,7 @@ import { resolveErrorMessage } from "@/utils/errorUtils";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-
-const SHARE_CODE_LZ_PREFIX = "astrbot-share:";
+import { useExtensionShareCode } from "./useExtensionShareCode";
 
 const useRandomPluginsDisplay = ({ activeTab, marketSearch, currentPage }) => {
   const showRandomPlugins = ref(true);
@@ -68,6 +63,8 @@ export const useExtensionPage = () => {
   const router = useRouter();
   const route = useRoute();
   const { width } = useDisplay();
+  const { encode: encodeShareCode, decode: decodeShareCode } =
+    useExtensionShareCode();
   
   const getSelectedGitHubProxy = () => {
     if (typeof window === "undefined" || !window.localStorage) return "";
@@ -146,25 +143,6 @@ export const useExtensionPage = () => {
     isShareMode.value = true;
     selectedSharePluginNames.value = new Set();
   };
-  const encodeShareCode = (payload) => {
-    const rawJson = JSON.stringify(payload);
-    const compressed = compressToEncodedURIComponent(rawJson);
-    if (!compressed) {
-      return rawJson;
-    }
-    return `${SHARE_CODE_LZ_PREFIX}${compressed}`;
-  };
-  const decodeShareCode = (rawCode) => {
-    if (rawCode.startsWith(SHARE_CODE_LZ_PREFIX)) {
-      const encodedPart = rawCode.slice(SHARE_CODE_LZ_PREFIX.length);
-      const decompressed = decompressFromEncodedURIComponent(encodedPart);
-      if (!decompressed) {
-        throw new Error("Invalid lz share code");
-      }
-      return decompressed;
-    }
-    return rawCode;
-  };
   const normalizePluginNames = (pluginNames = []) =>
     pluginNames.filter((name) => typeof name === "string" && name.length > 0);
   const updateSelectedSharePlugins = (updater) => {
@@ -189,9 +167,7 @@ export const useExtensionPage = () => {
       return;
     }
 
-    const shareCode = encodeShareCode({
-      repos: uniqueRepos,
-    });
+    const shareCode = encodeShareCode(uniqueRepos);
 
     try {
       if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
@@ -1379,15 +1355,6 @@ export const useExtensionPage = () => {
     });
   };
 
-  const parseShareCodeRepos = (rawCode) => {
-    const decodedContent = decodeShareCode(rawCode);
-    const parsed = JSON.parse(decodedContent);
-    const repos = Array.isArray(parsed?.repos) ? parsed.repos : [];
-    return repos
-      .filter((repo) => typeof repo === "string")
-      .map((repo) => repo.trim())
-      .filter((repo) => repo.length > 0);
-  };
   const installReposBatch = async (
     repos,
     { ignoreVersionCheck, onProgress } = {},
@@ -1462,7 +1429,7 @@ export const useExtensionPage = () => {
 
     let repos = [];
     try {
-      repos = parseShareCodeRepos(rawCode);
+      repos = decodeShareCode(rawCode);
     } catch (error) {
       toast(tm("messages.invalidShareCode"), "error");
       return;
