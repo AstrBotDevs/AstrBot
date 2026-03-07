@@ -28,5 +28,5 @@ RUN python -m pip install uv \
     && uv pip install socksio uv pilk --no-cache-dir --system
 
 EXPOSE 6185
-
+EXPOSE 6199
 CMD ["python", "main.py"]
