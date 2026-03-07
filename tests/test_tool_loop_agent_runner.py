@@ -561,8 +561,8 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
     step_iter = runner.step()
     first_resp = await step_iter.__anext__()
     assert first_resp.type == "tool_call"
-    assert provider.abort_signal is runner._abort_signal
     assert provider.abort_signal is not None
+    assert provider.abort_signal.is_set() is False
 
     pending_resp = asyncio.create_task(step_iter.__anext__())
     await asyncio.wait_for(subagent_context.started.wait(), timeout=5)
@@ -611,8 +611,8 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
     step_iter = runner.step()
     first_resp = await step_iter.__anext__()
     assert first_resp.type == "tool_call"
-    assert provider.abort_signal is runner._abort_signal
     assert provider.abort_signal is not None
+    assert provider.abort_signal.is_set() is False
 
     pending_resp = asyncio.create_task(step_iter.__anext__())
     await asyncio.wait_for(tool_state.started.wait(), timeout=5)

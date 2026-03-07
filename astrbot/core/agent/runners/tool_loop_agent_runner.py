@@ -162,7 +162,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.tool_executor = tool_executor
         self.agent_hooks = agent_hooks
         self.run_context = run_context
-        self._stop_requested = False
         self._aborted = False
         self._abort_signal = asyncio.Event()
         self._tool_executor_poll_interval = max(
@@ -417,7 +416,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
-                if self._stop_requested:
+                if self._is_stop_requested():
                     llm_resp_result = LLMResponse(
                         role="assistant",
                         completion_text="[SYSTEM: User actively interrupted the response generation. Partial output before interruption is preserved.]",
@@ -436,12 +435,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             break  # got final response
 
         if not llm_resp_result:
-            if self._stop_requested:
+            if self._is_stop_requested():
                 llm_resp_result = LLMResponse(role="assistant", completion_text="")
             else:
                 return
 
-        if self._stop_requested:
+        if self._is_stop_requested():
             yield await self._finalize_aborted_step(llm_resp_result)
             return
 
@@ -543,7 +542,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 yield await self._finalize_aborted_step(llm_resp)
                 return
 
-            if self._stop_requested:
+            if self._is_stop_requested():
                 yield await self._finalize_aborted_step(llm_resp)
                 return
 
@@ -662,7 +661,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
-            if self._stop_requested:
+            if self._is_stop_requested():
                 raise _ToolExecutionInterrupted(
                     "Tool execution interrupted before the next tool started."
                 )
@@ -942,6 +941,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     func_tool=param_subset,
                     model=self.req.model,
                     session_id=self.req.session_id,
+                    abort_signal=self._abort_signal,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
@@ -953,8 +953,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return self._state in (AgentState.DONE, AgentState.ERROR)
 
     def request_stop(self) -> None:
-        self._stop_requested = True
         self._abort_signal.set()
+
+    def _is_stop_requested(self) -> bool:
+        return self._abort_signal.is_set()
 
     def was_aborted(self) -> bool:
         return self._aborted
@@ -1025,7 +1027,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         poll_interval = self._tool_executor_poll_interval
 
         while True:
-            if self._stop_requested:
+            if self._is_stop_requested():
                 await self._cancel_tool_iteration(executor, None)
                 raise _ToolExecutionInterrupted(
                     "Tool execution interrupted before reading the next tool result."
@@ -1034,7 +1036,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             next_result_task = asyncio.create_task(anext(executor))
             try:
                 while not next_result_task.done():
-                    if self._stop_requested:
+                    if self._is_stop_requested():
                         await self._cancel_tool_iteration(executor, next_result_task)
                         raise _ToolExecutionInterrupted(
                             "Tool execution interrupted by a stop request."
@@ -1052,5 +1054,5 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 except StopAsyncIteration:
                     return
             finally:
-                if self._stop_requested and not next_result_task.done():
+                if self._is_stop_requested() and not next_result_task.done():
                     await self._cancel_tool_iteration(executor, next_result_task)
