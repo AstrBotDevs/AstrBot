@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "subset-icons": "node scripts/subset-mdi-font.mjs",
-    "build": "node scripts/subset-mdi-font.mjs && vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build",
     "build-stage": "vue-tsc --noEmit && vite build --base=/vue/free/stage/",
     "build-prod": "vue-tsc --noEmit && vite build --base=/vue/free/",
     "preview": "vite preview --port 5050",
