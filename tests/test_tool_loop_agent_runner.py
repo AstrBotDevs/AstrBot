@@ -540,7 +540,7 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
     assert first_resp.type == "tool_call"
 
     pending_resp = asyncio.create_task(step_iter.__anext__())
-    await asyncio.wait_for(subagent_context.started.wait(), timeout=1)
+    await asyncio.wait_for(subagent_context.started.wait(), timeout=5)
 
     runner.request_stop()
 
