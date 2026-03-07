@@ -61,6 +61,9 @@ class RespondStage(Stage):
         self.reply_with_quote = ctx.astrbot_config["platform_settings"][
             "reply_with_quote"
         ]
+        self.reply_with_quote_scope = ctx.astrbot_config["platform_settings"].get(
+            "reply_with_quote_scope", "all"
+        )
 
         # 分段回复
         self.enable_seg: bool = ctx.astrbot_config["platform_settings"][
