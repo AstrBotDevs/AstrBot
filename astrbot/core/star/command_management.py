@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from astrbot.api import sp
 from astrbot.core import db_helper, logger
 from astrbot.core.db.po import CommandConfig
 from astrbot.core.star.filter.command import CommandFilter
@@ -137,6 +138,51 @@ async def rename_command(
 
     await sync_command_configs()
     return descriptor
+
+
+async def update_command_permission(
+    handler_full_name: str,
+    permission_type: str,
+) -> CommandDescriptor:
+    descriptor = _build_descriptor_by_full_name(handler_full_name)
+    if not descriptor:
+        raise ValueError("指定的处理函数不存在或不是指令。")
+
+    if permission_type not in ["admin", "member"]:
+        raise ValueError("权限类型必须为 admin 或 member。")
+
+    handler = descriptor.handler
+    found_plugin = star_map.get(handler.handler_module_path)
+    if not found_plugin:
+        raise ValueError("未找到指令所属插件")
+
+    # 1. Update Persistent Config (alter_cmd)
+    alter_cmd_cfg = await sp.global_get("alter_cmd", {})
+    plugin_ = alter_cmd_cfg.get(found_plugin.name, {})
+    cfg = plugin_.get(handler.handler_name, {})
+    cfg["permission"] = permission_type
+    plugin_[handler.handler_name] = cfg
+    alter_cmd_cfg[found_plugin.name] = plugin_
+
+    await sp.global_put("alter_cmd", alter_cmd_cfg)
+
+    # 2. Update Runtime Filter
+    found_permission_filter = False
+    target_perm_type = (
+        PermissionType.ADMIN if permission_type == "admin" else PermissionType.MEMBER
+    )
+
+    for filter_ in handler.event_filters:
+        if isinstance(filter_, PermissionTypeFilter):
+            filter_.permission_type = target_perm_type
+            found_permission_filter = True
+            break
+
+    if not found_permission_filter:
+        handler.event_filters.insert(0, PermissionTypeFilter(target_perm_type))
+
+    # Re-build descriptor to reflect changes
+    return _build_descriptor(handler) or descriptor
 
 
 async def list_commands() -> list[dict[str, Any]]:

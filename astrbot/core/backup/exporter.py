@@ -59,7 +59,7 @@ class AstrBotExporter:
         main_db: BaseDatabase,
         kb_manager: "KnowledgeBaseManager | None" = None,
         config_path: str = CMD_CONFIG_FILE_PATH,
-    ):
+    ) -> None:
         self.main_db = main_db
         self.kb_manager = kb_manager
         self.config_path = config_path

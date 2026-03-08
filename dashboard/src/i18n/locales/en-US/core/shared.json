@@ -45,7 +45,8 @@
     "unknownType": "Unknown type",
     "createProvider": "Create Provider",
     "manageProviders": "Provider Management",
-    "selectProviderPool": "Select Provider Pool..."
+    "selectProviderPool": "Select Provider Pool...",
+    "selectedCount": "{count} provider(s) selected"
   },
   "personaSelector": {
     "notSelected": "Not selected",
@@ -60,6 +61,25 @@
     "selectPersonaPool": "Select Persona Pool...",
     "rootFolder": "All Personas",
     "emptyFolder": "This folder is empty"
+  },
+  "personaQuickPreview": {
+    "title": "Quick Persona Preview",
+    "loading": "Loading...",
+    "noPersonaSelected": "No persona selected",
+    "personaNotFound": "Persona details not found",
+    "systemPromptLabel": "System Prompt",
+    "toolsLabel": "Tools",
+    "skillsLabel": "Skills",
+    "originLabel": "Origin",
+    "originNameLabel": "Origin Name",
+    "toolInactive": "Disabled",
+    "toolInactiveTooltip": "This tool is disabled. Re-enable it in Extensions -> Handlers -> Function Tools.",
+    "allTools": "All tools available",
+    "allToolsWithCount": "All tools available ({count})",
+    "noTools": "No tools configured",
+    "allSkills": "All Skills available",
+    "allSkillsWithCount": "All Skills available ({count})",
+    "noSkills": "No Skills configured"
   },
   "t2iTemplateEditor": {
     "buttonText": "Customize T2I Template",

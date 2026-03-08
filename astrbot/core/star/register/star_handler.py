@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import docstring_parser
 
@@ -11,10 +11,12 @@ from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.tool import FunctionTool
-from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.provider.func_tool_manager import PY_TO_JSON_TYPE, SUPPORTED_TYPES
 from astrbot.core.provider.register import llm_tools
+
+if TYPE_CHECKING:
+    from astrbot.core.astr_agent_context import AstrAgentContext
 
 from ..filter.command import CommandFilter
 from ..filter.command_group import CommandGroupFilter
@@ -250,7 +252,7 @@ class RegisteringCommandable:
     command: Callable[..., Callable[..., None]] = register_command
     custom_filter: Callable[..., Callable[..., Any]] = register_custom_filter
 
-    def __init__(self, parent_group: CommandGroupFilter):
+    def __init__(self, parent_group: CommandGroupFilter) -> None:
         self.parent_group = parent_group
 
 
@@ -334,6 +336,58 @@ def register_on_platform_loaded(**kwargs):
 
     def decorator(awaitable):
         _ = get_handler_or_create(awaitable, EventType.OnPlatformLoadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_plugin_error(**kwargs):
+    """当插件处理消息异常时触发。
+
+    Hook 参数:
+        event, plugin_name, handler_name, error, traceback_text
+
+    说明:
+        在 hook 中调用 `event.stop_event()` 可屏蔽默认报错回显，
+        并由插件自行决定是否转发到其他会话。
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginErrorEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_plugin_loaded(**kwargs):
+    """当有插件加载完成时
+
+    Hook 参数:
+        metadata
+
+    说明:
+        当有插件加载完成时，触发该事件并获取到该插件的元数据
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginLoadedEvent, **kwargs)
+        return awaitable
+
+    return decorator
+
+
+def register_on_plugin_unloaded(**kwargs):
+    """当有插件卸载完成时
+
+    Hook 参数:
+        metadata
+
+    说明:
+        当有插件卸载完成时，触发该事件并获取到该插件的元数据
+    """
+
+    def decorator(awaitable):
+        _ = get_handler_or_create(awaitable, EventType.OnPluginUnloadedEvent, **kwargs)
         return awaitable
 
     return decorator
@@ -565,7 +619,7 @@ class RegisteringAgent:
         kwargs["registering_agent"] = self
         return register_llm_tool(*args, **kwargs)
 
-    def __init__(self, agent: Agent[AstrAgentContext]):
+    def __init__(self, agent: Agent[AstrAgentContext]) -> None:
         self._agent = agent
 
 

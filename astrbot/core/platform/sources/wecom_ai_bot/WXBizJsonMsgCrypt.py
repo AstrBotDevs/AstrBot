@@ -14,6 +14,7 @@ import secrets
 import socket
 import struct
 import time
+from typing import NoReturn
 
 from Crypto.Cipher import AES
 
@@ -30,7 +31,7 @@ class FormatException(Exception):
     pass
 
 
-def throw_exception(message, exception_class=FormatException):
+def throw_exception(message, exception_class=FormatException) -> NoReturn:
     """My define raise exception function"""
     raise exception_class(message)
 
@@ -145,7 +146,7 @@ class Prpcrypt:
     MIN_RANDOM_VALUE = 1000000000000000  # 最小值: 1000000000000000 (16位)
     RANDOM_RANGE = 9000000000000000  # 范围大小: 确保最大值为 9999999999999999 (16位)
 
-    def __init__(self, key):
+    def __init__(self, key) -> None:
         # self.key = base64.b64decode(key+"=")
         self.key = key
         # 设置加解密模式为AES的CBC模式
@@ -220,7 +221,7 @@ class Prpcrypt:
 
 class WXBizJsonMsgCrypt:
     # 构造函数
-    def __init__(self, sToken, sEncodingAESKey, sReceiveId):
+    def __init__(self, sToken, sEncodingAESKey, sReceiveId) -> None:
         try:
             self.key = base64.b64decode(sEncodingAESKey + "=")
             assert len(self.key) == 32

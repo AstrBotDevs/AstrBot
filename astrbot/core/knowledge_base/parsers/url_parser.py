@@ -6,7 +6,7 @@ import aiohttp
 class URLExtractor:
     """URL 内容提取器，封装了 Tavily API 调用和密钥管理"""
 
-    def __init__(self, tavily_keys: list[str]):
+    def __init__(self, tavily_keys: list[str]) -> None:
         """
         初始化 URL 提取器
 

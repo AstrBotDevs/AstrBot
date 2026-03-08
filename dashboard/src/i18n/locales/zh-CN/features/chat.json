@@ -9,7 +9,8 @@
     "voice": "语音输入",
     "recordingPrompt": "录音中，请说话...",
     "chatPrompt": "聊天吧!",
-    "dropToUpload": "松开鼠标上传文件"
+    "dropToUpload": "松开鼠标上传文件",
+    "stopGenerating": "停止生成"
   },
   "message": {
     "user": "用户",
@@ -80,6 +81,11 @@
     "disabled": "流式响应已关闭",
     "on": "流式",
     "off": "普通"
+  },
+  "transport": {
+    "title": "通信传输模式",
+    "sse": "SSE",
+    "websocket": "WebSocket"
   },
   "config": {
     "title": "配置文件"

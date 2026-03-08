@@ -7,12 +7,14 @@ import asyncio
 import os
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import cast
 
 from funasr_onnx import SenseVoiceSmall
 from funasr_onnx.utils.postprocess_utils import rich_transcription_postprocess
 
 from astrbot.core import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
@@ -37,7 +39,7 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
         self.model = None
         self.is_emotion = provider_config.get("is_emotion", False)
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         logger.info("下载或者加载 SenseVoice 模型中，这可能需要一些时间 ...")
 
         # 将模型加载放到线程池中执行
@@ -50,9 +52,11 @@ class ProviderSenseVoiceSTTSelfHost(STTProvider):
 
     async def get_timestamped_path(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return os.path.join("data", "temp", f"{timestamp}")
+        temp_dir = Path(get_astrbot_temp_path())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        return str(temp_dir / timestamp)
 
-    async def _is_silk_file(self, file_path):
+    async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
         with open(file_path, "rb") as f:
             file_header = f.read(8)

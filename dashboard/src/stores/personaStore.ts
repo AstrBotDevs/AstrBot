@@ -18,6 +18,7 @@ export interface PersonaFolder {
 export interface Persona {
   persona_id: string;
   system_prompt: string;
+  custom_error_message: string | null;
   begin_dialogs: string[];
   tools: string[] | null;
   skills: string[] | null;

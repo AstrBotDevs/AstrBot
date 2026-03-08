@@ -67,7 +67,7 @@ class DashscopeAgentRunner(BaseAgentRunner[TContext]):
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
 
-    def has_rag_options(self):
+    def has_rag_options(self) -> bool:
         """判断是否有 RAG 选项
 
         Returns:

@@ -12,7 +12,7 @@ class FixedSizeChunker(BaseChunker):
     按照固定的字符数分块,并支持块之间的重叠。
     """
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50):
+    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50) -> None:
         """初始化分块器
 
         Args:

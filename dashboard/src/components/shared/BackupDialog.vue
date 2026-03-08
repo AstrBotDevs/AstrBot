@@ -370,9 +370,13 @@
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { useI18n } from '@/i18n/composables'
+import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
+import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
 import WaitingForRestart from './WaitingForRestart.vue'
 
 const { t } = useI18n()
+
+const confirmDialog = useConfirmDialog()
 
 const isOpen = ref(false)
 const activeTab = ref('export')
@@ -844,7 +848,7 @@ const restoreFromList = async (filename) => {
 
 // 删除备份
 const deleteBackup = async (filename) => {
-    if (!confirm(t('features.settings.backup.list.confirmDelete'))) return
+    if (!(await askForConfirmation(t('features.settings.backup.list.confirmDelete'), confirmDialog))) return
 
     try {
         const response = await axios.post('/api/backup/delete', { filename })
@@ -945,12 +949,12 @@ const formatISODate = (isoString) => {
 }
 
 // 重启 AstrBot
-const restartAstrBot = () => {
-    axios.post('/api/stat/restart-core').then(() => {
-        if (wfr.value) {
-            wfr.value.check()
-        }
-    })
+const restartAstrBot = async () => {
+    try {
+        await restartAstrBotRuntime(wfr.value)
+    } catch (error) {
+        console.error(error)
+    }
 }
 
 // 重置所有状态

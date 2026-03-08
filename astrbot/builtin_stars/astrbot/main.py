@@ -85,7 +85,9 @@ class Main(star.Star):
                     logger.error(f"主动回复失败: {e}")
 
     @filter.on_llm_request()
-    async def decorate_llm_req(self, event: AstrMessageEvent, req: ProviderRequest):
+    async def decorate_llm_req(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ) -> None:
         """在请求 LLM 前注入人格信息、Identifier、时间、回复内容等 System Prompt"""
         if self.ltm and self.ltm_enabled(event):
             try:
@@ -94,7 +96,9 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
 
     @filter.on_llm_response()
-    async def record_llm_resp_to_ltm(self, event: AstrMessageEvent, resp: LLMResponse):
+    async def record_llm_resp_to_ltm(
+        self, event: AstrMessageEvent, resp: LLMResponse
+    ) -> None:
         """在 LLM 响应后记录对话"""
         if self.ltm and self.ltm_enabled(event):
             try:
@@ -103,7 +107,7 @@ class Main(star.Star):
                 logger.error(f"ltm: {e}")
 
     @filter.after_message_sent()
-    async def after_message_sent(self, event: AstrMessageEvent):
+    async def after_message_sent(self, event: AstrMessageEvent) -> None:
         """消息发送后处理"""
         if self.ltm and self.ltm_enabled(event):
             try:

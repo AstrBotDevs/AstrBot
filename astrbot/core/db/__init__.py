@@ -8,6 +8,7 @@ from deprecated import deprecated
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from astrbot.core.db.po import (
+    ApiKey,
     Attachment,
     ChatUIProject,
     CommandConfig,
@@ -43,7 +44,7 @@ class BaseDatabase(abc.ABC):
             expire_on_commit=False,
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化数据库连接"""
 
     @asynccontextmanager
@@ -249,6 +250,55 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def create_api_key(
+        self,
+        name: str,
+        key_hash: str,
+        key_prefix: str,
+        scopes: list[str] | None,
+        created_by: str,
+        expires_at: datetime.datetime | None = None,
+    ) -> ApiKey:
+        """Create a new API key record."""
+        ...
+
+    @abc.abstractmethod
+    async def list_api_keys(self) -> list[ApiKey]:
+        """List all API keys."""
+        ...
+
+    @abc.abstractmethod
+    async def get_api_key_by_id(self, key_id: str) -> ApiKey | None:
+        """Get an API key by key_id."""
+        ...
+
+    @abc.abstractmethod
+    async def get_active_api_key_by_hash(self, key_hash: str) -> ApiKey | None:
+        """Get an active API key by hash (not revoked, not expired)."""
+        ...
+
+    @abc.abstractmethod
+    async def touch_api_key(self, key_id: str) -> None:
+        """Update last_used_at of an API key."""
+        ...
+
+    @abc.abstractmethod
+    async def revoke_api_key(self, key_id: str) -> bool:
+        """Revoke an API key.
+
+        Returns True when the key exists and is updated.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def delete_api_key(self, key_id: str) -> bool:
+        """Delete an API key.
+
+        Returns True when the key exists and is deleted.
+        """
+        ...
+
+    @abc.abstractmethod
     async def insert_persona(
         self,
         persona_id: str,
@@ -256,6 +306,7 @@ class BaseDatabase(abc.ABC):
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
     ) -> Persona:
@@ -267,6 +318,7 @@ class BaseDatabase(abc.ABC):
             begin_dialogs: Optional list of initial dialog strings
             tools: Optional list of tool names (None means all tools, [] means no tools)
             skills: Optional list of skill names (None means all skills, [] means no skills)
+            custom_error_message: Optional persona-level fallback error message
             folder_id: Optional folder ID to place the persona in (None means root)
             sort_order: Sort order within the folder (default 0)
         """
@@ -290,6 +342,7 @@ class BaseDatabase(abc.ABC):
         begin_dialogs: list[str] | None = None,
         tools: list[str] | None = None,
         skills: list[str] | None = None,
+        custom_error_message: str | None = None,
     ) -> Persona | None:
         """Update a persona's system prompt or begin dialogs."""
         ...
@@ -605,6 +658,22 @@ class BaseDatabase(abc.ABC):
         """Get all Platform sessions for a specific creator (username) and optionally platform.
 
         Returns a list of dicts containing session info and project info (if session belongs to a project).
+        """
+        ...
+
+    @abc.abstractmethod
+    async def get_platform_sessions_by_creator_paginated(
+        self,
+        creator: str,
+        platform_id: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        exclude_project_sessions: bool = False,
+    ) -> tuple[list[dict], int]:
+        """Get paginated platform sessions and total count for a creator.
+
+        Returns:
+            tuple[list[dict], int]: (sessions_with_project_info, total_count)
         """
         ...
 

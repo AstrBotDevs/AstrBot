@@ -7,7 +7,7 @@ import wave
 from io import BytesIO
 
 from astrbot.core import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
@@ -117,12 +117,13 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     except ImportError as e:
         raise Exception("未安装 pilk: pip install pilk") from e
 
-    temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+    temp_dir = get_astrbot_temp_path()
     os.makedirs(temp_dir, exist_ok=True)
 
     # 是否需要转换为 WAV
     ext = os.path.splitext(audio_path)[1].lower()
     temp_wav = tempfile.NamedTemporaryFile(
+        prefix="tencent_record_",
         suffix=".wav",
         delete=False,
         dir=temp_dir,
@@ -140,6 +141,7 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
         rate = wav_file.getframerate()
 
     silk_path = tempfile.NamedTemporaryFile(
+        prefix="tencent_record_",
         suffix=".silk",
         delete=False,
         dir=temp_dir,

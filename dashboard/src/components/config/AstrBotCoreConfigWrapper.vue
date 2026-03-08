@@ -2,18 +2,22 @@
     <div :class="$vuetify.display.mobile ? '' : 'd-flex'">
         <v-tabs v-model="tab" :direction="$vuetify.display.mobile ? 'horizontal' : 'vertical'"
             :align-tabs="$vuetify.display.mobile ? 'left' : 'start'" color="deep-purple-accent-4" class="config-tabs">
-            <v-tab v-for="(val, key, index) in metadata" :key="index" :value="index"
+            <v-tab v-for="section in visibleSections" :key="section.key" :value="section.key"
                 style="font-weight: 1000; font-size: 15px">
-                {{ tm(metadata[key]['name']) }}
+                {{ tm(section.value['name']) }}
             </v-tab>
         </v-tabs>
         <v-tabs-window v-model="tab" class="config-tabs-window" :style="readonly ? 'pointer-events: none; opacity: 0.6;' : ''">
-            <v-tabs-window-item v-for="(val, key, index) in metadata" v-show="index == tab" :key="index">
+            <v-tabs-window-item v-for="section in visibleSections" :key="section.key" :value="section.key">
                 <v-container fluid>
-                    <div v-for="(val2, key2, index2) in metadata[key]['metadata']" :key="key2">
+                    <div v-for="(val2, key2, index2) in section.value['metadata']" :key="key2">
                         <!-- Support both traditional and JSON selector metadata -->
-                        <AstrBotConfigV4 :metadata="{ [key2]: metadata[key]['metadata'][key2] }" :iterable="config_data"
-                            :metadataKey="key2">
+                        <AstrBotConfigV4
+                            :metadata="{ [key2]: section.value['metadata'][key2] }"
+                            :iterable="config_data"
+                            :metadataKey="key2"
+                            :search-keyword="searchKeyword"
+                        >
                         </AstrBotConfigV4>
                     </div>
                 </v-container>
@@ -31,6 +35,11 @@
 
         </v-tabs-window>
     </div>
+    <v-container v-if="visibleSections.length === 0" fluid class="px-0">
+        <v-alert type="info" variant="tonal">
+            {{ tm('search.noResult') }}
+        </v-alert>
+    </v-container>
 </template>
 
 <script>
@@ -56,6 +65,10 @@ export default {
     readonly: {
       type: Boolean,
       default: false
+    },
+    searchKeyword: {
+      type: String,
+      default: ''
     }
   },
   setup() {
@@ -76,11 +89,63 @@ export default {
   },
   data() {
     return {
-      tab: 0, // 用于切换配置标签页
+      tab: null, // 当前激活的配置标签页 key
     }
   },
+  computed: {
+    normalizedSearchKeyword() {
+      return String(this.searchKeyword || '').trim().toLowerCase();
+    },
+    visibleSections() {
+      if (!this.metadata || typeof this.metadata !== 'object') {
+        return [];
+      }
+      const allSections = Object.entries(this.metadata).map(([key, value]) => ({ key, value }));
+      if (!this.normalizedSearchKeyword) {
+        return allSections;
+      }
+      return allSections.filter((section) => this.sectionHasSearchMatch(section.value));
+    }
+  },
+  watch: {
+    visibleSections(newSections) {
+      const sectionKeys = newSections.map((section) => section.key);
+      if (!sectionKeys.includes(this.tab)) {
+        this.tab = sectionKeys[0] ?? null;
+      }
+    }
+  },
+  mounted() {
+    const sectionKeys = this.visibleSections.map((section) => section.key);
+    this.tab = sectionKeys[0] ?? null;
+  },
   methods: {
-    // 如果需要添加其他方法，可以在这里添加
+    sectionHasSearchMatch(section) {
+      const keyword = this.normalizedSearchKeyword;
+      if (!keyword) {
+        return true;
+      }
+      const sectionMetadata = section?.metadata || {};
+      return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
+    },
+    metaObjectHasSearchMatch(metaObject, keyword) {
+      if (!metaObject || typeof metaObject !== 'object') {
+        return false;
+      }
+      const target = [
+        this.tm(metaObject.description || ''),
+        this.tm(metaObject.hint || ''),
+        ...Object.entries(metaObject.items || {}).flatMap(([itemKey, itemMeta]) => ([
+          itemKey,
+          this.tm(itemMeta?.description || ''),
+          this.tm(itemMeta?.hint || '')
+        ]))
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return target.includes(keyword);
+    }
   }
 }
 </script>

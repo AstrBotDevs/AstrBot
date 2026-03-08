@@ -76,6 +76,7 @@ const {
   renameDialog,
   detailsDialog,
   toggleCommand,
+  updatePermission,
   openRenameDialog,
   confirmRename,
   openDetailsDialog
@@ -93,6 +94,10 @@ const filteredTools = computed(() => {
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
   await toggleCommand(cmd, tm('messages.toggleSuccess'), tm('messages.toggleFailed'));
+};
+
+const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'member') => {
+  await updatePermission(cmd, permission, tm('messages.updateSuccess'), tm('messages.updateFailed'));
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
@@ -240,6 +245,7 @@ watch(viewMode, async (mode) => {
               @toggle-command="handleToggleCommand"
               @rename="openRenameDialog"
               @view-details="openDetailsDialog"
+              @update-permission="handleUpdatePermission"
             />
           </div>
 

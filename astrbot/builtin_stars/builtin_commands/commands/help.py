@@ -8,7 +8,7 @@ from astrbot.core.utils.io import get_dashboard_version
 
 
 class HelpCommand:
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
     async def _query_astrbot_notice(self):
@@ -34,7 +34,7 @@ class HelpCommand:
         lines: list[str] = []
         hidden_commands = {"set", "unset", "websearch"}
 
-        def walk(items: list[dict], indent: int = 0):
+        def walk(items: list[dict], indent: int = 0) -> None:
             for item in items:
                 if not item.get("reserved") or not item.get("enabled"):
                     continue
@@ -62,7 +62,7 @@ class HelpCommand:
         walk(commands)
         return lines
 
-    async def help(self, event: AstrMessageEvent):
+    async def help(self, event: AstrMessageEvent) -> None:
         """查看帮助"""
         notice = ""
         try:

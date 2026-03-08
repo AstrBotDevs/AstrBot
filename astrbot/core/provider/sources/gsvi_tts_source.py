@@ -4,7 +4,7 @@ import uuid
 
 import aiohttp
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -29,7 +29,7 @@ class ProviderGSVITTS(TTSProvider):
         self.emotion = provider_config.get("emotion")
 
     async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         path = os.path.join(temp_dir, f"gsvi_tts_{uuid.uuid4()}.wav")
         params = {"text": text}
 

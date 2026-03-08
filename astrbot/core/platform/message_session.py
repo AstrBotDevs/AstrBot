@@ -15,7 +15,7 @@ class MessageSession:
     session_id: str
     platform_id: str = field(init=False)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.platform_id}:{self.message_type.value}:{self.session_id}"
 
     def __post_init__(self):

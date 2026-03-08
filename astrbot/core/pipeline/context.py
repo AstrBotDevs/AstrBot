@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from astrbot.core.config import AstrBotConfig
-from astrbot.core.star import PluginManager
 
 from .context_utils import call_event_hook, call_handler
+
+if TYPE_CHECKING:
+    from astrbot.core.star import PluginManager
 
 
 @dataclass

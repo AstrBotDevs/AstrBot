@@ -57,7 +57,9 @@ class TruncateByTurnsCompressor:
     Truncates the message list by removing older turns.
     """
 
-    def __init__(self, truncate_turns: int = 1, compression_threshold: float = 0.82):
+    def __init__(
+        self, truncate_turns: int = 1, compression_threshold: float = 0.82
+    ) -> None:
         """Initialize the truncate by turns compressor.
 
         Args:
@@ -152,7 +154,7 @@ class LLMSummaryCompressor:
         keep_recent: int = 4,
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
-    ):
+    ) -> None:
         """Initialize the LLM summary compressor.
 
         Args:

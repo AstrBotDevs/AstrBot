@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 'latest'
+          node-version: '24.13.0'
 
       - name: npm install, build
         run: |
@@ -36,7 +36,7 @@ jobs:
           zip -r dist.zip dist
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dist-without-markdown
           path: |

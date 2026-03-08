@@ -12,6 +12,7 @@ from quart import request
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..utils import generate_tsne_visualization
 from .route import Response, Route, RouteContext
@@ -114,7 +115,7 @@ class KnowledgeBaseRoute(Route):
             p["total"] = total
 
     def _make_progress_callback(self, task_id: str, file_idx: int, file_name: str):
-        async def _callback(stage: str, current: int, total: int):
+        async def _callback(stage: str, current: int, total: int) -> None:
             self._update_progress(
                 task_id,
                 status="processing",
@@ -137,7 +138,7 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台上传任务"""
         try:
             # 初始化任务状态
@@ -216,7 +217,7 @@ class KnowledgeBaseRoute(Route):
         batch_size: int,
         tasks_limit: int,
         max_retries: int,
-    ):
+    ) -> None:
         """后台导入预切片文档任务"""
         try:
             # 初始化任务状态
@@ -703,7 +704,10 @@ class KnowledgeBaseRoute(Route):
                 file_name = file.filename
 
                 # 保存到临时文件
-                temp_file_path = f"data/temp/{uuid.uuid4()}_{file_name}"
+                temp_file_path = os.path.join(
+                    get_astrbot_temp_path(),
+                    f"kb_upload_{uuid.uuid4()}_{file_name}",
+                )
                 await file.save(temp_file_path)
 
                 try:
@@ -1215,7 +1219,7 @@ class KnowledgeBaseRoute(Route):
         max_retries: int,
         enable_cleaning: bool,
         cleaning_provider_id: str | None,
-    ):
+    ) -> None:
         """后台上传URL任务"""
         try:
             # 初始化任务状态

@@ -12,11 +12,11 @@ T = TypeVar("T", bound="StarHandlerMetadata")
 
 
 class StarHandlerRegistry(Generic[T]):
-    def __init__(self):
+    def __init__(self) -> None:
         self.star_handlers_map: dict[str, StarHandlerMetadata] = {}
         self._handlers: list[StarHandlerMetadata] = []
 
-    def append(self, handler: StarHandlerMetadata):
+    def append(self, handler: StarHandlerMetadata) -> None:
         """添加一个 Handler，并保持按优先级有序"""
         if "priority" not in handler.extras_configs:
             handler.extras_configs["priority"] = 0
@@ -25,7 +25,7 @@ class StarHandlerRegistry(Generic[T]):
         self._handlers.append(handler)
         self._handlers.sort(key=lambda h: -h.extras_configs["priority"])
 
-    def _print_handlers(self):
+    def _print_handlers(self) -> None:
         for handler in self._handlers:
             print(handler.handler_full_name)
 
@@ -100,6 +100,30 @@ class StarHandlerRegistry(Generic[T]):
     @overload
     def get_handlers_by_event_type(
         self,
+        event_type: Literal[EventType.OnPluginErrorEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
+        event_type: Literal[EventType.OnPluginLoadedEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
+        event_type: Literal[EventType.OnPluginUnloadedEvent],
+        only_activated=True,
+        plugins_name: list[str] | None = None,
+    ) -> list[StarHandlerMetadata[Callable[..., Awaitable[Any]]]]: ...
+
+    @overload
+    def get_handlers_by_event_type(
+        self,
         event_type: EventType,
         only_activated=True,
         plugins_name: list[str] | None = None,
@@ -136,6 +160,8 @@ class StarHandlerRegistry(Generic[T]):
                     not in (
                         EventType.OnAstrBotLoadedEvent,
                         EventType.OnPlatformLoadedEvent,
+                        EventType.OnPluginLoadedEvent,
+                        EventType.OnPluginUnloadedEvent,
                     )
                     and not plugin.reserved
                 ):
@@ -156,18 +182,18 @@ class StarHandlerRegistry(Generic[T]):
             if handler.handler_module_path == module_name
         ]
 
-    def clear(self):
+    def clear(self) -> None:
         self.star_handlers_map.clear()
         self._handlers.clear()
 
-    def remove(self, handler: StarHandlerMetadata):
+    def remove(self, handler: StarHandlerMetadata) -> None:
         self.star_handlers_map.pop(handler.handler_full_name, None)
         self._handlers = [h for h in self._handlers if h != handler]
 
     def __iter__(self):
         return iter(self._handlers)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._handlers)
 
 
@@ -192,6 +218,9 @@ class EventType(enum.Enum):
     OnUsingLLMToolEvent = enum.auto()  # 使用 LLM 工具
     OnLLMToolRespondEvent = enum.auto()  # 调用函数工具后
     OnAfterMessageSentEvent = enum.auto()  # 发送消息后
+    OnPluginErrorEvent = enum.auto()  # 插件处理消息异常时
+    OnPluginLoadedEvent = enum.auto()  # 插件加载完成
+    OnPluginUnloadedEvent = enum.auto()  # 插件卸载完成
 
 
 H = TypeVar("H", bound=Callable[..., Any])

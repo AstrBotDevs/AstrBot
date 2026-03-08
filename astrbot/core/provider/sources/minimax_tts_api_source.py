@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 import aiohttp
 
 from astrbot.api import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -145,7 +145,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
         return b"".join(chunks)
 
     async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, f"minimax_tts_api_{uuid.uuid4()}.mp3")
 

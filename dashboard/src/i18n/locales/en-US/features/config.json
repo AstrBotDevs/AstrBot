@@ -28,6 +28,7 @@
   "messages": {
     "configApplied": "Configuration successfully applied. To save, you need to click the save button in the bottom right corner.",
     "configApplyError": "Configuration not applied, JSON format error.",
+    "unsavedChangesNotice": "You have unsaved configuration changes. Click the save button in the bottom-right corner to apply them.",
     "saveSuccess": "Configuration saved successfully",
     "saveError": "Failed to save configuration",
     "loadError": "Failed to load configuration",
@@ -68,6 +69,10 @@
     "normalConfig": "Basic",
     "systemConfig": "System"
   },
+  "search": {
+    "placeholder": "Search config items (key/description/hint)",
+    "noResult": "No matching config items found"
+  },
   "configManagement": {
     "title": "Configuration Management",
     "description": "AstrBot supports separate configuration files for different bots. The `default` configuration is used by default.",
@@ -107,5 +112,18 @@
     "addToConfig": "Added to config",
     "fileCount": "Files: {count}",
     "done": "Done"
+  },
+  "unsavedChangesWarning": {
+    "dialogTitle": "Unsaved changes",
+    "leavePage": "You have unsaved changes. Do you want to save before leaving?",
+    "switchConfig": "Switching config will discard unsaved changes. Do you want to save first?",
+    "options": {
+      "save": "Save",
+      "saveAndSwitch": "Save and switch",
+      "discardAndSwitch": "Discard changes and switch",
+      "closeCard": "Close the pop-up window",
+      "confirm": "confirm",
+      "cancel": "cancel"
+    }
   }
 }

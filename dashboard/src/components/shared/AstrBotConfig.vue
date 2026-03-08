@@ -3,7 +3,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
-import { useI18n } from '@/i18n/composables'
+import { useI18n, useModuleI18n } from '@/i18n/composables'
 import axios from 'axios'
 import { useToast } from '@/utils/toast'
 
@@ -35,12 +35,52 @@ const props = defineProps({
 })
 
 const { t } = useI18n()
+const { tm, getRaw } = useModuleI18n('features/config-metadata')
+
+const translateIfKey = (value) => {
+  if (!value || typeof value !== 'string') return value
+  return getRaw(value) ? tm(value) : value
+}
 
 const filteredIterable = computed(() => {
   if (!props.iterable) return {}
   const { hint, ...rest } = props.iterable
   return rest
 })
+
+const providerHint = computed(() => {
+  const hint = props.iterable?.hint
+  if (typeof hint !== 'string' || !hint) return ''
+
+  if (
+    hint === 'provider_group.provider.openai_embedding.hint'
+    || hint === 'provider_group.provider.gemini_embedding.hint'
+  ) {
+    return ''
+  }
+
+  return hint
+})
+
+const getItemHint = (itemKey, itemMeta) => {
+  if (itemMeta?.hint) return itemMeta.hint
+
+  if (itemKey !== 'embedding_api_base') return ''
+
+  const providerType = props.iterable?.type
+  if (providerType === 'openai_embedding') {
+    return getRaw('provider_group.provider.openai_embedding.hint')
+      ? 'provider_group.provider.openai_embedding.hint'
+      : ''
+  }
+  if (providerType === 'gemini_embedding') {
+    return getRaw('provider_group.provider.gemini_embedding.hint')
+      ? 'provider_group.provider.gemini_embedding.hint'
+      : ''
+  }
+
+  return ''
+}
 
 const dialog = ref(false)
 const currentEditingKey = ref('')
@@ -134,11 +174,11 @@ function hasVisibleItemsAfter(items, currentIndex) {
 <template>
   <div class="config-section" v-if="iterable && metadata[metadataKey]?.type === 'object'">
     <v-list-item-title class="config-title">
-      {{ metadata[metadataKey]?.description }} <span class="metadata-key">({{ metadataKey }})</span>
+      {{ translateIfKey(metadata[metadataKey]?.description) }} <span class="metadata-key">({{ metadataKey }})</span>
     </v-list-item-title>
     <v-list-item-subtitle class="config-hint">
       <span v-if="metadata[metadataKey]?.obvious_hint && metadata[metadataKey]?.hint" class="important-hint">‼️</span>
-      {{ metadata[metadataKey]?.hint }}
+      {{ translateIfKey(metadata[metadataKey]?.hint) }}
     </v-list-item-subtitle>
   </div>
 
@@ -147,14 +187,14 @@ function hasVisibleItemsAfter(items, currentIndex) {
     <div v-if="metadata[metadataKey]?.type === 'object' || metadata[metadataKey]?.config_template" class="object-config">
       <!-- Provider-level hint -->
       <v-alert
-        v-if="iterable.hint && !isEditing"
+        v-if="providerHint"
         type="info"
         variant="tonal"
         class="mb-4"
         border="start"
         density="compact"
       >
-        {{ iterable.hint }}
+        {{ translateIfKey(providerHint) }}
       </v-alert>
 
       <div v-for="(val, key, index) in filteredIterable" :key="key" class="config-item">
@@ -180,14 +220,14 @@ function hasVisibleItemsAfter(items, currentIndex) {
             <div class="config-section mb-2">
               <v-list-item-title class="config-title">
                 <span v-if="metadata[metadataKey].items[key]?.description">
-                  {{ metadata[metadataKey].items[key]?.description }}
+                  {{ translateIfKey(metadata[metadataKey].items[key]?.description) }}
                   <span class="property-key">({{ key }})</span>
                 </span>
                 <span v-else>{{ key }}</span>
               </v-list-item-title>
               <v-list-item-subtitle class="config-hint">
                 <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint" class="important-hint">‼️</span>
-                {{ metadata[metadataKey].items[key]?.hint }}
+                {{ translateIfKey(metadata[metadataKey].items[key]?.hint) }}
               </v-list-item-subtitle>
             </div>
             <TemplateListEditor
@@ -205,16 +245,16 @@ function hasVisibleItemsAfter(items, currentIndex) {
               <v-list-item density="compact">
                 <v-list-item-title class="property-name">
                   <span v-if="metadata[metadataKey].items[key]?.description">
-                    {{ metadata[metadataKey].items[key]?.description }}
+                    {{ translateIfKey(metadata[metadataKey].items[key]?.description) }}
                     <span class="property-key">({{ key }})</span>
                   </span>
                   <span v-else>{{ key }}</span>
                 </v-list-item-title>
 
                 <v-list-item-subtitle class="property-hint">
-                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && metadata[metadataKey].items[key]?.hint"
+                  <span v-if="metadata[metadataKey].items[key]?.obvious_hint && getItemHint(key, metadata[metadataKey].items[key])"
                         class="important-hint">‼️</span>
-                  {{ metadata[metadataKey].items[key]?.hint }}
+                  {{ translateIfKey(getItemHint(key, metadata[metadataKey].items[key])) }}
                 </v-list-item-subtitle>
               </v-list-item>
             </v-col>

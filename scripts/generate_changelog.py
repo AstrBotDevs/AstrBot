@@ -185,7 +185,7 @@ def generate_simple_changelog(commits):
     return changelog_zh + changelog_en
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Generate changelog from git commits")
     parser.add_argument(
         "--version", help="Version number for the changelog (e.g., v4.13.3)"

@@ -38,7 +38,7 @@ class AstrMessageEvent(abc.ABC):
         message_obj: AstrBotMessage,
         platform_meta: PlatformMetadata,
         session_id: str,
-    ):
+    ) -> None:
         self.message_str = message_str
         """纯文本的消息"""
         self.message_obj = message_obj
@@ -52,9 +52,19 @@ class AstrMessageEvent(abc.ABC):
         self.is_at_or_wake_command = False
         """是否是 At 机器人或者带有唤醒词或者是私聊(插件注册的事件监听器会让 is_wake 设为 True, 但是不会让这个属性置为 True)"""
         self._extras: dict[str, Any] = {}
+        message_type = getattr(message_obj, "type", None)
+        if not isinstance(message_type, MessageType):
+            try:
+                message_type = MessageType(str(message_type))
+            except (ValueError, TypeError, AttributeError):
+                logger.warning(
+                    f"Failed to convert message type {message_obj.type!r} to MessageType. "
+                    f"Falling back to FRIEND_MESSAGE."
+                )
+                message_type = MessageType.FRIEND_MESSAGE
         self.session = MessageSession(
             platform_name=platform_meta.id,
-            message_type=message_obj.type,
+            message_type=message_type,
             session_id=session_id,
         )
         # self.unified_msg_origin = str(self.session)
@@ -91,7 +101,7 @@ class AstrMessageEvent(abc.ABC):
         return str(self.session)
 
     @unified_msg_origin.setter
-    def unified_msg_origin(self, value: str):
+    def unified_msg_origin(self, value: str) -> None:
         """设置统一的消息来源字符串。格式为 platform_name:message_type:session_id"""
         self.new_session = MessageSession.from_str(value)
         self.session = self.new_session
@@ -102,7 +112,7 @@ class AstrMessageEvent(abc.ABC):
         return self.session.session_id
 
     @session_id.setter
-    def session_id(self, value: str):
+    def session_id(self, value: str) -> None:
         """设置用户的会话 ID。可以直接使用下面的 unified_msg_origin"""
         self.session.session_id = value
 
@@ -159,15 +169,18 @@ class AstrMessageEvent(abc.ABC):
 
         除了文本消息外，其他消息类型会被转换为对应的占位符。如图片消息会被转换为 [图片]。
         """
-        return self._outline_chain(self.message_obj.message)
+        return self._outline_chain(getattr(self.message_obj, "message", None))
 
     def get_messages(self) -> list[BaseMessageComponent]:
         """获取消息链。"""
-        return self.message_obj.message
+        return getattr(self.message_obj, "message", [])
 
     def get_message_type(self) -> MessageType:
         """获取消息类型。"""
-        return self.message_obj.type
+        message_type = getattr(self.message_obj, "type", None)
+        if isinstance(message_type, MessageType):
+            return message_type
+        return self.session.message_type
 
     def get_session_id(self) -> str:
         """获取会话id。"""
@@ -175,23 +188,32 @@ class AstrMessageEvent(abc.ABC):
 
     def get_group_id(self) -> str:
         """获取群组id。如果不是群组消息，返回空字符串。"""
-        return self.message_obj.group_id
+        return getattr(self.message_obj, "group_id", "")
 
     def get_self_id(self) -> str:
         """获取机器人自身的id。"""
-        return self.message_obj.self_id
+        return getattr(self.message_obj, "self_id", "")
 
     def get_sender_id(self) -> str:
         """获取消息发送者的id。"""
-        return self.message_obj.sender.user_id
+        sender = getattr(self.message_obj, "sender", None)
+        if sender and isinstance(getattr(sender, "user_id", None), str):
+            return sender.user_id
+        return ""
 
     def get_sender_name(self) -> str:
         """获取消息发送者的名称。(可能会返回空字符串)"""
-        if isinstance(self.message_obj.sender.nickname, str):
-            return self.message_obj.sender.nickname
-        return ""
+        sender = getattr(self.message_obj, "sender", None)
+        if not sender:
+            return ""
+        nickname = getattr(sender, "nickname", None)
+        if nickname is None:
+            return ""
+        if isinstance(nickname, str):
+            return nickname
+        return str(nickname)
 
-    def set_extra(self, key, value):
+    def set_extra(self, key, value) -> None:
         """设置额外的信息。"""
         self._extras[key] = value
 
@@ -201,14 +223,14 @@ class AstrMessageEvent(abc.ABC):
             return self._extras
         return self._extras.get(key, default)
 
-    def clear_extra(self):
+    def clear_extra(self) -> None:
         """清除额外的信息。"""
         logger.info(f"清除 {self.get_platform_name()} 的额外信息: {self._extras}")
         self._extras.clear()
 
     def is_private_chat(self) -> bool:
         """是否是私聊。"""
-        return self.message_obj.type.value == (MessageType.FRIEND_MESSAGE).value
+        return self.get_message_type() == MessageType.FRIEND_MESSAGE
 
     def is_wake_up(self) -> bool:
         """是否是唤醒机器人的事件。"""
@@ -234,7 +256,7 @@ class AstrMessageEvent(abc.ABC):
         self,
         generator: AsyncGenerator[MessageChain, None],
         use_fallback: bool = False,
-    ):
+    ) -> None:
         """发送流式消息到消息平台，使用异步生成器。
         目前仅支持: telegram，qq official 私聊。
         Fallback仅支持 aiocqhttp。
@@ -244,13 +266,19 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def _pre_send(self):
+    async def send_typing(self) -> None:
+        """发送输入中状态。
+
+        默认实现为空，由具体平台按需重写。
+        """
+
+    async def _pre_send(self) -> None:
         """调度器会在执行 send() 前调用该方法 deprecated in v3.5.18"""
 
-    async def _post_send(self):
+    async def _post_send(self) -> None:
         """调度器会在执行 send() 后调用该方法 deprecated in v3.5.18"""
 
-    def set_result(self, result: MessageEventResult | str):
+    def set_result(self, result: MessageEventResult | str) -> None:
         """设置消息事件的结果。
 
         Note:
@@ -279,14 +307,14 @@ class AstrMessageEvent(abc.ABC):
             result.chain = []
         self._result = result
 
-    def stop_event(self):
+    def stop_event(self) -> None:
         """终止事件传播。"""
         if self._result is None:
             self.set_result(MessageEventResult().stop_event())
         else:
             self._result.stop_event()
 
-    def continue_event(self):
+    def continue_event(self) -> None:
         """继续事件传播。"""
         if self._result is None:
             self.set_result(MessageEventResult().continue_event())
@@ -299,7 +327,7 @@ class AstrMessageEvent(abc.ABC):
             return False  # 默认是继续传播
         return self._result.is_stopped()
 
-    def should_call_llm(self, call_llm: bool):
+    def should_call_llm(self, call_llm: bool) -> None:
         """是否在此消息事件中禁止默认的 LLM 请求。
 
         只会阻止 AstrBot 默认的 LLM 请求链路，不会阻止插件中的 LLM 请求。
@@ -310,7 +338,7 @@ class AstrMessageEvent(abc.ABC):
         """获取消息事件的结果。"""
         return self._result
 
-    def clear_result(self):
+    def clear_result(self) -> None:
         """清除消息事件的结果。"""
         self._result = None
 
@@ -404,7 +432,7 @@ class AstrMessageEvent(abc.ABC):
 
     """平台适配器"""
 
-    async def send(self, message: MessageChain):
+    async def send(self, message: MessageChain) -> None:
         """发送消息到消息平台。
 
         Args:
@@ -423,7 +451,7 @@ class AstrMessageEvent(abc.ABC):
         )
         self._has_send_oper = True
 
-    async def react(self, emoji: str):
+    async def react(self, emoji: str) -> None:
         """对消息添加表情回应。
 
         默认实现为发送一条包含该表情的消息。

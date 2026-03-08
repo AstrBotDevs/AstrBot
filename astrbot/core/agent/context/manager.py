@@ -13,7 +13,7 @@ class ContextManager:
     def __init__(
         self,
         config: ContextConfig,
-    ):
+    ) -> None:
         """Initialize the context manager.
 
         There are two strategies to handle context limit reached:

@@ -45,12 +45,67 @@
     },
     "invalidPlatformId": "平台 ID 不能包含 ':' 或 '!'。"
   },
+  "createDialog": {
+    "step1Title": "选择消息平台类别",
+    "step1Hint": "想把机器人接入到哪里？如 QQ、企业微信、飞书、Discord、Telegram 等。",
+    "platformTypeLabel": "消息平台类别",
+    "configFileTitle": "配置文件",
+    "optional": "可选",
+    "configHint": "想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。",
+    "configDefaultHint": "默认使用默认配置文件 “default”。您也可以稍后配置。",
+    "useExistingConfig": "使用现有配置文件",
+    "selectConfigLabel": "选择配置文件",
+    "createNewConfig": "创建新配置文件",
+    "newConfigNameLabel": "新配置文件名称",
+    "newConfigTitle": "使用新的配置文件",
+    "newConfigLoadFailed": "无法加载默认配置模板",
+    "addRouteRule": "添加路由规则",
+    "viewMode": "查看",
+    "editMode": "编辑",
+    "noRouteRules": "该平台暂无路由规则，将使用默认配置文件",
+    "sessionIdPlaceholder": "会话ID或*",
+    "allSessions": "全部会话",
+    "configMissing": "配置文件不存在",
+    "routeHint": "*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话 ID。全部不匹配时将使用默认配置文件。",
+    "warningContinue": "无视警告并继续创建",
+    "warningEditAgain": "重新修改",
+    "configDrawerTitle": "配置文件管理",
+    "configDrawerIdLabel": "ID",
+    "configTableHeaders": {
+      "configId": "与此实例关联的配置文件 ID",
+      "scope": "在此实例下的应用范围"
+    },
+    "routeTableHeaders": {
+      "source": "消息会话来源(消息类型:会话 ID)",
+      "config": "使用配置文件",
+      "actions": "操作"
+    },
+    "messageTypeOptions": {
+      "all": "全部消息",
+      "group": "群组消息(GroupMessage)",
+      "friend": "私聊消息(FriendMessage)"
+    },
+    "messageTypeLabels": {
+      "all": "全部消息",
+      "group": "群组消息",
+      "friend": "私聊消息"
+    }
+  },
   "messages": {
     "updateSuccess": "更新成功!",
     "addSuccess": "添加成功!",
     "deleteSuccess": "删除成功!",
     "statusUpdateSuccess": "状态更新成功!",
-    "deleteConfirm": "确定要删除平台适配器"
+    "deleteConfirm": "确定要删除平台适配器",
+    "configNotFoundOpenConfig": "目标配置文件不存在，已打开配置页面以便检查。",
+    "updateMissingPlatformId": "更新失败，缺少平台 ID。",
+    "platformUpdateFailed": "平台更新失败。",
+    "addSuccessWithConfig": "平台添加成功，配置文件已更新",
+    "configIdMissing": "无法获取配置文件ID。",
+    "routingUpdateFailed": "更新路由表失败: {message}",
+    "createConfigFailed": "创建新配置文件失败: {message}",
+    "platformIdMissing": "无法获取平台 ID。",
+    "routingSaveFailed": "保存路由表失败: {message}"
   },
   "status": {
     "enabled": "已启用",

@@ -16,7 +16,9 @@ class SubAgentOrchestrator:
     Execution happens via HandoffTool in FunctionToolExecutor.
     """
 
-    def __init__(self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager):
+    def __init__(
+        self, tool_mgr: FunctionToolManager, persona_mgr: PersonaManager
+    ) -> None:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
         self.handoffs: list[HandoffTool] = []

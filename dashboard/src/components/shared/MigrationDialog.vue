@@ -113,6 +113,7 @@
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { useI18n } from '@/i18n/composables'
+import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
 import ConsoleDisplayer from './ConsoleDisplayer.vue'
 import WaitingForRestart from './WaitingForRestart.vue'
 
@@ -258,12 +259,12 @@ const getPlatformLabel = (platform) => {
 }
 
 // 重启 AstrBot
-const restartAstrBot = () => {
-    axios.post('/api/stat/restart-core').then(() => {
-        if (wfr.value) {
-            wfr.value.check();
-        }
-    })
+const restartAstrBot = async () => {
+    try {
+        await restartAstrBotRuntime(wfr.value)
+    } catch (error) {
+        console.error(error)
+    }
 }
 
 // 打开对话框的方法

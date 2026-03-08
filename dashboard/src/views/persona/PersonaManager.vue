@@ -110,20 +110,36 @@
         <!-- 创建/编辑 Persona 对话框 -->
         <PersonaForm v-model="showPersonaDialog" :editing-persona="editingPersona ?? undefined"
             :current-folder-id="currentFolderId ?? undefined" :current-folder-name="currentFolderName ?? undefined"
-            @saved="handlePersonaSaved" @error="showError" />
+            @saved="handlePersonaSaved" @deleted="handlePersonaDeleted" @error="showError" />
 
         <!-- 查看 Persona 详情对话框 -->
         <v-dialog v-model="showViewDialog" max-width="700px">
             <v-card v-if="viewingPersona">
                 <v-card-title class="d-flex justify-space-between align-center">
                     <span class="text-h5">{{ viewingPersona.persona_id }}</span>
-                    <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+                    <div class="d-flex align-center ga-1">
+                        <v-btn
+                            color="primary"
+                            variant="tonal"
+                            size="small"
+                            prepend-icon="mdi-pencil"
+                            @click="openEditFromViewDialog"
+                        >
+                            {{ tm('buttons.edit') }}
+                        </v-btn>
+                        <v-btn icon="mdi-close" variant="text" @click="showViewDialog = false" />
+                    </div>
                 </v-card-title>
 
                 <v-card-text>
                     <div class="mb-4">
                         <h4 class="text-h6 mb-2">{{ tm('form.systemPrompt') }}</h4>
                         <pre class="system-prompt-content">{{ viewingPersona.system_prompt }}</pre>
+                    </div>
+
+                    <div v-if="viewingPersona.custom_error_message" class="mb-4">
+                        <h4 class="text-h6 mb-2">{{ tm('form.customErrorMessage') }}</h4>
+                        <pre class="system-prompt-content">{{ viewingPersona.custom_error_message }}</pre>
                     </div>
 
                     <div v-if="viewingPersona.begin_dialogs && viewingPersona.begin_dialogs.length > 0" class="mb-4">
@@ -260,12 +276,17 @@ import PersonaCard from './PersonaCard.vue';
 import PersonaForm from '@/components/shared/PersonaForm.vue';
 import CreateFolderDialog from './CreateFolderDialog.vue';
 import MoveToFolderDialog from './MoveToFolderDialog.vue';
+import {
+    askForConfirmation as askForConfirmationDialog,
+    useConfirmDialog
+} from '@/utils/confirmDialog';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
 interface Persona {
     persona_id: string;
     system_prompt: string;
+    custom_error_message?: string | null;
     begin_dialogs?: string[] | null;
     tools?: string[] | null;
     skills?: string[] | null;
@@ -294,7 +315,8 @@ export default defineComponent({
     setup() {
         const { t } = useI18n();
         const { tm } = useModuleI18n('features/persona');
-        return { t, tm };
+        const confirmDialog = useConfirmDialog();
+        return { t, tm, confirmDialog };
     },
     data() {
         return {
@@ -409,13 +431,30 @@ export default defineComponent({
             this.showViewDialog = true;
         },
 
+        openEditFromViewDialog() {
+            if (!this.viewingPersona) return;
+            this.editingPersona = this.viewingPersona;
+            this.showViewDialog = false;
+            this.showPersonaDialog = true;
+        },
+
         handlePersonaSaved(message: string) {
             this.showSuccess(message);
             this.refreshCurrentFolder();
         },
 
+        handlePersonaDeleted(message: string) {
+            this.showSuccess(message);
+            this.refreshCurrentFolder();
+        },
+
         async confirmDeletePersona(persona: Persona) {
-            if (!confirm(this.tm('messages.deleteConfirm', { id: persona.persona_id }))) {
+            if (
+                !(await askForConfirmationDialog(
+                    this.tm('messages.deleteConfirm', { id: persona.persona_id }),
+                    this.confirmDialog,
+                ))
+            ) {
                 return;
             }
 

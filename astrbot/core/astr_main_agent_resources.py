@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import uuid
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -12,11 +13,25 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.computer.tools import (
+    AnnotateExecutionTool,
+    BrowserBatchExecTool,
+    BrowserExecTool,
+    CreateSkillCandidateTool,
+    CreateSkillPayloadTool,
+    EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileUploadTool,
+    GetExecutionHistoryTool,
+    GetSkillPayloadTool,
+    ListSkillCandidatesTool,
+    ListSkillReleasesTool,
     LocalPythonTool,
+    PromoteSkillCandidateTool,
     PythonTool,
+    RollbackSkillReleaseTool,
+    RunBrowserSkillTool,
+    SyncSkillReleaseTool,
 )
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
@@ -240,7 +255,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             if "_&exists_" in json.dumps(result):
                 # Download the file from sandbox
                 name = os.path.basename(path)
-                local_path = os.path.join(get_astrbot_temp_path(), name)
+                local_path = os.path.join(
+                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
                 return local_path, True
@@ -352,11 +369,11 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             MessageChain(chain=components),
         )
 
-        if file_from_sandbox:
-            try:
-                os.remove(local_path)
-            except Exception as e:
-                logger.error(f"Error removing temp file {local_path}: {e}")
+        # if file_from_sandbox:
+        #     try:
+        #         os.remove(local_path)
+        #     except Exception as e:
+        #         logger.error(f"Error removing temp file {local_path}: {e}")
 
         return f"Message sent to session {target_session}"
 
@@ -446,6 +463,20 @@ PYTHON_TOOL = PythonTool()
 LOCAL_PYTHON_TOOL = LocalPythonTool()
 FILE_UPLOAD_TOOL = FileUploadTool()
 FILE_DOWNLOAD_TOOL = FileDownloadTool()
+BROWSER_EXEC_TOOL = BrowserExecTool()
+BROWSER_BATCH_EXEC_TOOL = BrowserBatchExecTool()
+RUN_BROWSER_SKILL_TOOL = RunBrowserSkillTool()
+GET_EXECUTION_HISTORY_TOOL = GetExecutionHistoryTool()
+ANNOTATE_EXECUTION_TOOL = AnnotateExecutionTool()
+CREATE_SKILL_PAYLOAD_TOOL = CreateSkillPayloadTool()
+GET_SKILL_PAYLOAD_TOOL = GetSkillPayloadTool()
+CREATE_SKILL_CANDIDATE_TOOL = CreateSkillCandidateTool()
+LIST_SKILL_CANDIDATES_TOOL = ListSkillCandidatesTool()
+EVALUATE_SKILL_CANDIDATE_TOOL = EvaluateSkillCandidateTool()
+PROMOTE_SKILL_CANDIDATE_TOOL = PromoteSkillCandidateTool()
+LIST_SKILL_RELEASES_TOOL = ListSkillReleasesTool()
+ROLLBACK_SKILL_RELEASE_TOOL = RollbackSkillReleaseTool()
+SYNC_SKILL_RELEASE_TOOL = SyncSkillReleaseTool()
 
 # we prevent astrbot from connecting to known malicious hosts
 # these hosts are base64 encoded

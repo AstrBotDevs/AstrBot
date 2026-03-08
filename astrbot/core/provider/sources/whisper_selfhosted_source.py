@@ -6,7 +6,7 @@ from typing import cast
 import whisper
 
 from astrbot.core import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
 
@@ -30,7 +30,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         self.set_model(provider_config["model"])
         self.model = None
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         loop = asyncio.get_event_loop()
         logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
@@ -40,7 +40,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         )
         logger.info("Whisper 模型加载完成。")
 
-    async def _is_silk_file(self, file_path):
+    async def _is_silk_file(self, file_path) -> bool:
         silk_header = b"SILK"
         with open(file_path, "rb") as f:
             file_header = f.read(8)
@@ -58,9 +58,11 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             if "multimedia.nt.qq.com.cn" in audio_url:
                 is_tencent = True
 
-            name = str(uuid.uuid4())
-            temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-            path = os.path.join(temp_dir, name)
+            temp_dir = get_astrbot_temp_path()
+            path = os.path.join(
+                temp_dir,
+                f"whisper_selfhost_{uuid.uuid4().hex[:8]}.input",
+            )
             await download_file(audio_url, path)
             audio_url = path
 
@@ -71,8 +73,11 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
             is_silk = await self._is_silk_file(audio_url)
             if is_silk:
                 logger.info("Converting silk file to wav ...")
-                temp_dir = os.path.join(get_astrbot_data_path(), "temp")
-                output_path = os.path.join(temp_dir, str(uuid.uuid4()) + ".wav")
+                temp_dir = get_astrbot_temp_path()
+                output_path = os.path.join(
+                    temp_dir,
+                    f"whisper_selfhost_{uuid.uuid4().hex[:8]}.wav",
+                )
                 await tencent_silk_to_wav(audio_url, output_path)
                 audio_url = output_path
 

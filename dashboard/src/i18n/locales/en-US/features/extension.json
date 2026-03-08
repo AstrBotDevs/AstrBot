@@ -8,6 +8,17 @@
     "handlersOperation": "Manage Handlers",
     "market": "AstrBot Plugin Market"
   },
+  "titles": {
+    "installedAstrBotPlugins": "Installed AstrBot Plugins"
+  },
+  "failedPlugins": {
+    "title": "Failed to Load Plugins ({count})",
+    "hint": "These plugins failed to load. You can try reload or uninstall them directly.",
+    "columns": {
+      "plugin": "Plugin",
+      "error": "Error"
+    }
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
@@ -38,7 +49,8 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
-    "deleteSource": "Delete Source"
+    "deleteSource": "Delete Source",
+    "reshuffle": "Shuffle Again"
   },
   "status": {
     "enabled": "Enabled",
@@ -103,7 +115,11 @@
     "sourceUpdated": "Source updated successfully",
     "defaultOfficialSource": "Default Official Source",
     "sourceExists": "This source already exists",
-    "installPlugin": "Install Plugin"
+    "installPlugin": "Install Plugin",
+    "randomPlugins": "🎲 Random Plugins",
+    "showRandomPlugins": "Show Random Plugins",
+    "hideRandomPlugins": "Hide Random Plugins",
+    "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
     "default": "Default",
@@ -140,13 +156,20 @@
     "install": {
       "title": "Install Extension",
       "fromFile": "Install from File",
-      "fromUrl": "Install from URL"
+      "fromUrl": "Install from URL",
+      "supportPlatformsCount": "Supports {count} Platforms"
     },
     "danger_warning": {
       "title": "Dangerous Plugin Warning",
       "message": "This plugin has been flagged as containing security risks, including unsafe code or functionalities that may cause system malfunctions or data loss. Do you wish to proceed with the installation?",
       "confirm": "Continue",
       "cancel": "Cancel"
+    },
+    "versionCompatibility": {
+      "title": "Version Compatibility Warning",
+      "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
+      "confirm": "Ignore Warning and Install",
+      "cancel": "Cancel Installation"
     },
     "forceUpdate": {
       "title": "No New Version Detected",
@@ -164,7 +187,9 @@
     "refreshing": "Refreshing extension list...",
     "refreshSuccess": "Extension list refreshed!",
     "refreshFailed": "Error occurred while refreshing extension list",
+    "operationFailed": "Operation failed",
     "reloadSuccess": "Reload successful",
+    "reloadFailed": "Reload failed",
     "updateSuccess": "Update successful!",
     "addSuccess": "Add successful!",
     "saveSuccess": "Save successful!",
@@ -191,19 +216,58 @@
     "enterUrl": "Enter extension repository URL"
   },
   "skills": {
+    "modeLocal": "Local Skills",
+    "modeNeo": "Neo Skills",
+    "actions": "Actions",
     "upload": "Upload Skills",
     "refresh": "Refresh",
     "empty": "No Skills found",
     "emptyHint": "Upload a Skills zip to get started",
     "uploadDialogTitle": "Upload Skills",
-    "uploadHint": "Upload a zip file that contains skill_name/ and a SKILL.md inside.",
+    "uploadHint": "Upload multiple zip skill packages or drag them in. The system validates the structure automatically and shows a result for each file.",
+    "structureRequirement": "The most common failure is an invalid archive structure. Each zip must contain exactly one top-level folder such as `skillname/`, and that folder must include `SKILL.md`.",
+    "abilityMultiple": "Upload multiple zip files at once",
+    "abilityValidate": "Validate `SKILL.md` automatically",
+    "abilitySkip": "Automatically skip duplicate files.",
     "selectFile": "Select file",
-    "confirmUpload": "Upload",
+    "selectFiles": "Select files (multiple allowed)",
+    "dropzoneTitle": "Drag multiple zip files here",
+    "dropzoneAction": "or click to pick multiple files from a folder",
+    "dropzoneHint": "Batch upload is supported and the structure will be validated automatically",
+    "fileListTitle": "Files in queue",
+    "fileListEmpty": "Selected files will appear here with validation feedback and upload status",
+    "uploading": "Uploading...",
+    "batchResultTitle": "Batch Upload Results",
+    "batchResultSummary": "{success} of {total} files uploaded successfully",
+    "batchSuccessList": "Successfully uploaded",
+    "batchFailedList": "Failed to upload",
+    "confirm": "OK",
+    "confirmUpload": "Start Upload",
     "cancel": "Cancel",
+    "statusWaiting": "Waiting",
+    "statusUploading": "Uploading",
+    "statusSuccess": "Uploaded",
+    "statusError": "Failed",
+    "statusSkipped": "Skipped",
+    "summaryTotal": "{count} file(s)",
+    "summaryReady": "Pending {count}",
+    "summarySuccess": "Success {count}",
+    "summaryFailed": "Failed {count}",
+    "summarySkipped": "Skipped {count}",
+    "validationReady": "Ready to upload. The archive structure will be checked during upload.",
+    "validationZipOnly": "Only zip skill packages are supported",
+    "validationDuplicate": "A file with the same name is already in the queue and has been skipped",
+    "validationUploading": "Validating and uploading...",
+    "validationUploadFailed": "Upload failed. Please try again.",
+    "validationUploadedAs": "Installed as {name}",
+    "validationNoResult": "No validation result was returned. Check the platform logs.",
     "noDescription": "No description",
     "path": "Path",
     "uploadSuccess": "Upload succeeded",
     "uploadFailed": "Upload failed",
+    "download": "Download",
+    "downloadSuccess": "Download succeeded",
+    "downloadFailed": "Download failed",
     "loadFailed": "Failed to load Skills",
     "updateSuccess": "Updated successfully",
     "updateFailed": "Update failed",
@@ -211,8 +275,42 @@
     "deleteMessage": "Are you sure you want to delete this Skill?",
     "deleteSuccess": "Deleted successfully",
     "deleteFailed": "Delete failed",
+    "neoSkillKey": "Filter by skill_key",
+    "neoStatus": "Candidate Status",
+    "neoStage": "Release Stage",
+    "neoFilterHint": "Filter candidates and release records",
+    "neoAll": "All",
+    "neoCandidates": "Neo Candidates",
+    "neoReleases": "Neo Releases",
+    "neoLoadFailed": "Failed to load Neo skills data",
+    "neoPass": "Pass",
+    "neoReject": "Reject",
+    "neoEvaluateSuccess": "Evaluation updated",
+    "neoEvaluateFailed": "Failed to update evaluation",
+    "neoPromoteSuccess": "Promoted successfully",
+    "neoPromoteFailed": "Failed to promote",
+    "neoRollback": "Rollback",
+    "neoRollbackSuccess": "Rollback succeeded",
+    "neoRollbackFailed": "Rollback failed",
+    "neoDeactivate": "Deactivate",
+    "neoDeactivateSuccess": "Deactivated successfully",
+    "neoDeactivateFailed": "Failed to deactivate",
+    "neoSync": "Sync",
+    "neoSyncSuccess": "Sync succeeded",
+    "neoSyncFailed": "Sync failed",
+    "neoDelete": "Delete",
+    "neoDeleteSuccess": "Deleted successfully",
+    "neoDeleteFailed": "Failed to delete",
+    "neoPayloadTitle": "Neo Payload",
+    "neoPayloadFailed": "Failed to load payload",
     "runtimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
-    "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills."
+    "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills.",
+    "neoRuntimeRequired": "Neo Skills are available only when runtime is sandbox and sandbox booter is shipyard_neo.",
+    "sourceLocalOnly": "Local Skill",
+    "sourceSandboxOnly": "Sandbox Preset Skill",
+    "sourceBoth": "Local + Sandbox",
+    "sandboxDiscoveryPending": "Sandbox preset skills have not been discovered yet. Start at least one sandbox session to populate this list.",
+    "sandboxPresetReadonly": "Sandbox preset skills are read-only here. You cannot delete or enable/disable them from Local Skills."
   },
   "card": {
     "actions": {
@@ -227,7 +325,10 @@
     "status": {
       "hasUpdate": "New version available",
       "disabled": "This extension is disabled",
-      "handlersCount": " handlers"
+      "handlersCount": " handlers",
+      "supportPlatform": "Supported Platform",
+      "supportPlatformsCount": "Supports {count} Platforms",
+      "astrbotVersion": "AstrBot Version Requirement"
     },
     "alt": {
       "logo": "logo",

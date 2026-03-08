@@ -3,6 +3,7 @@ from pathlib import Path
 
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
+from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
 
 # from .chunking.fixed_size import FixedSizeChunker
 from .chunking.recursive import RecursiveCharacterChunker
@@ -13,7 +14,7 @@ from .retrieval.manager import RetrievalManager, RetrievalResult
 from .retrieval.rank_fusion import RankFusion
 from .retrieval.sparse_retriever import SparseRetriever
 
-FILES_PATH = "data/knowledge_base"
+FILES_PATH = get_astrbot_knowledge_base_path()
 DB_PATH = Path(FILES_PATH) / "kb.db"
 """Knowledge Base storage root directory"""
 CHUNKER = RecursiveCharacterChunker()
@@ -26,14 +27,14 @@ class KnowledgeBaseManager:
     def __init__(
         self,
         provider_manager: ProviderManager,
-    ):
-        Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    ) -> None:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.provider_manager = provider_manager
         self._session_deleted_callback_registered = False
 
         self.kb_insts: dict[str, KBHelper] = {}
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化知识库模块"""
         try:
             logger.info("正在初始化知识库模块...")
@@ -58,13 +59,13 @@ class KnowledgeBaseManager:
             logger.error(f"知识库模块初始化失败: {e}")
             logger.error(traceback.format_exc())
 
-    async def _init_kb_database(self):
+    async def _init_kb_database(self) -> None:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
         await self.kb_db.initialize()
         await self.kb_db.migrate_to_v1()
         logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
 
-    async def load_kbs(self):
+    async def load_kbs(self) -> None:
         """加载所有知识库实例"""
         kb_records = await self.kb_db.list_kbs()
         for record in kb_records:
@@ -275,7 +276,7 @@ class KnowledgeBaseManager:
 
         return "\n".join(lines)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """终止所有知识库实例,关闭数据库连接"""
         for kb_id, kb_helper in self.kb_insts.items():
             try:

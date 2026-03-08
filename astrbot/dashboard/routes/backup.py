@@ -183,7 +183,9 @@ class BackupRoute(Route):
     def _make_progress_callback(self, task_id: str):
         """创建进度回调函数"""
 
-        async def _callback(stage: str, current: int, total: int, message: str = ""):
+        async def _callback(
+            stage: str, current: int, total: int, message: str = ""
+        ) -> None:
             self._update_progress(
                 task_id,
                 status="processing",
@@ -195,7 +197,7 @@ class BackupRoute(Route):
 
         return _callback
 
-    def _ensure_cleanup_task_started(self):
+    def _ensure_cleanup_task_started(self) -> None:
         """确保后台清理任务已启动（在异步上下文中延迟启动）"""
         if self._cleanup_task is None or self._cleanup_task.done():
             try:
@@ -206,7 +208,7 @@ class BackupRoute(Route):
                 # 如果没有运行中的事件循环，跳过（等待下次异步调用时启动）
                 pass
 
-    async def _cleanup_expired_uploads(self):
+    async def _cleanup_expired_uploads(self) -> None:
         """定期清理过期的上传会话
 
         基于 last_activity 字段判断过期，避免清理活跃的上传会话。
@@ -233,7 +235,7 @@ class BackupRoute(Route):
             except Exception as e:
                 logger.error(f"清理过期上传会话失败: {e}")
 
-    async def _cleanup_upload_session(self, upload_id: str):
+    async def _cleanup_upload_session(self, upload_id: str) -> None:
         """清理上传会话"""
         if upload_id in self.upload_sessions:
             session = self.upload_sessions[upload_id]
@@ -371,7 +373,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"创建备份失败: {e!s}").__dict__
 
-    async def _background_export_task(self, task_id: str):
+    async def _background_export_task(self, task_id: str) -> None:
         """后台导出任务"""
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")
@@ -866,7 +868,7 @@ class BackupRoute(Route):
             logger.error(traceback.format_exc())
             return Response().error(f"导入备份失败: {e!s}").__dict__
 
-    async def _background_import_task(self, task_id: str, zip_path: str):
+    async def _background_import_task(self, task_id: str, zip_path: str) -> None:
         """后台导入任务"""
         try:
             self._update_progress(task_id, status="processing", message="正在初始化...")

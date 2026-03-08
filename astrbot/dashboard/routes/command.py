@@ -10,6 +10,9 @@ from astrbot.core.star.command_management import (
 from astrbot.core.star.command_management import (
     toggle_command as toggle_command_service,
 )
+from astrbot.core.star.command_management import (
+    update_command_permission as update_command_permission_service,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -22,6 +25,7 @@ class CommandRoute(Route):
             "/commands/conflicts": ("GET", self.get_conflicts),
             "/commands/toggle": ("POST", self.toggle_command),
             "/commands/rename": ("POST", self.rename_command),
+            "/commands/permission": ("POST", self.update_permission),
         }
         self.register_routes()
 
@@ -68,6 +72,24 @@ class CommandRoute(Route):
 
         try:
             await rename_command_service(handler_full_name, new_name, aliases=aliases)
+        except ValueError as exc:
+            return Response().error(str(exc)).__dict__
+
+        payload = await _get_command_payload(handler_full_name)
+        return Response().ok(payload).__dict__
+
+    async def update_permission(self):
+        data = await request.get_json()
+        handler_full_name = data.get("handler_full_name")
+        permission = data.get("permission")
+
+        if not handler_full_name or not permission:
+            return (
+                Response().error("handler_full_name 与 permission 均为必填。").__dict__
+            )
+
+        try:
+            await update_command_permission_service(handler_full_name, permission)
         except ValueError as exc:
             return Response().error(str(exc)).__dict__
 

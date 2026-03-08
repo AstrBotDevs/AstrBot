@@ -64,7 +64,7 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     with a task identifier while the real work continues asynchronously.
     """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
 
     async def call(self, context: ContextWrapper[TContext], **kwargs) -> ToolExecResult:
@@ -88,7 +88,7 @@ class ToolSet:
         """Check if the tool set is empty."""
         return len(self.tools) == 0
 
-    def add_tool(self, tool: FunctionTool):
+    def add_tool(self, tool: FunctionTool) -> None:
         """Add a tool to the set.
 
         If a tool with the same name already exists:
@@ -97,20 +97,13 @@ class ToolSet:
         """
         for i, existing_tool in enumerate(self.tools):
             if existing_tool.name == tool.name:
-                # Prefer active tool; if same active state, overwrite
-                if tool.active and not existing_tool.active:
-                    # New tool is active, existing is not -> use new
-                    self.tools[i] = tool
-                elif existing_tool.active and not tool.active:
-                    # Existing is active, new is not -> keep existing
-                    pass
-                else:
-                    # Same active state -> overwrite
+                # Overwrite unless existing is active and new is not
+                if not (existing_tool.active and not tool.active):
                     self.tools[i] = tool
                 return
         self.tools.append(tool)
 
-    def remove_tool(self, name: str):
+    def remove_tool(self, name: str) -> None:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
 
@@ -169,7 +162,7 @@ class ToolSet:
         func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any]],
-    ):
+    ) -> None:
         """Add a function tool to the set."""
         params = {
             "type": "object",  # hard-coded here
@@ -189,7 +182,7 @@ class ToolSet:
         self.add_tool(_func)
 
     @deprecated(reason="Use remove_tool() instead", version="4.0.0")
-    def remove_func(self, name: str):
+    def remove_func(self, name: str) -> None:
         """Remove a function tool by its name."""
         self.remove_tool(name)
 
@@ -298,6 +291,9 @@ class ToolSet:
                     prop_value = convert_schema(value)
                     if "default" in prop_value:
                         del prop_value["default"]
+                    # see #5217
+                    if "additionalProperties" in prop_value:
+                        del prop_value["additionalProperties"]
                     properties[key] = prop_value
 
                 if properties:
@@ -338,22 +334,22 @@ class ToolSet:
         """获取所有工具的名称列表"""
         return [tool.name for tool in self.tools]
 
-    def merge(self, other: "ToolSet"):
+    def merge(self, other: "ToolSet") -> None:
         """Merge another ToolSet into this one."""
         for tool in other.tools:
             self.add_tool(tool)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tools)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return len(self.tools) > 0
 
     def __iter__(self):
         return iter(self.tools)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ToolSet(tools={self.tools})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"ToolSet(tools={self.tools})"

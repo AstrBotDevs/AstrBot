@@ -7,29 +7,63 @@ import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
-const sidebarMenu = shallowRef(sidebarItems);
+
+function collectGroupValues(items, values = new Set()) {
+  items.forEach((item) => {
+    if (item?.children && item.title) {
+      values.add(item.title);
+      collectGroupValues(item.children, values);
+    }
+  });
+  return values;
+}
+
+function sanitizeOpenedItems(items, menuItems) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const groupValues = collectGroupValues(menuItems);
+  return items.filter((item) => typeof item === 'string' && groupValues.has(item));
+}
+
+function getInitialOpenedItems(menuItems) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('sidebar_openedItems') || '[]');
+    return sanitizeOpenedItems(stored, menuItems);
+  } catch {
+    return [];
+  }
+}
+
+const sidebarMenu = shallowRef(applySidebarCustomization(sidebarItems));
 
 // 侧边栏分组展开状态持久化
-const openedItems = ref(JSON.parse(localStorage.getItem('sidebar_openedItems') || '[]'));
-watch(openedItems, (val) => localStorage.setItem('sidebar_openedItems', JSON.stringify(val)), { deep: true });
+const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
+watch(openedItems, (val) => {
+  localStorage.setItem('sidebar_openedItems', JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
+}, { deep: true });
+
+function refreshSidebarMenu() {
+  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+}
 
 // Apply customization on mount and listen for storage changes
 const handleStorageChange = (e) => {
   if (e.key === 'astrbot_sidebar_customization') {
-    sidebarMenu.value = applySidebarCustomization(sidebarItems);
+    refreshSidebarMenu();
   }
 };
 
 const handleCustomEvent = () => {
-  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  refreshSidebarMenu();
 };
 
 onMounted(() => {
-  sidebarMenu.value = applySidebarCustomization(sidebarItems);
-  
   window.addEventListener('storage', handleStorageChange);
   window.addEventListener('sidebar-customization-changed', handleCustomEvent);
 });
@@ -107,6 +141,13 @@ function openIframeLink(url) {
     let url_ = url || "https://astrbot.app";
     window.open(url_, "_blank");
   }
+}
+
+function openFaqLink() {
+  const faqUrl = locale.value === 'en-US'
+    ? 'https://docs.astrbot.app/en/faq.html'
+    : 'https://docs.astrbot.app/faq.html';
+  openIframeLink(faqUrl);
 }
 
 let offsetX = 0;
@@ -248,7 +289,7 @@ function openChangelogDialog() {
   >
     <div class="sidebar-container">
       <v-list class="pa-4 listitem flex-grow-1" v-model:opened="openedItems" :open-strategy="'multiple'">
-        <template v-for="(item, i) in sidebarMenu" :key="i">
+        <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
           <NavItem :item="item" class="leftPadding" />
         </template>
       </v-list>
@@ -263,6 +304,10 @@ function openChangelogDialog() {
         <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
           @click="toggleIframe">
           {{ t('core.navigation.documentation') }}
+        </v-btn>
+        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
+          @click="openFaqLink">
+          {{ t('core.navigation.faq') }}
         </v-btn>
         <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
           @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
@@ -319,7 +364,7 @@ function openChangelogDialog() {
     </div>
     <iframe
       src="https://astrbot.app"
-      style="width: 100%; height: calc(100% - 56px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
+      style="width: 100%; height: calc(100% - 66px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
       ></iframe>
   </div>
 

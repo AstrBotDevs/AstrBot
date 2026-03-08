@@ -10,7 +10,7 @@
             density="compact"
             :model-value="getItemEnabled()"
             :loading="loading"
-            :disabled="loading"
+            :disabled="loading || disableToggle"
             v-bind="props"
             @update:model-value="toggleEnabled"
           ></v-switch>
@@ -29,7 +29,7 @@
       color="error"
       size="small"
       rounded="xl"
-      :disabled="loading"
+      :disabled="loading || disableDelete"
       @click="$emit('delete', item)"
     >
       {{ t('core.common.itemCard.delete') }}
@@ -108,6 +108,14 @@ export default {
     showEditButton: {
       type: Boolean,
       default: true
+    },
+    disableToggle: {
+      type: Boolean,
+      default: false
+    },
+    disableDelete: {
+      type: Boolean,
+      default: false
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
@@ -132,6 +140,7 @@ export default {
   transition: all 0.3s ease;
   overflow: hidden;
   min-height: 220px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

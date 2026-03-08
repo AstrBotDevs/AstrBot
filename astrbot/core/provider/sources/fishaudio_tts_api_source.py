@@ -7,7 +7,8 @@ import ormsgpack
 from httpx import AsyncClient
 from pydantic import BaseModel, conint
 
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -60,6 +61,9 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             self.timeout: int = int(provider_config.get("timeout", 20))
         except ValueError:
             self.timeout = 20
+        self.proxy: str = provider_config.get("proxy", "")
+        if self.proxy:
+            logger.info(f"[FishAudio TTS] 使用代理: {self.proxy}")
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
@@ -79,7 +83,10 @@ class ProviderFishAudioTTSAPI(TTSProvider):
 
         """
         sort_options = ["score", "task_count", "created_at"]
-        async with AsyncClient(base_url=self.api_base.replace("/v1", "")) as client:
+        async with AsyncClient(
+            base_url=self.api_base.replace("/v1", ""),
+            proxy=self.proxy if self.proxy else None,
+        ) as client:
             for sort_by in sort_options:
                 params = {"title": character, "sort_by": sort_by}
                 response = await client.get(
@@ -135,11 +142,15 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         )
 
     async def get_audio(self, text: str) -> str:
-        temp_dir = os.path.join(get_astrbot_data_path(), "temp")
+        temp_dir = get_astrbot_temp_path()
         path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
         self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
-        async with AsyncClient(base_url=self.api_base, timeout=self.timeout).stream(
+        async with AsyncClient(
+            base_url=self.api_base,
+            timeout=self.timeout,
+            proxy=self.proxy if self.proxy else None,
+        ).stream(
             "POST",
             "/tts",
             headers=self.headers,

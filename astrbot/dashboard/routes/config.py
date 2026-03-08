@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import inspect
 import os
 import traceback
@@ -58,7 +59,7 @@ def try_cast(value: Any, type_: str):
             return None
 
 
-def _expect_type(value, expected_type, path_key, errors, expected_name=None):
+def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> bool:
     if not isinstance(value, expected_type):
         errors.append(
             f"错误的类型 {path_key}: 期望是 {expected_name or expected_type.__name__}, "
@@ -68,7 +69,7 @@ def _expect_type(value, expected_type, path_key, errors, expected_name=None):
     return True
 
 
-def _validate_template_list(value, meta, path_key, errors, validate_fn):
+def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
     if not _expect_type(value, list, path_key, errors, "list"):
         return
 
@@ -101,7 +102,7 @@ def _validate_template_list(value, meta, path_key, errors, validate_fn):
 def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]:
     errors = []
 
-    def validate(data: dict, metadata: dict = schema, path=""):
+    def validate(data: dict, metadata: dict = schema, path="") -> None:
         for key, value in data.items():
             if key not in metadata:
                 continue
@@ -205,10 +206,110 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
     return errors, data
 
 
-def save_config(post_config: dict, config: AstrBotConfig, is_core: bool = False):
+def _log_computer_config_changes(old_config: dict, new_config: dict) -> None:
+    """Compare and log Computer/sandbox configuration changes."""
+    old_ps = old_config.get("provider_settings", {})
+    new_ps = new_config.get("provider_settings", {})
+
+    # Check computer_use_runtime
+    old_runtime = old_ps.get("computer_use_runtime", "none")
+    new_runtime = new_ps.get("computer_use_runtime", "none")
+    if old_runtime != new_runtime:
+        logger.info(
+            "[Computer] Config changed: computer_use_runtime %s -> %s",
+            old_runtime,
+            new_runtime,
+        )
+
+    # Check sandbox sub-keys
+    old_sandbox = old_ps.get("sandbox", {})
+    new_sandbox = new_ps.get("sandbox", {})
+    all_keys = set(old_sandbox.keys()) | set(new_sandbox.keys())
+    for key in sorted(all_keys):
+        old_val = old_sandbox.get(key)
+        new_val = new_sandbox.get(key)
+        if old_val != new_val:
+            # Mask tokens/secrets in log output
+            if "token" in key or "secret" in key:
+                old_display = "***" if old_val else "(empty)"
+                new_display = "***" if new_val else "(empty)"
+            else:
+                old_display = old_val
+                new_display = new_val
+            logger.info(
+                "[Computer] Config changed: sandbox.%s %s -> %s",
+                key,
+                old_display,
+                new_display,
+            )
+
+
+async def _validate_neo_connectivity(
+    post_config: dict,
+) -> str | None:
+    """Check if Bay is reachable when Shipyard Neo sandbox is configured.
+
+    Returns a warning message string if Bay isn't reachable, or None if
+    everything looks fine (or Neo isn't configured).
+    """
+    ps = post_config.get("provider_settings", {})
+    runtime = ps.get("computer_use_runtime", "none")
+    sandbox = ps.get("sandbox", {})
+    booter = sandbox.get("booter", "")
+
+    # Only check when sandbox mode + shipyard_neo is selected
+    if runtime != "sandbox" or booter != "shipyard_neo":
+        return None
+
+    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
+    if not endpoint:
+        return "⚠️ Shipyard Neo endpoint 未设置"
+
+    access_token = sandbox.get("shipyard_neo_access_token", "")
+    if not access_token:
+        # Try auto-discovery
+        from astrbot.core.computer.computer_client import _discover_bay_credentials
+
+        access_token = _discover_bay_credentials(endpoint)
+
+    if not access_token:
+        return (
+            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
+            "或确保 Bay 的 credentials.json 可被自动发现。"
+        )
+
+    # Connectivity check
+    import aiohttp
+
+    health_url = f"{endpoint}/health"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                health_url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status != 200:
+                    return (
+                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
+                        f"请确认 Bay 正在运行: {endpoint}"
+                    )
+    except Exception:
+        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
+
+    return None
+
+
+def save_config(
+    post_config: dict, config: AstrBotConfig, is_core: bool = False
+) -> None:
     """验证并保存配置"""
     errors = None
     logger.info(f"Saving config, is_core={is_core}")
+
+    # Snapshot old Computer config for change detection
+    if is_core:
+        _log_computer_config_changes(dict(config), post_config)
+
     try:
         if is_core:
             errors, post_config = validate_config(
@@ -407,8 +508,19 @@ class ConfigRoute(Route):
         return Response().ok(message="更新 provider source 成功").__dict__
 
     async def get_provider_template(self):
+        provider_metadata = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "provider_group": {
+                    "metadata": {
+                        "provider": CONFIG_METADATA_2["provider_group"]["metadata"][
+                            "provider"
+                        ]
+                    }
+                }
+            }
+        )
         config_schema = {
-            "provider": CONFIG_METADATA_2["provider_group"]["metadata"]["provider"]
+            "provider": provider_metadata["provider_group"]["metadata"]["provider"]
         }
         data = {
             "config_schema": config_schema,
@@ -498,6 +610,7 @@ class ConfigRoute(Route):
 
         try:
             conf_id = self.acm.create_conf(name=name, config=config)
+            await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
             return Response().ok(message="创建成功", data={"conf_id": conf_id}).__dict__
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -537,6 +650,7 @@ class ConfigRoute(Route):
         try:
             success = self.acm.delete_conf(conf_id)
             if success:
+                self.core_lifecycle.pipeline_scheduler_mapping.pop(conf_id, None)
                 return Response().ok(message="删除成功").__dict__
             return Response().error("删除失败").__dict__
         except ValueError as e:
@@ -740,6 +854,22 @@ class ConfigRoute(Route):
             if not provider_type:
                 return Response().error("provider_config 缺少 type 字段").__dict__
 
+            # 首次添加某类提供商时，provider_cls_map 可能尚未注册该适配器
+            if provider_type not in provider_cls_map:
+                try:
+                    self.core_lifecycle.provider_manager.dynamic_import_provider(
+                        provider_type,
+                    )
+                except ImportError:
+                    logger.error(traceback.format_exc())
+                    return (
+                        Response()
+                        .error(
+                            "提供商适配器加载失败，请检查提供商类型配置或查看服务端日志"
+                        )
+                        .__dict__
+                    )
+
             # 获取对应的 provider 类
             if provider_type not in provider_cls_map:
                 return (
@@ -765,7 +895,7 @@ class ConfigRoute(Route):
             if inspect.iscoroutinefunction(init_fn):
                 await init_fn()
 
-            # 获取嵌入向量维度
+            # 通过实际请求验证当前 embedding_dimensions 是否可用
             vec = await inst.get_embedding("echo")
             dim = len(vec)
 
@@ -898,6 +1028,11 @@ class ConfigRoute(Route):
 
             await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+
+            # Non-blocking Bay connectivity check
+            warning = await _validate_neo_connectivity(config)
+            if warning:
+                return Response().ok(None, f"保存成功。{warning}").__dict__
             return Response().ok(None, "保存成功~").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -1209,7 +1344,7 @@ class ConfigRoute(Route):
         tools = tool_mgr.get_func_desc_openai_style()
         return Response().ok(tools).__dict__
 
-    async def _register_platform_logo(self, platform, platform_default_tmpl):
+    async def _register_platform_logo(self, platform, platform_default_tmpl) -> None:
         """注册平台logo文件并生成访问令牌"""
         if not platform.logo_path:
             return
@@ -1276,19 +1411,68 @@ class ConfigRoute(Route):
                 f"Unexpected error registering logo for platform {platform.name}: {e}",
             )
 
+    def _inject_platform_metadata_with_i18n(
+        self, platform, metadata, platform_i18n_translations: dict
+    ):
+        """将配置元数据注入到 metadata 中并处理国际化键转换。"""
+        metadata["platform_group"]["metadata"]["platform"].setdefault("items", {})
+        platform_items_to_inject = copy.deepcopy(platform.config_metadata)
+
+        if platform.i18n_resources:
+            i18n_prefix = f"platform_group.platform.{platform.name}"
+
+            for lang, lang_data in platform.i18n_resources.items():
+                platform_i18n_translations.setdefault(lang, {}).setdefault(
+                    "platform_group", {}
+                ).setdefault("platform", {})[platform.name] = lang_data
+
+            for field_key, field_value in platform_items_to_inject.items():
+                for key in ("description", "hint", "labels"):
+                    if key in field_value:
+                        field_value[key] = f"{i18n_prefix}.{field_key}.{key}"
+
+        metadata["platform_group"]["metadata"]["platform"]["items"].update(
+            platform_items_to_inject
+        )
+
     async def _get_astrbot_config(self):
         config = self.config
+        metadata = copy.deepcopy(CONFIG_METADATA_2)
+        platform_i18n = ConfigMetadataI18n.convert_to_i18n_keys(
+            {
+                "platform_group": {
+                    "metadata": {
+                        "platform": metadata["platform_group"]["metadata"]["platform"]
+                    }
+                }
+            }
+        )
+        metadata["platform_group"]["metadata"]["platform"] = platform_i18n[
+            "platform_group"
+        ]["metadata"]["platform"]
 
         # 平台适配器的默认配置模板注入
-        platform_default_tmpl = CONFIG_METADATA_2["platform_group"]["metadata"][
-            "platform"
-        ]["config_template"]
+        platform_default_tmpl = metadata["platform_group"]["metadata"]["platform"][
+            "config_template"
+        ]
+
+        # 收集平台的 i18n 翻译数据
+        platform_i18n_translations = {}
 
         # 收集需要注册logo的平台
         logo_registration_tasks = []
         for platform in platform_registry:
             if platform.default_config_tmpl:
-                platform_default_tmpl[platform.name] = platform.default_config_tmpl
+                platform_default_tmpl[platform.name] = copy.deepcopy(
+                    platform.default_config_tmpl
+                )
+
+                # 注入配置元数据（在 convert_to_i18n_keys 之后，使用国际化键）
+                if platform.config_metadata:
+                    self._inject_platform_metadata_with_i18n(
+                        platform, metadata, platform_i18n_translations
+                    )
+
                 # 收集logo注册任务
                 if platform.logo_path:
                     logo_registration_tasks.append(
@@ -1300,14 +1484,18 @@ class ConfigRoute(Route):
             await asyncio.gather(*logo_registration_tasks, return_exceptions=True)
 
         # 服务提供商的默认配置模板注入
-        provider_default_tmpl = CONFIG_METADATA_2["provider_group"]["metadata"][
-            "provider"
-        ]["config_template"]
+        provider_default_tmpl = metadata["provider_group"]["metadata"]["provider"][
+            "config_template"
+        ]
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
 
-        return {"metadata": CONFIG_METADATA_2, "config": config}
+        return {
+            "metadata": metadata,
+            "config": config,
+            "platform_i18n_translations": platform_i18n_translations,
+        }
 
     async def _get_plugin_config(self, plugin_name: str):
         ret: dict = {"metadata": None, "config": None}
@@ -1332,7 +1520,7 @@ class ConfigRoute(Route):
 
     async def _save_astrbot_configs(
         self, post_configs: dict, conf_id: str | None = None
-    ):
+    ) -> None:
         try:
             if conf_id not in self.acm.confs:
                 raise ValueError(f"配置文件 {conf_id} 不存在")
@@ -1348,7 +1536,7 @@ class ConfigRoute(Route):
         except Exception as e:
             raise e
 
-    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str):
+    async def _save_plugin_configs(self, post_configs: dict, plugin_name: str) -> None:
         md = None
         for plugin_md in star_registry:
             if plugin_md.name == plugin_name:

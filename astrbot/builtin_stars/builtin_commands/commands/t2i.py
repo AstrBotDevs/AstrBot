@@ -7,10 +7,10 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 class T2ICommand:
     """文本转图片命令类"""
 
-    def __init__(self, context: star.Context):
+    def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    async def t2i(self, event: AstrMessageEvent):
+    async def t2i(self, event: AstrMessageEvent) -> None:
         """开关文本转图片"""
         config = self.context.get_config(umo=event.unified_msg_origin)
         if config["t2i"]:

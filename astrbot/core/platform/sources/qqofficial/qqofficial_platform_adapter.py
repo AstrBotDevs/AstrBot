@@ -8,13 +8,11 @@ from typing import cast
 
 import botpy
 import botpy.message
-import botpy.types
-import botpy.types.message
 from botpy import Client
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain
+from astrbot.api.message_components import At, File, Image, Plain
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -35,11 +33,13 @@ for handler in logging.root.handlers[:]:
 
 # QQ 机器人官方框架
 class botClient(Client):
-    def set_platform(self, platform: QQOfficialPlatformAdapter):
+    def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
 
     # 收到群消息
-    async def on_group_at_message_create(self, message: botpy.message.GroupMessage):
+    async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -49,7 +49,7 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到频道消息
-    async def on_at_message_create(self, message: botpy.message.Message):
+    async def on_at_message_create(self, message: botpy.message.Message) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.GROUP_MESSAGE,
@@ -59,7 +59,9 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到私聊消息
-    async def on_direct_message_create(self, message: botpy.message.DirectMessage):
+    async def on_direct_message_create(
+        self, message: botpy.message.DirectMessage
+    ) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -68,7 +70,7 @@ class botClient(Client):
         self._commit(abm)
 
     # 收到 C2C 消息
-    async def on_c2c_message_create(self, message: botpy.message.C2CMessage):
+    async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
             message,
             MessageType.FRIEND_MESSAGE,
@@ -76,7 +78,7 @@ class botClient(Client):
         abm.session_id = abm.sender.user_id
         self._commit(abm)
 
-    def _commit(self, abm: AstrBotMessage):
+    def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.commit_event(
             QQOfficialMessageEvent(
                 abm.message_str,
@@ -128,7 +130,7 @@ class QQOfficialPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
-    ):
+    ) -> None:
         raise NotImplementedError("QQ 机器人官方 API 适配器不支持 send_by_session")
 
     def meta(self) -> PlatformMetadata:
@@ -138,6 +140,41 @@ class QQOfficialPlatformAdapter(Platform):
             id=cast(str, self.config.get("id")),
             support_proactive_message=False,
         )
+
+    @staticmethod
+    def _normalize_attachment_url(url: str | None) -> str:
+        if not url:
+            return ""
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        return f"https://{url}"
+
+    @staticmethod
+    def _append_attachments(
+        msg: list[BaseMessageComponent],
+        attachments: list | None,
+    ) -> None:
+        if not attachments:
+            return
+
+        for attachment in attachments:
+            content_type = cast(str, getattr(attachment, "content_type", "") or "")
+            url = QQOfficialPlatformAdapter._normalize_attachment_url(
+                cast(str | None, getattr(attachment, "url", None))
+            )
+            if not url:
+                continue
+
+            if content_type.startswith("image"):
+                msg.append(Image.fromURL(url))
+            else:
+                filename = cast(
+                    str,
+                    getattr(attachment, "filename", None)
+                    or getattr(attachment, "name", None)
+                    or "attachment",
+                )
+                msg.append(File(name=filename, file=url, url=url))
 
     @staticmethod
     def _parse_from_qqofficial(
@@ -168,14 +205,7 @@ class QQOfficialPlatformAdapter(Platform):
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
             msg.append(Plain(abm.message_str))
-            if message.attachments:
-                for i in message.attachments:
-                    if i.content_type.startswith("image"):
-                        url = i.url
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        img = Image.fromURL(url)
-                        msg.append(img)
+            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
 
         elif isinstance(message, botpy.message.Message) or isinstance(
@@ -192,14 +222,7 @@ class QQOfficialPlatformAdapter(Platform):
                 "",
             ).strip()
 
-            if message.attachments:
-                for i in message.attachments:
-                    if i.content_type.startswith("image"):
-                        url = i.url
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        img = Image.fromURL(url)
-                        msg.append(img)
+            QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
             abm.message_str = plain_content
             abm.sender = MessageMember(
@@ -222,6 +245,6 @@ class QQOfficialPlatformAdapter(Platform):
     def get_client(self) -> botClient:
         return self.client
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         await self.client.close()
         logger.info("QQ 官方机器人接口 适配器已被优雅地关闭")

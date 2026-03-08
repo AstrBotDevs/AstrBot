@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="showDialog" max-width="800px" height="90%" @after-enter="prepareData">
+  <v-dialog v-model="showDialog" max-width="800px" max-height="90%" @after-enter="prepareData">
     <v-card
       :title="updatingMode ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}` : tm('dialog.addPlatform')">
   <v-card-text ref="dialogScrollContainer" class="pa-4 ml-2" style="overflow-y: auto;">
@@ -9,14 +9,14 @@
           </div>
           <div style="flex: 1;">
             <h3>
-              选择消息平台类别
+              {{ tm('createDialog.step1Title') }}
             </h3>
-            <small style="color: grey;">想把机器人接入到哪里？如 QQ、企业微信、飞书、Discord、Telegram 等。</small>
+            <small style="color: grey;">{{ tm('createDialog.step1Hint') }}</small>
             <div>
 
               <div v-if="!updatingMode">
                 <v-select v-model="selectedPlatformType" :items="Object.keys(platformTemplates)" item-title="name"
-                  item-value="name" label="消息平台类别" variant="outlined" rounded="md" dense hide-details class="mt-6"
+                  item-value="name" :label="tm('createDialog.platformTypeLabel')" variant="outlined" rounded="md" dense hide-details class="mt-6"
                   style="max-width: 30%; min-width: 300px;">
 
                   <template v-slot:item="{ props: itemProps, item }">
@@ -41,7 +41,7 @@
                 </div>
               </div>
               <div v-else>
-                <v-text-field label="消息平台类别" variant="outlined" rounded="md" dense hide-details class="mt-6"
+                <v-text-field :label="tm('createDialog.platformTypeLabel')" variant="outlined" rounded="md" dense hide-details class="mt-6"
                   style="max-width: 30%; min-width: 300px;" v-model="updatingPlatformConfig.type"
                   disabled></v-text-field>
                 <div class="mt-3">
@@ -65,13 +65,13 @@
               <div>
                 <div class="d-flex align-center">
                   <h3>
-                    配置文件
+                    {{ tm('createDialog.configFileTitle') }}
                   </h3>
                   <v-chip size="x-small" color="primary" variant="tonal" rounded="sm" class="ml-2"
-                    v-if="!updatingMode">可选</v-chip>
+                    v-if="!updatingMode">{{ tm('createDialog.optional') }}</v-chip>
                 </div>
-                <small style="color: grey;">想如何配置机器人？配置文件包含了聊天模型、人格、知识库、插件范围等丰富的机器人配置项。</small>
-                <small style="color: grey;" v-if="!updatingMode">默认使用默认配置文件 “default”。您也可以稍后配置。</small>
+                <small style="color: grey;">{{ tm('createDialog.configHint') }}</small>
+                <small style="color: grey;" v-if="!updatingMode">{{ tm('createDialog.configDefaultHint') }}</small>
               </div>
               <div>
                 <v-btn variant="plain" icon @click="toggleConfigSection" class="mt-2">
@@ -86,12 +86,12 @@
                 <v-radio-group class="mt-2" v-model="aBConfigRadioVal" hide-details="true">
                   <v-radio value="0">
                     <template v-slot:label>
-                      <span>使用现有配置文件</span>
+                      <span>{{ tm('createDialog.useExistingConfig') }}</span>
                     </template>
                   </v-radio>
                   <div class="d-flex align-center ml-10 my-2" v-if="aBConfigRadioVal === '0'">
                     <v-select v-model="selectedAbConfId" :items="configInfoList" item-title="name"
-                      item-value="id" label="选择配置文件" variant="outlined" rounded="md" dense hide-details
+                      item-value="id" :label="tm('createDialog.selectConfigLabel')" variant="outlined" rounded="md" dense hide-details
                       style="max-width: 30%; min-width: 200px;">
                     </v-select>
                     <v-btn icon variant="text" density="comfortable" class="ml-2"
@@ -99,10 +99,10 @@
                       <v-icon>mdi-arrow-top-right-thick</v-icon>
                     </v-btn>
                   </div>
-                  <v-radio value="1" label="创建新配置文件">
+                  <v-radio value="1" :label="tm('createDialog.createNewConfig')">
                   </v-radio>
                   <div class="d-flex align-center" v-if="aBConfigRadioVal === '1'">
-                    <v-text-field v-model="selectedAbConfId" label="新配置文件名称" variant="outlined" rounded="md" dense
+                    <v-text-field v-model="selectedAbConfId" :label="tm('createDialog.newConfigNameLabel')" variant="outlined" rounded="md" dense
                       hide-details style="max-width: 30%; min-width: 200px;" class="ml-10 my-2">
                     </v-text-field>
                   </div>
@@ -131,12 +131,12 @@
                     <v-progress-circular indeterminate color="primary"></v-progress-circular>
                   </div>
                   <div v-else-if="newConfigData && newConfigMetadata" class="config-preview-container">
-                    <h4 class="mb-3">使用新的配置文件</h4>
+                    <h4 class="mb-3">{{ tm('createDialog.newConfigTitle') }}</h4>
                     <AstrBotCoreConfigWrapper :metadata="newConfigMetadata" :config_data="newConfigData" />
                   </div>
                   <div v-else class="text-center py-4 text-grey">
                     <v-icon>mdi-information-outline</v-icon>
-                    <p class="mt-2">无法加载默认配置模板</p>
+                    <p class="mt-2">{{ tm('createDialog.newConfigLoadFailed') }}</p>
                   </div>
                 </div>
 
@@ -147,18 +147,18 @@
                   <div>
                     <v-btn v-if="isEditingRoutes" color="primary" variant="tonal" @click="addNewRoute" size="small">
                       <v-icon start>mdi-plus</v-icon>
-                      添加路由规则
+                      {{ tm('createDialog.addRouteRule') }}
                     </v-btn>
                   </div>
                   <v-btn :color="isEditingRoutes ? 'grey' : 'primary'" variant="tonal" size="small"
                     @click="toggleEditMode">
                     <v-icon start>{{ isEditingRoutes ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
-                    {{ isEditingRoutes ? '查看' : '编辑' }}
+                    {{ isEditingRoutes ? tm('createDialog.viewMode') : tm('createDialog.editMode') }}
                   </v-btn>
                 </div>
 
                 <v-data-table :headers="routeTableHeaders" :items="platformRoutes" item-value="umop"
-                  no-data-text="该平台暂无路由规则，将使用默认配置文件" hide-default-footer :items-per-page="-1" class="mt-2"
+                  :no-data-text="tm('createDialog.noRouteRules')" hide-default-footer :items-per-page="-1" class="mt-2"
                   variant="outlined">
 
                   <template v-slot:item.source="{ item }">
@@ -170,9 +170,9 @@
                       <small v-else>{{ getMessageTypeLabel(item.messageType) }}</small>
                       <small class="mx-1">:</small>
                       <v-text-field v-if="isEditingRoutes" v-model="item.sessionId" variant="outlined" density="compact"
-                        hide-details placeholder="会话ID或*">
+                        hide-details :placeholder="tm('createDialog.sessionIdPlaceholder')">
                       </v-text-field>
-                      <small v-else>{{ item.sessionId === '*' ? '全部会话' : item.sessionId }}</small>
+                      <small v-else>{{ item.sessionId === '*' ? tm('createDialog.allSessions') : item.sessionId }}</small>
                     </div>
                   </template>
 
@@ -191,7 +191,7 @@
                       </v-btn>
                     </div>
                     <small v-if="configInfoList.findIndex(c => c.id === item.configId) === -1" style="color: red;"
-                      class="ml-2">配置文件不存在</small>
+                      class="ml-2">{{ tm('createDialog.configMissing') }}</small>
                   </template>
 
                   <template v-slot:item.actions="{ item, index }">
@@ -211,8 +211,7 @@
                   </template>
 
                 </v-data-table>
-                <small class="ml-2 mt-2 d-block" style="color: grey">*消息下发时，根据会话来源按顺序从上到下匹配首个符合条件的配置文件。使用 * 表示匹配所有。使用 /sid 指令获取会话
-                  ID。全部不匹配时将使用默认配置文件。</small>
+                <small class="ml-2 mt-2 d-block" style="color: grey">{{ tm('createDialog.routeHint') }}</small>
               </div>
             </div>
 
@@ -266,10 +265,10 @@
       <v-card-actions class="px-4 pb-4">
         <v-spacer></v-spacer>
         <v-btn color="error" @click="handleOneBotEmptyTokenWarningDismiss(true)">
-          无视警告并继续创建
+          {{ tm('createDialog.warningContinue') }}
         </v-btn>
         <v-btn color="primary" @click="handleOneBotEmptyTokenWarningDismiss(false)">
-          重新修改
+          {{ tm('createDialog.warningEditAgain') }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -286,9 +285,9 @@
     <v-card class="config-drawer-card" elevation="12">
       <div class="config-drawer-header">
         <div>
-          <span class="text-h6">配置文件管理</span>
+          <span class="text-h6">{{ tm('createDialog.configDrawerTitle') }}</span>
           <div v-if="configDrawerTargetId" class="text-caption text-grey">
-            ID: {{ configDrawerTargetId }}
+            {{ tm('createDialog.configDrawerIdLabel') }}: {{ configDrawerTargetId }}
           </div>
         </div>
         <v-btn icon variant="text" @click="closeConfigDrawer">
@@ -359,23 +358,9 @@ export default {
 
       // 平台配置文件表格（已弃用，改用 platformRoutes）
       platformConfigs: [],
-      configTableHeaders: [
-        { title: '与此实例关联的配置文件 ID', key: 'name', sortable: false },
-        { title: '在此实例下的应用范围', key: 'scope', sortable: false },
-      ],
 
       // 平台路由表
       platformRoutes: [],
-      routeTableHeaders: [
-        { title: '消息会话来源(消息类型:会话 ID)', key: 'source', sortable: false, width: '60%' },
-        { title: '使用配置文件', key: 'configId', sortable: false, width: '20%' },
-        { title: '操作', key: 'actions', sortable: false, align: 'center', width: '20%' },
-      ],
-      messageTypeOptions: [
-        { label: '全部消息', value: '*' },
-        { label: '群组消息(GroupMessage)', value: 'GroupMessage' },
-        { label: '私聊消息(FriendMessage)', value: 'FriendMessage' },
-      ],
       isEditingRoutes: false, // 编辑模式开关
 
       // ID冲突确认对话框
@@ -437,6 +422,26 @@ export default {
       }
 
       return false;
+    },
+    configTableHeaders() {
+      return [
+        { title: this.tm('createDialog.configTableHeaders.configId'), key: 'name', sortable: false },
+        { title: this.tm('createDialog.configTableHeaders.scope'), key: 'scope', sortable: false },
+      ];
+    },
+    routeTableHeaders() {
+      return [
+        { title: this.tm('createDialog.routeTableHeaders.source'), key: 'source', sortable: false, width: '60%' },
+        { title: this.tm('createDialog.routeTableHeaders.config'), key: 'configId', sortable: false, width: '20%' },
+        { title: this.tm('createDialog.routeTableHeaders.actions'), key: 'actions', sortable: false, align: 'center', width: '20%' },
+      ];
+    },
+    messageTypeOptions() {
+      return [
+        { label: this.tm('createDialog.messageTypeOptions.all'), value: '*' },
+        { label: this.tm('createDialog.messageTypeOptions.group'), value: 'GroupMessage' },
+        { label: this.tm('createDialog.messageTypeOptions.friend'), value: 'FriendMessage' },
+      ];
     }
   },
   watch: {
@@ -517,7 +522,14 @@ export default {
     }
   },
   methods: {
-    getPlatformIcon,
+    getPlatformIcon(platformType) {
+      // Check for plugin-provided logo_token first
+      const template = this.platformTemplates?.[platformType];
+      if (template && template.logo_token) {
+        return `/api/file/${template.logo_token}`;
+      }
+      return getPlatformIcon(platformType);
+    },
     getPlatformDescription,
     resetForm() {
       this.selectedPlatformType = null;
@@ -603,7 +615,7 @@ export default {
       const targetId = configId || 'default';
 
       if (configId && this.configInfoList.findIndex(c => c.id === configId) === -1) {
-        this.showError('目标配置文件不存在，已打开配置页面以便检查。');
+        this.showError(this.tm('messages.configNotFoundOpenConfig'));
       }
 
       this.configDrawerTargetId = targetId;
@@ -637,7 +649,7 @@ export default {
       const id = this.originalUpdatingPlatformId || this.updatingPlatformConfig.id;
       if (!id) {
         this.loading = false;
-        this.showError('更新失败，缺少平台 ID。');
+        this.showError(this.tm('messages.updateMissingPlatformId'));
         return;
       }
 
@@ -655,7 +667,7 @@ export default {
         })
 
         if (resp.data.status === 'error') {
-          throw new Error(resp.data.message || '平台更新失败');
+          throw new Error(resp.data.message || this.tm('messages.platformUpdateFailed'));
         }
         
         // 同时更新路由表
@@ -665,7 +677,7 @@ export default {
         this.showDialog = false;
         this.resetForm();
         this.$emit('refresh-config');
-        this.showSuccess('更新成功');
+        this.showSuccess(this.tm('messages.updateSuccess'));
       } catch (err) {
         this.loading = false;
         this.showError(err.response?.data?.message || err.message);
@@ -710,7 +722,7 @@ export default {
         this.showDialog = false;
         this.resetForm();
         this.$emit('refresh-config');
-        this.showSuccess(res.data.message || '平台添加成功，配置文件已更新');
+        this.showSuccess(res.data.message || this.tm('messages.addSuccessWithConfig'));
       } catch (err) {
         this.loading = false;
         this.showError(err.response?.data?.message || err.message);
@@ -738,7 +750,7 @@ export default {
       }
 
       if (!configId) {
-        throw new Error('无法获取配置文件ID');
+        throw new Error(this.tm('messages.configIdMissing'));
       }
 
       // 第二步：统一更新路由表
@@ -755,7 +767,8 @@ export default {
         console.log(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (err) {
         console.error('更新路由表失败:', err);
-        throw new Error(`更新路由表失败: ${err.response?.data?.message || err.message}`);
+        const errorMessage = err.response?.data?.message || err.message;
+        throw new Error(this.tm('messages.routingUpdateFailed', { message: errorMessage }));
       }
     },
 
@@ -778,7 +791,8 @@ export default {
         return newConfigId;
       } catch (err) {
         console.error('创建新配置文件失败:', err);
-        throw new Error(`创建新配置文件失败: ${err.response?.data?.message || err.message}`);
+        const errorMessage = err.response?.data?.message || err.message;
+        throw new Error(this.tm('messages.createConfigFailed', { message: errorMessage }));
       }
     },
 
@@ -922,7 +936,7 @@ export default {
       const newPlatformId = this.updatingPlatformConfig?.id || originalPlatformId;
 
       if (!originalPlatformId && !newPlatformId) {
-        throw new Error('无法获取平台 ID');
+        throw new Error(this.tm('messages.platformIdMissing'));
       }
 
       try {
@@ -958,7 +972,8 @@ export default {
         });
       } catch (err) {
         console.error('保存路由表失败:', err);
-        throw new Error(`保存路由表失败: ${err.response?.data?.message || err.message}`);
+        const errorMessage = err.response?.data?.message || err.message;
+        throw new Error(this.tm('messages.routingSaveFailed', { message: errorMessage }));
       }
     },
 
@@ -987,10 +1002,10 @@ export default {
     // 获取消息类型标签
     getMessageTypeLabel(messageType) {
       const typeMap = {
-        '*': '全部消息',
-        '': '全部消息',
-        'GroupMessage': '群组消息',
-        'FriendMessage': '私聊消息'
+        '*': this.tm('createDialog.messageTypeLabels.all'),
+        '': this.tm('createDialog.messageTypeLabels.all'),
+        'GroupMessage': this.tm('createDialog.messageTypeLabels.group'),
+        'FriendMessage': this.tm('createDialog.messageTypeLabels.friend')
       };
       return typeMap[messageType] || messageType;
     },

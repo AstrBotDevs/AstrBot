@@ -29,6 +29,7 @@ export default defineConfig({
     }
   },
   build: {
+    sourcemap: false,
     chunkSizeWarningLimit: 1024 * 1024 // Set the limit to 1 MB
   },
   optimizeDeps: {
@@ -42,6 +43,7 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:6185/',
         changeOrigin: true,
+        ws: true
       }
     }
   }

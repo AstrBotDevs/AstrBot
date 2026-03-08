@@ -8,6 +8,7 @@ import uuid
 import aiohttp
 
 from astrbot import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..entities import ProviderType
 from ..provider import TTSProvider
@@ -92,9 +93,12 @@ class ProviderVolcengineTTS(TTSProvider):
                     if "data" in resp_data:
                         audio_data = base64.b64decode(resp_data["data"])
 
-                        os.makedirs("data/temp", exist_ok=True)
-
-                        file_path = f"data/temp/volcengine_tts_{uuid.uuid4()}.mp3"
+                        temp_dir = get_astrbot_temp_path()
+                        os.makedirs(temp_dir, exist_ok=True)
+                        file_path = os.path.join(
+                            temp_dir,
+                            f"volcengine_tts_{uuid.uuid4()}.mp3",
+                        )
 
                         loop = asyncio.get_running_loop()
                         await loop.run_in_executor(

@@ -44,7 +44,7 @@ class RetrievalManager:
         sparse_retriever: SparseRetriever,
         rank_fusion: RankFusion,
         kb_db: KBSQLiteDatabase,
-    ):
+    ) -> None:
         """初始化检索管理器
 
         Args:
@@ -142,10 +142,13 @@ class RetrievalManager:
             f"Rank fusion took {time_end - time_start:.2f}s and returned {len(fused_results)} results.",
         )
 
-        # 4. 转换为 RetrievalResult (获取元数据)
+        # 4. 转换为 RetrievalResult (批量获取元数据)
+        doc_ids = {fr.doc_id for fr in fused_results}
+        metadata_map = await self.kb_db.get_documents_with_metadata_batch(doc_ids)
+
         retrieval_results = []
         for fr in fused_results:
-            metadata_dict = await self.kb_db.get_document_with_metadata(fr.doc_id)
+            metadata_dict = metadata_map.get(fr.doc_id)
             if metadata_dict:
                 retrieval_results.append(
                     RetrievalResult(

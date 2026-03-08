@@ -10,6 +10,7 @@
                     :selectedSessions="selectedSessions"
                     :currSessionId="currSessionId"
                     :selectedProjectId="selectedProjectId"
+                    :transportMode="transportMode"
                     :isDark="isDark"
                     :chatboxMode="chatboxMode"
                     :isMobile="isMobile"
@@ -26,6 +27,7 @@
                     @createProject="showCreateProjectDialog"
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
+                    @updateTransportMode="setTransportMode"
                 />
 
                 <!-- 右侧聊天内容区域 -->
@@ -35,14 +37,7 @@
 
                     <!-- 正常聊天界面 -->
                     <template v-else>
-                        <div class="conversation-header fade-in" v-if="isMobile">
-                            <!-- 手机端菜单按钮 -->
-                            <v-btn icon class="mobile-menu-btn" @click="toggleMobileSidebar" variant="text">
-                                <v-icon>mdi-menu</v-icon>
-                            </v-btn>
-                        </div>
 
-                        <!-- 面包屑导航 -->
                         <div v-if="currentSessionProject && messages && messages.length > 0" class="breadcrumb-container">
                             <div class="breadcrumb-content">
                                 <span class="breadcrumb-emoji">{{ currentSessionProject.emoji || '📁' }}</span>
@@ -77,12 +72,14 @@
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
                                 :disabled="isStreaming"
+                                :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
                                 @send="handleSendMessage"
+                                @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
                                 @removeImage="removeImage"
                                 @removeAudio="removeAudio"
@@ -106,12 +103,14 @@
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
                                 :disabled="isStreaming"
+                                :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
                                 @send="handleSendMessage"
+                                @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
                                 @removeImage="removeImage"
                                 @removeAudio="removeAudio"
@@ -134,12 +133,14 @@
                             :stagedAudioUrl="stagedAudioUrl"
                             :stagedFiles="stagedNonImageFiles"
                             :disabled="isStreaming"
+                            :is-running="isStreaming || isConvRunning"
                             :enableStreaming="enableStreaming"
                             :isRecording="isRecording"
                             :session-id="currSessionId || null"
                             :current-session="getCurrentSession"
                             :replyTo="replyTo"
                             @send="handleSendMessage"
+                            @stop="handleStopMessage"
                             @toggleStreaming="toggleStreaming"
                             @removeImage="removeImage"
                             @removeAudio="removeAudio"
@@ -233,6 +234,7 @@ const route = useRoute();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
 const theme = useTheme();
+const customizer = useCustomizerStore();
 
 // UI 状态
 const isMobile = ref(false);
@@ -295,10 +297,14 @@ const {
     isStreaming,
     isConvRunning,
     enableStreaming,
+    transportMode,
     currentSessionProject,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
-    toggleStreaming
+    stopMessage: stopMsg,
+    toggleStreaming,
+    setTransportMode,
+    cleanupTransport
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
 
 // 组件引用
@@ -330,19 +336,28 @@ function checkMobile() {
     isMobile.value = window.innerWidth <= 768;
     if (!isMobile.value) {
         mobileMenuOpen.value = false;
+        customizer.SET_CHAT_SIDEBAR(false);
     }
 }
 
 function toggleMobileSidebar() {
     mobileMenuOpen.value = !mobileMenuOpen.value;
+    customizer.SET_CHAT_SIDEBAR(mobileMenuOpen.value);
 }
 
 function closeMobileSidebar() {
     mobileMenuOpen.value = false;
+    customizer.SET_CHAT_SIDEBAR(false);
 }
 
+// 同步 nav header 中的 sidebar toggle
+watch(() => customizer.chatSidebarOpen, (val) => {
+    if (isMobile.value) {
+        mobileMenuOpen.value = val;
+    }
+});
+
 function toggleTheme() {
-    const customizer = useCustomizerStore();
     const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
     customizer.SET_UI_THEME(newTheme);
     theme.global.name.value = newTheme;
@@ -631,6 +646,10 @@ async function handleSendMessage() {
     }
 }
 
+async function handleStopMessage() {
+    await stopMsg();
+}
+
 // 路由变化监听
 watch(
     () => route.path,
@@ -684,6 +703,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('resize', checkMobile);
     cleanupMediaCache();
+    cleanupTransport();
 });
 </script>
 
@@ -705,6 +725,7 @@ onBeforeUnmount(() => {
     height: 100%;
     max-height: 100%;
     overflow: hidden;
+    overscroll-behavior: none;
 }
 
 .chat-page-container {
