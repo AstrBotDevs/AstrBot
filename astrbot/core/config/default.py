@@ -1123,7 +1123,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "timeout": 120,
-                        "api_base": "https://openrouter.ai/v1",
+                        "api_base": "https://openrouter.ai/api/v1",
                         "proxy": "",
                         "custom_headers": {},
                     },
