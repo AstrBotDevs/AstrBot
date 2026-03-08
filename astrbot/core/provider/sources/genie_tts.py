@@ -59,7 +59,7 @@ class GenieTTSProvider(TTSProvider):
         filename = f"genie_tts_{uuid.uuid4()}.wav"
         path = os.path.join(temp_dir, filename)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _generate(save_path: str) -> None:
             assert genie is not None
@@ -85,7 +85,7 @@ class GenieTTSProvider(TTSProvider):
         text_queue: asyncio.Queue[str | None],
         audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
     ) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         while True:
             text = await text_queue.get()

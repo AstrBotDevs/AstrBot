@@ -85,7 +85,6 @@ const {
   normalizeStr,
   toPinyinText,
   toInitials,
-  marketCustomFilter,
   plugin_handler_info_headers,
   pluginHeaders,
   filteredExtensions,
