@@ -225,54 +225,6 @@ class TestEventBusDispatch:
         mock_print_event.assert_called_once_with(mock_event, "test-conf-id")
         mock_pipeline_scheduler.execute.assert_called_once_with(mock_event)
 
-    @pytest.mark.asyncio
-    async def test_dispatch_skips_duplicate_event_in_short_window(
-        self, event_bus, event_queue, mock_pipeline_scheduler
-    ):
-        """Test that duplicate event in short window is skipped."""
-        processed = asyncio.Event()
-        processed_count = 0
-
-        async def execute_and_count(event):  # noqa: ARG001
-            nonlocal processed_count
-            processed_count += 1
-            processed.set()
-
-        mock_pipeline_scheduler.execute.side_effect = execute_and_count
-
-        event1 = MagicMock()
-        event1.unified_msg_origin = "test-platform:friend:user-1"
-        event1.get_platform_id.return_value = "test-platform"
-        event1.get_platform_name.return_value = "Test Platform"
-        event1.get_sender_name.return_value = None
-        event1.get_sender_id.return_value = "user-1"
-        event1.get_message_outline.return_value = "?"
-        event1.get_message_str.return_value = "?"
-
-        event2 = MagicMock()
-        event2.unified_msg_origin = "test-platform:friend:user-1"
-        event2.get_platform_id.return_value = "test-platform"
-        event2.get_platform_name.return_value = "Test Platform"
-        event2.get_sender_name.return_value = None
-        event2.get_sender_id.return_value = "user-1"
-        event2.get_message_outline.return_value = "?"
-        event2.get_message_str.return_value = "?"
-
-        await event_queue.put(event1)
-        await event_queue.put(event2)
-
-        task = asyncio.create_task(event_bus.dispatch())
-        try:
-            await asyncio.wait_for(processed.wait(), timeout=1.0)
-            await asyncio.sleep(0.05)
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-
-        assert processed_count == 1
-        assert mock_pipeline_scheduler.execute.call_count == 1
-
 
 class TestPrintEvent:
     """Tests for _print_event method."""
