@@ -37,13 +37,20 @@ class botClient(Client):
         self.platform = platform
 
     def _get_sender_id(self, message) -> str:
-        """Extract sender ID from different message types."""
-        if hasattr(message, 'author') and hasattr(message.author, 'id'):
-            return str(message.author.id)
-        if hasattr(message, 'author') and hasattr(message.author, 'user_openid'):
+        """Extract sender ID from different message types.
+
+        The precedence order is aligned with `_parse_from_qqofficial` to ensure
+        consistent deduplication and event fingerprinting:
+        1. author.user_openid
+        2. author.member_openid
+        3. author.id
+        """
+        if hasattr(message, "author") and hasattr(message.author, "user_openid"):
             return str(message.author.user_openid)
-        if hasattr(message, 'author') and hasattr(message.author, 'member_openid'):
+        if hasattr(message, "author") and hasattr(message.author, "member_openid"):
             return str(message.author.member_openid)
+        if hasattr(message, "author") and hasattr(message.author, "id"):
+            return str(message.author.id)
         return ""
 
     # 收到群消息
