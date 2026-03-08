@@ -1,4 +1,4 @@
 name: builtin_extension_hub
 desc: AstrBot 内置扩展中心入口，提供扩展搜索、安装、待确认管理与聊天确认能力。
-author: Soulter
+author: whatevertogo
 version: 0.0.1
