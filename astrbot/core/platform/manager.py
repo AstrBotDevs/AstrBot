@@ -122,6 +122,15 @@ class PlatformManager:
                     )
                     return
 
+            # 防御式处理：避免同一平台 ID 被重复加载导致消息重复消费。
+            if platform_id in self._inst_map:
+                logger.warning(
+                    "平台 %s(%s) 已存在实例，先终止旧实例再重载。",
+                    platform_config["type"],
+                    platform_id,
+                )
+                await self.terminate_platform(platform_id)
+
             logger.info(
                 f"载入 {platform_config['type']}({platform_config['id']}) 平台适配器 ...",
             )

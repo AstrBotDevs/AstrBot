@@ -11,6 +11,8 @@ class:
 """
 
 import asyncio
+import hashlib
+import time
 from asyncio import Queue
 
 from astrbot.core import logger
@@ -33,10 +35,46 @@ class EventBus:
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
+        # 跨平台实例短窗去重（兜底）：处理同一消息在极短时间内重复入队。
+        self._recent_event_fingerprints: dict[str, float] = {}
+        self._dedup_ttl_seconds = 0.5
+
+    def _clean_expired_event_fingerprints(self) -> None:
+        now = time.time()
+        expire_before = now - self._dedup_ttl_seconds
+        for key, ts in list(self._recent_event_fingerprints.items()):
+            if ts < expire_before:
+                self._recent_event_fingerprints.pop(key, None)
+
+    def _build_event_fingerprint(self, event: AstrMessageEvent) -> str:
+        payload = "\n".join(
+            [
+                str(event.get_platform_id() or ""),
+                str(event.unified_msg_origin or ""),
+                str(event.get_sender_id() or ""),
+                str((event.get_message_str() or "").strip()),
+            ]
+        )
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    def _is_duplicate_event(self, event: AstrMessageEvent) -> bool:
+        self._clean_expired_event_fingerprints()
+        fingerprint = self._build_event_fingerprint(event)
+        if fingerprint in self._recent_event_fingerprints:
+            return True
+        self._recent_event_fingerprints[fingerprint] = time.time()
+        return False
 
     async def dispatch(self) -> None:
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
+            if self._is_duplicate_event(event):
+                logger.info(
+                    "Skip duplicate event in event_bus, umo=%s, sender=%s",
+                    event.unified_msg_origin,
+                    event.get_sender_id(),
+                )
+                continue
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             conf_id = conf_info["id"]
             conf_name = conf_info.get("name") or conf_id
