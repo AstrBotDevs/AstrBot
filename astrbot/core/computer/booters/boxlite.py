@@ -1,5 +1,6 @@
 import asyncio
 import random
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -46,8 +47,7 @@ class MockShipyardSandboxClient:
 
         try:
             # Read file content
-            with open(path, "rb") as f:
-                file_content = f.read()
+            file_content = await asyncio.to_thread(Path(path).read_bytes)
 
             # Create multipart form data
             data = aiohttp.FormData()
@@ -88,7 +88,7 @@ class MockShipyardSandboxClient:
                 "error": f"Connection error: {str(e)}",
                 "message": "File upload failed",
             }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {
                 "success": False,
                 "error": "File upload timeout",

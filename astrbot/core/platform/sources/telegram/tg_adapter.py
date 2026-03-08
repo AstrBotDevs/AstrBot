@@ -1,9 +1,8 @@
 import asyncio
 import os
 import re
-import sys
 import uuid
-from typing import cast
+from typing import cast, override
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram import BotCommand, Update
@@ -32,11 +31,6 @@ from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import convert_audio_to_wav
 
 from .tg_event import TelegramPlatformEvent
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 @register_platform_adapter("telegram", "telegram 适配器")

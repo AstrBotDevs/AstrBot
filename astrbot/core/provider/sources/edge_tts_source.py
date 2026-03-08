@@ -100,7 +100,10 @@ class ProviderEdgeTTS(TTSProvider):
                 logger.info(f"[EdgeTTS] 返回值(0代表成功): {p.returncode}")
 
             os.remove(mp3_path)
-            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+            if (
+                await asyncio.to_thread(os.path.exists, wav_path)
+                and await asyncio.to_thread(os.path.getsize, wav_path) > 0
+            ):
                 return wav_path
             logger.error("生成的WAV文件不存在或为空")
             raise RuntimeError("生成的WAV文件不存在或为空")
@@ -110,7 +113,7 @@ class ProviderEdgeTTS(TTSProvider):
                 f"FFmpeg 转换失败: {e.stderr.decode() if e.stderr else str(e)}",
             )
             try:
-                if os.path.exists(mp3_path):
+                if await asyncio.to_thread(os.path.exists, mp3_path):
                     os.remove(mp3_path)
             except Exception:
                 pass
@@ -119,7 +122,7 @@ class ProviderEdgeTTS(TTSProvider):
         except Exception as e:
             logger.error(f"音频生成失败: {e!s}")
             try:
-                if os.path.exists(mp3_path):
+                if await asyncio.to_thread(os.path.exists, mp3_path):
                     os.remove(mp3_path)
             except Exception:
                 pass

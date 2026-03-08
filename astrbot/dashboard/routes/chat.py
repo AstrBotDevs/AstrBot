@@ -80,17 +80,23 @@ class ChatRoute(Route):
 
         try:
             file_path = os.path.join(self.attachments_dir, os.path.basename(filename))
-            real_file_path = os.path.realpath(file_path)
-            real_imgs_dir = os.path.realpath(self.attachments_dir)
+            real_file_path = await asyncio.to_thread(os.path.realpath, file_path)
+            real_imgs_dir = await asyncio.to_thread(
+                os.path.realpath, self.attachments_dir
+            )
 
-            if not os.path.exists(real_file_path):
+            if not await asyncio.to_thread(os.path.exists, real_file_path):
                 # try legacy
                 file_path = os.path.join(
                     self.legacy_img_dir, os.path.basename(filename)
                 )
-                if os.path.exists(file_path):
-                    real_file_path = os.path.realpath(file_path)
-                    real_imgs_dir = os.path.realpath(self.legacy_img_dir)
+                if await asyncio.to_thread(os.path.exists, file_path):
+                    real_file_path = await asyncio.to_thread(
+                        os.path.realpath, file_path
+                    )
+                    real_imgs_dir = await asyncio.to_thread(
+                        os.path.realpath, self.legacy_img_dir
+                    )
 
             if not real_file_path.startswith(real_imgs_dir):
                 return Response().error("Invalid file path").__dict__
@@ -117,7 +123,7 @@ class ChatRoute(Route):
                 return Response().error("Attachment not found").__dict__
 
             file_path = attachment.path
-            real_file_path = os.path.realpath(file_path)
+            real_file_path = await asyncio.to_thread(os.path.realpath, file_path)
 
             return await send_file(real_file_path, mimetype=attachment.mime_type)
 
@@ -344,7 +350,7 @@ class ChatRoute(Route):
                     while True:
                         try:
                             result = await asyncio.wait_for(back_queue.get(), timeout=1)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             continue
                         except asyncio.CancelledError:
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
@@ -652,7 +658,7 @@ class ChatRoute(Route):
         try:
             attachments = await self.db.get_attachments(attachment_ids)
             for attachment in attachments:
-                if not os.path.exists(attachment.path):
+                if not await asyncio.to_thread(os.path.exists, attachment.path):
                     continue
                 try:
                     os.remove(attachment.path)

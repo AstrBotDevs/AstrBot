@@ -1,10 +1,10 @@
 import asyncio
 import hashlib
 import json
-import sys
 import typing as T
 from collections import deque
 from dataclasses import dataclass, field
+from typing import override
 from uuid import uuid4
 
 import astrbot.core.message.components as Comp
@@ -39,11 +39,6 @@ from .deerflow_stream_utils import (
     extract_task_failures_from_custom_event,
     get_message_id,
 )
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
@@ -378,7 +373,9 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         if thread_id:
             return thread_id
 
-        thread = await self.api_client.create_thread(timeout=min(30, self.timeout))
+        thread = await self.api_client.create_thread(
+            timeout_seconds=min(30, self.timeout)
+        )
         thread_id = thread.get("thread_id", "")
         if not thread_id:
             raise Exception(
@@ -639,7 +636,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             async for event in self.api_client.stream_run(
                 thread_id=thread_id,
                 payload=payload,
-                timeout=self.timeout,
+                timeout_seconds=self.timeout,
             ):
                 event_type = event.get("event")
                 data = event.get("data")
@@ -666,7 +663,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
 
                 if event_type == "end":
                     break
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             logger.warning(
                 "DeerFlow stream timed out after %ss for thread_id=%s; returning partial result.",
                 self.timeout,

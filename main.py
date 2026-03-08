@@ -69,13 +69,13 @@ async def check_dashboard_files(webui_dir: str | None = None):
     """下载管理面板文件"""
     # 指定webui目录
     if webui_dir:
-        if os.path.exists(webui_dir):
+        if await asyncio.to_thread(os.path.exists, webui_dir):
             logger.info(f"使用指定的 WebUI 目录: {webui_dir}")
             return webui_dir
         logger.warning(f"指定的 WebUI 目录 {webui_dir} 不存在，将使用默认逻辑。")
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(data_dist_path):
+    if await asyncio.to_thread(os.path.exists, data_dist_path):
         v = await get_dashboard_version()
         if v is not None:
             # 存在文件

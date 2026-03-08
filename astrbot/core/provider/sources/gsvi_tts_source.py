@@ -1,6 +1,8 @@
+import asyncio
 import os
 import urllib.parse
 import uuid
+from pathlib import Path
 
 import aiohttp
 
@@ -48,8 +50,9 @@ class ProviderGSVITTS(TTSProvider):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
-                    with open(path, "wb") as f:
-                        f.write(await response.read())
+                    await asyncio.to_thread(
+                        Path(path).write_bytes, await response.read()
+                    )
                 else:
                     error_text = await response.text()
                     raise Exception(
