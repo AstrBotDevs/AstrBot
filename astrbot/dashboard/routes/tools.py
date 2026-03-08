@@ -13,27 +13,27 @@ DEFAULT_MCP_CONFIG = {"mcpServers": {}}
 
 
 class EmptyMcpServersError(ValueError):
-    """mcpServers 为空时抛出"""
+    """Raised when mcpServers is empty."""
 
     pass
 
 
 def _extract_mcp_server_config(mcp_servers_value: object) -> dict:
-    """从用户提交的 mcpServers 字段中提取服务器配置。
+    """Extract server configuration from user-submitted mcpServers field.
 
     Raises:
-        ValueError: 配置不合法
+        ValueError: Invalid configuration
     """
     if not isinstance(mcp_servers_value, dict):
-        raise ValueError("mcpServers 必须是一个 JSON 对象")
+        raise ValueError("mcpServers must be a JSON object")
     if not mcp_servers_value:
-        raise EmptyMcpServersError("mcpServers 配置不能为空")
+        raise EmptyMcpServersError("mcpServers configuration cannot be empty")
     key_0 = next(iter(mcp_servers_value))
     extracted = mcp_servers_value[key_0]
     if not isinstance(extracted, dict):
         raise ValueError(
-            "mcpServers 配置格式不正确。请确保 mcpServers 内部的 key 是服务器名称，"
-            "其值为包含 command/url 等字段的对象。"
+            "Invalid mcpServers format. Ensure each key in mcpServers is a server name, "
+            "and each value is an object containing fields like command/url."
         )
     return extracted
 
@@ -78,7 +78,7 @@ class ToolsRoute(Route):
 
             if not isinstance(mcp_servers, dict):
                 logger.warning(
-                    f"MCP 服务器配置无效（类型为 {type(mcp_servers).__name__}），应为对象/字典类型，已跳过所有 MCP 服务器"
+                    f"Invalid MCP server config type: {type(mcp_servers).__name__}. Expected object/dict; skipped all MCP servers."
                 )
                 mcp_servers = {}
 
@@ -86,7 +86,7 @@ class ToolsRoute(Route):
             for name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
                     logger.warning(
-                        f"MCP 服务器 '{name}' 的配置无效（类型为 {type(server_config).__name__}），已跳过"
+                        f"Invalid config for MCP server '{name}' (type: {type(server_config).__name__}); skipped."
                     )
                     continue
 
@@ -117,7 +117,7 @@ class ToolsRoute(Route):
             return Response().ok(servers).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"获取 MCP 服务器列表失败: {e!s}").__dict__
+            return Response().error(f"Failed to get MCP server list: {e!s}").__dict__
 
     async def add_mcp_server(self):
         try:
@@ -127,7 +127,7 @@ class ToolsRoute(Route):
 
             # 检查必填字段
             if not name:
-                return Response().error("服务器名称不能为空").__dict__
+                return Response().error("Server name cannot be empty").__dict__
 
             # 移除特殊字段并检查配置是否有效
             has_valid_config = False
@@ -148,18 +148,22 @@ class ToolsRoute(Route):
                     has_valid_config = True
 
             if not has_valid_config:
-                return Response().error("必须提供有效的服务器配置").__dict__
+                return (
+                    Response()
+                    .error("A valid server configuration is required")
+                    .__dict__
+                )
 
             config = self.tool_mgr.load_mcp_config()
 
             if name in config["mcpServers"]:
-                return Response().error(f"服务器 {name} 已存在").__dict__
+                return Response().error(f"Server {name} already exists").__dict__
 
             try:
                 await self.tool_mgr.test_mcp_server_connection(server_config)
             except Exception as e:
                 logger.error(traceback.format_exc())
-                return Response().error(f"测试 MCP 连接失败: {e!s}").__dict__
+                return Response().error(f"MCP connection test failed: {e!s}").__dict__
 
             config["mcpServers"][name] = server_config
 
@@ -172,22 +176,26 @@ class ToolsRoute(Route):
                     )
                 except TimeoutError:
                     rollback_ok = self._rollback_mcp_server(name)
-                    err_msg = f"启用 MCP 服务器 {name} 超时。"
+                    err_msg = f"Timed out while enabling MCP server {name}."
                     if not rollback_ok:
-                        err_msg += " 配置回滚失败，请手动检查配置。"
+                        err_msg += " Configuration rollback failed. Please check the config manually."
                     return Response().error(err_msg).__dict__
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     rollback_ok = self._rollback_mcp_server(name)
-                    err_msg = f"启用 MCP 服务器 {name} 失败: {e!s}"
+                    err_msg = f"Failed to enable MCP server {name}: {e!s}"
                     if not rollback_ok:
-                        err_msg += " 配置回滚失败，请手动检查配置。"
+                        err_msg += " Configuration rollback failed. Please check the config manually."
                     return Response().error(err_msg).__dict__
-                return Response().ok(None, f"成功添加 MCP 服务器 {name}").__dict__
-            return Response().error("保存配置失败").__dict__
+                return (
+                    Response()
+                    .ok(None, f"Successfully added MCP server {name}")
+                    .__dict__
+                )
+            return Response().error("Failed to save configuration").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"添加 MCP 服务器失败: {e!s}").__dict__
+            return Response().error(f"Failed to add MCP server: {e!s}").__dict__
 
     async def update_mcp_server(self):
         try:
@@ -197,17 +205,17 @@ class ToolsRoute(Route):
             old_name = server_data.get("oldName") or name
 
             if not name:
-                return Response().error("服务器名称不能为空").__dict__
+                return Response().error("Server name cannot be empty").__dict__
 
             config = self.tool_mgr.load_mcp_config()
 
             if old_name not in config["mcpServers"]:
-                return Response().error(f"服务器 {old_name} 不存在").__dict__
+                return Response().error(f"Server {old_name} does not exist").__dict__
 
             is_rename = name != old_name
 
             if name in config["mcpServers"] and is_rename:
-                return Response().error(f"服务器 {name} 已存在").__dict__
+                return Response().error(f"Server {name} already exists").__dict__
 
             # 获取活动状态
             old_config = config["mcpServers"][old_name]
@@ -270,7 +278,7 @@ class ToolsRoute(Route):
                             return (
                                 Response()
                                 .error(
-                                    f"启用前停用 MCP 服务器时 {old_name} 超时: {e!s}"
+                                    f"Timed out while disabling MCP server {old_name} before enabling: {e!s}"
                                 )
                                 .__dict__
                             )
@@ -279,7 +287,7 @@ class ToolsRoute(Route):
                             return (
                                 Response()
                                 .error(
-                                    f"启用前停用 MCP 服务器时 {old_name} 失败: {e!s}"
+                                    f"Failed to disable MCP server {old_name} before enabling: {e!s}"
                                 )
                                 .__dict__
                             )
@@ -291,13 +299,15 @@ class ToolsRoute(Route):
                         )
                     except TimeoutError:
                         return (
-                            Response().error(f"启用 MCP 服务器 {name} 超时。").__dict__
+                            Response()
+                            .error(f"Timed out while enabling MCP server {name}.")
+                            .__dict__
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"启用 MCP 服务器 {name} 失败: {e!s}")
+                            .error(f"Failed to enable MCP server {name}: {e!s}")
                             .__dict__
                         )
                 # 如果要停用服务器
@@ -307,22 +317,26 @@ class ToolsRoute(Route):
                     except TimeoutError:
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {old_name} 超时。")
+                            .error(f"Timed out while disabling MCP server {old_name}.")
                             .__dict__
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {old_name} 失败: {e!s}")
+                            .error(f"Failed to disable MCP server {old_name}: {e!s}")
                             .__dict__
                         )
 
-                return Response().ok(None, f"成功更新 MCP 服务器 {name}").__dict__
-            return Response().error("保存配置失败").__dict__
+                return (
+                    Response()
+                    .ok(None, f"Successfully updated MCP server {name}")
+                    .__dict__
+                )
+            return Response().error("Failed to save configuration").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"更新 MCP 服务器失败: {e!s}").__dict__
+            return Response().error(f"Failed to update MCP server: {e!s}").__dict__
 
     async def delete_mcp_server(self):
         try:
@@ -330,12 +344,12 @@ class ToolsRoute(Route):
             name = server_data.get("name", "")
 
             if not name:
-                return Response().error("服务器名称不能为空").__dict__
+                return Response().error("Server name cannot be empty").__dict__
 
             config = self.tool_mgr.load_mcp_config()
 
             if name not in config["mcpServers"]:
-                return Response().error(f"服务器 {name} 不存在").__dict__
+                return Response().error(f"Server {name} does not exist").__dict__
 
             del config["mcpServers"][name]
 
@@ -345,54 +359,76 @@ class ToolsRoute(Route):
                         await self.tool_mgr.disable_mcp_server(name, timeout=10)
                     except TimeoutError:
                         return (
-                            Response().error(f"停用 MCP 服务器 {name} 超时。").__dict__
+                            Response()
+                            .error(f"Timed out while disabling MCP server {name}.")
+                            .__dict__
                         )
                     except Exception as e:
                         logger.error(traceback.format_exc())
                         return (
                             Response()
-                            .error(f"停用 MCP 服务器 {name} 失败: {e!s}")
+                            .error(f"Failed to disable MCP server {name}: {e!s}")
                             .__dict__
                         )
-                return Response().ok(None, f"成功删除 MCP 服务器 {name}").__dict__
-            return Response().error("保存配置失败").__dict__
+                return (
+                    Response()
+                    .ok(None, f"Successfully deleted MCP server {name}")
+                    .__dict__
+                )
+            return Response().error("Failed to save configuration").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"删除 MCP 服务器失败: {e!s}").__dict__
+            return Response().error(f"Failed to delete MCP server: {e!s}").__dict__
 
     async def test_mcp_connection(self):
-        """测试 MCP 服务器连接"""
+        """Test MCP server connection."""
         try:
             server_data = await request.json
             config = server_data.get("mcp_server_config", None)
 
             if not isinstance(config, dict) or not config:
-                return Response().error("无效的 MCP 服务器配置").__dict__
+                return Response().error("Invalid MCP server configuration").__dict__
 
             if "mcpServers" in config:
                 mcp_servers = config["mcpServers"]
                 if isinstance(mcp_servers, dict) and len(mcp_servers) > 1:
-                    return Response().error("一次只能配置一个 MCP 服务器配置").__dict__
+                    return (
+                        Response()
+                        .error(
+                            "Only one MCP server configuration can be tested at a time"
+                        )
+                        .__dict__
+                    )
                 try:
                     config = _extract_mcp_server_config(mcp_servers)
                 except EmptyMcpServersError:
-                    return Response().error("MCP 服务器配置不能为空").__dict__
+                    return (
+                        Response()
+                        .error("MCP server configuration cannot be empty")
+                        .__dict__
+                    )
                 except ValueError as e:
                     return Response().error(f"{e!s}").__dict__
             elif not config:
-                return Response().error("MCP 服务器配置不能为空").__dict__
+                return (
+                    Response()
+                    .error("MCP server configuration cannot be empty")
+                    .__dict__
+                )
 
             tools_name = await self.tool_mgr.test_mcp_server_connection(config)
             return (
-                Response().ok(data=tools_name, message="🎉 MCP 服务器可用！").__dict__
+                Response()
+                .ok(data=tools_name, message="🎉 MCP server is available!")
+                .__dict__
             )
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"测试 MCP 连接失败: {e!s}").__dict__
+            return Response().error(f"Failed to test MCP connection: {e!s}").__dict__
 
     async def get_tool_list(self):
-        """获取所有注册的工具列表"""
+        """Get all registered tools."""
         try:
             tools = self.tool_mgr.func_list
             tools_dict = []
@@ -422,36 +458,44 @@ class ToolsRoute(Route):
             return Response().ok(data=tools_dict).__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"获取工具列表失败: {e!s}").__dict__
+            return Response().error(f"Failed to get tool list: {e!s}").__dict__
 
     async def toggle_tool(self):
-        """启用或停用指定的工具"""
+        """Activate or deactivate a specified tool."""
         try:
             data = await request.json
             tool_name = data.get("name")
             action = data.get("activate")  # True or False
 
             if not tool_name or action is None:
-                return Response().error("缺少必要参数: name 或 action").__dict__
+                return (
+                    Response()
+                    .error("Missing required parameters: name or activate")
+                    .__dict__
+                )
 
             if action:
                 try:
                     ok = self.tool_mgr.activate_llm_tool(tool_name, star_map=star_map)
                 except ValueError as e:
-                    return Response().error(f"启用工具失败: {e!s}").__dict__
+                    return Response().error(f"Failed to activate tool: {e!s}").__dict__
             else:
                 ok = self.tool_mgr.deactivate_llm_tool(tool_name)
 
             if ok:
-                return Response().ok(None, "操作成功。").__dict__
-            return Response().error(f"工具 {tool_name} 不存在或操作失败。").__dict__
+                return Response().ok(None, "Operation successful.").__dict__
+            return (
+                Response()
+                .error(f"Tool {tool_name} does not exist or the operation failed.")
+                .__dict__
+            )
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"操作工具失败: {e!s}").__dict__
+            return Response().error(f"Failed to operate tool: {e!s}").__dict__
 
     async def sync_provider(self):
-        """同步 MCP 提供者配置"""
+        """Sync MCP provider configuration."""
         try:
             data = await request.json
             provider_name = data.get("name")  # modelscope, or others
@@ -460,9 +504,11 @@ class ToolsRoute(Route):
                     access_token = data.get("access_token", "")
                     await self.tool_mgr.sync_modelscope_mcp_servers(access_token)
                 case _:
-                    return Response().error(f"未知: {provider_name}").__dict__
+                    return (
+                        Response().error(f"Unknown provider: {provider_name}").__dict__
+                    )
 
-            return Response().ok(message="同步成功").__dict__
+            return Response().ok(message="Sync completed").__dict__
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"同步失败: {e!s}").__dict__
+            return Response().error(f"Sync failed: {e!s}").__dict__
