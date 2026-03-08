@@ -186,6 +186,46 @@ class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
 
 
 @dataclass
+class ReadDocumentSectionTool(FunctionTool[AstrAgentContext]):
+    name: str = "astr_kb_read_section"
+    description: str = (
+        "Read full content of a specific structured section in knowledge base. "
+        "Use this when search results only provide a section path marker."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "doc_id": {"type": "string", "description": "Document ID."},
+                "section_path": {
+                    "type": "string",
+                    "description": "Section path, e.g. 'Chapter 1/API'.",
+                },
+            },
+            "required": ["doc_id", "section_path"],
+        }
+    )
+
+    async def call(
+        self, context: ContextWrapper[AstrAgentContext], **kwargs
+    ) -> ToolExecResult:
+        doc_id = kwargs.get("doc_id", "")
+        section_path = kwargs.get("section_path", "")
+        if not doc_id or not section_path:
+            return "error: doc_id and section_path are required."
+
+        body = await read_knowledge_base_section(
+            doc_id=doc_id,
+            section_path=section_path,
+            umo=context.context.event.unified_msg_origin,
+            context=context.context.context,
+        )
+        if not body:
+            return f"No section found for doc_id={doc_id}, path={section_path}"
+        return body
+
+
+@dataclass
 class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     name: str = "send_message_to_user"
     description: str = "Directly send message to the user. Only use this tool when you need to proactively message the user. Otherwise you can directly output the reply in the conversation."
@@ -394,42 +434,9 @@ async def retrieve_knowledge_base(
 
     # 1. 优先读取会话级配置
     session_config = await sp.session_get(umo, "kb_config", default={})
-
-    if session_config and "kb_ids" in session_config:
-        # 会话级配置
-        kb_ids = session_config.get("kb_ids", [])
-
-        # 如果配置为空列表，明确表示不使用知识库
-        if not kb_ids:
-            logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
-            return
-
-        top_k = session_config.get("top_k", 5)
-
-        # 将 kb_ids 转换为 kb_names
-        kb_names = []
-        invalid_kb_ids = []
-        for kb_id in kb_ids:
-            kb_helper = await kb_mgr.get_kb(kb_id)
-            if kb_helper:
-                kb_names.append(kb_helper.kb.kb_name)
-            else:
-                logger.warning(f"[知识库] 知识库不存在或未加载: {kb_id}")
-                invalid_kb_ids.append(kb_id)
-
-        if invalid_kb_ids:
-            logger.warning(
-                f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}",
-            )
-
-        if not kb_names:
-            return
-
-        logger.debug(f"[知识库] 使用会话级配置，知识库数量: {len(kb_names)}")
-    else:
-        kb_names = config.get("kb_names", [])
-        top_k = config.get("kb_final_top_k", 5)
-        logger.debug(f"[知识库] 使用全局配置，知识库数量: {len(kb_names)}")
+    kb_names, top_k = await _resolve_kb_names_for_session(
+        kb_mgr, config, session_config, umo
+    )
 
     top_k_fusion = config.get("kb_fusion_top_k", 20)
 
@@ -454,7 +461,56 @@ async def retrieve_knowledge_base(
         return formatted
 
 
+async def _resolve_kb_names_for_session(
+    kb_mgr, config: dict, session_config: dict, umo: str
+):
+    if session_config and "kb_ids" in session_config:
+        kb_ids = session_config.get("kb_ids", [])
+        if not kb_ids:
+            logger.info(f"[知识库] 会话 {umo} 已被配置为不使用知识库")
+            return [], session_config.get("top_k", 5)
+        top_k = session_config.get("top_k", 5)
+        kb_names = []
+        invalid_kb_ids = []
+        for kb_id in kb_ids:
+            kb_helper = await kb_mgr.get_kb(kb_id)
+            if kb_helper:
+                kb_names.append(kb_helper.kb.kb_name)
+            else:
+                invalid_kb_ids.append(kb_id)
+        if invalid_kb_ids:
+            logger.warning(
+                f"[知识库] 会话 {umo} 配置的以下知识库无效: {invalid_kb_ids}"
+            )
+        return kb_names, top_k
+    kb_names = config.get("kb_names", [])
+    top_k = config.get("kb_final_top_k", 5)
+    return kb_names, top_k
+
+
+async def read_knowledge_base_section(
+    doc_id: str,
+    section_path: str,
+    umo: str,
+    context: Context,
+) -> str | None:
+    kb_mgr = context.kb_manager
+    config = context.get_config(umo=umo)
+    session_config = await sp.session_get(umo, "kb_config", default={})
+    kb_names, _ = await _resolve_kb_names_for_session(
+        kb_mgr, config, session_config, umo
+    )
+    if not kb_names:
+        return None
+    return await kb_mgr.read_document_section(
+        kb_names=kb_names,
+        doc_id=doc_id,
+        section_path=section_path,
+    )
+
+
 KNOWLEDGE_BASE_QUERY_TOOL = KnowledgeBaseQueryTool()
+READ_DOCUMENT_SECTION_TOOL = ReadDocumentSectionTool()
 SEND_MESSAGE_TO_USER_TOOL = SendMessageToUserTool()
 
 EXECUTE_SHELL_TOOL = ExecuteShellTool()

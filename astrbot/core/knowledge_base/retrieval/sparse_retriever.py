@@ -24,6 +24,7 @@ class SparseResult:
     kb_id: str
     content: str
     score: float
+    metadata: dict
 
 
 class SparseRetriever:
@@ -89,6 +90,7 @@ class SparseRetriever:
                     "doc_id": chunk_md["kb_doc_id"],
                     "kb_id": kb_id,
                     "text": doc["text"],
+                    "metadata": chunk_md,
                 }
                 for doc, chunk_md in zip(result, chunk_mds)
             ]
@@ -128,6 +130,7 @@ class SparseRetriever:
                     kb_id=chunk["kb_id"],
                     content=chunk["text"],
                     score=float(score),
+                    metadata=chunk.get("metadata", {}),
                 ),
             )
 

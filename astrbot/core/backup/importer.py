@@ -748,11 +748,15 @@ class AstrBotImporter:
                 except Exception as e:
                     result.add_warning(f"导入知识库 {kb_id} 的文档失败: {e}")
 
-            # 导入 FAISS 索引
-            faiss_path = f"databases/kb_{kb_id}/index.faiss"
-            if faiss_path in zf.namelist():
+            # 导入 FAISS 索引（兼容旧版 index.faiss 与新版 index.{provider}.faiss）
+            faiss_paths = [
+                name
+                for name in zf.namelist()
+                if name.startswith(f"databases/kb_{kb_id}/") and name.endswith(".faiss")
+            ]
+            for faiss_path in faiss_paths:
                 try:
-                    target_path = kb_dir / "index.faiss"
+                    target_path = kb_dir / Path(faiss_path).name
                     with zf.open(faiss_path) as src, open(target_path, "wb") as dst:
                         dst.write(src.read())
                 except Exception as e:

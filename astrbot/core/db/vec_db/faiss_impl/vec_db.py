@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 
@@ -31,6 +32,7 @@ class FaissVecDB(BaseVecDB):
         )
         self.embedding_provider = embedding_provider
         self.rerank_provider = rerank_provider
+        self._index_switch_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         await self.document_storage.initialize()
@@ -45,15 +47,20 @@ class FaissVecDB(BaseVecDB):
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
-        vector = await self.embedding_provider.get_embedding(content)
-        vector = np.array(vector, dtype=np.float32)
+        async with self._index_switch_lock:
+            vector = await self.embedding_provider.get_embedding(content)
+            vector = np.array(vector, dtype=np.float32)
 
-        # 使用 DocumentStorage 的方法插入文档
-        int_id = await self.document_storage.insert_document(str_id, content, metadata)
+            # 使用 DocumentStorage 的方法插入文档
+            int_id = await self.document_storage.insert_document(
+                str_id,
+                content,
+                metadata,
+            )
 
-        # 插入向量到 FAISS
-        await self.embedding_storage.insert(vector, int_id)
-        return int_id
+            # 插入向量到 FAISS
+            await self.embedding_storage.insert(vector, int_id)
+            return int_id
 
     async def insert_batch(
         self,
@@ -71,34 +78,35 @@ class FaissVecDB(BaseVecDB):
             progress_callback: 进度回调函数，接收参数 (current, total)
 
         """
-        metadatas = metadatas or [{} for _ in contents]
-        ids = ids or [str(uuid.uuid4()) for _ in contents]
+        async with self._index_switch_lock:
+            metadatas = metadatas or [{} for _ in contents]
+            ids = ids or [str(uuid.uuid4()) for _ in contents]
 
-        start = time.time()
-        logger.debug(f"Generating embeddings for {len(contents)} contents...")
-        vectors = await self.embedding_provider.get_embeddings_batch(
-            contents,
-            batch_size=batch_size,
-            tasks_limit=tasks_limit,
-            max_retries=max_retries,
-            progress_callback=progress_callback,
-        )
-        end = time.time()
-        logger.debug(
-            f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
-        )
+            start = time.time()
+            logger.debug(f"Generating embeddings for {len(contents)} contents...")
+            vectors = await self.embedding_provider.get_embeddings_batch(
+                contents,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+            end = time.time()
+            logger.debug(
+                f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
+            )
 
-        # 使用 DocumentStorage 的批量插入方法
-        int_ids = await self.document_storage.insert_documents_batch(
-            ids,
-            contents,
-            metadatas,
-        )
+            # 使用 DocumentStorage 的批量插入方法
+            int_ids = await self.document_storage.insert_documents_batch(
+                ids,
+                contents,
+                metadatas,
+            )
 
-        # 批量插入向量到 FAISS
-        vectors_array = np.array(vectors).astype("float32")
-        await self.embedding_storage.insert_batch(vectors_array, int_ids)
-        return int_ids
+            # 批量插入向量到 FAISS
+            vectors_array = np.array(vectors).astype("float32")
+            await self.embedding_storage.insert_batch(vectors_array, int_ids)
+            return int_ids
 
     async def retrieve(
         self,
@@ -121,11 +129,12 @@ class FaissVecDB(BaseVecDB):
             List[Result]: 查询结果
 
         """
-        embedding = await self.embedding_provider.get_embedding(query)
-        scores, indices = await self.embedding_storage.search(
-            vector=np.array([embedding]).astype("float32"),
-            k=fetch_k if metadata_filters else k,
-        )
+        async with self._index_switch_lock:
+            embedding = await self.embedding_provider.get_embedding(query)
+            scores, indices = await self.embedding_storage.search(
+                vector=np.array([embedding]).astype("float32"),
+                k=fetch_k if metadata_filters else k,
+            )
         if len(indices[0]) == 0 or indices[0][0] == -1:
             return []
         # normalize scores
@@ -168,16 +177,20 @@ class FaissVecDB(BaseVecDB):
     async def delete(self, doc_id: str) -> None:
         """删除一条文档块（chunk）"""
         # 获得对应的 int id
-        result = await self.document_storage.get_document_by_doc_id(doc_id)
-        int_id = result["id"] if result else None
-        if int_id is None:
-            return
+        async with self._index_switch_lock:
+            result = await self.document_storage.get_document_by_doc_id(doc_id)
+            int_id = result["id"] if result else None
+            if int_id is None:
+                return
 
-        # 使用 DocumentStorage 的删除方法
-        await self.document_storage.delete_document_by_doc_id(doc_id)
-        await self.embedding_storage.delete([int_id])
+            # 使用 DocumentStorage 的删除方法
+            await self.document_storage.delete_document_by_doc_id(doc_id)
+            await self.embedding_storage.delete([int_id])
 
     async def close(self) -> None:
+        async with self._index_switch_lock:
+            if self.embedding_storage:
+                await self.embedding_storage.close()
         await self.document_storage.close()
 
     async def count_documents(self, metadata_filter: dict | None = None) -> int:
@@ -194,11 +207,42 @@ class FaissVecDB(BaseVecDB):
 
     async def delete_documents(self, metadata_filters: dict) -> None:
         """根据元数据过滤器删除文档"""
-        docs = await self.document_storage.get_documents(
-            metadata_filters=metadata_filters,
-            offset=None,
-            limit=None,
-        )
-        doc_ids: list[int] = [doc["id"] for doc in docs]
-        await self.embedding_storage.delete(doc_ids)
-        await self.document_storage.delete_documents(metadata_filters=metadata_filters)
+        async with self._index_switch_lock:
+            docs = await self.document_storage.get_documents(
+                metadata_filters=metadata_filters,
+                offset=None,
+                limit=None,
+            )
+            doc_ids: list[int] = [doc["id"] for doc in docs]
+            await self.embedding_storage.delete(doc_ids)
+            await self.document_storage.delete_documents(
+                metadata_filters=metadata_filters,
+            )
+
+    async def switch_index(
+        self,
+        index_store_path: str,
+        embedding_provider: EmbeddingProvider,
+        rerank_provider: RerankProvider | None = None,
+    ) -> None:
+        """Hot-switch to a new FAISS index and embedding provider."""
+        async with self._index_switch_lock:
+            old_storage = self.embedding_storage
+            try:
+                # Create new storage first; only swap after successful creation
+                new_storage = EmbeddingStorage(
+                    embedding_provider.get_dim(),
+                    index_store_path,
+                )
+            except Exception:
+                # If creation fails, keep old storage intact
+                raise
+            # document_storage keeps the same SQLite mapping (int id <-> chunk metadata),
+            # only embedding index file/provider changes here.
+            self.index_store_path = index_store_path
+            self.embedding_provider = embedding_provider
+            self.rerank_provider = rerank_provider
+            self.embedding_storage = new_storage
+            # Close old storage only after successful swap
+            if old_storage:
+                await old_storage.close()

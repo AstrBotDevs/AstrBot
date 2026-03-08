@@ -21,6 +21,7 @@ class FusedResult:
     kb_id: str
     content: str
     score: float
+    metadata: dict
 
 
 class RankFusion:
@@ -122,6 +123,7 @@ class RankFusion:
                         kb_id=sr.kb_id,
                         content=sr.content,
                         score=rrf_scores[identifier],
+                        metadata=sr.metadata,
                     ),
                 )
             elif identifier in vec_doc_id_to_dense:
@@ -136,6 +138,7 @@ class RankFusion:
                         kb_id=chunk_md["kb_id"],
                         content=vec_result.data["text"],
                         score=rrf_scores[identifier],
+                        metadata=chunk_md,
                     ),
                 )
 

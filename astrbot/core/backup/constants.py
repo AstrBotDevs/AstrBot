@@ -18,6 +18,7 @@ from astrbot.core.db.po import (
     Preference,
 )
 from astrbot.core.knowledge_base.models import (
+    DocSection,
     KBDocument,
     KBMedia,
     KnowledgeBase,
@@ -54,6 +55,7 @@ KB_METADATA_MODELS: dict[str, type[SQLModel]] = {
     "knowledge_bases": KnowledgeBase,
     "kb_documents": KBDocument,
     "kb_media": KBMedia,
+    "doc_sections": DocSection,
 }
 
 

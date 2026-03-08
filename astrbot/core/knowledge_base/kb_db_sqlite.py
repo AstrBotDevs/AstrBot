@@ -2,13 +2,16 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import col, desc
 
 from astrbot.core import logger
 from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
+from astrbot.core.knowledge_base.index_path import build_index_path
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
+    DocSection,
     KBDocument,
     KBMedia,
     KnowledgeBase,
@@ -164,6 +167,123 @@ class KBSQLiteDatabase:
 
                 await session.commit()
 
+    async def migrate_to_v2(self, kb_root_dir: str) -> None:
+        """执行知识库数据库 v2 迁移
+
+        变更:
+        - knowledge_bases.active_index_provider_id
+        - 旧 index.faiss 迁移为 index.{provider}.faiss
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                try:
+                    await session.execute(
+                        text(
+                            "ALTER TABLE knowledge_bases "
+                            "ADD COLUMN active_index_provider_id VARCHAR(100)",
+                        ),
+                    )
+                except (ProgrammingError, OperationalError) as e:
+                    err_msg = str(e).lower()
+                    if "duplicate column name" in err_msg:
+                        pass
+                    else:
+                        logger.error(
+                            "Failed to alter knowledge_bases for active_index_provider_id: %s",
+                            e,
+                        )
+                        raise
+
+                result = await session.execute(select(KnowledgeBase))
+                all_kbs = list(result.scalars().all())
+                kb_root = Path(kb_root_dir)
+                for kb in all_kbs:
+                    if not kb.active_index_provider_id and kb.embedding_provider_id:
+                        kb.active_index_provider_id = kb.embedding_provider_id
+
+                    rename_success = True
+                    if kb.embedding_provider_id:
+                        old_index_path = kb_root / kb.kb_id / "index.faiss"
+                        new_index_path = build_index_path(
+                            kb_root / kb.kb_id,
+                            kb.embedding_provider_id,
+                        )
+                        if old_index_path.exists() and not new_index_path.exists():
+                            try:
+                                old_index_path.rename(new_index_path)
+                            except OSError as e:
+                                logger.warning(
+                                    "Rename index failed for kb %s: %s -> %s, error: %s",
+                                    kb.kb_id,
+                                    old_index_path,
+                                    new_index_path,
+                                    e,
+                                )
+                                rename_success = False
+                            except Exception as e:
+                                logger.warning(
+                                    "Unexpected error when renaming index for kb %s: %s -> %s, error: %s",
+                                    kb.kb_id,
+                                    old_index_path,
+                                    new_index_path,
+                                    e,
+                                )
+                                rename_success = False
+                    # Only persist KB changes if rename succeeded (or no rename was needed)
+                    if rename_success:
+                        session.add(kb)
+
+                await session.commit()
+
+    async def migrate_to_v3(self) -> None:
+        """执行知识库数据库 v3 迁移
+
+        变更:
+        - knowledge_bases.default_index_mode
+        - kb_documents.index_mode
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                try:
+                    await session.execute(
+                        text(
+                            "ALTER TABLE knowledge_bases "
+                            "ADD COLUMN default_index_mode VARCHAR(20) DEFAULT 'flat'",
+                        ),
+                    )
+                except Exception:
+                    pass
+                try:
+                    await session.execute(
+                        text(
+                            "ALTER TABLE kb_documents "
+                            "ADD COLUMN index_mode VARCHAR(20) DEFAULT 'flat'",
+                        ),
+                    )
+                except Exception:
+                    pass
+                try:
+                    await session.execute(
+                        text(
+                            "UPDATE knowledge_bases SET default_index_mode = 'flat' "
+                            "WHERE default_index_mode IS NULL OR default_index_mode = ''",
+                        ),
+                    )
+                except Exception:
+                    pass
+                try:
+                    await session.execute(
+                        text(
+                            "UPDATE kb_documents SET index_mode = 'flat' "
+                            "WHERE index_mode IS NULL OR index_mode = ''",
+                        ),
+                    )
+                except Exception:
+                    pass
+                await session.commit()
+
     async def close(self) -> None:
         """关闭数据库连接"""
         await self.engine.dispose()
@@ -316,6 +436,50 @@ class KBSQLiteDatabase:
             stmt = select(KBMedia).where(col(KBMedia.doc_id) == doc_id)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def has_structured_docs(self, kb_id: str) -> bool:
+        """Check if kb has any structured indexed documents."""
+        async with self.get_db() as session:
+            stmt = (
+                select(func.count(col(KBDocument.id)))
+                .where(col(KBDocument.kb_id) == kb_id)
+                .where(col(KBDocument.index_mode) == "structure")
+            )
+            result = await session.execute(stmt)
+            return (result.scalar() or 0) > 0
+
+    async def upsert_doc_section(self, section: DocSection) -> None:
+        async with self.get_db() as session:
+            async with session.begin():
+                await session.merge(section)
+
+    async def get_doc_section(
+        self,
+        kb_id: str,
+        doc_id: str,
+        section_path: str,
+    ) -> DocSection | None:
+        async with self.get_db() as session:
+            stmt = (
+                select(DocSection)
+                .where(col(DocSection.kb_id) == kb_id)
+                .where(col(DocSection.doc_id) == doc_id)
+                .where(col(DocSection.section_path) == section_path)
+            )
+            result = await session.execute(stmt)
+            section = result.scalar_one_or_none()
+            if section:
+                return section
+            stmt = (
+                select(DocSection)
+                .where(col(DocSection.kb_id) == kb_id)
+                .where(col(DocSection.doc_id) == doc_id)
+                .where(DocSection.section_path.contains(section_path, autoescape=True))
+                .order_by(DocSection.created_at.asc(), DocSection.id.asc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
 
     async def get_media_by_id(self, media_id: str) -> KBMedia | None:
         """根据 ID 获取多媒体资源"""

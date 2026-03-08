@@ -41,6 +41,7 @@ from astrbot.core.astr_main_agent_resources import (
     LOCAL_PYTHON_TOOL,
     PROMOTE_SKILL_CANDIDATE_TOOL,
     PYTHON_TOOL,
+    READ_DOCUMENT_SECTION_TOOL,
     ROLLBACK_SKILL_RELEASE_TOOL,
     RUN_BROWSER_SKILL_TOOL,
     SANDBOX_MODE_PROMPT,
@@ -214,6 +215,24 @@ async def _apply_kb(
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(KNOWLEDGE_BASE_QUERY_TOOL)
+        session_config = await sp.session_get(
+            event.unified_msg_origin, "kb_config", default={}
+        )
+        kb_names = []
+        if session_config and "kb_ids" in session_config:
+            for kb_id in session_config.get("kb_ids", []):
+                kb_helper = await plugin_context.kb_manager.get_kb(kb_id)
+                if kb_helper:
+                    kb_names.append(kb_helper.kb.kb_name)
+        else:
+            kb_names = plugin_context.get_config(umo=event.unified_msg_origin).get(
+                "kb_names",
+                [],
+            )
+        if kb_names and await plugin_context.kb_manager.has_structured_docs_by_names(
+            kb_names
+        ):
+            req.func_tool.add_tool(READ_DOCUMENT_SECTION_TOOL)
 
 
 async def _apply_file_extract(

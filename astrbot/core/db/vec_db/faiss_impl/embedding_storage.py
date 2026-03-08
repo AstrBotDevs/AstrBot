@@ -14,6 +14,10 @@ class EmbeddingStorage:
         self.dimension = dimension
         self.path = path
         self.index = None
+        if self.path:
+            dirpath = os.path.dirname(self.path)
+            if dirpath:
+                os.makedirs(dirpath, exist_ok=True)
         if path and os.path.exists(path):
             self.index = faiss.read_index(path)
         else:
@@ -90,6 +94,20 @@ class EmbeddingStorage:
             path (str): 保存索引的路径
 
         """
-        if self.index is None:
+        if self.index is None or self.path is None:
             return
         faiss.write_index(self.index, self.path)
+
+    def get_all_ids(self) -> list[int]:
+        """Return all int ids in current index."""
+        assert self.index is not None, "FAISS index is not initialized."
+        if self.index.ntotal == 0:
+            return []
+        if hasattr(self.index, "id_map"):
+            return [int(x) for x in faiss.vector_to_array(self.index.id_map)]
+        return []
+
+    async def close(self) -> None:
+        """Persist index and release in-memory references."""
+        await self.save_index()
+        self.index = None

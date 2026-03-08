@@ -2,6 +2,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
+from hashlib import sha256
 
 from sqlalchemy import Column, Text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -28,6 +29,8 @@ class Document(BaseDocModel, table=True):
     doc_id: str = Field(nullable=False)
     text: str = Field(nullable=False)
     metadata_: str | None = Field(default=None, sa_column=Column("metadata", Text))
+    is_indexed: bool = Field(default=False)
+    source_hash: str | None = Field(default=None)
     created_at: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
 
@@ -73,6 +76,29 @@ class DocumentStorage:
                 await conn.execute(
                     text(
                         "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)",
+                    ),
+                )
+            except BaseException:
+                pass
+
+            try:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE documents ADD COLUMN is_indexed BOOLEAN DEFAULT 0",
+                    ),
+                )
+            except BaseException:
+                pass
+            try:
+                await conn.execute(
+                    text("ALTER TABLE documents ADD COLUMN source_hash TEXT"),
+                )
+            except BaseException:
+                pass
+            try:
+                await conn.execute(
+                    text(
+                        "UPDATE documents SET is_indexed = 1 WHERE is_indexed = 0 OR is_indexed IS NULL",
                     ),
                 )
             except BaseException:
@@ -167,6 +193,8 @@ class DocumentStorage:
                 doc_id=doc_id,
                 text=text,
                 metadata_=json.dumps(metadata),
+                is_indexed=True,
+                source_hash=sha256(text.encode("utf-8")).hexdigest(),
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
             )
@@ -202,6 +230,8 @@ class DocumentStorage:
                     doc_id=doc_id,
                     text=text,
                     metadata_=json.dumps(metadata),
+                    is_indexed=True,
+                    source_hash=sha256(text.encode("utf-8")).hexdigest(),
                     created_at=datetime.now(),
                     updated_at=datetime.now(),
                 )
@@ -339,6 +369,26 @@ class DocumentStorage:
             result = await session.execute(query)
             rows = result.fetchall()
             return [row[0] for row in rows]
+
+    async def get_all_int_ids(self) -> list[int]:
+        """Retrieve all integer ids from documents table."""
+        assert self.engine is not None, "Database connection is not initialized."
+        async with self.get_session() as session:
+            result = await session.execute(select(Document.id))
+            return [
+                int(doc_id) for doc_id in result.scalars().all() if doc_id is not None
+            ]
+
+    async def get_documents_by_int_ids(self, ids: list[int]) -> list[dict]:
+        """Retrieve documents by integer ids."""
+        if not ids:
+            return []
+        assert self.engine is not None, "Database connection is not initialized."
+        async with self.get_session() as session:
+            query = select(Document).where(col(Document.id).in_(ids))
+            result = await session.execute(query)
+            documents = result.scalars().all()
+            return [self._document_to_dict(doc) for doc in documents]
 
     def _document_to_dict(self, document: Document) -> dict:
         """Convert a Document model to a dictionary.

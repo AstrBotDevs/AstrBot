@@ -32,6 +32,8 @@ class KnowledgeBase(BaseKBModel, table=True):
     description: str | None = Field(default=None, sa_type=Text)
     emoji: str | None = Field(default="📚", max_length=10)
     embedding_provider_id: str | None = Field(default=None, max_length=100)
+    active_index_provider_id: str | None = Field(default=None, max_length=100)
+    default_index_mode: str = Field(default="flat", max_length=20)
     rerank_provider_id: str | None = Field(default=None, max_length=100)
     # 分块配置参数
     chunk_size: int | None = Field(default=512, nullable=True)
@@ -81,6 +83,7 @@ class KBDocument(BaseKBModel, table=True):
     file_type: str = Field(max_length=20, nullable=False)
     file_size: int = Field(nullable=False)
     file_path: str = Field(max_length=512, nullable=False)
+    index_mode: str = Field(default="flat", max_length=20)
     chunk_count: int = Field(default=0, nullable=False)
     media_count: int = Field(default=0, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -118,3 +121,35 @@ class KBMedia(BaseKBModel, table=True):
     file_size: int = Field(nullable=False)
     mime_type: str = Field(max_length=100, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class DocSection(BaseKBModel, table=True):
+    """Structured document sections table."""
+
+    __tablename__ = "doc_sections"  # type: ignore
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    section_id: str = Field(
+        max_length=36,
+        nullable=False,
+        unique=True,
+        default_factory=lambda: str(uuid.uuid4()),
+        index=True,
+    )
+    doc_id: str = Field(max_length=36, nullable=False, index=True)
+    kb_id: str = Field(max_length=36, nullable=False, index=True)
+    section_path: str = Field(max_length=1024, nullable=False, index=True)
+    section_level: int = Field(nullable=False, default=1)
+    section_title: str = Field(max_length=255, nullable=False)
+    section_body: str = Field(nullable=False, sa_type=Text)
+    parent_section_id: str | None = Field(default=None, max_length=36)
+    sort_order: int = Field(default=0, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": datetime.now(timezone.utc)},
+    )

@@ -45,6 +45,7 @@ class KnowledgeBaseRoute(Route):
             "/kb/create": ("POST", self.create_kb),
             "/kb/get": ("GET", self.get_kb),
             "/kb/update": ("POST", self.update_kb),
+            "/kb/rebuild/progress": ("GET", self.get_rebuild_progress),
             "/kb/delete": ("POST", self.delete_kb),
             "/kb/stats": ("GET", self.get_kb_stats),
             # 文档管理
@@ -133,6 +134,7 @@ class KnowledgeBaseRoute(Route):
         task_id: str,
         kb_helper,
         files_to_upload: list,
+        index_mode: str,
         chunk_size: int,
         chunk_overlap: int,
         batch_size: int,
@@ -177,6 +179,7 @@ class KnowledgeBaseRoute(Route):
                         file_name=file_info["file_name"],
                         file_content=file_info["file_content"],
                         file_type=file_info["file_type"],
+                        index_mode=index_mode,
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
                         batch_size=batch_size,
@@ -359,6 +362,7 @@ class KnowledgeBaseRoute(Route):
             top_k_dense = data.get("top_k_dense")
             top_k_sparse = data.get("top_k_sparse")
             top_m_final = data.get("top_m_final")
+            default_index_mode = data.get("default_index_mode")
 
             # pre-check embedding dim
             if not embedding_provider_id:
@@ -413,6 +417,7 @@ class KnowledgeBaseRoute(Route):
                 top_k_dense=top_k_dense,
                 top_k_sparse=top_k_sparse,
                 top_m_final=top_m_final,
+                default_index_mode=default_index_mode,
             )
             kb = kb_helper.kb
 
@@ -485,6 +490,7 @@ class KnowledgeBaseRoute(Route):
             top_k_dense = data.get("top_k_dense")
             top_k_sparse = data.get("top_k_sparse")
             top_m_final = data.get("top_m_final")
+            default_index_mode = data.get("default_index_mode")
 
             # 检查是否至少提供了一个更新字段
             if all(
@@ -500,6 +506,7 @@ class KnowledgeBaseRoute(Route):
                     top_k_dense,
                     top_k_sparse,
                     top_m_final,
+                    default_index_mode,
                 ]
             ):
                 return Response().error("至少需要提供一个更新字段").__dict__
@@ -516,13 +523,17 @@ class KnowledgeBaseRoute(Route):
                 top_k_dense=top_k_dense,
                 top_k_sparse=top_k_sparse,
                 top_m_final=top_m_final,
+                default_index_mode=default_index_mode,
             )
 
             if not kb_helper:
                 return Response().error("知识库不存在").__dict__
 
             kb = kb_helper.kb
-            return Response().ok(kb.model_dump(), "更新知识库成功").__dict__
+            response_data = kb.model_dump()
+            if kb_helper.last_rebuild_task_id:
+                response_data["rebuild_task_id"] = kb_helper.last_rebuild_task_id
+            return Response().ok(response_data, "更新知识库成功").__dict__
 
         except ValueError as e:
             return Response().error(str(e)).__dict__
@@ -557,6 +568,29 @@ class KnowledgeBaseRoute(Route):
             logger.error(f"删除知识库失败: {e}")
             logger.error(traceback.format_exc())
             return Response().error(f"删除知识库失败: {e!s}").__dict__
+
+    async def get_rebuild_progress(self):
+        """获取索引重建进度
+
+        Query 参数:
+        - kb_id: 知识库 ID (可选)
+        - task_id: 重建任务 ID (可选)
+        """
+        try:
+            kb_manager = self._get_kb_manager()
+            kb_id = request.args.get("kb_id")
+            task_id = request.args.get("task_id")
+            if not kb_id and not task_id:
+                return Response().error("缺少参数 kb_id 或 task_id").__dict__
+
+            progress = kb_manager.get_rebuild_progress(kb_id=kb_id, task_id=task_id)
+            if not progress:
+                return Response().error("找不到重建任务").__dict__
+            return Response().ok(progress).__dict__
+        except Exception as e:
+            logger.error(f"获取重建进度失败: {e}")
+            logger.error(traceback.format_exc())
+            return Response().error(f"获取重建进度失败: {e!s}").__dict__
 
     async def get_kb_stats(self):
         """获取知识库统计信息
@@ -666,6 +700,7 @@ class KnowledgeBaseRoute(Route):
             batch_size = 32
             tasks_limit = 3
             max_retries = 3
+            index_mode = "flat"
             files_to_upload = []  # 存储待上传的文件信息列表
 
             if content_type and "multipart/form-data" not in content_type:
@@ -681,6 +716,7 @@ class KnowledgeBaseRoute(Route):
             batch_size = int(form_data.get("batch_size", 32))
             tasks_limit = int(form_data.get("tasks_limit", 3))
             max_retries = int(form_data.get("max_retries", 3))
+            index_mode = form_data.get("index_mode", "flat")
             if not kb_id:
                 return Response().error("缺少参数 kb_id").__dict__
 
@@ -749,6 +785,7 @@ class KnowledgeBaseRoute(Route):
                     task_id=task_id,
                     kb_helper=kb_helper,
                     files_to_upload=files_to_upload,
+                    index_mode=index_mode,
                     chunk_size=chunk_size,
                     chunk_overlap=chunk_overlap,
                     batch_size=batch_size,

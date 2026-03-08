@@ -277,11 +277,11 @@ class AstrBotExporter:
     ) -> None:
         """导出 FAISS 索引文件"""
         try:
-            index_path = kb_helper.kb_dir / "index.faiss"
-            if index_path.exists():
-                archive_path = f"databases/kb_{kb_id}/index.faiss"
-                zf.write(str(index_path), archive_path)
-                logger.debug(f"导出 FAISS 索引: {archive_path}")
+            for index_path in kb_helper.kb_dir.glob("index*.faiss"):
+                if index_path.exists():
+                    archive_path = f"databases/kb_{kb_id}/{index_path.name}"
+                    zf.write(str(index_path), archive_path)
+                    logger.debug(f"导出 FAISS 索引: {archive_path}")
         except Exception as e:
             logger.warning(f"导出 FAISS 索引失败: {e}")
 
@@ -450,7 +450,7 @@ class AstrBotExporter:
             "origin": "exported",  # 标记备份来源：exported=本实例导出, uploaded=用户上传
             "schema_version": {
                 "main_db": "v4",
-                "kb_db": "v1",
+                "kb_db": "v3",
             },
             "tables": {
                 "main_db": list(main_data.keys()),

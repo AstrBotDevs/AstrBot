@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 import aiofiles
+import numpy as np
 
 from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
@@ -21,11 +22,13 @@ from astrbot.core.provider.provider import (
 
 from .chunking.base import BaseChunker
 from .chunking.recursive import RecursiveCharacterChunker
+from .index_path import build_index_path
 from .kb_db_sqlite import KBSQLiteDatabase
-from .models import KBDocument, KBMedia, KnowledgeBase
+from .models import DocSection, KBDocument, KBMedia, KnowledgeBase
 from .parsers.url_parser import extract_text_from_url
 from .parsers.util import select_parser
 from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
+from .structure_parser import StructureParser
 
 
 class RateLimiter:
@@ -129,21 +132,36 @@ class KBHelper:
 
         self.kb_medias_dir.mkdir(parents=True, exist_ok=True)
         self.kb_files_dir.mkdir(parents=True, exist_ok=True)
+        self.last_rebuild_task_id: str | None = None
 
     async def initialize(self) -> None:
+        if not self.kb.active_index_provider_id:
+            self.kb.active_index_provider_id = self.kb.embedding_provider_id
+            await self.persist_kb()
         await self._ensure_vec_db()
 
-    async def get_ep(self) -> EmbeddingProvider:
-        if not self.kb.embedding_provider_id:
-            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+    async def get_embedding_provider_by_id(self, provider_id: str) -> EmbeddingProvider:
         ep: EmbeddingProvider = await self.prov_mgr.get_provider_by_id(
-            self.kb.embedding_provider_id,
+            provider_id,
         )  # type: ignore
         if not ep:
-            raise ValueError(
-                f"无法找到 ID 为 {self.kb.embedding_provider_id} 的 Embedding Provider",
-            )
+            raise ValueError(f"无法找到 ID 为 {provider_id} 的 Embedding Provider")
         return ep
+
+    def get_active_embedding_provider_id(self) -> str | None:
+        return self.kb.active_index_provider_id or self.kb.embedding_provider_id
+
+    def get_active_index_path(self) -> Path:
+        provider_id = self.get_active_embedding_provider_id()
+        if not provider_id:
+            return self.kb_dir / "index.faiss"
+        return build_index_path(self.kb_dir, provider_id)
+
+    async def get_ep(self) -> EmbeddingProvider:
+        provider_id = self.get_active_embedding_provider_id()
+        if not provider_id:
+            raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
+        return await self.get_embedding_provider_by_id(provider_id)
 
     async def get_rp(self) -> RerankProvider | None:
         if not self.kb.rerank_provider_id:
@@ -158,7 +176,8 @@ class KBHelper:
         return rp
 
     async def _ensure_vec_db(self) -> FaissVecDB:
-        if not self.kb.embedding_provider_id:
+        provider_id = self.get_active_embedding_provider_id()
+        if not provider_id:
             raise ValueError(f"知识库 {self.kb.kb_name} 未配置 Embedding Provider")
 
         ep = await self.get_ep()
@@ -166,13 +185,18 @@ class KBHelper:
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
-            index_store_path=str(self.kb_dir / "index.faiss"),
+            index_store_path=str(self.get_active_index_path()),
             embedding_provider=ep,
             rerank_provider=rp,
         )
         await vec_db.initialize()
         self.vec_db = vec_db
         return vec_db
+
+    async def persist_kb(self) -> None:
+        async with self.kb_db.get_db() as session:
+            async with session.begin():
+                self.kb = await session.merge(self.kb)
 
     async def delete_vec_db(self) -> None:
         """删除知识库的向量数据库和所有相关文件"""
@@ -191,6 +215,7 @@ class KBHelper:
         file_name: str,
         file_content: bytes | None,
         file_type: str,
+        index_mode: str | None = None,
         chunk_size: int = 512,
         chunk_overlap: int = 50,
         batch_size: int = 32,
@@ -217,6 +242,18 @@ class KBHelper:
                 - total: 总数
 
         """
+        mode = (index_mode or self.kb.default_index_mode or "flat").lower()
+        if mode == "structure" and pre_chunked_text is None:
+            return await self._upload_document_structured(
+                file_name=file_name,
+                file_content=file_content,
+                file_type=file_type,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
@@ -315,6 +352,7 @@ class KBHelper:
                 file_size=file_size,
                 # file_path=str(file_path),
                 file_path="",
+                index_mode="flat",
                 chunk_count=len(chunks_text),
                 media_count=0,
             )
@@ -345,6 +383,126 @@ class KBHelper:
                     logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
 
             raise e
+
+    async def _upload_document_structured(
+        self,
+        file_name: str,
+        file_content: bytes | None,
+        file_type: str,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> KBDocument:
+        await self._ensure_vec_db()
+        if file_content is None:
+            raise ValueError("结构化上传需要 file_content")
+
+        doc_id = str(uuid.uuid4())
+        parser = await select_parser(f".{file_type}")
+        if progress_callback:
+            await progress_callback("parsing", 0, 100)
+        parse_result = await parser.parse(file_content, file_name)
+        if progress_callback:
+            await progress_callback("parsing", 100, 100)
+
+        structure_parser = StructureParser()
+        if progress_callback:
+            await progress_callback("chunking", 0, 100)
+        nodes = await structure_parser.parse_structure(parse_result.text, file_type)
+        sections = structure_parser.flatten(nodes)
+        if not sections:
+            logger.warning(
+                "Structured parse failed, fallback to flat mode for %s", file_name
+            )
+            return await self.upload_document(
+                file_name=file_name,
+                file_content=file_content,
+                file_type=file_type,
+                index_mode="flat",
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+
+        contents = [section.path for section in sections]
+        chunk_ids = [str(uuid.uuid4()) for _ in sections]
+        metadatas = [
+            {
+                "kb_id": self.kb.kb_id,
+                "kb_doc_id": doc_id,
+                "chunk_index": i,
+                "index_mode": "structure",
+                "section_path": section.path,
+                "section_level": section.level,
+            }
+            for i, section in enumerate(sections)
+        ]
+        if progress_callback:
+            await progress_callback("chunking", 100, 100)
+
+        ep = await self.get_ep()
+
+        async def structured_embedding_progress(current: int, total: int) -> None:
+            if progress_callback:
+                await progress_callback("embedding", current, total)
+
+        vectors = await ep.get_embeddings_batch(
+            contents,
+            batch_size=batch_size,
+            tasks_limit=tasks_limit,
+            max_retries=max_retries,
+            progress_callback=structured_embedding_progress
+            if progress_callback
+            else None,
+        )
+        int_ids = await self.vec_db.document_storage.insert_documents_batch(
+            chunk_ids,
+            contents,
+            metadatas,
+        )
+        await self.vec_db.embedding_storage.insert_batch(
+            vectors=np.array(vectors, dtype=np.float32),
+            ids=int_ids,
+        )
+
+        kb_doc = KBDocument(
+            doc_id=doc_id,
+            kb_id=self.kb.kb_id,
+            doc_name=file_name,
+            file_type=file_type,
+            file_size=len(file_content),
+            file_path="",
+            index_mode="structure",
+            chunk_count=len(sections),
+            media_count=0,
+        )
+        async with self.kb_db.get_db() as session:
+            async with session.begin():
+                session.add(kb_doc)
+            await session.refresh(kb_doc)
+
+        for i, section in enumerate(sections):
+            await self.kb_db.upsert_doc_section(
+                DocSection(
+                    doc_id=doc_id,
+                    kb_id=self.kb.kb_id,
+                    section_path=section.path,
+                    section_level=section.level,
+                    section_title=section.title,
+                    section_body=section.body,
+                    parent_section_id=None,
+                    sort_order=i,
+                ),
+            )
+
+        if progress_callback:
+            await progress_callback("embedding", len(sections), len(sections))
+        await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=self.vec_db)  # type: ignore[arg-type]
+        await self.refresh_kb()
+        await self.refresh_document(doc_id)
+        return kb_doc
 
     async def list_documents(
         self,

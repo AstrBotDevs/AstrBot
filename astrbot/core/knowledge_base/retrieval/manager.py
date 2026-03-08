@@ -160,6 +160,7 @@ class RetrievalManager:
                         content=fr.content,
                         score=fr.score,
                         metadata={
+                            **(fr.metadata or {}),
                             "chunk_index": fr.chunk_index,
                             "char_count": len(fr.content),
                         },

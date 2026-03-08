@@ -50,7 +50,7 @@ async def generate_tsne_visualization(
             return None
 
         kb = kb_helper.kb
-        index_path = kb_helper.kb_dir / "index.faiss"
+        index_path = kb_helper.get_active_index_path()
 
         # 读取 FAISS 索引
         if not index_path.exists():
