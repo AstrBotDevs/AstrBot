@@ -276,9 +276,17 @@ class ProviderAnthropic(Provider):
         llm_response.id = completion.id
         llm_response.usage = self._extract_usage(completion.usage)
 
-        # TODO(Soulter): 处理 end_turn 情况
+        # Handle cases where completion only contains ThinkingBlock (e.g., MiniMax max_tokens)
+        # When stop_reason='max_tokens', the model may return only thinking content
+        # This is valid and should not raise an exception
         if not llm_response.completion_text and not llm_response.tools_call_args:
-            raise Exception(f"Anthropic API 返回的 completion 无法解析：{completion}。")
+            # Check if we have reasoning content (ThinkingBlock)
+            if llm_response.reasoning_content:
+                logger.debug(f"Completion contains only ThinkingBlock (stop_reason={completion.stop_reason})")
+                # This is acceptable - model returned thinking but ran out of tokens for response
+                llm_response.completion_text = ""  # Ensure empty string, not None
+            else:
+                raise Exception(f"Anthropic API 返回的 completion 无法解析：{completion}。")
 
         return llm_response
 
