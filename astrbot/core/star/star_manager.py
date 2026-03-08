@@ -1381,11 +1381,9 @@ class PluginManager:
             )
 
             def _log_del_exception(fut: asyncio.Future) -> None:
-                try:
-                    fut.exception()
-                except asyncio.CancelledError:
+                if fut.cancelled():
                     return
-                except Exception as exc:
+                if (exc := fut.exception()) is not None:
                     logger.error(
                         "插件 %s 在 __del__ 中抛出了异常：%r",
                         star_metadata.name,
