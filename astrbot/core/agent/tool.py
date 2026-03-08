@@ -89,11 +89,24 @@ class ToolSet:
         return len(self.tools) == 0
 
     def add_tool(self, tool: FunctionTool):
-        """Add a tool to the set."""
-        # 检查是否已存在同名工具
+        """Add a tool to the set.
+
+        If a tool with the same name already exists:
+        - Prefer the one that is active (active=True)
+        - If both have the same active state, use the new one (overwrite)
+        """
         for i, existing_tool in enumerate(self.tools):
             if existing_tool.name == tool.name:
-                self.tools[i] = tool
+                # Prefer active tool; if same active state, overwrite
+                if tool.active and not existing_tool.active:
+                    # New tool is active, existing is not -> use new
+                    self.tools[i] = tool
+                elif existing_tool.active and not tool.active:
+                    # Existing is active, new is not -> keep existing
+                    pass
+                else:
+                    # Same active state -> overwrite
+                    self.tools[i] = tool
                 return
         self.tools.append(tool)
 
