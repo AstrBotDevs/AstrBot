@@ -19,6 +19,16 @@ const md = new MarkdownIt({
 md.enable(["table", "strikethrough"]);
 md.renderer.rules.table_open = () => '<div class="table-container"><table>';
 md.renderer.rules.table_close = () => "</table></div>";
+md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
+  const headingToken = tokens[idx + 1];
+  const headingText = headingToken?.content || "";
+  const slugger = env?.slugger;
+  if (slugger && typeof slugger.slug === "function") {
+    const headingId = slugger.slug(headingText);
+    tokens[idx].attrSet("id", headingId || slugger.slug("section"));
+  }
+  return self.renderToken(tokens, idx, options);
+};
 
 // 2. 复制按钮的 SVG 图标常量
 const ICONS = {
@@ -33,7 +43,7 @@ function isInDialogAnchor(href) {
   return href?.startsWith("#") && href.length > 1 && !href.startsWith("#/");
 }
 
-function scrollToHeadingInDialog(anchorId, markdownContainer) {
+function scrollToHeadingInDialog(anchorId, markdownContainer, scrollContainer) {
   if (!anchorId || !markdownContainer) return;
   const decodedId = decodeURIComponent(anchorId);
   const escapedId =
@@ -43,7 +53,6 @@ function scrollToHeadingInDialog(anchorId, markdownContainer) {
   const target = markdownContainer.querySelector(`#${escapedId}`);
   if (!target) return;
 
-  const scrollContainer = markdownContainer.closest(".v-card-text");
   if (!scrollContainer) {
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
@@ -75,6 +84,7 @@ const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
 const isEmpty = ref(false);
+const contentContainer = ref(null);
 const copyFeedbackTimer = ref(null);
 const lastRequestId = ref(0);
 
@@ -87,16 +97,6 @@ const renderedHtml = computed(() => {
   // 强制依赖 locale，确保语言切换时重新渲染
   const _ = locale?.value;
   if (!content.value) return "";
-
-  const slugger = new GithubSlugger();
-
-  md.renderer.rules.heading_open = (tokens, idx, options, _env, self) => {
-    const headingToken = tokens[idx + 1];
-    const headingText = headingToken?.content || "";
-    const headingId = slugger.slug(headingText);
-    tokens[idx].attrSet("id", headingId || slugger.slug("section"));
-    return self.renderToken(tokens, idx, options);
-  };
 
   // 设置 fence 规则，直接使用当前作用域的 t 函数
   md.renderer.rules.fence = (tokens, idx) => {
@@ -118,7 +118,7 @@ const renderedHtml = computed(() => {
     </div>`;
   };
 
-  const rawHtml = md.render(content.value);
+  const rawHtml = md.render(content.value, { slugger: new GithubSlugger() });
 
   const cleanHtml = DOMPurify.sanitize(rawHtml, {
     ALLOWED_TAGS: [
@@ -313,7 +313,11 @@ function handleContainerClick(event) {
   event.preventDefault();
   const markdownContainer = event.currentTarget;
   if (markdownContainer) {
-    scrollToHeadingInDialog(href.slice(1), markdownContainer);
+    scrollToHeadingInDialog(
+      href.slice(1),
+      markdownContainer,
+      contentContainer.value,
+    );
   }
 }
 
@@ -378,7 +382,7 @@ const showActionArea = computed(() => {
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text style="overflow-y: auto">
+      <v-card-text ref="contentContainer" style="overflow-y: auto">
         <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
