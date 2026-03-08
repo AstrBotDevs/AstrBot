@@ -344,7 +344,11 @@ export const useExtensionPage = () => {
 
   const sortInstalledPlugins = (plugins) => {
     return plugins
-      .map((plugin, index) => ({ plugin, index }))
+      .map((plugin, index) => ({
+        plugin,
+        index,
+        installedAtTimestamp: getInstalledAtTimestamp(plugin),
+      }))
       .sort((left, right) => {
         const fallbackNameCompare = compareInstalledPluginNames(
           left.plugin,
@@ -354,8 +358,8 @@ export const useExtensionPage = () => {
           fallbackNameCompare !== 0 ? fallbackNameCompare : left.index - right.index;
 
         if (installedSortBy.value === "install_time") {
-          const leftTimestamp = getInstalledAtTimestamp(left.plugin);
-          const rightTimestamp = getInstalledAtTimestamp(right.plugin);
+          const leftTimestamp = left.installedAtTimestamp;
+          const rightTimestamp = right.installedAtTimestamp;
 
           if (leftTimestamp == null && rightTimestamp == null) {
             return fallbackResult;

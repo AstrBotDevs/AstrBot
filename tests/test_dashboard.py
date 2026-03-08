@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import zipfile
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -171,7 +172,9 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
         assert len(data["data"]) == 1
-        assert data["data"][0]["installed_at"] is not None
+        installed_at = data["data"][0]["installed_at"]
+        assert installed_at is not None
+        datetime.fromisoformat(installed_at)
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
