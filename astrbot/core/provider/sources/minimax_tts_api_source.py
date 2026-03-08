@@ -1,7 +1,9 @@
+import asyncio
 import json
 import os
 import uuid
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import aiohttp
 
@@ -155,8 +157,7 @@ class ProviderMiniMaxTTSAPI(TTSProvider):
             audio = await self._audio_play(audio_stream)
 
             # 结果保存至文件
-            with open(path, "wb") as file:
-                file.write(audio)
+            await asyncio.to_thread(Path(path).write_bytes, audio)
 
             return path
 

@@ -97,42 +97,65 @@
         "importConfig": "导入配置"
       }
     },
-    "confirmDelete": "确定要删除服务器 {name} 吗?",
-    "syncProvider": {
-      "title": "同步 MCP 服务器",
-      "subtitle": "从提供商同步 MCP 服务器配置到本地",
-      "steps": {
-        "selectProvider": "步骤 1: 选择提供商",
-        "configureAuth": "步骤 2: 配置认证",
-        "syncServers": "步骤 3: 同步服务器"
-      },
-      "providers": {
-        "modelscope": "ModelScope",
-        "description": "ModelScope 是一个开源的模型社区，提供各种机器学习和AI服务的MCP服务器"
-      },
-      "fields": {
-        "provider": "选择提供商",
-        "accessToken": "访问令牌",
-        "tokenRequired": "访问令牌是必填项",
-        "tokenHint": "请输入您的 ModelScope 访问令牌"
-      },
-      "buttons": {
-        "cancel": "取消",
-        "previous": "上一步",
-        "next": "下一步",
-        "sync": "开始同步",
-        "getToken": "获取令牌"
-      },
-      "status": {
-        "selectProvider": "请选择一个 MCP 服务器提供商",
-        "enterToken": "请输入访问令牌以继续",
-        "readyToSync": "准备同步服务器配置"
-      },
-      "messages": {
-        "syncSuccess": "MCP 服务器同步成功!",
-        "syncError": "同步失败: {error}",
-        "tokenHelp": "如何获取 ModelScope 访问令牌？点击右侧按钮查看说明"
+    "confirmDelete": "确定要删除服务器 {name} 吗?"
+  },
+  "syncProvider": {
+    "title": "同步外部平台 MCP 服务器",
+    "subtitle": "从提供商同步 MCP 服务器配置到本地",
+    "steps": {
+      "selectProvider": "步骤 1: 选择提供商",
+      "configureAuth": "步骤 2: 配置认证",
+      "syncServers": "步骤 3: 同步服务器"
+    },
+    "providers": {
+      "modelscope": "ModelScope",
+      "mcprouter": "MCPRouter",
+      "description": "ModelScope 是一个开源的模型社区，提供各种机器学习和AI服务的MCP服务器"
+    },
+    "fields": {
+      "provider": "选择提供商",
+      "accessToken": "访问令牌",
+      "apiKey": "API Key",
+      "appUrl": "HTTP-Referer",
+      "appName": "X-Title",
+      "tokenRequired": "访问令牌是必填项",
+      "tokenHint": "请输入您的 ModelScope 访问令牌"
+    },
+    "timeline": {
+      "mcprouter": {
+        "createApiKeyTitle": "创建 API Key",
+        "createApiKeyDescPrefix": "访问 ",
+        "createApiKeyDescSuffix": " 创建并复制您的 API Key。",
+        "inputApiKeyTitle": "输入 API Key",
+        "inputApiKeyDesc": "输入 API Key 以同步 MCP 服务器。",
+        "optionalAppInfoTitle": "可选：应用标识",
+        "optionalAppInfoDesc": "部分 MCPRouter 服务可能会校验以下标识（可留空）。"
       }
+    },
+    "buttons": {
+      "cancel": "取消",
+      "previous": "上一步",
+      "next": "下一步",
+      "sync": "开始同步",
+      "getToken": "获取令牌",
+      "fetchServers": "获取服务器列表"
+    },
+    "status": {
+      "selectProvider": "请选择一个 MCP 服务器提供商",
+      "enterToken": "请输入访问令牌以继续",
+      "enterApiKey": "请输入 API Key 以继续",
+      "fetchServersFirst": "请先获取服务器列表",
+      "fetchedServers": "已获取服务器 ({count})",
+      "readyToSync": "准备同步服务器配置"
+    },
+    "messages": {
+      "syncSuccess": "MCP 服务器同步成功!",
+      "syncError": "同步失败: {error}",
+      "fetchServersSuccess": "已获取 {count} 个服务器",
+      "fetchServersError": "获取服务器列表失败: {error}",
+      "networkOrApiKeyIssue": "网络连接异常或 API Key 无效",
+      "networkOrTokenIssue": "网络连接异常或访问令牌无效",
+      "tokenHelp": "如何获取 ModelScope 访问令牌？点击右侧按钮查看说明"
     }
   },
   "messages": {

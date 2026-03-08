@@ -429,7 +429,7 @@ class LarkPlatformAdapter(Platform):
 
         suffix = Path(file_name).suffix if file_name else default_suffix
         temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
         temp_path = (
             temp_dir / f"lark_{message_type}_{file_name}_{uuid4().hex[:4]}{suffix}"
         )

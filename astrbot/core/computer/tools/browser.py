@@ -71,19 +71,23 @@ class BrowserExecTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         cmd: str,
-        timeout: int = 30,
+        timeout_seconds: int = 30,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = int(legacy_timeout)
         if err := _ensure_admin(context):
             return err
         try:
             browser = await _get_browser_component(context)
             result = await browser.exec(
                 cmd=cmd,
-                timeout=timeout,
+                timeout_seconds=timeout_seconds,
                 description=description,
                 tags=tags,
                 learn=learn,
@@ -133,20 +137,24 @@ class BrowserBatchExecTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         commands: list[str],
-        timeout: int = 60,
+        timeout_seconds: int = 60,
         stop_on_error: bool = True,
         description: str | None = None,
         tags: str | None = None,
         learn: bool = False,
         include_trace: bool = False,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = int(legacy_timeout)
         if err := _ensure_admin(context):
             return err
         try:
             browser = await _get_browser_component(context)
             result = await browser.exec_batch(
                 commands=commands,
-                timeout=timeout,
+                timeout_seconds=timeout_seconds,
                 stop_on_error=stop_on_error,
                 description=description,
                 tags=tags,
@@ -181,19 +189,23 @@ class RunBrowserSkillTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         skill_key: str,
-        timeout: int = 60,
+        timeout_seconds: int = 60,
         stop_on_error: bool = True,
         include_trace: bool = False,
         description: str | None = None,
         tags: str | None = None,
+        **kwargs: Any,
     ) -> ToolExecResult:
+        legacy_timeout = kwargs.pop("timeout", None)
+        if legacy_timeout is not None:
+            timeout_seconds = int(legacy_timeout)
         if err := _ensure_admin(context):
             return err
         try:
             browser = await _get_browser_component(context)
             result = await browser.run_skill(
                 skill_key=skill_key,
-                timeout=timeout,
+                timeout_seconds=timeout_seconds,
                 stop_on_error=stop_on_error,
                 include_trace=include_trace,
                 description=description,

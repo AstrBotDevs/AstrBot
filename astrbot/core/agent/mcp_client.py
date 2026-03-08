@@ -2,7 +2,6 @@ import asyncio
 import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import Generic
 
 from tenacity import (
     before_sleep_log,
@@ -16,13 +15,36 @@ from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
 
-from .run_context import TContext
 from .tool import FunctionTool
+
+
+class _McpSseNoiseFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage().strip()
+        except Exception:
+            return True
+        if msg.startswith("Unknown SSE event:"):
+            event_name = msg.split(":", 1)[1].strip()
+            if event_name in {"stream", "connection"}:
+                return False
+        return True
+
+
+def _install_mcp_noise_filters() -> None:
+    for logger_name in ("mcp.client.streamable_http", "mcp.client.sse"):
+        log = logging.getLogger(logger_name)
+        if any(isinstance(f, _McpSseNoiseFilter) for f in log.filters):
+            continue
+        log.addFilter(_McpSseNoiseFilter())
+
 
 try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
+
+    _install_mcp_noise_filters()
 except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
@@ -47,6 +69,8 @@ def _prepare_config(config: dict) -> dict:
 
 async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     """Quick test MCP server connectivity"""
+    import json
+
     import aiohttp
 
     cfg = _prepare_config(config.copy())
@@ -54,6 +78,40 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     url = cfg["url"]
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
+
+    async def _format_http_error(response: aiohttp.ClientResponse) -> str:
+        reason = response.reason or ""
+        detail = ""
+        try:
+            raw = await response.content.read(2048)
+            if raw:
+                text = raw.decode(errors="replace").strip()
+                if text:
+                    try:
+                        data = json.loads(text)
+                    except Exception:
+                        detail = text
+                    else:
+                        if isinstance(data, dict):
+                            msg = (
+                                data.get("message")
+                                or data.get("error")
+                                or data.get("detail")
+                            )
+                            code = data.get("code")
+                            if msg is not None:
+                                detail = (
+                                    f"{code}: {msg}" if code is not None else str(msg)
+                                )
+                            else:
+                                detail = text
+                        else:
+                            detail = text
+        except Exception:
+            detail = ""
+        if detail:
+            return f"HTTP {response.status}: {reason} ({detail})"
+        return f"HTTP {response.status}: {reason}"
 
     try:
         if "transport" in cfg:
@@ -70,7 +128,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     "method": "initialize",
                     "id": 0,
                     "params": {
-                        "protocolVersion": "2024-11-05",
+                        "protocolVersion": mcp.types.LATEST_PROTOCOL_VERSION,
                         "capabilities": {},
                         "clientInfo": {"name": "test-client", "version": "1.2.3"},
                     },
@@ -87,7 +145,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                    return False, await _format_http_error(response)
             else:
                 async with session.get(
                     url,
@@ -99,9 +157,9 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                 ) as response:
                     if response.status == 200:
                         return True, ""
-                    return False, f"HTTP {response.status}: {response.reason}"
+                    return False, await _format_http_error(response)
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
@@ -146,6 +204,11 @@ class MCPClient:
 
         def logging_callback(msg: str) -> None:
             # Handle MCP service error logs
+            normalized = msg.strip()
+            if normalized.startswith("Unknown SSE event:"):
+                event_name = normalized.split(":", 1)[1].strip()
+                if event_name in {"stream", "connection"}:
+                    return
             print(f"MCP Server {name} Error: {msg}")
             self.server_errlogs.append(msg)
 
@@ -360,7 +423,7 @@ class MCPClient:
         self.running_event.set()
 
 
-class MCPTool(FunctionTool, Generic[TContext]):
+class MCPTool[TContext](FunctionTool):
     """A function tool that calls an MCP service."""
 
     def __init__(

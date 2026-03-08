@@ -97,7 +97,11 @@ class AstrBotCoreLifecycle:
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
-    async def initialize(self) -> None:
+    async def initialize(
+        self,
+        *,
+        mcp_init_timeout: float | int | str | None = None,
+    ) -> None:
         """初始化 AstrBot 核心生命周期管理类.
 
         负责初始化各个组件, 包括 ProviderManager、PlatformManager、ConversationManager、PluginManager、PipelineScheduler、EventBus、AstrBotUpdator等。
@@ -201,7 +205,7 @@ class AstrBotCoreLifecycle:
         await self.plugin_manager.reload()
 
         # 根据配置实例化各个 Provider
-        await self.provider_manager.initialize()
+        await self.provider_manager.initialize(init_timeout=mcp_init_timeout)
 
         await self.kb_manager.initialize()
 
