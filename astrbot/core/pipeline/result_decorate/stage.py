@@ -5,7 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
-from astrbot.core.message.components import At, File, Image, Node, Plain, Record, Reply
+from astrbot.core.message.components import At, Image, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -383,8 +383,11 @@ class ResultDecorateStage(Stage):
                     )
                     result.chain = [node]
 
-            has_plain = any(isinstance(item, Plain) for item in result.chain)
-            if has_plain:
+            # at 回复 / 引用回复仅适用于纯文本或图文消息
+            can_decorate = all(
+                isinstance(item, (Plain, Image)) for item in result.chain
+            )
+            if can_decorate:
                 # at 回复
                 if (
                     self.reply_with_mention
@@ -399,5 +402,4 @@ class ResultDecorateStage(Stage):
 
                 # 引用回复
                 if self.reply_with_quote:
-                    if not any(isinstance(item, File) for item in result.chain):
-                        result.chain.insert(0, Reply(id=event.message_obj.message_id))
+                    result.chain.insert(0, Reply(id=event.message_obj.message_id))
