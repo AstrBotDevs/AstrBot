@@ -157,17 +157,29 @@ class QQOfficialPlatformAdapter(Platform):
 
         # Message deduplication
         self.message_id_timestamps: dict[str, float] = {}
+        self.content_key_timestamps: dict[str, float] = {}
+        self._message_id_ttl_seconds = 30 * 60
+        # Content key is only a short-window fallback for duplicate callback bursts.
+        self._content_key_ttl_seconds = 3.0
 
     def _clean_expired_messages(self) -> None:
-        """Clean up message IDs older than 30 minutes."""
+        """Clean up expired dedup caches."""
         current_time = time.time()
-        expired_keys = [
+        expired_message_ids = [
             msg_id
             for msg_id, timestamp in self.message_id_timestamps.items()
-            if current_time - timestamp > 1800
+            if current_time - timestamp > self._message_id_ttl_seconds
         ]
-        for msg_id in expired_keys:
+        for msg_id in expired_message_ids:
             del self.message_id_timestamps[msg_id]
+
+        expired_content_keys = [
+            content_key
+            for content_key, timestamp in self.content_key_timestamps.items()
+            if current_time - timestamp > self._content_key_ttl_seconds
+        ]
+        for content_key in expired_content_keys:
+            del self.content_key_timestamps[content_key]
 
     async def _is_duplicate_message(self, message_id: str, content: str = "", sender_id: str = "") -> bool:
         """Check if message has already been processed (thread-safe).
@@ -190,22 +202,22 @@ class QQOfficialPlatformAdapter(Platform):
                 logger.info(f"[QQOfficial] Duplicate message detected (by ID): {message_id[:50]}...")
                 return True
             
-            # Secondary check: content + sender (no time window, rely on message_id cleanup)
+            # Secondary check: content + sender in a short window
             if content and sender_id:
                 content_key = f"{sender_id}:{content[:50]}"
-                
-                if content_key in self.message_id_timestamps:
+
+                if content_key in self.content_key_timestamps:
                     logger.info(f"[QQOfficial] Duplicate message detected (by content): {content_key}")
                     return True
             
             # Register the message
             self.message_id_timestamps[message_id] = current_time
-            
+
             # Also register content key if available
             if content and sender_id:
                 content_key = f"{sender_id}:{content[:50]}"
-                self.message_id_timestamps[content_key] = current_time
-            
+                self.content_key_timestamps[content_key] = current_time
+
             logger.info(f"[QQOfficial] New message registered: {message_id[:50]}...")
             return False
 
@@ -308,8 +320,13 @@ class QQOfficialPlatformAdapter(Platform):
             QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
             abm.message_str = plain_content
+            sender_user_id = cast(
+                str,
+                getattr(message.author, "user_openid", None)
+                or getattr(message.author, "id", ""),
+            )
             abm.sender = MessageMember(
-                str(message.author.id),
+                sender_user_id,
                 str(message.author.username),
             )
             msg.append(At(qq="qq_official"))
