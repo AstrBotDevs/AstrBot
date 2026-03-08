@@ -282,11 +282,17 @@ class ProviderAnthropic(Provider):
         if not llm_response.completion_text and not llm_response.tools_call_args:
             # Check if we have reasoning content (ThinkingBlock)
             if llm_response.reasoning_content:
-                logger.debug(f"Completion contains only ThinkingBlock (stop_reason={completion.stop_reason})")
+                stop_reason = getattr(completion, "stop_reason", "unknown")
+                logger.debug(f"Completion contains only ThinkingBlock (stop_reason={stop_reason})")
                 # This is acceptable - model returned thinking but ran out of tokens for response
                 llm_response.completion_text = ""  # Ensure empty string, not None
             else:
-                raise Exception(f"Anthropic API 返回的 completion 无法解析：{completion}。")
+                # No valid content (no text, no tools, no thinking)
+                raise ValueError(
+                    f"Anthropic API returned unparsable completion: "
+                    f"no text, tool_use, or thinking content found. "
+                    f"Completion: {completion}"
+                )
 
         return llm_response
 
