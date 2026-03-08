@@ -311,11 +311,11 @@ class FunctionToolManager:
                 break
 
     def get_func(self, name) -> FuncTool | None:
-        # 优先返回已激活的工具
-        for f in self.func_list:
+        # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
+        for f in reversed(self.func_list):
             if f.name == name and getattr(f, "active", False):
                 return f
-        # 退化则拿最后一个覆盖的（后加载的覆盖前面的，通常是 MCP 工具）
+        # 退化则拿最后一个同名工具
         for f in reversed(self.func_list):
             if f.name == name:
                 return f
@@ -324,12 +324,16 @@ class FunctionToolManager:
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集
 
-        使用 add_tool 进行填充，确保同名工具只保留最后一个（后加载的覆盖前面的）。
-        这样 MCP 工具可以正确覆盖被禁用的内置工具。
+        使用 ToolSet.add_tool 进行填充。对于同名工具，去重规则为：
+        - 优先保留 active=True 的工具；
+        - 当 active 状态相同时，后加载的工具会覆盖前面的工具。
+
+        因此，后加载的 inactive 工具不会覆盖已激活的工具；
+        同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
         """
         tool_set = ToolSet()
         for tool in self.func_list:
-            tool_set.add_tool(copy.deepcopy(tool))
+            tool_set.add_tool(tool)
         return tool_set
 
     @staticmethod

@@ -97,8 +97,12 @@ class ToolSet:
         """
         for i, existing_tool in enumerate(self.tools):
             if existing_tool.name == tool.name:
-                # Overwrite unless existing is active and new is not
-                if not (existing_tool.active and not tool.active):
+                # Use getattr with a default of True for compatibility with tools
+                # that may not define an `active` attribute (e.g., mocks).
+                existing_active = bool(getattr(existing_tool, "active", True))
+                new_active = bool(getattr(tool, "active", True))
+                # Overwrite if new tool is active, or if existing tool is not active
+                if new_active or not existing_active:
                     self.tools[i] = tool
                 return
         self.tools.append(tool)
