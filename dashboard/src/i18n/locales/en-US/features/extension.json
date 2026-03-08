@@ -127,7 +127,7 @@
   "sort": {
     "by": "Sort by",
     "default": "Default",
-    "installTime": "Install Time",
+    "installTime": "Last Modified",
     "name": "Name",
     "stars": "Stars",
     "author": "Author",

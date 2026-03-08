@@ -127,7 +127,7 @@
   "sort": {
     "by": "排序方式",
     "default": "默认排序",
-    "installTime": "安装时间",
+    "installTime": "最后修改时间",
     "name": "名称",
     "stars": "Star数",
     "author": "作者名",
