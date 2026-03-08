@@ -322,13 +322,17 @@ export const useExtensionPage = () => {
   });
 
   const compareInstalledPluginNames = (left, right) =>
-    normalizeStr(left?.name).localeCompare(normalizeStr(right?.name), undefined, {
-      sensitivity: "base",
-    });
+    normalizeStr(left?.name ?? "").localeCompare(
+      normalizeStr(right?.name ?? ""),
+      undefined,
+      {
+        sensitivity: "base",
+      },
+    );
 
   const compareInstalledPluginAuthors = (left, right) =>
-    normalizeStr(left?.author).localeCompare(
-      normalizeStr(right?.author),
+    normalizeStr(left?.author ?? "").localeCompare(
+      normalizeStr(right?.author ?? ""),
       undefined,
       { sensitivity: "base" },
     );
