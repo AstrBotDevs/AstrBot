@@ -369,7 +369,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 if future:
                     logger.debug(f"duplicate message id checked: {msg.id}")
                 else:
-                    future = asyncio.get_event_loop().create_future()
+                    future = asyncio.get_running_loop().create_future()
                     self.wexin_event_workers[msg_id] = future
                     await self.convert_message(msg, future)
                     # I love shield so much!
@@ -461,7 +461,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         elif msg.type == "voice":
             assert isinstance(msg, VoiceMessage)
 
-            resp: Response = await asyncio.get_event_loop().run_in_executor(
+            resp: Response = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client.media.download,
                 msg.media_id,

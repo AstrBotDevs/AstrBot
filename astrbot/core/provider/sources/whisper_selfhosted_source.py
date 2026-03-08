@@ -31,7 +31,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         self.model = None
 
     async def initialize(self) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         logger.info("下载或者加载 Whisper 模型中，这可能需要一些时间 ...")
         self.model = await loop.run_in_executor(
             None,
@@ -50,7 +50,7 @@ class ProviderOpenAIWhisperSelfHost(STTProvider):
         return False
 
     async def get_text(self, audio_url: str) -> str:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         is_tencent = False
 

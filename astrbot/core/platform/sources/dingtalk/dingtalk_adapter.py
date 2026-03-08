@@ -367,7 +367,7 @@ class DingtalkPlatformAdapter(Platform):
 
     async def get_access_token(self) -> str:
         try:
-            access_token = await asyncio.get_event_loop().run_in_executor(
+            access_token = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client_.get_access_token,
             )
@@ -760,7 +760,7 @@ class DingtalkPlatformAdapter(Platform):
                     return
                 logger.error(f"钉钉机器人启动失败: {e}")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, start_client, loop)
 
     async def terminate(self) -> None:

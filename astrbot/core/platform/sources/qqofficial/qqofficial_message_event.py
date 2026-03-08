@@ -80,7 +80,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
                 if isinstance(source, botpy.message.C2CMessage):
                     # 真流式传输
-                    current_time = asyncio.get_event_loop().time()
+                    current_time = asyncio.get_running_loop().time()
                     time_since_last_edit = current_time - last_edit_time
 
                     if time_since_last_edit >= throttle_interval:
@@ -90,7 +90,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         )
                         stream_payload["index"] += 1
                         stream_payload["id"] = ret["id"]
-                        last_edit_time = asyncio.get_event_loop().time()
+                        last_edit_time = asyncio.get_running_loop().time()
 
             if isinstance(source, botpy.message.C2CMessage):
                 # 结束流式对话，并且传输 buffer 中剩余的消息
