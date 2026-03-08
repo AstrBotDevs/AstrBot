@@ -118,6 +118,7 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    assert all("installed_at" in plugin for plugin in data["data"])
 
     # 插件市场
     response = await test_client.get(
@@ -161,6 +162,16 @@ async def test_plugins(
         assert data["status"] == "ok", (
             f"安装失败: {data.get('message', 'unknown error')}"
         )
+
+        response = await test_client.get(
+            f"/api/plugin/get?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert len(data["data"]) == 1
+        assert data["data"][0]["installed_at"] is not None
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
