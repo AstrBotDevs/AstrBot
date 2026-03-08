@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.19.2"
+VERSION = "4.19.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -343,11 +343,16 @@ CONFIG_METADATA_2 = {
                         "id": "wecom_ai_bot",
                         "type": "wecom_ai_bot",
                         "enable": True,
+                        "wecom_ai_bot_connection_mode": "webhook",
                         "wecomaibot_init_respond_text": "",
                         "wecomaibot_friend_message_welcome_text": "",
                         "wecom_ai_bot_name": "",
                         "msg_push_webhook_url": "",
                         "only_use_webhook_url_to_send": False,
+                        "long_connection_bot_id": "",
+                        "long_connection_secret": "",
+                        "long_connection_ws_url": "wss://openws.work.weixin.qq.com",
+                        "long_connection_heartbeat_interval": 30,
                         "token": "",
                         "encoding_aes_key": "",
                         "unified_webhook_mode": True,
@@ -732,6 +737,13 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "请务必填写正确，否则无法使用一些指令。",
                     },
+                    "wecom_ai_bot_connection_mode": {
+                        "description": "企业微信智能机器人连接模式",
+                        "type": "string",
+                        "options": ["webhook", "long_connection"],
+                        "labels": ["Webhook 回调", "长连接"],
+                        "hint": "Webhook 回调模式需要配置 Token/EncodingAESKey。长连接模式需要配置 BotID/Secret。",
+                    },
                     "wecomaibot_init_respond_text": {
                         "description": "企业微信智能机器人初始响应文本",
                         "type": "string",
@@ -751,6 +763,38 @@ CONFIG_METADATA_2 = {
                         "description": "仅使用 Webhook 发送消息",
                         "type": "bool",
                         "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。",
+                    },
+                    "long_connection_bot_id": {
+                        "description": "长连接 BotID",
+                        "type": "string",
+                        "hint": "企业微信智能机器人长连接模式凭证 BotID。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
+                    },
+                    "long_connection_secret": {
+                        "description": "长连接 Secret",
+                        "type": "string",
+                        "hint": "企业微信智能机器人长连接模式凭证 Secret。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
+                    },
+                    "long_connection_ws_url": {
+                        "description": "长连接 WebSocket 地址",
+                        "type": "string",
+                        "hint": "默认值为 wss://openws.work.weixin.qq.com，一般无需修改。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
+                    },
+                    "long_connection_heartbeat_interval": {
+                        "description": "长连接心跳间隔",
+                        "type": "int",
+                        "hint": "长连接模式心跳间隔（秒），建议 30 秒。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "long_connection",
+                        },
                     },
                     "lark_bot_name": {
                         "description": "飞书机器人的名字",
