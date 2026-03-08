@@ -280,19 +280,18 @@ class ProviderAnthropic(Provider):
         # When stop_reason='max_tokens', the model may return only thinking content
         # This is valid and should not raise an exception
         if not llm_response.completion_text and not llm_response.tools_call_args:
-            # Check if we have reasoning content (ThinkingBlock)
-            if llm_response.reasoning_content:
-                stop_reason = getattr(completion, "stop_reason", "unknown")
-                logger.debug(f"Completion contains only ThinkingBlock (stop_reason={stop_reason})")
-                # This is acceptable - model returned thinking but ran out of tokens for response
-                llm_response.completion_text = ""  # Ensure empty string, not None
-            else:
-                # No valid content (no text, no tools, no thinking)
+            # Guard clause: raise early if no valid content at all
+            if not llm_response.reasoning_content:
                 raise ValueError(
                     f"Anthropic API returned unparsable completion: "
                     f"no text, tool_use, or thinking content found. "
                     f"Completion: {completion}"
                 )
+            
+            # We have reasoning content (ThinkingBlock) - this is valid
+            stop_reason = getattr(completion, "stop_reason", "unknown")
+            logger.debug(f"Completion contains only ThinkingBlock (stop_reason={stop_reason})")
+            llm_response.completion_text = ""  # Ensure empty string, not None
 
         return llm_response
 
