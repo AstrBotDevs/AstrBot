@@ -23,6 +23,9 @@
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
   },
+  "filters": {
+    "all": "All"
+  },
   "views": {
     "card": "Card View",
     "list": "List View"
@@ -122,10 +125,14 @@
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
   },
   "sort": {
+    "by": "Sort by",
     "default": "Default",
+    "installTime": "Install Time",
+    "name": "Name",
     "stars": "Stars",
     "author": "Author",
     "updated": "Last Updated",
+    "updateStatus": "Update Status",
     "ascending": "Ascending",
     "descending": "Descending"
   },
