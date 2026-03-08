@@ -43,9 +43,17 @@ function isInDialogAnchor(href) {
   return href?.startsWith("#") && href.length > 1 && !href.startsWith("#/");
 }
 
+function safeDecodeAnchorId(anchorId) {
+  try {
+    return decodeURIComponent(anchorId);
+  } catch {
+    return anchorId;
+  }
+}
+
 function scrollToHeadingInDialog(anchorId, markdownContainer, scrollContainer) {
   if (!anchorId || !markdownContainer) return;
-  const decodedId = decodeURIComponent(anchorId);
+  const decodedId = safeDecodeAnchorId(anchorId);
   const escapedId =
     typeof CSS !== "undefined" && CSS.escape
       ? CSS.escape(decodedId)
