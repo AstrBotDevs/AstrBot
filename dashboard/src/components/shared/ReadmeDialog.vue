@@ -4,6 +4,7 @@ import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import axios from "axios";
 import DOMPurify from "dompurify";
+import GithubSlugger from "github-slugger";
 import "highlight.js/styles/github-dark.css";
 import { useI18n } from "@/i18n/composables";
 
@@ -27,6 +28,34 @@ const ICONS = {
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
   COPY: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
 };
+
+function isInDialogAnchor(href) {
+  return href?.startsWith("#") && href.length > 1 && !href.startsWith("#/");
+}
+
+function scrollToHeadingInDialog(anchorId, markdownContainer) {
+  if (!anchorId || !markdownContainer) return;
+  const decodedId = decodeURIComponent(anchorId);
+  const escapedId =
+    typeof CSS !== "undefined" && CSS.escape
+      ? CSS.escape(decodedId)
+      : decodedId.replace(/["\\]/g, "\\$&");
+  const target = markdownContainer.querySelector(`#${escapedId}`);
+  if (!target) return;
+
+  const scrollContainer = markdownContainer.closest(".v-card-text");
+  if (!scrollContainer) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const offsetTop =
+    target.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top;
+  scrollContainer.scrollTo({
+    top: scrollContainer.scrollTop + offsetTop - 8,
+    behavior: "smooth",
+  });
+}
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -58,6 +87,16 @@ const renderedHtml = computed(() => {
   // 强制依赖 locale，确保语言切换时重新渲染
   const _ = locale?.value;
   if (!content.value) return "";
+
+  const slugger = new GithubSlugger();
+
+  md.renderer.rules.heading_open = (tokens, idx, options, _env, self) => {
+    const headingToken = tokens[idx + 1];
+    const headingText = headingToken?.content || "";
+    const headingId = slugger.slug(headingText);
+    tokens[idx].attrSet("id", headingId || slugger.slug("section"));
+    return self.renderToken(tokens, idx, options);
+  };
 
   // 设置 fence 规则，直接使用当前作用域的 t 函数
   md.renderer.rules.fence = (tokens, idx) => {
@@ -251,17 +290,30 @@ watch(
 
 function handleContainerClick(event) {
   const btn = event.target.closest(".copy-code-btn");
-  if (!btn) return;
-  const code = btn.closest(".code-block-wrapper")?.querySelector("code");
-  if (code) {
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard
-        .writeText(code.textContent)
-        .then(() => showCopyFeedback(btn, true))
-        .catch(() => tryFallbackCopy(code.textContent, btn));
-    } else {
-      tryFallbackCopy(code.textContent, btn);
+  if (btn) {
+    const code = btn.closest(".code-block-wrapper")?.querySelector("code");
+    if (code) {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(code.textContent)
+          .then(() => showCopyFeedback(btn, true))
+          .catch(() => tryFallbackCopy(code.textContent, btn));
+      } else {
+        tryFallbackCopy(code.textContent, btn);
+      }
     }
+    return;
+  }
+
+  const link = event.target.closest("a");
+  if (!link) return;
+  const href = link.getAttribute("href")?.trim();
+  if (!isInDialogAnchor(href)) return;
+
+  event.preventDefault();
+  const markdownContainer = event.currentTarget;
+  if (markdownContainer) {
+    scrollToHeadingInDialog(href.slice(1), markdownContainer);
   }
 }
 
