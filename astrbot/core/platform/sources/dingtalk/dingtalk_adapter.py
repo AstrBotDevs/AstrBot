@@ -215,11 +215,13 @@ class DingtalkPlatformAdapter(Platform):
                     dingtalk_stream.RichTextContent, message.rich_text_content
                 )
                 contents: list[dict] = cast(list[dict], rtc.rich_text_list)
+                plain_parts: list[str] = []
                 for content in contents:
-                    plains = ""
                     if "text" in content:
-                        plains += content["text"]
-                        abm.message.append(Plain(plains))
+                        plain_text = cast(str, content.get("text") or "")
+                        if plain_text:
+                            plain_parts.append(plain_text)
+                            abm.message.append(Plain(plain_text))
                     elif "type" in content and content["type"] == "picture":
                         download_code = cast(str, content.get("downloadCode") or "")
                         if not download_code:
@@ -239,6 +241,7 @@ class DingtalkPlatformAdapter(Platform):
                         )
                         if f_path:
                             abm.message.append(Image.fromFileSystem(f_path))
+                abm.message_str = "".join(plain_parts).strip()
             case "audio" | "voice":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
                 if not download_code:
@@ -629,6 +632,28 @@ class DingtalkPlatformAdapter(Platform):
                     self._safe_remove_file(cover_path)
                     if converted_video:
                         self._safe_remove_file(video_path)
+            elif isinstance(segment, File):
+                try:
+                    file_path = await segment.get_file()
+                    if not file_path:
+                        logger.warning("钉钉文件发送失败: 无法解析文件路径")
+                        continue
+                    media_id = await self.upload_media(file_path, "file")
+                    if not media_id:
+                        continue
+                    file_name = segment.name or Path(file_path).name
+                    file_type = Path(file_name).suffix.lstrip(".")
+                    await send_message(
+                        msg_key="sampleFile",
+                        msg_param={
+                            "mediaId": media_id,
+                            "fileName": file_name,
+                            "fileType": file_type,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(f"钉钉文件发送失败: {e}")
+                    continue
 
     async def send_message_chain_to_group(
         self,
