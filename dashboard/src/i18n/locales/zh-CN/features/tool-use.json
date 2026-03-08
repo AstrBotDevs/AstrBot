@@ -31,13 +31,17 @@
   "functionTools": {
     "title": "函数工具",
     "buttons": {
-      "view": "查看工具"
+      "view": "查看工具",
+      "showSystemTools": "显示系统工具"
     },
     "search": "搜索函数工具",
     "empty": "没有可用的函数工具",
     "description": "功能描述",
     "parameters": "参数列表",
     "noParameters": "此工具没有参数",
+    "status": {
+      "notConfigurable": "不可配置"
+    },
     "table": {
       "paramName": "参数名",
       "type": "类型",

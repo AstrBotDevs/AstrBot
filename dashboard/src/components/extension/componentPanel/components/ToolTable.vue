@@ -12,7 +12,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'toggle-tool', tool: ToolItem): void;
+  (e: 'toggle-tool', tool: ToolItem, nextActive: boolean): void;
 }>();
 
 const toolHeaders = computed(() => [
@@ -25,6 +25,7 @@ const toolHeaders = computed(() => [
 ]);
 
 const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.properties || {});
+const getRawTool = (item: any): ToolItem => (item?.raw ?? item) as ToolItem;
 </script>
 
 <template>
@@ -68,19 +69,35 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       </template>
 
       <template #item.active="{ item }">
-        <v-chip :color="item.active ? 'success' : 'error'" size="small" class="font-weight-medium" :variant="item.active ? 'flat' : 'outlined'">
-          {{ item.active ? tmCommand('status.enabled') : tmCommand('status.disabled') }}
+        <v-chip
+          v-if="getRawTool(item).toggleable === false"
+          color="grey"
+          size="small"
+          class="font-weight-medium"
+          variant="tonal"
+        >
+          {{ tmTool('functionTools.status.notConfigurable') }}
+        </v-chip>
+        <v-chip
+          v-else
+          :color="getRawTool(item).active ? 'success' : 'error'"
+          size="small"
+          class="font-weight-medium"
+          :variant="getRawTool(item).active ? 'flat' : 'outlined'"
+        >
+          {{ getRawTool(item).active ? tmCommand('status.enabled') : tmCommand('status.disabled') }}
         </v-chip>
       </template>
 
       <template #item.actions="{ item }">
         <v-switch
-          :model-value="item.active"
+          :model-value="getRawTool(item).active"
+          :disabled="getRawTool(item).toggleable === false"
           color="primary"
           density="compact"
           hide-details
           inset
-          @update:model-value="emit('toggle-tool', item)"
+          @update:model-value="emit('toggle-tool', getRawTool(item), !!$event)"
         />
       </template>
 

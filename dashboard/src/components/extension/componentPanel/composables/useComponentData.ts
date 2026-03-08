@@ -55,7 +55,7 @@ export function useComponentData() {
   const fetchTools = async (errorMessage: string) => {
     toolsLoading.value = true;
     try {
-      const res = await axios.get('/api/tools/list');
+      const res = await axios.get('/api/tools/list?include_system_tools=true');
       if (res.data.status === 'ok') {
         tools.value = res.data.data || [];
       } else {
@@ -80,4 +80,3 @@ export function useComponentData() {
     fetchTools
   };
 }
-

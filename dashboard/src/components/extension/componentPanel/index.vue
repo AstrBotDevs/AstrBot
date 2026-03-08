@@ -41,6 +41,14 @@ const { tm: tmTool } = useModuleI18n('features/tooluse');
 
 const viewMode = ref<'commands' | 'tools'>('commands');
 const toolSearch = ref('');
+const SHOW_SYSTEM_TOOLS_STORAGE_KEY = 'showSystemToolsInFunctionTools';
+const getInitialShowSystemTools = () => {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return false;
+  }
+  return localStorage.getItem(SHOW_SYSTEM_TOOLS_STORAGE_KEY) === 'true';
+};
+const showSystemTools = ref(getInitialShowSystemTools());
 
 // 数据管理
 const { 
@@ -84,11 +92,17 @@ const {
 
 const filteredTools = computed(() => {
   const query = toolSearch.value.trim().toLowerCase();
-  if (!query) return tools.value;
-  return tools.value.filter(tool => 
-    tool.name?.toLowerCase().includes(query) ||
-    tool.description?.toLowerCase().includes(query)
-  );
+  let filtered = tools.value;
+  if (query) {
+    filtered = filtered.filter(tool =>
+      tool.name?.toLowerCase().includes(query) ||
+      tool.description?.toLowerCase().includes(query)
+    );
+  }
+  if (!showSystemTools.value) {
+    filtered = filtered.filter(tool => tool.is_system !== true);
+  }
+  return filtered;
 });
 
 // 处理切换指令状态
@@ -100,13 +114,19 @@ const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'm
   await updatePermission(cmd, permission, tm('messages.updateSuccess'), tm('messages.updateFailed'));
 };
 
-const handleToggleTool = async (tool: ToolItem) => {
+const handleToggleTool = async (tool: ToolItem, nextActive: boolean) => {
+  if (tool.toggleable === false) {
+    return;
+  }
+  if (tool.active === nextActive) {
+    return;
+  }
   const previous = tool.active;
-  tool.active = !tool.active;
+  tool.active = nextActive;
   try {
     const res = await axios.post('/api/tools/toggle-tool', {
       name: tool.name,
-      activate: tool.active
+      activate: nextActive
     });
     if (res.data.status === 'ok') {
       toast(res.data.message || tmTool('messages.toggleToolSuccess'));
@@ -119,6 +139,12 @@ const handleToggleTool = async (tool: ToolItem) => {
     toast(error?.response?.data?.message || error?.message || tmTool('messages.toggleToolError', { error: '' }), 'error');
   }
 };
+
+watch(showSystemTools, (value) => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.setItem(SHOW_SYSTEM_TOOLS_STORAGE_KEY, value.toString());
+  }
+});
 
 // 处理确认重命名
 const handleConfirmRename = async () => {
@@ -157,16 +183,18 @@ watch(viewMode, async (mode) => {
       <v-card variant="flat" style="background-color: transparent">
         <v-card-text style="padding: 20px 12px; padding-top: 0px;">
           <div class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3">
-            <v-btn-toggle v-model="viewMode" color="primary" variant="outlined" density="comfortable" mandatory>
-              <v-btn value="commands">
-                <v-icon size="18" class="mr-1">mdi-console-line</v-icon>
-                {{ tm('type.command') }}
-              </v-btn>
-              <v-btn value="tools">
-                <v-icon size="18" class="mr-1">mdi-function-variant</v-icon>
-                {{ tmTool('functionTools.title') }}
-              </v-btn>
-            </v-btn-toggle>
+            <div class="d-flex align-center ga-2 flex-wrap">
+              <v-btn-toggle v-model="viewMode" color="primary" variant="outlined" density="comfortable" mandatory>
+                <v-btn value="commands">
+                  <v-icon size="18" class="mr-1">mdi-console-line</v-icon>
+                  {{ tm('type.command') }}
+                </v-btn>
+                <v-btn value="tools">
+                  <v-icon size="18" class="mr-1">mdi-function-variant</v-icon>
+                  {{ tmTool('functionTools.title') }}
+                </v-btn>
+              </v-btn-toggle>
+            </div>
             <v-progress-linear
               v-if="viewMode === 'commands' && loading"
               indeterminate
@@ -274,6 +302,17 @@ watch(viewMode, async (mode) => {
                   <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('status.enabled') }}:</span>
                   <span class="text-body-1 font-weight-bold text-success">{{ filteredTools.filter(t => t.active).length }}</span>
                 </div>
+                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-checkbox
+                  v-model="showSystemTools"
+                  density="compact"
+                  hide-details
+                  class="system-tool-checkbox"
+                >
+                  <template v-slot:label>
+                    <span class="text-body-2">{{ tmTool('functionTools.buttons.showSystemTools') }}</span>
+                  </template>
+                </v-checkbox>
               </div>
             </div>
 
@@ -313,3 +352,13 @@ watch(viewMode, async (mode) => {
     {{ snackbar.message }}
   </v-snackbar>
 </template>
+
+<style scoped>
+.system-tool-checkbox {
+  flex: none;
+}
+
+.system-tool-checkbox :deep(.v-selection-control) {
+  min-height: auto;
+}
+</style>
