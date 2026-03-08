@@ -56,7 +56,6 @@ class TestCrossLoopIsolation:
     async def test_different_loops_have_different_managers(self):
         """Test that different event loops get different per-loop managers."""
         manager = SessionLockManager()
-        session_id = "shared-session"
 
         # Get manager for current loop
         manager1 = manager._get_loop_manager()
@@ -214,7 +213,7 @@ class TestEventLoopCleanup:
     async def test_weakref_cleanup_on_loop_close(self):
         """Test that per-loop managers are cleaned up when loop is closed."""
         manager = SessionLockManager()
-        loop_ref = None
+        loop_ref: weakref.ref[asyncio.AbstractEventLoop] | None = None
 
         def run_in_new_loop():
             nonlocal loop_ref
@@ -246,7 +245,9 @@ class TestEventLoopCleanup:
 
         # The per-loop manager should be cleaned up when the loop is closed
         # because WeakKeyDictionary removes entries when the key (loop) is gone
-        assert per_loop_mgr_ref() is None or loop_ref() is None
+        per_loop_mgr = per_loop_mgr_ref()
+        loop = loop_ref() if loop_ref is not None else None
+        assert per_loop_mgr is None or loop is None
 
     @pytest.mark.asyncio
     async def test_access_after_loop_close_in_new_loop_works(self):
