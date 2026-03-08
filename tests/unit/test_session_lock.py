@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+import time
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 
@@ -279,6 +280,158 @@ class TestEventLoopCleanup:
             result = future.result()
 
         assert result == "success"
+
+
+class TestIssue5464:
+    """Tests for issue #5464: Multiple OneBot instances with different event loops.
+
+    Issue: Running multiple OneBot adapter instances causes
+    "is bound to a different event loop" error.
+    """
+
+    @pytest.mark.asyncio
+    async def test_multiple_event_loops_no_cross_loop_error(self):
+        """Test that multiple event loops don't cause cross-loop binding errors.
+
+        This simulates the scenario where multiple OneBot instances
+        (each potentially running in different event loops) access the
+        same SessionLockManager concurrently.
+        """
+        from astrbot.core.utils.session_lock import session_lock_manager
+
+        errors: list[Exception] = []
+        results: list[str] = []
+
+        def simulate_onebot_instance(instance_id: int, session_ids: list[str]):
+            """Simulate a OneBot instance running in its own event loop."""
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+
+                async def process_messages():
+                    for session_id in session_ids:
+                        try:
+                            async with session_lock_manager.acquire_lock(session_id):
+                                # Simulate message processing
+                                await asyncio.sleep(0.01)
+                                results.append(f"instance-{instance_id}-{session_id}")
+                        except Exception as e:
+                            errors.append(e)
+
+                loop.run_until_complete(process_messages())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+
+        # Simulate 4 OneBot instances (as in the issue report)
+        # Each handles multiple sessions concurrently
+        threads = []
+        for i in range(4):
+            sessions = [f"session-{i}-1", f"session-{i}-2", f"session-{i}-3"]
+            t = threading.Thread(target=simulate_onebot_instance, args=(i, sessions))
+            threads.append(t)
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Should have no errors (especially no "bound to a different event loop")
+        assert len(errors) == 0, f"Errors occurred: {errors}"
+        assert len(results) == 12  # 4 instances * 3 sessions each
+
+    @pytest.mark.asyncio
+    async def test_lock_object_not_shared_across_loops(self):
+        """Verify that asyncio.Lock objects are not shared across event loops.
+
+        The root cause of issue #5464 was that Lock objects created in one
+        event loop were being used in another, causing the error.
+        """
+        manager = SessionLockManager()
+        session_id = "shared-session-id"
+        lock_ids: set[int] = set()
+        lock_id_lock = threading.Lock()
+
+        def get_lock_in_new_loop():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+
+                async def acquire_and_capture():
+                    # Get the per-loop manager
+                    per_loop_mgr = manager._get_loop_manager()
+                    # Capture the lock object id before acquiring
+                    async with per_loop_mgr._access_lock:
+                        lock = per_loop_mgr._locks[session_id]
+                        with lock_id_lock:
+                            lock_ids.add(id(lock))
+                    async with manager.acquire_lock(session_id):
+                        await asyncio.sleep(0.01)
+
+                loop.run_until_complete(acquire_and_capture())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+
+        # Run multiple loops concurrently
+        threads = [threading.Thread(target=get_lock_in_new_loop) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Each loop should have its own Lock object
+        # If locks were shared, we'd only have 1 lock_id
+        assert len(lock_ids) == 5, "Each event loop should have its own Lock object"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_access_same_session_different_loops(self):
+        """Test that same session ID accessed from different loops doesn't block.
+
+        This verifies the fix: locks are isolated per event loop,
+        so different loops can acquire the "same" session lock concurrently.
+        """
+        from astrbot.core.utils.session_lock import session_lock_manager
+
+        session_id = "global-session"
+        acquisition_times: list[float] = []
+        time_lock = threading.Lock()
+
+        def acquire_lock_in_loop(loop_id: int):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+
+                async def acquire():
+                    import time
+
+                    start = time.time()
+                    async with session_lock_manager.acquire_lock(session_id):
+                        with time_lock:
+                            acquisition_times.append(start)
+                        await asyncio.sleep(0.1)  # Hold the lock
+
+                loop.run_until_complete(acquire())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
+
+        # Start 3 threads nearly simultaneously
+        threads = [threading.Thread(target=acquire_lock_in_loop, args=(i,)) for i in range(3)]
+
+        start_time = time.time()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        total_time = time.time() - start_time
+
+        # If locks were NOT isolated, we'd need ~0.3s (3 * 0.1s serial)
+        # With isolation, all should complete in ~0.1s (parallel)
+        # Allow some overhead, but should be much less than 0.3s
+        assert total_time < 0.25, (
+            f"Locks should be isolated per loop, but took {total_time:.2f}s"
+        )
 
 
 class TestEdgeCases:
