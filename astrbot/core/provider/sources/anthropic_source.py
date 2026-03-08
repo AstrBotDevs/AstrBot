@@ -287,10 +287,12 @@ class ProviderAnthropic(Provider):
                     f"no text, tool_use, or thinking content found. "
                     f"Completion: {completion}"
                 )
-            
+
             # We have reasoning content (ThinkingBlock) - this is valid
             stop_reason = getattr(completion, "stop_reason", "unknown")
-            logger.debug(f"Completion contains only ThinkingBlock (stop_reason={stop_reason})")
+            logger.debug(
+                f"Completion contains only ThinkingBlock (stop_reason={stop_reason})"
+            )
             llm_response.completion_text = ""  # Ensure empty string, not None
 
         return llm_response
