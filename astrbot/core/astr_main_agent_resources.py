@@ -199,7 +199,7 @@ class ReadDocumentSectionTool(FunctionTool[AstrAgentContext]):
                 "doc_id": {"type": "string", "description": "Document ID."},
                 "section_path": {
                     "type": "string",
-                    "description": "Section path, e.g. 'Chapter 1/API'.",
+                    "description": "Section path, e.g. 'Chapter 1 > API'.",
                 },
             },
             "required": ["doc_id", "section_path"],

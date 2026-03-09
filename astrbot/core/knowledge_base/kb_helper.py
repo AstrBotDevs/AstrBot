@@ -483,19 +483,20 @@ class KBHelper:
                 session.add(kb_doc)
             await session.refresh(kb_doc)
 
-        for i, section in enumerate(sections):
-            await self.kb_db.upsert_doc_section(
-                DocSection(
-                    doc_id=doc_id,
-                    kb_id=self.kb.kb_id,
-                    section_path=section.path,
-                    section_level=section.level,
-                    section_title=section.title,
-                    section_body=section.body,
-                    parent_section_id=None,
-                    sort_order=i,
-                ),
+        section_models = [
+            DocSection(
+                doc_id=doc_id,
+                kb_id=self.kb.kb_id,
+                section_path=section.path,
+                section_level=section.level,
+                section_title=section.title,
+                section_body=section.body,
+                parent_section_id=None,
+                sort_order=i,
             )
+            for i, section in enumerate(sections)
+        ]
+        await self.kb_db.upsert_doc_sections(section_models)
 
         if progress_callback:
             await progress_callback("embedding", len(sections), len(sections))

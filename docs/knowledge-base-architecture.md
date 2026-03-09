@@ -148,7 +148,7 @@
 | section_id | VARCHAR(36) UNIQUE | 章节唯一标识 |
 | doc_id | VARCHAR(36) | 所属文档 |
 | kb_id | VARCHAR(36) | 所属知识库 |
-| section_path | VARCHAR(1024) | 章节路径，如 `"第一章/API 设计"` |
+| section_path | VARCHAR(1024) | 章节路径，如 `"第一章 > API 设计"` |
 | section_level | INTEGER | 标题层级 (1-6) |
 | section_title | VARCHAR(255) | 章节标题 |
 | section_body | TEXT | 章节正文内容 |
@@ -334,8 +334,8 @@ API 设计正文...
 输出（SectionNode 树）：
 ```
 SectionNode(title="第一章", level=1, path="第一章", body="正文内容...")
-├── SectionNode(title="API 设计", level=2, path="第一章/API 设计", body="API 设计正文...")
-└── SectionNode(title="数据模型", level=2, path="第一章/数据模型", body="数据模型正文...")
+├── SectionNode(title="API 设计", level=2, path="第一章 > API 设计", body="API 设计正文...")
+└── SectionNode(title="数据模型", level=2, path="第一章 > 数据模型", body="数据模型正文...")
 SectionNode(title="第二章", level=1, path="第二章", body="")
 ```
 
@@ -571,7 +571,7 @@ Dense 检索           Sparse 检索
 
 ### structure_parser.py
 
-`StructureParser` 类，解析 Markdown 标题层级为 `SectionNode` 树。`flatten()` 展平为列表，每个节点的 `path` 字段（如 `"第一章/API 设计"`）作为唯一标识。
+`StructureParser` 类，解析 Markdown 标题层级为 `SectionNode` 树。`flatten()` 展平为列表，每个节点的 `path` 字段（如 `"第一章 > API 设计"`）作为唯一标识。
 
 ### kb_helper.py
 

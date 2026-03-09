@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -7,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlmodel import col, desc
 
 from astrbot.core import logger
-from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 from astrbot.core.knowledge_base.index_path import build_index_path
 from astrbot.core.knowledge_base.models import (
     BaseKBModel,
@@ -17,6 +17,9 @@ from astrbot.core.knowledge_base.models import (
     KnowledgeBase,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
+
+if TYPE_CHECKING:
+    from astrbot.core.db.vec_db.faiss_impl import FaissVecDB
 
 
 class KBSQLiteDatabase:
@@ -276,8 +279,14 @@ class KBSQLiteDatabase:
                             "ADD COLUMN default_index_mode VARCHAR(20) DEFAULT 'flat'",
                         ),
                     )
-                except Exception:
-                    pass
+                except (ProgrammingError, OperationalError) as e:
+                    err_msg = str(e).lower()
+                    if "duplicate column name" not in err_msg:
+                        logger.error(
+                            "Failed to alter knowledge_bases for default_index_mode: %s",
+                            e,
+                        )
+                        raise
                 try:
                     await session.execute(
                         text(
@@ -285,26 +294,26 @@ class KBSQLiteDatabase:
                             "ADD COLUMN index_mode VARCHAR(20) DEFAULT 'flat'",
                         ),
                     )
-                except Exception:
-                    pass
-                try:
-                    await session.execute(
-                        text(
-                            "UPDATE knowledge_bases SET default_index_mode = 'flat' "
-                            "WHERE default_index_mode IS NULL OR default_index_mode = ''",
-                        ),
-                    )
-                except Exception:
-                    pass
-                try:
-                    await session.execute(
-                        text(
-                            "UPDATE kb_documents SET index_mode = 'flat' "
-                            "WHERE index_mode IS NULL OR index_mode = ''",
-                        ),
-                    )
-                except Exception:
-                    pass
+                except (ProgrammingError, OperationalError) as e:
+                    err_msg = str(e).lower()
+                    if "duplicate column name" not in err_msg:
+                        logger.error(
+                            "Failed to alter kb_documents for index_mode: %s",
+                            e,
+                        )
+                        raise
+                await session.execute(
+                    text(
+                        "UPDATE knowledge_bases SET default_index_mode = 'flat' "
+                        "WHERE default_index_mode IS NULL OR default_index_mode = ''",
+                    ),
+                )
+                await session.execute(
+                    text(
+                        "UPDATE kb_documents SET index_mode = 'flat' "
+                        "WHERE index_mode IS NULL OR index_mode = ''",
+                    ),
+                )
                 await session.commit()
 
     async def close(self) -> None:
@@ -439,7 +448,7 @@ class KBSQLiteDatabase:
 
         return metadata_map
 
-    async def delete_document_by_id(self, doc_id: str, vec_db: FaissVecDB) -> None:
+    async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
         """删除单个文档及其相关数据"""
         # 在知识库表中删除
         async with self.get_db() as session, session.begin():
@@ -483,6 +492,23 @@ class KBSQLiteDatabase:
                     section.id = existing.id
                 await session.merge(section)
 
+    async def upsert_doc_sections(self, sections: list[DocSection]) -> None:
+        if not sections:
+            return
+        async with self.get_db() as session:
+            async with session.begin():
+                section_ids = [section.section_id for section in sections]
+                existing_stmt = select(DocSection.section_id, DocSection.id).where(
+                    col(DocSection.section_id).in_(section_ids),
+                )
+                existing_result = await session.execute(existing_stmt)
+                existing_map = {row[0]: row[1] for row in existing_result.all()}
+                for section in sections:
+                    existing_id = existing_map.get(section.section_id)
+                    if existing_id is not None:
+                        section.id = existing_id
+                    await session.merge(section)
+
     async def get_doc_section(
         self,
         kb_id: str,
@@ -518,7 +544,7 @@ class KBSQLiteDatabase:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
-    async def update_kb_stats(self, kb_id: str, vec_db: FaissVecDB) -> None:
+    async def update_kb_stats(self, kb_id: str, vec_db: "FaissVecDB") -> None:
         """更新知识库统计信息"""
         chunk_cnt = await vec_db.count_documents()
 

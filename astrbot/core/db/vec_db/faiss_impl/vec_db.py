@@ -226,23 +226,20 @@ class FaissVecDB(BaseVecDB):
         rerank_provider: RerankProvider | None = None,
     ) -> None:
         """Hot-switch to a new FAISS index and embedding provider."""
+        new_storage = EmbeddingStorage(
+            embedding_provider.get_dim(),
+            index_store_path,
+        )
+
         async with self._index_switch_lock:
             old_storage = self.embedding_storage
-            try:
-                # Create new storage first; only swap after successful creation
-                new_storage = EmbeddingStorage(
-                    embedding_provider.get_dim(),
-                    index_store_path,
-                )
-            except Exception:
-                # If creation fails, keep old storage intact
-                raise
             # document_storage keeps the same SQLite mapping (int id <-> chunk metadata),
             # only embedding index file/provider changes here.
             self.index_store_path = index_store_path
             self.embedding_provider = embedding_provider
             self.rerank_provider = rerank_provider
             self.embedding_storage = new_storage
-            # Close old storage only after successful swap
-            if old_storage:
-                await old_storage.close()
+
+        # Close old storage only after successful swap.
+        if old_storage:
+            await old_storage.close()
