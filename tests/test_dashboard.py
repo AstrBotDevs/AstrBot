@@ -72,6 +72,7 @@ def registered_plugin_webui(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch
     )
     (webui_root / "app.js").write_text(
         """
+import React from "react";
 import "./shared/common.js";
 
 function renderTabs() {
@@ -318,6 +319,7 @@ async def test_plugin_webui_content_supports_cookie_auth(
     assert asset_response.status_code == 200
     asset_content = (await asset_response.get_data()).decode("utf-8")
     assert "renderTabs" in asset_content
+    assert 'from "react"' in asset_content
     assert (
         f"/api/plugin/webui/content/{PLUGIN_WEBUI_DEMO_NAME}/shared/common.js"
         in asset_content

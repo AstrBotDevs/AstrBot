@@ -6,7 +6,6 @@ import socket
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
-from urllib.parse import unquote
 
 import jwt
 import psutil
@@ -24,6 +23,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from .plugin_webui_auth import PluginWebUIAuth
 from .routes import *
 from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
@@ -208,17 +208,19 @@ class AstrBotDashboard:
         ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
-        is_plugin_webui_path = self._is_plugin_webui_protected_path(request.path)
-        token = self._extract_dashboard_jwt(allow_asset_token=is_plugin_webui_path)
+        is_plugin_webui_path = PluginWebUIAuth.is_protected_path(request.path)
+        token = self._extract_dashboard_jwt()
+        if not token and is_plugin_webui_path:
+            token = PluginWebUIAuth.extract_asset_token()
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            if self._is_plugin_webui_asset_token(
+            if PluginWebUIAuth.is_asset_token(
                 payload
-            ) and not self._is_plugin_webui_asset_token_scope_valid(
+            ) and not PluginWebUIAuth.is_scope_valid(
                 payload,
                 request.path,
             ):
@@ -240,7 +242,7 @@ class AstrBotDashboard:
             return r
 
     @staticmethod
-    def _extract_dashboard_jwt(allow_asset_token: bool = False) -> str | None:
+    def _extract_dashboard_jwt() -> str | None:
         auth_header = request.headers.get("Authorization", "").strip()
         if auth_header.startswith("Bearer "):
             token = auth_header.removeprefix("Bearer ").strip()
@@ -250,54 +252,7 @@ class AstrBotDashboard:
         cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
         if cookie_token:
             return cookie_token
-
-        if allow_asset_token:
-            query_asset_token = request.args.get("asset_token", "").strip()
-            if query_asset_token:
-                return query_asset_token
         return None
-
-    @staticmethod
-    def _is_plugin_webui_protected_path(path: str) -> bool:
-        return path.startswith("/api/plugin/webui/content/") or path.startswith(
-            "/api/plugin/webui/bridge-sdk.js"
-        )
-
-    @staticmethod
-    def _is_plugin_webui_asset_token(payload: dict) -> bool:
-        return payload.get("token_type") == "plugin_webui_asset"
-
-    @staticmethod
-    def _extract_plugin_name_from_webui_path(path: str) -> str | None:
-        prefix = "/api/plugin/webui/content/"
-        if not path.startswith(prefix):
-            return None
-        remainder = path[len(prefix) :]
-        plugin_part = remainder.split("/", 1)[0] if remainder else ""
-        if not plugin_part:
-            return None
-        return unquote(plugin_part)
-
-    def _is_plugin_webui_asset_token_scope_valid(
-        self,
-        payload: dict,
-        path: str,
-    ) -> bool:
-        if not self._is_plugin_webui_protected_path(path):
-            return False
-
-        if path.startswith("/api/plugin/webui/bridge-sdk.js"):
-            return True
-
-        token_plugin_name = payload.get("plugin_name")
-        request_plugin_name = self._extract_plugin_name_from_webui_path(path)
-        if (
-            not isinstance(token_plugin_name, str)
-            or not token_plugin_name
-            or not request_plugin_name
-        ):
-            return False
-        return token_plugin_name == request_plugin_name
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:

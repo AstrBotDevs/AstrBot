@@ -243,26 +243,18 @@ class PluginManager:
         if not isinstance(raw_webui, dict):
             return None
 
-        raw_display_name = raw_webui.get("display_name") or raw_webui.get("title")
-        display_name = (
-            raw_display_name.strip()
-            if isinstance(raw_display_name, str) and raw_display_name.strip()
-            else "WebUI"
-        )
+        def _get_str_value(keys: list[str], default: str) -> str:
+            for key in keys:
+                value = raw_webui.get(key)
+                if isinstance(value, str):
+                    stripped = value.strip()
+                    if stripped:
+                        return stripped
+            return default
 
-        raw_root_dir = raw_webui.get("root_dir") or raw_webui.get("root")
-        root_dir = (
-            raw_root_dir.strip()
-            if isinstance(raw_root_dir, str) and raw_root_dir.strip()
-            else "webui"
-        )
-
-        raw_entry_file = raw_webui.get("entry_file") or raw_webui.get("entry")
-        entry_file = (
-            raw_entry_file.strip()
-            if isinstance(raw_entry_file, str) and raw_entry_file.strip()
-            else "index.html"
-        )
+        display_name = _get_str_value(["display_name", "title"], "WebUI")
+        root_dir = _get_str_value(["root_dir", "root"], "webui")
+        entry_file = _get_str_value(["entry_file", "entry"], "index.html")
 
         return PluginWebUIPage(
             display_name=display_name,
