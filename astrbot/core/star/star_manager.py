@@ -198,14 +198,23 @@ class PluginManager:
                 to_update.append(p.root_dir_name)
         for p in to_update:
             plugin_path = os.path.join(plugin_dir, p)
-            if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                pth = os.path.join(plugin_path, "requirements.txt")
-                logger.info(f"正在安装插件 {p} 所需的依赖库: {pth}")
-                try:
-                    await pip_installer.install(requirements_path=pth)
-                except Exception as e:
-                    logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
+            try:
+                await self._install_plugin_requirements(plugin_path, p)
+            except Exception as e:
+                logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
         return True
+
+    async def _install_plugin_requirements(
+        self,
+        plugin_dir_path: str,
+        plugin_label: str,
+    ) -> None:
+        requirements_path = os.path.join(plugin_dir_path, "requirements.txt")
+        if not os.path.exists(requirements_path):
+            return
+
+        logger.info(f"正在安装插件 {plugin_label} 所需的依赖库: {requirements_path}")
+        await pip_installer.install(requirements_path=requirements_path)
 
     async def _import_plugin_with_dependency_recovery(
         self,
@@ -494,6 +503,9 @@ class PluginManager:
                 return False, "插件不存在于失败列表中"
 
             self._cleanup_plugin_state(dir_name)
+
+            plugin_path = os.path.join(self.plugin_store_path, dir_name)
+            await self._install_plugin_requirements(plugin_path, dir_name)
 
             success, error = await self.load(specified_dir_name=dir_name)
             if success:
@@ -1078,6 +1090,7 @@ class PluginManager:
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
+                await self._install_plugin_requirements(plugin_path, dir_name)
                 success, error_message = await self.load(
                     specified_dir_name=dir_name,
                     ignore_version_check=ignore_version_check,
@@ -1317,6 +1330,9 @@ class PluginManager:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
         await self.updator.update(plugin, proxy=proxy)
+        if plugin.root_dir_name:
+            plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
+            await self._install_plugin_requirements(plugin_dir_path, plugin_name)
         await self.reload(plugin_name)
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
@@ -1488,6 +1504,7 @@ class PluginManager:
                 os.remove(zip_file_path)
             except BaseException as e:
                 logger.warning(f"删除插件压缩包失败: {e!s}")
+            await self._install_plugin_requirements(desti_dir, dir_name)
             # await self.reload()
             success, error_message = await self.load(
                 specified_dir_name=dir_name,

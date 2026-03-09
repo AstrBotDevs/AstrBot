@@ -39,3 +39,127 @@ async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp
     assert str(site_packages_path) in recorded_args
     assert prepend_sys_path_calls == [str(site_packages_path), str(site_packages_path)]
     assert ensure_preferred_calls == [(str(site_packages_path), {"demo-package"})]
+
+
+@pytest.mark.asyncio
+async def test_install_splits_space_separated_packages(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package another-package>=1.0")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:3] == ["install", "demo-package", "another-package>=1.0"]
+
+
+@pytest.mark.asyncio
+async def test_install_tracks_multiline_packages_for_desktop_client(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = AsyncMock(return_value=0)
+    ensure_preferred_calls = []
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._prepend_sys_path",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._ensure_plugin_dependencies_preferred",
+        lambda path, requirements: ensure_preferred_calls.append((path, requirements)),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package\nanother-package>=1.0\n")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:3] == ["install", "demo-package", "another-package>=1.0"]
+    assert ensure_preferred_calls == [
+        (str(site_packages_path), {"demo-package", "another-package"})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_install_keeps_single_requirement_with_marker_intact(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package ; python_version < '4'")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:2] == ["install", "demo-package ; python_version < '4'"]
+
+
+@pytest.mark.asyncio
+async def test_install_keeps_single_requirement_with_compact_marker_intact(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name='demo-package; python_version < "4"')
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:2] == ["install", 'demo-package; python_version < "4"']
+
+
+@pytest.mark.asyncio
+async def test_install_keeps_single_requirement_with_version_range_intact(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package >= 1.0, < 2.0")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:2] == ["install", "demo-package >= 1.0, < 2.0"]
+
+
+@pytest.mark.asyncio
+async def test_install_multiline_input_strips_comments_and_splits_options(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(
+        package_name=(
+            "demo-package==1.0  # pinned\n"
+            "--extra-index-url https://example.com/simple\n"
+            "another-package\n"
+        )
+    )
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:5] == [
+        "install",
+        "demo-package==1.0",
+        "--extra-index-url",
+        "https://example.com/simple",
+        "another-package",
+    ]

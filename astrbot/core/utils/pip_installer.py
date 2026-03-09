@@ -7,9 +7,12 @@ import io
 import logging
 import os
 import re
+import shlex
 import sys
 import threading
 from collections import deque
+
+from packaging.requirements import InvalidRequirement, Requirement
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
@@ -129,6 +132,52 @@ def _extract_requirement_names(requirements_path: str) -> set[str]:
     except Exception as exc:
         logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
     return names
+
+
+def _split_package_install_input(raw_input: str) -> list[str]:
+    normalized = raw_input.strip()
+    if not normalized:
+        return []
+
+    if "\n" in normalized or "\r" in normalized:
+        return _split_multiline_package_input(normalized)
+
+    if _is_valid_install_requirement(normalized):
+        return [normalized]
+
+    split_tokens = shlex.split(normalized)
+    if split_tokens and all(_is_valid_install_token(token) for token in split_tokens):
+        return split_tokens
+
+    return [normalized]
+
+
+def _is_valid_install_requirement(candidate: str) -> bool:
+    try:
+        Requirement(candidate)
+    except InvalidRequirement:
+        return False
+    return True
+
+
+def _is_valid_install_token(token: str) -> bool:
+    if token.startswith("-"):
+        return True
+
+    return _is_valid_install_requirement(token)
+
+
+def _split_multiline_package_input(raw_input: str) -> list[str]:
+    requirements: list[str] = []
+    for line in raw_input.splitlines():
+        candidate = re.split(r"\s+#", line, maxsplit=1)[0].strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        if candidate.startswith("-"):
+            requirements.extend(shlex.split(candidate))
+            continue
+        requirements.append(candidate)
+    return requirements
 
 
 def _extract_top_level_modules(
@@ -544,10 +593,12 @@ class PipInstaller:
         args = ["install"]
         requested_requirements: set[str] = set()
         if package_name:
-            args.append(package_name)
-            requirement_name = _extract_requirement_name(package_name)
-            if requirement_name:
-                requested_requirements.add(requirement_name)
+            package_specs = _split_package_install_input(package_name)
+            args.extend(package_specs)
+            for package_spec in package_specs:
+                requirement_name = _extract_requirement_name(package_spec)
+                if requirement_name:
+                    requested_requirements.add(requirement_name)
         elif requirements_path:
             args.extend(["-r", requirements_path])
             requested_requirements = _extract_requirement_names(requirements_path)
@@ -566,7 +617,7 @@ class PipInstaller:
         if self.pip_install_arg:
             args.extend(self.pip_install_arg.split())
 
-        logger.info(f"Pip 包管理器: pip {' '.join(args)}")
+        logger.info("Pip 包管理器 argv: %s", ["pip", *args])
         result_code = await self._run_pip_in_process(args)
 
         if result_code != 0:
