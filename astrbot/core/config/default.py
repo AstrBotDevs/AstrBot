@@ -342,19 +342,20 @@ CONFIG_METADATA_2 = {
                     "企业微信智能机器人": {
                         "id": "wecom_ai_bot",
                         "type": "wecom_ai_bot",
+                        "hint": "如果发现字段有异常，请重新创建",
                         "enable": True,
-                        "wecom_ai_bot_connection_mode": "webhook",
+                        "wecom_ai_bot_connection_mode": "long_connection",  # long_connection, webhook
+                        "wecom_ai_bot_name": "",
+                        "wecomaibot_ws_bot_id": "",
+                        "wecomaibot_ws_secret": "",
+                        "wecomaibot_token": "",
+                        "wecomaibot_encoding_aes_key": "",
                         "wecomaibot_init_respond_text": "",
                         "wecomaibot_friend_message_welcome_text": "",
-                        "wecom_ai_bot_name": "",
                         "msg_push_webhook_url": "",
                         "only_use_webhook_url_to_send": False,
-                        "long_connection_bot_id": "",
-                        "long_connection_secret": "",
-                        "long_connection_ws_url": "wss://openws.work.weixin.qq.com",
-                        "long_connection_heartbeat_interval": 30,
-                        "token": "",
-                        "encoding_aes_key": "",
+                        "wecomaibot_ws_url": "wss://openws.work.weixin.qq.com",
+                        "wecomaibot_heartbeat_interval": 30,
                         "unified_webhook_mode": True,
                         "webhook_uuid": "",
                         "callback_server_host": "0.0.0.0",
@@ -754,6 +755,22 @@ CONFIG_METADATA_2 = {
                         "type": "string",
                         "hint": "当用户当天进入智能机器人单聊会话，回复欢迎语，留空则不回复。",
                     },
+                    "wecomaibot_token": {
+                        "description": "企业微信智能机器人 Token",
+                        "type": "string",
+                        "hint": "用于 Webhook 回调模式的身份验证。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "webhook",
+                        },
+                    },
+                    "wecomaibot_encoding_aes_key": {
+                        "description": "企业微信智能机器人 EncodingAESKey",
+                        "type": "string",
+                        "hint": "用于 Webhook 回调模式的消息加密解密。",
+                        "condition": {
+                            "wecom_ai_bot_connection_mode": "webhook",
+                        },
+                    },
                     "msg_push_webhook_url": {
                         "description": "企业微信消息推送 Webhook URL",
                         "type": "string",
@@ -764,7 +781,7 @@ CONFIG_METADATA_2 = {
                         "type": "bool",
                         "hint": "启用后，企业微信智能机器人的所有回复都改为通过消息推送 Webhook 发送。消息推送 Webhook 支持更多的消息类型（如图片、文件等）。",
                     },
-                    "long_connection_bot_id": {
+                    "wecomaibot_ws_bot_id": {
                         "description": "长连接 BotID",
                         "type": "string",
                         "hint": "企业微信智能机器人长连接模式凭证 BotID。",
@@ -772,7 +789,7 @@ CONFIG_METADATA_2 = {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
                     },
-                    "long_connection_secret": {
+                    "wecomaibot_ws_secret": {
                         "description": "长连接 Secret",
                         "type": "string",
                         "hint": "企业微信智能机器人长连接模式凭证 Secret。",
@@ -780,17 +797,19 @@ CONFIG_METADATA_2 = {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
                     },
-                    "long_connection_ws_url": {
+                    "wecomaibot_ws_url": {
                         "description": "长连接 WebSocket 地址",
                         "type": "string",
+                        "invisible": True,
                         "hint": "默认值为 wss://openws.work.weixin.qq.com，一般无需修改。",
                         "condition": {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
                     },
-                    "long_connection_heartbeat_interval": {
+                    "wecomaibot_heartbeat_interval": {
                         "description": "长连接心跳间隔",
                         "type": "int",
+                        "invisible": True,
                         "hint": "长连接模式心跳间隔（秒），建议 30 秒。",
                         "condition": {
                             "wecom_ai_bot_connection_mode": "long_connection",
@@ -840,7 +859,7 @@ CONFIG_METADATA_2 = {
                     "unified_webhook_mode": {
                         "description": "统一 Webhook 模式",
                         "type": "bool",
-                        "hint": "启用后，将使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
+                        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。",
                     },
                     "webhook_uuid": {
                         "invisible": True,

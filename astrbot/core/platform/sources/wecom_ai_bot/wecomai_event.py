@@ -1,5 +1,7 @@
 """企业微信智能机器人事件处理模块，处理消息事件的发送和接收"""
 
+from collections.abc import Awaitable, Callable
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, Image, Plain
@@ -18,10 +20,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         message_obj,
         platform_meta,
         session_id: str,
-        api_client: WecomAIBotAPIClient,
+        api_client: WecomAIBotAPIClient | None,
         queue_mgr: WecomAIQueueMgr,
         webhook_client: WecomAIBotWebhookClient | None = None,
         only_use_webhook_url_to_send: bool = False,
+        long_connection_sender: (Callable[[str, dict], Awaitable[bool]] | None) = None,
     ) -> None:
         """初始化消息事件
 
@@ -38,6 +41,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         self.queue_mgr = queue_mgr
         self.webhook_client = webhook_client
         self.only_use_webhook_url_to_send = only_use_webhook_url_to_send
+        self.long_connection_sender = long_connection_sender
 
     async def _mark_stream_complete(self, stream_id: str) -> None:
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
@@ -117,6 +121,18 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         return data
 
+    @staticmethod
+    def _extract_plain_text_from_chain(message_chain: MessageChain | None) -> str:
+        if not message_chain:
+            return ""
+        plain_parts: list[str] = []
+        for comp in message_chain.chain:
+            if isinstance(comp, At):
+                plain_parts.append(f"@{comp.name} ")
+            elif isinstance(comp, Plain):
+                plain_parts.append(comp.text)
+        return "".join(plain_parts).strip()
+
     async def send(self, message: MessageChain | None) -> None:
         """发送消息"""
         raw = self.message_obj.raw_message
@@ -124,6 +140,44 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             "wecom_ai_bot platform event raw_message should be a dict"
         )
         stream_id = raw.get("stream_id", self.session_id)
+        pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
+        connection_mode = pending_response.get("callback_params", {}).get(
+            "connection_mode"
+        )
+        req_id = pending_response.get("callback_params", {}).get("req_id")
+
+        if (
+            connection_mode == "long_connection"
+            and self.long_connection_sender
+            and isinstance(req_id, str)
+            and req_id
+        ):
+            if self.only_use_webhook_url_to_send and self.webhook_client and message:
+                await self.webhook_client.send_message_chain(message)
+                await super().send(MessageChain([]))
+                return
+
+            if self.webhook_client and message:
+                await self.webhook_client.send_message_chain(
+                    message,
+                    unsupported_only=True,
+                )
+
+            content = self._extract_plain_text_from_chain(message)
+            await self.long_connection_sender(
+                req_id,
+                {
+                    "msgtype": "stream",
+                    "stream": {
+                        "id": stream_id,
+                        "finish": True,
+                        "content": content,
+                    },
+                },
+            )
+            await super().send(MessageChain([]))
+            return
+
         if self.only_use_webhook_url_to_send and self.webhook_client and message:
             await self.webhook_client.send_message_chain(message)
             await self._mark_stream_complete(stream_id)
@@ -152,7 +206,76 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             "wecom_ai_bot platform event raw_message should be a dict"
         )
         stream_id = raw.get("stream_id", self.session_id)
+        pending_response = self.queue_mgr.get_pending_response(stream_id) or {}
+        connection_mode = pending_response.get("callback_params", {}).get(
+            "connection_mode"
+        )
+        req_id = pending_response.get("callback_params", {}).get("req_id")
         back_queue = self.queue_mgr.get_or_create_back_queue(stream_id)
+
+        if (
+            connection_mode == "long_connection"
+            and self.long_connection_sender
+            and isinstance(req_id, str)
+            and req_id
+        ):
+            if self.only_use_webhook_url_to_send and self.webhook_client:
+                merged_chain = MessageChain([])
+                async for chain in generator:
+                    merged_chain.chain.extend(chain.chain)
+                merged_chain.squash_plain()
+                await self.webhook_client.send_message_chain(merged_chain)
+                await self.long_connection_sender(
+                    req_id,
+                    {
+                        "msgtype": "stream",
+                        "stream": {
+                            "id": stream_id,
+                            "finish": True,
+                            "content": "",
+                        },
+                    },
+                )
+                await super().send_streaming(generator, use_fallback)
+                return
+
+            increment_plain = ""
+            async for chain in generator:
+                if self.webhook_client:
+                    await self.webhook_client.send_message_chain(
+                        chain,
+                        unsupported_only=True,
+                    )
+
+                chain.squash_plain()
+                chunk_text = self._extract_plain_text_from_chain(chain)
+                if chunk_text:
+                    increment_plain += chunk_text
+                await self.long_connection_sender(
+                    req_id,
+                    {
+                        "msgtype": "stream",
+                        "stream": {
+                            "id": stream_id,
+                            "finish": False,
+                            "content": increment_plain,
+                        },
+                    },
+                )
+
+            await self.long_connection_sender(
+                req_id,
+                {
+                    "msgtype": "stream",
+                    "stream": {
+                        "id": stream_id,
+                        "finish": True,
+                        "content": increment_plain,
+                    },
+                },
+            )
+            await super().send_streaming(generator, use_fallback)
+            return
 
         if self.only_use_webhook_url_to_send and self.webhook_client:
             merged_chain = MessageChain([])
