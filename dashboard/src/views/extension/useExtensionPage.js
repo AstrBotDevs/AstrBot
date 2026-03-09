@@ -1162,8 +1162,7 @@ export const useExtensionPage = () => {
     }
 
     if (resData.status === "pending") {
-      const opId = resData.data?.operation_id || "";
-      const pendingMessage = `${resData.message}\noperation_id: ${opId}\n请在聊天中确认或拒绝，或使用 /extend confirm <operation_id>。`;
+      const pendingMessage = `${resData.message}\n请在聊天中确认或拒绝。`;
       onLoadingDialogResult(2, pendingMessage, -1);
       toast(pendingMessage, "warning");
       await refreshExtensionsAfterInstallFailure();

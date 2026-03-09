@@ -24,7 +24,7 @@ from astrbot.core.star.context import Context
 def test_apply_extension_hub_tools_enabled() -> None:
     req = ProviderRequest(prompt="hi")
     req.func_tool = ToolSet()
-    cfg = {"provider_settings": {"extension_install": {"enable": False}}}
+    cfg = {"provider_settings": {"extension_install": {"enable": True}}}
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(
@@ -39,6 +39,25 @@ def test_apply_extension_hub_tools_enabled() -> None:
     assert "astrbot_extension_confirm" not in names
     assert "astrbot_extension_deny" in names
     assert "astrbot_extension_deny_all" in names
+
+
+def test_apply_extension_hub_tools_respects_extension_install_enable_false() -> None:
+    req = ProviderRequest(prompt="hi")
+    req.func_tool = ToolSet()
+    cfg = {"provider_settings": {"extension_install": {"enable": False}}}
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "astrbot.core.astr_main_agent.sp.get",
+            lambda *args, **kwargs: [],
+        )
+        _apply_extension_hub_tools(req, cfg)
+
+    names = req.func_tool.names()
+    assert "astrbot_extension_search" not in names
+    assert "astrbot_extension_install" not in names
+    assert "astrbot_extension_deny" not in names
+    assert "astrbot_extension_deny_all" not in names
 
 
 def test_apply_extension_hub_tools_disabled() -> None:

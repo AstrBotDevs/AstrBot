@@ -143,7 +143,7 @@ class PendingOperationService:
         """通过操作 ID 前缀查找挂起操作
 
         支持用户输入短 ID（至少 4 字符）来操作挂起记录，
-        例如: /extend confirm abcd1234
+        例如: 使用公开的 operation_id 或确认 token 查询挂起安装
 
         只有当前缀唯一匹配时才返回结果。
         """

@@ -57,3 +57,17 @@ def test_confirmation_candidate_requires_confirmation_intent() -> None:
     assert not main._is_install_confirmation_candidate_message(
         "I bought a laptop today"
     )
+
+
+def test_confirmation_candidate_ignored_when_extension_install_disabled() -> None:
+    cfg = {
+        "provider_settings": {
+            "extension_install": {
+                "enable": False,
+            }
+        }
+    }
+    main = _build_main(cfg)
+    assert not main._is_install_confirmation_candidate_message(
+        "yes proceed with the install"
+    )

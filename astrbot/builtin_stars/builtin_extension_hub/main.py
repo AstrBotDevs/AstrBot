@@ -1,9 +1,10 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
-from astrbot.builtin_stars.builtin_commands.commands import ExtensionCommands
 from astrbot.core.extensions import InstallResultStatus
-from astrbot.core.extensions.runtime import get_extension_orchestrator
-from astrbot.core.star.filter.command import GreedyStr
+from astrbot.core.extensions.runtime import (
+    get_extension_orchestrator,
+    is_extension_install_enabled,
+)
 
 
 class Main(star.Star):
@@ -53,7 +54,9 @@ class Main(star.Star):
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self.extension_c = ExtensionCommands(self.context)
+
+    def _is_extension_install_enabled(self) -> bool:
+        return is_extension_install_enabled(self.context.get_config())
 
     def _get_extension_confirm_keywords(self) -> tuple[str, str]:
         config = self.context.get_config()
@@ -107,51 +110,11 @@ class Main(star.Star):
         return None
 
     def _is_install_confirmation_candidate_message(self, raw_text: str) -> bool:
+        if not self._is_extension_install_enabled():
+            return False
         if raw_text.startswith("/"):
             return False
         return self._detect_install_intent(raw_text) is not None
-
-    @filter.command_group("extend")
-    def extend(self) -> None:
-        """能力扩展管理"""
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @extend.command("search")
-    async def extend_search(
-        self, event: AstrMessageEvent, query: GreedyStr = ""
-    ) -> None:
-        """搜索可安装扩展"""
-        await self.extension_c.extend_search(event, query)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @extend.command("install")
-    async def extend_install(
-        self, event: AstrMessageEvent, target: GreedyStr = ""
-    ) -> None:
-        """安装扩展"""
-        await self.extension_c.extend_install(event, target)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @extend.command("confirm")
-    async def extend_confirm(
-        self, event: AstrMessageEvent, operation_id_or_token: str = ""
-    ) -> None:
-        """确认安装待办"""
-        await self.extension_c.extend_confirm(event, operation_id_or_token)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @extend.command("deny")
-    async def extend_deny(
-        self, event: AstrMessageEvent, operation_id_or_token: str = ""
-    ) -> None:
-        """拒绝安装待办"""
-        await self.extension_c.extend_deny(event, operation_id_or_token)
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @extend.command("pending")
-    async def extend_pending(self, event: AstrMessageEvent, kind: str = "") -> None:
-        """查看安装待确认列表"""
-        await self.extension_c.extend_pending(event, kind)
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @filter.regex(r"^.+$")

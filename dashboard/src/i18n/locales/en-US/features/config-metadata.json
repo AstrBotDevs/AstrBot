@@ -806,6 +806,91 @@
         "description": "Available Plugins",
         "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
       }
+    },
+    "extension_install": {
+      "description": "Extension Install",
+      "provider_settings": {
+        "extension_install": {
+          "enable": {
+            "description": "Enable Chat Extension Install",
+            "hint": "When disabled, chat-side extension install capabilities are removed, including LLM extension tools and the related natural-language confirmation flow. Dashboard installs remain available."
+          },
+          "default_mode": {
+            "description": "Default Install Policy",
+            "hint": "In secure mode, non-allowlisted targets require confirmation by default. Open mode can be paired with other policy options to relax restrictions.",
+            "labels": [
+              "Secure",
+              "Open"
+            ]
+          },
+          "search_result_limit": {
+            "description": "Default Search Result Limit",
+            "hint": "Controls the default number of chat-side extension search results."
+          },
+          "confirmation_required_non_allowlist": {
+            "description": "Confirm Non-Allowlisted Targets",
+            "hint": "When enabled, chat-side install requests that do not match the allowlist require confirmation first."
+          },
+          "confirmation_token_ttl_seconds": {
+            "description": "Confirmation TTL (Seconds)",
+            "hint": "How long a pending chat-side install confirmation remains valid, in seconds."
+          },
+          "confirm_keywords": {
+            "description": "Confirmation Keywords",
+            "hint": "Fill in two keywords in order: the first confirms install, the second rejects install."
+          },
+          "allowed_roles": {
+            "description": "Allowed Roles",
+            "hint": "Roles allowed to initiate or confirm chat-side extension installs."
+          },
+          "pending_cleanup_interval_seconds": {
+            "description": "Pending Cleanup Interval (Seconds)",
+            "hint": "Background cleanup interval for expired pending install requests, in seconds."
+          },
+          "allowlist": {
+            "description": "Install Allowlist",
+            "hint": "Chat-side install targets matching these rules are installed directly.",
+            "rule": {
+              "description": "Rule",
+              "kind": {
+                "description": "Extension Kind",
+                "labels": [
+                  "Plugin",
+                  "Skill",
+                  "MCP"
+                ]
+              },
+              "provider": {
+                "description": "Provider"
+              },
+              "identifier": {
+                "description": "Identifier"
+              }
+            }
+          },
+          "blocklist": {
+            "description": "Install Blocklist",
+            "hint": "Chat-side install targets matching these rules are denied directly.",
+            "rule": {
+              "description": "Rule",
+              "kind": {
+                "description": "Extension Kind",
+                "labels": [
+                  "Plugin",
+                  "Skill",
+                  "MCP"
+                ]
+              },
+              "provider": {
+                "description": "Provider"
+              },
+              "identifier": {
+                "description": "Identifier"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "ext_group": {

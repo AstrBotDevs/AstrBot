@@ -711,9 +711,8 @@ export default {
                     if (response.data.status === 'ok') {
                         this.checkPlugin();
                     } else if (response.data.status === 'pending') {
-                        const opId = response.data.data?.operation_id || '';
                         this.showSnackbar(
-                            `${response.data.message || this.tm('messages.installFailed')}\noperation_id: ${opId}\n请在聊天中确认或拒绝，或使用 /extend confirm <operation_id>。`,
+                            `${response.data.message || this.tm('messages.installFailed')}\n请在聊天中确认或拒绝。`,
                             'warning',
                         );
                     } else {

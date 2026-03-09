@@ -3549,6 +3549,142 @@ CONFIG_METADATA_3 = {
                     },
                 },
             },
+            "extension_install": {
+                "description": "扩展安装",
+                "type": "object",
+                "items": {
+                    "provider_settings.extension_install.enable": {
+                        "description": "启用聊天扩展安装",
+                        "type": "bool",
+                        "hint": "关闭后将移除聊天侧的扩展安装能力，包括 LLM 扩展工具与相关自然语言确认流；插件市场人工安装不受影响。",
+                    },
+                    "provider_settings.extension_install.default_mode": {
+                        "description": "默认安装策略",
+                        "type": "string",
+                        "options": ["secure", "open"],
+                        "labels": ["安全模式", "开放模式"],
+                        "hint": "安全模式下，非白名单目标默认需要确认；开放模式下可配合其他策略项放宽限制。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.search_result_limit": {
+                        "description": "默认搜索结果上限",
+                        "type": "int",
+                        "hint": "控制聊天侧扩展搜索默认返回的结果数量。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.confirmation_required_non_allowlist": {
+                        "description": "非白名单目标需要确认",
+                        "type": "bool",
+                        "hint": "开启后，未命中白名单的聊天侧安装请求需要先确认。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.confirmation_token_ttl_seconds": {
+                        "description": "确认有效期（秒）",
+                        "type": "int",
+                        "hint": "聊天侧待确认安装请求的有效时长，单位为秒。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.confirm_keywords": {
+                        "description": "确认关键词",
+                        "type": "list",
+                        "hint": "按顺序填写两个关键词：第一个表示确认安装，第二个表示拒绝安装。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.allowed_roles": {
+                        "description": "允许的角色",
+                        "type": "list",
+                        "options": ["admin", "owner"],
+                        "hint": "允许在聊天侧发起或确认扩展安装的角色列表。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.pending_cleanup_interval_seconds": {
+                        "description": "待确认清理周期（秒）",
+                        "type": "int",
+                        "hint": "后台清理过期待确认安装请求的执行周期，单位为秒。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.allowlist": {
+                        "description": "安装白名单",
+                        "type": "template_list",
+                        "hint": "命中规则的聊天侧安装目标可直接安装。",
+                        "templates": {
+                            "rule": {
+                                "name": "规则项",
+                                "description": "白名单规则",
+                                "items": {
+                                    "kind": {
+                                        "description": "扩展类型",
+                                        "type": "string",
+                                        "options": ["plugin", "skill", "mcp"],
+                                        "labels": ["插件", "技能", "MCP"],
+                                        "default": "plugin",
+                                    },
+                                    "provider": {
+                                        "description": "提供者",
+                                        "type": "string",
+                                        "default": "",
+                                    },
+                                    "identifier": {
+                                        "description": "目标标识",
+                                        "type": "string",
+                                        "default": "",
+                                    },
+                                },
+                            }
+                        },
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.blocklist": {
+                        "description": "安装黑名单",
+                        "type": "template_list",
+                        "hint": "命中规则的聊天侧安装目标会被直接拒绝。",
+                        "templates": {
+                            "rule": {
+                                "name": "规则项",
+                                "description": "黑名单规则",
+                                "items": {
+                                    "kind": {
+                                        "description": "扩展类型",
+                                        "type": "string",
+                                        "options": ["plugin", "skill", "mcp"],
+                                        "labels": ["插件", "技能", "MCP"],
+                                        "default": "plugin",
+                                    },
+                                    "provider": {
+                                        "description": "提供者",
+                                        "type": "string",
+                                        "default": "",
+                                    },
+                                    "identifier": {
+                                        "description": "目标标识",
+                                        "type": "string",
+                                        "default": "",
+                                    },
+                                },
+                            }
+                        },
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                },
+            },
         },
     },
     "ext_group": {

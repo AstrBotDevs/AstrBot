@@ -9,13 +9,11 @@ from datetime import datetime
 
 import aiohttp
 import certifi
-from quart import g, request
+from quart import request
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.extensions import ExtensionKind, InstallRequest, InstallResultStatus
-from astrbot.core.extensions.runtime import get_extension_orchestrator
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
@@ -537,9 +535,13 @@ class PluginRoute(Route):
             .lower()
         )
         if provider not in SUPPORTED_PLUGIN_PROVIDERS:
-            return Response().error(
-                f"unsupported provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PLUGIN_PROVIDERS))}"
-            ).__dict__
+            return (
+                Response()
+                .error(
+                    f"unsupported provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PLUGIN_PROVIDERS))}"
+                )
+                .__dict__
+            )
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -548,36 +550,13 @@ class PluginRoute(Route):
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            orchestrator = get_extension_orchestrator(self.core_lifecycle.star_context)
-            result = await orchestrator.install(
-                InstallRequest(
-                    kind=ExtensionKind.PLUGIN,
-                    target=repo_url,
-                    provider=provider,
-                    conversation_id=f"dashboard:{getattr(g, 'username', 'dashboard-admin')}",
-                    requester_id=str(getattr(g, "username", "dashboard-admin")),
-                    requester_role="admin",
-                    metadata={
-                        "proxy": proxy or "",
-                        "ignore_version_check": ignore_version_check,
-                    },
-                )
+            result = await self.plugin_manager.install_plugin(
+                repo_url=repo_url,
+                proxy=proxy or "",
+                ignore_version_check=ignore_version_check,
             )
-            if result.status == InstallResultStatus.PENDING:
-                return (
-                    Response()
-                    .pending(
-                        {"operation_id": result.operation_id},
-                        "安装请求等待确认，请在聊天中使用 /extend confirm <operation_id> 确认",
-                    )
-                    .__dict__
-                )
-            if result.status == InstallResultStatus.SUCCESS:
-                logger.info(f"安装插件 {repo_url} 成功。")
-                return Response().ok(result.data, "安装成功。").__dict__
-            if result.status == InstallResultStatus.DENIED:
-                return Response().error(f"安装被拒绝: {result.message}").__dict__
-            return Response().error(f"安装失败: {result.message}").__dict__
+            logger.info(f"安装插件 {repo_url} 成功。")
+            return Response().ok(result, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
             return (
                 Response()

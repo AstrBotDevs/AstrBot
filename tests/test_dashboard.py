@@ -13,8 +13,6 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.extensions import InstallResultStatus
-from astrbot.core.extensions.runtime import get_extension_orchestrator
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.dashboard.server import AstrBotDashboard
@@ -160,18 +158,9 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        if data["status"] == "pending":
-            orchestrator = get_extension_orchestrator(core_lifecycle_td.star_context)
-            confirm_result = await orchestrator.confirm(
-                operation_id_or_token=data["data"]["operation_id"],
-                actor_id="dashboard_test_actor",
-                actor_role="admin",
-            )
-            assert confirm_result.status == InstallResultStatus.SUCCESS
-        else:
-            assert data["status"] == "ok", (
-                f"安装失败: {data.get('message', 'unknown error')}"
-            )
+        assert data["status"] == "ok", (
+            f"安装失败: {data.get('message', 'unknown error')}"
+        )
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -268,6 +257,10 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert "total" in summary
     assert "disabled" in summary
     assert "conflicts" in summary
+    assert all(
+        item.get("effective_command", "").strip().split(" ", maxsplit=1)[0] != "extend"
+        for item in data["data"]["items"]
+    )
 
     # GET /api/commands/conflicts - list conflicts
     response = await test_client.get(

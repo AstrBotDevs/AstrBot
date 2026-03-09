@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from typing import Any
 
 from astrbot.core import logger
@@ -16,9 +17,32 @@ _ORCH_ATTR = "_extension_install_orchestrator"
 _CLEANUP_TASK_ATTR = "_extension_pending_cleanup_task"
 
 
+def _get_extension_install_config(
+    config_or_provider_settings: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if not isinstance(config_or_provider_settings, Mapping):
+        return {}
+
+    provider_settings = config_or_provider_settings
+    nested_provider_settings = config_or_provider_settings.get("provider_settings")
+    if isinstance(nested_provider_settings, Mapping):
+        provider_settings = nested_provider_settings
+
+    extension_cfg = provider_settings.get("extension_install")
+    if isinstance(extension_cfg, Mapping):
+        return extension_cfg
+    return {}
+
+
+def is_extension_install_enabled(
+    config_or_provider_settings: Mapping[str, Any] | None,
+) -> bool:
+    extension_cfg = _get_extension_install_config(config_or_provider_settings)
+    return bool(extension_cfg.get("enable", True))
+
+
 def _read_ttl_seconds(config: dict[str, Any]) -> int:
-    provider_settings = config.get("provider_settings", {})
-    install_cfg = provider_settings.get("extension_install", {})
+    install_cfg = _get_extension_install_config(config)
     ttl = install_cfg.get("confirmation_token_ttl_seconds", 900)
     try:
         ttl_int = int(ttl)
@@ -28,8 +52,7 @@ def _read_ttl_seconds(config: dict[str, Any]) -> int:
 
 
 def _read_cleanup_interval_seconds(config: dict[str, Any]) -> int:
-    provider_settings = config.get("provider_settings", {})
-    install_cfg = provider_settings.get("extension_install", {})
+    install_cfg = _get_extension_install_config(config)
     interval = install_cfg.get("pending_cleanup_interval_seconds", 300)
     try:
         interval_int = int(interval)

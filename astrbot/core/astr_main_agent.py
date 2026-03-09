@@ -57,6 +57,7 @@ from astrbot.core.extensions.llm_tools import (
     EXTENSION_INSTALL_TOOL,
     EXTENSION_SEARCH_TOOL,
 )
+from astrbot.core.extensions.runtime import is_extension_install_enabled
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -941,6 +942,8 @@ def _apply_extension_hub_tools(req: ProviderRequest, cfg: dict) -> None:
         scope_id="global",
     )
     if EXTENSION_HUB_PLUGIN_MODULE_PATH in inactivated_plugins:
+        return
+    if not is_extension_install_enabled(cfg):
         return
     if req.func_tool is None:
         req.func_tool = ToolSet()

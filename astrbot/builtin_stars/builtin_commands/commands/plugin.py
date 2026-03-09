@@ -2,7 +2,10 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.extensions import ExtensionKind, InstallRequest, InstallResultStatus
-from astrbot.core.extensions.runtime import get_extension_orchestrator
+from astrbot.core.extensions.runtime import (
+    get_extension_orchestrator,
+    is_extension_install_enabled,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
@@ -67,6 +70,13 @@ class PluginCommands:
                 MessageEventResult().message("/plugin get <插件仓库地址> 安装插件"),
             )
             return
+        if not is_extension_install_enabled(self.context.get_config()):
+            event.set_result(
+                MessageEventResult().message(
+                    "当前未启用聊天扩展安装能力，请前往插件市场手动安装插件。"
+                )
+            )
+            return
         logger.info(f"准备从 {plugin_repo} 安装插件。")
         if self.context._star_manager:
             try:
@@ -84,10 +94,7 @@ class PluginCommands:
                 if result.status == InstallResultStatus.PENDING:
                     event.set_result(
                         MessageEventResult().message(
-                            "安装请求已创建，等待确认。\n"
-                            f"operation_id: {result.operation_id}\n"
-                            "请直接在聊天中确认或拒绝，或使用 "
-                            "/extend confirm <operation_id> 作为管理员兜底。"
+                            "安装请求已创建，等待确认。\n请直接在聊天中确认或拒绝。"
                         )
                     )
                     return
