@@ -300,6 +300,10 @@ export default {
       this.loadingGettingServers = true;
       axios.get('/api/tools/mcp/servers')
         .then(response => {
+          if (response.data.status === 'error') {
+            this.showError(response.data.message || this.tm('messages.getServersError', { error: 'Unknown error' }));
+            return;
+          }
           this.mcpServers = response.data.data || [];
           this.mcpServers.forEach(server => {
             if (!this.mcpServerUpdateLoaders[server.name]) {
@@ -372,6 +376,10 @@ export default {
         axios.post(endpoint, serverData)
           .then(response => {
             this.loading = false;
+            if (response.data.status === 'error') {
+              this.showError(response.data.message || this.tm('messages.saveError', { error: 'Unknown error' }));
+              return;
+            }
             this.showMcpServerDialog = false;
             this.addServerDialogMessage = '';
             this.getServers();
