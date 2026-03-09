@@ -15,6 +15,13 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class PluginWebUIPage:
+    display_name: str
+    root_dir: str
+    entry_file: str
+
+
+@dataclass
 class StarMetadata:
     """插件的元数据。
 
@@ -66,6 +73,9 @@ class StarMetadata:
 
     astrbot_version: str | None = None
     """插件要求的 AstrBot 版本范围（PEP 440 specifier，如 >=4.13.0,<4.17.0）"""
+
+    webui: PluginWebUIPage | None = None
+    """插件注册的单入口 WebUI 配置"""
 
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
