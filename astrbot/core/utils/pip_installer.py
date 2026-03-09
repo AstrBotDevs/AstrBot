@@ -179,7 +179,7 @@ def _split_multiline_package_input(raw_input: str) -> list[str]:
         if candidate.startswith("-"):
             requirements.extend(_split_option_input(candidate))
             continue
-        requirements.append(candidate)
+        requirements.extend(_split_package_install_input(candidate))
     return requirements
 
 
@@ -615,6 +615,9 @@ class PipInstaller:
         mirror: str | None = None,
     ) -> None:
         args = ["install"]
+        pip_install_args = (
+            shlex.split(self.pip_install_arg) if self.pip_install_arg else []
+        )
         requested_requirements: set[str] = set()
         if package_name:
             package_specs = _split_package_install_input(package_name)
@@ -627,7 +630,7 @@ class PipInstaller:
             args.extend(["-r", requirements_path])
             requested_requirements = _extract_requirement_names(requirements_path)
 
-        if not _package_specs_override_index(args[1:]):
+        if not _package_specs_override_index([*args[1:], *pip_install_args]):
             index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
             args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
 
@@ -639,8 +642,8 @@ class PipInstaller:
             args.extend(["--target", target_site_packages])
             args.extend(["--upgrade", "--force-reinstall"])
 
-        if self.pip_install_arg:
-            args.extend(self.pip_install_arg.split())
+        if pip_install_args:
+            args.extend(pip_install_args)
 
         logger.info("Pip 包管理器 argv: %s", ["pip", *args])
         result_code = await self._run_pip_in_process(args)

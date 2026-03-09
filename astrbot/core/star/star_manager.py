@@ -221,7 +221,7 @@ class PluginManager:
         try:
             await self._install_plugin_requirements(plugin_dir_path, plugin_label)
         except Exception as e:
-            logger.error(f"更新插件 {plugin_label} 的依赖失败。Code: {e!s}")
+            logger.exception(f"插件 {plugin_label} 依赖安装失败: {e!s}")
 
     async def _import_plugin_with_dependency_recovery(
         self,

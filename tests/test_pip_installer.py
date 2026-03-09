@@ -136,6 +136,28 @@ async def test_install_tracks_multiline_packages_for_desktop_client(
 
 
 @pytest.mark.asyncio
+async def test_install_splits_space_separated_packages_within_multiline_input(
+    monkeypatch,
+):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package another-package\nextra-package\n")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:4] == [
+        "install",
+        "demo-package",
+        "another-package",
+        "extra-package",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_install_keeps_single_requirement_with_marker_intact(monkeypatch):
     run_pip = AsyncMock(return_value=0)
 
@@ -385,4 +407,24 @@ async def test_install_ignores_whitespace_only_package_string(monkeypatch):
         "mirrors.aliyun.com",
         "-i",
         "https://pypi.org/simple",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("--index-url https://example.com/simple")
+    await installer.install(package_name="demo-package")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args == [
+        "install",
+        "demo-package",
+        "--index-url",
+        "https://example.com/simple",
     ]
