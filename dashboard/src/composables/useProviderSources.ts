@@ -203,11 +203,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const excluded = ['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider']
+    const excluded = new Set(['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider'])
     const advanced: Record<string, any> = {}
 
     for (const key of Object.keys(editableProviderSource.value)) {
-      if (excluded.includes(key)) continue
       Object.defineProperty(advanced, key, {
         get() {
           return editableProviderSource.value![key]
@@ -215,7 +214,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         set(val) {
           editableProviderSource.value![key] = val
         },
-        enumerable: true
+        enumerable: !excluded.has(key)
       })
     }
 
@@ -344,13 +343,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     selectedProviderSource.value = source
     selectedProviderSourceOriginalId.value = source?.id || null
     suppressSourceWatch = true
-    editableProviderSource.value = source ? JSON.parse(JSON.stringify(source)) : null
+    editableProviderSource.value = source
+      ? ensureProviderSourceDefaults(JSON.parse(JSON.stringify(source)))
+      : null
     nextTick(() => {
       suppressSourceWatch = false
     })
     availableModels.value = []
     modelMetadata.value = {}
     isSourceModified.value = false
+  }
+
+  function ensureProviderSourceDefaults(source: any) {
+    if (!source || typeof source !== 'object') {
+      return source
+    }
+
+    if (source.provider === 'ollama' && source.ollama_disable_thinking === undefined) {
+      source.ollama_disable_thinking = false
+    }
+
+    return source
   }
 
   function extractSourceFieldsFromTemplate(template: Record<string, any>) {
@@ -388,14 +401,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     const newId = generateUniqueSourceId(template.id)
-    const newSource = {
+    const newSource = ensureProviderSourceDefaults({
       ...extractSourceFieldsFromTemplate(template),
       id: newId,
       type: template.type,
       provider_type: template.provider_type,
       provider: template.provider,
       enable: true
-    }
+    })
 
     providerSources.value.push(newSource)
     selectedProviderSource.value = newSource

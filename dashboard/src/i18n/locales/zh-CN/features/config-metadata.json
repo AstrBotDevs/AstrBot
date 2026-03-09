@@ -1071,6 +1071,10 @@
         "description": "自定义添加请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
+      "ollama_disable_thinking": {
+        "description": "关闭思考模式",
+        "hint": "仅对 Ollama 提供商生效。启用后会通过 OpenAI 兼容接口注入 reasoning_effort=none，以稳定关闭 thinking；比 think:false 更可靠。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",

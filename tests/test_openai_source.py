@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from openai.types.chat.chat_completion import ChatCompletion
 
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 
@@ -378,5 +379,90 @@ async def test_handle_api_error_unknown_image_error_raises():
                 retry_cnt=0,
                 max_retries=10,
             )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_apply_provider_specific_extra_body_overrides_disables_ollama_thinking():
+    provider = _make_provider(
+        {
+            "provider": "ollama",
+            "ollama_disable_thinking": True,
+        }
+    )
+    try:
+        extra_body = {
+            "reasoning": {"effort": "high"},
+            "reasoning_effort": "low",
+            "think": True,
+            "temperature": 0.2,
+        }
+
+        provider._apply_provider_specific_extra_body_overrides(extra_body)
+
+        assert extra_body["reasoning_effort"] == "none"
+        assert "reasoning" not in extra_body
+        assert "think" not in extra_body
+        assert extra_body["temperature"] == 0.2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
+    provider = _make_provider(
+        {
+            "provider": "ollama",
+            "ollama_disable_thinking": True,
+            "custom_extra_body": {
+                "reasoning": {"effort": "high"},
+                "temperature": 0.1,
+            },
+        }
+    )
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "qwen3.5:4b",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "ok",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        await provider._query(
+            payloads={
+                "model": "qwen3.5:4b",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+            tools=None,
+        )
+
+        extra_body = captured_kwargs["extra_body"]
+        assert extra_body["reasoning_effort"] == "none"
+        assert "reasoning" not in extra_body
+        assert extra_body["temperature"] == 0.1
     finally:
         await provider.terminate()
