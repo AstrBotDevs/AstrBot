@@ -195,19 +195,28 @@ class KBSQLiteDatabase:
                         )
                         raise
 
-                result = await session.execute(select(KnowledgeBase))
-                all_kbs = list(result.scalars().all())
+                # Do not use ORM entity query here. During v2 migration, the on-disk
+                # schema may still miss newer columns defined in KnowledgeBase (v3+),
+                # which would make `select(KnowledgeBase)` fail before migration finishes.
+                result = await session.execute(
+                    text(
+                        "SELECT kb_id, embedding_provider_id, active_index_provider_id "
+                        "FROM knowledge_bases",
+                    ),
+                )
+                all_kbs = list(result.mappings().all())
                 kb_root = Path(kb_root_dir)
                 for kb in all_kbs:
-                    if not kb.active_index_provider_id and kb.embedding_provider_id:
-                        kb.active_index_provider_id = kb.embedding_provider_id
+                    kb_id = kb["kb_id"]
+                    embedding_provider_id = kb["embedding_provider_id"]
+                    active_index_provider_id = kb["active_index_provider_id"]
 
                     rename_success = True
-                    if kb.embedding_provider_id:
-                        old_index_path = kb_root / kb.kb_id / "index.faiss"
+                    if embedding_provider_id:
+                        old_index_path = kb_root / kb_id / "index.faiss"
                         new_index_path = build_index_path(
-                            kb_root / kb.kb_id,
-                            kb.embedding_provider_id,
+                            kb_root / kb_id,
+                            embedding_provider_id,
                         )
                         if old_index_path.exists() and not new_index_path.exists():
                             try:
@@ -215,7 +224,7 @@ class KBSQLiteDatabase:
                             except OSError as e:
                                 logger.warning(
                                     "Rename index failed for kb %s: %s -> %s, error: %s",
-                                    kb.kb_id,
+                                    kb_id,
                                     old_index_path,
                                     new_index_path,
                                     e,
@@ -224,15 +233,29 @@ class KBSQLiteDatabase:
                             except Exception as e:
                                 logger.warning(
                                     "Unexpected error when renaming index for kb %s: %s -> %s, error: %s",
-                                    kb.kb_id,
+                                    kb_id,
                                     old_index_path,
                                     new_index_path,
                                     e,
                                 )
                                 rename_success = False
                     # Only persist KB changes if rename succeeded (or no rename was needed)
-                    if rename_success:
-                        session.add(kb)
+                    if (
+                        rename_success
+                        and not active_index_provider_id
+                        and embedding_provider_id
+                    ):
+                        await session.execute(
+                            text(
+                                "UPDATE knowledge_bases "
+                                "SET active_index_provider_id = :provider_id "
+                                "WHERE kb_id = :kb_id",
+                            ),
+                            {
+                                "provider_id": embedding_provider_id,
+                                "kb_id": kb_id,
+                            },
+                        )
 
                 await session.commit()
 
