@@ -451,6 +451,13 @@ class KBSQLiteDatabase:
     async def upsert_doc_section(self, section: DocSection) -> None:
         async with self.get_db() as session:
             async with session.begin():
+                existing_stmt = select(DocSection).where(
+                    col(DocSection.section_id) == section.section_id,
+                )
+                existing_result = await session.execute(existing_stmt)
+                existing = existing_result.scalar_one_or_none()
+                if existing and existing.id is not None:
+                    section.id = existing.id
                 await session.merge(section)
 
     async def get_doc_section(
