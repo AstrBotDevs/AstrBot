@@ -5,7 +5,7 @@ import hashlib
 import logging
 import os
 import time
-from typing import cast
+from typing import Any, cast
 
 import botpy
 import botpy.message
@@ -26,6 +26,8 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 
 from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
+
+# pyright: reportUnreachable=false
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -59,7 +61,7 @@ class botClient(Client):
         self, message: botpy.message.GroupMessage
     ) -> None:
         sender_id = self._get_sender_id(message)
-        content = getattr(message, 'content', '') or ""
+        content = getattr(message, "content", "") or ""
         if await self.platform._is_duplicate_message(message.id, content, sender_id):
             return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -73,7 +75,7 @@ class botClient(Client):
     # 收到频道消息
     async def on_at_message_create(self, message: botpy.message.Message) -> None:
         sender_id = self._get_sender_id(message)
-        content = getattr(message, 'content', '') or ""
+        content = getattr(message, "content", "") or ""
         if await self.platform._is_duplicate_message(message.id, content, sender_id):
             return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -89,7 +91,7 @@ class botClient(Client):
         self, message: botpy.message.DirectMessage
     ) -> None:
         sender_id = self._get_sender_id(message)
-        content = getattr(message, 'content', '') or ""
+        content = getattr(message, "content", "") or ""
         if await self.platform._is_duplicate_message(message.id, content, sender_id):
             return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -102,7 +104,7 @@ class botClient(Client):
     # 收到 C2C 消息
     async def on_c2c_message_create(self, message: botpy.message.C2CMessage) -> None:
         sender_id = self._get_sender_id(message)
-        content = getattr(message, 'content', '') or ""
+        content = getattr(message, "content", "") or ""
         if await self.platform._is_duplicate_message(message.id, content, sender_id):
             return
         abm = QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -189,7 +191,9 @@ class QQOfficialPlatformAdapter(Platform):
         for content_key in expired_content_keys:
             del self.content_key_timestamps[content_key]
 
-    async def _is_duplicate_message(self, message_id: str, content: str = "", sender_id: str = "") -> bool:
+    async def _is_duplicate_message(
+        self, message_id: str, content: str = "", sender_id: str = ""
+    ) -> bool:
         """Check if message has already been processed (thread-safe).
 
         Args:
@@ -202,14 +206,16 @@ class QQOfficialPlatformAdapter(Platform):
         """
         async with self._dedup_lock:
             self._clean_expired_messages()
-            
+
             current_time = time.time()
-            
+
             # Primary check: by message_id (exact match)
             if message_id in self.message_id_timestamps:
-                logger.info(f"[QQOfficial] Duplicate message detected (by ID): {message_id[:50]}...")
+                logger.info(
+                    f"[QQOfficial] Duplicate message detected (by ID): {message_id[:50]}..."
+                )
                 return True
-            
+
             # Secondary check: content + sender in a short window
             if content and sender_id:
                 # Use hash of full content instead of truncation to avoid false positives
@@ -217,9 +223,11 @@ class QQOfficialPlatformAdapter(Platform):
                 content_key = f"{sender_id}:{content_hash}"
 
                 if content_key in self.content_key_timestamps:
-                    logger.info(f"[QQOfficial] Duplicate message detected (by content): {content_key}")
+                    logger.info(
+                        f"[QQOfficial] Duplicate message detected (by content): {content_key}"
+                    )
                     return True
-            
+
             # Register the message
             self.message_id_timestamps[message_id] = current_time
 
@@ -297,6 +305,7 @@ class QQOfficialPlatformAdapter(Platform):
         abm.message_id = message.id
         # abm.tag = "qq_official"
         msg: list[BaseMessageComponent] = []
+        message = cast(Any, message)
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
             message,
