@@ -16,6 +16,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
@@ -119,7 +120,13 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    assert all("installed_at" in plugin for plugin in data["data"])
+    for plugin in data["data"]:
+        assert "installed_at" in plugin
+        installed_at = plugin["installed_at"]
+        if installed_at is None:
+            continue
+        assert isinstance(installed_at, str)
+        datetime.fromisoformat(installed_at)
 
     # 插件市场
     response = await test_client.get(
@@ -215,6 +222,28 @@ async def test_plugins(
     finally:
         # 清理测试插件
         builder.cleanup(test_plugin_name)
+
+
+@pytest.mark.asyncio
+async def test_plugins_when_installed_at_unresolved(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    """Tests plugin payload when installed_at cannot be resolved."""
+    test_client = app.test_client()
+
+    monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    for plugin in data["data"]:
+        assert "name" in plugin
+        assert "installed_at" in plugin
+        assert plugin["installed_at"] is None
 
 
 @pytest.mark.asyncio
