@@ -44,7 +44,8 @@ class EventBus:
         )  # deque[(timestamp, Fingerprint)]
 
     def _clean_expired_event_fingerprints(self) -> None:
-        now = time.time()
+        # Use monotonic clock to avoid issues with system clock changes
+        now = time.monotonic()
         expire_before = now - self._dedup_ttl_seconds
         while self._dedup_queue and self._dedup_queue[0][0] < expire_before:
             _, fingerprint = self._dedup_queue.popleft()
@@ -65,7 +66,7 @@ class EventBus:
         fingerprint = self._build_event_fingerprint(event)
         if fingerprint in self._dedup_seen:
             return True
-        ts = time.time()
+        ts = time.monotonic()
         self._dedup_seen.add(fingerprint)
         self._dedup_queue.append((ts, fingerprint))
         return False

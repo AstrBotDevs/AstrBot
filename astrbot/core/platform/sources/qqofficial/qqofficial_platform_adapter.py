@@ -173,8 +173,11 @@ class QQOfficialPlatformAdapter(Platform):
         self._content_key_ttl_seconds = 3.0
 
     def _clean_expired_messages(self) -> None:
-        """Clean up expired dedup caches."""
-        current_time = time.time()
+        """Clean up expired dedup caches.
+        
+        Uses monotonic clock to avoid issues with system clock changes (NTP sync, manual adjustments, DST).
+        """
+        current_time = time.monotonic()
         expired_message_ids = [
             msg_id
             for msg_id, timestamp in self.message_id_timestamps.items()
@@ -207,7 +210,7 @@ class QQOfficialPlatformAdapter(Platform):
         async with self._dedup_lock:
             self._clean_expired_messages()
 
-            current_time = time.time()
+            current_time = time.monotonic()
 
             # Primary check: by message_id (exact match)
             if message_id in self.message_id_timestamps:
