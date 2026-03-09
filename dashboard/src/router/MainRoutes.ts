@@ -22,6 +22,11 @@ const MainRoutes = {
       component: () => import('@/views/ExtensionPage.vue')
     },
     {
+      name: 'PluginWebUI',
+      path: '/plugin-webui/:pluginName',
+      component: () => import('@/views/PluginWebUIPage.vue')
+    },
+    {
       name: 'ExtensionMarketplace',
       path: '/extension-marketplace',
       component: () => import('@/views/ExtensionPage.vue')
