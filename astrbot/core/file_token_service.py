@@ -39,7 +39,7 @@ class FileTokenService:
 
         Args:
             file_path(str): 文件路径
-            timeout(float): 超时时间，单位秒（可选）
+            timeout_seconds(float): 超时时间，单位秒（可选）
 
         Returns:
             str: 一个单次令牌
