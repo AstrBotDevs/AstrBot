@@ -1,15 +1,18 @@
 import asyncio
+import io
 import os
 import re
 import shutil
 import sys
 from pathlib import Path
+import zipfile
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pytest
 import pytest_asyncio
 from quart import Quart
+from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -831,3 +834,223 @@ async def test_neo_skills_routes(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert data["data"]["skill_key"] == "neo.demo"
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_returns_error_when_all_files_invalid(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"not-a-zip"),
+                filename="invalid.txt",
+                content_type="text/plain",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Upload failed for all 1 file(s)."
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_zip_files(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        assert zip_path.endswith(".zip")
+        return "demo_skill"
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"fake-zip"),
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "All 1 skill(s) uploaded successfully."
+    assert data["data"]["total"] == 1
+    assert data["data"]["succeeded"] == [
+        {"filename": "demo_skill.zip", "name": "demo_skill"}
+    ]
+    assert data["data"]["failed"] == []
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_valid_skill_archive(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    skills_dir = tmp_path / "skills"
+    temp_dir = tmp_path / "temp"
+    data_dir.mkdir()
+    skills_dir.mkdir()
+    temp_dir.mkdir()
+
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "demo_skill/SKILL.md",
+            "---\nname: demo-skill\ndescription: Demo skill\n---\n",
+        )
+        zf.writestr("demo_skill/notes.txt", "hello")
+        zf.writestr("__MACOSX/demo_skill/._SKILL.md", "")
+        zf.writestr("__MACOSX/._demo_skill", "")
+    archive.seek(0)
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=archive,
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["succeeded"] == [
+        {"filename": "demo_skill.zip", "name": "demo_skill"}
+    ]
+    assert data["data"]["failed"] == []
+    assert (skills_dir / "demo_skill" / "SKILL.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_partial_success(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        if "ok_skill" in zip_path:
+            return "ok_skill"
+        raise RuntimeError("install failed")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    boundary = "----AstrBotBatchBoundary"
+    body = (
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="ok_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode()
+        + b"fake-zip-1\r\n"
+        + (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="bad_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode()
+        + b"fake-zip-2\r\n"
+        + f"--{boundary}--\r\n".encode()
+    )
+    headers = dict(authenticated_header)
+    headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=headers,
+        data=body,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "Partial success: 1/2 skill(s) uploaded."
+    assert data["data"]["total"] == 2
+    assert data["data"]["succeeded"] == [
+        {"filename": "ok_skill.zip", "name": "ok_skill"}
+    ]
+    assert data["data"]["failed"] == [
+        {"filename": "bad_skill.zip", "error": "install failed"}
+    ]

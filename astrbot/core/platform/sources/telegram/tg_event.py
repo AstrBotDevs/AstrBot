@@ -626,7 +626,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         # 发送初始 typing 状态
         await self._ensure_typing(user_name, message_thread_id)
-        last_chat_action_time = asyncio.get_event_loop().time()
+        last_chat_action_time = asyncio.get_running_loop().time()
+
+        def _append_text(t: str) -> None:
+            nonlocal delta
+            delta += t
 
         def _append_text(t: str) -> None:
             nonlocal delta
@@ -657,11 +661,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
             # 编辑或发送消息
             if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
-                current_time = asyncio.get_event_loop().time()
+                current_time = asyncio.get_running_loop().time()
                 time_since_last_edit = current_time - last_edit_time
 
                 if time_since_last_edit >= throttle_interval:
-                    current_time = asyncio.get_event_loop().time()
+                    current_time = asyncio.get_running_loop().time()
                     if current_time - last_chat_action_time >= chat_action_interval:
                         await self._ensure_typing(user_name, message_thread_id)
                         last_chat_action_time = current_time
@@ -674,9 +678,9 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         current_content = delta
                     except Exception as e:
                         logger.warning(f"编辑消息失败(streaming): {e!s}")
-                    last_edit_time = asyncio.get_event_loop().time()
+                    last_edit_time = asyncio.get_running_loop().time()
             else:
-                current_time = asyncio.get_event_loop().time()
+                current_time = asyncio.get_running_loop().time()
                 if current_time - last_chat_action_time >= chat_action_interval:
                     await self._ensure_typing(user_name, message_thread_id)
                     last_chat_action_time = current_time
@@ -688,7 +692,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 except Exception as e:
                     logger.warning(f"发送消息失败(streaming): {e!s}")
                 message_id = msg.message_id
-                last_edit_time = asyncio.get_event_loop().time()
+                last_edit_time = asyncio.get_running_loop().time()
 
         try:
             if delta and current_content != delta:

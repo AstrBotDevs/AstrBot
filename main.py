@@ -97,6 +97,26 @@ async def check_dashboard_files(webui_dir: str | None = None):
     return data_dist_path
 
 
+async def main_async(webui_dir_arg: str | None) -> None:
+    """主异步入口"""
+    # 检查仪表板文件
+    webui_dir = await check_dashboard_files(webui_dir_arg)
+    if webui_dir is None:
+        logger.warning(
+            "管理面板文件检查失败，WebUI 功能将不可用。"
+            "请检查网络连接或手动指定 --webui-dir 参数。"
+        )
+
+    db = db_helper
+
+    # 打印 logo
+    logger.info(logo_tmpl)
+
+    core_lifecycle = InitialLoader(db, log_broker)
+    core_lifecycle.webui_dir = webui_dir
+    await core_lifecycle.start()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AstrBot")
     parser.add_argument(
@@ -113,14 +133,5 @@ if __name__ == "__main__":
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
 
-    # 检查仪表板文件
-    webui_dir = asyncio.run(check_dashboard_files(args.webui_dir))
-
-    db = db_helper
-
-    # 打印 logo
-    logger.info(logo_tmpl)
-
-    core_lifecycle = InitialLoader(db, log_broker)
-    core_lifecycle.webui_dir = webui_dir
-    asyncio.run(core_lifecycle.start())
+    # 只使用一次 asyncio.run()
+    asyncio.run(main_async(args.webui_dir))

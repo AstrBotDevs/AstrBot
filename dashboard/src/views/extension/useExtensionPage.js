@@ -1,9 +1,15 @@
 import axios from "axios";
-import { pinyin } from "pinyin-pro";
 import { useCommonStore } from "@/stores/common";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import { resolveErrorMessage } from "@/utils/errorUtils";
+import {
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
+} from "@/utils/pluginSearch";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
@@ -240,37 +246,6 @@ export const useExtensionPage = () => {
   });
   
   // 插件市场拼音搜索
-  const normalizeStr = (s) => (s ?? "").toString().toLowerCase().trim();
-  const toPinyinText = (s) =>
-    pinyin(s ?? "", { toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const toInitials = (s) =>
-    pinyin(s ?? "", { pattern: "first", toneType: "none" })
-      .toLowerCase()
-      .replace(/\s+/g, "");
-  const marketCustomFilter = (value, query, item) => {
-    const q = normalizeStr(query);
-    if (!q) return true;
-  
-    const candidates = new Set();
-    if (value != null) candidates.add(String(value));
-    if (item?.name) candidates.add(String(item.name));
-    if (item?.trimmedName) candidates.add(String(item.trimmedName));
-    if (item?.display_name) candidates.add(String(item.display_name));
-    if (item?.desc) candidates.add(String(item.desc));
-    if (item?.author) candidates.add(String(item.author));
-  
-    for (const v of candidates) {
-      const nv = normalizeStr(v);
-      if (nv.includes(q)) return true;
-      const pv = toPinyinText(v);
-      if (pv.includes(q)) return true;
-      const iv = toInitials(v);
-      if (iv.includes(q)) return true;
-    }
-    return false;
-  };
   
   const plugin_handler_info_headers = computed(() => [
     { title: tm("table.headers.eventType"), key: "event_type_h" },
@@ -347,47 +322,24 @@ export const useExtensionPage = () => {
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
     const plugins = filteredExtensions.value;
-    let filtered = plugins;
-
-    if (pluginSearch.value) {
-      const search = pluginSearch.value.toLowerCase();
-      filtered = plugins.filter((plugin) => {
-        const pluginName = (plugin.name ?? "").toLowerCase();
-        const pluginDesc = (plugin.desc ?? "").toLowerCase();
-        const pluginAuthor = (plugin.author ?? "").toLowerCase();
-        const supportPlatforms = Array.isArray(plugin.support_platforms)
-          ? plugin.support_platforms.join(" ").toLowerCase()
-          : "";
-        const astrbotVersion = (plugin.astrbot_version ?? "").toLowerCase();
-
-        return (
-          pluginName.includes(search) ||
-          pluginDesc.includes(search) ||
-          pluginAuthor.includes(search) ||
-          supportPlatforms.includes(search) ||
-          astrbotVersion.includes(search)
-        );
-      });
-    }
+    const query = buildSearchQuery(pluginSearch.value);
+    const filtered = query
+      ? plugins.filter((plugin) => matchesPluginSearch(plugin, query))
+      : plugins;
 
     return sortPluginsByName([...filtered]);
   });
   
   // 过滤后的插件市场数据（带搜索）
   const filteredMarketPlugins = computed(() => {
-    if (!debouncedMarketSearch.value) {
+    const query = buildSearchQuery(debouncedMarketSearch.value);
+    if (!query) {
       return pluginMarketData.value;
     }
-  
-    const search = debouncedMarketSearch.value.toLowerCase();
-    return pluginMarketData.value.filter((plugin) => {
-      // 使用自定义过滤器
-      return (
-        marketCustomFilter(plugin.name, search, plugin) ||
-        marketCustomFilter(plugin.desc, search, plugin) ||
-        marketCustomFilter(plugin.author, search, plugin)
-      );
-    });
+
+    return pluginMarketData.value.filter((plugin) =>
+      matchesPluginSearch(plugin, query),
+    );
   });
   
   // 所有插件列表，推荐插件排在前面
@@ -1575,7 +1527,6 @@ export const useExtensionPage = () => {
     normalizeStr,
     toPinyinText,
     toInitials,
-    marketCustomFilter,
     plugin_handler_info_headers,
     pluginHeaders,
     filteredExtensions,

@@ -1408,10 +1408,23 @@ class PluginManager:
             return
 
         if "__del__" in star_metadata.star_cls_type.__dict__:
-            asyncio.get_event_loop().run_in_executor(
+            loop = asyncio.get_running_loop()
+            future = loop.run_in_executor(
                 None,
                 star_metadata.star_cls.__del__,
             )
+
+            def _log_del_exception(fut: asyncio.Future) -> None:
+                if fut.cancelled():
+                    return
+                if (exc := fut.exception()) is not None:
+                    logger.error(
+                        "插件 %s 在 __del__ 中抛出了异常：%r",
+                        star_metadata.name,
+                        exc,
+                    )
+
+            future.add_done_callback(_log_del_exception)
         elif "terminate" in star_metadata.star_cls_type.__dict__:
             await star_metadata.star_cls.terminate()
 
