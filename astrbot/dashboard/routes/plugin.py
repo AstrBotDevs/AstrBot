@@ -64,7 +64,7 @@ _JS_MODULE_FROM_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _JS_SIDE_EFFECT_IMPORT_RE = re.compile(
-    r"(?P<prefix>\bimport\s*)(?P<quote>[\"\'])(?P<url>.*?)(?P=quote)",
+    r"(?P<prefix>\bimport\s+)(?P<quote>[\"\'])(?P<url>[^\"'\r\n]+)(?P=quote)",
     re.IGNORECASE,
 )
 _PLUGIN_WEBUI_ASSET_TOKEN_TYPE = "plugin_webui_asset"
@@ -72,12 +72,7 @@ _PLUGIN_WEBUI_ASSET_TOKEN_TTL_SECONDS = 60
 
 
 def _normalize_plugin_webui_asset_path(asset_path: str) -> str:
-    normalized = posixpath.normpath(asset_path.replace("\\", "/").strip())
-    if normalized in {"", "."}:
-        return ""
-    if normalized.startswith("../") or normalized == ".." or normalized.startswith("/"):
-        raise ValueError("Invalid plugin WebUI asset path")
-    return normalized
+    return PluginRoute._normalize_plugin_webui_path(asset_path, allow_empty=True)
 
 
 @dataclass
@@ -179,6 +174,29 @@ class PluginRoute(Route):
                 return plugin
         return None
 
+    @staticmethod
+    def _normalize_plugin_webui_path(
+        raw_path: str,
+        *,
+        base_dir: str | None = None,
+        allow_empty: bool = False,
+    ) -> str:
+        path = raw_path.replace("\\", "/").strip()
+        if base_dir:
+            path = posixpath.join(base_dir, path)
+        normalized = posixpath.normpath(path)
+        if normalized in {"", "."}:
+            if allow_empty:
+                return ""
+            raise ValueError("Invalid plugin WebUI asset path")
+        if (
+            normalized.startswith("../")
+            or normalized == ".."
+            or normalized.startswith("/")
+        ):
+            raise ValueError("Invalid plugin WebUI asset path")
+        return normalized
+
     def _get_plugin_root_dir(self, plugin: StarMetadata) -> Path:
         if not plugin.root_dir_name:
             raise FileNotFoundError("Plugin directory metadata is missing")
@@ -259,12 +277,13 @@ class PluginRoute(Route):
         if not referenced_path:
             raise ValueError("Plugin WebUI referenced asset path is empty")
         base_dir = posixpath.dirname(base_asset_path) if base_asset_path else ""
-        joined = posixpath.normpath(posixpath.join(base_dir, referenced_path))
-        if joined in {"", "."}:
+        normalized = PluginRoute._normalize_plugin_webui_path(
+            referenced_path,
+            base_dir=base_dir,
+        )
+        if not normalized:
             raise ValueError("Plugin WebUI referenced asset path is invalid")
-        if joined.startswith("../") or joined == ".." or joined.startswith("/"):
-            raise ValueError("Plugin WebUI referenced asset path is invalid")
-        return joined
+        return normalized
 
     def _build_plugin_webui_asset_url(
         self,
@@ -320,6 +339,31 @@ class PluginRoute(Route):
             )
         )
 
+    @staticmethod
+    def _is_js_relative_module_specifier(raw_url: str) -> bool:
+        value = raw_url.strip()
+        return value.startswith(("./", "../", "/"))
+
+    def _rewrite_relative_asset_url(
+        self,
+        raw_url: str,
+        base_asset_path: str,
+        plugin_name: str,
+        extra_query_params: dict[str, str] | None = None,
+    ) -> str | None:
+        candidate = raw_url.strip()
+        if not self._is_rewritable_asset_url(candidate):
+            return None
+        parts = urlsplit(candidate)
+        asset_path = self._resolve_referenced_asset_path(base_asset_path, candidate)
+        return self._build_plugin_webui_asset_url(
+            plugin_name,
+            asset_path,
+            original_query=parts.query,
+            original_fragment=parts.fragment,
+            extra_query_params=extra_query_params,
+        )
+
     def _rewrite_plugin_webui_html(
         self,
         html_text: str,
@@ -340,17 +384,14 @@ class PluginRoute(Route):
                 return match.group(0)
 
             try:
-                parts = urlsplit(raw_url)
-                asset_path = self._resolve_referenced_asset_path(
-                    entry_asset_path, raw_url
-                )
-                rewritten_url = self._build_plugin_webui_asset_url(
+                rewritten_url = self._rewrite_relative_asset_url(
+                    raw_url,
+                    entry_asset_path,
                     plugin_name,
-                    asset_path,
-                    original_query=parts.query,
-                    original_fragment=parts.fragment,
                     extra_query_params=extra_query_params,
                 )
+                if not rewritten_url:
+                    return match.group(0)
                 return f"{attr}={quote_char}{rewritten_url}{quote_char}"
             except ValueError:
                 return match.group(0)
@@ -376,20 +417,15 @@ class PluginRoute(Route):
         def replace_url(match: re.Match[str]) -> str:
             raw_url = match.group("url").strip()
             quote_char = match.group("quote") or ""
-            if not self._is_rewritable_asset_url(raw_url):
-                return match.group(0)
             try:
-                parts = urlsplit(raw_url)
-                asset_path = self._resolve_referenced_asset_path(
-                    css_asset_path, raw_url
-                )
-                rewritten_url = self._build_plugin_webui_asset_url(
+                rewritten_url = self._rewrite_relative_asset_url(
+                    raw_url,
+                    css_asset_path,
                     plugin_name,
-                    asset_path,
-                    original_query=parts.query,
-                    original_fragment=parts.fragment,
                     extra_query_params=extra_query_params,
                 )
+                if not rewritten_url:
+                    return match.group(0)
                 return f"url({quote_char}{rewritten_url}{quote_char})"
             except ValueError:
                 return match.group(0)
@@ -404,17 +440,17 @@ class PluginRoute(Route):
         extra_query_params: dict[str, str] | None = None,
     ) -> str:
         def rewrite_specifier(raw_url: str) -> str:
+            if not self._is_js_relative_module_specifier(raw_url):
+                return raw_url
             if not self._is_rewritable_asset_url(raw_url):
                 return raw_url
-            parts = urlsplit(raw_url)
-            asset_path = self._resolve_referenced_asset_path(js_asset_path, raw_url)
-            return self._build_plugin_webui_asset_url(
+            rewritten = self._rewrite_relative_asset_url(
+                raw_url,
+                js_asset_path,
                 plugin_name,
-                asset_path,
-                original_query=parts.query,
-                original_fragment=parts.fragment,
                 extra_query_params=extra_query_params,
             )
+            return rewritten or raw_url
 
         def replace_dynamic(match: re.Match[str]) -> str:
             raw_url = match.group("url")
@@ -500,6 +536,15 @@ class PluginRoute(Route):
         }
         return cast(str, jwt.encode(payload, jwt_secret, algorithm="HS256"))
 
+    def _prepare_plugin_webui_query_params(
+        self,
+        plugin_name: str,
+    ) -> dict[str, str] | None:
+        asset_token = request.args.get("asset_token", "").strip()
+        if not asset_token:
+            asset_token = self._issue_plugin_webui_asset_token(plugin_name) or ""
+        return {"asset_token": asset_token} if asset_token else None
+
     @staticmethod
     async def _plugin_webui_error_response(status_code: int, message: str):
         response = await make_response(message, status_code)
@@ -519,6 +564,84 @@ class PluginRoute(Route):
             "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
         )
         return response
+
+    async def _serve_plugin_webui_html_asset(
+        self,
+        file_path: Path,
+        plugin_name: str,
+        asset_path: str,
+        extra_query_params: dict[str, str] | None,
+    ):
+        html_text = await self._read_plugin_webui_text(file_path)
+        rewritten_html = self._rewrite_plugin_webui_html(
+            html_text,
+            plugin_name,
+            asset_path,
+            extra_query_params=extra_query_params,
+        )
+        response = cast(
+            QuartResponse,
+            await make_response(
+                rewritten_html, {"Content-Type": "text/html; charset=utf-8"}
+            ),
+        )
+        return self._apply_plugin_webui_security_headers(response)
+
+    async def _serve_plugin_webui_css_asset(
+        self,
+        file_path: Path,
+        plugin_name: str,
+        asset_path: str,
+        extra_query_params: dict[str, str] | None,
+    ):
+        css_text = await self._read_plugin_webui_text(file_path)
+        rewritten_css = self._rewrite_plugin_webui_css(
+            css_text,
+            plugin_name,
+            asset_path,
+            extra_query_params=extra_query_params,
+        )
+        response = cast(
+            QuartResponse,
+            await make_response(
+                rewritten_css, {"Content-Type": "text/css; charset=utf-8"}
+            ),
+        )
+        return self._apply_plugin_webui_security_headers(response)
+
+    async def _serve_plugin_webui_js_asset(
+        self,
+        file_path: Path,
+        plugin_name: str,
+        asset_path: str,
+        extra_query_params: dict[str, str] | None,
+    ):
+        js_text = await self._read_plugin_webui_text(file_path)
+        rewritten_js = self._rewrite_plugin_webui_js(
+            js_text,
+            plugin_name,
+            asset_path,
+            extra_query_params=extra_query_params,
+        )
+        response = cast(
+            QuartResponse,
+            await make_response(
+                rewritten_js,
+                {"Content-Type": "application/javascript; charset=utf-8"},
+            ),
+        )
+        return self._apply_plugin_webui_security_headers(response)
+
+    async def _serve_plugin_webui_static_asset(self, file_path: Path):
+        raw_bytes = await self._read_plugin_webui_binary(file_path)
+        response = cast(
+            QuartResponse,
+            await make_response(
+                raw_bytes,
+                {"Content-Type": self._guess_plugin_webui_mime_type(file_path)},
+            ),
+        )
+        return self._apply_plugin_webui_security_headers(response)
 
     async def _serve_plugin_webui_content(
         self,
@@ -543,71 +666,24 @@ class PluginRoute(Route):
                 404, "Plugin WebUI asset not found"
             )
 
-        asset_token = request.args.get("asset_token", "").strip()
-        if not asset_token:
-            asset_token = self._issue_plugin_webui_asset_token(plugin_name) or ""
-        extra_query_params = {"asset_token": asset_token} if asset_token else None
-
+        extra_query_params = self._prepare_plugin_webui_query_params(plugin_name)
         served_asset_path = asset_path or plugin.webui.entry_file
         suffix = file_path.suffix.lower()
-        if suffix == ".html":
-            html_text = await self._read_plugin_webui_text(file_path)
-            rewritten_html = self._rewrite_plugin_webui_html(
-                html_text,
+        handlers = {
+            ".html": self._serve_plugin_webui_html_asset,
+            ".css": self._serve_plugin_webui_css_asset,
+            ".js": self._serve_plugin_webui_js_asset,
+            ".mjs": self._serve_plugin_webui_js_asset,
+        }
+        handler = handlers.get(suffix)
+        if handler:
+            return await handler(
+                file_path,
                 plugin_name,
                 served_asset_path,
-                extra_query_params=extra_query_params,
+                extra_query_params,
             )
-            response = cast(
-                QuartResponse,
-                await make_response(
-                    rewritten_html, {"Content-Type": "text/html; charset=utf-8"}
-                ),
-            )
-            return self._apply_plugin_webui_security_headers(response)
-
-        if suffix == ".css":
-            css_text = await self._read_plugin_webui_text(file_path)
-            rewritten_css = self._rewrite_plugin_webui_css(
-                css_text,
-                plugin_name,
-                served_asset_path,
-                extra_query_params=extra_query_params,
-            )
-            response = cast(
-                QuartResponse,
-                await make_response(
-                    rewritten_css, {"Content-Type": "text/css; charset=utf-8"}
-                ),
-            )
-            return self._apply_plugin_webui_security_headers(response)
-
-        if suffix in {".js", ".mjs"}:
-            js_text = await self._read_plugin_webui_text(file_path)
-            rewritten_js = self._rewrite_plugin_webui_js(
-                js_text,
-                plugin_name,
-                served_asset_path,
-                extra_query_params=extra_query_params,
-            )
-            response = cast(
-                QuartResponse,
-                await make_response(
-                    rewritten_js,
-                    {"Content-Type": "application/javascript; charset=utf-8"},
-                ),
-            )
-            return self._apply_plugin_webui_security_headers(response)
-
-        raw_bytes = await self._read_plugin_webui_binary(file_path)
-        response = cast(
-            QuartResponse,
-            await make_response(
-                raw_bytes,
-                {"Content-Type": self._guess_plugin_webui_mime_type(file_path)},
-            ),
-        )
-        return self._apply_plugin_webui_security_headers(response)
+        return await self._serve_plugin_webui_static_asset(file_path)
 
     async def check_plugin_compatibility(self):
         try:
