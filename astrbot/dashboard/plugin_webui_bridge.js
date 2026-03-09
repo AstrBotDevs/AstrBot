@@ -1,5 +1,6 @@
 (function attachAstrBotPluginWebUIBridge() {
   const CHANNEL = "astrbot-plugin-webui";
+  const TARGET_ORIGIN = window.location.origin;
   const pendingRequests = new Map();
   const sseHandlers = new Map();
   let requestCounter = 0;
@@ -17,7 +18,7 @@
         kind,
         ...(payload || {}),
       },
-      "*",
+      TARGET_ORIGIN,
     );
   }
 
@@ -47,6 +48,9 @@
 
   window.addEventListener("message", (event) => {
     if (event.source !== window.parent) {
+      return;
+    }
+    if (event.origin !== TARGET_ORIGIN) {
       return;
     }
 
