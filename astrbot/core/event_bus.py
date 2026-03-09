@@ -39,7 +39,9 @@ class EventBus:
         # 最近事件指纹，短窗去重（0.5s），单消费者线程内使用
         self._dedup_ttl_seconds = 0.5
         self._dedup_seen: set[tuple] = set()  # Set[Fingerprint]
-        self._dedup_queue: deque[tuple[float, tuple]] = deque()  # deque[(timestamp, Fingerprint)]
+        self._dedup_queue: deque[tuple[float, tuple]] = (
+            deque()
+        )  # deque[(timestamp, Fingerprint)]
 
     def _clean_expired_event_fingerprints(self) -> None:
         now = time.time()
