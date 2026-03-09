@@ -6,6 +6,7 @@ import socket
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
+from urllib.parse import unquote
 
 import jwt
 import psutil
@@ -25,6 +26,7 @@ from astrbot.core.utils.io import get_local_ip_addresses
 
 from .routes import *
 from .routes.api_key import ALL_OPEN_API_SCOPES
+from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
@@ -198,6 +200,7 @@ class AstrBotDashboard:
 
         allowed_endpoints = [
             "/api/auth/login",
+            "/api/auth/logout",
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
@@ -205,16 +208,31 @@ class AstrBotDashboard:
         ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
-        # 声明 JWT
-        token = request.headers.get("Authorization")
+        is_plugin_webui_path = self._is_plugin_webui_protected_path(request.path)
+        token = self._extract_dashboard_jwt(
+            allow_asset_token=is_plugin_webui_path
+        )
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
-        token = token.removeprefix("Bearer ")
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            g.username = payload["username"]
+            if (
+                self._is_plugin_webui_asset_token(payload)
+                and not self._is_plugin_webui_asset_token_scope_valid(
+                    payload,
+                    request.path,
+                )
+            ):
+                r = jsonify(Response().error("Token 无效").__dict__)
+                r.status_code = 401
+                return r
+
+            username = payload.get("username")
+            if not isinstance(username, str) or not username.strip():
+                raise jwt.InvalidTokenError("missing username in token payload")
+            g.username = username
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
             r.status_code = 401
@@ -223,6 +241,66 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    @staticmethod
+    def _extract_dashboard_jwt(allow_asset_token: bool = False) -> str | None:
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            token = auth_header.removeprefix("Bearer ").strip()
+            if token:
+                return token
+
+        cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
+        if cookie_token:
+            return cookie_token
+
+        if allow_asset_token:
+            query_asset_token = request.args.get("asset_token", "").strip()
+            if query_asset_token:
+                return query_asset_token
+        return None
+
+    @staticmethod
+    def _is_plugin_webui_protected_path(path: str) -> bool:
+        return path.startswith("/api/plugin/webui/content/") or path.startswith(
+            "/api/plugin/webui/bridge-sdk.js"
+        )
+
+    @staticmethod
+    def _is_plugin_webui_asset_token(payload: dict) -> bool:
+        return payload.get("token_type") == "plugin_webui_asset"
+
+    @staticmethod
+    def _extract_plugin_name_from_webui_path(path: str) -> str | None:
+        prefix = "/api/plugin/webui/content/"
+        if not path.startswith(prefix):
+            return None
+        remainder = path[len(prefix) :]
+        plugin_part = remainder.split("/", 1)[0] if remainder else ""
+        if not plugin_part:
+            return None
+        return unquote(plugin_part)
+
+    def _is_plugin_webui_asset_token_scope_valid(
+        self,
+        payload: dict,
+        path: str,
+    ) -> bool:
+        if not self._is_plugin_webui_protected_path(path):
+            return False
+
+        if path.startswith("/api/plugin/webui/bridge-sdk.js"):
+            return True
+
+        token_plugin_name = payload.get("plugin_name")
+        request_plugin_name = self._extract_plugin_name_from_webui_path(path)
+        if (
+            not isinstance(token_plugin_name, str)
+            or not token_plugin_name
+            or not request_plugin_name
+        ):
+            return False
+        return token_plugin_name == request_plugin_name
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:
