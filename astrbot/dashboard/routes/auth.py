@@ -2,7 +2,7 @@ import asyncio
 import datetime
 
 import jwt
-from quart import jsonify, make_response, request
+from quart import current_app, jsonify, make_response, request
 
 from astrbot import logger
 from astrbot.core import DEMO_MODE
@@ -101,6 +101,15 @@ class AuthRoute(Route):
         return token
 
     @staticmethod
+    def _use_secure_dashboard_jwt_cookie() -> bool:
+        return bool(
+            current_app.config.get(
+                "DASHBOARD_JWT_COOKIE_SECURE",
+                not current_app.debug and not current_app.testing,
+            )
+        )
+
+    @staticmethod
     def _set_dashboard_jwt_cookie(response, token: str) -> None:
         response.set_cookie(
             DASHBOARD_JWT_COOKIE_NAME,
@@ -108,7 +117,7 @@ class AuthRoute(Route):
             max_age=DASHBOARD_JWT_COOKIE_MAX_AGE,
             httponly=True,
             samesite="Strict",
-            secure=request.scheme == "https",
+            secure=AuthRoute._use_secure_dashboard_jwt_cookie(),
             path="/",
         )
 
@@ -118,6 +127,6 @@ class AuthRoute(Route):
             DASHBOARD_JWT_COOKIE_NAME,
             httponly=True,
             samesite="Strict",
-            secure=request.scheme == "https",
+            secure=AuthRoute._use_secure_dashboard_jwt_cookie(),
             path="/",
         )
