@@ -33,7 +33,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
-from .star import star_map, star_registry
+from .star import PluginWebUIPage, star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updator import PluginUpdator
 
@@ -239,6 +239,38 @@ class PluginManager:
             return __import__(path, fromlist=[module_str])
 
     @staticmethod
+    def _normalize_plugin_webui(raw_webui: object) -> PluginWebUIPage | None:
+        if not isinstance(raw_webui, dict):
+            return None
+
+        raw_display_name = raw_webui.get("display_name") or raw_webui.get("title")
+        display_name = (
+            raw_display_name.strip()
+            if isinstance(raw_display_name, str) and raw_display_name.strip()
+            else "WebUI"
+        )
+
+        raw_root_dir = raw_webui.get("root_dir") or raw_webui.get("root")
+        root_dir = (
+            raw_root_dir.strip()
+            if isinstance(raw_root_dir, str) and raw_root_dir.strip()
+            else "webui"
+        )
+
+        raw_entry_file = raw_webui.get("entry_file") or raw_webui.get("entry")
+        entry_file = (
+            raw_entry_file.strip()
+            if isinstance(raw_entry_file, str) and raw_entry_file.strip()
+            else "index.html"
+        )
+
+        return PluginWebUIPage(
+            display_name=display_name,
+            root_dir=root_dir,
+            entry_file=entry_file,
+        )
+
+    @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
         """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
 
@@ -293,6 +325,7 @@ class PluginManager:
                     if isinstance(metadata.get("astrbot_version"), str)
                     else None
                 ),
+                webui=PluginManager._normalize_plugin_webui(metadata.get("webui")),
             )
 
         return metadata
@@ -681,6 +714,7 @@ class PluginManager:
                             metadata.display_name = metadata_yaml.display_name
                             metadata.support_platforms = metadata_yaml.support_platforms
                             metadata.astrbot_version = metadata_yaml.astrbot_version
+                            metadata.webui = metadata_yaml.webui
                     except Exception as e:
                         logger.warning(
                             f"插件 {root_dir_name} 元数据载入失败: {e!s}。使用默认元数据。",
