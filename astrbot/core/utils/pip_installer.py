@@ -153,7 +153,10 @@ def _split_package_install_input(raw_input: str) -> list[str]:
     if split_tokens and split_tokens[0].startswith("-"):
         return split_tokens
 
-    if split_tokens and all(_is_valid_install_token(token) for token in split_tokens):
+    if split_tokens and all(
+        token.startswith("-") or _is_valid_install_requirement(token)
+        for token in split_tokens
+    ):
         return split_tokens
 
     return [normalized]
@@ -167,19 +170,9 @@ def _is_valid_install_requirement(candidate: str) -> bool:
     return True
 
 
-def _is_valid_install_token(token: str) -> bool:
-    if token.startswith("-"):
-        return True
-
-    return _is_valid_install_requirement(token)
-
-
 def _split_multiline_package_input(raw_input: str) -> list[str]:
     requirements: list[str] = []
-    for line in raw_input.splitlines():
-        candidate = _strip_inline_requirement_comment(line)
-        if not candidate or candidate.startswith("#"):
-            continue
+    for candidate in _iter_clean_requirement_lines(raw_input):
         if candidate.startswith("-"):
             requirements.extend(shlex.split(candidate))
             continue
@@ -188,16 +181,26 @@ def _split_multiline_package_input(raw_input: str) -> list[str]:
 
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
-    return any(
-        spec in {"-i", "--index-url"}
-        or spec.startswith("--index-url=")
-        or spec.startswith("-i")
-        for spec in package_specs
-    )
+    for spec in package_specs:
+        if spec in {"-i", "--index-url"}:
+            return True
+        if spec.startswith("--index-url="):
+            return True
+        if spec.startswith("-i"):
+            return True
+    return False
 
 
 def _strip_inline_requirement_comment(raw_input: str) -> str:
     return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
+
+
+def _iter_clean_requirement_lines(raw_input: str):
+    for line in raw_input.splitlines():
+        candidate = _strip_inline_requirement_comment(line)
+        if not candidate or candidate.startswith("#"):
+            continue
+        yield candidate
 
 
 def _extract_top_level_modules(
