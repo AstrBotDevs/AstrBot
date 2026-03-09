@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import time
@@ -211,7 +212,9 @@ class QQOfficialPlatformAdapter(Platform):
             
             # Secondary check: content + sender in a short window
             if content and sender_id:
-                content_key = f"{sender_id}:{content[:50]}"
+                # Use hash of full content instead of truncation to avoid false positives
+                content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
+                content_key = f"{sender_id}:{content_hash}"
 
                 if content_key in self.content_key_timestamps:
                     logger.info(f"[QQOfficial] Duplicate message detected (by content): {content_key}")
@@ -222,7 +225,8 @@ class QQOfficialPlatformAdapter(Platform):
 
             # Also register content key if available
             if content and sender_id:
-                content_key = f"{sender_id}:{content[:50]}"
+                content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
+                content_key = f"{sender_id}:{content_hash}"
                 self.content_key_timestamps[content_key] = current_time
 
             logger.info(f"[QQOfficial] New message registered: {message_id[:50]}...")

@@ -11,9 +11,9 @@ class:
 """
 
 import asyncio
-import hashlib
 import time
 from asyncio import Queue
+from collections import deque
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -36,36 +36,40 @@ class EventBus:
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
         # 跨平台实例短窗去重（兜底）：处理同一消息在极短时间内重复入队。
-        self._recent_event_fingerprints: dict[str, float] = {}
+        # 最近事件指纹，短窗去重（0.5s），单消费者线程内使用
         self._dedup_ttl_seconds = 0.5
+        self._dedup_seen: set[tuple] = set()  # Set[Fingerprint]
+        self._dedup_queue: deque[tuple[float, tuple]] = deque()  # deque[(timestamp, Fingerprint)]
 
     def _clean_expired_event_fingerprints(self) -> None:
         now = time.time()
         expire_before = now - self._dedup_ttl_seconds
-        for key, ts in list(self._recent_event_fingerprints.items()):
-            if ts < expire_before:
-                self._recent_event_fingerprints.pop(key, None)
+        while self._dedup_queue and self._dedup_queue[0][0] < expire_before:
+            _, fingerprint = self._dedup_queue.popleft()
+            self._dedup_seen.discard(fingerprint)
 
-    def _build_event_fingerprint(self, event: AstrMessageEvent) -> str:
-        payload = "\n".join(
-            [
-                str(event.get_platform_id() or ""),
-                str(event.unified_msg_origin or ""),
-                str(event.get_sender_id() or ""),
-                str((event.get_message_str() or "").strip()),
-            ]
+    def _build_event_fingerprint(self, event: AstrMessageEvent) -> tuple:
+        # 简单元组键即可，避免拼接和哈希
+        return (
+            event.get_platform_id() or "",
+            event.unified_msg_origin or "",
+            event.get_sender_id() or "",
+            (event.get_message_str() or "").strip(),
         )
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
     def _is_duplicate_event(self, event: AstrMessageEvent) -> bool:
+        # dispatch 是单消费者循环，未加锁是有意为之
         self._clean_expired_event_fingerprints()
         fingerprint = self._build_event_fingerprint(event)
-        if fingerprint in self._recent_event_fingerprints:
+        if fingerprint in self._dedup_seen:
             return True
-        self._recent_event_fingerprints[fingerprint] = time.time()
+        ts = time.time()
+        self._dedup_seen.add(fingerprint)
+        self._dedup_queue.append((ts, fingerprint))
         return False
 
     async def dispatch(self) -> None:
+        # event_queue 由单一消费者处理；去重结构不是线程安全的，按设计仅在此循环中使用。
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
             if self._is_duplicate_event(event):
