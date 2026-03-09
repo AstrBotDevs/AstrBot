@@ -419,6 +419,34 @@ class TestProviderManagerCleanup:
         assert provider_manager.curr_stt_provider_inst is None
         assert provider_manager.curr_tts_provider_inst is None
 
+    @pytest.mark.asyncio
+    async def test_terminate_continues_when_individual_provider_terminate_fails(self):
+        """Test terminate keeps cleaning remaining providers and MCP servers after one provider fails."""
+        provider_manager = build_provider_manager_for_tests()
+        provider_manager.llm_tools.disable_mcp_server = AsyncMock()
+
+        failing_provider = MagicMock()
+        failing_provider.meta.return_value.id = "failing"
+        failing_provider.terminate = AsyncMock(side_effect=RuntimeError("terminate failed"))
+
+        healthy_provider = MagicMock()
+        healthy_provider.meta.return_value.id = "healthy"
+        healthy_provider.terminate = AsyncMock()
+
+        provider_manager.provider_insts = [failing_provider, healthy_provider]
+        provider_manager.inst_map = {
+            "failing": failing_provider,
+            "healthy": healthy_provider,
+        }
+
+        with patch("astrbot.core.provider.manager.logger") as mock_logger:
+            await provider_manager.terminate()
+
+        failing_provider.terminate.assert_awaited_once()
+        healthy_provider.terminate.assert_awaited_once()
+        provider_manager.llm_tools.disable_mcp_server.assert_awaited_once()
+        mock_logger.error.assert_called()
+
 
 class TestContextRuntimeRegistrations:
     """Tests for runtime registration containers on Context."""

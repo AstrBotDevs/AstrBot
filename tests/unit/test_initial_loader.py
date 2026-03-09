@@ -75,3 +75,32 @@ async def test_initial_loader_start_awaits_initialize_core_and_schedules_runtime
     assert call_order[:3] == ["initialize_core", "create_task", "dashboard_init"]
     assert len(created_tasks) == 1
     assert lifecycle.runtime_bootstrap_task is created_tasks[0]
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_start_returns_without_partial_start_when_initialize_core_fails():
+    """Test InitialLoader.start aborts cleanly if initialize_core fails."""
+    loader = InitialLoader(MagicMock(), MagicMock())
+
+    lifecycle = MagicMock()
+    lifecycle.runtime_bootstrap_task = None
+    expected_error = RuntimeError("core init failed")
+    lifecycle.initialize_core = AsyncMock(side_effect=expected_error)
+    lifecycle.bootstrap_runtime = AsyncMock()
+    lifecycle.start = AsyncMock()
+
+    with (
+        patch(
+            "astrbot.core.initial_loader.AstrBotCoreLifecycle", return_value=lifecycle
+        ),
+        patch("astrbot.core.initial_loader.AstrBotDashboard") as dashboard_cls,
+        patch("astrbot.core.initial_loader.asyncio.create_task") as create_task,
+    ):
+        await loader.start()
+
+    lifecycle.initialize_core.assert_awaited_once()
+    dashboard_cls.assert_not_called()
+    create_task.assert_not_called()
+    lifecycle.bootstrap_runtime.assert_not_called()
+    lifecycle.start.assert_not_called()
+    assert lifecycle.runtime_bootstrap_task is None

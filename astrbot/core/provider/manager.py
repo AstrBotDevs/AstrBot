@@ -858,9 +858,15 @@ class ProviderManager:
             terminate = getattr(cast(Any, provider_inst), "terminate", None)
             if not callable(terminate):
                 continue
-            result = terminate()
-            if inspect.isawaitable(result):
-                await result
+            try:
+                result = terminate()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.error(
+                    "Error while terminating provider instance",
+                    exc_info=True,
+                )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:
