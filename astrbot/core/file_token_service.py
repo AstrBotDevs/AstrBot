@@ -65,13 +65,14 @@ class FileTokenService:
         async with self.lock:
             await self._cleanup_expired_tokens()
 
-            if not os.path.exists(local_path):
+            if not await asyncio.to_thread(os.path.exists, local_path):
                 raise FileNotFoundError(
                     f"文件不存在: {local_path} (原始输入: {file_path})",
                 )
 
-            if timeout_seconds is None and "timeout" in kwargs:
-                timeout_seconds = kwargs["timeout"]
+            legacy_timeout = kwargs.pop("timeout", None)
+            if legacy_timeout is not None:
+                timeout_seconds = float(legacy_timeout)
 
             file_token = str(uuid.uuid4())
             expire_time = time.time() + (
