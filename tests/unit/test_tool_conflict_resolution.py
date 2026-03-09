@@ -44,12 +44,17 @@ class TestToolSetAddTool:
     def test_both_active_last_one_wins(self):
         """When both tools are active, the new one should overwrite."""
         toolset = ToolSet()
-        toolset.add_tool(make_tool("web_search", active=True))
-        toolset.add_tool(make_tool("web_search", active=True))
+        first = make_tool("web_search", active=True)
+        second = make_tool("web_search", active=True)
+        second.description = "Second web search"
+
+        toolset.add_tool(first)
+        toolset.add_tool(second)
 
         assert len(toolset.tools) == 1
         # The second tool should be the one kept
-        assert toolset.tools[0].description == "Test tool web_search"
+        assert toolset.tools[0] is second
+        assert toolset.tools[0].description == "Second web search"
 
     def test_both_inactive_last_one_wins(self):
         """When both tools are inactive, the new one should overwrite."""

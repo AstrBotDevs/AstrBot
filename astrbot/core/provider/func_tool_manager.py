@@ -312,8 +312,9 @@ class FunctionToolManager:
 
     def get_func(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
+        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
         for f in reversed(self.func_list):
-            if f.name == name and getattr(f, "active", False):
+            if f.name == name and getattr(f, "active", True):
                 return f
         # 退化则拿最后一个同名工具
         for f in reversed(self.func_list):
