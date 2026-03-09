@@ -220,6 +220,8 @@ class PluginManager:
     ) -> None:
         try:
             await self._install_plugin_requirements(plugin_dir_path, plugin_label)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.exception(f"插件 {plugin_label} 依赖安装失败: {e!s}")
 
