@@ -226,7 +226,6 @@ def _split_text(text: str, limit: int, mode: str) -> list[str]:
     "微博私信适配器",
     default_config_tmpl=WEIBO_DEFAULT_CONFIG,
     adapter_display_name="微博私信",
-    logo_path="weibo_logo.svg",
     support_streaming_message=False,
     config_metadata=WEIBO_CONFIG_METADATA,
 )
