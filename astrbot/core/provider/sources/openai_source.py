@@ -4,7 +4,7 @@ import inspect
 import json
 import random
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterable
 from typing import Any
 
 import httpx
@@ -14,6 +14,10 @@ from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
+from openai.types.responses.response import Response as OpenAIResponse
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_reasoning_item import ResponseReasoningItem
+from openai.types.responses.response_usage import ResponseUsage
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -165,6 +169,14 @@ class ProviderOpenAIOfficial(Provider):
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
 
+    @staticmethod
+    def _as_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -201,14 +213,36 @@ class ProviderOpenAIOfficial(Provider):
                 http_client=self._create_http_client(provider_config),
             )
 
-        self.default_params = inspect.signature(
+        self.chat_default_params = inspect.signature(
             self.client.chat.completions.create,
+        ).parameters.keys()
+        self.responses_default_params = inspect.signature(
+            self.client.responses.create,
         ).parameters.keys()
 
         model = provider_config.get("model", "unknown")
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
+        self.use_responses_api = self._as_bool(
+            provider_config.get("use_responses_api", False)
+        )
+
+    def _get_openai_native_tools(self) -> list[dict[str, Any]]:
+        tool_list: list[dict[str, Any]] = []
+        if self._as_bool(self.provider_config.get("oa_native_web_search", False)):
+            tool_list.append({"type": "web_search"})
+        if self._as_bool(self.provider_config.get("oa_native_code_interpreter", False)):
+            tool_list.append(
+                {"type": "code_interpreter", "container": {"type": "auto"}}
+            )
+        return tool_list
+
+    def _openai_native_tools_enabled(self) -> bool:
+        return bool(self._get_openai_native_tools())
+
+    def _should_use_responses_api(self) -> bool:
+        return self.use_responses_api or self._openai_native_tools_enabled()
 
     async def get_models(self):
         try:
@@ -222,6 +256,8 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(f"获取模型列表失败：{e}")
 
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+        if self._should_use_responses_api():
+            return await self._query_responses(payloads, tools)
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -235,7 +271,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_body = {}
         to_del = []
         for key in payloads:
-            if key not in self.default_params:
+            if key not in self.chat_default_params:
                 extra_body[key] = payloads[key]
                 to_del.append(key)
         for key in to_del:
@@ -271,6 +307,10 @@ class ProviderOpenAIOfficial(Provider):
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
+        if self._should_use_responses_api():
+            async for item in self._query_stream_responses(payloads, tools):
+                yield item
+            return
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -290,7 +330,7 @@ class ProviderOpenAIOfficial(Provider):
 
         to_del = []
         for key in payloads:
-            if key not in self.default_params:
+            if key not in self.chat_default_params:
                 extra_body[key] = payloads[key]
                 to_del.append(key)
         for key in to_del:
@@ -339,6 +379,282 @@ class ProviderOpenAIOfficial(Provider):
 
         yield llm_response
 
+    def _convert_openai_tools_to_responses(self, tools: ToolSet) -> list[dict]:
+        result: list[dict] = []
+        for tool in tools.func_list:
+            payload: dict[str, Any] = {
+                "type": "function",
+                "name": tool.name,
+                "strict": False,
+                "parameters": tool.parameters,
+            }
+            if tool.description:
+                payload["description"] = tool.description
+            result.append(payload)
+        return result
+
+    def _normalize_message_content_to_list(
+        self, raw_content: Any, role: str
+    ) -> list[dict[str, Any]]:
+        if raw_content is None:
+            return []
+        if isinstance(raw_content, str):
+            text = raw_content if role == "assistant" else raw_content.strip()
+            if not text and role != "assistant":
+                return []
+            return [{"type": "text", "text": text}]
+        if isinstance(raw_content, list):
+            result: list[dict[str, Any]] = []
+            for item in raw_content:
+                if isinstance(item, dict):
+                    result.append(item)
+            return result
+        if isinstance(raw_content, dict):
+            return [raw_content]
+        return [{"type": "text", "text": str(raw_content)}]
+
+    def _convert_message_parts_to_responses_content(
+        self, parts: Iterable[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        content: list[dict[str, Any]] = []
+        for part in parts:
+            part_type = part.get("type")
+            if part_type == "text":
+                content.append(
+                    {
+                        "type": "input_text",
+                        "text": str(part.get("text", "")),
+                    }
+                )
+            elif part_type == "image_url":
+                image_url = part.get("image_url")
+                url = ""
+                if isinstance(image_url, dict):
+                    url = str(image_url.get("url", ""))
+                elif image_url is not None:
+                    url = str(image_url)
+                if url:
+                    content.append(
+                        {
+                            "type": "input_image",
+                            "image_url": url,
+                            "detail": "auto",
+                        }
+                    )
+            elif part_type == "input_text":
+                content.append(part)
+            elif part_type == "input_image":
+                normalized_part = dict(part)
+                normalized_part.setdefault("detail", "auto")
+                content.append(normalized_part)
+        return content
+
+    def _convert_openai_messages_to_responses_input(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        response_input: list[dict[str, Any]] = []
+
+        for index, message in enumerate(messages):
+            role = str(message.get("role", "user"))
+            content_parts = self._normalize_message_content_to_list(
+                message.get("content"),
+                role,
+            )
+
+            if role in {"system", "developer", "user"}:
+                converted = self._convert_message_parts_to_responses_content(
+                    content_parts
+                )
+                if not converted:
+                    continue
+                response_input.append(
+                    {
+                        "type": "message",
+                        "role": "developer" if role == "system" else role,
+                        "content": converted,
+                    }
+                )
+                continue
+
+            if role == "assistant":
+                output_content = []
+                for part in content_parts:
+                    if part.get("type") != "text":
+                        continue
+                    output_content.append(
+                        {
+                            "type": "output_text",
+                            "text": str(part.get("text", "")),
+                            "annotations": [],
+                        }
+                    )
+                if output_content:
+                    response_input.append(
+                        {
+                            "type": "message",
+                            "id": str(message.get("id") or f"msg_{index}"),
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": output_content,
+                        }
+                    )
+
+                reasoning_content = str(
+                    message.get("reasoning_content", "") or ""
+                ).strip()
+                if reasoning_content:
+                    response_input.append(
+                        {
+                            "type": "reasoning",
+                            "id": str(message.get("reasoning_id") or f"rs_{index}"),
+                            "status": "completed",
+                            "summary": [],
+                            "content": [
+                                {
+                                    "type": "reasoning_text",
+                                    "text": reasoning_content,
+                                }
+                            ],
+                        }
+                    )
+
+                for tool_call in message.get("tool_calls") or []:
+                    if isinstance(tool_call, str):
+                        tool_call = json.loads(tool_call)
+                    function_obj = tool_call.get("function", {})
+                    call_id = str(
+                        tool_call.get("id")
+                        or tool_call.get("call_id")
+                        or f"call_{index}_{len(response_input)}"
+                    )
+                    arguments = function_obj.get("arguments", "{}")
+                    if not isinstance(arguments, str):
+                        arguments = json.dumps(arguments, ensure_ascii=False)
+                    response_input.append(
+                        {
+                            "type": "function_call",
+                            "id": call_id,
+                            "call_id": call_id,
+                            "name": str(function_obj.get("name", "")),
+                            "arguments": arguments,
+                            "status": "completed",
+                        }
+                    )
+                continue
+
+            if role == "tool":
+                tool_output_parts = self._convert_message_parts_to_responses_content(
+                    content_parts
+                )
+                output: str | list[dict[str, Any]]
+                if tool_output_parts:
+                    output = tool_output_parts
+                else:
+                    output = self._normalize_content(message.get("content"))
+                call_id = str(
+                    message.get("tool_call_id") or message.get("id") or f"tool_{index}"
+                )
+                response_input.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": output,
+                    }
+                )
+
+        return response_input
+
+    def _build_responses_payload(self, payloads: dict, tools: ToolSet | None) -> dict:
+        response_payload: dict[str, Any] = {
+            "model": payloads.get("model", self.get_model()),
+            "input": self._convert_openai_messages_to_responses_input(
+                payloads.get("messages", [])
+            ),
+        }
+
+        extra_body = {}
+        custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if isinstance(custom_extra_body, dict):
+            extra_body.update(custom_extra_body)
+
+        for key, value in payloads.items():
+            if key in {"model", "messages"}:
+                continue
+            target_key = "instructions" if key == "system_prompt" else key
+            if target_key in self.responses_default_params:
+                response_payload[target_key] = value
+            else:
+                extra_body[key] = value
+
+        native_tools = self._get_openai_native_tools()
+        if native_tools:
+            response_payload["tools"] = native_tools
+            if tools:
+                logger.warning("已启用 OpenAI 原生工具，AstrBot 函数工具将被忽略")
+        elif tools:
+            response_payload["tools"] = self._convert_openai_tools_to_responses(tools)
+
+        if extra_body:
+            response_payload["extra_body"] = extra_body
+
+        return response_payload
+
+    async def _query_responses(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+    ) -> LLMResponse:
+        response_payload = self._build_responses_payload(payloads, tools)
+        extra_body = response_payload.pop("extra_body", None)
+        response = await self.client.responses.create(
+            **response_payload,
+            stream=False,
+            extra_body=extra_body,
+        )
+        if not isinstance(response, OpenAIResponse):
+            raise Exception(
+                f"API 返回的 response 类型错误：{type(response)}: {response}。"
+            )
+        return await self._parse_responses_completion(response, tools)
+
+    async def _query_stream_responses(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+    ) -> AsyncGenerator[LLMResponse, None]:
+        response_payload = self._build_responses_payload(payloads, tools)
+        extra_body = response_payload.pop("extra_body", None)
+        stream = await self.client.responses.create(
+            **response_payload,
+            stream=True,
+            extra_body=extra_body,
+        )
+
+        final_response: OpenAIResponse | None = None
+
+        async for event in stream:
+            if event.type == "response.output_text.delta":
+                yield LLMResponse(
+                    "assistant",
+                    result_chain=MessageChain(chain=[Comp.Plain(event.delta)]),
+                    is_chunk=True,
+                )
+            elif event.type == "response.reasoning_text.delta":
+                yield LLMResponse(
+                    "assistant",
+                    completion_text="",
+                    reasoning_content=event.delta,
+                    is_chunk=True,
+                )
+            elif event.type == "response.completed":
+                final_response = event.response
+
+        if final_response is None:
+            raise Exception("Responses API 流式返回缺少 response.completed 事件。")
+
+        yield await self._parse_responses_completion(final_response, tools)
+
     def _extract_reasoning_content(
         self,
         completion: ChatCompletion | ChatCompletionChunk,
@@ -370,6 +686,16 @@ class ProviderOpenAIOfficial(Provider):
             input_other=prompt_tokens - cached,
             input_cached=cached,
             output=completion_tokens,
+        )
+
+    def _extract_responses_usage(self, usage: ResponseUsage) -> TokenUsage:
+        cached = usage.input_tokens_details.cached_tokens or 0
+        input_tokens = usage.input_tokens or 0
+        output_tokens = usage.output_tokens or 0
+        return TokenUsage(
+            input_other=input_tokens - cached,
+            input_cached=cached,
+            output=output_tokens,
         )
 
     @staticmethod
@@ -544,6 +870,77 @@ class ProviderOpenAIOfficial(Provider):
         if completion.usage:
             llm_response.usage = self._extract_usage(completion.usage)
 
+        return llm_response
+
+    async def _parse_responses_completion(
+        self,
+        response: OpenAIResponse,
+        tools: ToolSet | None,
+    ) -> LLMResponse:
+        llm_response = LLMResponse("assistant")
+
+        if response.error is not None:
+            raise Exception(str(response.error))
+
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        tool_args: list[dict[str, Any]] = []
+        tool_names: list[str] = []
+        tool_ids: list[str] = []
+
+        for item in response.output:
+            if isinstance(item, ResponseOutputMessage):
+                for content in item.content:
+                    if content.type == "output_text":
+                        text_parts.append(content.text)
+            elif isinstance(item, ResponseReasoningItem):
+                if item.content:
+                    reasoning_parts.extend(part.text for part in item.content)
+                elif item.summary:
+                    reasoning_parts.extend(part.text for part in item.summary)
+            else:
+                item_type = getattr(item, "type", "")
+                if item_type == "function_call" and tools is not None:
+                    try:
+                        args = json.loads(item.arguments)
+                    except json.JSONDecodeError:
+                        logger.error(
+                            "Responses API function_call arguments is not valid JSON: %s",
+                            item.arguments,
+                        )
+                        raise Exception(
+                            f"Responses API function_call arguments is not valid JSON: {item.arguments}"
+                        )
+                    tool_args.append(args)
+                    tool_names.append(item.name)
+                    tool_ids.append(item.call_id)
+
+        completion_text = "".join(text_parts).strip()
+        if completion_text:
+            llm_response.result_chain = MessageChain().message(completion_text)
+
+        llm_response.reasoning_content = "".join(reasoning_parts).strip()
+
+        if tool_args:
+            llm_response.role = "tool"
+            llm_response.tools_call_args = tool_args
+            llm_response.tools_call_name = tool_names
+            llm_response.tools_call_ids = tool_ids
+
+        incomplete_reason = (
+            response.incomplete_details.reason if response.incomplete_details else None
+        )
+        if incomplete_reason == "content_filter":
+            raise Exception("API 返回的 response 由于内容安全过滤被拒绝(非 AstrBot)。")
+
+        if llm_response.completion_text is None and not llm_response.tools_call_args:
+            logger.error(f"API 返回的 response 无法解析：{response}。")
+            raise Exception(f"API 返回的 response 无法解析：{response}。")
+
+        llm_response.raw_completion = response
+        llm_response.id = response.id
+        if response.usage:
+            llm_response.usage = self._extract_responses_usage(response.usage)
         return llm_response
 
     async def _prepare_chat_payload(

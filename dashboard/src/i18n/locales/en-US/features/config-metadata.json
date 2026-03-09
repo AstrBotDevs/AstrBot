@@ -1068,6 +1068,18 @@
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
       },
+      "use_responses_api": {
+        "description": "Use Responses API (required for native tools)",
+        "hint": "When enabled, requests use /v1/responses instead of /v1/chat/completions. Enable this only if the upstream service supports the Responses API. OpenAI native web_search and code_interpreter are only available in this mode."
+      },
+      "oa_native_web_search": {
+        "description": "Enable OpenAI native web search (Responses only)",
+        "hint": "Only works through the Responses API. When enabled, AstrBot forces /v1/responses and uses OpenAI's native web_search tool. chat.completions does not support this native tool; AstrBot function tools are ignored when it is enabled."
+      },
+      "oa_native_code_interpreter": {
+        "description": "Enable OpenAI native code interpreter (Responses only)",
+        "hint": "Only works through the Responses API. When enabled, AstrBot forces /v1/responses and uses OpenAI's native code_interpreter tool. chat.completions does not support this native tool; AstrBot function tools are ignored when it is enabled."
+      },
       "custom_extra_body": {
         "description": "Custom request body parameters",
         "hint": "Add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",

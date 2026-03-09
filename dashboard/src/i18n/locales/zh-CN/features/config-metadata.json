@@ -1071,6 +1071,18 @@
         "description": "自定义添加请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
+      "use_responses_api": {
+        "description": "使用 Responses API（原生工具必需）",
+        "hint": "启用后将使用 /v1/responses，而不是 /v1/chat/completions。仅在上游服务支持 Responses API 时启用。OpenAI 原生 web_search 和 code_interpreter 也仅在此模式下可用。"
+      },
+      "oa_native_web_search": {
+        "description": "启用 OpenAI 原生联网搜索（仅 Responses）",
+        "hint": "仅通过 Responses API 生效。启用后将强制使用 /v1/responses，并使用 OpenAI 原生 web_search 工具。chat.completions 不支持该原生工具；开启后 AstrBot 函数工具将被忽略。"
+      },
+      "oa_native_code_interpreter": {
+        "description": "启用 OpenAI 原生代码解释器（仅 Responses）",
+        "hint": "仅通过 Responses API 生效。启用后将强制使用 /v1/responses，并使用 OpenAI 原生 code_interpreter 工具。chat.completions 不支持该原生工具；开启后 AstrBot 函数工具将被忽略。"
+      },
       "custom_extra_body": {
         "description": "自定义请求体参数",
         "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
