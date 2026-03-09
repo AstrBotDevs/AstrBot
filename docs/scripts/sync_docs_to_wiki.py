@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-import re
 import posixpath
+import re
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-
 
 TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 FENCED_BLOCK_RE = re.compile(

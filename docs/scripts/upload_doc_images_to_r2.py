@@ -7,8 +7,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Set, Tuple
 from urllib.parse import quote
 
 IMAGE_EXTS = {
@@ -26,7 +26,9 @@ IMAGE_EXTS = {
 }
 
 MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
-HTML_IMG_RE = re.compile(r"<img\b[^>]*\bsrc\s*=\s*([\"'])([^\"']+)\1[^>]*>", re.IGNORECASE)
+HTML_IMG_RE = re.compile(
+    r"<img\b[^>]*\bsrc\s*=\s*([\"'])([^\"']+)\1[^>]*>", re.IGNORECASE
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,8 +47,12 @@ def parse_args() -> argparse.Namespace:
         default=".",
         help="docs root to scan for .md files (default: current directory)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="preview uploads without sending files")
-    parser.add_argument("--list-only", action="store_true", help="only print matched image files")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="preview uploads without sending files"
+    )
+    parser.add_argument(
+        "--list-only", action="store_true", help="only print matched image files"
+    )
     parser.add_argument(
         "--rewrite-markdown",
         action="store_true",
@@ -92,7 +98,7 @@ def clean_ref(raw: str) -> str:
     return ref.strip()
 
 
-def resolve_local_ref(md_file: Path, ref: str, root: Path) -> Optional[Path]:
+def resolve_local_ref(md_file: Path, ref: str, root: Path) -> Path | None:
     if not ref:
         return None
     if ref.startswith("/"):
@@ -119,8 +125,8 @@ def resolve_local_ref(md_file: Path, ref: str, root: Path) -> Optional[Path]:
     return resolved
 
 
-def find_markdown_files(root: Path) -> List[Path]:
-    files: List[Path] = []
+def find_markdown_files(root: Path) -> list[Path]:
+    files: list[Path] = []
     for path in root.rglob("*.md"):
         if "node_modules" in path.parts:
             continue
@@ -128,9 +134,11 @@ def find_markdown_files(root: Path) -> List[Path]:
     return sorted(files)
 
 
-def collect_images(root: Path, md_files: Sequence[Path]) -> Tuple[Set[Path], List[Tuple[Path, str]]]:
-    images: Set[Path] = set()
-    missing: List[Tuple[Path, str]] = []
+def collect_images(
+    root: Path, md_files: Sequence[Path]
+) -> tuple[set[Path], list[tuple[Path, str]]]:
+    images: set[Path] = set()
+    missing: list[tuple[Path, str]] = []
 
     for md_file in md_files:
         text = md_file.read_text(encoding="utf-8")
@@ -182,7 +190,9 @@ def build_public_url(base: str, object_path: str) -> str:
     return f"{base}/{encoded_path}"
 
 
-def run_rclone_upload(root: Path, target: str, rel_files: Iterable[str], dry_run: bool) -> None:
+def run_rclone_upload(
+    root: Path, target: str, rel_files: Iterable[str], dry_run: bool
+) -> None:
     if shutil.which("rclone") is None:
         raise RuntimeError("rclone not found in PATH")
 
@@ -218,14 +228,14 @@ def run_rclone_upload(root: Path, target: str, rel_files: Iterable[str], dry_run
 def rewrite_markdown_files(
     root: Path,
     md_files: Sequence[Path],
-    image_set: Set[Path],
+    image_set: set[Path],
     prefix: str,
     public_base_url: str,
     backup_ext: str,
 ) -> int:
     changed_count = 0
 
-    def to_url(md_file: Path, raw_ref: str, is_markdown: bool) -> Optional[str]:
+    def to_url(md_file: Path, raw_ref: str, is_markdown: bool) -> str | None:
         ref = parse_md_ref(raw_ref) if is_markdown else clean_ref(raw_ref)
         if not ref or not is_local_ref(ref):
             return None
@@ -251,7 +261,9 @@ def rewrite_markdown_files(
             url = to_url(md_file, raw, is_markdown=False)
             if not url:
                 return match.group(0)
-            return match.group(0).replace(f"src={quote_ch}{raw}{quote_ch}", f"src={quote_ch}{url}{quote_ch}", 1)
+            return match.group(0).replace(
+                f"src={quote_ch}{raw}{quote_ch}", f"src={quote_ch}{url}{quote_ch}", 1
+            )
 
         updated = MD_IMAGE_RE.sub(md_repl, text)
         updated = HTML_IMG_RE.sub(html_repl, updated)
@@ -270,7 +282,10 @@ def main() -> int:
     args = parse_args()
 
     if args.rewrite_markdown and not args.public_base_url:
-        print("Error: --public-base-url is required when using --rewrite-markdown", file=sys.stderr)
+        print(
+            "Error: --public-base-url is required when using --rewrite-markdown",
+            file=sys.stderr,
+        )
         return 1
 
     root = Path(args.docs_root).resolve()
@@ -297,7 +312,10 @@ def main() -> int:
 
     if missing:
         print(file=sys.stderr)
-        print(f"Warning: {len(missing)} referenced files were not found (showing up to 20):", file=sys.stderr)
+        print(
+            f"Warning: {len(missing)} referenced files were not found (showing up to 20):",
+            file=sys.stderr,
+        )
         for md, ref in missing[:20]:
             print(f"{md}\t{ref}", file=sys.stderr)
 
