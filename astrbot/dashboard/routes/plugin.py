@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import mimetypes
 import os
 import posixpath
 import re
@@ -12,11 +13,13 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
+import aiofiles
 import aiohttp
 import certifi
 import jwt
+from aiofiles import ospath as aio_ospath
 from quart import Response as QuartResponse
-from quart import g, make_response, request, send_file
+from quart import g, make_response, request
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -157,16 +160,16 @@ class PluginRoute(Route):
         return await self._serve_plugin_webui_content(plugin_name, asset_path)
 
     async def get_plugin_webui_bridge_sdk(self):
-        if (
-            not _PLUGIN_WEBUI_BRIDGE_FILE.exists()
-            or not _PLUGIN_WEBUI_BRIDGE_FILE.is_file()
-        ):
+        if not await aio_ospath.isfile(str(_PLUGIN_WEBUI_BRIDGE_FILE)):
             return await self._plugin_webui_error_response(
                 404, "Plugin WebUI bridge SDK not found"
             )
-        response = await send_file(
-            _PLUGIN_WEBUI_BRIDGE_FILE,
-            mimetype="application/javascript",
+        bridge_js = await self._read_plugin_webui_binary(_PLUGIN_WEBUI_BRIDGE_FILE)
+        response = cast(
+            QuartResponse,
+            await make_response(
+                bridge_js, {"Content-Type": "application/javascript; charset=utf-8"}
+            ),
         )
         return self._apply_plugin_webui_security_headers(response)
 
@@ -189,7 +192,7 @@ class PluginRoute(Route):
         plugin_root.relative_to(base_dir)
         return plugin_root
 
-    def _resolve_plugin_webui_root(
+    async def _resolve_plugin_webui_root(
         self,
         plugin: StarMetadata,
     ) -> Path:
@@ -202,11 +205,11 @@ class PluginRoute(Route):
         page_root.relative_to(plugin_root)
         if page_root == plugin_root:
             raise FileNotFoundError("Plugin WebUI root directory is invalid")
-        if not page_root.exists() or not page_root.is_dir():
+        if not await aio_ospath.isdir(str(page_root)):
             raise FileNotFoundError("Plugin WebUI root directory does not exist")
         return page_root
 
-    def _resolve_plugin_webui_file(
+    async def _resolve_plugin_webui_file(
         self,
         plugin: StarMetadata,
         asset_path: str,
@@ -215,11 +218,11 @@ class PluginRoute(Route):
         if not page:
             raise FileNotFoundError("Plugin WebUI metadata is missing")
 
-        page_root = self._resolve_plugin_webui_root(plugin)
+        page_root = await self._resolve_plugin_webui_root(plugin)
         target_name = _normalize_plugin_webui_asset_path(asset_path) or page.entry_file
         target_path = (page_root / target_name).resolve(strict=False)
         target_path.relative_to(page_root)
-        if not target_path.exists() or not target_path.is_file():
+        if not await aio_ospath.isfile(str(target_path)):
             raise FileNotFoundError("Plugin WebUI asset not found")
         return target_path
 
@@ -354,9 +357,7 @@ class PluginRoute(Route):
 
         rewritten_html = _HTML_ASSET_ATTR_RE.sub(replace_attr, html_text)
         if "/api/plugin/webui/bridge-sdk.js" not in rewritten_html:
-            bridge_tag = (
-                f'<script src="{self._get_plugin_webui_bridge_sdk_url(extra_query_params)}"></script>'
-            )
+            bridge_tag = f'<script src="{self._get_plugin_webui_bridge_sdk_url(extra_query_params)}"></script>'
             if "</body>" in rewritten_html:
                 rewritten_html = rewritten_html.replace(
                     "</body>", f"{bridge_tag}</body>", 1
@@ -449,7 +450,21 @@ class PluginRoute(Route):
 
         return _JS_SIDE_EFFECT_IMPORT_RE.sub(replace_side_effect, rewritten_js)
 
-    def _serialize_plugin_webui(self, plugin: StarMetadata) -> dict | None:
+    @staticmethod
+    async def _read_plugin_webui_text(file_path: Path) -> str:
+        async with aiofiles.open(file_path, encoding="utf-8") as file:
+            return await file.read()
+
+    @staticmethod
+    async def _read_plugin_webui_binary(file_path: Path) -> bytes:
+        async with aiofiles.open(file_path, mode="rb") as file:
+            return await file.read()
+
+    @staticmethod
+    def _guess_plugin_webui_mime_type(file_path: Path) -> str:
+        return mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+
+    async def _serialize_plugin_webui(self, plugin: StarMetadata) -> dict | None:
         page = plugin.webui
         if not page:
             return None
@@ -457,7 +472,7 @@ class PluginRoute(Route):
         if not plugin_name:
             return None
         try:
-            self._resolve_plugin_webui_file(plugin, "")
+            await self._resolve_plugin_webui_file(plugin, "")
         except (FileNotFoundError, ValueError):
             return None
 
@@ -522,7 +537,7 @@ class PluginRoute(Route):
             )
 
         try:
-            file_path = self._resolve_plugin_webui_file(plugin, asset_path)
+            file_path = await self._resolve_plugin_webui_file(plugin, asset_path)
         except (FileNotFoundError, ValueError):
             return await self._plugin_webui_error_response(
                 404, "Plugin WebUI asset not found"
@@ -536,7 +551,7 @@ class PluginRoute(Route):
         served_asset_path = asset_path or plugin.webui.entry_file
         suffix = file_path.suffix.lower()
         if suffix == ".html":
-            html_text = file_path.read_text(encoding="utf-8")
+            html_text = await self._read_plugin_webui_text(file_path)
             rewritten_html = self._rewrite_plugin_webui_html(
                 html_text,
                 plugin_name,
@@ -552,7 +567,7 @@ class PluginRoute(Route):
             return self._apply_plugin_webui_security_headers(response)
 
         if suffix == ".css":
-            css_text = file_path.read_text(encoding="utf-8")
+            css_text = await self._read_plugin_webui_text(file_path)
             rewritten_css = self._rewrite_plugin_webui_css(
                 css_text,
                 plugin_name,
@@ -568,7 +583,7 @@ class PluginRoute(Route):
             return self._apply_plugin_webui_security_headers(response)
 
         if suffix in {".js", ".mjs"}:
-            js_text = file_path.read_text(encoding="utf-8")
+            js_text = await self._read_plugin_webui_text(file_path)
             rewritten_js = self._rewrite_plugin_webui_js(
                 js_text,
                 plugin_name,
@@ -584,7 +599,14 @@ class PluginRoute(Route):
             )
             return self._apply_plugin_webui_security_headers(response)
 
-        response = await send_file(file_path)
+        raw_bytes = await self._read_plugin_webui_binary(file_path)
+        response = cast(
+            QuartResponse,
+            await make_response(
+                raw_bytes,
+                {"Content-Type": self._guess_plugin_webui_mime_type(file_path)},
+            ),
+        )
         return self._apply_plugin_webui_security_headers(response)
 
     async def check_plugin_compatibility(self):
@@ -878,7 +900,7 @@ class PluginRoute(Route):
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
                 "support_platforms": plugin.support_platforms,
                 "astrbot_version": plugin.astrbot_version,
-                "webui": self._serialize_plugin_webui(plugin),
+                "webui": await self._serialize_plugin_webui(plugin),
             }
             # 检查是否为全空的幽灵插件
             if not any(
