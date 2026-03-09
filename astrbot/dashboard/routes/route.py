@@ -57,3 +57,21 @@ class Response:
         self.data = data
         self.message = message
         return self
+
+    def pending(self, data: dict | None = None, message: str | None = None):
+        """Return a pending status response for operations requiring confirmation."""
+        self.status = "pending"
+        if data is None:
+            data = {}
+        self.data = data
+        self.message = message
+        return self
+
+    def warning(self, data: dict | None = None, message: str | None = None):
+        """Return a warning status response for non-fatal issues."""
+        self.status = "warning"
+        if data is None:
+            data = {}
+        self.data = data
+        self.message = message
+        return self

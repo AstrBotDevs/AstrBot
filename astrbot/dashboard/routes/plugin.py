@@ -40,6 +40,7 @@ PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
 DEFAULT_PLUGIN_PROVIDER = "git"
+SUPPORTED_PLUGIN_PROVIDERS = {"git"}
 
 
 @dataclass
@@ -168,7 +169,9 @@ class PluginRoute(Route):
         limit: int | None = None
         if raw_limit:
             try:
-                limit = max(1, int(raw_limit))
+                limit = int(raw_limit)
+                if limit <= 0:
+                    return Response().error("limit must be a positive integer").__dict__
             except ValueError:
                 return Response().error("limit must be a positive integer").__dict__
 
@@ -533,6 +536,10 @@ class PluginRoute(Route):
             .strip()
             .lower()
         )
+        if provider not in SUPPORTED_PLUGIN_PROVIDERS:
+            return Response().error(
+                f"unsupported provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PLUGIN_PROVIDERS))}"
+            ).__dict__
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -557,13 +564,14 @@ class PluginRoute(Route):
                 )
             )
             if result.status == InstallResultStatus.PENDING:
-                return {
-                    "status": "pending",
-                    "message": "安装请求等待确认，请在聊天中使用 /extend confirm <operation_id> 确认",
-                    "data": {
-                        "operation_id": result.operation_id,
-                    },
-                }
+                return (
+                    Response()
+                    .pending(
+                        {"operation_id": result.operation_id},
+                        "安装请求等待确认，请在聊天中使用 /extend confirm <operation_id> 确认",
+                    )
+                    .__dict__
+                )
             if result.status == InstallResultStatus.SUCCESS:
                 logger.info(f"安装插件 {repo_url} 成功。")
                 return Response().ok(result.data, "安装成功。").__dict__
@@ -571,14 +579,17 @@ class PluginRoute(Route):
                 return Response().error(f"安装被拒绝: {result.message}").__dict__
             return Response().error(f"安装失败: {result.message}").__dict__
         except PluginVersionIncompatibleError as e:
-            return {
-                "status": "warning",
-                "message": str(e),
-                "data": {
-                    "warning_type": "astrbot_version_incompatible",
-                    "can_ignore": True,
-                },
-            }
+            return (
+                Response()
+                .warning(
+                    {
+                        "warning_type": "astrbot_version_incompatible",
+                        "can_ignore": True,
+                    },
+                    str(e),
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -612,14 +623,17 @@ class PluginRoute(Route):
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(plugin_info, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
-            return {
-                "status": "warning",
-                "message": str(e),
-                "data": {
-                    "warning_type": "astrbot_version_incompatible",
-                    "can_ignore": True,
-                },
-            }
+            return (
+                Response()
+                .warning(
+                    {
+                        "warning_type": "astrbot_version_incompatible",
+                        "can_ignore": True,
+                    },
+                    str(e),
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__

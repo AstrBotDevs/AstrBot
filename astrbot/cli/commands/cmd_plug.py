@@ -244,10 +244,16 @@ def search(query: str, limit: int | None) -> None:
     base_path = _get_data_path()
     plugins = build_plug_list(base_path / "plugins")
 
+    # Only apply a limit when the user explicitly supplies --limit.
+    # When limit is None, pass through None so all matches are returned.
+    effective_limit = (
+        None if limit is None else get_plugin_search_result_limit(override=limit)
+    )
+
     matched_plugins = search_plugin_records(
         plugins,
         query,
-        limit=get_plugin_search_result_limit(override=limit),
+        limit=effective_limit,
     )
 
     if not matched_plugins:
