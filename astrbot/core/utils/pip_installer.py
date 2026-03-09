@@ -146,6 +146,9 @@ def _split_package_install_input(raw_input: str) -> list[str]:
         return [normalized]
 
     split_tokens = shlex.split(normalized)
+    if split_tokens and split_tokens[0].startswith("-"):
+        return split_tokens
+
     if split_tokens and all(_is_valid_install_token(token) for token in split_tokens):
         return split_tokens
 
@@ -178,6 +181,13 @@ def _split_multiline_package_input(raw_input: str) -> list[str]:
             continue
         requirements.append(candidate)
     return requirements
+
+
+def _package_specs_override_index(package_specs: list[str]) -> bool:
+    return any(
+        spec in {"-i", "--index-url"} or spec.startswith("--index-url=")
+        for spec in package_specs
+    )
 
 
 def _extract_top_level_modules(
@@ -603,8 +613,9 @@ class PipInstaller:
             args.extend(["-r", requirements_path])
             requested_requirements = _extract_requirement_names(requirements_path)
 
-        index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-        args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
+        if not _package_specs_override_index(args[1:]):
+            index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
+            args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
 
         target_site_packages = None
         if is_packaged_desktop_runtime():
