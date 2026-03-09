@@ -43,6 +43,7 @@
     "viewInfo": "行为",
     "viewDocs": "文档",
     "viewRepo": "仓库",
+    "openWebUI": "WebUI",
     "close": "关闭",
     "save": "保存",
     "saveAndClose": "保存并关闭",
@@ -214,7 +215,11 @@
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
     "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
     "invalidUrl": "请输入有效的URL地址",
-    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址"
+    "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
+    "pluginNotFound": "未找到该插件",
+    "pluginDisabled": "该插件当前已禁用，请先启用后再访问页面",
+    "pluginWebUIPageNotFound": "未找到该插件页面",
+    "pluginWebUILoadFailed": "加载插件页面失败"
   },
   "upload": {
     "fromFile": "从文件安装",

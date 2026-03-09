@@ -43,6 +43,7 @@
     "viewInfo": "Handlers",
     "viewDocs": "Documentation",
     "viewRepo": "Repository",
+    "openWebUI": "WebUI",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -214,7 +215,11 @@
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "pluginNotFound": "Plugin not found",
+    "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
+    "pluginWebUIPageNotFound": "Plugin page not found",
+    "pluginWebUILoadFailed": "Failed to load the plugin page"
   },
   "upload": {
     "fromFile": "Install from File",
