@@ -169,8 +169,14 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 
 @pytest.mark.asyncio
-async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def test_auth_login(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
     """Tests the login functionality with both wrong and correct credentials."""
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", False)
+
     test_client = app.test_client()
     response = await test_client.post(
         "/api/auth/login",
@@ -189,8 +195,42 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     data = await response.get_json()
     assert data["status"] == "ok" and "token" in data["data"]
     set_cookie_headers = response.headers.getlist("Set-Cookie")
-    assert any(DASHBOARD_JWT_COOKIE_NAME in value for value in set_cookie_headers)
-    assert any("HttpOnly" in value for value in set_cookie_headers)
+    jwt_cookie_header = next(
+        (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
+        "",
+    )
+    assert jwt_cookie_header
+    assert "HttpOnly" in jwt_cookie_header
+    assert "SameSite=Strict" in jwt_cookie_header
+    assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_auth_login_secure_cookie_override(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", True)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+        },
+    )
+    assert response.status_code == 200
+
+    set_cookie_headers = response.headers.getlist("Set-Cookie")
+    jwt_cookie_header = next(
+        (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
+        "",
+    )
+    assert jwt_cookie_header
+    assert "Secure" in jwt_cookie_header
+    assert "SameSite=Strict" in jwt_cookie_header
 
 
 def test_plugin_webui_content_path_escapes_plugin_name():
@@ -423,6 +463,18 @@ async def test_logout_clears_cookie_for_plugin_webui(
 
     logout_response = await test_client.post("/api/auth/logout")
     assert logout_response.status_code == 200
+    clear_cookie_header = next(
+        (
+            value
+            for value in logout_response.headers.getlist("Set-Cookie")
+            if DASHBOARD_JWT_COOKIE_NAME in value
+        ),
+        "",
+    )
+    assert clear_cookie_header
+    assert f"{DASHBOARD_JWT_COOKIE_NAME}=;" in clear_cookie_header
+    assert "Max-Age=0" in clear_cookie_header
+    assert "SameSite=Strict" in clear_cookie_header
 
     response = await test_client.get(
         f"/api/plugin/webui/content/{PLUGIN_WEBUI_DEMO_NAME}/"

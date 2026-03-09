@@ -1,15 +1,39 @@
 (function attachAstrBotPluginWebUIBridge() {
   const CHANNEL = "astrbot-plugin-webui";
-  const TARGET_ORIGIN = window.location.origin;
+  const SELF_ORIGIN = window.location.origin;
   const pendingRequests = new Map();
   const sseHandlers = new Map();
   let requestCounter = 0;
   let subscriptionCounter = 0;
   let context = null;
+  let parentOrigin = null;
   let resolveReady;
   const readyPromise = new Promise((resolve) => {
     resolveReady = resolve;
   });
+
+  function getTargetOrigin() {
+    if (typeof parentOrigin === "string" && parentOrigin && parentOrigin !== "null") {
+      return parentOrigin;
+    }
+    if (SELF_ORIGIN !== "null") {
+      return SELF_ORIGIN;
+    }
+    return "*";
+  }
+
+  function isAllowedParentOrigin(origin) {
+    if (typeof origin !== "string" || !origin) {
+      return false;
+    }
+    if (parentOrigin) {
+      return origin === parentOrigin;
+    }
+    if (SELF_ORIGIN === "null") {
+      return true;
+    }
+    return origin === SELF_ORIGIN;
+  }
 
   function send(kind, payload) {
     window.parent.postMessage(
@@ -18,7 +42,7 @@
         kind,
         ...(payload || {}),
       },
-      TARGET_ORIGIN,
+      getTargetOrigin(),
     );
   }
 
@@ -50,8 +74,11 @@
     if (event.source !== window.parent) {
       return;
     }
-    if (event.origin !== TARGET_ORIGIN) {
+    if (!isAllowedParentOrigin(event.origin)) {
       return;
+    }
+    if (!parentOrigin) {
+      parentOrigin = event.origin;
     }
 
     const message = event.data;

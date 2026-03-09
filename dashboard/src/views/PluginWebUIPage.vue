@@ -18,6 +18,7 @@ const iframeSrc = ref("");
 const iframeRef = ref(null);
 const sseConnections = new Map();
 const BRIDGE_TARGET_ORIGIN = window.location.origin;
+let iframeMessageOrigin = null;
 
 const pluginName = computed(() => String(route.params.pluginName || ""));
 const getIframeWindow = () => iframeRef.value?.contentWindow || null;
@@ -34,9 +35,13 @@ const postToIframe = (payload) => {
   if (!iframeWindow) {
     return;
   }
+  const targetOrigin =
+    typeof iframeMessageOrigin === "string" && iframeMessageOrigin !== "null"
+      ? iframeMessageOrigin
+      : "*";
   iframeWindow.postMessage(
     { channel: BRIDGE_CHANNEL, ...payload },
-    BRIDGE_TARGET_ORIGIN,
+    targetOrigin,
   );
 };
 
@@ -237,9 +242,13 @@ const handleWindowMessage = (event) => {
   if (!iframeWindow || event.source !== iframeWindow) {
     return;
   }
-  if (event.origin !== BRIDGE_TARGET_ORIGIN) {
+  if (event.origin !== BRIDGE_TARGET_ORIGIN && event.origin !== "null") {
     return;
   }
+  if (iframeMessageOrigin && event.origin !== iframeMessageOrigin) {
+    return;
+  }
+  iframeMessageOrigin = event.origin;
 
   const message = event.data;
   if (!message || message.channel !== BRIDGE_CHANNEL) {
@@ -266,6 +275,7 @@ const loadPluginWebUI = async () => {
   plugin.value = null;
   webui.value = null;
   iframeSrc.value = "";
+  iframeMessageOrigin = null;
   cleanupSSEConnections();
 
   try {
