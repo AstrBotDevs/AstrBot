@@ -18,6 +18,16 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
     "line",
 ]
 
+
+def _openai_compatible_provider_defaults() -> dict[str, Any]:
+    return {
+        "use_responses_api": False,
+        "oa_native_web_search": False,
+        "oa_native_code_interpreter": False,
+        "custom_headers": {},
+    }
+
+
 # 默认配置
 DEFAULT_CONFIG = {
     "config_version": 2,
@@ -1081,10 +1091,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.openai.com/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Google Gemini": {
                         "id": "google_gemini",
@@ -1130,10 +1137,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api.moonshot.cn/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "xAI": {
                         "id": "xai",
@@ -1145,10 +1149,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.x.ai/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                         "xai_native_search": False,
                     },
                     "DeepSeek": {
@@ -1161,10 +1162,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.deepseek.com/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Zhipu": {
                         "id": "zhipu",
@@ -1176,10 +1174,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://open.bigmodel.cn/api/paas/v4/",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "AIHubMix": {
                         "id": "aihubmix",
@@ -1191,10 +1186,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://aihubmix.com/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "OpenRouter": {
                         "id": "openrouter",
@@ -1206,10 +1198,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://openrouter.ai/api/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "NVIDIA": {
                         "id": "nvidia",
@@ -1221,10 +1210,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://integrate.api.nvidia.com/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Azure OpenAI": {
                         "id": "azure_openai",
@@ -1237,10 +1223,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Ollama": {
                         "id": "ollama",
@@ -1251,10 +1234,7 @@ CONFIG_METADATA_2 = {
                         "key": ["ollama"],  # ollama 的 key 默认是 ollama
                         "api_base": "http://127.0.0.1:11434/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "LM Studio": {
                         "id": "lm_studio",
@@ -1265,10 +1245,7 @@ CONFIG_METADATA_2 = {
                         "key": ["lmstudio"],
                         "api_base": "http://127.0.0.1:1234/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Gemini_OpenAI_API": {
                         "id": "google_gemini_openai",
@@ -1280,10 +1257,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://generativelanguage.googleapis.com/v1beta/openai/",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Groq": {
                         "id": "groq",
@@ -1295,10 +1269,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.groq.com/openai/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "302.AI": {
                         "id": "302ai",
@@ -1310,10 +1281,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.302.ai/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "SiliconFlow": {
                         "id": "siliconflow",
@@ -1325,10 +1293,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api.siliconflow.cn/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "PPIO": {
                         "id": "ppio",
@@ -1340,10 +1305,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.ppinfra.com/v3/openai",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "TokenPony": {
                         "id": "tokenpony",
@@ -1355,10 +1317,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.tokenpony.cn/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Compshare": {
                         "id": "compshare",
@@ -1370,10 +1329,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.modelverse.cn/v1",
                         "timeout": 120,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "ModelScope": {
                         "id": "modelscope",
@@ -1385,10 +1341,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "api_base": "https://api-inference.modelscope.cn/v1",
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                     },
                     "Dify": {
                         "id": "dify_app_default",
@@ -1465,10 +1418,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.fastgpt.in/api/v1",
                         "timeout": 60,
                         "proxy": "",
-                        "use_responses_api": False,
-                        "oa_native_web_search": False,
-                        "oa_native_code_interpreter": False,
-                        "custom_headers": {},
+                        **_openai_compatible_provider_defaults(),
                         "custom_extra_body": {},
                     },
                     "Whisper(API)": {

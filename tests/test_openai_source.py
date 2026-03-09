@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -264,8 +265,6 @@ def test_build_responses_payload_converts_messages_and_tools():
         assert payload["input"][3]["type"] == "function_call"
         assert payload["input"][4]["type"] == "function_call_output"
     finally:
-        import asyncio
-
         asyncio.run(provider.terminate())
 
 
@@ -299,8 +298,6 @@ def test_native_tools_force_responses_mode_and_override_function_tools():
             {"type": "code_interpreter", "container": {"type": "auto"}},
         ]
     finally:
-        import asyncio
-
         asyncio.run(provider.terminate())
 
 
@@ -407,6 +404,25 @@ async def test_parse_responses_completion_raises_on_invalid_tool_arguments():
                 response,
                 tools=SimpleNamespace(func_list=[SimpleNamespace(name="weather")]),
             )
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_parse_responses_completion_handles_missing_input_token_details():
+    provider = _make_provider({"use_responses_api": True})
+    try:
+        usage = SimpleNamespace(
+            input_tokens=12,
+            input_tokens_details=None,
+            output_tokens=5,
+        )
+
+        parsed = provider._extract_responses_usage(usage)
+
+        assert parsed.input_cached == 0
+        assert parsed.input_other == 12
+        assert parsed.output == 5
     finally:
         await provider.terminate()
 

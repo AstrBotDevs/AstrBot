@@ -15,6 +15,9 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
 from openai.types.responses.response import Response as OpenAIResponse
+from openai.types.responses.response_function_tool_call import (
+    ResponseFunctionToolCall,
+)
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_reasoning_item import ResponseReasoningItem
 from openai.types.responses.response_usage import ResponseUsage
@@ -689,7 +692,8 @@ class ProviderOpenAIOfficial(Provider):
         )
 
     def _extract_responses_usage(self, usage: ResponseUsage) -> TokenUsage:
-        cached = usage.input_tokens_details.cached_tokens or 0
+        details = usage.input_tokens_details
+        cached = details.cached_tokens if details and details.cached_tokens else 0
         input_tokens = usage.input_tokens or 0
         output_tokens = usage.output_tokens or 0
         return TokenUsage(
@@ -898,22 +902,20 @@ class ProviderOpenAIOfficial(Provider):
                     reasoning_parts.extend(part.text for part in item.content)
                 elif item.summary:
                     reasoning_parts.extend(part.text for part in item.summary)
-            else:
-                item_type = getattr(item, "type", "")
-                if item_type == "function_call" and tools is not None:
-                    try:
-                        args = json.loads(item.arguments)
-                    except json.JSONDecodeError:
-                        logger.error(
-                            "Responses API function_call arguments is not valid JSON: %s",
-                            item.arguments,
-                        )
-                        raise Exception(
-                            f"Responses API function_call arguments is not valid JSON: {item.arguments}"
-                        )
-                    tool_args.append(args)
-                    tool_names.append(item.name)
-                    tool_ids.append(item.call_id)
+            elif isinstance(item, ResponseFunctionToolCall) and tools is not None:
+                try:
+                    args = json.loads(item.arguments)
+                except json.JSONDecodeError:
+                    logger.error(
+                        "Responses API function_call arguments is not valid JSON: %s",
+                        item.arguments,
+                    )
+                    raise Exception(
+                        f"Responses API function_call arguments is not valid JSON: {item.arguments}"
+                    )
+                tool_args.append(args)
+                tool_names.append(item.name)
+                tool_ids.append(item.call_id)
 
         completion_text = "".join(text_parts).strip()
         if completion_text:
