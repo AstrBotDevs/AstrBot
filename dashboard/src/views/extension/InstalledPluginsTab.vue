@@ -1,4 +1,5 @@
 <script setup>
+import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
@@ -48,6 +49,9 @@ const {
   getInitialListViewMode,
   isListView,
   pluginSearch,
+  installedStatusFilter,
+  installedSortBy,
+  installedSortOrder,
   loading_,
   currentPage,
   dangerConfirmDialog,
@@ -82,6 +86,8 @@ const {
   toPinyinText,
   toInitials,
   plugin_handler_info_headers,
+  installedSortItems,
+  installedSortUsesOrder,
   pluginHeaders,
   filteredExtensions,
   filteredPlugins,
@@ -186,30 +192,64 @@ const {
             </div>
 
             <v-row class="mb-4">
-              <v-col cols="12" class="d-flex align-center flex-wrap ga-2">
-                <v-btn variant="tonal" @click="toggleShowReserved">
-                  <v-icon>{{
-                    showReserved ? "mdi-eye-off" : "mdi-eye"
-                  }}</v-icon>
-                  {{
-                    showReserved
-                      ? tm("buttons.hideSystemPlugins")
-                      : tm("buttons.showSystemPlugins")
-                  }}
-                </v-btn>
+              <v-col cols="12">
+                <div class="installed-toolbar">
+                  <div class="installed-toolbar__actions">
+                    <v-btn variant="tonal" @click="toggleShowReserved">
+                      <v-icon>{{
+                        showReserved ? "mdi-eye-off" : "mdi-eye"
+                      }}</v-icon>
+                      {{
+                        showReserved
+                          ? tm("buttons.hideSystemPlugins")
+                          : tm("buttons.showSystemPlugins")
+                      }}
+                    </v-btn>
 
-                <v-btn
-                  class="ml-2"
-                  color="warning"
-                  variant="tonal"
-                  :disabled="updatableExtensions.length === 0"
-                  :loading="updatingAll"
-                  @click="showUpdateAllConfirm"
-                >
-                  <v-icon>mdi-update</v-icon>
-                  {{ tm("buttons.updateAll") }}
-                </v-btn>
+                    <v-btn
+                      color="warning"
+                      variant="tonal"
+                      :disabled="updatableExtensions.length === 0"
+                      :loading="updatingAll"
+                      @click="showUpdateAllConfirm"
+                    >
+                      <v-icon>mdi-update</v-icon>
+                      {{ tm("buttons.updateAll") }}
+                    </v-btn>
+                  </div>
 
+                  <div class="installed-toolbar__controls">
+                    <v-btn-toggle
+                      v-model="installedStatusFilter"
+                      mandatory
+                      divided
+                      density="compact"
+                      color="primary"
+                      class="installed-status-toggle"
+                    >
+                      <v-btn value="all" prepend-icon="mdi-filter-variant">
+                        {{ tm("filters.all") }}
+                      </v-btn>
+                      <v-btn value="enabled" prepend-icon="mdi-play-circle-outline">
+                        {{ tm("status.enabled") }}
+                      </v-btn>
+                      <v-btn value="disabled" prepend-icon="mdi-pause-circle-outline">
+                        {{ tm("status.disabled") }}
+                      </v-btn>
+                    </v-btn-toggle>
+
+                    <PluginSortControl
+                      v-model="installedSortBy"
+                      :items="installedSortItems"
+                      :label="tm('sort.by')"
+                      :order="installedSortOrder"
+                      :ascending-label="tm('sort.ascending')"
+                      :descending-label="tm('sort.descending')"
+                      :show-order="installedSortUsesOrder"
+                      @update:order="installedSortOrder = $event"
+                    />
+                  </div>
+                </div>
               </v-col>
             </v-row>
 
@@ -669,6 +709,32 @@ const {
 </template>
 
 <style scoped>
+.installed-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.installed-toolbar__actions,
+.installed-toolbar__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.installed-toolbar__controls {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.installed-status-toggle :deep(.v-btn) {
+  min-height: 34px;
+  text-transform: none;
+}
+
 .view-mode-toggle :deep(.v-btn) {
   min-width: 30px;
   height: 28px;
@@ -696,6 +762,14 @@ const {
   .table-action-btn {
     min-width: 0;
     padding: 0 8px;
+  }
+}
+
+@media (max-width: 960px) {
+  .installed-toolbar__controls {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

@@ -186,6 +186,9 @@ export const useExtensionPage = () => {
   };
   const isListView = ref(getInitialListViewMode());
   const pluginSearch = ref("");
+  const installedStatusFilter = ref("all");
+  const installedSortBy = ref("default");
+  const installedSortOrder = ref("desc");
   const loading_ = ref(false);
   
   // 分页相关
@@ -253,6 +256,18 @@ export const useExtensionPage = () => {
     { title: tm("table.headers.specificType"), key: "type" },
     { title: tm("table.headers.trigger"), key: "cmd" },
   ]);
+
+  const installedSortItems = computed(() => [
+    { title: tm("sort.default"), value: "default" },
+    { title: tm("sort.installTime"), value: "install_time" },
+    { title: tm("sort.name"), value: "name" },
+    { title: tm("sort.author"), value: "author" },
+    { title: tm("sort.updateStatus"), value: "update_status" },
+  ]);
+
+  const installedSortUsesOrder = computed(
+    () => installedSortBy.value !== "default",
+  );
   
   // 插件表格的表头定义
   const showAuthorColumn = computed(() => width.value >= 1280);
@@ -261,16 +276,19 @@ export const useExtensionPage = () => {
       {
         title: tm("table.headers.name"),
         key: "name",
+        sortable: false,
         width: showAuthorColumn.value ? "24%" : "26%",
       },
       {
         title: tm("table.headers.description"),
         key: "desc",
+        sortable: false,
         width: showAuthorColumn.value ? "32%" : "36%",
       },
       {
         title: tm("table.headers.version"),
         key: "version",
+        sortable: false,
         width: showAuthorColumn.value ? "12%" : "14%",
       },
     ];
@@ -279,6 +297,7 @@ export const useExtensionPage = () => {
       headers.push({
         title: tm("table.headers.author"),
         key: "author",
+        sortable: false,
         width: "10%",
       });
     }
@@ -301,33 +320,120 @@ export const useExtensionPage = () => {
     }
     return data;
   });
-  
-  const sortPluginsByName = (plugins) => {
+
+  const compareInstalledPluginNames = (left, right) =>
+    normalizeStr(left?.name ?? "").localeCompare(
+      normalizeStr(right?.name ?? ""),
+      undefined,
+      {
+        sensitivity: "base",
+      },
+    );
+
+  const compareInstalledPluginAuthors = (left, right) =>
+    normalizeStr(left?.author ?? "").localeCompare(
+      normalizeStr(right?.author ?? ""),
+      undefined,
+      { sensitivity: "base" },
+    );
+
+  const getInstalledAtTimestamp = (plugin) => {
+    const parsed = Date.parse(plugin?.installed_at ?? "");
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const sortInstalledPlugins = (plugins) => {
     return plugins
-      .map((plugin, index) => ({ plugin, index }))
-      .sort((a, b) => {
-        const nameA = String(a.plugin?.name ?? "");
-        const nameB = String(b.plugin?.name ?? "");
-        const nameCompare = nameA.localeCompare(nameB, undefined, {
-          sensitivity: "base",
-        });
-        if (nameCompare !== 0) {
-          return nameCompare;
+      .map((plugin, index) => ({
+        plugin,
+        index,
+        installedAtTimestamp: getInstalledAtTimestamp(plugin),
+      }))
+      .sort((left, right) => {
+        const fallbackNameCompare = compareInstalledPluginNames(
+          left.plugin,
+          right.plugin,
+        );
+        const fallbackResult =
+          fallbackNameCompare !== 0 ? fallbackNameCompare : left.index - right.index;
+
+        if (installedSortBy.value === "install_time") {
+          const leftTimestamp = left.installedAtTimestamp;
+          const rightTimestamp = right.installedAtTimestamp;
+
+          if (leftTimestamp == null && rightTimestamp == null) {
+            return fallbackResult;
+          }
+          if (leftTimestamp == null) {
+            return 1;
+          }
+          if (rightTimestamp == null) {
+            return -1;
+          }
+
+          const timeDiff =
+            installedSortOrder.value === "desc"
+              ? rightTimestamp - leftTimestamp
+              : leftTimestamp - rightTimestamp;
+          return timeDiff !== 0 ? timeDiff : fallbackResult;
         }
-        return a.index - b.index;
+
+        if (installedSortBy.value === "name") {
+          const nameCompare = compareInstalledPluginNames(left.plugin, right.plugin);
+          if (nameCompare !== 0) {
+            return installedSortOrder.value === "desc"
+              ? -nameCompare
+              : nameCompare;
+          }
+          return left.index - right.index;
+        }
+
+        if (installedSortBy.value === "author") {
+          const authorCompare = compareInstalledPluginAuthors(
+            left.plugin,
+            right.plugin,
+          );
+          if (authorCompare !== 0) {
+            return installedSortOrder.value === "desc"
+              ? -authorCompare
+              : authorCompare;
+          }
+          return fallbackResult;
+        }
+
+        if (installedSortBy.value === "update_status") {
+          const leftHasUpdate = left.plugin?.has_update ? 1 : 0;
+          const rightHasUpdate = right.plugin?.has_update ? 1 : 0;
+          const updateDiff =
+            installedSortOrder.value === "desc"
+              ? rightHasUpdate - leftHasUpdate
+              : leftHasUpdate - rightHasUpdate;
+          return updateDiff !== 0 ? updateDiff : fallbackResult;
+        }
+
+        return fallbackResult;
       })
       .map((item) => item.plugin);
   };
 
   // 通过搜索过滤插件
   const filteredPlugins = computed(() => {
-    const plugins = filteredExtensions.value;
+    const plugins = filteredExtensions.value.filter((plugin) => {
+      if (installedStatusFilter.value === "enabled") {
+        return !!plugin.activated;
+      }
+      if (installedStatusFilter.value === "disabled") {
+        return !plugin.activated;
+      }
+      return true;
+    });
+
     const query = buildSearchQuery(pluginSearch.value);
     const filtered = query
       ? plugins.filter((plugin) => matchesPluginSearch(plugin, query))
       : plugins;
 
-    return sortPluginsByName([...filtered]);
+    return sortInstalledPlugins(filtered);
   });
   
   // 过滤后的插件市场数据（带搜索）
@@ -1493,6 +1599,9 @@ export const useExtensionPage = () => {
     getInitialListViewMode,
     isListView,
     pluginSearch,
+    installedStatusFilter,
+    installedSortBy,
+    installedSortOrder,
     loading_,
     currentPage,
     dangerConfirmDialog,
@@ -1528,6 +1637,8 @@ export const useExtensionPage = () => {
     toPinyinText,
     toInitials,
     plugin_handler_info_headers,
+    installedSortItems,
+    installedSortUsesOrder,
     pluginHeaders,
     filteredExtensions,
     filteredPlugins,

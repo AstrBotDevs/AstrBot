@@ -1,5 +1,6 @@
 <script setup>
 import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
+import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { computed } from "vue";
 
@@ -157,6 +158,13 @@ const currentSourceName = computed(() => {
   const matched = customSources.value.find((s) => s.url === selectedSource.value);
   return matched?.name || tm("market.defaultSource");
 });
+
+const marketSortItems = computed(() => [
+  { title: tm("sort.default"), value: "default" },
+  { title: tm("sort.stars"), value: "stars" },
+  { title: tm("sort.author"), value: "author" },
+  { title: tm("sort.updated"), value: "updated" },
+]);
 </script>
 
 <template>
@@ -327,44 +335,16 @@ const currentSourceName = computed(() => {
                   class="d-flex align-center"
                   style="gap: 8px; flex-wrap: wrap"
                 >
-                  <v-select
+                  <PluginSortControl
                     v-model="sortBy"
-                    :items="[
-                      { title: tm('sort.default'), value: 'default' },
-                      { title: tm('sort.stars'), value: 'stars' },
-                      { title: tm('sort.author'), value: 'author' },
-                      { title: tm('sort.updated'), value: 'updated' },
-                    ]"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    style="max-width: 150px"
-                  >
-                    <template v-slot:prepend-inner>
-                      <v-icon size="small">mdi-sort</v-icon>
-                    </template>
-                  </v-select>
-
-                  <v-btn
-                    icon
-                    v-if="sortBy !== 'default'"
-                    @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
-                    variant="text"
-                    density="compact"
-                  >
-                    <v-icon>{{
-                      sortOrder === "desc"
-                        ? "mdi-sort-descending"
-                        : "mdi-sort-ascending"
-                    }}</v-icon>
-                    <v-tooltip activator="parent" location="top">
-                      {{
-                        sortOrder === "desc"
-                          ? tm("sort.descending")
-                          : tm("sort.ascending")
-                      }}
-                    </v-tooltip>
-                  </v-btn>
+                    :items="marketSortItems"
+                    :label="tm('sort.by')"
+                    :order="sortOrder"
+                    :ascending-label="tm('sort.ascending')"
+                    :descending-label="tm('sort.descending')"
+                    :show-order="sortBy !== 'default'"
+                    @update:order="sortOrder = $event"
+                  />
                 </div>
               </div>
 
