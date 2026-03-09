@@ -18,7 +18,7 @@ class FileTokenService:
         """清理过期的令牌"""
         now = time.time()
         expired_tokens = [
-            token for token, (_, expire) in self.staged_files.items() if expire < now
+            token for token, payload in self.staged_files.items() if payload[1] < now
         ]
         for token in expired_tokens:
             self.staged_files.pop(token, None)
