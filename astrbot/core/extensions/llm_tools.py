@@ -33,7 +33,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.tools.permissions import check_admin_permission
 
 from .model import ExtensionKind, InstallRequest, InstallResultStatus
-from .runtime import get_extension_orchestrator
+from .runtime import get_extension_confirm_keywords, get_extension_orchestrator
 
 
 def _json_result(payload: dict) -> str:
@@ -213,15 +213,21 @@ class ExtensionInstallTool(FunctionTool[AstrAgentContext]):
             "data": result.data,
         }
         if result.status == InstallResultStatus.PENDING:
+            confirm_keyword, deny_keyword = get_extension_confirm_keywords(
+                context.context.context.get_config()
+            )
             payload["hint"] = (
                 "Tell the user which extension is about to be installed "
                 "(use candidate_name and candidate_description) and ask "
-                "them to confirm or reject in natural language."
+                f"them to reply with the configured confirmation keyword "
+                f"'{confirm_keyword}' or rejection keyword '{deny_keyword}'."
             )
             payload["candidate_name"] = result.data.get("candidate_name", "")
             payload["candidate_description"] = result.data.get(
                 "candidate_description", ""
             )
+            payload["confirm_keyword"] = confirm_keyword
+            payload["deny_keyword"] = deny_keyword
         return _json_result(payload)
 
 

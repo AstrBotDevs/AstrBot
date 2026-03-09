@@ -82,7 +82,6 @@ def _build_policy_config() -> dict:
                 "default_mode": "secure",
                 "allowlist": [],
                 "blocklist": [],
-                "confirmation_required_non_allowlist": True,
                 "allowed_roles": ["admin", "owner"],
                 "confirmation_token_ttl_seconds": 900,
             }
@@ -130,6 +129,158 @@ async def test_policy_matrix() -> None:
             "identifier": "https://github.com/example/demo",
         }
     ]
+    decision = ExtensionPolicyEngine(cfg).evaluate(req, candidate)
+    assert decision.action == PolicyAction.DENY
+
+
+@pytest.mark.asyncio
+async def test_policy_allowlist_matches_plugin_author_without_identifier() -> None:
+    cfg = _build_policy_config()
+    cfg["provider_settings"]["extension_install"]["allowlist"] = [
+        {
+            "kind": "plugin",
+            "author": "NickMo",
+        }
+    ]
+    req = InstallRequest(
+        kind=ExtensionKind.PLUGIN,
+        target="https://github.com/example/demo",
+        provider="fake",
+        requester_id="u1",
+        requester_role="admin",
+    )
+    candidate = InstallCandidate(
+        kind=ExtensionKind.PLUGIN,
+        provider="git",
+        identifier="https://github.com/example/demo",
+        name="demo",
+        description="d",
+        source="plugin_market_cache",
+        install_payload={"author": "NickMo"},
+    )
+
+    decision = ExtensionPolicyEngine(cfg).evaluate(req, candidate)
+    assert decision.action == PolicyAction.ALLOW_DIRECT
+
+
+@pytest.mark.asyncio
+async def test_policy_blocklist_matches_plugin_author_without_identifier() -> None:
+    cfg = _build_policy_config()
+    cfg["provider_settings"]["extension_install"]["blocklist"] = [
+        {
+            "kind": "plugin",
+            "author": "NickMo",
+        }
+    ]
+    req = InstallRequest(
+        kind=ExtensionKind.PLUGIN,
+        target="https://github.com/example/demo",
+        provider="fake",
+        requester_id="u1",
+        requester_role="admin",
+    )
+    candidate = InstallCandidate(
+        kind=ExtensionKind.PLUGIN,
+        provider="git",
+        identifier="https://github.com/example/demo",
+        name="demo",
+        description="d",
+        source="plugin_market_cache",
+        install_payload={"author": "NickMo"},
+    )
+
+    decision = ExtensionPolicyEngine(cfg).evaluate(req, candidate)
+    assert decision.action == PolicyAction.DENY
+
+
+@pytest.mark.asyncio
+async def test_policy_ignores_empty_plugin_author_rule() -> None:
+    cfg = _build_policy_config()
+    cfg["provider_settings"]["extension_install"]["allowlist"] = [
+        {
+            "kind": "plugin",
+            "author": "",
+        }
+    ]
+    req = InstallRequest(
+        kind=ExtensionKind.PLUGIN,
+        target="https://github.com/example/demo",
+        provider="fake",
+        requester_id="u1",
+        requester_role="admin",
+    )
+    candidate = InstallCandidate(
+        kind=ExtensionKind.PLUGIN,
+        provider="git",
+        identifier="https://github.com/example/demo",
+        name="demo",
+        description="d",
+        source="plugin_market_cache",
+        install_payload={"author": "NickMo"},
+    )
+
+    decision = ExtensionPolicyEngine(cfg).evaluate(req, candidate)
+    assert decision.action == PolicyAction.REQUIRE_CONFIRMATION
+
+
+@pytest.mark.asyncio
+async def test_policy_open_mode_allows_non_blocklisted_target_without_confirmation() -> None:
+    cfg = _build_policy_config()
+    cfg["provider_settings"]["extension_install"]["default_mode"] = "open"
+    req = InstallRequest(
+        kind=ExtensionKind.PLUGIN,
+        target="https://github.com/example/demo",
+        provider="fake",
+        requester_id="u1",
+        requester_role="admin",
+    )
+    candidate = InstallCandidate(
+        kind=ExtensionKind.PLUGIN,
+        provider="git",
+        identifier="https://github.com/example/demo",
+        name="demo",
+        description="d",
+        source="plugin_market_cache",
+        install_payload={"author": "NickMo"},
+    )
+
+    decision = ExtensionPolicyEngine(cfg).evaluate(req, candidate)
+    assert decision.action == PolicyAction.ALLOW_DIRECT
+
+
+@pytest.mark.asyncio
+async def test_policy_open_mode_ignores_allowlist_and_still_denies_blocklist() -> None:
+    cfg = _build_policy_config()
+    cfg["provider_settings"]["extension_install"]["default_mode"] = "open"
+    cfg["provider_settings"]["extension_install"]["allowlist"] = [
+        {
+            "kind": "plugin",
+            "author": "SomeoneElse",
+        }
+    ]
+    cfg["provider_settings"]["extension_install"]["blocklist"] = [
+        {
+            "kind": "plugin",
+            "author": "NickMo",
+        }
+    ]
+    req = InstallRequest(
+        kind=ExtensionKind.PLUGIN,
+        target="https://github.com/example/demo",
+        provider="fake",
+        requester_id="u1",
+        requester_role="admin",
+    )
+    candidate = InstallCandidate(
+        kind=ExtensionKind.PLUGIN,
+        provider="git",
+        identifier="https://github.com/example/demo",
+        name="demo",
+        description="d",
+        source="plugin_market_cache",
+        install_payload={"author": "NickMo"},
+    )
+
     decision = ExtensionPolicyEngine(cfg).evaluate(req, candidate)
     assert decision.action == PolicyAction.DENY
 

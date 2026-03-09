@@ -11,7 +11,6 @@ class ExtensionPolicyConfig:
     mode: str = "secure"
     allowlist: list[dict[str, str]] | None = None
     blocklist: list[dict[str, str]] | None = None
-    confirmation_required_non_allowlist: bool = True
     allowed_roles: list[str] | None = None
 
 
@@ -25,9 +24,6 @@ class ExtensionPolicyEngine:
             mode=str(cfg.get("default_mode", "secure")),
             allowlist=list(cfg.get("allowlist", []) or []),
             blocklist=list(cfg.get("blocklist", []) or []),
-            confirmation_required_non_allowlist=bool(
-                cfg.get("confirmation_required_non_allowlist", True)
-            ),
             allowed_roles=list(cfg.get("allowed_roles", ["admin", "owner"]) or []),
         )
 
@@ -35,11 +31,27 @@ class ExtensionPolicyEngine:
     def _match_rule(
         rule: dict[str, str], request: InstallRequest, candidate: InstallCandidate
     ) -> bool:
-        return (
-            str(rule.get("kind", "")).strip() == request.kind.value
-            and str(rule.get("provider", "")).strip() == candidate.provider
-            and str(rule.get("identifier", "")).strip() == candidate.identifier
-        )
+        expected_kind = str(rule.get("kind", "")).strip()
+        if expected_kind and expected_kind != request.kind.value:
+            return False
+
+        expected_provider = str(rule.get("provider", "")).strip()
+        if expected_provider and expected_provider != candidate.provider:
+            return False
+
+        expected_identifier = str(rule.get("identifier", "")).strip()
+        if expected_identifier and expected_identifier != candidate.identifier:
+            return False
+
+        expected_author = str(rule.get("author", "")).strip()
+        if not any([expected_provider, expected_identifier, expected_author]):
+            return False
+        if expected_author:
+            candidate_author = str(candidate.install_payload.get("author", "")).strip()
+            if candidate_author != expected_author:
+                return False
+
+        return True
 
     def evaluate(
         self, request: InstallRequest, candidate: InstallCandidate
@@ -59,25 +71,18 @@ class ExtensionPolicyEngine:
                 )
 
         for rule in self.config.allowlist or []:
-            if self._match_rule(rule, request, candidate):
+            if self.config.mode == "secure" and self._match_rule(
+                rule, request, candidate
+            ):
                 return PolicyDecision(
                     action=PolicyAction.ALLOW_DIRECT,
                     reason="target matched allowlist",
                 )
 
-        if (
-            self.config.mode == "secure"
-            and self.config.confirmation_required_non_allowlist
-        ):
+        if self.config.mode == "secure":
             return PolicyDecision(
                 action=PolicyAction.REQUIRE_CONFIRMATION,
                 reason="non-allowlisted target requires confirmation",
-            )
-
-        if self.config.confirmation_required_non_allowlist:
-            return PolicyDecision(
-                action=PolicyAction.REQUIRE_CONFIRMATION,
-                reason="confirmation enabled for non-allowlisted target",
             )
 
         return PolicyDecision(

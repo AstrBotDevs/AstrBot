@@ -13,6 +13,7 @@ from astrbot.core.astr_main_agent import _apply_extension_hub_tools
 from astrbot.core.extensions.llm_tools import (
     EXTENSION_DENY_ALL_TOOL,
     EXTENSION_DENY_TOOL,
+    EXTENSION_INSTALL_TOOL,
     EXTENSION_SEARCH_TOOL,
 )
 from astrbot.core.extensions.model import InstallResultStatus
@@ -169,3 +170,57 @@ async def test_extension_deny_all_tool_calls_global_reject() -> None:
         kind=None,
         reason="rejected by agent",
     )
+
+
+@pytest.mark.asyncio
+async def test_extension_install_tool_exposes_configured_confirmation_keywords(
+    monkeypatch,
+) -> None:
+    orchestrator = SimpleNamespace(
+        install=AsyncMock(
+            return_value=SimpleNamespace(
+                status=InstallResultStatus.PENDING,
+                message="confirmation required",
+                operation_id="op-1",
+                data={
+                    "candidate_name": "demo-plugin",
+                    "candidate_description": "demo desc",
+                },
+            )
+        )
+    )
+    monkeypatch.setattr(
+        "astrbot.core.extensions.llm_tools.get_extension_orchestrator",
+        lambda _: orchestrator,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.extensions.llm_tools.check_admin_permission",
+        lambda *args, **kwargs: None,
+    )
+    event = MagicMock(spec=AstrMessageEvent)
+    event.unified_msg_origin = "conv-1"
+    event.get_sender_id.return_value = "u1"
+    event.role = "admin"
+    plugin_context = MagicMock(spec=Context)
+    plugin_context.get_config.return_value = {
+        "provider_settings": {
+            "extension_install": {
+                "confirm_keyword": "点头",
+                "deny_keyword": "取消",
+            }
+        }
+    }
+    context = ContextWrapper(
+        AstrAgentContext(context=plugin_context, event=event),
+    )
+
+    result = await EXTENSION_INSTALL_TOOL.call(
+        context, kind="plugin", target="https://github.com/example/demo"
+    )
+    payload = json.loads(result)
+
+    assert payload["status"] == "pending"
+    assert payload["confirm_keyword"] == "点头"
+    assert payload["deny_keyword"] == "取消"
+    assert "点头" in payload["hint"]
+    assert "取消" in payload["hint"]

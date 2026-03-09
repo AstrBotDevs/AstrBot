@@ -820,7 +820,7 @@
           },
           "default_mode": {
             "description": "默认安装策略",
-            "hint": "安全模式下，非白名单目标默认需要确认；开放模式下可配合其他策略项放宽限制。",
+            "hint": "安全模式下，仅白名单命中的插件可直接安装，其余必须确认；开放模式下仅黑名单生效，其余直接安装。",
             "labels": [
               "安全模式",
               "开放模式"
@@ -830,17 +830,17 @@
             "description": "默认搜索结果上限",
             "hint": "控制聊天侧扩展搜索默认返回的结果数量。"
           },
-          "confirmation_required_non_allowlist": {
-            "description": "非白名单目标需要确认",
-            "hint": "开启后，未命中白名单的聊天侧安装请求需要先确认。"
-          },
           "confirmation_token_ttl_seconds": {
             "description": "确认有效期（秒）",
             "hint": "聊天侧待确认安装请求的有效时长，单位为秒。"
           },
-          "confirm_keywords": {
+          "confirm_keyword": {
             "description": "确认关键词",
-            "hint": "按顺序填写两个关键词：第一个表示确认安装，第二个表示拒绝安装。"
+            "hint": "用户回复该关键词时，确认安装待处理的扩展。"
+          },
+          "deny_keyword": {
+            "description": "拒绝关键词",
+            "hint": "用户回复该关键词时，拒绝安装待处理的扩展。"
           },
           "allowed_roles": {
             "description": "允许的角色",
@@ -852,43 +852,45 @@
           },
           "allowlist": {
             "description": "安装白名单",
-            "hint": "命中规则的聊天侧安装目标可直接安装。",
-            "rule": {
-              "description": "规则项",
-              "kind": {
-                "description": "扩展类型",
-                "labels": [
-                  "插件",
-                  "技能",
-                  "MCP"
-                ]
-              },
-              "provider": {
-                "description": "提供者"
-              },
-              "identifier": {
-                "description": "目标标识"
+            "hint": "命中作者规则的聊天侧插件安装目标可直接安装。",
+            "templates": {
+              "rule": {
+                "name": "按作者匹配",
+                "description": "白名单规则",
+                "kind": {
+                  "description": "扩展类型",
+                  "labels": [
+                    "插件",
+                    "技能",
+                    "MCP"
+                  ]
+                },
+                "author": {
+                  "description": "作者",
+                  "hint": "填写插件作者名，例如 NickMo。"
+                }
               }
             }
           },
           "blocklist": {
             "description": "安装黑名单",
-            "hint": "命中规则的聊天侧安装目标会被直接拒绝。",
-            "rule": {
-              "description": "规则项",
-              "kind": {
-                "description": "扩展类型",
-                "labels": [
-                  "插件",
-                  "技能",
-                  "MCP"
-                ]
-              },
-              "provider": {
-                "description": "提供者"
-              },
-              "identifier": {
-                "description": "目标标识"
+            "hint": "命中作者规则的聊天侧插件安装目标会被直接拒绝。",
+            "templates": {
+              "rule": {
+                "name": "按作者匹配",
+                "description": "黑名单规则",
+                "kind": {
+                  "description": "扩展类型",
+                  "labels": [
+                    "插件",
+                    "技能",
+                    "MCP"
+                  ]
+                },
+                "author": {
+                  "description": "作者",
+                  "hint": "填写插件作者名，例如 NickMo。"
+                }
               }
             }
           }

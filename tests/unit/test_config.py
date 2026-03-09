@@ -605,3 +605,49 @@ class TestConfigMetadataI18n:
             result["group"]["metadata"]["section"]["items"]["field"]["name"]
             == "group.section.field.name"
         )
+
+    def test_convert_to_i18n_keys_templates(self):
+        """Test converting template metadata to i18n keys."""
+        metadata = {
+            "group": {
+                "metadata": {
+                    "section": {
+                        "items": {
+                            "rules": {
+                                "type": "template_list",
+                                "templates": {
+                                    "rule": {
+                                        "name": "Author rule",
+                                        "description": "Match by author",
+                                        "items": {
+                                            "author": {
+                                                "description": "Author",
+                                                "hint": "Plugin author name",
+                                                "type": "string",
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+
+        result = ConfigMetadataI18n.convert_to_i18n_keys(metadata)
+
+        template = (
+            result["group"]["metadata"]["section"]["items"]["rules"]["templates"][
+                "rule"
+            ]
+        )
+        assert template["name"] == "group.section.rules.templates.rule.name"
+        assert (
+            template["description"]
+            == "group.section.rules.templates.rule.description"
+        )
+        assert (
+            template["items"]["author"]["description"]
+            == "group.section.rules.templates.rule.author.description"
+        )

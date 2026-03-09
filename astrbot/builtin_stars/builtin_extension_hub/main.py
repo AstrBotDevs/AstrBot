@@ -2,9 +2,88 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.core.extensions import InstallResultStatus
 from astrbot.core.extensions.runtime import (
+    get_extension_confirm_keywords,
     get_extension_orchestrator,
     is_extension_install_enabled,
 )
+from astrbot.core.star.filter.custom_filter import CustomFilter
+
+
+def _get_extension_confirm_keywords_from_config(
+    config: dict,
+) -> tuple[str, str]:
+    return get_extension_confirm_keywords(config)
+
+
+def _normalize_intent_text(raw_text: str) -> str:
+    text = raw_text.lower()
+    for ch in [",", ".", "!", "?", "，", "。", "！", "？", "；", ";", "：", ":"]:
+        text = text.replace(ch, " ")
+    return " ".join(text.split())
+
+
+def _contains_intent_word(normalized: str, word: str) -> bool:
+    if not word:
+        return False
+    is_ascii_word = all(
+        ch.isascii() and (ch.isalnum() or ch in {"_", "-"}) for ch in word
+    )
+    if not is_ascii_word:
+        return word in normalized
+    parts = normalized.split()
+    return word in parts
+
+
+def _is_allowed_confirmation_role(config: dict, role: str) -> bool:
+    provider_settings = config.get("provider_settings", {})
+    extension_cfg = provider_settings.get("extension_install", {})
+    allowed_roles = extension_cfg.get("allowed_roles", ["admin", "owner"])
+    if not isinstance(allowed_roles, list):
+        return False
+    return role in {str(item).strip() for item in allowed_roles}
+
+
+def _detect_install_intent_from_config(
+    config: dict,
+    raw_text: str,
+    confirm_words: set[str],
+    deny_words: set[str],
+) -> str | None:
+    normalized = _normalize_intent_text(raw_text)
+    confirm_keyword, deny_keyword = _get_extension_confirm_keywords_from_config(config)
+
+    deny_words = deny_words | {deny_keyword.lower()}
+    confirm_words = confirm_words | {confirm_keyword.lower()}
+
+    has_deny = any(_contains_intent_word(normalized, word) for word in deny_words)
+    has_confirm = any(_contains_intent_word(normalized, word) for word in confirm_words)
+    if has_deny and has_confirm:
+        return None
+    if has_deny:
+        return "deny"
+    if has_confirm:
+        return "confirm"
+    return None
+
+
+class InstallConfirmationIntentFilter(CustomFilter):
+    def filter(self, event: AstrMessageEvent, cfg: dict) -> bool:
+        if not is_extension_install_enabled(cfg):
+            return False
+        if not _is_allowed_confirmation_role(cfg, event.role):
+            return False
+        raw_text = event.get_message_str().strip()
+        if raw_text.startswith("/"):
+            return False
+        return (
+            _detect_install_intent_from_config(
+                cfg,
+                raw_text,
+                Main._CONFIRM_WORDS,
+                Main._DENY_WORDS,
+            )
+            is not None
+        )
 
 
 class Main(star.Star):
@@ -59,55 +138,15 @@ class Main(star.Star):
         return is_extension_install_enabled(self.context.get_config())
 
     def _get_extension_confirm_keywords(self) -> tuple[str, str]:
-        config = self.context.get_config()
-        provider_settings = config.get("provider_settings", {})
-        extension_cfg = provider_settings.get("extension_install", {})
-        keywords = extension_cfg.get("confirm_keywords", [])
-        if isinstance(keywords, list) and len(keywords) >= 2:
-            confirm_keyword = str(keywords[0]).strip() or "确认安装"
-            deny_keyword = str(keywords[1]).strip() or "拒绝安装"
-            return confirm_keyword, deny_keyword
-        return "确认安装", "拒绝安装"
-
-    @staticmethod
-    def _normalize_intent_text(raw_text: str) -> str:
-        text = raw_text.lower()
-        for ch in [",", ".", "!", "?", "，", "。", "！", "？", "；", ";", "：", ":"]:
-            text = text.replace(ch, " ")
-        return " ".join(text.split())
-
-    @staticmethod
-    def _contains_intent_word(normalized: str, word: str) -> bool:
-        if not word:
-            return False
-        is_ascii_word = all(
-            ch.isascii() and (ch.isalnum() or ch in {"_", "-"}) for ch in word
-        )
-        if not is_ascii_word:
-            return word in normalized
-        parts = normalized.split()
-        return word in parts
+        return _get_extension_confirm_keywords_from_config(self.context.get_config())
 
     def _detect_install_intent(self, raw_text: str) -> str | None:
-        normalized = self._normalize_intent_text(raw_text)
-        confirm_keyword, deny_keyword = self._get_extension_confirm_keywords()
-
-        deny_words = self._DENY_WORDS | {deny_keyword.lower()}
-        confirm_words = self._CONFIRM_WORDS | {confirm_keyword.lower()}
-
-        has_deny = any(
-            self._contains_intent_word(normalized, word) for word in deny_words
+        return _detect_install_intent_from_config(
+            self.context.get_config(),
+            raw_text,
+            self._CONFIRM_WORDS,
+            self._DENY_WORDS,
         )
-        has_confirm = any(
-            self._contains_intent_word(normalized, word) for word in confirm_words
-        )
-        if has_deny and has_confirm:
-            return None
-        if has_deny:
-            return "deny"
-        if has_confirm:
-            return "confirm"
-        return None
 
     def _is_install_confirmation_candidate_message(self, raw_text: str) -> bool:
         if not self._is_extension_install_enabled():
@@ -116,8 +155,30 @@ class Main(star.Star):
             return False
         return self._detect_install_intent(raw_text) is not None
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @filter.regex(r"^.+$")
+    async def _append_install_result_to_conversation(
+        self,
+        *,
+        unified_msg_origin: str,
+        user_message: str,
+        assistant_message: str,
+    ) -> None:
+        conversation_manager = getattr(self.context, "conversation_manager", None)
+        if conversation_manager is None:
+            return
+
+        conversation_id = await conversation_manager.get_curr_conversation_id(
+            unified_msg_origin
+        )
+        if not conversation_id:
+            return
+
+        await conversation_manager.add_message_pair(
+            conversation_id,
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_message},
+        )
+
+    @filter.custom_filter(InstallConfirmationIntentFilter, False)
     async def handle_install_confirmation_intent(self, event: AstrMessageEvent) -> None:
         """Natural-language intent based install confirmation/rejection."""
         message = event.get_message_str().strip()
@@ -143,17 +204,21 @@ class Main(star.Star):
                 actor_role=event.role,
             )
             if result.status == InstallResultStatus.SUCCESS:
-                event.set_result(
-                    MessageEventResult().message(
-                        f"Confirmed {target_label}, install completed."
-                    )
+                assistant_message = f"Confirmed {target_label}, install completed."
+                await self._append_install_result_to_conversation(
+                    unified_msg_origin=event.unified_msg_origin,
+                    user_message=message,
+                    assistant_message=assistant_message,
                 )
+                event.set_result(MessageEventResult().message(assistant_message))
             elif result.status != InstallResultStatus.FAILED:
-                event.set_result(
-                    MessageEventResult().message(
-                        f"Confirmation denied: {result.message}"
-                    )
+                assistant_message = f"Confirmation denied: {result.message}"
+                await self._append_install_result_to_conversation(
+                    unified_msg_origin=event.unified_msg_origin,
+                    user_message=message,
+                    assistant_message=assistant_message,
                 )
+                event.set_result(MessageEventResult().message(assistant_message))
         elif intent == "deny":
             result = await orchestrator.deny_for_conversation(
                 conversation_id=event.unified_msg_origin,
@@ -163,8 +228,12 @@ class Main(star.Star):
             )
             if result.status == InstallResultStatus.DENIED:
                 count = result.data.get("count", 1)
-                event.set_result(
-                    MessageEventResult().message(
-                        f"Rejected {count} pending install request(s) for {target_label}."
-                    )
+                assistant_message = (
+                    f"Rejected {count} pending install request(s) for {target_label}."
                 )
+                await self._append_install_result_to_conversation(
+                    unified_msg_origin=event.unified_msg_origin,
+                    user_message=message,
+                    assistant_message=assistant_message,
+                )
+                event.set_result(MessageEventResult().message(assistant_message))

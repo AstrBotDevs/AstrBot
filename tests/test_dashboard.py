@@ -242,6 +242,62 @@ async def test_builtin_extension_hub_is_listed_as_plugin(
 
 
 @pytest.mark.asyncio
+async def test_chat_stream_survives_back_queue_exception(
+    app: Quart, authenticated_header: dict, monkeypatch
+):
+    test_client = app.test_client()
+
+    class _BackQueue:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def get(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("boom")
+            return {"type": "end", "data": "", "streaming": False}
+
+    class _ChatQueue:
+        def __init__(self) -> None:
+            self.items = []
+
+        async def put(self, item):
+            self.items.append(item)
+
+    back_queue = _BackQueue()
+    chat_queue = _ChatQueue()
+    logger_exceptions = []
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.webchat_queue_mgr.get_or_create_back_queue",
+        lambda *args, **kwargs: back_queue,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.webchat_queue_mgr.get_or_create_queue",
+        lambda *args, **kwargs: chat_queue,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.webchat_queue_mgr.remove_back_queue",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.logger.exception",
+        lambda message, *args, **kwargs: logger_exceptions.append(message),
+    )
+
+    response = await test_client.post(
+        "/api/chat/send",
+        json={"message": "hello", "session_id": "test-session"},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    body = await response.get_data(as_text=True)
+    assert '"type": "session_id"' in body
+    assert logger_exceptions == []
+
+
+@pytest.mark.asyncio
 async def test_commands_api(app: Quart, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()

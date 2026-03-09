@@ -76,10 +76,11 @@ class PluginAdapter(ExtensionAdapter):
             name = str(item.get("name", "") or item.get("display_name", "")).strip()
             desc = str(item.get("desc", "") or item.get("description", "")).strip()
             repo = str(item.get("repo", "")).strip()
+            author = str(item.get("author", "")).strip()
             identifier = repo or name
             if not identifier:
                 continue
-            keyword_blob = " ".join([name, desc, repo]).strip()
+            keyword_blob = " ".join([name, desc, repo, author]).strip()
             if not _candidate_match(keyword_blob, query):
                 continue
             candidates.append(
@@ -91,7 +92,10 @@ class PluginAdapter(ExtensionAdapter):
                     description=desc,
                     version=str(item.get("version", "")),
                     source="plugin_market_cache",
-                    install_payload={"repo": repo or identifier},
+                    install_payload={
+                        "repo": repo or identifier,
+                        "author": author,
+                    },
                 )
             )
         logger.debug(

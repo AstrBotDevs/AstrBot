@@ -91,20 +91,19 @@
                 <div v-for="(childMeta, childKey, childIndex) in itemMeta.items" :key="childKey">
                   <template v-if="!childMeta?.invisible && shouldShowItem(childMeta, entry)">
                     <v-row class="config-row">
-                      <v-col cols="12" sm="6" class="property-info">
-                        <v-list-item density="compact">
-                          <v-list-item-title class="property-name">
+                      <v-col cols="12" class="config-input config-input--stacked">
+                        <div class="field-stack">
+                          <div class="field-label">
                             {{ translateIfKey(childMeta?.description) || childKey }}
-                          </v-list-item-title>
-                          <v-list-item-subtitle class="property-hint">
+                          </div>
+                          <div v-if="childMeta?.hint" class="field-hint">
                             {{ translateIfKey(childMeta?.hint) }}
-                          </v-list-item-subtitle>
-                        </v-list-item>
-                      </v-col>
-                      <v-col cols="12" sm="6" class="config-input">
+                          </div>
+                        </div>
                         <ConfigItemRenderer
                           v-model="entry[itemKey][childKey]"
                           :item-meta="childMeta"
+                          class="config-field"
                         />
                       </v-col>
                     </v-row>
@@ -119,21 +118,19 @@
               <!-- Regular Property -->
               <template v-else-if="!itemMeta?.invisible && shouldShowItem(itemMeta, entry)">
                 <v-row class="config-row">
-                  <v-col cols="12" sm="6" class="property-info">
-                    <v-list-item density="compact">
-                      <v-list-item-title class="property-name">
-                        <span v-if="itemMeta?.description">{{ translateIfKey(itemMeta?.description) }} <span class="property-key">({{ itemKey }})</span></span>
-                        <span v-else>{{ itemKey }}</span>
-                      </v-list-item-title>
-                      <v-list-item-subtitle class="property-hint">
+                  <v-col cols="12" class="config-input config-input--stacked">
+                    <div class="field-stack">
+                      <div class="field-label">
+                        {{ translateIfKey(itemMeta?.description) || itemKey }}
+                      </div>
+                      <div v-if="itemMeta?.hint" class="field-hint">
                         {{ translateIfKey(itemMeta?.hint) }}
-                      </v-list-item-subtitle>
-                    </v-list-item>
-                  </v-col>
-                  <v-col cols="12" sm="6" class="config-input">
+                      </div>
+                    </div>
                     <ConfigItemRenderer
                       v-model="entry[itemKey]"
                       :item-meta="itemMeta"
+                      class="config-field"
                     />
                   </v-col>
                 </v-row>
@@ -391,17 +388,12 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
 
 .template-entry-body {
   margin-top: 4px;
+  padding: 0 4px 8px;
 }
 
 .config-row {
   margin: 0;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.config-row:hover {
-  background-color: rgba(0, 0, 0, 0.03);
+  padding: 10px 12px;
 }
 
 .property-info {
@@ -427,11 +419,35 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
 }
 
 .config-input {
-  padding: 4px 8px;
+  padding: 0;
+}
+
+.config-input--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .config-field {
   margin-bottom: 0;
+}
+
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--v-theme-primaryText);
+}
+
+.field-hint {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--v-theme-secondaryText);
 }
 
 .config-divider {

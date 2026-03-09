@@ -41,6 +41,23 @@ def is_extension_install_enabled(
     return bool(extension_cfg.get("enable", True))
 
 
+def get_extension_confirm_keywords(
+    config_or_provider_settings: Mapping[str, Any] | None,
+) -> tuple[str, str]:
+    extension_cfg = _get_extension_install_config(config_or_provider_settings)
+    confirm_keyword = str(extension_cfg.get("confirm_keyword", "")).strip()
+    deny_keyword = str(extension_cfg.get("deny_keyword", "")).strip()
+    if confirm_keyword or deny_keyword:
+        return confirm_keyword or "确认安装", deny_keyword or "拒绝安装"
+
+    keywords = extension_cfg.get("confirm_keywords", [])
+    if isinstance(keywords, list) and len(keywords) >= 2:
+        confirm_keyword = str(keywords[0]).strip() or "确认安装"
+        deny_keyword = str(keywords[1]).strip() or "拒绝安装"
+        return confirm_keyword, deny_keyword
+    return "确认安装", "拒绝安装"
+
+
 def _read_ttl_seconds(config: dict[str, Any]) -> int:
     install_cfg = _get_extension_install_config(config)
     ttl = install_cfg.get("confirmation_token_ttl_seconds", 900)

@@ -135,10 +135,10 @@ DEFAULT_CONFIG = {
             "search_result_limit": 6,
             "allowlist": [],
             "blocklist": [],
-            "confirmation_required_non_allowlist": True,
             "confirmation_token_ttl_seconds": 900,
             "pending_cleanup_interval_seconds": 300,
-            "confirm_keywords": ["确认安装", "拒绝安装"],
+            "confirm_keyword": "确认安装",
+            "deny_keyword": "拒绝安装",
             "allowed_roles": ["admin", "owner"],
         },
         "computer_use_runtime": "none",
@@ -3576,14 +3576,6 @@ CONFIG_METADATA_3 = {
                             "provider_settings.extension_install.enable": True,
                         },
                     },
-                    "provider_settings.extension_install.confirmation_required_non_allowlist": {
-                        "description": "非白名单目标需要确认",
-                        "type": "bool",
-                        "hint": "开启后，未命中白名单的聊天侧安装请求需要先确认。",
-                        "condition": {
-                            "provider_settings.extension_install.enable": True,
-                        },
-                    },
                     "provider_settings.extension_install.confirmation_token_ttl_seconds": {
                         "description": "确认有效期（秒）",
                         "type": "int",
@@ -3592,10 +3584,18 @@ CONFIG_METADATA_3 = {
                             "provider_settings.extension_install.enable": True,
                         },
                     },
-                    "provider_settings.extension_install.confirm_keywords": {
+                    "provider_settings.extension_install.confirm_keyword": {
                         "description": "确认关键词",
-                        "type": "list",
-                        "hint": "按顺序填写两个关键词：第一个表示确认安装，第二个表示拒绝安装。",
+                        "type": "string",
+                        "hint": "用户回复该关键词时，确认安装待处理的扩展。",
+                        "condition": {
+                            "provider_settings.extension_install.enable": True,
+                        },
+                    },
+                    "provider_settings.extension_install.deny_keyword": {
+                        "description": "拒绝关键词",
+                        "type": "string",
+                        "hint": "用户回复该关键词时，拒绝安装待处理的扩展。",
                         "condition": {
                             "provider_settings.extension_install.enable": True,
                         },
@@ -3620,10 +3620,10 @@ CONFIG_METADATA_3 = {
                     "provider_settings.extension_install.allowlist": {
                         "description": "安装白名单",
                         "type": "template_list",
-                        "hint": "命中规则的聊天侧安装目标可直接安装。",
+                        "hint": "命中作者规则的聊天侧插件安装目标可直接安装。",
                         "templates": {
                             "rule": {
-                                "name": "规则项",
+                                "name": "按作者匹配",
                                 "description": "白名单规则",
                                 "items": {
                                     "kind": {
@@ -3632,31 +3632,29 @@ CONFIG_METADATA_3 = {
                                         "options": ["plugin", "skill", "mcp"],
                                         "labels": ["插件", "技能", "MCP"],
                                         "default": "plugin",
+                                        "invisible": True,
                                     },
-                                    "provider": {
-                                        "description": "提供者",
+                                    "author": {
+                                        "description": "作者",
                                         "type": "string",
                                         "default": "",
-                                    },
-                                    "identifier": {
-                                        "description": "目标标识",
-                                        "type": "string",
-                                        "default": "",
+                                        "hint": "填写插件作者名，例如 NickMo。",
                                     },
                                 },
                             }
                         },
                         "condition": {
                             "provider_settings.extension_install.enable": True,
+                            "provider_settings.extension_install.default_mode": "secure",
                         },
                     },
                     "provider_settings.extension_install.blocklist": {
                         "description": "安装黑名单",
                         "type": "template_list",
-                        "hint": "命中规则的聊天侧安装目标会被直接拒绝。",
+                        "hint": "命中作者规则的聊天侧插件安装目标会被直接拒绝。",
                         "templates": {
                             "rule": {
-                                "name": "规则项",
+                                "name": "按作者匹配",
                                 "description": "黑名单规则",
                                 "items": {
                                     "kind": {
@@ -3665,16 +3663,13 @@ CONFIG_METADATA_3 = {
                                         "options": ["plugin", "skill", "mcp"],
                                         "labels": ["插件", "技能", "MCP"],
                                         "default": "plugin",
+                                        "invisible": True,
                                     },
-                                    "provider": {
-                                        "description": "提供者",
+                                    "author": {
+                                        "description": "作者",
                                         "type": "string",
                                         "default": "",
-                                    },
-                                    "identifier": {
-                                        "description": "目标标识",
-                                        "type": "string",
-                                        "default": "",
+                                        "hint": "填写插件作者名，例如 NickMo。",
                                     },
                                 },
                             }
