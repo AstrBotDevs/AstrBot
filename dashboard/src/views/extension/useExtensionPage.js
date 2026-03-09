@@ -915,6 +915,18 @@ export const useExtensionPage = () => {
     changelogDialog.repoUrl = plugin.repo;
     changelogDialog.show = true;
   };
+
+  const openPluginWebUI = (pluginName) => {
+    if (typeof pluginName !== "string" || !pluginName.length) {
+      return;
+    }
+    router.push({
+      name: "PluginWebUI",
+      params: {
+        pluginName,
+      },
+    });
+  };
   
   // 为表格视图创建一个处理安装插件的函数
   const handleInstallPlugin = async (plugin) => {
@@ -1608,6 +1620,7 @@ export const useExtensionPage = () => {
     reloadPlugin,
     viewReadme,
     viewChangelog,
+    openPluginWebUI,
     handleInstallPlugin,
     confirmDangerInstall,
     cancelDangerInstall,

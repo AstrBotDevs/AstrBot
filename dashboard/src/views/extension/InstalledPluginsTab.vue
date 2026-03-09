@@ -121,6 +121,7 @@ const {
   reloadPlugin,
   viewReadme,
   viewChangelog,
+  openPluginWebUI,
   handleInstallPlugin,
   confirmDangerInstall,
   cancelDangerInstall,
@@ -508,6 +509,19 @@ const {
                         </v-btn>
 
                         <v-btn
+                          v-if="item.webui?.content_path"
+                          size="small"
+                          variant="tonal"
+                          color="info"
+                          class="table-action-btn"
+                          prepend-icon="mdi-monitor-dashboard"
+                          :disabled="!item.activated"
+                          @click="openPluginWebUI(item.name)"
+                        >
+                          {{ tm("buttons.openWebUI") }}
+                        </v-btn>
+
+                        <v-btn
                           size="small"
                           variant="tonal"
                           color="info"
@@ -617,6 +631,7 @@ const {
                       @view-handlers="showPluginInfo(extension)"
                       @view-readme="viewReadme(extension)"
                       @view-changelog="viewChangelog(extension)"
+                      @open-webui-page="() => openPluginWebUI(extension.name)"
                     >
                     </ExtensionCard>
                   </v-col>
