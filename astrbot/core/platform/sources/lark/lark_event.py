@@ -747,12 +747,6 @@ class LarkMessageEvent(AstrMessageEvent):
         使用解耦发送循环，LLM token 到达时只更新 buffer 并唤醒发送协程，
         发送频率由网络 RTT 自然限流。
         """
-        # Guard: 如果平台未配置支持流式输出，直接回退
-        if not getattr(self.platform_meta, "support_streaming_message", False):
-            logger.debug("[Lark] 流式输出未启用，回退到非流式发送")
-            await self._fallback_send_streaming(generator, use_fallback)
-            return
-
         # Step 1: 创建流式卡片实体
         card_id = await self._create_streaming_card()
         if not card_id:

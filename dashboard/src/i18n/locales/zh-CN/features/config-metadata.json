@@ -426,10 +426,6 @@
         "description": "Verification Token",
         "hint": "用于验证飞书回调请求的令牌"
       },
-      "lark_enable_streaming": {
-        "description": "启用流式输出",
-        "hint": "启用后，LLM 回复将以「打字机」效果逐步输出。使用前请确保已在「AI 配置 → 其他配置」中开启「流式输出」。还需要在飞书开发者后台为应用开通「创建与更新卡片(cardkit:card:write)」权限。飞书客户端需 ≥ 7.20 版本，低版本将只显示标题和升级提示。"
-      },
       "misskey_allow_insecure_downloads": {
         "description": "允许不安全下载（禁用 SSL 验证）",
         "hint": "当远端服务器存在证书问题导致无法正常下载时，自动禁用 SSL 验证作为回退方案。适用于某些图床的证书配置问题。启用有安全风险，仅在必要时使用。"
