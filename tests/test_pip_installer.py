@@ -304,6 +304,54 @@ async def test_install_keeps_short_form_index_override(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_install_preserves_url_fragment_in_option_input(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(
+        package_name="--index-url https://example.com/simple#frag demo-package"
+    )
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:4] == [
+        "install",
+        "--index-url",
+        "https://example.com/simple#frag",
+        "demo-package",
+    ]
+    assert "-i" not in recorded_args
+
+
+@pytest.mark.asyncio
+async def test_install_strips_inline_comment_from_option_line(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(
+        package_name=(
+            "--extra-index-url https://example.com/simple  # mirror\n"
+            "demo-package\n"
+        )
+    )
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:4] == [
+        "install",
+        "--extra-index-url",
+        "https://example.com/simple",
+        "demo-package",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_install_falls_back_to_raw_input_for_invalid_token_string(monkeypatch):
     run_pip = AsyncMock(return_value=0)
 

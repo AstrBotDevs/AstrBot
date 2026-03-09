@@ -151,7 +151,7 @@ def _split_package_install_input(raw_input: str) -> list[str]:
 
     split_tokens = shlex.split(normalized)
     if split_tokens and split_tokens[0].startswith("-"):
-        return split_tokens
+        return _split_option_input(normalized)
 
     if split_tokens and all(
         token.startswith("-") or _is_valid_install_requirement(token)
@@ -172,21 +172,26 @@ def _is_valid_install_requirement(candidate: str) -> bool:
 
 def _split_multiline_package_input(raw_input: str) -> list[str]:
     requirements: list[str] = []
-    for candidate in _iter_clean_requirement_lines(raw_input):
+    for line in raw_input.splitlines():
+        candidate = _strip_inline_requirement_comment(line)
+        if not candidate or candidate.startswith("#"):
+            continue
         if candidate.startswith("-"):
-            requirements.extend(shlex.split(candidate))
+            requirements.extend(_split_option_input(candidate))
             continue
         requirements.append(candidate)
     return requirements
 
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
-    for spec in package_specs:
+    for index, spec in enumerate(package_specs):
         if spec in {"-i", "--index-url"}:
-            return True
+            if index + 1 < len(package_specs):
+                return True
+            continue
         if spec.startswith("--index-url="):
             return True
-        if spec.startswith("-i"):
+        if spec.startswith("-i") and spec != "-i":
             return True
     return False
 
@@ -195,12 +200,8 @@ def _strip_inline_requirement_comment(raw_input: str) -> str:
     return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
 
 
-def _iter_clean_requirement_lines(raw_input: str):
-    for line in raw_input.splitlines():
-        candidate = _strip_inline_requirement_comment(line)
-        if not candidate or candidate.startswith("#"):
-            continue
-        yield candidate
+def _split_option_input(raw_input: str) -> list[str]:
+    return shlex.split(_strip_inline_requirement_comment(raw_input))
 
 
 def _extract_top_level_modules(
