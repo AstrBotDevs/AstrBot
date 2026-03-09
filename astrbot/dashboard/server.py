@@ -209,21 +209,18 @@ class AstrBotDashboard:
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
         is_plugin_webui_path = self._is_plugin_webui_protected_path(request.path)
-        token = self._extract_dashboard_jwt(
-            allow_asset_token=is_plugin_webui_path
-        )
+        token = self._extract_dashboard_jwt(allow_asset_token=is_plugin_webui_path)
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            if (
-                self._is_plugin_webui_asset_token(payload)
-                and not self._is_plugin_webui_asset_token_scope_valid(
-                    payload,
-                    request.path,
-                )
+            if self._is_plugin_webui_asset_token(
+                payload
+            ) and not self._is_plugin_webui_asset_token_scope_valid(
+                payload,
+                request.path,
             ):
                 r = jsonify(Response().error("Token 无效").__dict__)
                 r.status_code = 401
