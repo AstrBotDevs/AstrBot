@@ -742,25 +742,26 @@ class ProviderManager:
             logger.info(
                 f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
             )
+            provider_inst = self.inst_map[provider_id]
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, Provider):
                     self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.stt_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, STTProvider):
                     self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.tts_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, TTSProvider):
                     self.tts_provider_insts.remove(prov_inst)
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
+            if provider_inst == self.curr_provider_inst:
                 self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
+            if provider_inst == self.curr_stt_provider_inst:
                 self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
+            if provider_inst == self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
 
             inst = self.inst_map[provider_id]
@@ -836,6 +837,35 @@ class ProviderManager:
             # sync in-memory config for API queries (e.g., embedding provider list)
             self.providers_config = astrbot_config["provider"]
 
+    def _get_all_provider_instances(self) -> list[Providers]:
+        seen: set[int] = set()
+        instances: list[Providers] = []
+        for provider_inst in [
+            *self.provider_insts,
+            *self.stt_provider_insts,
+            *self.tts_provider_insts,
+            *self.embedding_provider_insts,
+            *self.rerank_provider_insts,
+            *self.inst_map.values(),
+        ]:
+            marker = id(provider_inst)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            instances.append(provider_inst)
+        return instances
+
+    def _clear_loaded_instances(self) -> None:
+        self.provider_insts = []
+        self.stt_provider_insts = []
+        self.tts_provider_insts = []
+        self.embedding_provider_insts = []
+        self.rerank_provider_insts = []
+        self.inst_map = {}
+        self.curr_provider_inst = None
+        self.curr_stt_provider_inst = None
+        self.curr_tts_provider_inst = None
+
     async def terminate(self) -> None:
         if self._mcp_init_task and not self._mcp_init_task.done():
             self._mcp_init_task.cancel()
@@ -844,9 +874,20 @@ class ProviderManager:
             except asyncio.CancelledError:
                 pass
 
-        for provider_inst in self.provider_insts:
-            if isinstance(provider_inst, SupportsTerminate):
+        self._mcp_init_task = None
+        provider_instances = self._get_all_provider_instances()
+        self._clear_loaded_instances()
+
+        for provider_inst in provider_instances:
+            if not isinstance(provider_inst, SupportsTerminate):
+                continue
+            try:
                 await provider_inst.terminate()
+            except Exception:
+                logger.error(
+                    "Error while terminating provider instance",
+                    exc_info=True,
+                )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:

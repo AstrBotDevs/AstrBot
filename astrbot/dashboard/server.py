@@ -22,6 +22,7 @@ from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
 from quart_cors import cors
+from quart.typing import ResponseReturnValue
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -62,6 +63,7 @@ from .routes import (
     UpdateRoute,
 )
 from .routes.api_key import ALL_OPEN_API_SCOPES
+from .routes.route import runtime_loading_response
 
 # Static assets shipped inside the wheel (built during `hatch build`).
 _BUNDLED_DIST = Path(__file__).parent / "dist"
@@ -263,13 +265,14 @@ class AstrBotDashboard:
         logging.getLogger(self.app.name).removeHandler(default_handler)
 
     def _init_routes(self, db: BaseDatabase):
-        UpdateRoute(
-            self.context, self.core_lifecycle.astrbot_updator, self.core_lifecycle
-        )
+        astrbot_updator = self.core_lifecycle.astrbot_updator
+        plugin_manager = self.core_lifecycle.plugin_manager
+        assert astrbot_updator is not None
+        assert plugin_manager is not None
+
+        UpdateRoute(self.context, astrbot_updator, self.core_lifecycle)
         StatRoute(self.context, db, self.core_lifecycle)
-        PluginRoute(
-            self.context, self.core_lifecycle, self.core_lifecycle.plugin_manager
-        )
+        PluginRoute(self.context, self.core_lifecycle, plugin_manager)
 
         self.command_route = CommandRoute(self.context)
         self.cr = ConfigRoute(self.context, self.core_lifecycle)
@@ -308,21 +311,24 @@ class AstrBotDashboard:
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
-            view_func=self.srv_plug_route,
+            view_func=self.guarded_srv_plug_route,
             methods=["GET", "POST"],
         )
 
     def _init_plugin_route_index(self):
         """将插件路由索引,避免 O(n) 查找"""
         self._plugin_route_map: dict[tuple[str, str], Callable] = {}
-        if self.core_lifecycle.star_context.registered_web_apis is None:
-            self.core_lifecycle.star_context.registered_web_apis = []
+        star_context = self.core_lifecycle.star_context
+        if star_context is None:
+            return
+        if star_context.registered_web_apis is None:
+            star_context.registered_web_apis = []
         for (
             route,
             handler,
             methods,
             _,
-        ) in self.core_lifecycle.star_context.registered_web_apis:
+        ) in star_context.registered_web_apis:
             for method in methods:
                 self._plugin_route_map[(route, method)] = handler
 
@@ -333,6 +339,13 @@ class AstrBotDashboard:
             self.config.save_config()
             logger.info("Initialized random JWT secret for dashboard.")
         self._jwt_secret = dashboard_cfg["jwt_secret"]
+
+    async def guarded_srv_plug_route(
+        self, subpath: str, *args, **kwargs
+    ) -> ResponseReturnValue:
+        if not self.core_lifecycle.runtime_ready:
+            return runtime_loading_response(self.core_lifecycle)
+        return await self.srv_plug_route(subpath, *args, **kwargs)
 
     async def auth_middleware(self):
         # 放行CORS预检请求
@@ -402,6 +415,9 @@ class AstrBotDashboard:
 
     async def srv_plug_route(self, subpath: str, *args, **kwargs):
         handler = self._plugin_route_map.get((f"/{subpath}", request.method))
+        if not handler:
+            self._init_plugin_route_index()
+            handler = self._plugin_route_map.get((f"/{subpath}", request.method))
         if not handler:
             return jsonify(Response().error("未找到该路由").to_json())
 
