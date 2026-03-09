@@ -505,7 +505,10 @@ class PluginManager:
             self._cleanup_plugin_state(dir_name)
 
             plugin_path = os.path.join(self.plugin_store_path, dir_name)
-            await self._install_plugin_requirements(plugin_path, dir_name)
+            try:
+                await self._install_plugin_requirements(plugin_path, dir_name)
+            except Exception as e:
+                logger.error(f"更新插件 {dir_name} 的依赖失败。Code: {e!s}")
 
             success, error = await self.load(specified_dir_name=dir_name)
             if success:

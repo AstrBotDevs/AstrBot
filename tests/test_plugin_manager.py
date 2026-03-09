@@ -359,6 +359,42 @@ async def test_reload_failed_plugin_installs_requirements_before_retry(
 
 
 @pytest.mark.asyncio
+async def test_reload_failed_plugin_logs_dependency_install_error_and_retries_load(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    _write_requirements(plugin_path)
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {"name": TEST_PLUGIN_NAME}
+    events = []
+
+    async def mock_install_requirements(*, requirements_path: str, **kwargs):
+        del kwargs
+        events.append(("deps", requirements_path))
+        raise Exception("pip failed")
+
+    async def mock_load(*args, **kwargs):
+        del args
+        events.append(("load", kwargs["specified_dir_name"]))
+        return True, None
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    success, error = await plugin_manager_pm.reload_failed_plugin(TEST_PLUGIN_DIR)
+
+    assert success is True
+    assert error is None
+    assert events == [
+        ("deps", str(plugin_path / "requirements.txt")),
+        ("load", TEST_PLUGIN_DIR),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_update_plugin_installs_requirements_before_reload(
     plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
 ):
@@ -394,4 +430,3 @@ async def test_update_plugin_installs_requirements_before_reload(
         ("deps", str(local_updator / "requirements.txt")),
         ("reload", TEST_PLUGIN_NAME),
     ]
-

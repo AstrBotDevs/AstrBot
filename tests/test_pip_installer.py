@@ -208,6 +208,21 @@ async def test_install_multiline_input_strips_comments_and_splits_options(monkey
 
 
 @pytest.mark.asyncio
+async def test_install_single_line_input_strips_inline_comment(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="requests==2.31.0  # latest")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:2] == ["install", "requests==2.31.0"]
+
+
+@pytest.mark.asyncio
 async def test_install_splits_single_line_editable_option_input(monkeypatch):
     run_pip = AsyncMock(return_value=0)
 
@@ -269,6 +284,26 @@ async def test_install_keeps_equals_form_index_override(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_install_keeps_short_form_index_override(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="-ihttps://example.com/simple demo-package")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:3] == [
+        "install",
+        "-ihttps://example.com/simple",
+        "demo-package",
+    ]
+    assert "-i" not in recorded_args
+
+
+@pytest.mark.asyncio
 async def test_install_falls_back_to_raw_input_for_invalid_token_string(monkeypatch):
     run_pip = AsyncMock(return_value=0)
 
@@ -282,3 +317,24 @@ async def test_install_falls_back_to_raw_input_for_invalid_token_string(monkeypa
     recorded_args = run_pip.await_args_list[0].args[0]
 
     assert recorded_args[0:2] == ["install", raw_input]
+
+
+@pytest.mark.asyncio
+async def test_install_ignores_whitespace_only_package_string(monkeypatch):
+    run_pip = AsyncMock(return_value=0)
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="   ")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args == [
+        "install",
+        "--trusted-host",
+        "mirrors.aliyun.com",
+        "-i",
+        "https://pypi.org/simple",
+    ]

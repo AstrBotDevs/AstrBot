@@ -142,6 +142,10 @@ def _split_package_install_input(raw_input: str) -> list[str]:
     if "\n" in normalized or "\r" in normalized:
         return _split_multiline_package_input(normalized)
 
+    normalized = _strip_inline_requirement_comment(normalized)
+    if not normalized:
+        return []
+
     if _is_valid_install_requirement(normalized):
         return [normalized]
 
@@ -173,7 +177,7 @@ def _is_valid_install_token(token: str) -> bool:
 def _split_multiline_package_input(raw_input: str) -> list[str]:
     requirements: list[str] = []
     for line in raw_input.splitlines():
-        candidate = re.split(r"\s+#", line, maxsplit=1)[0].strip()
+        candidate = _strip_inline_requirement_comment(line)
         if not candidate or candidate.startswith("#"):
             continue
         if candidate.startswith("-"):
@@ -185,9 +189,15 @@ def _split_multiline_package_input(raw_input: str) -> list[str]:
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
     return any(
-        spec in {"-i", "--index-url"} or spec.startswith("--index-url=")
+        spec in {"-i", "--index-url"}
+        or spec.startswith("--index-url=")
+        or spec.startswith("-i")
         for spec in package_specs
     )
+
+
+def _strip_inline_requirement_comment(raw_input: str) -> str:
+    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
 
 
 def _extract_top_level_modules(
