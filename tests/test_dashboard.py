@@ -4,6 +4,7 @@ import os
 import sys
 import zipfile
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -11,7 +12,7 @@ from quart import Quart
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
-from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.core_lifecycle import AstrBotCoreLifecycle, LifecycleState
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
@@ -70,6 +71,75 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
     return {"Authorization": f"Bearer {token}"}
 
 
+def _set_runtime_loading(core_lifecycle: AstrBotCoreLifecycle) -> None:
+    core_lifecycle._set_lifecycle_state(LifecycleState.CORE_READY)
+    core_lifecycle.runtime_ready_event.clear()
+    core_lifecycle.runtime_failed_event.clear()
+    core_lifecycle.runtime_bootstrap_error = None
+
+
+def _restore_runtime_ready(core_lifecycle: AstrBotCoreLifecycle) -> None:
+    core_lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_READY)
+    core_lifecycle.runtime_ready_event.set()
+    core_lifecycle.runtime_failed_event.clear()
+    core_lifecycle.runtime_bootstrap_error = None
+
+
+def _set_runtime_failed(
+    core_lifecycle: AstrBotCoreLifecycle,
+    message: str = "Runtime bootstrap failed.",
+) -> None:
+    core_lifecycle._set_lifecycle_state(LifecycleState.RUNTIME_FAILED)
+    core_lifecycle.runtime_ready_event.clear()
+    core_lifecycle.runtime_failed_event.set()
+    core_lifecycle.runtime_bootstrap_error = RuntimeError(message)
+
+
+def _assert_runtime_loading_response(
+    data: dict,
+    state: LifecycleState = LifecycleState.CORE_READY,
+) -> None:
+    assert data == {
+        "status": "error",
+        "message": "Runtime is still loading. Please try again shortly.",
+        "data": {
+            "state": state.value,
+            "ready": False,
+            "failed": False,
+            "failure_message": None,
+        },
+    }
+
+
+def _assert_runtime_failed_response(
+    data: dict,
+    message: str | None,
+    state: SimpleNamespace | LifecycleState = LifecycleState.RUNTIME_FAILED,
+) -> None:
+    assert data == {
+        "status": "error",
+        "message": "Runtime bootstrap failed. Please check logs and retry.",
+        "data": {
+            "state": state.value,
+            "ready": False,
+            "failed": True,
+            "failure_message": message,
+        },
+    }
+
+
+def _build_plugin_upload_files() -> dict:
+    return {
+        "files": {
+            "file": FileStorage(
+                stream=io.BytesIO(b"fake-plugin-archive"),
+                filename="demo-plugin.zip",
+                content_type="application/zip",
+            )
+        }
+    }
+
+
 @pytest.mark.asyncio
 async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
     """Tests the login functionality with both wrong and correct credentials."""
@@ -104,6 +174,451 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+async def test_runtime_status_reports_current_state(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    response = await test_client.get(
+        "/api/stat/runtime-status",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["state"] == LifecycleState.RUNTIME_READY.value
+    assert data["data"]["ready"] is True
+    assert data["data"]["failed"] is False
+    assert data["data"]["failure_message"] is None
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        response = await test_client.get(
+            "/api/stat/runtime-status",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["state"] == LifecycleState.CORE_READY.value
+        assert data["data"]["ready"] is False
+        assert data["data"]["failed"] is False
+        assert data["data"]["failure_message"] is None
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+    _set_runtime_failed(core_lifecycle_td, "bootstrap exploded during provider init")
+    try:
+        response = await test_client.get(
+            "/api/stat/runtime-status",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["state"] == "runtime_failed"
+        assert data["data"]["ready"] is False
+        assert data["data"]["failed"] is True
+        assert (
+            data["data"]["failure_message"] == "bootstrap exploded during provider init"
+        )
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "headers", "misleading_field"),
+    [
+        ("/api/stat/get", "auth", "platform"),
+        ("/api/stat/start-time", None, "start_time"),
+    ],
+    ids=["stat-get", "stat-start-time"],
+)
+async def test_stat_endpoints_return_503_while_runtime_loading(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    path: str,
+    headers: str | None,
+    misleading_field: str,
+):
+    test_client = app.test_client()
+    request_kwargs = {}
+    if headers == "auth":
+        request_kwargs["headers"] = authenticated_header
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        response = await test_client.get(path, **request_kwargs)
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_loading_response(data)
+        assert misleading_field not in data["data"]
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "headers", "misleading_field"),
+    [
+        ("/api/stat/get", "auth", "platform"),
+        ("/api/stat/start-time", None, "start_time"),
+    ],
+    ids=["stat-get", "stat-start-time"],
+)
+async def test_stat_endpoints_return_failure_aware_503_after_bootstrap_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    path: str,
+    headers: str | None,
+    misleading_field: str,
+):
+    test_client = app.test_client()
+    request_kwargs = {}
+    if headers == "auth":
+        request_kwargs["headers"] = authenticated_header
+
+    _set_runtime_failed(core_lifecycle_td, "runtime bootstrap failed in plugin reload")
+    try:
+        response = await test_client.get(path, **request_kwargs)
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_failed_response(
+            data,
+            (
+                None
+                if path == "/api/stat/start-time"
+                else "runtime bootstrap failed in plugin reload"
+            ),
+        )
+        assert misleading_field not in data["data"]
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_public_start_time_failure_response_does_not_leak_bootstrap_error(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+
+    _set_runtime_failed(core_lifecycle_td, "provider api key leaked in stacktrace")
+    try:
+        response = await test_client.get("/api/stat/start-time")
+        assert response.status_code == 503
+        data = await response.get_json()
+        assert data == {
+            "status": "error",
+            "message": "Runtime bootstrap failed. Please check logs and retry.",
+            "data": {
+                "state": LifecycleState.RUNTIME_FAILED.value,
+                "ready": False,
+                "failed": True,
+                "failure_message": None,
+            },
+        }
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "request_kwargs_factory", "guard_attr"),
+    [
+        ("get", "/api/plugin/get", lambda: {}, "context.get_all_stars"),
+        (
+            "get",
+            "/api/plugin/source/get-failed-plugins",
+            lambda: {},
+            None,
+        ),
+        (
+            "post",
+            "/api/plugin/install",
+            lambda: {"json": {"url": "https://example.com/plugin"}},
+            "install_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/install-upload",
+            _build_plugin_upload_files,
+            "install_plugin_from_file",
+        ),
+        (
+            "post",
+            "/api/plugin/update",
+            lambda: {"json": {"name": "demo-plugin"}},
+            "update_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/update-all",
+            lambda: {"json": {"names": ["demo-plugin"]}},
+            "update_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/uninstall",
+            lambda: {"json": {"name": "demo-plugin"}},
+            "uninstall_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/uninstall-failed",
+            lambda: {"json": {"dir_name": "demo-plugin"}},
+            "uninstall_failed_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/off",
+            lambda: {"json": {"name": "demo-plugin"}},
+            "turn_off_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/on",
+            lambda: {"json": {"name": "demo-plugin"}},
+            "turn_on_plugin",
+        ),
+        (
+            "post",
+            "/api/plugin/reload",
+            lambda: {"json": {"name": "demo-plugin"}},
+            "reload",
+        ),
+        (
+            "post",
+            "/api/plugin/reload-failed",
+            lambda: {"json": {"dir_name": "demo-plugin"}},
+            "reload_failed_plugin",
+        ),
+        (
+            "get",
+            "/api/plugin/readme?name=demo-plugin",
+            lambda: {},
+            "context.get_all_stars",
+        ),
+        (
+            "get",
+            "/api/plugin/changelog?name=demo-plugin",
+            lambda: {},
+            "context.get_all_stars",
+        ),
+    ],
+    ids=[
+        "get",
+        "get-failed-plugins",
+        "install",
+        "install-upload",
+        "update",
+        "update-all",
+        "uninstall",
+        "uninstall-failed",
+        "off",
+        "on",
+        "reload",
+        "reload-failed",
+        "readme",
+        "changelog",
+    ],
+)
+async def test_plugin_api_returns_503_while_runtime_loading(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    method: str,
+    path: str,
+    request_kwargs_factory,
+    guard_attr: str,
+):
+    test_client = app.test_client()
+    plugin_manager = core_lifecycle_td.plugin_manager
+    assert plugin_manager is not None
+
+    if guard_attr == "context.get_all_stars":
+        monkeypatch.setattr(
+            plugin_manager.context,
+            "get_all_stars",
+            lambda: (_ for _ in ()).throw(
+                AssertionError("plugin state should not be read")
+            ),
+        )
+    elif guard_attr is not None:
+        monkeypatch.setattr(
+            plugin_manager,
+            guard_attr,
+            AsyncMock(side_effect=AssertionError(f"{guard_attr} should not be called")),
+        )
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        request_kwargs = request_kwargs_factory()
+        response = await getattr(test_client, method)(
+            path,
+            headers=authenticated_header,
+            **request_kwargs,
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_loading_response(data)
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path", "request_kwargs_factory", "guard_attr"),
+    [
+        ("get", "/api/plugin/get", lambda: {}, "context.get_all_stars"),
+        (
+            "get",
+            "/api/plugin/source/get-failed-plugins",
+            lambda: {},
+            None,
+        ),
+        (
+            "post",
+            "/api/plugin/install",
+            lambda: {"json": {"url": "https://example.com/plugin"}},
+            "install_plugin",
+        ),
+    ],
+    ids=["get", "get-failed-plugins", "install"],
+)
+async def test_plugin_api_returns_failed_response_after_runtime_bootstrap_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    method: str,
+    path: str,
+    request_kwargs_factory,
+    guard_attr: str,
+):
+    test_client = app.test_client()
+    plugin_manager = core_lifecycle_td.plugin_manager
+    assert plugin_manager is not None
+
+    if guard_attr == "context.get_all_stars":
+        monkeypatch.setattr(
+            plugin_manager.context,
+            "get_all_stars",
+            lambda: (_ for _ in ()).throw(
+                AssertionError("plugin state should not be read")
+            ),
+        )
+    elif guard_attr is not None:
+        monkeypatch.setattr(
+            plugin_manager,
+            guard_attr,
+            AsyncMock(side_effect=AssertionError(f"{guard_attr} should not be called")),
+        )
+
+    _set_runtime_failed(core_lifecycle_td, "plugin bootstrap failed")
+    try:
+        request_kwargs = request_kwargs_factory()
+        response = await getattr(test_client, method)(
+            path,
+            headers=authenticated_header,
+            **request_kwargs,
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_failed_response(data, "plugin bootstrap failed")
+    finally:
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_plugin_web_route_returns_503_while_runtime_loading(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    route_called = False
+    star_context = core_lifecycle_td.star_context
+    assert star_context is not None
+
+    async def dummy_plugin_route(*args, **kwargs):
+        nonlocal route_called
+        route_called = True
+        return {"status": "ok", "message": None, "data": {"called": True}}
+
+    registered_web_apis = star_context.registered_web_apis
+    original_registered_web_apis = list(registered_web_apis)
+    registered_web_apis[:] = [
+        ("/runtime-guard-test", dummy_plugin_route, ["GET"], "runtime guard test"),
+    ]
+
+    _set_runtime_loading(core_lifecycle_td)
+    try:
+        response = await test_client.get(
+            "/api/plug/runtime-guard-test",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_loading_response(data)
+        assert route_called is False
+    finally:
+        registered_web_apis[:] = original_registered_web_apis
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
+async def test_plugin_web_route_returns_failed_response_after_runtime_bootstrap_failure(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    test_client = app.test_client()
+    route_called = False
+    star_context = core_lifecycle_td.star_context
+    assert star_context is not None
+
+    async def dummy_plugin_route(*args, **kwargs):
+        nonlocal route_called
+        route_called = True
+        return {"status": "ok", "message": None, "data": {"called": True}}
+
+    registered_web_apis = star_context.registered_web_apis
+    original_registered_web_apis = list(registered_web_apis)
+    registered_web_apis[:] = [
+        (
+            "/runtime-failed-guard-test",
+            dummy_plugin_route,
+            ["GET"],
+            "runtime guard test",
+        ),
+    ]
+
+    _set_runtime_failed(core_lifecycle_td, "plugin web runtime bootstrap failed")
+    try:
+        response = await test_client.get(
+            "/api/plug/runtime-failed-guard-test",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 503
+        data = await response.get_json()
+        _assert_runtime_failed_response(
+            data,
+            "plugin web runtime bootstrap failed",
+        )
+        assert route_called is False
+    finally:
+        registered_web_apis[:] = original_registered_web_apis
+        _restore_runtime_ready(core_lifecycle_td)
+
+
+@pytest.mark.asyncio
 async def test_plugins(
     app: Quart,
     authenticated_header: dict,
@@ -129,7 +644,9 @@ async def test_plugins(
     assert data["status"] == "ok"
 
     # 使用 MockPluginBuilder 创建测试插件
-    plugin_store_path = core_lifecycle_td.plugin_manager.plugin_store_path
+    plugin_manager = core_lifecycle_td.plugin_manager
+    assert plugin_manager is not None
+    plugin_store_path = plugin_manager.plugin_store_path
     builder = MockPluginBuilder(plugin_store_path)
 
     # 定义测试插件
@@ -144,10 +661,8 @@ async def test_plugins(
     mock_update = create_mock_updater_update(builder)
 
     # 设置 Mock
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "install", mock_install
-    )
-    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
+    monkeypatch.setattr(plugin_manager.updator, "install", mock_install)
+    monkeypatch.setattr(plugin_manager.updator, "update", mock_update)
 
     try:
         # 插件安装
