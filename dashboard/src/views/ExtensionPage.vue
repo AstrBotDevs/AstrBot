@@ -306,22 +306,22 @@ const {
       <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
         <v-progress-linear
           v-if="loadingDialog.statusCode === 0"
-          :indeterminate="!loadingDialog.progressEnabled"
+          :indeterminate="!loadingDialog.progress.enabled"
           :model-value="
-            loadingDialog.progressTotal > 0
-              ? (loadingDialog.progressCurrent / loadingDialog.progressTotal) * 100
+            loadingDialog.progress.total > 0
+              ? (loadingDialog.progress.current / loadingDialog.progress.total) * 100
               : 0
           "
           color="primary"
           class="mb-4"
         ></v-progress-linear>
         <div
-          v-if="loadingDialog.statusCode === 0 && loadingDialog.progressEnabled"
+          v-if="loadingDialog.statusCode === 0 && loadingDialog.progress.enabled"
           class="text-caption text-medium-emphasis mb-3"
         >
-          {{ loadingDialog.progressCurrent }} / {{ loadingDialog.progressTotal }}
-          <span v-if="loadingDialog.progressLabel">
-            · {{ loadingDialog.progressLabel }}
+          {{ loadingDialog.progress.current }} / {{ loadingDialog.progress.total }}
+          <span v-if="loadingDialog.progress.label">
+            · {{ loadingDialog.progress.label }}
           </span>
         </div>
 

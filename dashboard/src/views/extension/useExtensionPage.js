@@ -61,8 +61,6 @@ const buildFailedPluginItems = (raw) => {
 };
 
 export const useExtensionPage = () => {
-  
-  
   const commonStore = useCommonStore();
   const { t } = useI18n();
   const { tm } = useModuleI18n("features/extension");
@@ -243,15 +241,18 @@ export const useExtensionPage = () => {
     config: {},
   });
   const pluginMarketData = ref([]);
+  const defaultProgress = () => ({
+    enabled: false,
+    current: 0,
+    total: 0,
+    label: "",
+  });
   const loadingDialog = reactive({
     show: false,
-    title: "",
+    title: tm("dialogs.loading.title"),
     statusCode: 0, // 0: loading, 1: success, 2: error,
     result: "",
-    progressEnabled: false,
-    progressCurrent: 0,
-    progressTotal: 0,
-    progressLabel: "",
+    progress: defaultProgress(),
   });
   const showPluginInfoDialog = ref(false);
   const selectedPlugin = ref({});
@@ -660,20 +661,19 @@ export const useExtensionPage = () => {
   };
   
   const resetLoadingDialog = () => {
-    loadingDialog.show = false;
-    loadingDialog.title = tm("dialogs.loading.title");
-    loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
-    loadingDialog.progressEnabled = false;
-    loadingDialog.progressCurrent = 0;
-    loadingDialog.progressTotal = 0;
-    loadingDialog.progressLabel = "";
+    Object.assign(loadingDialog, {
+      show: false,
+      title: tm("dialogs.loading.title"),
+      statusCode: 0,
+      result: "",
+      progress: defaultProgress(),
+    });
   };
   
   const onLoadingDialogResult = (statusCode, result, timeToClose = 2000) => {
     loadingDialog.statusCode = statusCode;
     loadingDialog.result = result;
-    loadingDialog.progressEnabled = false;
+    loadingDialog.progress.enabled = false;
     if (timeToClose === -1) return;
     setTimeout(resetLoadingDialog, timeToClose);
   };
@@ -872,6 +872,7 @@ export const useExtensionPage = () => {
       return;
     }
   
+    resetLoadingDialog();
     loadingDialog.title = tm("status.loading");
     loadingDialog.show = true;
     try {
@@ -937,9 +938,8 @@ export const useExtensionPage = () => {
   const updateAllExtensions = async () => {
     if (updatingAll.value || updatableExtensions.value.length === 0) return;
     updatingAll.value = true;
+    resetLoadingDialog();
     loadingDialog.title = tm("status.loading");
-    loadingDialog.statusCode = 0;
-    loadingDialog.result = "";
     loadingDialog.show = true;
   
     const targets = updatableExtensions.value.map((ext) => ext.name);
@@ -1417,8 +1417,10 @@ export const useExtensionPage = () => {
     repos,
     { ignoreVersionCheck, onProgress } = {},
   ) => {
-    let completedCount = 0;
-    const installTasks = repos.map(async (repoUrl) => {
+    const failedItems = [];
+    let successCount = 0;
+
+    for (const [index, repoUrl] of repos.entries()) {
       try {
         const res = await performInstallRequest({
           source: "url",
@@ -1427,50 +1429,26 @@ export const useExtensionPage = () => {
         });
         const resData = res.data || {};
         if (resData.status === "ok") {
-          return { success: true, url: repoUrl };
+          successCount += 1;
+        } else {
+          failedItems.push({
+            url: repoUrl,
+            message: resData.message || tm("messages.installFailed"),
+          });
         }
-        return {
-          success: false,
-          url: repoUrl,
-          message: resData.message || tm("messages.installFailed"),
-        };
       } catch (err) {
-        return {
-          success: false,
+        failedItems.push({
           url: repoUrl,
           message: resolveErrorMessage(err, tm("messages.installFailed")),
-        };
+        });
       } finally {
-        completedCount += 1;
         onProgress?.({
-          current: completedCount,
+          current: index + 1,
           total: repos.length,
           repoUrl,
         });
       }
-    });
-
-    const settledResults = await Promise.allSettled(installTasks);
-    const failedItems = [];
-    let successCount = 0;
-
-    settledResults.forEach((result) => {
-      if (result.status === "fulfilled") {
-        if (result.value.success) {
-          successCount += 1;
-          return;
-        }
-        failedItems.push({
-          url: result.value.url,
-          message: result.value.message || tm("messages.installFailed"),
-        });
-        return;
-      }
-      failedItems.push({
-        url: tm("status.unknown"),
-        message: resolveErrorMessage(result.reason, tm("messages.installFailed")),
-      });
-    });
+    }
 
     return {
       successCount,
@@ -1500,12 +1478,13 @@ export const useExtensionPage = () => {
     }
 
     loading_.value = true;
+    resetLoadingDialog();
     loadingDialog.title = tm("status.loading");
     loadingDialog.show = true;
-    loadingDialog.progressEnabled = true;
-    loadingDialog.progressCurrent = 0;
-    loadingDialog.progressTotal = uniqueRepos.length;
-    loadingDialog.progressLabel = "";
+    loadingDialog.progress.enabled = true;
+    loadingDialog.progress.current = 0;
+    loadingDialog.progress.total = uniqueRepos.length;
+    loadingDialog.progress.label = "";
 
     let successCount = 0;
     let failedItems = [];
@@ -1513,9 +1492,9 @@ export const useExtensionPage = () => {
       const batchResult = await installReposBatch(uniqueRepos, {
         ignoreVersionCheck,
         onProgress: ({ current, total, repoUrl }) => {
-          loadingDialog.progressCurrent = current;
-          loadingDialog.progressTotal = total;
-          loadingDialog.progressLabel = repoUrl;
+          loadingDialog.progress.current = current;
+          loadingDialog.progress.total = total;
+          loadingDialog.progress.label = repoUrl;
         },
       });
       successCount = batchResult.successCount;
@@ -1584,6 +1563,7 @@ export const useExtensionPage = () => {
       return;
     }
     loading_.value = true;
+    resetLoadingDialog();
     loadingDialog.title = tm("status.loading");
     loadingDialog.show = true;
 
