@@ -83,7 +83,12 @@ async def test_run_pip_in_process_streams_output_lines(monkeypatch):
     unblock_pip.set()
     result = await task
 
-    assert result == (0, ["Collecting demo-package", "Downloading demo-package.whl"])
+    assert result.code == 0
+    assert result.conflict is None
+    assert result.output_lines == [
+        "Collecting demo-package",
+        "Downloading demo-package.whl",
+    ]
     assert logged_lines[-2:] == [
         "Collecting demo-package",
         "Downloading demo-package.whl",
@@ -115,7 +120,9 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result == (0, ["outerr", " line"])
+    assert result.code == 0
+    assert result.conflict is None
+    assert result.output_lines == ["outerr", " line"]
     assert logged_lines[-2:] == ["outerr", " line"]
 
 
@@ -142,10 +149,13 @@ async def test_run_pip_in_process_preserves_blank_lines(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result == (
-        0,
-        ["Collecting demo-package", "", "Installing collected packages"],
-    )
+    assert result.code == 0
+    assert result.conflict is None
+    assert result.output_lines == [
+        "Collecting demo-package",
+        "",
+        "Installing collected packages",
+    ]
     assert logged_lines[-3:] == [
         "Collecting demo-package",
         "",
@@ -179,14 +189,43 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result == (
-        0,
-        ["Collecting demo-package", "Installing collected packages"],
-    )
+    assert result.code == 0
+    assert result.conflict is None
+    assert result.output_lines == [
+        "Collecting demo-package",
+        "Installing collected packages",
+    ]
     assert logged_lines[-2:] == [
         "Collecting demo-package",
         "Installing collected packages",
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeypatch):
+    def fake_pip_main(args):
+        del args
+        print(
+            "Cannot install demo-package and astrbot-core because these package "
+            "versions have conflicting dependencies."
+        )
+        print("The conflict is caused by:")
+        print("    demo-package depends on shared-lib>=3.0")
+        print("    AstrBot (constraint) depends on shared-lib==2.0")
+        return 1
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result.code == 1
+    assert result.output_lines[0].startswith("Cannot install demo-package")
+    assert result.conflict is not None
+    assert result.conflict.is_core_conflict is True
 
 
 def _make_fake_distribution(name: str, version: str):

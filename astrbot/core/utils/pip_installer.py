@@ -12,6 +12,7 @@ import sys
 import threading
 from collections import deque
 from collections.abc import Iterator
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -25,6 +26,14 @@ logger = logging.getLogger("astrbot")
 
 _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
+_PIP_FAILURE_PATTERNS = {
+    "error_prefix": re.compile(r"^\s*error:", re.IGNORECASE),
+    "user_requested": re.compile(r"\bthe user requested\b", re.IGNORECASE),
+    "resolution_impossible": re.compile(r"\bresolutionimpossible\b", re.IGNORECASE),
+    "cannot_install": re.compile(r"\bcannot install\b", re.IGNORECASE),
+    "conflict": re.compile(r"\bconflict(?:ing|s)?\b", re.IGNORECASE),
+    "constraint": re.compile(r"\(constraint\)", re.IGNORECASE),
+}
 
 
 class DependencyConflictError(Exception):
@@ -42,6 +51,20 @@ class RequirementsPrecheckFailed(Exception):
     """Raised when the pre-check of requirements fails."""
 
     pass
+
+
+@dataclass(frozen=True)
+class ParsedRequirementLine:
+    raw: str
+    tokens: tuple[str, ...]
+    requirement_names: frozenset[str]
+
+
+@dataclass
+class PipRunResult:
+    code: int
+    output_lines: list[str]
+    conflict: DependencyConflictError | None = None
 
 
 def _canonicalize_distribution_name(name: str) -> str:
@@ -116,7 +139,7 @@ def _iter_normalized_requirement_lines(raw_input: str) -> Iterator[str]:
             yield stripped
 
 
-def _parse_package_install_line(line: str) -> tuple[list[str], set[str]]:
+def _parse_requirement_line(line: str) -> ParsedRequirementLine:
     requirement_names: set[str] = set()
 
     try:
@@ -124,29 +147,56 @@ def _parse_package_install_line(line: str) -> tuple[list[str], set[str]]:
     except InvalidRequirement:
         tokens = shlex.split(line)
         if not tokens:
-            return [], set()
+            return ParsedRequirementLine(
+                raw=line,
+                tokens=(),
+                requirement_names=frozenset(),
+            )
 
         if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
             name = _extract_requirement_name(line)
             if name:
                 requirement_names.add(name)
-            return tokens, requirement_names
+            return ParsedRequirementLine(
+                raw=line,
+                tokens=tuple(tokens),
+                requirement_names=frozenset(requirement_names),
+            )
 
         if tokens[0].startswith("-"):
             name = _extract_requirement_name(line)
             if name:
                 requirement_names.add(name)
-            return tokens, requirement_names
+            return ParsedRequirementLine(
+                raw=line,
+                tokens=tuple(tokens),
+                requirement_names=frozenset(requirement_names),
+            )
 
         for token in tokens:
             name = _extract_requirement_name(token)
             if name:
                 requirement_names.add(name)
 
-        return tokens, requirement_names
+        return ParsedRequirementLine(
+            raw=line,
+            tokens=tuple(tokens),
+            requirement_names=frozenset(requirement_names),
+        )
 
     requirement_names.add(_canonicalize_distribution_name(req.name))
-    return [line], requirement_names
+    return ParsedRequirementLine(
+        raw=line,
+        tokens=(line,),
+        requirement_names=frozenset(requirement_names),
+    )
+
+
+def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirementLine]:
+    for line in _iter_normalized_requirement_lines(raw_input):
+        parsed = _parse_requirement_line(line)
+        if parsed.tokens:
+            yield parsed
 
 
 def _split_package_install_input(raw_input: str) -> list[str]:
@@ -159,17 +209,15 @@ def _split_package_install_input(raw_input: str) -> list[str]:
     - Falls back to shlex splitting for command-style input and options.
     """
     specs: list[str] = []
-    for line in _iter_normalized_requirement_lines(raw_input):
-        tokens, _ = _parse_package_install_line(line)
-        specs.extend(tokens)
+    for parsed in _iter_parsed_requirement_lines(raw_input):
+        specs.extend(parsed.tokens)
     return specs
 
 
 def _extract_requested_requirements_from_package_input(raw_input: str) -> set[str]:
     requirements: set[str] = set()
-    for line in _iter_normalized_requirement_lines(raw_input):
-        _, names = _parse_package_install_line(line)
-        requirements.update(names)
+    for parsed in _iter_parsed_requirement_lines(raw_input):
+        requirements.update(parsed.requirement_names)
     return requirements
 
 
@@ -230,8 +278,9 @@ def _iter_requirements(
     try:
         with open(resolved_path, encoding="utf-8") as f:
             for raw_line in f:
-                for line in _iter_normalized_requirement_lines(raw_line):
-                    tokens = shlex.split(line)
+                for parsed in _iter_parsed_requirement_lines(raw_line):
+                    line = parsed.raw
+                    tokens = list(parsed.tokens)
                     if not tokens:
                         continue
 
@@ -254,8 +303,7 @@ def _iter_requirements(
                         continue
 
                     if tokens[0].startswith("-"):
-                        name = _extract_requirement_name(line)
-                        if name:
+                        for name in parsed.requirement_names:
                             yield name, None
                         continue
 
@@ -459,38 +507,50 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
     return result_code, stream.lines
 
 
-def _classify_pip_failure(lines: list[str]) -> DependencyConflictError | None:
-    error_lines = [
-        line
-        for line in lines
-        if line.startswith("ERROR:")
-        or "The user requested" in line
-        or "ResolutionImpossible" in line
+def _matches_pip_failure_pattern(line: str, *pattern_names: str) -> bool:
+    names = pattern_names or tuple(_PIP_FAILURE_PATTERNS)
+    return any(_PIP_FAILURE_PATTERNS[name].search(line) for name in names)
+
+
+def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | None:
+    relevant_output_lines = [
+        line for line in output_lines if _matches_pip_failure_pattern(line)
     ]
-    if not error_lines:
+    if not relevant_output_lines:
         return None
 
-    is_conflict = any(
-        "conflict" in line.lower() or "resolutionimpossible" in line.lower()
-        for line in error_lines
+    has_conflict_signal = any(
+        _matches_pip_failure_pattern(
+            line,
+            "resolution_impossible",
+            "cannot_install",
+            "conflict",
+        )
+        for line in relevant_output_lines
     )
-    if not is_conflict:
+    requested_lines = [
+        line.strip()
+        for line in relevant_output_lines
+        if _matches_pip_failure_pattern(line, "user_requested")
+        and not _matches_pip_failure_pattern(line, "constraint")
+    ]
+    constraint_lines = [
+        line.strip()
+        for line in relevant_output_lines
+        if _matches_pip_failure_pattern(line, "constraint")
+    ]
+
+    if not has_conflict_signal and not (requested_lines and constraint_lines):
         return None
 
-    is_core_conflict = any("(constraint)" in line for line in error_lines)
-    constraints = [line.strip() for line in error_lines if "(constraint)" in line]
-    requested = [
-        line.strip()
-        for line in error_lines
-        if "The user requested" in line and "(constraint)" not in line
-    ]
+    is_core_conflict = bool(constraint_lines)
 
     detail = ""
-    if constraints and requested:
+    if constraint_lines and requested_lines:
         detail = (
             " 冲突详情: "
-            f"{requested[0].removeprefix('The user requested ')} vs "
-            f"{constraints[0].removeprefix('The user requested ')}。"
+            f"{requested_lines[0].removeprefix('The user requested ')} vs "
+            f"{constraint_lines[0].removeprefix('The user requested ')}。"
         )
 
     if is_core_conflict:
@@ -502,8 +562,21 @@ def _classify_pip_failure(lines: list[str]) -> DependencyConflictError | None:
         message = f"检测到依赖冲突。{detail}"
 
     return DependencyConflictError(
-        message, error_lines, is_core_conflict=is_core_conflict
+        message,
+        relevant_output_lines,
+        is_core_conflict=is_core_conflict,
     )
+
+
+def _coerce_pip_run_result(
+    result: PipRunResult | tuple[int, list[str]],
+) -> PipRunResult:
+    if isinstance(result, PipRunResult):
+        return result
+
+    code, output_lines = result
+    conflict = _classify_pip_failure(output_lines) if code != 0 else None
+    return PipRunResult(code=code, output_lines=output_lines, conflict=conflict)
 
 
 def _extract_top_level_modules(
@@ -1024,13 +1097,12 @@ class PipInstaller:
                 args.extend(["-c", constraints_file_path])
 
             logger.info("Pip 包管理器 argv: %s", ["pip", *args])
-            result_code, lines = await self._run_pip_in_process(args)
+            run_result = _coerce_pip_run_result(await self._run_pip_in_process(args))
 
-            if result_code != 0:
-                conflict = _classify_pip_failure(lines)
-                if conflict:
-                    raise conflict
-                raise Exception(f"安装失败，错误码：{result_code}")
+            if run_result.code != 0:
+                if run_result.conflict:
+                    raise run_result.conflict
+                raise Exception(f"安装失败，错误码：{run_result.code}")
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
@@ -1060,14 +1132,21 @@ class PipInstaller:
         )
         importlib.invalidate_caches()
 
-    async def _run_pip_in_process(self, args: list[str]) -> tuple[int, list[str]]:
+    async def _run_pip_in_process(self, args: list[str]) -> PipRunResult:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
 
         original_handlers = list(logging.getLogger().handlers)
-        result_code, error_lines = await asyncio.to_thread(
-            _run_pip_main_streaming, pip_main, args
-        )
+        try:
+            result_code, output_lines = await asyncio.to_thread(
+                _run_pip_main_streaming, pip_main, args
+            )
+        finally:
+            _cleanup_added_root_handlers(original_handlers)
 
-        _cleanup_added_root_handlers(original_handlers)
-        return result_code, error_lines
+        conflict = _classify_pip_failure(output_lines) if result_code != 0 else None
+        return PipRunResult(
+            code=result_code,
+            output_lines=output_lines,
+            conflict=conflict,
+        )
