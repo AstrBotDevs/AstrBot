@@ -327,7 +327,8 @@ class FunctionToolManager:
             return mcp_matches[0]
         elif len(mcp_matches) > 1:
             # Multiple MCP servers provide the same tool name
-            # Log warning and return the first one
+            # Sort by namespaced name for deterministic selection
+            mcp_matches.sort(key=lambda f: f.name)
             logger.warning(
                 f"Multiple MCP tools found with original name '{name}': "
                 f"{[f.name for f in mcp_matches]}. Using {mcp_matches[0].name}"
@@ -525,6 +526,8 @@ class FunctionToolManager:
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
         async with self._runtime_lock:
+            # After successful initialization, mcp_client is guaranteed to be non-None
+            assert mcp_client is not None
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
                 client=mcp_client,
