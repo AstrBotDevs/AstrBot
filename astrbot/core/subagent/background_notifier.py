@@ -78,7 +78,7 @@ async def wake_main_agent_for_background_result(
         context_dump = req._print_friendly_context()
         req.contexts = []
         req.system_prompt += (
-            f"\n\nBellow is you and user previous conversation history:\n{context_dump}"
+            f"\n\nBelow is your and the user's previous conversation history:\n{context_dump}"
         )
 
     bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
