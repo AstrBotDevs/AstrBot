@@ -67,7 +67,7 @@ async def wake_main_agent_for_background_result(
         # by default – these overrides preserve the original behaviour.
         tool_call_timeout=max(
             int(provider_settings.get("tool_call_timeout", 0) or 0),
-            3600,
+            900,
         ),
         computer_use_runtime=str(provider_settings.get("computer_use_runtime", "none")),
     )
