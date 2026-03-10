@@ -142,3 +142,18 @@ def test_decode_subagent_config_rejects_invalid_boolean_value():
                 "agents": [{"name": "writer"}],
             }
         )
+
+
+def test_decode_subagent_config_wraps_invalid_tools_scope_with_agent_index():
+    with pytest.raises(ValueError, match=r"invalid subagent at agents\[0\]"):
+        decode_subagent_config(
+            {
+                "main_enable": True,
+                "agents": [
+                    {
+                        "name": "writer",
+                        "tools_scope": "invalid-scope",
+                    }
+                ],
+            }
+        )

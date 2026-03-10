@@ -434,7 +434,7 @@ async def test_build_handoff_toolset_defaults_runtime_to_none():
 
 
 @pytest.mark.asyncio
-async def test_wake_main_agent_for_background_result_uses_provider_settings(
+async def test_wake_main_agent_for_background_result_uses_background_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ):
     captured: dict = {}
@@ -450,7 +450,7 @@ async def test_wake_main_agent_for_background_result_uses_provider_settings(
     async def _fake_get_session_conv(*, event, plugin_context):
         _ = event
         _ = plugin_context
-        return SimpleNamespace(history="[]")
+        return SimpleNamespace(history='[{"role":"user","content":"hello"}]')
 
     async def _fake_build_main_agent(*, event, plugin_context, config, req):
         captured["event"] = event
@@ -507,10 +507,14 @@ async def test_wake_main_agent_for_background_result_uses_provider_settings(
     )
 
     cfg = captured["config"]
-    assert cfg.tool_call_timeout == 123
+    assert cfg.tool_call_timeout == 3600
     assert cfg.computer_use_runtime == "none"
     assert cfg.add_cron_tools is False
     assert cfg.provider_settings["computer_use_runtime"] == "none"
+    assert (
+        "Below is your and the user's previous conversation history:"
+        in captured["req"].system_prompt
+    )
 
 
 @pytest.mark.asyncio

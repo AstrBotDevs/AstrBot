@@ -108,31 +108,10 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
     for idx, item in enumerate(agents_raw):
         if not isinstance(item, dict):
             raise ValueError(f"`agents[{idx}]` must be an object")
-        _validate_no_unknown_keys(item, _AGENT_KEYS)
-
-        scope = _infer_tools_scope(item)
-        if "system_prompt" in item and "instructions" not in item:
-            compat_warnings.append(
-                f"legacy field `agents[{idx}].system_prompt` is accepted and mapped to `instructions`."
-            )
-
-        extensions = {k: v for k, v in item.items() if k.startswith("x-")}
-
-        tools_raw = item.get("tools")
-        tools: list[str] | None
-        if scope == ToolsScope.LIST:
-            if tools_raw is None:
-                tools = []
-            elif isinstance(tools_raw, list):
-                tools = [str(t).strip() for t in tools_raw if str(t).strip()]
-            else:
-                raise ValueError(
-                    f"`agents[{idx}].tools` must be a list when tools_scope=list"
-                )
-        else:
-            tools = None
 
         try:
+            _validate_no_unknown_keys(item, _AGENT_KEYS)
+            scope = _infer_tools_scope(item)
             if "enabled" in item:
                 enabled = _parse_bool(
                     item["enabled"], field_name=f"agents[{idx}].enabled"
@@ -143,6 +122,26 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
                 )
             else:
                 enabled = True
+            if "system_prompt" in item and "instructions" not in item:
+                compat_warnings.append(
+                    f"legacy field `agents[{idx}].system_prompt` is accepted and mapped to `instructions`."
+                )
+
+            extensions = {k: v for k, v in item.items() if k.startswith("x-")}
+            tools_raw = item.get("tools")
+            tools: list[str] | None
+            if scope == ToolsScope.LIST:
+                if tools_raw is None:
+                    tools = []
+                elif isinstance(tools_raw, list):
+                    tools = [str(t).strip() for t in tools_raw if str(t).strip()]
+                else:
+                    raise ValueError(
+                        f"`agents[{idx}].tools` must be a list when tools_scope=list"
+                    )
+            else:
+                tools = None
+
             spec = SubagentAgentSpec(
                 name=str(item.get("name", "")).strip(),
                 enabled=enabled,
