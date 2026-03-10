@@ -6,12 +6,13 @@ import sidebarItems from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
-import { useTheme } from 'vuetify';
+
+import { useThemeToggle } from '@/composables/useThemeToggle';
 
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
-const theme = useTheme();
+const { toggleTheme: toggleDarkMode } = useThemeToggle();
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -274,12 +275,6 @@ fetchStarCount();
 // 打开更新日志对话框
 function openChangelogDialog() {
   changelogDialog.value = true;
-}
-
-function toggleDarkMode() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
 }
 
 </script>

@@ -65,30 +65,25 @@ withDefaults(defineProps<{
 
 <style>
 /* 深色模式下的下拉框样式 - 需要全局样式才能检测主题 */
-.v-theme--dark .styled-menu-card,
-.v-theme--PurpleThemeDark .styled-menu-card {
+.v-theme--dark .styled-menu-card {
   background: rgb(var(--v-theme-surface)) !important;
   border: 1px solid rgba(var(--v-theme-primary), 0.692) !important;
 }
 
 /* 深色模式下的列表项悬停效果 */
-.v-theme--dark .styled-menu-item:hover,
-.v-theme--PurpleThemeDark .styled-menu-item:hover {
+.v-theme--dark .styled-menu-item:hover {
   background: rgba(var(--v-theme-primary), 0.12) !important;
 }
 
-.v-theme--dark .styled-menu-item-active,
-.v-theme--PurpleThemeDark .styled-menu-item-active {
+.v-theme--dark .styled-menu-item-active {
   background: rgba(var(--v-theme-primary), 0.2) !important;
 }
 
-.v-theme--dark .styled-menu-item-active:hover,
-.v-theme--PurpleThemeDark .styled-menu-item-active:hover {
+.v-theme--dark .styled-menu-item-active:hover {
   background: rgba(var(--v-theme-primary), 0.25) !important;
 }
 
-.v-theme--dark .styled-menu-item:focus-visible,
-.v-theme--PurpleThemeDark .styled-menu-item:focus-visible {
+.v-theme--dark .styled-menu-item:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: -2px;
   background: rgba(var(--v-theme-primary), 0.16) !important;

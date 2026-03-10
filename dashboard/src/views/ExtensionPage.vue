@@ -318,7 +318,7 @@ const {
           <h3>{{ tm("dialogs.loading.logs") }}</h3>
           <ConsoleDisplayer
             historyNum="10"
-            class="console-displayer"
+            class="console-displayer mt-4 mb-6"
           >
           </ConsoleDisplayer>
         </div>
@@ -846,10 +846,6 @@ const {
 </template>
 
 <style scoped>
-.bg-transparent {
-  background-color: transparent !important;
-}
-
 .divider-vertical {
   height: 24px;
   width: 1px;
@@ -869,28 +865,9 @@ const {
 
 .console-displayer {
   height: 200px;
-  margin-top: 16px;
-  margin-bottom: 24px;
 }
 
 .table-text-large {
   font-size: 17px;
-}
-
-.plugin-handler-item {
-  margin-bottom: 10px;
-  padding: 5px;
-  border-radius: 5px;
-  background-color: rgba(var(--v-theme-on-surface), 0.05);
-}
-
-.fab-button {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.fab-button:hover {
-  transform: translateY(-4px) scale(1.05);
-  box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
 }
 </style>

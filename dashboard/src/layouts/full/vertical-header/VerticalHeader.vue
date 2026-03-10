@@ -443,13 +443,13 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-md-and-down desktop-menu-btn"
+    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-md-and-down ml-4"
       icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <v-btn v-else-if="customizer.viewMode === 'bot'"
-      class="hidden-md-and-down desktop-menu-btn-alt" icon rounded="sm" variant="flat"
+      class="hidden-md-and-down ml-5" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -473,7 +473,7 @@ onMounted(async () => {
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
       </span></span>
-      <span class="logo-text logo-text-light Outfit chat-ui-text" v-if="customizer.viewMode === 'chat'">ChatUI</span>
+      <span class="logo-text logo-text-light Outfit text-grey" v-if="customizer.viewMode === 'chat'">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
@@ -497,6 +497,7 @@ onMounted(async () => {
       density="compact"
       class="mr-4 hidden-xs"
       color="primary"
+      rounded="0"
     >
       <v-btn value="bot" size="small">
         <v-icon start>mdi-robot</v-icon>
@@ -527,14 +528,15 @@ onMounted(async () => {
 
       <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
       <template v-if="$vuetify.display.xs">
-        <div class="mobile-mode-toggle-wrapper">
+        <div class="d-flex justify-center pt-2 pb-1 px-3">
           <v-btn-toggle
             v-model="viewMode"
             mandatory
             variant="outlined"
             density="compact"
             color="primary"
-            class="mobile-mode-toggle"
+            class="w-100"
+            rounded="0"
           >
             <v-btn value="bot" size="small">
               <v-icon start>mdi-robot</v-icon>
@@ -597,7 +599,7 @@ onMounted(async () => {
     <v-dialog v-model="updateStatusDialog" :width="$vuetify.display.smAndDown ? '100%' : '1200'"
       :fullscreen="$vuetify.display.xs">
       <v-card>
-        <v-card-title class="mobile-card-title">
+        <v-card-title class="d-flex justify-space-between align-center">
           <span class="text-h5">{{ t('core.header.updateDialog.title') }}</span>
           <v-btn v-if="$vuetify.display.xs" icon @click="updateStatusDialog = false">
             <v-icon>mdi-close</v-icon>
@@ -608,8 +610,8 @@ onMounted(async () => {
             <v-progress-linear v-show="installLoading" class="mb-4" indeterminate color="primary"></v-progress-linear>
 
             <div>
-              <h1 class="version-heading">{{ botCurrVersion }}</h1>
-              <small class="update-status-text">{{ updateStatus }}</small>
+              <h1 class="d-inline-block">{{ botCurrVersion }}</h1>
+              <small class="ml-1">{{ updateStatus }}</small>
             </div>
 
             <div v-if="releaseMessage" class="release-message-container">
@@ -669,7 +671,7 @@ onMounted(async () => {
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
-            <div class="dashboard-update-container">
+            <div class="mt-4">
               <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
               <div class="mb-4">
                 <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion
@@ -827,7 +829,7 @@ onMounted(async () => {
     <v-dialog v-model="aboutDialog"
       width="600">
       <v-card>
-        <v-card-text class="about-dialog-content">
+        <v-card-text class="overflow-y-auto">
           <AboutPage />
         </v-card-text>
       </v-card>
@@ -836,26 +838,6 @@ onMounted(async () => {
 </template>
 
 <style>
-.desktop-menu-btn {
-  margin-left: 16px;
-}
-
-.desktop-menu-btn-alt {
-  margin-left: 22px;
-}
-
-.chat-ui-text {
-  color: grey;
-}
-
-.version-heading {
-  display: inline-block;
-}
-
-.update-status-text {
-  margin-left: 4px;
-}
-
 .release-message-container {
   background-color: #646cff24;
   padding: 16px;
@@ -865,10 +847,6 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-.dashboard-update-container {
-  margin-top: 16px;
-}
-
 .update-btn {
   border-radius: 10px;
 }
@@ -876,10 +854,6 @@ onMounted(async () => {
 .release-notes-content {
   font-size: 14px;
   max-height: 400px;
-  overflow-y: auto;
-}
-
-.about-dialog-content {
   overflow-y: auto;
 }
 
@@ -982,27 +956,6 @@ onMounted(async () => {
 .language-flag {
   font-size: 16px;
   margin-right: 8px;
-}
-
-.mobile-mode-toggle-wrapper {
-  display: flex;
-  justify-content: center;
-  padding: 8px 12px 4px;
-}
-
-.mobile-mode-toggle {
-  width: 100%;
-}
-
-.mobile-mode-toggle .v-btn {
-  flex: 1;
-}
-
-/* 移动端对话框标题样式 */
-.mobile-card-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 /* 移动端样式优化 */

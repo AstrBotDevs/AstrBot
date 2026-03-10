@@ -117,11 +117,11 @@ onMounted(() => {
           :class="{ 
             'chat-mode-container': showChatPage,
             'bot-mode-container': !showChatPage,
-            'no-padding': isChatPage || showChatPage
+            'pa-0': isChatPage || showChatPage
           }"
         >
-          <div class="content-wrapper" :class="{ 'chat-mode-content': showChatPage }">
-            <div v-if="showChatPage" class="chat-wrapper">
+          <div class="h-100 w-100" :class="{ 'overflow-hidden': showChatPage }">
+            <div v-if="showChatPage" class="h-100 w-100 overflow-hidden">
               <Chat />
             </div>
             <RouterView v-else />
@@ -159,24 +159,5 @@ onMounted(() => {
 
 .bot-mode-container {
   height: calc(100% - 8px);
-}
-
-.no-padding {
-  padding: 0 !important;
-}
-
-.content-wrapper {
-  height: 100%;
-  width: 100%;
-}
-
-.chat-mode-content {
-  overflow: hidden;
-}
-
-.chat-wrapper {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
 }
 </style>
