@@ -14,7 +14,7 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from astrbot.core import logger, pip_installer, sp
+from astrbot.core import DependencyConflictError, logger, pip_installer, sp
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
@@ -236,6 +236,8 @@ class PluginManager:
             await self._install_plugin_requirements(plugin_dir_path, plugin_label)
         except asyncio.CancelledError:
             raise
+        except DependencyConflictError as e:
+            logger.error(f"插件 {plugin_label} 依赖冲突: {e!s}")
         except Exception as e:
             logger.exception(f"插件 {plugin_label} 依赖安装失败: {e!s}")
 

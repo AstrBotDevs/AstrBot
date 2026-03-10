@@ -51,6 +51,7 @@ class _StreamingLogWriter(io.TextIOBase):
     def __init__(self, log_func) -> None:
         self._log_func = log_func
         self._buffer = ""
+        self.error_lines: list[str] = []
 
     def write(self, text: str) -> int:
         if not text:
@@ -61,17 +62,21 @@ class _StreamingLogWriter(io.TextIOBase):
             line, self._buffer = self._buffer.split("\n", 1)
             line = line.strip()
             if line:
+                if line.startswith("ERROR:"):
+                    self.error_lines.append(line)
                 self._log_func(line)
         return len(text)
 
     def flush(self) -> None:
         line = self._buffer.strip()
         if line:
+            if line.startswith("ERROR:"):
+                self.error_lines.append(line)
             self._log_func(line)
         self._buffer = ""
 
 
-def _run_pip_main_streaming(pip_main, args: list[str]) -> int:
+def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
     stream = _StreamingLogWriter(logger.info)
     with (
         contextlib.redirect_stdout(stream),
@@ -79,7 +84,7 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> int:
     ):
         result_code = pip_main(args)
     stream.flush()
-    return result_code
+    return result_code, stream.error_lines
 
 
 def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
@@ -772,6 +777,14 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             )
 
 
+class DependencyConflictError(Exception):
+    """Raised when pip encounters a dependency conflict."""
+
+    def __init__(self, message: str, errors: list[str]) -> None:
+        super().__init__(message)
+        self.errors = errors
+
+
 class PipInstaller:
     def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None) -> None:
         self.pip_install_arg = pip_install_arg
@@ -833,9 +846,25 @@ class PipInstaller:
 
         try:
             logger.info("Pip 包管理器 argv: %s", ["pip", *args])
-            result_code = await self._run_pip_in_process(args)
+            result_code, error_lines = await self._run_pip_in_process(args)
 
             if result_code != 0:
+                is_conflict = any(
+                    "conflict" in line.lower() or "resolutionimpossible" in line.lower()
+                    for line in error_lines
+                )
+                if is_conflict:
+                    is_core_conflict = any(
+                        "(constraint)" in line for line in error_lines
+                    )
+                    error_msg = "检测到依赖冲突。"
+                    if is_core_conflict:
+                        error_msg = (
+                            "检测到核心依赖版本保护冲突。插件要求的依赖版本与 AstrBot 核心不兼容，"
+                            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+                        )
+                    raise DependencyConflictError(error_msg, error_lines)
+
                 raise Exception(f"安装失败，错误码：{result_code}")
 
             if target_site_packages:
@@ -875,12 +904,14 @@ class PipInstaller:
     def find_missing_requirements(self, requirements_path: str) -> set[str] | None:
         return _find_missing_requirements(requirements_path)
 
-    async def _run_pip_in_process(self, args: list[str]) -> int:
+    async def _run_pip_in_process(self, args: list[str]) -> tuple[int, list[str]]:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
 
         original_handlers = list(logging.getLogger().handlers)
-        result_code = await asyncio.to_thread(_run_pip_main_streaming, pip_main, args)
+        result_code, error_lines = await asyncio.to_thread(
+            _run_pip_main_streaming, pip_main, args
+        )
 
         _cleanup_added_root_handlers(original_handlers)
-        return result_code
+        return result_code, error_lines

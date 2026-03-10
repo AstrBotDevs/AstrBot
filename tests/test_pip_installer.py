@@ -14,7 +14,7 @@ async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp
     monkeypatch.delattr("sys.frozen", raising=False)
 
     site_packages_path = tmp_path / "site-packages"
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
     prepend_sys_path_calls = []
     ensure_preferred_calls = []
 
@@ -81,7 +81,7 @@ async def test_run_pip_in_process_streams_output_lines(monkeypatch):
     unblock_pip.set()
     result = await task
 
-    assert result == 0
+    assert result == (0, [])
     assert logged_lines[-2:] == [
         "Collecting demo-package",
         "Downloading demo-package.whl",
@@ -113,7 +113,7 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result == 0
+    assert result == (0, [])
     assert logged_lines[-2:] == ["outerr", "line"]
 
 
@@ -269,7 +269,7 @@ def test_find_missing_requirements_returns_none_when_distribution_scan_fails(
 
 @pytest.mark.asyncio
 async def test_install_splits_space_separated_packages(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -284,7 +284,7 @@ async def test_install_splits_space_separated_packages(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_splits_three_space_separated_packages(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -306,7 +306,7 @@ async def test_install_splits_three_space_separated_packages(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_splits_three_bare_packages(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -332,7 +332,7 @@ async def test_install_tracks_multiline_packages_for_desktop_client(
     monkeypatch.delattr("sys.frozen", raising=False)
 
     site_packages_path = tmp_path / "site-packages"
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
     ensure_preferred_calls = []
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
@@ -365,7 +365,7 @@ async def test_install_tracks_multiline_packages_for_desktop_client(
 async def test_install_splits_space_separated_packages_within_multiline_input(
     monkeypatch,
 ):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -385,7 +385,7 @@ async def test_install_splits_space_separated_packages_within_multiline_input(
 
 @pytest.mark.asyncio
 async def test_install_keeps_single_requirement_with_marker_intact(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -403,7 +403,7 @@ async def test_install_keeps_single_requirement_with_marker_intact(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_keeps_single_requirement_with_compact_marker_intact(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -420,7 +420,7 @@ async def test_install_keeps_single_requirement_with_compact_marker_intact(monke
 
 @pytest.mark.asyncio
 async def test_install_keeps_single_requirement_with_version_range_intact(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -438,7 +438,7 @@ async def test_install_keeps_single_requirement_with_version_range_intact(monkey
 
 @pytest.mark.asyncio
 async def test_install_multiline_input_strips_comments_and_splits_options(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -465,7 +465,7 @@ async def test_install_multiline_input_strips_comments_and_splits_options(monkey
 
 @pytest.mark.asyncio
 async def test_install_single_line_input_strips_inline_comment(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -480,7 +480,7 @@ async def test_install_single_line_input_strips_inline_comment(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_splits_single_line_editable_option_input(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -495,7 +495,7 @@ async def test_install_splits_single_line_editable_option_input(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_splits_single_line_option_with_url(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -519,7 +519,7 @@ async def test_install_splits_single_line_option_with_url(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_keeps_equals_form_index_override(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -541,7 +541,7 @@ async def test_install_keeps_equals_form_index_override(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_keeps_short_form_index_override(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -561,7 +561,7 @@ async def test_install_keeps_short_form_index_override(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_preserves_url_fragment_in_option_input(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -584,7 +584,7 @@ async def test_install_preserves_url_fragment_in_option_input(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_strips_inline_comment_from_option_line(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -609,7 +609,7 @@ async def test_install_strips_inline_comment_from_option_line(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_falls_back_to_raw_input_for_invalid_token_string(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -625,7 +625,7 @@ async def test_install_falls_back_to_raw_input_for_invalid_token_string(monkeypa
 
 @pytest.mark.asyncio
 async def test_install_ignores_whitespace_only_package_string(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
@@ -645,7 +645,7 @@ async def test_install_ignores_whitespace_only_package_string(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
-    run_pip = AsyncMock(return_value=0)
+    run_pip = AsyncMock(return_value=(0, []))
 
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 

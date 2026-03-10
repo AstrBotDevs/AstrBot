@@ -4,7 +4,7 @@ from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.file_token_service import FileTokenService
-from astrbot.core.utils.pip_installer import PipInstaller
+from astrbot.core.utils.pip_installer import DependencyConflictError, PipInstaller
 from astrbot.core.utils.shared_preferences import SharedPreferences
 from astrbot.core.utils.t2i.renderer import HtmlRenderer
 
