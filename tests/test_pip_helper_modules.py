@@ -70,3 +70,21 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
             )
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
+
+
+def test_find_missing_requirements_returns_none_when_precheck_gate_fails(
+    monkeypatch,
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo-package\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        requirements_utils,
+        "_load_requirement_lines_for_precheck",
+        lambda path: (False, None),
+    )
+
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
+
+    assert missing is None

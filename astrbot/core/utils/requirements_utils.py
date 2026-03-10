@@ -27,7 +27,7 @@ def canonicalize_distribution_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).strip("-").lower()
 
 
-def _strip_inline_requirement_comment(raw_input: str) -> str:
+def strip_inline_requirement_comment(raw_input: str) -> str:
     if raw_input.lstrip().startswith("#"):
         return ""
     return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
@@ -157,7 +157,7 @@ def parse_package_install_input(raw_input: str) -> ParsedPackageInput:
         return ParsedPackageInput(specs=(), requirement_names=frozenset())
 
     for raw_line in normalized.splitlines():
-        line = _strip_inline_requirement_comment(raw_line)
+        line = strip_inline_requirement_comment(raw_line)
         if not line:
             continue
 
@@ -197,7 +197,7 @@ def _iter_requirement_lines(
 
     with open(resolved_path, encoding="utf-8") as f:
         for raw_line in f:
-            line = _strip_inline_requirement_comment(raw_line)
+            line = strip_inline_requirement_comment(raw_line)
             if not line:
                 continue
 
@@ -314,12 +314,14 @@ def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str]
     return installed
 
 
-def find_missing_requirements(requirements_path: str) -> set[str] | None:
+def _load_requirement_lines_for_precheck(
+    requirements_path: str,
+) -> tuple[bool, list[str] | None]:
     try:
         requirement_lines = list(_iter_requirement_lines(requirements_path))
     except Exception as exc:
         logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
-        return None
+        return False, None
 
     if any(
         _requirement_line_needs_precheck_fallback(line) for line in requirement_lines
@@ -327,6 +329,16 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
         logger.warning(
             "预检查缺失依赖失败，将回退到完整安装: unresolved direct requirement source in requirements file"
         )
+        return False, None
+
+    return True, requirement_lines
+
+
+def find_missing_requirements(requirements_path: str) -> set[str] | None:
+    can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
+        requirements_path
+    )
+    if not can_precheck or requirement_lines is None:
         return None
 
     required = list(_iter_requirements_from_lines(requirement_lines))

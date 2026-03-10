@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.core.utils import core_constraints as core_constraints_module
 from astrbot.core.utils import pip_installer as pip_installer_module
+from astrbot.core.utils import requirements_utils
 from astrbot.core.utils.pip_installer import PipInstaller
 
 
@@ -14,13 +15,13 @@ def _make_run_pip_mock(
     output_lines: list[str] | None = None,
     conflict=None,
 ):
-    return AsyncMock(
-        return_value=pip_installer_module.PipRunResult(
-            code=code,
-            output_lines=output_lines or [],
-            conflict=conflict,
-        )
-    )
+    del output_lines, conflict
+
+    async def run_pip(*args, **kwargs):
+        del args, kwargs
+        return code
+
+    return AsyncMock(side_effect=run_pip)
 
 
 @pytest.mark.asyncio
@@ -98,12 +99,7 @@ async def test_run_pip_in_process_streams_output_lines(monkeypatch):
     unblock_pip.set()
     result = await task
 
-    assert result.code == 0
-    assert result.conflict is None
-    assert result.output_lines == [
-        "Collecting demo-package",
-        "Downloading demo-package.whl",
-    ]
+    assert result == 0
     assert logged_lines[-2:] == [
         "Collecting demo-package",
         "Downloading demo-package.whl",
@@ -135,9 +131,7 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result.code == 0
-    assert result.conflict is None
-    assert result.output_lines == ["outerr", " line"]
+    assert result == 0
     assert logged_lines[-2:] == ["outerr", " line"]
 
 
@@ -164,13 +158,7 @@ async def test_run_pip_in_process_preserves_blank_lines(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result.code == 0
-    assert result.conflict is None
-    assert result.output_lines == [
-        "Collecting demo-package",
-        "",
-        "Installing collected packages",
-    ]
+    assert result == 0
     assert logged_lines[-3:] == [
         "Collecting demo-package",
         "",
@@ -201,8 +189,7 @@ async def test_run_pip_in_process_preserves_trailing_blank_line_on_flush(monkeyp
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result.code == 0
-    assert result.output_lines == ["Collecting demo-package", ""]
+    assert result == 0
     assert logged_lines[-2:] == ["Collecting demo-package", ""]
 
 
@@ -232,12 +219,7 @@ async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result.code == 0
-    assert result.conflict is None
-    assert result.output_lines == [
-        "Collecting demo-package",
-        "Installing collected packages",
-    ]
+    assert result == 0
     assert logged_lines[-2:] == [
         "Collecting demo-package",
         "Installing collected packages",
@@ -263,14 +245,22 @@ async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeyp
     )
 
     installer = PipInstaller("")
-    result = await installer._run_pip_in_process(["install", "demo-package"])
+    with pytest.raises(pip_installer_module.DependencyConflictError) as exc_info:
+        await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result.code == 1
-    assert result.output_lines[0].startswith("Cannot install demo-package")
-    assert result.conflict is not None
-    assert result.conflict.is_core_conflict is True
-    assert "demo-package depends on shared-lib>=3.0" in str(result.conflict)
-    assert "AstrBot (constraint) depends on shared-lib==2.0" in str(result.conflict)
+    assert exc_info.value.is_core_conflict is True
+    assert "demo-package depends on shared-lib>=3.0" in str(exc_info.value)
+    assert "AstrBot (constraint) depends on shared-lib==2.0" in str(exc_info.value)
+
+
+def test_build_pip_args_rejects_package_name_and_requirements_path_together(tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo-package\n", encoding="utf-8")
+
+    installer = PipInstaller("")
+
+    with pytest.raises(ValueError, match="package_name and requirements_path"):
+        installer._build_pip_args("requests", str(requirements_path), None)
 
 
 def _make_fake_distribution(name: str, version: str):
@@ -293,7 +283,7 @@ def test_find_missing_requirements_honors_version_specifiers(monkeypatch, tmp_pa
         lambda path: [_make_fake_distribution("demo-package", "1.0")],
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing == {"demo-package"}
 
@@ -311,7 +301,7 @@ def test_find_missing_requirements_skips_unmatched_markers(monkeypatch, tmp_path
         lambda path: [],
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing == set()
 
@@ -330,7 +320,7 @@ def test_find_missing_requirements_follows_nested_requirement_files(
         lambda path: [],
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing == {"demo-package"}
 
@@ -349,7 +339,7 @@ def test_find_missing_requirements_follows_equals_form_nested_requirements(
         lambda path: [],
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing == {"demo-package"}
 
@@ -358,7 +348,7 @@ def test_find_missing_requirements_returns_none_when_nested_file_missing(tmp_pat
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("-r base.txt\n", encoding="utf-8")
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing is None
 
@@ -378,7 +368,7 @@ def test_find_missing_requirements_extracts_editable_vcs_requirement(
         lambda path: [],
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing == {"demo-package"}
 
@@ -398,7 +388,7 @@ def test_find_missing_requirements_prefers_first_search_path_version(
         ],
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing == {"demo-package"}
 
@@ -420,7 +410,7 @@ def test_find_missing_requirements_returns_none_when_distribution_scan_fails(
         failing_distributions,
     )
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing is None
 
@@ -584,7 +574,7 @@ def test_iter_requirement_lines_expands_nested_requirement_files(tmp_path):
         encoding="utf-8",
     )
 
-    lines = list(pip_installer_module._iter_requirement_lines(str(requirements_path)))
+    lines = list(requirements_utils._iter_requirement_lines(str(requirements_path)))
 
     assert lines == [
         "demo-package==1.0",
@@ -611,7 +601,7 @@ def test_build_pip_args_extracts_requested_requirements():
 
 
 def test_parse_package_install_input_collects_specs_and_requirement_names():
-    parsed = pip_installer_module._parse_package_install_input(
+    parsed = requirements_utils.parse_package_install_input(
         "--index-url https://example.com/simple demo-package\nanother-package>=1.0\n"
     )
 
@@ -1055,7 +1045,7 @@ def test_find_missing_requirements_returns_none_for_editable_local_path_referenc
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("-e ../sharedlib\n", encoding="utf-8")
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing is None
 
@@ -1073,7 +1063,7 @@ def test_find_missing_requirements_returns_none_for_editable_local_path_variants
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text(requirement_line, encoding="utf-8")
 
-    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing is None
 

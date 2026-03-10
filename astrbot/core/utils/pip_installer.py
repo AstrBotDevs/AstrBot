@@ -11,39 +11,18 @@ import shlex
 import sys
 import threading
 from collections import deque
-from collections.abc import Iterator
-from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.core_constraints import CoreConstraintsProvider
-from astrbot.core.utils.core_constraints import (
-    _core_constraints_file as _shared_core_constraints_file,
-)
-from astrbot.core.utils.core_constraints import (
-    _get_core_constraints as _shared_get_core_constraints,
-)
-from astrbot.core.utils.requirements_utils import ParsedPackageInput
-from astrbot.core.utils.requirements_utils import (
-    _collect_installed_distribution_versions as _shared_collect_installed_distribution_versions,
-)
-from astrbot.core.utils.requirements_utils import (
-    _iter_requirement_lines as _shared_iter_requirement_lines,
-)
 from astrbot.core.utils.requirements_utils import (
     canonicalize_distribution_name as _canonicalize_distribution_name,
 )
 from astrbot.core.utils.requirements_utils import (
-    extract_requirement_name as _shared_extract_requirement_name,
-)
-from astrbot.core.utils.requirements_utils import (
-    extract_requirement_names as _shared_extract_requirement_names,
-)
-from astrbot.core.utils.requirements_utils import (
-    find_missing_requirements as _shared_find_missing_requirements,
-)
-from astrbot.core.utils.requirements_utils import (
-    parse_package_install_input as _shared_parse_package_install_input,
+    extract_requirement_name,
+    extract_requirement_names,
+    find_missing_requirements,
+    parse_package_install_input,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
@@ -82,13 +61,6 @@ class RequirementsPrecheckFailed(Exception):
     pass
 
 
-@dataclass
-class PipRunResult:
-    code: int
-    output_lines: list[str]
-    conflict: DependencyConflictError | None = None
-
-
 def _get_pip_main():
     try:
         from pip._internal.cli.main import main as pip_main
@@ -104,12 +76,6 @@ def _get_pip_main():
             ) from exc
 
     return pip_main
-
-
-def _strip_inline_requirement_comment(raw_input: str) -> str:
-    if raw_input.lstrip().startswith("#"):
-        return ""
-    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
 
 
 def _prepend_sys_path(path: str) -> None:
@@ -129,21 +95,6 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
             root_logger.removeHandler(handler)
             with contextlib.suppress(Exception):
                 handler.close()
-
-
-def _parse_package_install_input(raw_input: str) -> ParsedPackageInput:
-    return _shared_parse_package_install_input(raw_input)
-
-
-def _extract_requirement_name(raw_requirement: str) -> str | None:
-    return _shared_extract_requirement_name(raw_requirement)
-
-
-def _iter_requirement_lines(
-    requirements_path: str,
-    _visited: set[str] | None = None,
-) -> Iterator[str]:
-    return _shared_iter_requirement_lines(requirements_path, _visited=_visited)
 
 
 def _get_trusted_host_for_index_url(index_url: str) -> str | None:
@@ -230,37 +181,11 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
     return False
 
 
-def _extract_requirement_names(requirements_path: str) -> set[str]:
-    return _shared_extract_requirement_names(requirements_path)
-
-
-def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
-    return _shared_collect_installed_distribution_versions(paths)
-
-
-def _find_missing_requirements(requirements_path: str) -> set[str] | None:
-    return _shared_find_missing_requirements(requirements_path)
-
-
-def find_missing_requirements(requirements_path: str) -> set[str] | None:
-    return _find_missing_requirements(requirements_path)
-
-
 def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
     missing = find_missing_requirements(requirements_path)
     if missing is None:
         raise RequirementsPrecheckFailed(f"预检查失败: {requirements_path}")
     return missing
-
-
-def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
-    return _shared_get_core_constraints(core_dist_name)
-
-
-@contextlib.contextmanager
-def _core_constraints_file(core_dist_name: str | None) -> Iterator[str | None]:
-    with _shared_core_constraints_file(core_dist_name) as constraints_path:
-        yield constraints_path
 
 
 class _StreamingLogWriter(io.TextIOBase):
@@ -443,7 +368,7 @@ def _collect_candidate_modules(
 
         for distribution in by_name.get(requirement_name, []):
             for dependency_line in distribution.requires or []:
-                dependency_name = _extract_requirement_name(dependency_line)
+                dependency_name = extract_requirement_name(dependency_line)
                 if not dependency_name:
                     continue
                 if dependency_name in expanded_requirement_names:
@@ -856,14 +781,19 @@ class PipInstaller:
             requirements_path.strip() if requirements_path else ""
         )
 
+        if package_name and normalized_requirements_path:
+            raise ValueError(
+                "package_name and requirements_path cannot be used together"
+            )
+
         if package_name:
-            parsed_package = _parse_package_install_input(package_name)
+            parsed_package = parse_package_install_input(package_name)
             if parsed_package.specs:
                 args = ["install", *parsed_package.specs]
                 requested_requirements = set(parsed_package.requirement_names)
         elif normalized_requirements_path:
             args = ["install", "-r", normalized_requirements_path]
-            requested_requirements = _extract_requirement_names(
+            requested_requirements = extract_requirement_names(
                 normalized_requirements_path
             )
 
@@ -922,12 +852,10 @@ class PipInstaller:
                 "Pip 包管理器 argv: %s",
                 ["pip", *_redact_pip_args_for_logging(args)],
             )
-            run_result = await self._run_pip_in_process(args)
+            result_code = await self._run_pip_in_process(args)
 
-            if run_result.code != 0:
-                if run_result.conflict:
-                    raise run_result.conflict
-                raise Exception(f"安装失败，错误码：{run_result.code}")
+            if result_code != 0:
+                raise Exception(f"安装失败，错误码：{result_code}")
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
@@ -946,7 +874,7 @@ class PipInstaller:
         if not os.path.isdir(target_site_packages):
             return
 
-        requested_requirements = _extract_requirement_names(requirements_path)
+        requested_requirements = extract_requirement_names(requirements_path)
         if not requested_requirements:
             return
 
@@ -957,7 +885,7 @@ class PipInstaller:
         )
         importlib.invalidate_caches()
 
-    async def _run_pip_in_process(self, args: list[str]) -> PipRunResult:
+    async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
 
@@ -969,9 +897,9 @@ class PipInstaller:
         finally:
             _cleanup_added_root_handlers(original_handlers)
 
-        conflict = _classify_pip_failure(output_lines) if result_code != 0 else None
-        return PipRunResult(
-            code=result_code,
-            output_lines=output_lines,
-            conflict=conflict,
-        )
+        if result_code != 0:
+            conflict = _classify_pip_failure(output_lines)
+            if conflict:
+                raise conflict
+
+        return result_code
