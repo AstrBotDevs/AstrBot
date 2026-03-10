@@ -481,6 +481,37 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     assert distributions_calls == ["scan"]
 
 
+def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
+    monkeypatch,
+):
+    warning_logs = []
+    conflict = pip_installer_module.DependencyConflictError(
+        "core conflict",
+        [],
+        is_core_conflict=True,
+    )
+
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_get_core_constraints",
+        lambda core_dist_name: ("aiohttp==3.13.3",),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.logger.warning",
+        lambda line, *args: warning_logs.append(line % args if args else line),
+    )
+
+    with pytest.raises(
+        pip_installer_module.DependencyConflictError,
+        match="core conflict",
+    ):
+        with pip_installer_module._core_constraints_file("AstrBot") as constraints_path:
+            assert constraints_path is not None
+            raise conflict
+
+    assert warning_logs == []
+
+
 def test_iter_requirement_lines_expands_nested_requirement_files(tmp_path):
     base_requirements = tmp_path / "base.txt"
     base_requirements.write_text("demo-package==1.0\n", encoding="utf-8")

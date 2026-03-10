@@ -613,10 +613,13 @@ def _core_constraints_file(core_dist_name: str | None) -> Iterator[str | None]:
             f.write("\n".join(constraints))
             path = f.name
         logger.info("已启用核心依赖版本保护 (%d 个约束)", len(constraints))
-        yield path
     except Exception as exc:
         logger.warning("创建临时约束文件失败: %s", exc)
         yield None
+        return
+
+    try:
+        yield path
     finally:
         if path and os.path.exists(path):
             with contextlib.suppress(Exception):
