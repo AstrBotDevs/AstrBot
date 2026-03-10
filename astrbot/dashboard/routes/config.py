@@ -9,6 +9,8 @@ from typing import Any
 from quart import request
 
 from astrbot.core import astrbot_config, file_token_service, logger
+from astrbot.core.computer.booters.constants import BOOTER_SHIPYARD_NEO
+from astrbot.core.computer.computer_client import discover_bay_credentials
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -258,7 +260,7 @@ async def _validate_neo_connectivity(
     booter = sandbox.get("booter", "")
 
     # Only check when sandbox mode + shipyard_neo is selected
-    if runtime != "sandbox" or booter != "shipyard_neo":
+    if runtime != "sandbox" or booter != BOOTER_SHIPYARD_NEO:
         return None
 
     endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
@@ -268,9 +270,7 @@ async def _validate_neo_connectivity(
     access_token = sandbox.get("shipyard_neo_access_token", "")
     if not access_token:
         # Try auto-discovery
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
-
-        access_token = _discover_bay_credentials(endpoint)
+        access_token = discover_bay_credentials(endpoint)
 
     if not access_token:
         return (

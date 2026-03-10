@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import json
 import os
 import shutil
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 from astrbot.core.skills.skill_manager import SANDBOX_SKILLS_ROOT, SkillManager
@@ -13,7 +16,11 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 from .booters.base import ComputerBooter
+from .booters.constants import BOOTER_BOXLITE, BOOTER_SHIPYARD, BOOTER_SHIPYARD_NEO
 from .booters.local import LocalBooter
+
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import FunctionTool
 
 session_booter: dict[str, ComputerBooter] = {}
 local_booter: ComputerBooter | None = None
@@ -31,7 +38,7 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
     return skills
 
 
-def _discover_bay_credentials(endpoint: str) -> str:
+def discover_bay_credentials(endpoint: str) -> str:
     """Try to auto-discover Bay API key from credentials.json.
 
     Search order:
@@ -88,6 +95,9 @@ def _discover_bay_credentials(endpoint: str) -> str:
 
     logger.debug("[Computer] No Bay credentials.json found in search paths")
     return ""
+
+
+_discover_bay_credentials = discover_bay_credentials
 
 
 def _build_python_exec_command(script: str) -> str:
@@ -416,6 +426,78 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
                 logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
+def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
+    """Map booter_type string to class (lazy import)."""
+    if booter_type == BOOTER_SHIPYARD:
+        from .booters.shipyard import ShipyardBooter
+
+        return ShipyardBooter
+    elif booter_type == BOOTER_SHIPYARD_NEO:
+        from .booters.shipyard_neo import ShipyardNeoBooter
+
+        return ShipyardNeoBooter
+    elif booter_type == BOOTER_BOXLITE:
+        from .booters.boxlite import BoxliteBooter
+
+        return BoxliteBooter
+    return None
+
+
+def get_sandbox_tools(session_id: str) -> list[FunctionTool]:
+    """Return precise tool list from a booted session, or [] if not booted."""
+    booter = session_booter.get(session_id)
+    return booter.get_tools() if booter else []
+
+
+def get_default_sandbox_tools(sandbox_cfg: dict) -> list[FunctionTool]:
+    """Return conservative (pre-boot) tool list based on config. No instance needed."""
+    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
+    cls = _get_booter_class(booter_type)
+    return cls.get_default_tools() if cls else []
+
+
+def get_sandbox_prompt_parts(sandbox_cfg: dict) -> list[str]:
+    """Return booter-specific system prompt fragments based on config."""
+    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
+    cls = _get_booter_class(booter_type)
+    return cls.get_system_prompt_parts() if cls else []
+
+
+def _build_booter(booter_type: str, sandbox_cfg: dict) -> ComputerBooter:
+    cls = _get_booter_class(booter_type)
+    if cls is None:
+        raise ValueError(f"Unknown booter type: {booter_type}")
+
+    if booter_type == BOOTER_SHIPYARD:
+        return cls(
+            endpoint_url=sandbox_cfg.get("shipyard_endpoint", ""),
+            access_token=sandbox_cfg.get("shipyard_access_token", ""),
+            ttl=sandbox_cfg.get("shipyard_ttl", 3600),
+            session_num=sandbox_cfg.get("shipyard_max_sessions", 10),
+        )
+
+    if booter_type == BOOTER_SHIPYARD_NEO:
+        endpoint = sandbox_cfg.get("shipyard_neo_endpoint", "")
+        access_token = sandbox_cfg.get("shipyard_neo_access_token", "")
+        if not access_token:
+            access_token = discover_bay_credentials(endpoint)
+
+        logger.info(
+            "[Computer] Shipyard Neo config: endpoint=%s, profile=%s, ttl=%s",
+            endpoint,
+            sandbox_cfg.get("shipyard_neo_profile", "python-default"),
+            sandbox_cfg.get("shipyard_neo_ttl", 3600),
+        )
+        return cls(
+            endpoint_url=endpoint,
+            access_token=access_token,
+            profile=sandbox_cfg.get("shipyard_neo_profile", "python-default"),
+            ttl=sandbox_cfg.get("shipyard_neo_ttl", 3600),
+        )
+
+    return cls()
+
+
 async def get_booter(
     context: Context,
     session_id: str,
@@ -423,7 +505,7 @@ async def get_booter(
     config = context.get_config(umo=session_id)
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
-    booter_type = sandbox_cfg.get("booter", "shipyard_neo")
+    booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
 
     if session_id in session_booter:
         booter = session_booter[session_id]
@@ -435,44 +517,7 @@ async def get_booter(
         logger.info(
             f"[Computer] Initializing booter: type={booter_type}, session={session_id}"
         )
-        if booter_type == "shipyard":
-            from .booters.shipyard import ShipyardBooter
-
-            ep = sandbox_cfg.get("shipyard_endpoint", "")
-            token = sandbox_cfg.get("shipyard_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_ttl", 3600)
-            max_sessions = sandbox_cfg.get("shipyard_max_sessions", 10)
-
-            client = ShipyardBooter(
-                endpoint_url=ep, access_token=token, ttl=ttl, session_num=max_sessions
-            )
-        elif booter_type == "shipyard_neo":
-            from .booters.shipyard_neo import ShipyardNeoBooter
-
-            ep = sandbox_cfg.get("shipyard_neo_endpoint", "")
-            token = sandbox_cfg.get("shipyard_neo_access_token", "")
-            ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
-            profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
-
-            # Auto-discover token from Bay's credentials.json if not configured
-            if not token:
-                token = _discover_bay_credentials(ep)
-
-            logger.info(
-                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
-            )
-            client = ShipyardNeoBooter(
-                endpoint_url=ep,
-                access_token=token,
-                profile=profile,
-                ttl=ttl,
-            )
-        elif booter_type == "boxlite":
-            from .booters.boxlite import BoxliteBooter
-
-            client = BoxliteBooter()
-        else:
-            raise ValueError(f"Unknown booter type: {booter_type}")
+        client = _build_booter(booter_type, sandbox_cfg)
 
         try:
             await client.boot(uuid_str)

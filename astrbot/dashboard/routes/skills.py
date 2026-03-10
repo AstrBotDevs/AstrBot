@@ -11,7 +11,7 @@ from quart import request, send_file
 
 from astrbot.core import DEMO_MODE, logger
 from astrbot.core.computer.computer_client import (
-    _discover_bay_credentials,
+    discover_bay_credentials,
     sync_skills_to_active_sandboxes,
 )
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
@@ -78,7 +78,7 @@ class SkillsRoute(Route):
 
         # Auto-discover token from Bay's credentials.json if not configured
         if not access_token and endpoint:
-            access_token = _discover_bay_credentials(endpoint)
+            access_token = discover_bay_credentials(endpoint)
 
         if not endpoint or not access_token:
             raise ValueError(
