@@ -295,54 +295,29 @@ def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
     return specifier.contains(parsed_version, prereleases=True)
 
 
+def _strip_inline_requirement_comment(raw_input: str) -> str:
+    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
+
+
 def _split_package_install_input(raw_input: str) -> list[str]:
+    """
+    Normalize the user-provided package string into a list of pip args.
+
+    - Supports multiline input (one requirement / options per line).
+    - Strips inline comments (`# ...`) and empty lines.
+    - Uses shlex so quoting works as in a shell.
+    """
     normalized = raw_input.strip()
     if not normalized:
         return []
 
-    if "\n" in normalized or "\r" in normalized:
-        return _split_multiline_package_input(normalized)
-
-    return _split_single_line_package_input(normalized)
-
-
-def _split_single_line_package_input(raw_input: str) -> list[str]:
-    normalized = _strip_inline_requirement_comment(raw_input)
-    if not normalized:
-        return []
-
-    if _is_valid_install_requirement(normalized):
-        return [normalized]
-
-    split_tokens = shlex.split(normalized)
-    if split_tokens and split_tokens[0].startswith("-"):
-        return _split_option_input(normalized)
-
-    if split_tokens and all(
-        token.startswith("-") or _is_valid_install_requirement(token)
-        for token in split_tokens
-    ):
-        return split_tokens
-
-    return [normalized]
-
-
-def _is_valid_install_requirement(candidate: str) -> bool:
-    try:
-        Requirement(candidate)
-    except InvalidRequirement:
-        return False
-    return True
-
-
-def _split_multiline_package_input(raw_input: str) -> list[str]:
-    requirements: list[str] = []
-    for line in raw_input.splitlines():
-        candidate = line.strip()
-        if not candidate or candidate.startswith("#"):
+    specs: list[str] = []
+    for line in normalized.splitlines():
+        stripped = _strip_inline_requirement_comment(line)
+        if not stripped:
             continue
-        requirements.extend(_split_single_line_package_input(candidate))
-    return requirements
+        specs.extend(shlex.split(stripped))
+    return specs
 
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
@@ -358,12 +333,44 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
     return False
 
 
-def _strip_inline_requirement_comment(raw_input: str) -> str:
-    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
+def _get_core_constraints() -> list[str]:
+    """
+    Get version constraints for core AstrBot dependencies to prevent downgrades.
+    It attempts to find the AstrBot distribution and its requirements,
+    then matches them with currently installed versions.
+    """
+    constraints = []
+    try:
+        dist = None
+        try:
+            dist = importlib_metadata.distribution("AstrBot")
+        except importlib_metadata.PackageNotFoundError:
+            return []
 
+        if not dist or not dist.requires:
+            return []
 
-def _split_option_input(raw_input: str) -> list[str]:
-    return shlex.split(_strip_inline_requirement_comment(raw_input))
+        installed = _collect_installed_distribution_versions(
+            _get_requirement_check_paths()
+        )
+        if not installed:
+            return []
+
+        for req_str in dist.requires:
+            try:
+                req = Requirement(req_str)
+                if req.marker and not req.marker.evaluate():
+                    continue
+
+                name = _canonicalize_distribution_name(req.name)
+                if name in installed:
+                    constraints.append(f"{name}=={installed[name]}")
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.warning("获取核心依赖约束失败: %s", exc)
+
+    return constraints
 
 
 def _extract_top_level_modules(
@@ -802,24 +809,48 @@ class PipInstaller:
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
             args.extend(["--target", target_site_packages])
-            args.extend(["--upgrade", "--force-reinstall"])
+            args.extend(["--upgrade", "--upgrade-strategy", "only-if-needed"])
 
         if pip_install_args:
             args.extend(pip_install_args)
 
-        logger.info("Pip 包管理器 argv: %s", ["pip", *args])
-        result_code = await self._run_pip_in_process(args)
+        # Add constraints to protect core dependencies
+        core_constraints = _get_core_constraints()
+        constraints_file_path = None
+        if core_constraints:
+            try:
+                import tempfile
 
-        if result_code != 0:
-            raise Exception(f"安装失败，错误码：{result_code}")
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
+                ) as f:
+                    f.write("\n".join(core_constraints))
+                    constraints_file_path = f.name
+                args.extend(["-c", constraints_file_path])
+                logger.info("已启用核心依赖版本保护 (%d 个约束)", len(core_constraints))
+            except Exception as exc:
+                logger.warning("创建临时约束文件失败: %s", exc)
 
-        if target_site_packages:
-            _prepend_sys_path(target_site_packages)
-            _ensure_plugin_dependencies_preferred(
-                target_site_packages,
-                requested_requirements,
-            )
-        importlib.invalidate_caches()
+        try:
+            logger.info("Pip 包管理器 argv: %s", ["pip", *args])
+            result_code = await self._run_pip_in_process(args)
+
+            if result_code != 0:
+                raise Exception(f"安装失败，错误码：{result_code}")
+
+            if target_site_packages:
+                _prepend_sys_path(target_site_packages)
+                _ensure_plugin_dependencies_preferred(
+                    target_site_packages,
+                    requested_requirements,
+                )
+            importlib.invalidate_caches()
+        finally:
+            if constraints_file_path and os.path.exists(constraints_file_path):
+                try:
+                    os.remove(constraints_file_path)
+                except Exception:
+                    pass
 
     def prefer_installed_dependencies(self, requirements_path: str) -> None:
         """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
