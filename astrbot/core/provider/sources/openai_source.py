@@ -235,10 +235,6 @@ class ProviderOpenAIOfficial(Provider):
         tool_list: list[dict[str, Any]] = []
         if self._as_bool(self.provider_config.get("oa_native_web_search", False)):
             tool_list.append({"type": "web_search"})
-        if self._as_bool(self.provider_config.get("oa_native_code_interpreter", False)):
-            tool_list.append(
-                {"type": "code_interpreter", "container": {"type": "auto"}}
-            )
         return tool_list
 
     def _openai_native_tools_enabled(self) -> bool:

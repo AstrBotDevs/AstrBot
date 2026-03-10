@@ -21,10 +21,14 @@ WEBHOOK_SUPPORTED_PLATFORMS = [
 
 def _openai_compatible_provider_defaults() -> dict[str, Any]:
     return {
+        "custom_headers": {},
+    }
+
+
+def _openai_responses_provider_defaults() -> dict[str, Any]:
+    return {
         "use_responses_api": False,
         "oa_native_web_search": False,
-        "oa_native_code_interpreter": False,
-        "custom_headers": {},
     }
 
 
@@ -1092,6 +1096,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         **_openai_compatible_provider_defaults(),
+                        **_openai_responses_provider_defaults(),
                     },
                     "Google Gemini": {
                         "id": "google_gemini",
@@ -1224,6 +1229,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 120,
                         "proxy": "",
                         **_openai_compatible_provider_defaults(),
+                        **_openai_responses_provider_defaults(),
                     },
                     "Ollama": {
                         "id": "ollama",
@@ -1767,19 +1773,13 @@ CONFIG_METADATA_2 = {
                     "use_responses_api": {
                         "description": "使用 Responses API（原生工具必需）",
                         "type": "bool",
-                        "hint": "启用后将使用 /v1/responses，而不是 /v1/chat/completions。仅在上游服务支持 Responses API 时启用。OpenAI 原生 web_search 和 code_interpreter 也仅在此模式下可用。",
+                        "hint": "启用后将使用 /v1/responses，而不是 /v1/chat/completions。仅在上游服务支持 Responses API 时启用。OpenAI 原生 web_search 也仅在此模式下可用。",
                         "obvious_hint": True,
                     },
                     "oa_native_web_search": {
                         "description": "启用 OpenAI 原生联网搜索（仅 Responses）",
                         "type": "bool",
                         "hint": "仅通过 Responses API 生效。启用后将强制使用 /v1/responses，并使用 OpenAI 原生 web_search 工具。chat.completions 不支持该原生工具；开启后 AstrBot 函数工具将被忽略。",
-                        "obvious_hint": True,
-                    },
-                    "oa_native_code_interpreter": {
-                        "description": "启用 OpenAI 原生代码解释器（仅 Responses）",
-                        "type": "bool",
-                        "hint": "仅通过 Responses API 生效。启用后将强制使用 /v1/responses，并使用 OpenAI 原生 code_interpreter 工具。chat.completions 不支持该原生工具；开启后 AstrBot 函数工具将被忽略。",
                         "obvious_hint": True,
                     },
                     "custom_extra_body": {

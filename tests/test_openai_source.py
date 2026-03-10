@@ -272,7 +272,6 @@ def test_native_tools_force_responses_mode_and_override_function_tools():
     provider = _make_provider(
         {
             "oa_native_web_search": True,
-            "oa_native_code_interpreter": True,
         }
     )
     try:
@@ -293,10 +292,7 @@ def test_native_tools_force_responses_mode_and_override_function_tools():
         )
 
         assert provider._should_use_responses_api() is True
-        assert payload["tools"] == [
-            {"type": "web_search"},
-            {"type": "code_interpreter", "container": {"type": "auto"}},
-        ]
+        assert payload["tools"] == [{"type": "web_search"}]
     finally:
         asyncio.run(provider.terminate())
 
