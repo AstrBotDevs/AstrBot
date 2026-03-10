@@ -366,17 +366,13 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
-}
 
 function openReleaseNotesDialog(body: string, tag: string) {
   selectedReleaseNotes.value = body;
   selectedReleaseTag.value = tag;
   releaseNotesDialog.value = true;
 }
+
 
 function handleLogoClick() {
   if (customizer.viewMode === 'chat') {
@@ -447,14 +443,13 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
-      class="hidden-md-and-down"  icon rounded="sm" variant="flat"
+    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-md-and-down desktop-menu-btn"
+      icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <v-btn v-else-if="customizer.viewMode === 'bot'"
-      style="margin-left: 22px;"
-      class="hidden-md-and-down" icon rounded="sm" variant="flat"
+      class="hidden-md-and-down desktop-menu-btn-alt" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -478,7 +473,7 @@ onMounted(async () => {
       <span class="logo-text Outfit">Astr<span class="logo-text bot-text-wrapper">Bot
         <img v-if="isChristmas" src="@/assets/images/xmas-hat.png" alt="Christmas hat" class="xmas-hat" />
       </span></span>
-      <span class="logo-text logo-text-light Outfit" style="color: grey;" v-if="customizer.viewMode === 'chat'">ChatUI</span>
+      <span class="logo-text logo-text-light Outfit chat-ui-text" v-if="customizer.viewMode === 'chat'">ChatUI</span>
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
     </div>
 
@@ -570,23 +565,7 @@ onMounted(async () => {
         <v-list-item-title>{{ lang.name }}</v-list-item-title>
       </v-list-item>
 
-      <!-- 主题切换 -->
-      <v-list-item
-        @click="toggleDarkMode()"
-        class="styled-menu-item"
-        rounded="md"
-      >
-        <template v-slot:prepend>
-          <v-icon>
-            {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
-          </v-icon>
-        </template>
-        <v-list-item-title>
-          {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
-        </v-list-item-title>
-      </v-list-item>
 
-      <!-- 更新按钮 -->
       <v-list-item
         @click="handleUpdateClick"
         class="styled-menu-item"
@@ -629,12 +608,11 @@ onMounted(async () => {
             <v-progress-linear v-show="installLoading" class="mb-4" indeterminate color="primary"></v-progress-linear>
 
             <div>
-              <h1 style="display:inline-block;">{{ botCurrVersion }}</h1>
-              <small style="margin-left: 4px;">{{ updateStatus }}</small>
+              <h1 class="version-heading">{{ botCurrVersion }}</h1>
+              <small class="update-status-text">{{ updateStatus }}</small>
             </div>
 
-            <div v-if="releaseMessage"
-              style="background-color: #646cff24; padding: 16px; border-radius: 10px; font-size: 14px; max-height: 400px; overflow-y: auto;">
+            <div v-if="releaseMessage" class="release-message-container">
               <MarkdownRender :content="releaseMessage" :typewriter="false" class="markdown-content" />
             </div>
 
@@ -691,7 +669,7 @@ onMounted(async () => {
             </div>
 
             <v-divider class="mt-4 mb-4"></v-divider>
-            <div style="margin-top: 16px;">
+            <div class="dashboard-update-container">
               <h3 class="mb-4">{{ t('core.header.updateDialog.dashboardUpdate.title') }}</h3>
               <div class="mb-4">
                 <small>{{ t('core.header.updateDialog.dashboardUpdate.currentVersion') }} {{ dashboardCurrentVersion
@@ -709,7 +687,7 @@ onMounted(async () => {
                 </p>
               </div>
 
-              <v-btn color="primary" style="border-radius: 10px;" @click="updateDashboard()"
+              <v-btn color="primary" class="update-btn" @click="updateDashboard()"
                 :disabled="!dashboardHasNewVersion" :loading="updatingDashboardLoading">
                 {{ t('core.header.updateDialog.dashboardUpdate.downloadAndUpdate') }}
               </v-btn>
@@ -731,8 +709,7 @@ onMounted(async () => {
         <v-card-title class="text-h5">
           {{ t('core.header.updateDialog.releaseNotes.title') }}: {{ selectedReleaseTag }}
         </v-card-title>
-        <v-card-text
-          style="font-size: 14px; max-height: 400px; overflow-y: auto;">
+        <v-card-text class="release-notes-content">
           <MarkdownRender :content="selectedReleaseNotes" :typewriter="false" class="markdown-content" />
         </v-card-text>
         <v-card-actions>
@@ -850,7 +827,7 @@ onMounted(async () => {
     <v-dialog v-model="aboutDialog"
       width="600">
       <v-card>
-        <v-card-text style="overflow-y: auto;">
+        <v-card-text class="about-dialog-content">
           <AboutPage />
         </v-card-text>
       </v-card>
@@ -859,6 +836,53 @@ onMounted(async () => {
 </template>
 
 <style>
+.desktop-menu-btn {
+  margin-left: 16px;
+}
+
+.desktop-menu-btn-alt {
+  margin-left: 22px;
+}
+
+.chat-ui-text {
+  color: grey;
+}
+
+.version-heading {
+  display: inline-block;
+}
+
+.update-status-text {
+  margin-left: 4px;
+}
+
+.release-message-container {
+  background-color: #646cff24;
+  padding: 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.dashboard-update-container {
+  margin-top: 16px;
+}
+
+.update-btn {
+  border-radius: 10px;
+}
+
+.release-notes-content {
+  font-size: 14px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.about-dialog-content {
+  overflow-y: auto;
+}
+
 .markdown-content h1 {
   font-size: 1.3em;
 }

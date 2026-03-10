@@ -155,23 +155,22 @@ const {
 <template>
   <v-row>
     <v-col cols="12" md="12">
-      <v-card variant="flat" style="background-color: transparent">
+      <v-card variant="flat" class="bg-transparent">
         <!-- 标签页 -->
-        <v-card-text style="padding: 0px 12px">
+        <v-card-text class="px-3 py-0">
           <!-- 已安装插件标签页内容 -->
           <InstalledPluginsTab :state="pageState" />
 
           <!-- 指令面板标签页内容 -->
           <v-tab-item v-show="activeTab === 'components'">
             <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
+              <div class="d-flex align-center flex-wrap ga-3">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.handlersOperation") }}</h2>
               </div>
             </div>
             <v-card
-              class="rounded-lg"
+              class="rounded-lg bg-transparent"
               variant="flat"
-              style="background-color: transparent"
             >
               <v-card-text class="pa-0">
                 <ComponentPanel :active="activeTab === 'components'" />
@@ -182,14 +181,13 @@ const {
           <!-- 已安装的 MCP 服务器标签页内容 -->
           <v-tab-item v-show="activeTab === 'mcp'">
             <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
+              <div class="d-flex align-center flex-wrap ga-3">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.installedMcpServers") }}</h2>
               </div>
             </div>
             <v-card
-              class="rounded-lg"
+              class="rounded-lg bg-transparent"
               variant="flat"
-              style="background-color: transparent"
             >
               <v-card-text class="pa-0">
                 <McpServersSection />
@@ -200,14 +198,13 @@ const {
           <!-- Skills 标签页内容 -->
           <v-tab-item v-show="activeTab === 'skills'">
             <div class="mb-4 pt-4 pb-4">
-              <div class="d-flex align-center flex-wrap" style="gap: 12px">
+              <div class="d-flex align-center flex-wrap ga-3">
                 <h2 class="text-h2 mb-0">{{ tm("tabs.skills") }}</h2>
               </div>
             </div>
             <v-card
-              class="rounded-lg"
+              class="rounded-lg bg-transparent"
               variant="flat"
-              style="background-color: transparent"
             >
               <v-card-text class="pa-0">
                 <SkillsSection />
@@ -243,13 +240,7 @@ const {
         >
           {{ tm("market.devDocs") }}
         </v-btn>
-        <div
-          style="
-            height: 24px;
-            width: 1px;
-            background-color: rgba(var(--v-theme-on-surface), 0.12);
-          "
-        ></div>
+        <div class="divider-vertical"></div>
         <v-btn
           variant="text"
           prepend-icon="mdi-github"
@@ -271,7 +262,7 @@ const {
         tm("dialogs.config.title")
       }}</v-card-title>
       <v-card-text>
-        <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
+        <div class="config-scroll-container">
           <AstrBotConfig
             v-if="extension_config.metadata"
             :metadata="extension_config.metadata"
@@ -301,7 +292,7 @@ const {
   <v-dialog v-model="loadingDialog.show" width="700" persistent>
     <v-card>
       <v-card-title class="text-h5">{{ loadingDialog.title }}</v-card-title>
-      <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
+      <v-card-text class="loading-scroll-container">
         <v-progress-linear
           v-if="loadingDialog.statusCode === 0"
           indeterminate
@@ -323,11 +314,11 @@ const {
           <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
         </div>
 
-        <div style="margin-top: 32px">
+        <div class="mt-8">
           <h3>{{ tm("dialogs.loading.logs") }}</h3>
           <ConsoleDisplayer
             historyNum="10"
-            style="height: 200px; margin-top: 16px; margin-bottom: 24px"
+            class="console-displayer"
           >
           </ConsoleDisplayer>
         </div>
@@ -355,13 +346,13 @@ const {
       >
       <v-card-text>
         <v-data-table
-          style="font-size: 17px"
+          class="table-text-large"
           :headers="plugin_handler_info_headers"
           :items="selectedPlugin.handlers"
           item-key="name"
         >
           <template v-slot:header.id="{ column }">
-            <p style="font-weight: bold">{{ column.title }}</p>
+            <p class="font-weight-bold">{{ column.title }}</p>
           </template>
           <template v-slot:item.event_type="{ item }">
             {{ item.event_type }}
@@ -375,7 +366,7 @@ const {
             </v-chip>
           </template>
           <template v-slot:item.cmd="{ item }">
-            <span style="font-weight: bold">{{ item.cmd }}</span>
+            <span class="font-weight-bold">{{ item.cmd }}</span>
           </template>
         </v-data-table>
       </v-card-text>
@@ -467,10 +458,7 @@ const {
           </v-chip>
           <span class="ml-2 text-body-1">{{ tm("conflicts.pairs") }}</span>
         </div>
-        <p
-          class="text-body-2"
-          style="color: rgba(var(--v-theme-on-surface), 0.7)"
-        >
+        <p class="text-body-2 text-medium-emphasis">
           {{ tm("conflicts.message") }}
         </p>
       </v-card-text>
@@ -858,11 +846,42 @@ const {
 </template>
 
 <style scoped>
+.bg-transparent {
+  background-color: transparent !important;
+}
+
+.divider-vertical {
+  height: 24px;
+  width: 1px;
+  background-color: rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.config-scroll-container {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.loading-scroll-container {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.console-displayer {
+  height: 200px;
+  margin-top: 16px;
+  margin-bottom: 24px;
+}
+
+.table-text-large {
+  font-size: 17px;
+}
+
 .plugin-handler-item {
   margin-bottom: 10px;
   padding: 5px;
   border-radius: 5px;
-  background-color: #f5f5f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.05);
 }
 
 .fab-button {
