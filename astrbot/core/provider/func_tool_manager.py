@@ -311,9 +311,30 @@ class FunctionToolManager:
                 break
 
     def get_func(self, name) -> FuncTool | None:
+        # First try exact match
         for f in self.func_list:
             if f.name == name:
                 return f
+
+        # Fallback: try to find MCP tool by original name for backward compatibility
+        # This handles cases where personas reference tools by their original names
+        mcp_matches = []
+        for f in self.func_list:
+            if isinstance(f, MCPTool) and f.original_tool_name == name:
+                mcp_matches.append(f)
+
+        if len(mcp_matches) == 1:
+            return mcp_matches[0]
+        elif len(mcp_matches) > 1:
+            # Multiple MCP servers provide the same tool name
+            # Log warning and return the first one
+            logger.warning(
+                f"Multiple MCP tools found with original name '{name}': "
+                f"{[f.name for f in mcp_matches]}. Using {mcp_matches[0].name}"
+            )
+            return mcp_matches[0]
+
+        return None
 
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集"""

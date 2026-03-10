@@ -104,7 +104,13 @@ class ToolsRoute(Route):
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        # Display original tool names without namespace prefix
+                        server_info["tools"] = [
+                            tool.name.split("__", 1)[1]
+                            if tool.name.startswith(f"mcp_{name}__")
+                            else tool.name
+                            for tool in mcp_client.tools
+                        ]
                         server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
@@ -434,18 +440,23 @@ class ToolsRoute(Route):
                 if isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
+                    # Add original tool name for MCP tools
+                    display_name = getattr(tool, "original_tool_name", tool.name)
                 elif tool.handler_module_path and star_map.get(
                     tool.handler_module_path
                 ):
                     star = star_map[tool.handler_module_path]
                     origin = "plugin"
                     origin_name = star.name
+                    display_name = tool.name
                 else:
                     origin = "unknown"
                     origin_name = "unknown"
+                    display_name = tool.name
 
                 tool_info = {
-                    "name": tool.name,
+                    "name": tool.name,  # Keep namespaced name for internal use
+                    "display_name": display_name,  # Original name for display
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,
