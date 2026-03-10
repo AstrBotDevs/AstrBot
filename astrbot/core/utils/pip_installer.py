@@ -135,7 +135,9 @@ def _looks_like_local_path_reference(token: str) -> bool:
     candidate = token.strip()
     if not candidate:
         return False
-    return candidate in {".", ".."} or candidate.startswith(("./", "../", "/", "~/"))
+    return candidate in {".", ".."} or candidate.startswith(
+        ("./", "../", "/", "~/", ".\\", "..\\", "\\")
+    )
 
 
 def _looks_like_direct_reference(token: str) -> bool:
@@ -159,7 +161,7 @@ def _extract_names_from_pip_tokens(
     for token in tokens:
         if skip_next_for:
             if skip_next_for == "editable":
-                if _looks_like_direct_reference(token) and "#egg=" not in token:
+                if "#egg=" not in token:
                     has_unresolved_requirement_source = True
                 else:
                     name = _extract_requirement_name(token)
@@ -189,10 +191,7 @@ def _extract_names_from_pip_tokens(
 
         if token.startswith(("--editable=",)):
             editable_target = token.split("=", 1)[1]
-            if (
-                _looks_like_direct_reference(editable_target)
-                and "#egg=" not in editable_target
-            ):
+            if "#egg=" not in editable_target:
                 has_unresolved_requirement_source = True
             else:
                 name = _extract_requirement_name(editable_target)
@@ -493,37 +492,31 @@ def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
 
 
 @functools.cache
-def _resolve_core_dist_name(core_dist_name: str | None) -> str | None:
-    if core_dist_name:
-        try:
-            importlib_metadata.distribution(core_dist_name)
-        except importlib_metadata.PackageNotFoundError:
-            return None
-        return core_dist_name
-
-    try:
-        importlib_metadata.distribution("AstrBot")
-        return "AstrBot"
-    except importlib_metadata.PackageNotFoundError:
-        pass
-
-    try:
-        if __package__:
-            top_pkg = __package__.split(".")[0]
-            for dist in importlib_metadata.distributions():
-                if top_pkg in (dist.read_text("top_level.txt") or "").splitlines():
-                    return dist.metadata["Name"]
-    except Exception:
-        return None
-
-    return None
-
-
-@functools.cache
-def _get_cached_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
+def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
+    """Get version constraints for core dependencies to prevent downgrades."""
     constraints: list[str] = []
     try:
-        resolved_core_dist_name = _resolve_core_dist_name(core_dist_name)
+        resolved_core_dist_name: str | None = None
+        if core_dist_name:
+            try:
+                importlib_metadata.distribution(core_dist_name)
+                resolved_core_dist_name = core_dist_name
+            except importlib_metadata.PackageNotFoundError:
+                return ()
+        else:
+            try:
+                importlib_metadata.distribution("AstrBot")
+                resolved_core_dist_name = "AstrBot"
+            except importlib_metadata.PackageNotFoundError:
+                pass
+
+            if resolved_core_dist_name is None and __package__:
+                top_pkg = __package__.split(".")[0]
+                for dist in importlib_metadata.distributions():
+                    if top_pkg in (dist.read_text("top_level.txt") or "").splitlines():
+                        resolved_core_dist_name = dist.metadata["Name"]
+                        break
+
         if not resolved_core_dist_name:
             return ()
 
@@ -556,13 +549,6 @@ def _get_cached_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
         return ()
 
     return tuple(constraints)
-
-
-def _get_core_constraints(core_dist_name: str | None) -> list[str]:
-    """
-    Get version constraints for core dependencies to prevent downgrades.
-    """
-    return list(_get_cached_core_constraints(core_dist_name))
 
 
 @contextlib.contextmanager
@@ -1168,17 +1154,16 @@ class PipInstaller:
         self.pypi_index_url = pypi_index_url
         self.core_dist_name = core_dist_name
 
-    def _build_pip_args(
+    def _parse_global_pip_args(self) -> list[str]:
+        return shlex.split(self.pip_install_arg) if self.pip_install_arg else []
+
+    def _build_base_install_args(
         self,
         package_name: str | None,
         requirements_path: str | None,
-        mirror: str | None,
     ) -> tuple[list[str], set[str]]:
         args: list[str] = []
         requested_requirements: set[str] = set()
-        pip_install_args = (
-            shlex.split(self.pip_install_arg) if self.pip_install_arg else []
-        )
         normalized_requirements_path = (
             requirements_path.strip() if requirements_path else ""
         )
@@ -1196,15 +1181,37 @@ class PipInstaller:
                 normalized_requirements_path
             )
 
+        return args, requested_requirements
+
+    def _apply_index_config(
+        self,
+        args: list[str],
+        pip_install_args: list[str],
+        mirror: str | None,
+    ) -> None:
+        if not args or _package_specs_override_index([*args[1:], *pip_install_args]):
+            return
+
+        index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
+        trusted_host = _get_trusted_host_for_index_url(index_url)
+        if trusted_host:
+            args.extend(["--trusted-host", trusted_host])
+        args.extend(["-i", index_url])
+
+    def _build_pip_args(
+        self,
+        package_name: str | None,
+        requirements_path: str | None,
+        mirror: str | None,
+    ) -> tuple[list[str], set[str]]:
+        args, requested_requirements = self._build_base_install_args(
+            package_name, requirements_path
+        )
         if not args:
             return [], requested_requirements
 
-        if not _package_specs_override_index([*args[1:], *pip_install_args]):
-            index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-            trusted_host = _get_trusted_host_for_index_url(index_url)
-            if trusted_host:
-                args.extend(["--trusted-host", trusted_host])
-            args.extend(["-i", index_url])
+        pip_install_args = self._parse_global_pip_args()
+        self._apply_index_config(args, pip_install_args, mirror)
 
         if pip_install_args:
             args.extend(pip_install_args)

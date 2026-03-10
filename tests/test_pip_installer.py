@@ -468,19 +468,43 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
         lambda paths: {"shared-lib": "2.0"},
     )
 
-    pip_installer_module._resolve_core_dist_name.cache_clear()
-    pip_installer_module._get_cached_core_constraints.cache_clear()
+    pip_installer_module._get_core_constraints.cache_clear()
     try:
         first = pip_installer_module._get_core_constraints(None)
         second = pip_installer_module._get_core_constraints(None)
     finally:
-        pip_installer_module._resolve_core_dist_name.cache_clear()
-        pip_installer_module._get_cached_core_constraints.cache_clear()
+        pip_installer_module._get_core_constraints.cache_clear()
 
-    assert first == ["shared-lib==2.0"]
-    assert second == ["shared-lib==2.0"]
+    assert first == ("shared-lib==2.0",)
+    assert second == ("shared-lib==2.0",)
     assert distribution_calls == ["AstrBot", "AstrBot-App"]
     assert distributions_calls == ["scan"]
+
+
+def test_build_base_install_args_extracts_requested_requirements():
+    installer = PipInstaller("")
+
+    args, requested = installer._build_base_install_args(
+        "--index-url https://example.com/simple demo-package",
+        None,
+    )
+
+    assert args == [
+        "install",
+        "--index-url",
+        "https://example.com/simple",
+        "demo-package",
+    ]
+    assert requested == {"demo-package"}
+
+
+def test_apply_index_config_appends_default_index_when_not_overridden():
+    installer = PipInstaller("")
+    args = ["install", "demo-package"]
+
+    installer._apply_index_config(args, [], None)
+
+    assert args == ["install", "demo-package", "-i", "https://pypi.org/simple"]
 
 
 @pytest.mark.asyncio
@@ -904,6 +928,24 @@ def test_find_missing_requirements_returns_none_for_editable_local_path_referenc
 ):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("-e ../sharedlib\n", encoding="utf-8")
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing is None
+
+
+@pytest.mark.parametrize(
+    "requirement_line",
+    [
+        "-e sharedlib\n",
+        "--editable=.\\sharedlib\n",
+    ],
+)
+def test_find_missing_requirements_returns_none_for_editable_local_path_variants(
+    tmp_path, requirement_line
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(requirement_line, encoding="utf-8")
 
     missing = pip_installer_module._find_missing_requirements(str(requirements_path))
 
