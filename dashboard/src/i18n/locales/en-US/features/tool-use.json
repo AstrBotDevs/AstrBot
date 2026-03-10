@@ -86,6 +86,17 @@
       },
       "tips": {
         "timeoutConfig": "Please configure tool call timeout separately in the configuration page"
+      },
+      "feedback": {
+        "successTitle": "Connection test passed",
+        "errorTitle": "Connection test failed",
+        "availableTools": "Available tools: {tools}",
+        "rawError": "Original error:",
+        "stdioCommandNotFound": {
+          "title": "Unable to start the MCP stdio server",
+          "reason": "Command '{command}' was not found.",
+          "action": "Install the command, or set 'command' to the full executable path and ensure it is available in PATH."
+        }
       }
     },
     "serverDetail": {

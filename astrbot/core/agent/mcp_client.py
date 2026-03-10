@@ -40,13 +40,18 @@ class MCPStdioCommandNotFoundError(Exception):
     """Raised when the configured stdio MCP command cannot be started."""
 
 
-def _build_missing_stdio_command_message(command: str | None) -> str:
+def _build_missing_stdio_command_message(
+    command: str | None, original_error: Exception | None = None
+) -> str:
     normalized_command = str(command or "").strip() or "<unknown>"
-    return (
-        "Failed to start MCP stdio server: "
-        f"command '{normalized_command}' was not found. Please install the command or fix "
-        "the configured path, and ensure it is available in PATH."
-    )
+    sections = [
+        "Unable to start the MCP stdio server",
+        f"Command '{normalized_command}' was not found.",
+        "Install the command, or set 'command' to the full executable path and ensure it is available in PATH.",
+    ]
+    if original_error is not None:
+        sections.append(f"Original error: {original_error!s}")
+    return "\n\n".join(sections)
 
 
 def _prepare_config(config: dict) -> dict:
@@ -245,7 +250,7 @@ class MCPClient:
                 )
             except FileNotFoundError as exc:
                 raise MCPStdioCommandNotFoundError(
-                    _build_missing_stdio_command_message(cfg.get("command"))
+                    _build_missing_stdio_command_message(cfg.get("command"), exc)
                 ) from exc
 
             # Create a new client session

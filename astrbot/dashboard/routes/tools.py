@@ -423,7 +423,11 @@ class ToolsRoute(Route):
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            return Response().error(f"Failed to test MCP connection: {e!s}").__dict__
+            return (
+                Response()
+                .error(f"{e!s}" or "Unable to test the MCP connection.")
+                .__dict__
+            )
 
     async def get_tool_list(self):
         """Get all registered tools."""

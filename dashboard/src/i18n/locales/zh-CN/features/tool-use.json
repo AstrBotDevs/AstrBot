@@ -86,6 +86,17 @@
       },
       "tips": {
         "timeoutConfig": "工具调用的超时时间请前往配置页面单独配置"
+      },
+      "feedback": {
+        "successTitle": "连接测试通过",
+        "errorTitle": "连接测试失败",
+        "availableTools": "可用工具：{tools}",
+        "rawError": "原始错误：",
+        "stdioCommandNotFound": {
+          "title": "无法启动 MCP stdio 服务",
+          "reason": "未找到命令 “{command}”。",
+          "action": "请先安装该命令，或将 command 修改为本机可执行文件的完整路径，并确认它已加入 PATH。"
+        }
       }
     },
     "serverDetail": {

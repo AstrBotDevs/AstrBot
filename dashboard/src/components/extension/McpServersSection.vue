@@ -129,9 +129,30 @@
             </div>
 
           </v-form>
-          <div style="margin-top: 8px;">
-            <small>{{ addServerDialogMessage }}</small>
-          </div>
+          <v-alert
+            v-if="addServerDialogFeedback"
+            :type="addServerDialogFeedback.type"
+            :icon="addServerDialogFeedback.icon"
+            variant="tonal"
+            border="start"
+            density="comfortable"
+            class="mt-4"
+          >
+            <div class="text-subtitle-2 font-weight-medium">
+              {{ addServerDialogFeedback.title }}
+            </div>
+            <div
+              v-for="(detail, index) in addServerDialogFeedback.details"
+              :key="index"
+              class="text-body-2"
+              :class="index === 0 ? 'mt-2' : 'mt-1'"
+            >
+              {{ detail }}
+            </div>
+            <div v-if="addServerDialogFeedback.rawError" class="text-caption text-medium-emphasis mt-3">
+              {{ tm('dialogs.addServer.feedback.rawError') }} {{ addServerDialogFeedback.rawError }}
+            </div>
+          </v-alert>
 
         </v-card-text>
 
@@ -244,7 +265,7 @@ export default {
       mcpServerProviderList: ['modelscope'],
       mcpProviderToken: '',
       showSyncMcpServerDialog: false,
-      addServerDialogMessage: '',
+      addServerDialogFeedback: null,
       loading: false,
       loadingGettingServers: false,
       mcpServerUpdateLoaders: {},
@@ -381,7 +402,7 @@ export default {
               return;
             }
             this.showMcpServerDialog = false;
-            this.setAddServerDialogMessage('');
+            this.clearAddServerDialogFeedback();
             this.getServers();
             this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
             this.resetForm();
@@ -445,18 +466,89 @@ export default {
     },
     closeServerDialog() {
       this.showMcpServerDialog = false;
-      this.setAddServerDialogMessage('');
+      this.clearAddServerDialogFeedback();
       this.resetForm();
     },
-    setAddServerDialogMessage(message = '') {
-      this.addServerDialogMessage = message;
+    setAddServerDialogFeedback(feedback = null) {
+      this.addServerDialogFeedback = feedback;
+    },
+    clearAddServerDialogFeedback() {
+      this.setAddServerDialogFeedback(null);
+    },
+    buildAddServerDialogErrorFeedback(message) {
+      const normalizedMessage = String(message || '').trim();
+      const sections = normalizedMessage
+        .split(/\n\s*\n/)
+        .map(section => section.trim())
+        .filter(Boolean);
+      if (sections.length > 1) {
+        const [title, ...rest] = sections;
+        const rawErrorPrefix = 'Original error:';
+        const details = [];
+        let rawError = '';
+        rest.forEach(section => {
+          if (section.startsWith(rawErrorPrefix)) {
+            rawError = section.slice(rawErrorPrefix.length).trim();
+            return;
+          }
+          details.push(section);
+        });
+        const missingCommandMatch = details[0]?.match(/^Command '(.+)' was not found\.$/);
+        if (
+          title === 'Unable to start the MCP stdio server'
+          && missingCommandMatch
+        ) {
+          return {
+            type: 'error',
+            icon: 'mdi-alert-circle',
+            title: this.tm('dialogs.addServer.feedback.stdioCommandNotFound.title'),
+            details: [
+              this.tm('dialogs.addServer.feedback.stdioCommandNotFound.reason', {
+                command: missingCommandMatch[1]
+              }),
+              this.tm('dialogs.addServer.feedback.stdioCommandNotFound.action')
+            ],
+            rawError
+          };
+        }
+        return {
+          type: 'error',
+          icon: 'mdi-alert-circle',
+          title,
+          details,
+          rawError
+        };
+      }
+      return {
+        type: 'error',
+        icon: 'mdi-alert-circle',
+        title: this.tm('dialogs.addServer.feedback.errorTitle'),
+        details: normalizedMessage ? [normalizedMessage] : [this.tm('messages.testError', { error: 'Unknown error' })],
+        rawError: ''
+      };
+    },
+    buildAddServerDialogSuccessFeedback(message, tools = '') {
+      const details = [];
+      if (message) {
+        details.push(message);
+      }
+      if (tools) {
+        details.push(this.tm('dialogs.addServer.feedback.availableTools', { tools }));
+      }
+      return {
+        type: 'success',
+        icon: 'mdi-check-circle',
+        title: this.tm('dialogs.addServer.feedback.successTitle'),
+        details,
+        rawError: ''
+      };
     },
     testServerConnection() {
       if (!this.validateJson()) {
         return;
       }
       this.loading = true;
-      this.setAddServerDialogMessage('');
+      this.clearAddServerDialogFeedback();
       let configObj;
       try {
         configObj = JSON.parse(this.serverConfigJson);
@@ -472,7 +564,7 @@ export default {
           this.loading = false;
           if (response.data.status === 'error') {
             this.showError(
-              response.data.message || this.tm('messages.testError', { error: 'Unknown error' }),
+              response.data.message || 'Unknown error',
               { inlineDialog: true }
             );
             return;
@@ -481,14 +573,16 @@ export default {
           const tools = Array.isArray(response.data.data)
             ? response.data.data.join(', ')
             : response.data.data;
-          const toolsSuffix = tools ? ` (tools: ${tools})` : '';
-          this.setAddServerDialogMessage(`${response.data.message}${toolsSuffix}`);
+          this.setAddServerDialogFeedback(
+            this.buildAddServerDialogSuccessFeedback(response.data.message, tools)
+          );
         })
         .catch(error => {
           this.loading = false;
-          this.showError(this.tm('messages.testError', {
-            error: error.response?.data?.message || error.message
-          }), { inlineDialog: true });
+          this.showError(
+            error.response?.data?.message || error.message || 'Unknown error',
+            { inlineDialog: true }
+          );
         });
     },
     resetForm() {
@@ -509,7 +603,7 @@ export default {
     },
     showError(message, options = {}) {
       if (options.inlineDialog) {
-        this.setAddServerDialogMessage(message);
+        this.setAddServerDialogFeedback(this.buildAddServerDialogErrorFeedback(message));
         return;
       }
       this.save_message = message;

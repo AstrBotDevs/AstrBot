@@ -305,9 +305,11 @@ async def test_mcp_test_connection_returns_clear_missing_stdio_command_message(
     data = await response.get_json()
     assert data["status"] == "error"
     assert data["message"] == (
-        "Failed to test MCP connection: Failed to start MCP stdio server: "
-        "command 'uvx' was not found. Please install the command or fix the "
-        "configured path, and ensure it is available in PATH."
+        "Unable to start the MCP stdio server\n\n"
+        "Command 'uvx' was not found.\n\n"
+        "Install the command, or set 'command' to the full executable path "
+        "and ensure it is available in PATH.\n\n"
+        "Original error: [Errno 2] 系统找不到指定的文件。"
     )
 
 
