@@ -6,7 +6,11 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.utils.pip_installer import (
     DependencyConflictError as DependencyConflictError,
+)
+from astrbot.core.utils.pip_installer import (
     PipInstaller,
+)
+from astrbot.core.utils.pip_installer import (
     RequirementsPrecheckFailed as RequirementsPrecheckFailed,
 )
 from astrbot.core.utils.shared_preferences import SharedPreferences
