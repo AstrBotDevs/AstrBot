@@ -14,6 +14,10 @@
 
 主动消息推送：支持。
 
+流式输出：支持。需要在飞书开发者后台为应用开通 `创建与更新卡片(cardkit:card:write)` 权限。
+
+飞书客户端版本需 >= 7.20。低版本客户端将只显示标题和升级提示。
+
 ## 创建机器人
 
 前往 [开发者后台](https://open.feishu.cn/app) ，创建企业自建应用。
@@ -87,6 +91,8 @@
 接下来，点击权限管理，点击开通权限，输入 `im:message:send,im:message,im:message:send_as_bot`。添加筛选到的权限。
 
 再次输入 `im:resource:upload,im:resource` 开通上传图片相关的权限。
+
+如果需要使用流式输出，请额外开通 `创建与更新卡片(cardkit:card:write)` 权限。
 
 最终开通的权限如下图：
 
