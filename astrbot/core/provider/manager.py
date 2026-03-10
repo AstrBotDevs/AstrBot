@@ -335,7 +335,7 @@ class ProviderManager:
             try:
                 await self.llm_tools.init_mcp_clients()
             except Exception:
-                logger.error("MCP 后台初始化失败", exc_info=True)
+                logger.error("MCP init background task failed", exc_info=True)
 
         if self._mcp_init_task is None or self._mcp_init_task.done():
             self._mcp_init_task = asyncio.create_task(
