@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import functools
+from typing import TYPE_CHECKING
+
 from shipyard import ShipyardClient, Spec
 
 from astrbot.api import logger
@@ -5,8 +10,25 @@ from astrbot.api import logger
 from ..olayer import FileSystemComponent, PythonComponent, ShellComponent
 from .base import ComputerBooter
 
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import FunctionTool
+
 
 class ShipyardBooter(ComputerBooter):
+    @classmethod
+    @functools.cache
+    def _default_tools(cls) -> tuple[FunctionTool, ...]:
+        from astrbot.core.computer.tools.fs import FileDownloadTool, FileUploadTool
+        from astrbot.core.computer.tools.python import PythonTool
+        from astrbot.core.computer.tools.shell import ExecuteShellTool
+
+        return (
+            ExecuteShellTool(),
+            PythonTool(),
+            FileUploadTool(),
+            FileDownloadTool(),
+        )
+
     def __init__(
         self,
         endpoint_url: str,
@@ -60,6 +82,10 @@ class ShipyardBooter(ComputerBooter):
             local_path,
         )
         return result
+
+    @classmethod
+    def get_default_tools(cls) -> list[FunctionTool]:
+        return list(cls._default_tools())
 
     async def available(self) -> bool:
         """Check if the sandbox is available."""
