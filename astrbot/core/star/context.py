@@ -77,6 +77,8 @@ class Context:
         cron_manager: CronJobManager,
         subagent_orchestrator: SubAgentOrchestrator | None = None,
     ) -> None:
+        self.registered_web_apis = []
+        self._register_tasks = []
         self._event_queue = event_queue
         """事件队列。消息平台通过事件队列传递消息事件。"""
         self._config = config
@@ -100,6 +102,10 @@ class Context:
         self.cron_manager = cron_manager
         """Cron job manager, initialized by core lifecycle."""
         self.subagent_orchestrator = subagent_orchestrator
+
+    def reset_runtime_registrations(self) -> None:
+        self.registered_web_apis.clear()
+        self._register_tasks.clear()
 
     async def llm_generate(
         self,

@@ -14,6 +14,7 @@ from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from quart import Quart, g, jsonify, request
 from quart.logging import default_handler
+from quart.typing import ResponseReturnValue
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
@@ -28,7 +29,11 @@ from .routes.api_key import ALL_OPEN_API_SCOPES
 from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
-from .routes.route import Response, RouteContext
+from .routes.route import (
+    Response,
+    RouteContext,
+    runtime_loading_response,
+)
 from .routes.session_management import SessionManagementRoute
 from .routes.subagent import SubAgentRoute
 from .routes.t2i import T2iRoute
@@ -97,6 +102,8 @@ class AstrBotDashboard:
         # token 用于验证请求
         logging.getLogger(self.app.name).removeHandler(default_handler)
         self.context = RouteContext(self.config, self.app)
+        assert core_lifecycle.astrbot_updator is not None
+        assert core_lifecycle.plugin_manager is not None
         self.ur = UpdateRoute(
             self.context,
             core_lifecycle.astrbot_updator,
@@ -142,7 +149,7 @@ class AstrBotDashboard:
 
         self.app.add_url_rule(
             "/api/plug/<path:subpath>",
-            view_func=self.srv_plug_route,
+            view_func=self.guarded_srv_plug_route,
             methods=["GET", "POST"],
         )
 
@@ -150,9 +157,20 @@ class AstrBotDashboard:
 
         self._init_jwt_secret()
 
+    async def guarded_srv_plug_route(
+        self, subpath, *args, **kwargs
+    ) -> ResponseReturnValue:
+        if not self.core_lifecycle.runtime_ready:
+            return runtime_loading_response(self.core_lifecycle)
+        return await self.srv_plug_route(subpath, *args, **kwargs)
+
     async def srv_plug_route(self, subpath, *args, **kwargs):
         """插件路由"""
-        registered_web_apis = self.core_lifecycle.star_context.registered_web_apis
+        star_context = self.core_lifecycle.star_context
+        if star_context is None:
+            return runtime_loading_response(self.core_lifecycle)
+
+        registered_web_apis = star_context.registered_web_apis
         for api in registered_web_apis:
             route, view_handler, methods, _ = api
             if route == f"/{subpath}" and request.method in methods:

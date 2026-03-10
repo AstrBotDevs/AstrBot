@@ -1,9 +1,10 @@
 import asyncio
 import copy
+import inspect
 import os
 import traceback
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -725,29 +726,33 @@ class ProviderManager:
             logger.info(
                 f"终止 {provider_id} 提供商适配器({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)}) ...",
             )
+            provider_inst = self.inst_map[provider_id]
 
-            if self.inst_map[provider_id] in self.provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, Provider):
                     self.provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.stt_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.stt_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, STTProvider):
                     self.stt_provider_insts.remove(prov_inst)
-            if self.inst_map[provider_id] in self.tts_provider_insts:
-                prov_inst = self.inst_map[provider_id]
+            if provider_inst in self.tts_provider_insts:
+                prov_inst = provider_inst
                 if isinstance(prov_inst, TTSProvider):
                     self.tts_provider_insts.remove(prov_inst)
 
-            if self.inst_map[provider_id] == self.curr_provider_inst:
+            if provider_inst == self.curr_provider_inst:
                 self.curr_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_stt_provider_inst:
+            if provider_inst == self.curr_stt_provider_inst:
                 self.curr_stt_provider_inst = None
-            if self.inst_map[provider_id] == self.curr_tts_provider_inst:
+            if provider_inst == self.curr_tts_provider_inst:
                 self.curr_tts_provider_inst = None
 
-            if getattr(self.inst_map[provider_id], "terminate", None):
-                await self.inst_map[provider_id].terminate()  # type: ignore
+            terminate = getattr(cast(Any, provider_inst), "terminate", None)
+            if callable(terminate):
+                result = terminate()
+                if inspect.isawaitable(result):
+                    await result
 
             logger.info(
                 f"{provider_id} 提供商适配器已终止({len(self.provider_insts)}, {len(self.stt_provider_insts)}, {len(self.tts_provider_insts)})",
@@ -816,10 +821,52 @@ class ProviderManager:
             # load instance
             await self.load_provider(new_config)
 
+    def _get_all_provider_instances(self) -> list[Providers]:
+        seen: set[int] = set()
+        instances: list[Providers] = []
+        for provider_inst in [
+            *self.provider_insts,
+            *self.stt_provider_insts,
+            *self.tts_provider_insts,
+            *self.embedding_provider_insts,
+            *self.rerank_provider_insts,
+            *self.inst_map.values(),
+        ]:
+            marker = id(provider_inst)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            instances.append(provider_inst)
+        return instances
+
+    def _clear_loaded_instances(self) -> None:
+        self.provider_insts = []
+        self.stt_provider_insts = []
+        self.tts_provider_insts = []
+        self.embedding_provider_insts = []
+        self.rerank_provider_insts = []
+        self.inst_map = {}
+        self.curr_provider_inst = None
+        self.curr_stt_provider_inst = None
+        self.curr_tts_provider_inst = None
+
     async def terminate(self) -> None:
-        for provider_inst in self.provider_insts:
-            if hasattr(provider_inst, "terminate"):
-                await provider_inst.terminate()  # type: ignore
+        provider_instances = self._get_all_provider_instances()
+        self._clear_loaded_instances()
+
+        for provider_inst in provider_instances:
+            terminate = getattr(cast(Any, provider_inst), "terminate", None)
+            if not callable(terminate):
+                continue
+            try:
+                result = terminate()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.error(
+                    "Error while terminating provider instance",
+                    exc_info=True,
+                )
         try:
             await self.llm_tools.disable_mcp_server()
         except Exception:

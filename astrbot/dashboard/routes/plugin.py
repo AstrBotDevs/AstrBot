@@ -29,11 +29,28 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_temp_path,
 )
 
-from .route import Response, Route, RouteContext
+from .route import Response, Route, RouteContext, guard_runtime_ready
 
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
+
+RUNTIME_GUARDED_PLUGIN_PATHS = {
+    "/plugin/get",
+    "/plugin/install",
+    "/plugin/install-upload",
+    "/plugin/update",
+    "/plugin/update-all",
+    "/plugin/uninstall",
+    "/plugin/uninstall-failed",
+    "/plugin/off",
+    "/plugin/on",
+    "/plugin/reload-failed",
+    "/plugin/reload",
+    "/plugin/readme",
+    "/plugin/changelog",
+    "/plugin/source/get-failed-plugins",
+}
 
 
 @dataclass
@@ -73,6 +90,14 @@ class PluginRoute(Route):
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
+        self._guard_runtime_ready = lambda handler: guard_runtime_ready(
+            self.core_lifecycle,
+            handler,
+        )
+        for path, definition in list(self.routes.items()):
+            method, handler = definition
+            if path in RUNTIME_GUARDED_PLUGIN_PATHS:
+                self.routes[path] = (method, self._guard_runtime_ready(handler))
         self.register_routes()
 
         self.translated_event_type = {
