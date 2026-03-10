@@ -34,6 +34,7 @@ export const useAuthStore = defineStore({
       this.username = '';
       localStorage.removeItem('user');
       localStorage.removeItem('token');
+      void axios.post('/api/auth/logout').catch(() => undefined);
       router.push('/auth/login');
     },
     has_token(): boolean {

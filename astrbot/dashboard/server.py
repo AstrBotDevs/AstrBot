@@ -23,8 +23,10 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.core.utils.io import get_local_ip_addresses
 
+from .plugin_webui_auth import PluginWebUIAuth
 from .routes import *
 from .routes.api_key import ALL_OPEN_API_SCOPES
+from .routes.auth import DASHBOARD_JWT_COOKIE_NAME
 from .routes.backup import BackupRoute
 from .routes.live_chat import LiveChatRoute
 from .routes.platform import PlatformRoute
@@ -198,6 +200,7 @@ class AstrBotDashboard:
 
         allowed_endpoints = [
             "/api/auth/login",
+            "/api/auth/logout",
             "/api/file",
             "/api/platform/webhook",
             "/api/stat/start-time",
@@ -205,16 +208,30 @@ class AstrBotDashboard:
         ]
         if any(request.path.startswith(prefix) for prefix in allowed_endpoints):
             return None
-        # 声明 JWT
-        token = request.headers.get("Authorization")
+        is_plugin_webui_path = PluginWebUIAuth.is_protected_path(request.path)
+        token = self._extract_dashboard_jwt()
+        if not token and is_plugin_webui_path:
+            token = PluginWebUIAuth.extract_asset_token()
         if not token:
             r = jsonify(Response().error("未授权").__dict__)
             r.status_code = 401
             return r
-        token = token.removeprefix("Bearer ")
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            g.username = payload["username"]
+            if PluginWebUIAuth.is_asset_token(
+                payload
+            ) and not PluginWebUIAuth.is_scope_valid(
+                payload,
+                request.path,
+            ):
+                r = jsonify(Response().error("Token 无效").__dict__)
+                r.status_code = 401
+                return r
+
+            username = payload.get("username")
+            if not isinstance(username, str) or not username.strip():
+                raise jwt.InvalidTokenError("missing username in token payload")
+            g.username = username
         except jwt.ExpiredSignatureError:
             r = jsonify(Response().error("Token 过期").__dict__)
             r.status_code = 401
@@ -223,6 +240,19 @@ class AstrBotDashboard:
             r = jsonify(Response().error("Token 无效").__dict__)
             r.status_code = 401
             return r
+
+    @staticmethod
+    def _extract_dashboard_jwt() -> str | None:
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            token = auth_header.removeprefix("Bearer ").strip()
+            if token:
+                return token
+
+        cookie_token = request.cookies.get(DASHBOARD_JWT_COOKIE_NAME, "").strip()
+        if cookie_token:
+            return cookie_token
+        return None
 
     @staticmethod
     def _extract_raw_api_key() -> str | None:
