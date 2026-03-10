@@ -660,3 +660,6 @@ async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
     assert "demo-package" in recorded_args
     assert "--index-url" in recorded_args
     assert "https://example.com/simple" in recorded_args
+    # Verify that default index overrides are NOT present
+    assert "mirrors.aliyun.com" not in recorded_args
+    assert "https://pypi.org/simple" not in recorded_args
