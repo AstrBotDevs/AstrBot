@@ -17,6 +17,7 @@ from astrbot.core.computer.computer_client import (
 from astrbot.core.skills.neo_skill_sync import NeoSkillSyncManager
 from astrbot.core.skills.skill_manager import SkillManager
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.bool_parser import parse_bool
 
 from .route import Response, Route, RouteContext
 
@@ -32,13 +33,7 @@ def _to_jsonable(value: Any) -> Any:
 
 
 def _to_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return bool(value)
+    return parse_bool(value, default)
 
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")

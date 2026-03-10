@@ -29,6 +29,7 @@ from astrbot.core.agent.message import ContentPart, ImageURLPart, Message, TextP
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
+from astrbot.core.utils.bool_parser import parse_bool
 from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
@@ -172,14 +173,6 @@ class ProviderOpenAIOfficial(Provider):
         proxy = provider_config.get("proxy", "")
         return create_proxy_client("OpenAI", proxy)
 
-    @staticmethod
-    def _as_bool(value: Any) -> bool:
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(value)
-
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -227,13 +220,13 @@ class ProviderOpenAIOfficial(Provider):
         self.set_model(model)
 
         self.reasoning_key = "reasoning_content"
-        self.use_responses_api = self._as_bool(
+        self.use_responses_api = parse_bool(
             provider_config.get("use_responses_api", False)
         )
 
     def _get_openai_native_tools(self) -> list[dict[str, Any]]:
         tool_list: list[dict[str, Any]] = []
-        if self._as_bool(self.provider_config.get("oa_native_web_search", False)):
+        if parse_bool(self.provider_config.get("oa_native_web_search", False)):
             tool_list.append({"type": "web_search"})
         return tool_list
 
@@ -448,6 +441,150 @@ class ProviderOpenAIOfficial(Provider):
                 content.append(normalized_part)
         return content
 
+    def _build_responses_input_message(
+        self,
+        role: str,
+        content_parts: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        converted = self._convert_message_parts_to_responses_content(content_parts)
+        if not converted:
+            return None
+        # Responses API treats system prompts as developer messages.
+        normalized_role = "developer" if role == "system" else role
+        return {
+            "type": "message",
+            "role": normalized_role,
+            "content": converted,
+        }
+
+    def _build_responses_assistant_output_item(
+        self,
+        message: dict[str, Any],
+        content_parts: list[dict[str, Any]],
+        index: int,
+    ) -> dict[str, Any] | None:
+        output_content = []
+        for part in content_parts:
+            if part.get("type") != "text":
+                continue
+            output_content.append(
+                {
+                    "type": "output_text",
+                    "text": str(part.get("text", "")),
+                    "annotations": [],
+                }
+            )
+        if not output_content:
+            return None
+        return {
+            "type": "message",
+            "id": str(message.get("id") or f"msg_{index}"),
+            "role": "assistant",
+            "status": "completed",
+            "content": output_content,
+        }
+
+    def _build_responses_reasoning_item(
+        self, message: dict[str, Any], index: int
+    ) -> dict[str, Any] | None:
+        reasoning_content = str(message.get("reasoning_content", "") or "").strip()
+        if not reasoning_content:
+            return None
+        return {
+            "type": "reasoning",
+            "id": str(message.get("reasoning_id") or f"rs_{index}"),
+            "status": "completed",
+            "summary": [],
+            "content": [
+                {
+                    "type": "reasoning_text",
+                    "text": reasoning_content,
+                }
+            ],
+        }
+
+    def _build_responses_function_call_item(
+        self,
+        tool_call: dict[str, Any] | str,
+        index: int,
+        item_index: int,
+    ) -> dict[str, Any]:
+        if isinstance(tool_call, str):
+            tool_call = json.loads(tool_call)
+        function_obj = tool_call.get("function", {})
+        call_id = str(
+            tool_call.get("id")
+            or tool_call.get("call_id")
+            or f"call_{index}_{item_index}"
+        )
+        arguments = function_obj.get("arguments", "{}")
+        if not isinstance(arguments, str):
+            arguments = json.dumps(arguments, ensure_ascii=False)
+        return {
+            "type": "function_call",
+            "id": call_id,
+            "call_id": call_id,
+            "name": str(function_obj.get("name", "")),
+            "arguments": arguments,
+            "status": "completed",
+        }
+
+    def _build_responses_assistant_items(
+        self,
+        message: dict[str, Any],
+        content_parts: list[dict[str, Any]],
+        index: int,
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+
+        assistant_output = self._build_responses_assistant_output_item(
+            message,
+            content_parts,
+            index,
+        )
+        if assistant_output:
+            items.append(assistant_output)
+
+        reasoning_item = self._build_responses_reasoning_item(message, index)
+        if reasoning_item:
+            items.append(reasoning_item)
+
+        # Assistant tool calls are emitted as sibling function_call items rather than
+        # nested under the assistant message to match Responses API history shape.
+        for tool_call in message.get("tool_calls") or []:
+            items.append(
+                self._build_responses_function_call_item(
+                    tool_call,
+                    index,
+                    len(items),
+                )
+            )
+
+        return items
+
+    def _build_responses_tool_output_item(
+        self,
+        message: dict[str, Any],
+        content_parts: list[dict[str, Any]],
+        index: int,
+    ) -> dict[str, Any]:
+        tool_output_parts = self._convert_message_parts_to_responses_content(
+            content_parts
+        )
+        output: str | list[dict[str, Any]]
+        if tool_output_parts:
+            output = tool_output_parts
+        else:
+            output = self._normalize_content(message.get("content"))
+        call_id = str(
+            message.get("tool_call_id") or message.get("id") or f"tool_{index}"
+        )
+        return {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": output,
+        }
+
     def _convert_openai_messages_to_responses_input(
         self,
         messages: list[dict[str, Any]],
@@ -462,117 +599,42 @@ class ProviderOpenAIOfficial(Provider):
             )
 
             if role in {"system", "developer", "user"}:
-                converted = self._convert_message_parts_to_responses_content(
-                    content_parts
+                input_message = self._build_responses_input_message(
+                    role,
+                    content_parts,
                 )
-                if not converted:
+                if not input_message:
                     continue
-                response_input.append(
-                    {
-                        "type": "message",
-                        "role": "developer" if role == "system" else role,
-                        "content": converted,
-                    }
-                )
+                response_input.append(input_message)
                 continue
 
             if role == "assistant":
-                output_content = []
-                for part in content_parts:
-                    if part.get("type") != "text":
-                        continue
-                    output_content.append(
-                        {
-                            "type": "output_text",
-                            "text": str(part.get("text", "")),
-                            "annotations": [],
-                        }
+                response_input.extend(
+                    self._build_responses_assistant_items(
+                        message,
+                        content_parts,
+                        index,
                     )
-                if output_content:
-                    response_input.append(
-                        {
-                            "type": "message",
-                            "id": str(message.get("id") or f"msg_{index}"),
-                            "role": "assistant",
-                            "status": "completed",
-                            "content": output_content,
-                        }
-                    )
-
-                reasoning_content = str(
-                    message.get("reasoning_content", "") or ""
-                ).strip()
-                if reasoning_content:
-                    response_input.append(
-                        {
-                            "type": "reasoning",
-                            "id": str(message.get("reasoning_id") or f"rs_{index}"),
-                            "status": "completed",
-                            "summary": [],
-                            "content": [
-                                {
-                                    "type": "reasoning_text",
-                                    "text": reasoning_content,
-                                }
-                            ],
-                        }
-                    )
-
-                for tool_call in message.get("tool_calls") or []:
-                    if isinstance(tool_call, str):
-                        tool_call = json.loads(tool_call)
-                    function_obj = tool_call.get("function", {})
-                    call_id = str(
-                        tool_call.get("id")
-                        or tool_call.get("call_id")
-                        or f"call_{index}_{len(response_input)}"
-                    )
-                    arguments = function_obj.get("arguments", "{}")
-                    if not isinstance(arguments, str):
-                        arguments = json.dumps(arguments, ensure_ascii=False)
-                    response_input.append(
-                        {
-                            "type": "function_call",
-                            "id": call_id,
-                            "call_id": call_id,
-                            "name": str(function_obj.get("name", "")),
-                            "arguments": arguments,
-                            "status": "completed",
-                        }
-                    )
+                )
                 continue
 
             if role == "tool":
-                tool_output_parts = self._convert_message_parts_to_responses_content(
-                    content_parts
-                )
-                output: str | list[dict[str, Any]]
-                if tool_output_parts:
-                    output = tool_output_parts
-                else:
-                    output = self._normalize_content(message.get("content"))
-                call_id = str(
-                    message.get("tool_call_id") or message.get("id") or f"tool_{index}"
-                )
                 response_input.append(
-                    {
-                        "type": "function_call_output",
-                        "call_id": call_id,
-                        "output": output,
-                    }
+                    self._build_responses_tool_output_item(
+                        message,
+                        content_parts,
+                        index,
+                    )
                 )
 
         return response_input
 
-    def _build_responses_payload(self, payloads: dict, tools: ToolSet | None) -> dict:
-        response_payload: dict[str, Any] = {
-            "model": payloads.get("model", self.get_model()),
-            "input": self._convert_openai_messages_to_responses_input(
-                payloads.get("messages", [])
-            ),
-        }
+    def _partition_responses_payload_fields(
+        self, payloads: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        response_payload: dict[str, Any] = {}
+        extra_body: dict[str, Any] = {}
 
-        extra_body = {}
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
@@ -586,13 +648,34 @@ class ProviderOpenAIOfficial(Provider):
             else:
                 extra_body[key] = value
 
+        return response_payload, extra_body
+
+    def _build_responses_tools_payload(
+        self, tools: ToolSet | None
+    ) -> list[dict] | None:
         native_tools = self._get_openai_native_tools()
         if native_tools:
-            response_payload["tools"] = native_tools
             if tools:
                 logger.warning("已启用 OpenAI 原生工具，AstrBot 函数工具将被忽略")
-        elif tools:
-            response_payload["tools"] = self._convert_openai_tools_to_responses(tools)
+            return native_tools
+        if tools:
+            return self._convert_openai_tools_to_responses(tools)
+        return None
+
+    def _build_responses_payload(self, payloads: dict, tools: ToolSet | None) -> dict:
+        response_payload: dict[str, Any] = {
+            "model": payloads.get("model", self.get_model()),
+            "input": self._convert_openai_messages_to_responses_input(
+                payloads.get("messages", [])
+            ),
+        }
+
+        response_fields, extra_body = self._partition_responses_payload_fields(payloads)
+        response_payload.update(response_fields)
+
+        tools_payload = self._build_responses_tools_payload(tools)
+        if tools_payload:
+            response_payload["tools"] = tools_payload
 
         if extra_body:
             response_payload["extra_body"] = extra_body
@@ -622,6 +705,7 @@ class ProviderOpenAIOfficial(Provider):
         payloads: dict,
         tools: ToolSet | None,
     ) -> AsyncGenerator[LLMResponse, None]:
+        """Stream text/reasoning deltas and defer tool-call parsing until completion."""
         response_payload = self._build_responses_payload(payloads, tools)
         extra_body = response_payload.pop("extra_body", None)
         stream = await self.client.responses.create(
@@ -648,6 +732,8 @@ class ProviderOpenAIOfficial(Provider):
                 )
             elif event.type == "response.completed":
                 final_response = event.response
+            # Tool/function call items are reconstructed from the final response payload.
+            # This keeps stream handling simple until we need true incremental tool events.
 
         if final_response is None:
             raise Exception("Responses API 流式返回缺少 response.completed 事件。")
