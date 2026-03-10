@@ -12,6 +12,7 @@ import sys
 import threading
 from collections import deque
 from collections.abc import Iterator
+from urllib.parse import urlparse
 
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
@@ -115,6 +116,39 @@ def _iter_normalized_requirement_lines(raw_input: str) -> Iterator[str]:
             yield stripped
 
 
+def _parse_package_install_line(line: str) -> tuple[list[str], set[str]]:
+    requirement_names: set[str] = set()
+
+    try:
+        req = Requirement(line)
+    except InvalidRequirement:
+        tokens = shlex.split(line)
+        if not tokens:
+            return [], set()
+
+        if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
+            name = _extract_requirement_name(line)
+            if name:
+                requirement_names.add(name)
+            return tokens, requirement_names
+
+        if tokens[0].startswith("-"):
+            name = _extract_requirement_name(line)
+            if name:
+                requirement_names.add(name)
+            return tokens, requirement_names
+
+        for token in tokens:
+            name = _extract_requirement_name(token)
+            if name:
+                requirement_names.add(name)
+
+        return tokens, requirement_names
+
+    requirement_names.add(_canonicalize_distribution_name(req.name))
+    return [line], requirement_names
+
+
 def _split_package_install_input(raw_input: str) -> list[str]:
     """
     Normalize the user-provided package string into a list of pip args.
@@ -126,41 +160,25 @@ def _split_package_install_input(raw_input: str) -> list[str]:
     """
     specs: list[str] = []
     for line in _iter_normalized_requirement_lines(raw_input):
-        specs.extend(_split_package_install_line(line))
+        tokens, _ = _parse_package_install_line(line)
+        specs.extend(tokens)
     return specs
-
-
-def _split_package_install_line(line: str) -> list[str]:
-    try:
-        Requirement(line)
-    except InvalidRequirement:
-        return shlex.split(line)
-    return [line]
 
 
 def _extract_requested_requirements_from_package_input(raw_input: str) -> set[str]:
     requirements: set[str] = set()
     for line in _iter_normalized_requirement_lines(raw_input):
-        try:
-            req = Requirement(line)
-        except InvalidRequirement:
-            tokens = _split_package_install_line(line)
-            if not tokens:
-                continue
-            if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
-                requirement_name = _extract_requirement_name(line)
-                if requirement_name:
-                    requirements.add(requirement_name)
-                continue
-            if tokens[0].startswith("-"):
-                continue
-            for token in tokens:
-                requirement_name = _extract_requirement_name(token)
-                if requirement_name:
-                    requirements.add(requirement_name)
-        else:
-            requirements.add(_canonicalize_distribution_name(req.name))
+        _, names = _parse_package_install_line(line)
+        requirements.update(names)
     return requirements
+
+
+def _get_trusted_host_for_index_url(index_url: str) -> str | None:
+    parsed = urlparse(index_url if "://" in index_url else f"//{index_url}")
+    host = parsed.hostname
+    if host == "mirrors.aliyun.com":
+        return host
+    return None
 
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
@@ -414,7 +432,7 @@ class _StreamingLogWriter(io.TextIOBase):
         if not text:
             return 0
 
-        self._buffer += text.replace("\r", "\n")
+        self._buffer += text.replace("\r\n", "\n").replace("\r", "\n")
         while "\n" in self._buffer:
             raw_line, self._buffer = self._buffer.split("\n", 1)
             line = raw_line.rstrip("\r\n")
@@ -963,7 +981,10 @@ class PipInstaller:
 
         if not _package_specs_override_index([*args[1:], *pip_install_args]):
             index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-            args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
+            trusted_host = _get_trusted_host_for_index_url(index_url)
+            if trusted_host:
+                args.extend(["--trusted-host", trusted_host])
+            args.extend(["-i", index_url])
 
         if pip_install_args:
             args.extend(pip_install_args)

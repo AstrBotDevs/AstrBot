@@ -153,6 +153,42 @@ async def test_run_pip_in_process_preserves_blank_lines(monkeypatch):
     ]
 
 
+@pytest.mark.asyncio
+async def test_run_pip_in_process_normalizes_crlf_without_extra_blank_lines(
+    monkeypatch,
+):
+    logged_lines = []
+
+    def fake_pip_main(args):
+        del args
+        import sys
+
+        sys.stdout.write("Collecting demo-package\r\n")
+        sys.stdout.write("Installing collected packages\r\n")
+        return 0
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.logger.info",
+        lambda line, *args: logged_lines.append(line % args if args else line),
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == (
+        0,
+        ["Collecting demo-package", "Installing collected packages"],
+    )
+    assert logged_lines[-2:] == [
+        "Collecting demo-package",
+        "Installing collected packages",
+    ]
+
+
 def _make_fake_distribution(name: str, version: str):
     class FakeDistribution:
         metadata = {"Name": name}
@@ -771,3 +807,38 @@ async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
     # Verify that default index overrides are NOT present
     assert "mirrors.aliyun.com" not in recorded_args
     assert "https://pypi.org/simple" not in recorded_args
+
+
+@pytest.mark.asyncio
+async def test_install_does_not_add_aliyun_trusted_host_for_default_index(monkeypatch):
+    run_pip = AsyncMock(return_value=(0, []))
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert "-i" in recorded_args
+    assert "https://pypi.org/simple" in recorded_args
+    assert "--trusted-host" not in recorded_args
+
+
+@pytest.mark.asyncio
+async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatch):
+    run_pip = AsyncMock(return_value=(0, []))
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("", pypi_index_url="https://mirrors.aliyun.com/simple")
+    await installer.install(package_name="demo-package")
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert "-i" in recorded_args
+    assert "https://mirrors.aliyun.com/simple" in recorded_args
+    trusted_host_index = recorded_args.index("--trusted-host")
+    assert recorded_args[trusted_host_index + 1] == "mirrors.aliyun.com"

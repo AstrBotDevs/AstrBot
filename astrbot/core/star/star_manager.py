@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import traceback
+from enum import Enum, auto
 from types import ModuleType
 
 import yaml
@@ -53,6 +54,26 @@ except ImportError:
 
 class PluginVersionIncompatibleError(Exception):
     """Raised when plugin astrbot_version is incompatible with current AstrBot."""
+
+
+class _RequirementInstallStrategy(Enum):
+    FULL_INSTALL = auto()
+    SKIP = auto()
+    INSTALL_MISSING = auto()
+
+
+def _determine_requirement_install_strategy(
+    requirements_path: str,
+) -> tuple[_RequirementInstallStrategy, set[str]]:
+    try:
+        missing = find_missing_requirements_or_raise(requirements_path)
+    except RequirementsPrecheckFailed:
+        return _RequirementInstallStrategy.FULL_INSTALL, set()
+
+    if not missing:
+        return _RequirementInstallStrategy.SKIP, set()
+
+    return _RequirementInstallStrategy.INSTALL_MISSING, missing
 
 
 class PluginManager:
@@ -218,9 +239,11 @@ class PluginManager:
             return
 
         try:
-            try:
-                missing = find_missing_requirements_or_raise(requirements_path)
-            except RequirementsPrecheckFailed:
+            strategy, missing = _determine_requirement_install_strategy(
+                requirements_path
+            )
+
+            if strategy is _RequirementInstallStrategy.FULL_INSTALL:
                 logger.info(
                     f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
                     f"{requirements_path}"
@@ -228,7 +251,7 @@ class PluginManager:
                 await pip_installer.install(requirements_path=requirements_path)
                 return
 
-            if not missing:
+            if strategy is _RequirementInstallStrategy.SKIP:
                 logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
                 return
 
