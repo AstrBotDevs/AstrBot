@@ -19,12 +19,8 @@ from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
-    EXECUTE_SHELL_TOOL,
-    FILE_DOWNLOAD_TOOL,
-    FILE_UPLOAD_TOOL,
     LOCAL_EXECUTE_SHELL_TOOL,
     LOCAL_PYTHON_TOOL,
-    PYTHON_TOOL,
     SEND_MESSAGE_TO_USER_TOOL,
 )
 from astrbot.core.cron.events import CronMessageEvent
@@ -177,14 +173,41 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
     @classmethod
-    def _get_runtime_computer_tools(cls, runtime: str) -> dict[str, FunctionTool]:
+    def _get_runtime_computer_tools(
+        cls,
+        runtime: str,
+        session_id: str | None = None,
+        sandbox_cfg: dict | None = None,
+    ) -> dict[str, FunctionTool]:
         if runtime == "sandbox":
-            return {
-                EXECUTE_SHELL_TOOL.name: EXECUTE_SHELL_TOOL,
-                PYTHON_TOOL.name: PYTHON_TOOL,
-                FILE_UPLOAD_TOOL.name: FILE_UPLOAD_TOOL,
-                FILE_DOWNLOAD_TOOL.name: FILE_DOWNLOAD_TOOL,
-            }
+            from astrbot.core.computer.computer_client import (
+                get_default_sandbox_tools,
+                get_sandbox_capabilities,
+                get_sandbox_tools,
+            )
+
+            booted = get_sandbox_tools(session_id) if session_id else []
+            if booted:
+                tools = booted
+                source = "booted"
+            else:
+                tools = get_default_sandbox_tools(sandbox_cfg or {})
+                source = "default"
+            result = {t.name: t for t in tools} if tools else {}
+            capabilities = (
+                get_sandbox_capabilities(session_id)
+                if source == "booted" and session_id
+                else None
+            )
+            logger.info(
+                "[Computer] sandbox_tool_binding target=subagent runtime=%s source=%s tools=%d session=%s capabilities=%s",
+                runtime,
+                source,
+                len(result),
+                session_id,
+                list(capabilities) if capabilities is not None else "unknown",
+            )
+            return result
         if runtime == "local":
             return {
                 LOCAL_EXECUTE_SHELL_TOOL.name: LOCAL_EXECUTE_SHELL_TOOL,
@@ -203,7 +226,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
-        runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
+        sandbox_cfg = provider_settings.get("sandbox", {})
+        runtime_computer_tools = cls._get_runtime_computer_tools(
+            runtime,
+            session_id=event.unified_msg_origin,
+            sandbox_cfg=sandbox_cfg,
+        )
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.

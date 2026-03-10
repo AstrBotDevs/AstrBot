@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import functools
 import os
 import shlex
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from astrbot.api import logger
+
+if TYPE_CHECKING:
+    from astrbot.core.agent.tool import FunctionTool
+
+from astrbot.core.computer.prompts import (
+    NEO_FILE_PATH_PROMPT,
+    NEO_SKILL_LIFECYCLE_PROMPT,
+)
 
 from ..olayer import (
     BrowserComponent,
@@ -315,14 +324,17 @@ class ShipyardNeoBooter(ComputerBooter):
             if self._bay_manager is not None:
                 await self._bay_manager.close_client()
 
-            logger.info("[Computer] Neo auto-start mode: launching Bay container")
+            logger.info("[Computer] bay_autostart status=starting")
             self._bay_manager = BayContainerManager()
             self._endpoint_url = await self._bay_manager.ensure_running()
             await self._bay_manager.wait_healthy()
             # Read auto-provisioned credentials
             if not self._access_token:
                 self._access_token = await self._bay_manager.read_credentials()
-            logger.info("[Computer] Bay auto-started at %s", self._endpoint_url)
+            logger.info(
+                "[Computer] bay_autostart status=ready endpoint=%s",
+                self._endpoint_url,
+            )
 
         if not self._endpoint_url or not self._access_token:
             if self._bay_manager is not None:
@@ -362,7 +374,7 @@ class ShipyardNeoBooter(ComputerBooter):
         )
 
         logger.info(
-            "Got Shipyard Neo sandbox: %s (profile=%s, capabilities=%s, auto=%s)",
+            "[Computer] sandbox_created booter=shipyard_neo sandbox_id=%s profile=%s capabilities=%s auto=%s",
             self._sandbox.id,
             resolved_profile,
             list(caps),
@@ -384,7 +396,10 @@ class ShipyardNeoBooter(ComputerBooter):
         """
         # User explicitly set a profile → honour it
         if self._profile and self._profile != self.DEFAULT_PROFILE:
-            logger.info("[Computer] Using user-specified profile: %s", self._profile)
+            logger.info(
+                "[Computer] profile_selected mode=user profile=%s",
+                self._profile,
+            )
             return self._profile
 
         # Query Bay for available profiles
@@ -397,7 +412,7 @@ class ShipyardNeoBooter(ComputerBooter):
             raise  # auth errors must not be silenced
         except Exception as exc:
             logger.warning(
-                "[Computer] Failed to query Bay profiles, falling back to %s: %s",
+                "[Computer] profile_selection_fallback reason=query_failed fallback=%s error=%s",
                 self.DEFAULT_PROFILE,
                 exc,
             )
@@ -417,7 +432,7 @@ class ShipyardNeoBooter(ComputerBooter):
         if chosen != self.DEFAULT_PROFILE:
             caps = getattr(best, "capabilities", [])
             logger.info(
-                "[Computer] Auto-selected profile %s (capabilities=%s)",
+                "[Computer] profile_selected mode=auto profile=%s capabilities=%s",
                 chosen,
                 caps,
             )
@@ -428,12 +443,16 @@ class ShipyardNeoBooter(ComputerBooter):
         if self._client is not None:
             sandbox_id = getattr(self._sandbox, "id", "unknown")
             logger.info(
-                "[Computer] Shutting down Shipyard Neo sandbox: id=%s", sandbox_id
+                "[Computer] booter_shutdown booter=shipyard_neo sandbox_id=%s status=starting",
+                sandbox_id,
             )
             await self._client.__aexit__(None, None, None)
             self._client = None
             self._sandbox = None
-            logger.info("[Computer] Shipyard Neo sandbox shut down: id=%s", sandbox_id)
+            logger.info(
+                "[Computer] booter_shutdown booter=shipyard_neo sandbox_id=%s status=done",
+                sandbox_id,
+            )
 
         # NOTE: We intentionally do NOT stop the Bay container here.
         # It stays running for reuse by future sessions.  The user can
@@ -472,7 +491,10 @@ class ShipyardNeoBooter(ComputerBooter):
             content = f.read()
         remote_path = file_name.lstrip("/")
         await self._sandbox.filesystem.upload(remote_path, content)
-        logger.info("[Computer] File uploaded to Neo sandbox: %s", remote_path)
+        logger.info(
+            "[Computer] file_upload booter=shipyard_neo remote_path=%s",
+            remote_path,
+        )
         return {
             "success": True,
             "message": "File uploaded successfully",
@@ -489,7 +511,7 @@ class ShipyardNeoBooter(ComputerBooter):
         with open(local_path, "wb") as f:
             f.write(cast(bytes, content))
         logger.info(
-            "[Computer] File downloaded from Neo sandbox: %s -> %s",
+            "[Computer] file_download booter=shipyard_neo remote_path=%s local_path=%s",
             remote_path,
             local_path,
         )
@@ -501,13 +523,87 @@ class ShipyardNeoBooter(ComputerBooter):
             await self._sandbox.refresh()
             status = getattr(self._sandbox.status, "value", str(self._sandbox.status))
             healthy = status not in {"failed", "expired"}
-            logger.info(
-                "[Computer] Neo sandbox health check: id=%s, status=%s, healthy=%s",
+            logger.debug(
+                "[Computer] health_check booter=shipyard_neo sandbox_id=%s status=%s healthy=%s",
                 getattr(self._sandbox, "id", "unknown"),
                 status,
                 healthy,
             )
             return healthy
-        except Exception as e:
-            logger.error(f"Error checking Shipyard Neo sandbox availability: {e}")
+        except Exception:
+            logger.exception(
+                "[Computer] health_check_failed booter=shipyard_neo sandbox_id=%s",
+                getattr(self._sandbox, "id", "unknown"),
+            )
             return False
+
+    # ── Tool / prompt self-description ────────────────────────────
+
+    @classmethod
+    @functools.cache
+    def _base_tools(cls) -> tuple[FunctionTool, ...]:
+        """4 base + 11 Neo lifecycle = 15 tools (all Neo profiles)."""
+        from astrbot.core.computer.tools.fs import FileDownloadTool, FileUploadTool
+        from astrbot.core.computer.tools.neo_skills import (
+            AnnotateExecutionTool,
+            CreateSkillCandidateTool,
+            CreateSkillPayloadTool,
+            EvaluateSkillCandidateTool,
+            GetExecutionHistoryTool,
+            GetSkillPayloadTool,
+            ListSkillCandidatesTool,
+            ListSkillReleasesTool,
+            PromoteSkillCandidateTool,
+            RollbackSkillReleaseTool,
+            SyncSkillReleaseTool,
+        )
+        from astrbot.core.computer.tools.python import PythonTool
+        from astrbot.core.computer.tools.shell import ExecuteShellTool
+
+        return (
+            ExecuteShellTool(),
+            PythonTool(),
+            FileUploadTool(),
+            FileDownloadTool(),
+            GetExecutionHistoryTool(),
+            AnnotateExecutionTool(),
+            CreateSkillPayloadTool(),
+            GetSkillPayloadTool(),
+            CreateSkillCandidateTool(),
+            ListSkillCandidatesTool(),
+            EvaluateSkillCandidateTool(),
+            PromoteSkillCandidateTool(),
+            ListSkillReleasesTool(),
+            RollbackSkillReleaseTool(),
+            SyncSkillReleaseTool(),
+        )
+
+    @classmethod
+    @functools.cache
+    def _browser_tools(cls) -> tuple[FunctionTool, ...]:
+        from astrbot.core.computer.tools.browser import (
+            BrowserBatchExecTool,
+            BrowserExecTool,
+            RunBrowserSkillTool,
+        )
+
+        return (BrowserExecTool(), BrowserBatchExecTool(), RunBrowserSkillTool())
+
+    @classmethod
+    def get_default_tools(cls) -> list[FunctionTool]:
+        """Pre-boot: conservative full list (including browser)."""
+        return list(cls._base_tools()) + list(cls._browser_tools())
+
+    def get_tools(self) -> list[FunctionTool]:
+        """Post-boot: capability-filtered list."""
+        caps = self.capabilities
+        if caps is None:
+            return self.__class__.get_default_tools()
+        tools = list(self._base_tools())
+        if "browser" in caps:
+            tools.extend(self._browser_tools())
+        return tools
+
+    @classmethod
+    def get_system_prompt_parts(cls) -> list[str]:
+        return [NEO_FILE_PATH_PROMPT, NEO_SKILL_LIFECYCLE_PROMPT]
