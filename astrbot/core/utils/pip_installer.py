@@ -59,14 +59,6 @@ class RequirementsPrecheckFailed(Exception):
 
 
 @dataclass(frozen=True)
-class ParsedRequirementLine:
-    raw: str
-    tokens: tuple[str, ...]
-    requirement_names: frozenset[str]
-    has_unresolved_requirement_source: bool = False
-
-
-@dataclass(frozen=True)
 class ParsedPackageInput:
     specs: tuple[str, ...]
     requirement_names: frozenset[str]
@@ -101,6 +93,8 @@ def _get_pip_main():
 
 
 def _strip_inline_requirement_comment(raw_input: str) -> str:
+    if raw_input.lstrip().startswith("#"):
+        return ""
     return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
 
 
@@ -160,22 +154,18 @@ def _looks_like_direct_reference(token: str) -> bool:
     )
 
 
-def _extract_names_from_pip_tokens(
+def _extract_requirement_names_from_package_tokens(
     tokens: list[str],
-) -> tuple[frozenset[str], bool]:
+) -> frozenset[str]:
     requirement_names: set[str] = set()
-    has_unresolved_requirement_source = False
     skip_next_for: str | None = None
 
     for token in tokens:
         if skip_next_for:
             if skip_next_for == "editable":
-                if "#egg=" not in token:
-                    has_unresolved_requirement_source = True
-                else:
-                    name = _extract_requirement_name(token)
-                    if name:
-                        requirement_names.add(name)
+                name = _extract_requirement_name(token)
+                if name:
+                    requirement_names.add(name)
             skip_next_for = None
             continue
 
@@ -200,12 +190,9 @@ def _extract_names_from_pip_tokens(
 
         if token.startswith(("--editable=",)):
             editable_target = token.split("=", 1)[1]
-            if "#egg=" not in editable_target:
-                has_unresolved_requirement_source = True
-            else:
-                name = _extract_requirement_name(editable_target)
-                if name:
-                    requirement_names.add(name)
+            name = _extract_requirement_name(editable_target)
+            if name:
+                requirement_names.add(name)
             continue
 
         if token.startswith(
@@ -233,18 +220,17 @@ def _extract_names_from_pip_tokens(
         name = _extract_requirement_name(token)
         if name and not _looks_like_direct_reference(token):
             requirement_names.add(name)
-            continue
 
-        if _looks_like_direct_reference(token):
-            has_unresolved_requirement_source = True
-
-    return frozenset(requirement_names), has_unresolved_requirement_source
+    return frozenset(requirement_names)
 
 
-def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirementLine]:
+def _parse_package_install_input(raw_input: str) -> ParsedPackageInput:
+    """Parse the user-provided package string into pip args and requirement names."""
+    specs: list[str] = []
+    requirement_names: set[str] = set()
     normalized = raw_input.strip()
     if not normalized:
-        return
+        return ParsedPackageInput(specs=(), requirement_names=frozenset())
 
     for raw_line in normalized.splitlines():
         line = _strip_inline_requirement_comment(raw_line)
@@ -257,34 +243,14 @@ def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirement
             tokens = shlex.split(line)
             if not tokens:
                 continue
-
-            requirement_names, has_unresolved_requirement_source = (
-                _extract_names_from_pip_tokens(tokens)
-            )
-
-            yield ParsedRequirementLine(
-                raw=line,
-                tokens=tuple(tokens),
-                requirement_names=requirement_names,
-                has_unresolved_requirement_source=has_unresolved_requirement_source,
+            specs.extend(tokens)
+            requirement_names.update(
+                _extract_requirement_names_from_package_tokens(tokens)
             )
             continue
 
-        yield ParsedRequirementLine(
-            raw=line,
-            tokens=(line,),
-            requirement_names=frozenset({_canonicalize_distribution_name(req.name)}),
-        )
-
-
-def _parse_package_install_input(raw_input: str) -> ParsedPackageInput:
-    """Parse the user-provided package string into pip args and requirement names."""
-    specs: list[str] = []
-    requirement_names: set[str] = set()
-
-    for parsed in _iter_parsed_requirement_lines(raw_input):
-        specs.extend(parsed.tokens)
-        requirement_names.update(parsed.requirement_names)
+        specs.append(line)
+        requirement_names.add(_canonicalize_distribution_name(req.name))
 
     return ParsedPackageInput(
         specs=tuple(specs),
@@ -396,10 +362,10 @@ def _extract_requirement_name(raw_requirement: str) -> str | None:
     return _canonicalize_distribution_name(candidate)
 
 
-def _iter_requirements(
+def _iter_requirement_lines(
     requirements_path: str,
     _visited: set[str] | None = None,
-) -> Iterator[tuple[str, SpecifierSet | None]]:
+) -> Iterator[str]:
     visited = _visited or set()
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited:
@@ -409,57 +375,90 @@ def _iter_requirements(
         return
     visited.add(resolved_path)
 
-    try:
-        with open(resolved_path, encoding="utf-8") as f:
-            for raw_line in f:
-                for parsed in _iter_parsed_requirement_lines(raw_line):
-                    line = parsed.raw
-                    tokens = list(parsed.tokens)
-                    if not tokens:
-                        continue
-                    if parsed.has_unresolved_requirement_source:
-                        raise ValueError(
-                            "unresolved direct requirement source in requirements file"
-                        )
+    with open(resolved_path, encoding="utf-8") as f:
+        for raw_line in f:
+            line = _strip_inline_requirement_comment(raw_line)
+            if not line:
+                continue
 
-                    # Handle recursion
-                    nested: str | None = None
-                    if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
-                        nested = tokens[1]
-                    elif tokens[0].startswith("--requirement="):
-                        nested = tokens[0].split("=", 1)[1]
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
 
-                    if nested:
-                        if not os.path.isabs(nested):
-                            nested = os.path.join(
-                                os.path.dirname(resolved_path), nested
-                            )
-                        yield from _iter_requirements(nested, _visited=visited)
-                        continue
+            nested: str | None = None
+            if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
+                nested = tokens[1]
+            elif tokens[0].startswith("--requirement="):
+                nested = tokens[0].split("=", 1)[1]
 
-                    if tokens[0] in {"-c", "--constraint"}:
-                        continue
+            if nested:
+                if not os.path.isabs(nested):
+                    nested = os.path.join(os.path.dirname(resolved_path), nested)
+                yield from _iter_requirement_lines(nested, _visited=visited)
+                continue
 
-                    if tokens[0].startswith("-"):
-                        for name in parsed.requirement_names:
-                            yield name, None
-                        continue
+            yield line
 
-                    try:
-                        req = Requirement(line)
-                        if req.marker and not req.marker.evaluate():
-                            continue
-                        yield (
-                            _canonicalize_distribution_name(req.name),
-                            req.specifier or None,
-                        )
-                    except InvalidRequirement:
-                        name = _extract_requirement_name(line)
-                        if name:
-                            yield name, None
-    except FileNotFoundError:
-        # Rethrow to allow find_missing_requirements to return None
-        raise
+
+def _requirement_line_needs_precheck_fallback(line: str) -> bool:
+    if line.startswith(("-e ", "--editable ")) or line.startswith("--editable="):
+        return "#egg=" not in line
+
+    if line.startswith("-"):
+        return False
+
+    return (
+        _looks_like_direct_reference(line) and _extract_requirement_name(line) is None
+    )
+
+
+def _iter_requirements_from_lines(
+    requirement_lines: Iterator[str] | list[str],
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    for line in requirement_lines:
+        if line.startswith(("-c", "--constraint")):
+            continue
+
+        try:
+            req = Requirement(line)
+        except InvalidRequirement:
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
+
+            editable_target: str | None = None
+            if tokens[0] in {"-e", "--editable"} and len(tokens) > 1:
+                editable_target = tokens[1]
+            elif tokens[0].startswith("--editable="):
+                editable_target = tokens[0].split("=", 1)[1]
+
+            if editable_target:
+                name = _extract_requirement_name(editable_target)
+                if name and (
+                    "#egg=" in editable_target
+                    or not _looks_like_direct_reference(editable_target)
+                ):
+                    yield name, None
+                continue
+
+            name = _extract_requirement_name(line)
+            if name and ("#egg=" in line or not _looks_like_direct_reference(line)):
+                yield name, None
+            continue
+
+        if req.marker and not req.marker.evaluate():
+            continue
+
+        yield (
+            _canonicalize_distribution_name(req.name),
+            req.specifier or None,
+        )
+
+
+def _iter_requirements(
+    requirements_path: str,
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    yield from _iter_requirements_from_lines(_iter_requirement_lines(requirements_path))
 
 
 def _extract_requirement_names(requirements_path: str) -> set[str]:
@@ -493,11 +492,20 @@ def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str]
 
 def _find_missing_requirements(requirements_path: str) -> set[str] | None:
     try:
-        required = list(_iter_requirements(requirements_path))
+        requirement_lines = list(_iter_requirement_lines(requirements_path))
     except Exception as exc:
         logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
         return None
 
+    if any(
+        _requirement_line_needs_precheck_fallback(line) for line in requirement_lines
+    ):
+        logger.warning(
+            "预检查缺失依赖失败，将回退到完整安装: unresolved direct requirement source in requirements file"
+        )
+        return None
+
+    required = list(_iter_requirements_from_lines(requirement_lines))
     if not required:
         return set()
 
@@ -1191,13 +1199,11 @@ class PipInstaller:
         self.pypi_index_url = pypi_index_url
         self.core_dist_name = core_dist_name
 
-    def _parse_global_pip_args(self) -> list[str]:
-        return shlex.split(self.pip_install_arg) if self.pip_install_arg else []
-
-    def _build_base_install_args(
+    def _build_pip_args(
         self,
         package_name: str | None,
         requirements_path: str | None,
+        mirror: str | None,
     ) -> tuple[list[str], set[str]]:
         args: list[str] = []
         requested_requirements: set[str] = set()
@@ -1216,37 +1222,19 @@ class PipInstaller:
                 normalized_requirements_path
             )
 
-        return args, requested_requirements
-
-    def _apply_index_config(
-        self,
-        args: list[str],
-        pip_install_args: list[str],
-        mirror: str | None,
-    ) -> None:
-        if not args or _package_specs_override_index([*args[1:], *pip_install_args]):
-            return
-
-        index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
-        trusted_host = _get_trusted_host_for_index_url(index_url)
-        if trusted_host:
-            args.extend(["--trusted-host", trusted_host])
-        args.extend(["-i", index_url])
-
-    def _build_pip_args(
-        self,
-        package_name: str | None,
-        requirements_path: str | None,
-        mirror: str | None,
-    ) -> tuple[list[str], set[str]]:
-        args, requested_requirements = self._build_base_install_args(
-            package_name, requirements_path
-        )
         if not args:
             return [], requested_requirements
 
-        pip_install_args = self._parse_global_pip_args()
-        self._apply_index_config(args, pip_install_args, mirror)
+        pip_install_args = (
+            shlex.split(self.pip_install_arg) if self.pip_install_arg else []
+        )
+
+        if not _package_specs_override_index([*args[1:], *pip_install_args]):
+            index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
+            trusted_host = _get_trusted_host_for_index_url(index_url)
+            if trusted_host:
+                args.extend(["--trusted-host", trusted_host])
+            args.extend(["-i", index_url])
 
         if pip_install_args:
             args.extend(pip_install_args)

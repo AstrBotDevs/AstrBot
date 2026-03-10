@@ -481,11 +481,29 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     assert distributions_calls == ["scan"]
 
 
-def test_build_base_install_args_extracts_requested_requirements():
+def test_iter_requirement_lines_expands_nested_requirement_files(tmp_path):
+    base_requirements = tmp_path / "base.txt"
+    base_requirements.write_text("demo-package==1.0\n", encoding="utf-8")
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        "# comment\n-r base.txt\n--extra-index-url https://example.com/simple\n",
+        encoding="utf-8",
+    )
+
+    lines = list(pip_installer_module._iter_requirement_lines(str(requirements_path)))
+
+    assert lines == [
+        "demo-package==1.0",
+        "--extra-index-url https://example.com/simple",
+    ]
+
+
+def test_build_pip_args_extracts_requested_requirements():
     installer = PipInstaller("")
 
-    args, requested = installer._build_base_install_args(
+    args, requested = installer._build_pip_args(
         "--index-url https://example.com/simple demo-package",
+        None,
         None,
     )
 
@@ -512,13 +530,13 @@ def test_parse_package_install_input_collects_specs_and_requirement_names():
     assert parsed.requirement_names == {"demo-package", "another-package"}
 
 
-def test_apply_index_config_appends_default_index_when_not_overridden():
+def test_build_pip_args_appends_default_index_when_not_overridden():
     installer = PipInstaller("")
-    args = ["install", "demo-package"]
 
-    installer._apply_index_config(args, [], None)
+    args, requested = installer._build_pip_args("demo-package", None, None)
 
     assert args == ["install", "demo-package", "-i", "https://pypi.org/simple"]
+    assert requested == {"demo-package"}
 
 
 @pytest.mark.asyncio
