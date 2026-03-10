@@ -20,7 +20,10 @@ export default defineConfig({
   resolve: {
     alias: {
       mermaid: 'mermaid/dist/mermaid.js',
-      '@': fileURLToPath(new URL('./src', import.meta.url))
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@dashboard-shared': fileURLToPath(
+        new URL('../astrbot/dashboard/shared', import.meta.url)
+      )
     }
   },
   css: {

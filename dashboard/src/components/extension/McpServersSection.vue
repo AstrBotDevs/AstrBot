@@ -129,9 +129,30 @@
             </div>
 
           </v-form>
-          <div style="margin-top: 8px;">
-            <small>{{ addServerDialogMessage }}</small>
-          </div>
+          <v-alert
+            v-if="addServerDialogFeedback"
+            :type="addServerDialogFeedback.type"
+            :icon="addServerDialogFeedback.icon"
+            variant="tonal"
+            border="start"
+            density="comfortable"
+            class="mt-4"
+          >
+            <div class="text-subtitle-2 font-weight-medium">
+              {{ addServerDialogFeedback.title }}
+            </div>
+            <div
+              v-for="(detail, index) in addServerDialogFeedback.details"
+              :key="index"
+              class="text-body-2"
+              :class="index === 0 ? 'mt-2' : 'mt-1'"
+            >
+              {{ detail }}
+            </div>
+            <div v-if="addServerDialogFeedback.rawError" class="text-caption text-medium-emphasis mt-3">
+              {{ tm('dialogs.addServer.feedback.rawError') }} {{ addServerDialogFeedback.rawError }}
+            </div>
+          </v-alert>
 
         </v-card-text>
 
@@ -217,6 +238,7 @@
 import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import ItemCard from '@/components/shared/ItemCard.vue';
+import { MCP_TEST_CONNECTION_ERROR_CODES } from '@/constants/mcpTestConnectionErrorCodes';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -244,7 +266,7 @@ export default {
       mcpServerProviderList: ['modelscope'],
       mcpProviderToken: '',
       showSyncMcpServerDialog: false,
-      addServerDialogMessage: '',
+      addServerDialogFeedback: null,
       loading: false,
       loadingGettingServers: false,
       mcpServerUpdateLoaders: {},
@@ -381,7 +403,7 @@ export default {
               return;
             }
             this.showMcpServerDialog = false;
-            this.addServerDialogMessage = '';
+            this.clearAddServerDialogFeedback();
             this.getServers();
             this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
             this.resetForm();
@@ -445,14 +467,73 @@ export default {
     },
     closeServerDialog() {
       this.showMcpServerDialog = false;
-      this.addServerDialogMessage = '';
+      this.clearAddServerDialogFeedback();
       this.resetForm();
+    },
+    setAddServerDialogFeedback(feedback = null) {
+      this.addServerDialogFeedback = feedback;
+    },
+    clearAddServerDialogFeedback() {
+      this.setAddServerDialogFeedback(null);
+    },
+    buildAddServerDialogErrorFeedback(message, errorData = null) {
+      const normalizedMessage = String(message || '').trim();
+      if (errorData?.code === MCP_TEST_CONNECTION_ERROR_CODES.STDIO_COMMAND_NOT_FOUND) {
+        return {
+          type: 'error',
+          icon: 'mdi-alert-circle',
+          title: this.tm('dialogs.addServer.feedback.stdioCommandNotFound.title'),
+          details: [
+            this.tm('dialogs.addServer.feedback.stdioCommandNotFound.reason', {
+              command: errorData.command || '<unknown>'
+            }),
+            this.tm('dialogs.addServer.feedback.stdioCommandNotFound.action')
+          ],
+          rawError: errorData.raw_error || ''
+        };
+      }
+      if (errorData?.code === MCP_TEST_CONNECTION_ERROR_CODES.TEST_CONNECTION_FAILED) {
+        const detail = String(errorData.detail || '').trim();
+        return {
+          type: 'error',
+          icon: 'mdi-alert-circle',
+          title: this.tm('dialogs.addServer.feedback.errorTitle'),
+          details: [detail || this.tm('dialogs.addServer.feedback.genericDetail')],
+          rawError: errorData.raw_error || ''
+        };
+      }
+      return {
+        type: 'error',
+        icon: 'mdi-alert-circle',
+        title: this.tm('dialogs.addServer.feedback.errorTitle'),
+        details: [
+          normalizedMessage || this.tm('dialogs.addServer.feedback.genericDetail')
+        ],
+        rawError: errorData?.raw_error || ''
+      };
+    },
+    buildAddServerDialogSuccessFeedback(message, tools = '') {
+      const details = [];
+      if (message) {
+        details.push(message);
+      }
+      if (tools) {
+        details.push(this.tm('dialogs.addServer.feedback.availableTools', { tools }));
+      }
+      return {
+        type: 'success',
+        icon: 'mdi-check-circle',
+        title: this.tm('dialogs.addServer.feedback.successTitle'),
+        details,
+        rawError: ''
+      };
     },
     testServerConnection() {
       if (!this.validateJson()) {
         return;
       }
       this.loading = true;
+      this.clearAddServerDialogFeedback();
       let configObj;
       try {
         configObj = JSON.parse(this.serverConfigJson);
@@ -466,11 +547,33 @@ export default {
       })
         .then(response => {
           this.loading = false;
-          this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
+          if (response.data.status === 'error') {
+            this.showError(
+              response.data.message || this.tm('dialogs.addServer.feedback.genericDetail'),
+              {
+                inlineDialog: true,
+                errorData: response.data.data?.error
+              }
+            );
+            return;
+          }
+
+          const tools = Array.isArray(response.data.data)
+            ? response.data.data.join(', ')
+            : response.data.data;
+          this.setAddServerDialogFeedback(
+            this.buildAddServerDialogSuccessFeedback(response.data.message, tools)
+          );
         })
         .catch(error => {
           this.loading = false;
-          this.showError(this.tm('messages.testError', { error: error.response?.data?.message || error.message }));
+          this.showError(
+            error.response?.data?.message || error.message || this.tm('dialogs.addServer.feedback.genericDetail'),
+            {
+              inlineDialog: true,
+              errorData: error.response?.data?.data?.error
+            }
+          );
         });
     },
     resetForm() {
@@ -489,7 +592,13 @@ export default {
       this.save_message_success = 'success';
       this.save_message_snack = true;
     },
-    showError(message) {
+    showError(message, options = {}) {
+      if (options.inlineDialog) {
+        this.setAddServerDialogFeedback(
+          this.buildAddServerDialogErrorFeedback(message, options.errorData)
+        );
+        return;
+      }
       this.save_message = message;
       this.save_message_success = 'error';
       this.save_message_snack = true;
