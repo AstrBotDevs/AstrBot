@@ -61,5 +61,5 @@ GenieData/
 .codex/
 .opencode/
 .kilocode/
-/.worktrees/
-/docs/plans/
+.worktrees/
+docs/plans/
