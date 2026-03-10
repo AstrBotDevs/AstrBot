@@ -116,7 +116,7 @@ allow-direct-references = true
 
 # Include bundled dashboard dist even though it is not tracked by VCS.
 [tool.hatch.build.targets.wheel]
-artifacts = ["astrbot/dashboard/dist/**", "astrbot/dashboard/shared/*.json"]
+artifacts = ["astrbot/dashboard/dist/**"]
 
 # Custom build hook: builds the Vue dashboard and copies dist into the package.
 [tool.hatch.build.hooks.custom]
