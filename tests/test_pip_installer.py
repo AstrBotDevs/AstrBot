@@ -498,6 +498,20 @@ def test_build_base_install_args_extracts_requested_requirements():
     assert requested == {"demo-package"}
 
 
+def test_parse_package_install_input_collects_specs_and_requirement_names():
+    parsed = pip_installer_module._parse_package_install_input(
+        "--index-url https://example.com/simple demo-package\nanother-package>=1.0\n"
+    )
+
+    assert parsed.specs == (
+        "--index-url",
+        "https://example.com/simple",
+        "demo-package",
+        "another-package>=1.0",
+    )
+    assert parsed.requirement_names == {"demo-package", "another-package"}
+
+
 def test_apply_index_config_appends_default_index_when_not_overridden():
     installer = PipInstaller("")
     args = ["install", "demo-package"]
@@ -1073,6 +1087,46 @@ def test_redact_pip_args_for_logging_redacts_inline_url_credentials():
     assert redacted_args == [
         "install",
         "--index-url=https://<redacted>@example.com/simple",
+        "demo-package",
+    ]
+
+
+def test_redact_pip_args_for_logging_redacts_sensitive_option_value_pairs():
+    redacted_args = pip_installer_module._redact_pip_args_for_logging(
+        [
+            "install",
+            "--password",
+            "super-secret",
+            "--token",
+            "opaque-token",
+            "demo-package",
+        ]
+    )
+
+    assert redacted_args == [
+        "install",
+        "--password",
+        "****",
+        "--token",
+        "****",
+        "demo-package",
+    ]
+
+
+def test_redact_pip_args_for_logging_redacts_inline_sensitive_values():
+    redacted_args = pip_installer_module._redact_pip_args_for_logging(
+        [
+            "install",
+            "--api-token=super-secret",
+            "password=hunter2",
+            "demo-package",
+        ]
+    )
+
+    assert redacted_args == [
+        "install",
+        "--api-token=****",
+        "password=****",
         "demo-package",
     ]
 

@@ -36,6 +36,9 @@ _PIP_FAILURE_PATTERNS = {
     "constraint": re.compile(r"\(constraint\)", re.IGNORECASE),
     "dependency_detail": re.compile(r"\bdepends on\b", re.IGNORECASE),
 }
+_SENSITIVE_PIP_VALUE_KEYS = frozenset(
+    {"password", "passwd", "pass", "api_token", "token", "auth_token"}
+)
 
 
 class DependencyConflictError(Exception):
@@ -61,6 +64,12 @@ class ParsedRequirementLine:
     tokens: tuple[str, ...]
     requirement_names: frozenset[str]
     has_unresolved_requirement_source: bool = False
+
+
+@dataclass(frozen=True)
+class ParsedPackageInput:
+    specs: tuple[str, ...]
+    requirement_names: frozenset[str]
 
 
 @dataclass
@@ -268,26 +277,19 @@ def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirement
         )
 
 
-def _split_package_install_input(raw_input: str) -> list[str]:
-    """
-    Normalize the user-provided package string into a list of pip args.
-
-    - Supports multiline input (one requirement / options per line).
-    - Strips inline comments (`# ...`) and empty lines.
-    - Preserves a single valid requirement string, even when it contains spaces.
-    - Falls back to shlex splitting for command-style input and options.
-    """
+def _parse_package_install_input(raw_input: str) -> ParsedPackageInput:
+    """Parse the user-provided package string into pip args and requirement names."""
     specs: list[str] = []
+    requirement_names: set[str] = set()
+
     for parsed in _iter_parsed_requirement_lines(raw_input):
         specs.extend(parsed.tokens)
-    return specs
+        requirement_names.update(parsed.requirement_names)
 
-
-def _extract_requested_requirements_from_package_input(raw_input: str) -> set[str]:
-    requirements: set[str] = set()
-    for parsed in _iter_parsed_requirement_lines(raw_input):
-        requirements.update(parsed.requirement_names)
-    return requirements
+    return ParsedPackageInput(
+        specs=tuple(specs),
+        requirement_names=frozenset(requirement_names),
+    )
 
 
 def _get_trusted_host_for_index_url(index_url: str) -> str | None:
@@ -298,25 +300,60 @@ def _get_trusted_host_for_index_url(index_url: str) -> str | None:
     return None
 
 
+def _normalize_sensitive_pip_key(raw_key: str) -> str:
+    return raw_key.lstrip("-").replace("-", "_").lower()
+
+
+def _is_sensitive_pip_value_key(raw_key: str) -> bool:
+    return _normalize_sensitive_pip_key(raw_key) in _SENSITIVE_PIP_VALUE_KEYS
+
+
 def _redact_url_credentials(raw_value: str) -> str:
+    """Redact URL credentials and known inline secret values for safe logging."""
     parsed = urlparse(raw_value)
-    if "@" not in parsed.netloc:
+    if parsed.netloc and "@" in parsed.netloc:
+        hostname = parsed.hostname or ""
+        port = f":{parsed.port}" if parsed.port else ""
+        return parsed._replace(netloc=f"<redacted>@{hostname}{port}").geturl()
+
+    if raw_value.startswith("--"):
+        option, separator, _ = raw_value.partition("=")
+        if separator and _is_sensitive_pip_value_key(option):
+            return f"{option}=****"
         return raw_value
 
-    _, host = parsed.netloc.rsplit("@", 1)
-    return parsed._replace(netloc=f"<redacted>@{host}").geturl()
+    key, separator, _ = raw_value.partition("=")
+    if separator and _is_sensitive_pip_value_key(key):
+        return f"{key}=****"
+
+    return raw_value
 
 
 def _redact_pip_args_for_logging(args: list[str]) -> list[str]:
     redacted_args: list[str] = []
+    redact_next_value = False
+
     for arg in args:
+        if redact_next_value:
+            redacted_args.append("****")
+            redact_next_value = False
+            continue
+
         if arg.startswith("--") and "=" in arg:
             option, value = arg.split("=", 1)
-            redacted_args.append(f"{option}={_redact_url_credentials(value)}")
+            if _is_sensitive_pip_value_key(option):
+                redacted_args.append(f"{option}=****")
+            else:
+                redacted_args.append(f"{option}={_redact_url_credentials(value)}")
             continue
 
         if arg.startswith("-i") and arg != "-i":
             redacted_args.append(f"-i{_redact_url_credentials(arg[2:])}")
+            continue
+
+        if _is_sensitive_pip_value_key(arg):
+            redacted_args.append(arg)
+            redact_next_value = True
             continue
 
         redacted_args.append(_redact_url_credentials(arg))
@@ -1169,12 +1206,10 @@ class PipInstaller:
         )
 
         if package_name:
-            package_specs = _split_package_install_input(package_name)
-            if package_specs:
-                args = ["install", *package_specs]
-                requested_requirements = (
-                    _extract_requested_requirements_from_package_input(package_name)
-                )
+            parsed_package = _parse_package_install_input(package_name)
+            if parsed_package.specs:
+                args = ["install", *parsed_package.specs]
+                requested_requirements = set(parsed_package.requirement_names)
         elif normalized_requirements_path:
             args = ["install", "-r", normalized_requirements_path]
             requested_requirements = _extract_requirement_names(
