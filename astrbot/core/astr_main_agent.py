@@ -838,15 +838,29 @@ def _apply_sandbox_tools(
     )
 
     # Tools: booter self-declaration (unified source for main agent + subagent)
-    tools = get_sandbox_tools(session_id) or get_default_sandbox_tools(
-        config.sandbox_cfg
-    )
+    booted_tools = get_sandbox_tools(session_id)
+    if booted_tools:
+        tools = booted_tools
+        source = "booted"
+    else:
+        tools = get_default_sandbox_tools(config.sandbox_cfg)
+        source = "default"
     for tool in tools:
         req.func_tool.add_tool(tool)
 
+    booter_type = config.sandbox_cfg.get("booter", "shipyard_neo")
+    logger.info(
+        "[Computer] _apply_sandbox_tools: booter=%s, source=%s, tools=%d, session=%s",
+        booter_type,
+        source,
+        len(tools),
+        session_id,
+    )
+
     # Prompts: shared sandbox prompt + booter-specific parts
+    prompt_parts = get_sandbox_prompt_parts(config.sandbox_cfg)
     req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
-    for part in get_sandbox_prompt_parts(config.sandbox_cfg):
+    for part in prompt_parts:
         req.system_prompt += part
 
 

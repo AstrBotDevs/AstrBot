@@ -185,10 +185,22 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 get_sandbox_tools,
             )
 
-            tools = (get_sandbox_tools(session_id) if session_id else []) or (
-                get_default_sandbox_tools(sandbox_cfg or {})
+            booted = get_sandbox_tools(session_id) if session_id else []
+            if booted:
+                tools = booted
+                source = "booted"
+            else:
+                tools = get_default_sandbox_tools(sandbox_cfg or {})
+                source = "default"
+            result = {t.name: t for t in tools} if tools else {}
+            logger.info(
+                "[Computer] Subagent handoff: runtime=%s, source=%s, tools=%d, session=%s",
+                runtime,
+                source,
+                len(result),
+                session_id,
             )
-            return {t.name: t for t in tools} if tools else {}
+            return result
         if runtime == "local":
             return {
                 LOCAL_EXECUTE_SHELL_TOOL.name: LOCAL_EXECUTE_SHELL_TOOL,

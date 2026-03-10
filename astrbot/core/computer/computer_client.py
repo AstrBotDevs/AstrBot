@@ -440,20 +440,33 @@ def _get_booter_class(booter_type: str) -> type[ComputerBooter] | None:
         from .booters.boxlite import BoxliteBooter
 
         return BoxliteBooter
+    logger.warning("[Computer] Unknown booter type: %s", booter_type)
     return None
 
 
 def get_sandbox_tools(session_id: str) -> list[FunctionTool]:
     """Return precise tool list from a booted session, or [] if not booted."""
     booter = session_booter.get(session_id)
-    return booter.get_tools() if booter else []
+    if booter is None:
+        return []
+    tools = booter.get_tools()
+    logger.debug(
+        "[Computer] get_sandbox_tools: session=%s, tools=%d", session_id, len(tools)
+    )
+    return tools
 
 
 def get_default_sandbox_tools(sandbox_cfg: dict) -> list[FunctionTool]:
     """Return conservative (pre-boot) tool list based on config. No instance needed."""
     booter_type = sandbox_cfg.get("booter", BOOTER_SHIPYARD_NEO)
     cls = _get_booter_class(booter_type)
-    return cls.get_default_tools() if cls else []
+    tools = cls.get_default_tools() if cls else []
+    logger.debug(
+        "[Computer] get_default_sandbox_tools: booter=%s, tools=%d",
+        booter_type,
+        len(tools),
+    )
+    return tools
 
 
 def get_sandbox_prompt_parts(sandbox_cfg: dict) -> list[str]:
@@ -469,6 +482,12 @@ def _build_booter(booter_type: str, sandbox_cfg: dict) -> ComputerBooter:
         raise ValueError(f"Unknown booter type: {booter_type}")
 
     if booter_type == BOOTER_SHIPYARD:
+        logger.info(
+            "[Computer] Shipyard config: endpoint=%s, ttl=%s, max_sessions=%s",
+            sandbox_cfg.get("shipyard_endpoint", ""),
+            sandbox_cfg.get("shipyard_ttl", 3600),
+            sandbox_cfg.get("shipyard_max_sessions", 10),
+        )
         return cls(
             endpoint_url=sandbox_cfg.get("shipyard_endpoint", ""),
             access_token=sandbox_cfg.get("shipyard_access_token", ""),
@@ -495,6 +514,7 @@ def _build_booter(booter_type: str, sandbox_cfg: dict) -> ComputerBooter:
             ttl=sandbox_cfg.get("shipyard_neo_ttl", 3600),
         )
 
+    logger.info("[Computer] Boxlite config: using defaults")
     return cls()
 
 
