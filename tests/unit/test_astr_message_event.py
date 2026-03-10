@@ -493,6 +493,11 @@ class TestIsAdmin:
         astr_message_event.role = "admin"
         assert astr_message_event.is_admin() is True
 
+    def test_is_admin_when_owner(self, astr_message_event):
+        """Test is_admin returns True when role is owner."""
+        astr_message_event.role = "owner"
+        assert astr_message_event.is_admin() is True
+
 
 class TestProcessBuffer:
     """Tests for process_buffer method."""

@@ -208,9 +208,13 @@ class AiocqhttpAdapter(Platform):
         assert event.sender is not None
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
+        sender_role = event.sender.get("role")
+        if sender_role not in {"admin", "owner", "member"}:
+            sender_role = None
         abm.sender = MessageMember(
             str(event.sender["user_id"]),
             event.sender.get("card") or event.sender.get("nickname", "N/A"),
+            role=sender_role,
         )
         if event["message_type"] == "group":
             abm.type = MessageType.GROUP_MESSAGE

@@ -45,8 +45,13 @@ class AstrMessageEvent(abc.ABC):
         """消息对象, AstrBotMessage。带有完整的消息结构。"""
         self.platform_meta = platform_meta
         """消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp"""
-        self.role = "member"
-        """用户是否是管理员。如果是管理员，这里是 admin"""
+        sender = getattr(message_obj, "sender", None)
+        sender_role = getattr(sender, "role", None)
+        if sender_role in {"admin", "owner", "member"}:
+            self.role = sender_role
+        else:
+            self.role = "member"
+        """User role within the current context (e.g. group chat)."""
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
         self.is_at_or_wake_command = False
@@ -238,7 +243,7 @@ class AstrMessageEvent(abc.ABC):
 
     def is_admin(self) -> bool:
         """是否是管理员。"""
-        return self.role == "admin"
+        return self.role in {"admin", "owner"}
 
     async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
         """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。"""

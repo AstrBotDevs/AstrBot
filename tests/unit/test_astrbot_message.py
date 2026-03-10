@@ -17,6 +17,7 @@ class TestMessageMember:
 
         assert member.user_id == "user123"
         assert member.nickname is None
+        assert member.role is None
 
     def test_message_member_creation_with_nickname(self):
         """Test creating a MessageMember with nickname."""
@@ -24,6 +25,7 @@ class TestMessageMember:
 
         assert member.user_id == "user123"
         assert member.nickname == "TestUser"
+        assert member.role is None
 
     def test_message_member_str_with_nickname(self):
         """Test __str__ method with nickname."""

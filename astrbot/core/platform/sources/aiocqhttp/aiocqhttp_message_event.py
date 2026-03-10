@@ -244,6 +244,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 MessageMember(
                     user_id=member["user_id"],
                     nickname=member.get("nickname") or member.get("card"),
+                    role=member.get("role"),
                 )
                 for member in members
             ],
