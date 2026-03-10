@@ -252,6 +252,23 @@ async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeyp
     assert "demo-package" in str(exc_info.value)
     assert "demo-package depends on shared-lib>=3.0" in str(exc_info.value)
     assert "AstrBot (constraint) depends on shared-lib==2.0" in str(exc_info.value)
+    assert "The conflict is caused by:" in exc_info.value.errors
+
+
+@pytest.mark.asyncio
+async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failure(
+    monkeypatch,
+):
+    async def failing_run_pip(self, args):
+        del self, args
+        return 2
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", failing_run_pip)
+
+    installer = PipInstaller("")
+
+    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：2"):
+        await installer.install(package_name="demo-package")
 
 
 @pytest.mark.asyncio
@@ -286,8 +303,9 @@ async def test_run_pip_in_process_bounds_retained_conflict_lines(monkeypatch):
             "astrbot.core.utils.pip_installer._MAX_PIP_OUTPUT_LINES", original_limit
         )
 
-    assert len(exc_info.value.errors) == 4
-    assert exc_info.value.errors[0].startswith("Cannot install demo-package")
+    assert len(exc_info.value.errors) == 5
+    assert exc_info.value.errors[0] == "noise-9"
+    assert exc_info.value.errors[1].startswith("Cannot install demo-package")
     assert (
         exc_info.value.errors[-1]
         == "    AstrBot (constraint) depends on shared-lib==2.0"

@@ -55,6 +55,14 @@ class DependencyConflictError(Exception):
         self.is_core_conflict = is_core_conflict
 
 
+class PipInstallError(Exception):
+    """Raised when pip install fails without a classified dependency conflict."""
+
+    def __init__(self, message: str, *, code: int) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def _get_pip_main():
     try:
         from pip._internal.cli.main import main as pip_main
@@ -234,9 +242,25 @@ def _normalize_conflict_detail_line(line: str) -> str:
 
 
 def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | None:
-    relevant_output_lines = [
-        line for line in output_lines if _matches_pip_failure_pattern(line)
+    matched_indices = [
+        index
+        for index, line in enumerate(output_lines)
+        if _matches_pip_failure_pattern(line)
     ]
+    if matched_indices:
+        relevant_index_set: set[int] = set()
+        for index in matched_indices:
+            start = max(0, index - 1)
+            end = min(len(output_lines), index + 2)
+            relevant_index_set.update(range(start, end))
+        relevant_output_lines = [
+            line
+            for index, line in enumerate(output_lines)
+            if index in relevant_index_set
+        ]
+    else:
+        relevant_output_lines = output_lines[-5:]
+
     if not relevant_output_lines:
         return None
 
@@ -846,7 +870,9 @@ class PipInstaller:
             result_code = await self._run_pip_in_process(args)
 
             if result_code != 0:
-                raise Exception(f"安装失败，错误码：{result_code}")
+                raise PipInstallError(
+                    f"安装失败，错误码：{result_code}", code=result_code
+                )
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
