@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import functools
 import importlib
 import importlib.metadata as importlib_metadata
 import importlib.util
@@ -33,6 +34,7 @@ _PIP_FAILURE_PATTERNS = {
     "cannot_install": re.compile(r"\bcannot install\b", re.IGNORECASE),
     "conflict": re.compile(r"\bconflict(?:ing|s)?\b", re.IGNORECASE),
     "constraint": re.compile(r"\(constraint\)", re.IGNORECASE),
+    "dependency_detail": re.compile(r"\bdepends on\b", re.IGNORECASE),
 }
 
 
@@ -128,75 +130,64 @@ def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
     return specifier.contains(parsed_version, prereleases=True)
 
 
-def _iter_normalized_requirement_lines(raw_input: str) -> Iterator[str]:
+def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirementLine]:
     normalized = raw_input.strip()
     if not normalized:
         return
 
-    for line in normalized.splitlines():
-        stripped = _strip_inline_requirement_comment(line)
-        if stripped:
-            yield stripped
+    for raw_line in normalized.splitlines():
+        line = _strip_inline_requirement_comment(raw_line)
+        if not line:
+            continue
 
+        requirement_names: set[str] = set()
+        try:
+            req = Requirement(line)
+        except InvalidRequirement:
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
 
-def _parse_requirement_line(line: str) -> ParsedRequirementLine:
-    requirement_names: set[str] = set()
+            if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
+                name = _extract_requirement_name(line)
+                if name:
+                    requirement_names.add(name)
+                yield ParsedRequirementLine(
+                    raw=line,
+                    tokens=tuple(tokens),
+                    requirement_names=frozenset(requirement_names),
+                )
+                continue
 
-    try:
-        req = Requirement(line)
-    except InvalidRequirement:
-        tokens = shlex.split(line)
-        if not tokens:
-            return ParsedRequirementLine(
-                raw=line,
-                tokens=(),
-                requirement_names=frozenset(),
-            )
+            if tokens[0].startswith("-"):
+                name = _extract_requirement_name(line)
+                if name:
+                    requirement_names.add(name)
+                yield ParsedRequirementLine(
+                    raw=line,
+                    tokens=tuple(tokens),
+                    requirement_names=frozenset(requirement_names),
+                )
+                continue
 
-        if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
-            name = _extract_requirement_name(line)
-            if name:
-                requirement_names.add(name)
-            return ParsedRequirementLine(
+            for token in tokens:
+                name = _extract_requirement_name(token)
+                if name:
+                    requirement_names.add(name)
+
+            yield ParsedRequirementLine(
                 raw=line,
                 tokens=tuple(tokens),
                 requirement_names=frozenset(requirement_names),
             )
+            continue
 
-        if tokens[0].startswith("-"):
-            name = _extract_requirement_name(line)
-            if name:
-                requirement_names.add(name)
-            return ParsedRequirementLine(
-                raw=line,
-                tokens=tuple(tokens),
-                requirement_names=frozenset(requirement_names),
-            )
-
-        for token in tokens:
-            name = _extract_requirement_name(token)
-            if name:
-                requirement_names.add(name)
-
-        return ParsedRequirementLine(
+        requirement_names.add(_canonicalize_distribution_name(req.name))
+        yield ParsedRequirementLine(
             raw=line,
-            tokens=tuple(tokens),
+            tokens=(line,),
             requirement_names=frozenset(requirement_names),
         )
-
-    requirement_names.add(_canonicalize_distribution_name(req.name))
-    return ParsedRequirementLine(
-        raw=line,
-        tokens=(line,),
-        requirement_names=frozenset(requirement_names),
-    )
-
-
-def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirementLine]:
-    for line in _iter_normalized_requirement_lines(raw_input):
-        parsed = _parse_requirement_line(line)
-        if parsed.tokens:
-            yield parsed
 
 
 def _split_package_install_input(raw_input: str) -> list[str]:
@@ -416,43 +407,54 @@ def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
     return missing
 
 
-def _get_core_constraints(core_dist_name: str | None) -> list[str]:
-    """
-    Get version constraints for core dependencies to prevent downgrades.
-    """
+@functools.cache
+def _resolve_core_dist_name(core_dist_name: str | None) -> str | None:
+    if core_dist_name:
+        try:
+            importlib_metadata.distribution(core_dist_name)
+        except importlib_metadata.PackageNotFoundError:
+            return None
+        return core_dist_name
+
+    try:
+        importlib_metadata.distribution("AstrBot")
+        return "AstrBot"
+    except importlib_metadata.PackageNotFoundError:
+        pass
+
+    try:
+        if __package__:
+            top_pkg = __package__.split(".")[0]
+            for dist in importlib_metadata.distributions():
+                if top_pkg in (dist.read_text("top_level.txt") or "").splitlines():
+                    return dist.metadata["Name"]
+    except Exception:
+        return None
+
+    return None
+
+
+@functools.cache
+def _get_cached_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
     constraints: list[str] = []
     try:
-        if core_dist_name is None:
-            core_dist_name = "AstrBot"
-            try:
-                importlib_metadata.distribution("AstrBot")
-            except importlib_metadata.PackageNotFoundError:
-                try:
-                    if __package__:
-                        top_pkg = __package__.split(".")[0]
-                        for dist in importlib_metadata.distributions():
-                            if (
-                                top_pkg
-                                in (dist.read_text("top_level.txt") or "").splitlines()
-                            ):
-                                core_dist_name = dist.metadata["Name"]
-                                break
-                except Exception:
-                    pass
+        resolved_core_dist_name = _resolve_core_dist_name(core_dist_name)
+        if not resolved_core_dist_name:
+            return ()
 
         try:
-            dist = importlib_metadata.distribution(core_dist_name)
+            dist = importlib_metadata.distribution(resolved_core_dist_name)
         except importlib_metadata.PackageNotFoundError:
-            return []
+            return ()
 
         if not dist or not dist.requires:
-            return []
+            return ()
 
         installed = _collect_installed_distribution_versions(
             _get_requirement_check_paths()
         )
         if not installed:
-            return []
+            return ()
 
         for req_str in dist.requires:
             try:
@@ -466,7 +468,16 @@ def _get_core_constraints(core_dist_name: str | None) -> list[str]:
                 continue
     except Exception as exc:
         logger.warning("获取核心依赖约束失败: %s", exc)
-    return constraints
+        return ()
+
+    return tuple(constraints)
+
+
+def _get_core_constraints(core_dist_name: str | None) -> list[str]:
+    """
+    Get version constraints for core dependencies to prevent downgrades.
+    """
+    return list(_get_cached_core_constraints(core_dist_name))
 
 
 @contextlib.contextmanager
@@ -538,6 +549,18 @@ def _matches_pip_failure_pattern(line: str, *pattern_names: str) -> bool:
     return any(_PIP_FAILURE_PATTERNS[name].search(line) for name in names)
 
 
+def _normalize_conflict_detail_line(line: str) -> str:
+    stripped = line.strip()
+    if _matches_pip_failure_pattern(stripped, "user_requested"):
+        return re.sub(
+            r"^\s*The user requested\s+",
+            "",
+            stripped,
+            flags=re.IGNORECASE,
+        )
+    return stripped
+
+
 def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | None:
     relevant_output_lines = [
         line for line in output_lines if _matches_pip_failure_pattern(line)
@@ -545,28 +568,46 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
     if not relevant_output_lines:
         return None
 
-    has_conflict_signal = any(
+    has_strong_conflict_signal = any(
         _matches_pip_failure_pattern(
             line,
             "resolution_impossible",
             "cannot_install",
-            "conflict",
         )
         for line in relevant_output_lines
     )
+    dependency_detail_lines = [
+        line.strip()
+        for line in relevant_output_lines
+        if _matches_pip_failure_pattern(line, "dependency_detail")
+    ]
     requested_lines = [
         line.strip()
         for line in relevant_output_lines
         if _matches_pip_failure_pattern(line, "user_requested")
         and not _matches_pip_failure_pattern(line, "constraint")
     ]
+    if not requested_lines:
+        requested_lines = [
+            line
+            for line in dependency_detail_lines
+            if not _matches_pip_failure_pattern(line, "constraint")
+        ]
     constraint_lines = [
         line.strip()
         for line in relevant_output_lines
         if _matches_pip_failure_pattern(line, "constraint")
     ]
 
-    if not has_conflict_signal and not (requested_lines and constraint_lines):
+    has_contextual_conflict_signal = any(
+        _matches_pip_failure_pattern(line, "conflict") for line in relevant_output_lines
+    ) and bool(dependency_detail_lines or requested_lines or constraint_lines)
+
+    if (
+        not has_strong_conflict_signal
+        and not has_contextual_conflict_signal
+        and not (requested_lines and constraint_lines)
+    ):
         return None
 
     is_core_conflict = bool(constraint_lines)
@@ -575,8 +616,14 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
     if constraint_lines and requested_lines:
         detail = (
             " 冲突详情: "
-            f"{requested_lines[0].removeprefix('The user requested ')} vs "
-            f"{constraint_lines[0].removeprefix('The user requested ')}。"
+            f"{_normalize_conflict_detail_line(requested_lines[0])} vs "
+            f"{_normalize_conflict_detail_line(constraint_lines[0])}。"
+        )
+    elif len(dependency_detail_lines) >= 2:
+        detail = (
+            " 冲突详情: "
+            f"{_normalize_conflict_detail_line(dependency_detail_lines[0])} vs "
+            f"{_normalize_conflict_detail_line(dependency_detail_lines[1])}。"
         )
 
     if is_core_conflict:

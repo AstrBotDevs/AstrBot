@@ -76,7 +76,7 @@ class PluginDependencyInstallError(Exception):
 class _RequirementInstallStrategy(Enum):
     FULL_INSTALL = auto()
     SKIP = auto()
-    INSTALL_MISSING = auto()
+    INSTALL_REQUIREMENTS = auto()
 
 
 def _determine_requirement_install_strategy(
@@ -90,7 +90,7 @@ def _determine_requirement_install_strategy(
     if not missing:
         return _RequirementInstallStrategy.SKIP, set()
 
-    return _RequirementInstallStrategy.INSTALL_MISSING, missing
+    return _RequirementInstallStrategy.INSTALL_REQUIREMENTS, missing
 
 
 class PluginManager:
@@ -273,7 +273,7 @@ class PluginManager:
                 return
 
             logger.info(
-                f"正在安装插件 {plugin_label} 缺失的依赖库: "
+                f"检测到插件 {plugin_label} 缺失依赖，正在按 requirements.txt 安装: "
                 f"{requirements_path} -> {sorted(missing)}"
             )
             await pip_installer.install(requirements_path=requirements_path)

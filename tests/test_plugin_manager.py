@@ -316,6 +316,34 @@ async def test_ensure_plugin_requirements_wraps_generic_dependency_install_failu
 
 
 @pytest.mark.asyncio
+async def test_ensure_plugin_requirements_logs_requirements_file_install_for_missing_dependencies(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    _write_requirements(local_updator)
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+    logged_lines = []
+
+    async def mock_install_requirements(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.logger.info",
+        lambda line, *args: logged_lines.append(line % args if args else line),
+    )
+
+    await plugin_manager_pm._ensure_plugin_requirements(
+        str(local_updator),
+        TEST_PLUGIN_DIR,
+    )
+
+    assert any("按 requirements.txt 安装" in line for line in logged_lines)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_update_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,

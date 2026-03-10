@@ -268,6 +268,8 @@ async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeyp
     assert result.output_lines[0].startswith("Cannot install demo-package")
     assert result.conflict is not None
     assert result.conflict.is_core_conflict is True
+    assert "demo-package depends on shared-lib>=3.0" in str(result.conflict)
+    assert "AstrBot (constraint) depends on shared-lib==2.0" in str(result.conflict)
 
 
 def _make_fake_distribution(name: str, version: str):
@@ -420,6 +422,65 @@ def test_find_missing_requirements_returns_none_when_distribution_scan_fails(
     missing = pip_installer_module._find_missing_requirements(str(requirements_path))
 
     assert missing is None
+
+
+def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
+    distribution_calls = []
+    distributions_calls = []
+
+    class FakeFallbackDistribution:
+        metadata = {"Name": "AstrBot-App"}
+        requires = ["shared-lib>=1.0"]
+
+        def read_text(self, name):
+            if name == "top_level.txt":
+                return "astrbot\n"
+            return ""
+
+    fake_distribution = FakeFallbackDistribution()
+
+    def mock_distribution(name):
+        distribution_calls.append(name)
+        if name == "AstrBot":
+            raise pip_installer_module.importlib_metadata.PackageNotFoundError
+        if name == "AstrBot-App":
+            return fake_distribution
+        raise pip_installer_module.importlib_metadata.PackageNotFoundError
+
+    def mock_distributions(path=None):
+        del path
+        distributions_calls.append("scan")
+        return [fake_distribution]
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distribution",
+        mock_distribution,
+    )
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        mock_distributions,
+    )
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_collect_installed_distribution_versions",
+        lambda paths: {"shared-lib": "2.0"},
+    )
+
+    pip_installer_module._resolve_core_dist_name.cache_clear()
+    pip_installer_module._get_cached_core_constraints.cache_clear()
+    try:
+        first = pip_installer_module._get_core_constraints(None)
+        second = pip_installer_module._get_core_constraints(None)
+    finally:
+        pip_installer_module._resolve_core_dist_name.cache_clear()
+        pip_installer_module._get_cached_core_constraints.cache_clear()
+
+    assert first == ["shared-lib==2.0"]
+    assert second == ["shared-lib==2.0"]
+    assert distribution_calls == ["AstrBot", "AstrBot-App"]
+    assert distributions_calls == ["scan"]
 
 
 @pytest.mark.asyncio
