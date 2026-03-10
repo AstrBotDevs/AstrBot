@@ -34,6 +34,11 @@ def _contains_intent_word(normalized: str, word: str) -> bool:
     return word in parts
 
 
+_INSTALL_CONTEXT_WORDS = frozenset({"install", "安装"})
+_WEAK_CONFIRM_WORDS = frozenset({"yes", "ok", "okay", "sure", "可以", "好的", "行"})
+_WEAK_DENY_WORDS = frozenset({"no"})
+
+
 def _is_allowed_confirmation_role(config: dict, role: str) -> bool:
     provider_settings = config.get("provider_settings", {})
     extension_cfg = provider_settings.get("extension_install", {})
@@ -41,6 +46,17 @@ def _is_allowed_confirmation_role(config: dict, role: str) -> bool:
     if not isinstance(allowed_roles, list):
         return False
     return role in {str(item).strip() for item in allowed_roles}
+
+
+def _looks_like_install_follow_up_reply(raw_text: str) -> bool:
+    normalized = _normalize_intent_text(raw_text)
+    if not normalized:
+        return False
+    if _detect_install_intent_from_config(
+        {}, raw_text, Main._CONFIRM_WORDS, Main._DENY_WORDS
+    ):
+        return True
+    return len(normalized) <= 8 and len(normalized.split()) <= 3
 
 
 def _detect_install_intent_from_config(
@@ -52,38 +68,43 @@ def _detect_install_intent_from_config(
     normalized = _normalize_intent_text(raw_text)
     confirm_keyword, deny_keyword = _get_extension_confirm_keywords_from_config(config)
 
-    deny_words = deny_words | {deny_keyword.lower()}
-    confirm_words = confirm_words | {confirm_keyword.lower()}
+    has_explicit_deny = _contains_intent_word(normalized, deny_keyword.lower())
+    has_explicit_confirm = _contains_intent_word(normalized, confirm_keyword.lower())
+    if has_explicit_deny and has_explicit_confirm:
+        return None
+    if has_explicit_deny:
+        return "deny"
+    if has_explicit_confirm:
+        return "confirm"
 
+    has_install_context = any(
+        _contains_intent_word(normalized, word) for word in _INSTALL_CONTEXT_WORDS
+    )
     has_deny = any(_contains_intent_word(normalized, word) for word in deny_words)
     has_confirm = any(_contains_intent_word(normalized, word) for word in confirm_words)
-    if has_deny and has_confirm:
+    has_weak_deny = any(
+        _contains_intent_word(normalized, word) for word in _WEAK_DENY_WORDS
+    )
+    has_weak_confirm = any(
+        _contains_intent_word(normalized, word) for word in _WEAK_CONFIRM_WORDS
+    )
+    effective_deny = has_deny or (has_weak_deny and has_install_context)
+    effective_confirm = has_confirm or (has_weak_confirm and has_install_context)
+    if effective_deny and effective_confirm:
         return None
-    if has_deny:
+    if effective_deny:
         return "deny"
-    if has_confirm:
+    if effective_confirm:
         return "confirm"
     return None
 
 
 class InstallConfirmationIntentFilter(CustomFilter):
     def filter(self, event: AstrMessageEvent, cfg: dict) -> bool:
-        if not is_extension_install_enabled(cfg):
-            return False
-        if not _is_allowed_confirmation_role(cfg, event.role):
-            return False
         raw_text = event.get_message_str().strip()
         if raw_text.startswith("/"):
             return False
-        return (
-            _detect_install_intent_from_config(
-                cfg,
-                raw_text,
-                Main._CONFIRM_WORDS,
-                Main._DENY_WORDS,
-            )
-            is not None
-        )
+        return _looks_like_install_follow_up_reply(raw_text)
 
 
 class Main(star.Star):
@@ -96,7 +117,6 @@ class Main(star.Star):
             "cancel",
             "abort",
             "stop",
-            "no",
             "refuse",
             "拒绝",
             "取消",
@@ -116,44 +136,46 @@ class Main(star.Star):
             "accepted",
             "allow",
             "proceed",
-            "yes",
-            "ok",
-            "okay",
-            "sure",
             "确认",
             "同意",
             "批准",
             "允许",
             "继续",
-            "可以",
-            "好的",
-            "行",
         }
     )
 
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
-    def _is_extension_install_enabled(self) -> bool:
-        return is_extension_install_enabled(self.context.get_config())
+    def _get_config(self, *, umo: str | None = None) -> dict:
+        return self.context.get_config(umo=umo)
 
-    def _get_extension_confirm_keywords(self) -> tuple[str, str]:
-        return _get_extension_confirm_keywords_from_config(self.context.get_config())
+    def _is_extension_install_enabled(self, *, umo: str | None = None) -> bool:
+        return is_extension_install_enabled(self._get_config(umo=umo))
 
-    def _detect_install_intent(self, raw_text: str) -> str | None:
+    def _get_extension_confirm_keywords(
+        self, *, umo: str | None = None
+    ) -> tuple[str, str]:
+        return _get_extension_confirm_keywords_from_config(self._get_config(umo=umo))
+
+    def _detect_install_intent(
+        self, raw_text: str, *, umo: str | None = None
+    ) -> str | None:
         return _detect_install_intent_from_config(
-            self.context.get_config(),
+            self._get_config(umo=umo),
             raw_text,
             self._CONFIRM_WORDS,
             self._DENY_WORDS,
         )
 
-    def _is_install_confirmation_candidate_message(self, raw_text: str) -> bool:
-        if not self._is_extension_install_enabled():
+    def _is_install_confirmation_candidate_message(
+        self, raw_text: str, *, umo: str | None = None
+    ) -> bool:
+        if not self._is_extension_install_enabled(umo=umo):
             return False
         if raw_text.startswith("/"):
             return False
-        return self._detect_install_intent(raw_text) is not None
+        return self._detect_install_intent(raw_text, umo=umo) is not None
 
     async def _append_install_result_to_conversation(
         self,
@@ -182,17 +204,31 @@ class Main(star.Star):
     async def handle_install_confirmation_intent(self, event: AstrMessageEvent) -> None:
         """Natural-language intent based install confirmation/rejection."""
         message = event.get_message_str().strip()
-        if not self._is_install_confirmation_candidate_message(message):
+        if not self._is_install_confirmation_candidate_message(
+            message,
+            umo=event.unified_msg_origin,
+        ):
+            return
+        if not _is_allowed_confirmation_role(
+            self._get_config(umo=event.unified_msg_origin),
+            event.role,
+        ):
             return
 
-        orchestrator = get_extension_orchestrator(self.context)
+        orchestrator = get_extension_orchestrator(
+            self.context,
+            umo=event.unified_msg_origin,
+        )
         pending = await orchestrator.pending_service.get_active_by_conversation(
             event.unified_msg_origin
         )
         if pending is None:
             return
 
-        intent = self._detect_install_intent(message)
+        intent = self._detect_install_intent(
+            message,
+            umo=event.unified_msg_origin,
+        )
         if intent is None:
             return
 

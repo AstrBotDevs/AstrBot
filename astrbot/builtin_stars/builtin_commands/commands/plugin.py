@@ -70,7 +70,9 @@ class PluginCommands:
                 MessageEventResult().message("/plugin get <插件仓库地址> 安装插件"),
             )
             return
-        if not is_extension_install_enabled(self.context.get_config()):
+        if not is_extension_install_enabled(
+            self.context.get_config(umo=event.unified_msg_origin)
+        ):
             event.set_result(
                 MessageEventResult().message(
                     "当前未启用聊天扩展安装能力，请前往插件市场手动安装插件。"
@@ -80,7 +82,10 @@ class PluginCommands:
         logger.info(f"准备从 {plugin_repo} 安装插件。")
         if self.context._star_manager:
             try:
-                orchestrator = get_extension_orchestrator(self.context)
+                orchestrator = get_extension_orchestrator(
+                    self.context,
+                    umo=event.unified_msg_origin,
+                )
                 result = await orchestrator.install(
                     InstallRequest(
                         kind=ExtensionKind.PLUGIN,

@@ -1400,6 +1400,7 @@ class SQLiteDatabase(BaseDatabase):
         operation_id: str,
         *,
         status: str | None = None,
+        current_status: str | None = None,
         decision: str | None = None,
         reason: str | None = None,
         error: str | None = None,
@@ -1408,35 +1409,41 @@ class SQLiteDatabase(BaseDatabase):
         payload: dict | None = None,
     ) -> PendingOperation | None:
         async def _op(session: AsyncSession) -> PendingOperation | None:
+            update_values: dict[str, object] = {
+                "updated_at": datetime.now(timezone.utc),
+            }
+            if status is not None:
+                update_values["status"] = status
+            if decision is not None:
+                update_values["decision"] = decision
+            if reason is not None:
+                update_values["reason"] = reason
+            if error is not None:
+                update_values["error"] = error
+            if confirmed_by is not None:
+                update_values["confirmed_by"] = confirmed_by
+            if confirmed_at is not None:
+                update_values["confirmed_at"] = confirmed_at
+            if payload is not None:
+                update_values["payload"] = payload
+
+            conditions = [col(PendingOperation.operation_id) == operation_id]
+            if current_status is not None:
+                conditions.append(col(PendingOperation.status) == current_status)
+
             result = await session.execute(
+                update(PendingOperation).where(*conditions).values(**update_values),
+            )
+            rowcount = result.rowcount or 0
+            if rowcount == 0:
+                return None
+
+            refreshed = await session.execute(
                 select(PendingOperation).where(
                     col(PendingOperation.operation_id) == operation_id,
                 ),
             )
-            operation = result.scalar_one_or_none()
-            if operation is None:
-                return None
-
-            if status is not None:
-                operation.status = status
-            if decision is not None:
-                operation.decision = decision
-            if reason is not None:
-                operation.reason = reason
-            if error is not None:
-                operation.error = error
-            if confirmed_by is not None:
-                operation.confirmed_by = confirmed_by
-            if confirmed_at is not None:
-                operation.confirmed_at = confirmed_at
-            if payload is not None:
-                operation.payload = payload
-
-            operation.updated_at = datetime.now(timezone.utc)
-            session.add(operation)
-            await session.flush()
-            await session.refresh(operation)
-            return operation
+            return refreshed.scalar_one_or_none()
 
         return await self._run_in_tx(_op)
 

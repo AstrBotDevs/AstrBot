@@ -115,6 +115,7 @@ class PendingOperationService:
             await self.db.update_pending_operation(
                 operation.operation_id,
                 status="expired",
+                current_status="pending",
                 reason="token expired",
             )
             return None
@@ -175,6 +176,7 @@ class PendingOperationService:
                 await self.db.update_pending_operation(
                     operation.operation_id,
                     status="expired",
+                    current_status="pending",
                     reason="token expired",
                 )
                 return None
@@ -192,6 +194,7 @@ class PendingOperationService:
         return await self.db.update_pending_operation(
             operation.operation_id,
             status="running",
+            current_status="pending",
             confirmed_by=confirmed_by,
             confirmed_at=datetime.now(timezone.utc),
         )
@@ -207,6 +210,7 @@ class PendingOperationService:
         return await self.db.update_pending_operation(
             operation.operation_id,
             status="rejected",
+            current_status="pending",
             reason=reason,
         )
 

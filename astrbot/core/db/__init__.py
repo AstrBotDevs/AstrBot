@@ -596,6 +596,7 @@ class BaseDatabase(abc.ABC):
         operation_id: str,
         *,
         status: str | None = None,
+        current_status: str | None = None,
         decision: str | None = None,
         reason: str | None = None,
         error: str | None = None,

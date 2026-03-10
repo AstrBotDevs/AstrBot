@@ -109,7 +109,8 @@ class ExtensionSearchTool(FunctionTool[AstrAgentContext]):
             if limit <= 0:
                 return "error: limit must be a positive integer."
 
-        orchestrator = get_extension_orchestrator(context.context.context)
+        umo = context.context.event.unified_msg_origin
+        orchestrator = get_extension_orchestrator(context.context.context, umo=umo)
         candidates = await orchestrator.search(
             kind=kind,
             query=query,
@@ -195,13 +196,14 @@ class ExtensionInstallTool(FunctionTool[AstrAgentContext]):
         if not target:
             return "error: target cannot be empty."
         provider = str(kwargs.get("provider", "")).strip()
-        orchestrator = get_extension_orchestrator(context.context.context)
+        umo = context.context.event.unified_msg_origin
+        orchestrator = get_extension_orchestrator(context.context.context, umo=umo)
         result = await orchestrator.install(
             InstallRequest(
                 kind=kind,
                 target=target,
                 provider=provider,
-                conversation_id=context.context.event.unified_msg_origin,
+                conversation_id=umo,
                 requester_id=context.context.event.get_sender_id(),
                 requester_role=context.context.event.role,
             )
@@ -214,7 +216,7 @@ class ExtensionInstallTool(FunctionTool[AstrAgentContext]):
         }
         if result.status == InstallResultStatus.PENDING:
             confirm_keyword, deny_keyword = get_extension_confirm_keywords(
-                context.context.context.get_config()
+                context.context.context.get_config(umo=umo)
             )
             payload["hint"] = (
                 "Tell the user which extension is about to be installed "
@@ -267,7 +269,10 @@ class ExtensionDenyTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        orchestrator = get_extension_orchestrator(context.context.context)
+        orchestrator = get_extension_orchestrator(
+            context.context.context,
+            umo=context.context.event.unified_msg_origin,
+        )
         operation_id = str(kwargs.get("operation_id", "")).strip()
         if operation_id:
             result = await orchestrator.deny(
@@ -332,7 +337,10 @@ class ExtensionDenyAllTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        orchestrator = get_extension_orchestrator(context.context.context)
+        orchestrator = get_extension_orchestrator(
+            context.context.context,
+            umo=context.context.event.unified_msg_origin,
+        )
         scope = (
             str(kwargs.get("scope", "conversation")).strip().lower() or "conversation"
         )

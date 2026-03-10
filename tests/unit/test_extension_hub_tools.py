@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import astrbot.core.extensions.runtime as extension_runtime
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -17,6 +19,7 @@ from astrbot.core.extensions.llm_tools import (
     EXTENSION_SEARCH_TOOL,
 )
 from astrbot.core.extensions.model import InstallResultStatus
+from astrbot.core.extensions.model import ExtensionKind
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.context import Context
@@ -99,6 +102,117 @@ def test_extension_search_tool_exposes_optional_limit_for_bot_control() -> None:
     assert "choose" in EXTENSION_SEARCH_TOOL.description.lower()
 
 
+def test_get_extension_orchestrator_scopes_cache_by_session(monkeypatch) -> None:
+    default_cfg = {
+        "provider_settings": {
+            "extension_install": {
+                "default_mode": "secure",
+                "allowed_roles": ["admin"],
+            }
+        }
+    }
+    session_cfg = {
+        "provider_settings": {
+            "extension_install": {
+                "default_mode": "open",
+                "allowed_roles": ["admin"],
+            }
+        }
+    }
+    context = SimpleNamespace(
+        get_config=lambda umo=None: session_cfg if umo == "conv-1" else default_cfg,
+        get_db=lambda: object(),
+    )
+
+    monkeypatch.setattr(
+        extension_runtime,
+        "PluginAdapter",
+        lambda ctx: SimpleNamespace(
+            kind=ExtensionKind.PLUGIN,
+            provider="git",
+        ),
+    )
+    monkeypatch.setattr(
+        extension_runtime,
+        "SkillAdapter",
+        lambda ctx: SimpleNamespace(
+            kind=ExtensionKind.SKILL,
+            provider="local",
+        ),
+    )
+    monkeypatch.setattr(
+        extension_runtime,
+        "McpTodoAdapter",
+        lambda: SimpleNamespace(
+            kind=ExtensionKind.MCP,
+            provider="todo",
+        ),
+    )
+    monkeypatch.setattr(
+        extension_runtime,
+        "_ensure_cleanup_task",
+        lambda *args, **kwargs: None,
+    )
+
+    session_orchestrator = extension_runtime.get_extension_orchestrator(
+        context,
+        umo="conv-1",
+    )
+    default_orchestrator = extension_runtime.get_extension_orchestrator(context)
+
+    assert session_orchestrator is not default_orchestrator
+    assert session_orchestrator.policy_engine.config.mode == "open"
+    assert default_orchestrator.policy_engine.config.mode == "secure"
+
+
+def test_get_extension_orchestrator_reuses_single_cleanup_task(monkeypatch) -> None:
+    default_cfg = {
+        "provider_settings": {
+            "extension_install": {
+                "default_mode": "secure",
+                "allowed_roles": ["admin"],
+            }
+        }
+    }
+    context = SimpleNamespace(
+        get_config=lambda umo=None: default_cfg,
+        get_db=lambda: object(),
+    )
+
+    monkeypatch.setattr(
+        extension_runtime,
+        "PluginAdapter",
+        lambda ctx: SimpleNamespace(kind=ExtensionKind.PLUGIN, provider="git"),
+    )
+    monkeypatch.setattr(
+        extension_runtime,
+        "SkillAdapter",
+        lambda ctx: SimpleNamespace(kind=ExtensionKind.SKILL, provider="local"),
+    )
+    monkeypatch.setattr(
+        extension_runtime,
+        "McpTodoAdapter",
+        lambda: SimpleNamespace(kind=ExtensionKind.MCP, provider="todo"),
+    )
+
+    created_tasks: list[str | None] = []
+
+    class _Loop:
+        def create_task(self, coro, name=None):
+            coro.close()
+            task = MagicMock(spec=asyncio.Task)
+            task.done.return_value = False
+            created_tasks.append(name)
+            return task
+
+    monkeypatch.setattr(extension_runtime.asyncio, "get_running_loop", lambda: _Loop())
+
+    extension_runtime.get_extension_orchestrator(context, umo="conv-1")
+    extension_runtime.get_extension_orchestrator(context, umo="conv-2")
+
+    assert created_tasks == ["astrbot-extension-pending-cleanup"]
+
+
 @pytest.mark.asyncio
 async def test_extension_deny_tool_calls_conversation_reject_without_admin_check(
     monkeypatch,
@@ -115,7 +229,7 @@ async def test_extension_deny_tool_calls_conversation_reject_without_admin_check
     )
     monkeypatch.setattr(
         "astrbot.core.extensions.llm_tools.get_extension_orchestrator",
-        lambda _: orchestrator,
+        lambda *args, **kwargs: orchestrator,
     )
     event = MagicMock(spec=AstrMessageEvent)
     event.unified_msg_origin = "conv-1"
@@ -191,7 +305,7 @@ async def test_extension_install_tool_exposes_configured_confirmation_keywords(
     )
     monkeypatch.setattr(
         "astrbot.core.extensions.llm_tools.get_extension_orchestrator",
-        lambda _: orchestrator,
+        lambda *args, **kwargs: orchestrator,
     )
     monkeypatch.setattr(
         "astrbot.core.extensions.llm_tools.check_admin_permission",

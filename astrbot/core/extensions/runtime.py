@@ -13,8 +13,9 @@ from .orchestrator import ExtensionInstallOrchestrator
 from .pending_operation import PendingOperationService
 from .policy import ExtensionPolicyEngine
 
-_ORCH_ATTR = "_extension_install_orchestrator"
+_ORCH_ATTR = "_extension_install_orchestrators"
 _CLEANUP_TASK_ATTR = "_extension_pending_cleanup_task"
+_DEFAULT_SCOPE_KEY = "__default__"
 
 
 def _get_extension_install_config(
@@ -92,7 +93,9 @@ async def _cleanup_pending_loop(
 
 
 def _ensure_cleanup_task(
-    context: Context, pending_service: PendingOperationService, config: dict[str, Any]
+    context: Context,
+    pending_service: PendingOperationService,
+    config: dict[str, Any],
 ) -> None:
     existing_task = getattr(context, _CLEANUP_TASK_ATTR, None)
     if isinstance(existing_task, asyncio.Task) and not existing_task.done():
@@ -112,8 +115,21 @@ def _ensure_cleanup_task(
     setattr(context, _CLEANUP_TASK_ATTR, task)
 
 
-def get_extension_orchestrator(context: Context) -> ExtensionInstallOrchestrator:
-    orchestrator = getattr(context, _ORCH_ATTR, None)
+def _scope_key(umo: str | None = None) -> str:
+    normalized = str(umo or "").strip()
+    return normalized or _DEFAULT_SCOPE_KEY
+
+
+def get_extension_orchestrator(
+    context: Context, *, umo: str | None = None
+) -> ExtensionInstallOrchestrator:
+    scope_key = _scope_key(umo)
+    orchestrators = getattr(context, _ORCH_ATTR, None)
+    if not isinstance(orchestrators, dict):
+        orchestrators = {}
+        setattr(context, _ORCH_ATTR, orchestrators)
+
+    orchestrator = orchestrators.get(scope_key)
     if isinstance(orchestrator, ExtensionInstallOrchestrator):
         _ensure_cleanup_task(
             context,
@@ -122,7 +138,7 @@ def get_extension_orchestrator(context: Context) -> ExtensionInstallOrchestrator
         )
         return orchestrator
 
-    config = context.get_config()
+    config = context.get_config(umo=umo)
     pending_service = PendingOperationService(
         db=context.get_db(),
         token_ttl_seconds=_read_ttl_seconds(config),
@@ -138,6 +154,10 @@ def get_extension_orchestrator(context: Context) -> ExtensionInstallOrchestrator
             McpTodoAdapter(),
         ],
     )
-    setattr(context, _ORCH_ATTR, orchestrator)
-    _ensure_cleanup_task(context, pending_service, config)
+    orchestrators[scope_key] = orchestrator
+    _ensure_cleanup_task(
+        context,
+        pending_service,
+        context.get_config(),
+    )
     return orchestrator

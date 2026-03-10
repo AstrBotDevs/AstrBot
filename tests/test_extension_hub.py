@@ -54,6 +54,26 @@ class _FakeAdapter:
         return {"name": candidate.name, "identifier": candidate.identifier}
 
 
+class _SlowFakeAdapter(_FakeAdapter):
+    async def install(self, candidate: InstallCandidate) -> dict:
+        self.install_calls += 1
+        await asyncio.sleep(0.05)
+        return {"name": candidate.name, "identifier": candidate.identifier}
+
+
+class _AsyncBarrier:
+    def __init__(self, parties: int) -> None:
+        self.parties = parties
+        self.waiting = 0
+        self._ready = asyncio.Event()
+
+    async def wait(self) -> None:
+        self.waiting += 1
+        if self.waiting >= self.parties:
+            self._ready.set()
+        await self._ready.wait()
+
+
 class _BulkFakeAdapter:
     provider = "fake"
     kind = ExtensionKind.PLUGIN
@@ -376,6 +396,43 @@ async def test_pending_operation_service_confirm_after_reject_is_blocked(
 
 
 @pytest.mark.asyncio
+async def test_pending_operation_service_start_allows_only_one_winner_under_race(
+    tmp_path: Path,
+) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        barrier = _AsyncBarrier(2)
+
+        class _RacePendingOperationService(PendingOperationService):
+            async def get_by_operation_id_or_token(self, operation_id_or_token: str):
+                snapshot = await self.get_by_id(operation_id_or_token)
+                await barrier.wait()
+                return snapshot
+
+        store = _RacePendingOperationService(db, token_ttl_seconds=300)
+        created = await store.create(
+            conversation_id="conv-1",
+            requester_id="u1",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo",
+            payload={"x": 1},
+            reason="need_confirm",
+        )
+
+        started_1, started_2 = await asyncio.gather(
+            store.start(created.operation_id, confirmed_by="u1"),
+            store.start(created.operation_id, confirmed_by="u2"),
+        )
+
+        assert sum(operation is not None for operation in (started_1, started_2)) == 1
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_pending_list_filters_expired_operations(tmp_path: Path) -> None:
     db = SQLiteDatabase(str(tmp_path / "hub.db"))
     await db.initialize()
@@ -408,6 +465,48 @@ async def test_pending_list_filters_expired_operations(tmp_path: Path) -> None:
         expired = await db.get_pending_operation_by_operation_id(created.operation_id)
         assert expired is not None
         assert expired.status == "expired"
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_get_by_operation_id_or_token_does_not_expire_running_operation(
+    tmp_path: Path,
+) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        store = PendingOperationService(db, token_ttl_seconds=300)
+        created = await store.create(
+            conversation_id="conv-1",
+            requester_id="u1",
+            requester_role="admin",
+            kind=ExtensionKind.PLUGIN,
+            provider="fake",
+            target="https://github.com/example/demo",
+            payload={"x": 1},
+            reason="need_confirm",
+        )
+        await db.update_pending_operation(
+            created.operation_id,
+            status="running",
+            current_status="pending",
+        )
+        stale = PendingOperation.model_validate(created.model_dump())
+        stale.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+        class _StalePendingOperationService(PendingOperationService):
+            async def get_by_id(self, operation_id: str):
+                _ = operation_id
+                return stale
+
+        stale_store = _StalePendingOperationService(db, token_ttl_seconds=300)
+        resolved = await stale_store.get_by_operation_id_or_token(created.operation_id)
+        current = await db.get_pending_operation_by_operation_id(created.operation_id)
+
+        assert resolved is None
+        assert current is not None
+        assert current.status == "running"
     finally:
         await db.engine.dispose()
 
@@ -715,6 +814,53 @@ async def test_orchestrator_confirm_for_conversation_rejects_unauthorized_actor(
         )
         assert denied.status == InstallResultStatus.DENIED
         assert adapter.install_calls == 0
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_confirm_is_idempotent_under_concurrency(
+    tmp_path: Path,
+) -> None:
+    db = SQLiteDatabase(str(tmp_path / "hub.db"))
+    await db.initialize()
+    try:
+        target = "https://github.com/example/demo"
+        adapter = _SlowFakeAdapter(identifier=target)
+        orchestrator = ExtensionInstallOrchestrator(
+            policy_engine=ExtensionPolicyEngine(_build_policy_config()),
+            pending_service=PendingOperationService(db, token_ttl_seconds=300),
+            adapters=[adapter],
+        )
+        pending = await orchestrator.install(
+            InstallRequest(
+                kind=ExtensionKind.PLUGIN,
+                target=target,
+                provider="fake",
+                conversation_id="conv-1",
+                requester_id="u1",
+                requester_role="admin",
+            )
+        )
+
+        result_1, result_2 = await asyncio.gather(
+            orchestrator.confirm(
+                operation_id_or_token=pending.operation_id,
+                actor_id="u1",
+                actor_role="admin",
+            ),
+            orchestrator.confirm(
+                operation_id_or_token=pending.operation_id,
+                actor_id="u1",
+                actor_role="admin",
+            ),
+        )
+
+        assert adapter.install_calls == 1
+        assert {result_1.status, result_2.status} == {
+            InstallResultStatus.SUCCESS,
+            InstallResultStatus.FAILED,
+        }
     finally:
         await db.engine.dispose()
 
