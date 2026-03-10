@@ -11,8 +11,11 @@ import shlex
 import sys
 import threading
 from collections import deque
+from collections.abc import Iterator
 
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
@@ -44,11 +47,39 @@ def _get_pip_main():
     return pip_main
 
 
-def _run_pip_main_with_output(pip_main, args: list[str]) -> tuple[int, str]:
-    stream = io.StringIO()
-    with contextlib.redirect_stdout(stream), contextlib.redirect_stderr(stream):
+class _StreamingLogWriter(io.TextIOBase):
+    def __init__(self, log_func) -> None:
+        self._log_func = log_func
+        self._buffer = ""
+
+    def write(self, text: str) -> int:
+        if not text:
+            return 0
+
+        self._buffer += text.replace("\r", "\n")
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            line = line.strip()
+            if line:
+                self._log_func(line)
+        return len(text)
+
+    def flush(self) -> None:
+        line = self._buffer.strip()
+        if line:
+            self._log_func(line)
+        self._buffer = ""
+
+
+def _run_pip_main_streaming(pip_main, args: list[str]) -> int:
+    stream = _StreamingLogWriter(logger.info)
+    with (
+        contextlib.redirect_stdout(stream),
+        contextlib.redirect_stderr(stream),
+    ):
         result_code = pip_main(args)
-    return result_code, stream.getvalue()
+    stream.flush()
+    return result_code
 
 
 def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
@@ -108,12 +139,13 @@ def _extract_requirement_name(raw_requirement: str) -> str | None:
         return None
     if line.startswith(("-r", "--requirement", "-c", "--constraint")):
         return None
-    if line.startswith("-"):
-        return None
 
     egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
     if egg_match:
         return _canonicalize_distribution_name(egg_match.group(1))
+
+    if line.startswith("-"):
+        return None
 
     candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
     if not candidate:
@@ -124,14 +156,143 @@ def _extract_requirement_name(raw_requirement: str) -> str | None:
 def _extract_requirement_names(requirements_path: str) -> set[str]:
     names: set[str] = set()
     try:
-        with open(requirements_path, encoding="utf-8") as requirements_file:
-            for line in requirements_file:
-                requirement_name = _extract_requirement_name(line)
-                if requirement_name:
-                    names.add(requirement_name)
+        for requirement_name, _ in _iter_requirement_specs(requirements_path):
+            names.add(requirement_name)
     except Exception as exc:
         logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
     return names
+
+
+def _iter_requirement_specs(
+    requirements_path: str,
+    *,
+    _visited_paths: set[str] | None = None,
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    visited_paths = _visited_paths or set()
+    resolved_path = os.path.realpath(requirements_path)
+    if resolved_path in visited_paths:
+        return
+    visited_paths.add(resolved_path)
+
+    with open(resolved_path, encoding="utf-8") as requirements_file:
+        for raw_line in requirements_file:
+            line = _strip_inline_requirement_comment(raw_line)
+            if not line or line.startswith("#"):
+                continue
+
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
+
+            nested_path = None
+            if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
+                nested_path = tokens[1]
+            elif tokens[0].startswith("--requirement="):
+                nested_path = tokens[0].split("=", 1)[1]
+
+            if nested_path:
+                if not os.path.isabs(nested_path):
+                    nested_path = os.path.join(
+                        os.path.dirname(resolved_path), nested_path
+                    )
+                yield from _iter_requirement_specs(
+                    nested_path,
+                    _visited_paths=visited_paths,
+                )
+                continue
+
+            if tokens[0] in {"-c", "--constraint"}:
+                continue
+
+            if tokens[0].startswith("-"):
+                requirement_name = _extract_requirement_name(line)
+                if requirement_name:
+                    yield requirement_name, None
+                continue
+
+            try:
+                requirement = Requirement(line)
+            except InvalidRequirement:
+                requirement_name = _extract_requirement_name(line)
+                if requirement_name:
+                    yield requirement_name, None
+                continue
+
+            if requirement.marker and not requirement.marker.evaluate():
+                continue
+
+            yield (
+                _canonicalize_distribution_name(requirement.name),
+                requirement.specifier,
+            )
+
+
+def _get_requirement_check_paths() -> list[str]:
+    paths = list(sys.path)
+    if is_packaged_desktop_runtime():
+        target_site_packages = get_astrbot_site_packages_path()
+        if os.path.isdir(target_site_packages):
+            paths.insert(0, target_site_packages)
+    return paths
+
+
+def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
+    installed: dict[str, str] = {}
+    try:
+        for distribution in importlib_metadata.distributions(path=paths):
+            distribution_name = (
+                distribution.metadata["Name"]
+                if "Name" in distribution.metadata
+                else None
+            )
+            if not distribution_name:
+                continue
+            installed.setdefault(
+                _canonicalize_distribution_name(distribution_name),
+                distribution.version,
+            )
+    except Exception as exc:
+        logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
+        return None
+    return installed
+
+
+def _find_missing_requirements(requirements_path: str) -> set[str] | None:
+    try:
+        required = list(_iter_requirement_specs(requirements_path))
+    except Exception as exc:
+        logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
+        return None
+
+    if not required:
+        return set()
+
+    installed = _collect_installed_distribution_versions(_get_requirement_check_paths())
+    if installed is None:
+        return None
+
+    missing: set[str] = set()
+    for requirement_name, specifier in required:
+        installed_version = installed.get(requirement_name)
+        if not installed_version:
+            missing.add(requirement_name)
+            continue
+
+        if not specifier:
+            continue
+
+        if not _specifier_contains_version(specifier, installed_version):
+            missing.add(requirement_name)
+
+    return missing
+
+
+def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
+    try:
+        parsed_version = Version(version)
+    except InvalidVersion:
+        return False
+    return specifier.contains(parsed_version, prereleases=True)
 
 
 def _split_package_install_input(raw_input: str) -> list[str]:
@@ -680,18 +841,15 @@ class PipInstaller:
         )
         importlib.invalidate_caches()
 
+    def find_missing_requirements(self, requirements_path: str) -> set[str] | None:
+        return _find_missing_requirements(requirements_path)
+
     async def _run_pip_in_process(self, args: list[str]) -> int:
         pip_main = _get_pip_main()
         _patch_distlib_finder_for_frozen_runtime()
 
         original_handlers = list(logging.getLogger().handlers)
-        result_code, output = await asyncio.to_thread(
-            _run_pip_main_with_output, pip_main, args
-        )
-        for line in output.splitlines():
-            line = line.strip()
-            if line:
-                logger.info(line)
+        result_code = await asyncio.to_thread(_run_pip_main_streaming, pip_main, args)
 
         _cleanup_added_root_handlers(original_handlers)
         return result_code

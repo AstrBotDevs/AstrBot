@@ -1,7 +1,10 @@
+import asyncio
+import threading
 from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.utils import pip_installer as pip_installer_module
 from astrbot.core.utils.pip_installer import PipInstaller
 
 
@@ -39,6 +42,229 @@ async def test_install_targets_site_packages_for_desktop_client(monkeypatch, tmp
     assert str(site_packages_path) in recorded_args
     assert prepend_sys_path_calls == [str(site_packages_path), str(site_packages_path)]
     assert ensure_preferred_calls == [(str(site_packages_path), {"demo-package"})]
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_streams_output_lines(monkeypatch):
+    logged_lines = []
+    first_line_seen = asyncio.Event()
+    unblock_pip = threading.Event()
+
+    def fake_pip_main(args):
+        del args
+        print("Collecting demo-package")
+        unblock_pip.wait(timeout=1)
+        print("Downloading demo-package.whl")
+        return 0
+
+    loop = asyncio.get_running_loop()
+
+    def record_log(line, *args):
+        message = line % args if args else line
+        logged_lines.append(message)
+        if message == "Collecting demo-package":
+            loop.call_soon_threadsafe(first_line_seen.set)
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.logger.info",
+        record_log,
+    )
+
+    installer = PipInstaller("")
+    task = asyncio.create_task(installer._run_pip_in_process(["install", "demo-package"]))
+
+    await asyncio.wait_for(first_line_seen.wait(), timeout=1)
+    unblock_pip.set()
+    result = await task
+
+    assert result == 0
+    assert logged_lines[-2:] == [
+        "Collecting demo-package",
+        "Downloading demo-package.whl",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
+    logged_lines = []
+
+    def fake_pip_main(args):
+        del args
+        import sys
+
+        sys.stdout.write("out")
+        sys.stderr.write("err\n")
+        sys.stdout.write(" line\n")
+        return 0
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.logger.info",
+        lambda line, *args: logged_lines.append(line % args if args else line),
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == 0
+    assert logged_lines[-2:] == ["outerr", "line"]
+
+
+def _make_fake_distribution(name: str, version: str):
+    class FakeDistribution:
+        metadata = {"Name": name}
+
+        def __init__(self, version: str):
+            self.version = version
+
+    return FakeDistribution(version)
+
+
+def test_find_missing_requirements_honors_version_specifiers(monkeypatch, tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo-package>=2.0\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        lambda path: [_make_fake_distribution("demo-package", "1.0")],
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing == {"demo-package"}
+
+
+def test_find_missing_requirements_skips_unmatched_markers(monkeypatch, tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        'demo-package; sys_platform == "win32"\n',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        lambda path: [],
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing == set()
+
+
+def test_find_missing_requirements_follows_nested_requirement_files(
+    monkeypatch, tmp_path
+):
+    base_requirements = tmp_path / "base.txt"
+    base_requirements.write_text("demo-package==1.0\n", encoding="utf-8")
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("-r base.txt\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        lambda path: [],
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing == {"demo-package"}
+
+
+def test_find_missing_requirements_follows_equals_form_nested_requirements(
+    monkeypatch, tmp_path
+):
+    base_requirements = tmp_path / "base.txt"
+    base_requirements.write_text("demo-package==1.0\n", encoding="utf-8")
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("--requirement=base.txt\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        lambda path: [],
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing == {"demo-package"}
+
+
+def test_find_missing_requirements_returns_none_when_nested_file_missing(tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("-r base.txt\n", encoding="utf-8")
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing is None
+
+
+def test_find_missing_requirements_extracts_editable_vcs_requirement(
+    monkeypatch, tmp_path
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        "-e git+https://example.com/demo.git#egg=demo-package\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        lambda path: [],
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing == {"demo-package"}
+
+
+def test_find_missing_requirements_prefers_first_search_path_version(monkeypatch, tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo-package>=2.0\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        lambda path: [
+            _make_fake_distribution("demo-package", "1.0"),
+            _make_fake_distribution("demo-package", "3.0"),
+        ],
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing == {"demo-package"}
+
+
+def test_find_missing_requirements_returns_none_when_distribution_scan_fails(
+    monkeypatch, tmp_path
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo-package>=2.0\n", encoding="utf-8")
+
+    def failing_distributions(path):
+        del path
+        yield _make_fake_distribution("demo-package", "3.0")
+        raise RuntimeError("scan failed")
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        failing_distributions,
+    )
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing is None
 
 
 @pytest.mark.asyncio

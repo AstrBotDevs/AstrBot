@@ -210,7 +210,21 @@ class PluginManager:
         if not os.path.exists(requirements_path):
             return
 
-        logger.info(f"正在安装插件 {plugin_label} 所需的依赖库: {requirements_path}")
+        missing_requirements = pip_installer.find_missing_requirements(
+            requirements_path
+        )
+        if missing_requirements == set():
+            logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
+            return
+
+        if missing_requirements is None:
+            logger.info(
+                f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: {requirements_path}"
+            )
+        else:
+            logger.info(
+                f"正在安装插件 {plugin_label} 缺失的依赖库: {requirements_path} -> {sorted(missing_requirements)}"
+            )
         await pip_installer.install(requirements_path=requirements_path)
 
     async def _install_plugin_requirements_with_logging(

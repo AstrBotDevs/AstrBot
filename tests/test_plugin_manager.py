@@ -106,6 +106,13 @@ def _build_reload_mock(events):
     return mock_reload
 
 
+def _mock_missing_requirements(monkeypatch, missing: set[str]):
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements",
+        lambda requirements_path: missing,
+    )
+
+
 @pytest_asyncio.fixture
 async def plugin_manager_pm(tmp_path, monkeypatch):
     """Provides a fully isolated PluginManager instance for testing."""
@@ -278,6 +285,7 @@ async def test_install_plugin_dependency_install_flow(
 ):
     plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
     events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
 
     async def mock_install(repo_url: str, proxy=""):
         assert repo_url == TEST_PLUGIN_REPO
@@ -309,6 +317,7 @@ async def test_install_plugin_from_file_dependency_install_flow(
     zip_file_path = tmp_path / f"{TEST_PLUGIN_DIR}.zip"
     zip_file_path.write_text("placeholder", encoding="utf-8")
     events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
 
     def mock_unzip_file(zip_path: str, target_dir: str) -> None:
         assert zip_path == str(zip_file_path)
@@ -345,6 +354,7 @@ async def test_reload_failed_plugin_dependency_install_flow(
     _write_requirements(plugin_path)
     plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {"name": TEST_PLUGIN_NAME}
     events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
 
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
@@ -369,6 +379,7 @@ async def test_install_plugin_requirements_with_logging_reraises_cancelled_error
     plugin_path = tmp_path / TEST_PLUGIN_DIR
     plugin_path.mkdir(parents=True, exist_ok=True)
     _write_requirements(plugin_path)
+    _mock_missing_requirements(monkeypatch, {"networkx"})
 
     async def mock_install_requirements(*, requirements_path: str, **kwargs):
         del requirements_path, kwargs
@@ -399,6 +410,7 @@ async def test_update_plugin_dependency_install_flow(
 
     _write_requirements(local_updator)
     events = []
+    _mock_missing_requirements(monkeypatch, {"networkx"})
 
     async def mock_update(plugin, proxy=""):
         del proxy
@@ -417,4 +429,64 @@ async def test_update_plugin_dependency_install_flow(
         ("update", TEST_PLUGIN_NAME),
         ("deps", str(local_updator / "requirements.txt")),
         ("reload", TEST_PLUGIN_NAME),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_skips_dependency_install_when_no_requirements_missing(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
+    events = []
+
+    async def mock_install(repo_url: str, proxy=""):
+        assert repo_url == TEST_PLUGIN_REPO
+        _write_local_test_plugin(plugin_path, repo_url)
+        _write_requirements(plugin_path)
+        return str(plugin_path)
+
+    _mock_missing_requirements(monkeypatch, set())
+    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_mock(events, False),
+    )
+    monkeypatch.setattr(plugin_manager_pm, "load", _build_load_mock(events))
+
+    plugin_info = await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
+
+    assert plugin_info is None
+    assert events == [("load", TEST_PLUGIN_DIR)]
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_runs_dependency_install_when_precheck_fails(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    plugin_path = Path(plugin_manager_pm.plugin_store_path) / TEST_PLUGIN_DIR
+    events = []
+
+    async def mock_install(repo_url: str, proxy=""):
+        assert repo_url == TEST_PLUGIN_REPO
+        _write_local_test_plugin(plugin_path, repo_url)
+        _write_requirements(plugin_path)
+        return str(plugin_path)
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements",
+        lambda requirements_path: None,
+    )
+    monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_mock(events, False),
+    )
+    monkeypatch.setattr(plugin_manager_pm, "load", _build_load_mock(events))
+
+    plugin_info = await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
+
+    assert plugin_info is None
+    assert events == [
+        ("deps", str(plugin_path / "requirements.txt")),
+        ("load", TEST_PLUGIN_DIR),
     ]
