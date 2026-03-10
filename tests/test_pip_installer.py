@@ -253,6 +253,46 @@ async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeyp
     assert "AstrBot (constraint) depends on shared-lib==2.0" in str(exc_info.value)
 
 
+@pytest.mark.asyncio
+async def test_run_pip_in_process_bounds_retained_conflict_lines(monkeypatch):
+    original_limit = pip_installer_module._MAX_PIP_OUTPUT_LINES
+
+    def fake_pip_main(args):
+        del args
+        for index in range(10):
+            print(f"noise-{index}")
+        print(
+            "Cannot install demo-package and astrbot-core because these package "
+            "versions have conflicting dependencies."
+        )
+        print("The conflict is caused by:")
+        print("    demo-package depends on shared-lib>=3.0")
+        print("    AstrBot (constraint) depends on shared-lib==2.0")
+        return 1
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    monkeypatch.setattr("astrbot.core.utils.pip_installer._MAX_PIP_OUTPUT_LINES", 4)
+
+    installer = PipInstaller("")
+    try:
+        with pytest.raises(pip_installer_module.DependencyConflictError) as exc_info:
+            await installer._run_pip_in_process(["install", "demo-package"])
+    finally:
+        monkeypatch.setattr(
+            "astrbot.core.utils.pip_installer._MAX_PIP_OUTPUT_LINES", original_limit
+        )
+
+    assert len(exc_info.value.errors) == 4
+    assert exc_info.value.errors[0].startswith("Cannot install demo-package")
+    assert (
+        exc_info.value.errors[-1]
+        == "    AstrBot (constraint) depends on shared-lib==2.0"
+    )
+
+
 def test_build_pip_args_rejects_package_name_and_requirements_path_together(tmp_path):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("demo-package\n", encoding="utf-8")
@@ -455,7 +495,7 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     )
     monkeypatch.setattr(
         core_constraints_module,
-        "_collect_installed_distribution_versions",
+        "collect_installed_distribution_versions",
         lambda paths: {"shared-lib": "2.0"},
     )
 
@@ -519,7 +559,7 @@ def test_get_core_constraints_skips_distributions_with_unreadable_top_level(
     )
     monkeypatch.setattr(
         core_constraints_module,
-        "_collect_installed_distribution_versions",
+        "collect_installed_distribution_versions",
         lambda paths: {"shared-lib": "2.0"},
     )
 

@@ -16,8 +16,6 @@ from packaging.version import InvalidVersion, Version
 
 from astrbot.core import (
     DependencyConflictError,
-    RequirementsPrecheckFailed,
-    find_missing_requirements_or_raise,
     logger,
     pip_installer,
     sp,
@@ -34,6 +32,10 @@ from astrbot.core.utils.astrbot_path import (
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.requirements_utils import (
+    RequirementsPrecheckFailed,
+    find_missing_requirements_or_raise,
+)
 
 from . import StarMetadata
 from .command_management import sync_command_configs

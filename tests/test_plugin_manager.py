@@ -1,13 +1,10 @@
 import asyncio
-import os
-import shutil
 from pathlib import Path
-from typing import Any, Dict
 
 import pytest
 import yaml
-from astrbot.core.star.star_manager import PluginDependencyInstallError
-from astrbot.core.star.star_manager import PluginManager
+
+from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 
 # --- Test Data & Helpers ---
 
@@ -77,7 +74,9 @@ def _build_reload_mock(events):
 
 
 def _build_dependency_install_mock(events, fail: bool):
-    async def mock_install_requirements(*, requirements_path: str = None, package_name: str = None, **kwargs):
+    async def mock_install_requirements(
+        *, requirements_path: str = None, package_name: str = None, **kwargs
+    ):
         del kwargs
         if requirements_path:
             events.append(("deps", str(requirements_path)))
@@ -140,7 +139,8 @@ def plugin_manager_pm(tmp_path, monkeypatch):
     # Patch paths to use tmp_path
     monkeypatch.setattr(pm, "plugin_store_path", str(plugin_dir))
     monkeypatch.setattr(
-        "astrbot.core.star.star_manager.get_astrbot_plugin_path", lambda: str(plugin_dir)
+        "astrbot.core.star.star_manager.get_astrbot_plugin_path",
+        lambda: str(plugin_dir),
     )
 
     return pm
@@ -199,7 +199,10 @@ async def test_install_plugin_dependency_install_flow(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_install_plugin_from_file_dependency_install_flow(
-    plugin_manager_pm: PluginManager, monkeypatch, tmp_path, dependency_install_fails: bool
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+    tmp_path,
+    dependency_install_fails: bool,
 ):
     zip_file_path = tmp_path / f"{TEST_PLUGIN_DIR}.zip"
     zip_file_path.write_text("placeholder", encoding="utf-8")
@@ -237,7 +240,10 @@ async def test_install_plugin_from_file_dependency_install_flow(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_reload_failed_plugin_dependency_install_flow(
-    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch, dependency_install_fails: bool
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+    dependency_install_fails: bool,
 ):
     _write_requirements(local_updator)
     plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {"error": "init fail"}

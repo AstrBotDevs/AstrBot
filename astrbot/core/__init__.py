@@ -10,13 +10,13 @@ from astrbot.core.utils.pip_installer import (
 from astrbot.core.utils.pip_installer import (
     PipInstaller,
 )
-from astrbot.core.utils.pip_installer import (
+from astrbot.core.utils.requirements_utils import (
     RequirementsPrecheckFailed as RequirementsPrecheckFailed,
 )
-from astrbot.core.utils.pip_installer import (
+from astrbot.core.utils.requirements_utils import (
     find_missing_requirements as find_missing_requirements,
 )
-from astrbot.core.utils.pip_installer import (
+from astrbot.core.utils.requirements_utils import (
     find_missing_requirements_or_raise as find_missing_requirements_or_raise,
 )
 from astrbot.core.utils.shared_preferences import SharedPreferences

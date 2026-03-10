@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from astrbot.core.utils import core_constraints as core_constraints_module
 from astrbot.core.utils import requirements_utils
 from astrbot.core.utils.core_constraints import CoreConstraintsProvider
@@ -56,7 +58,7 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
     )
     monkeypatch.setattr(
         core_constraints_module,
-        "_collect_installed_distribution_versions",
+        "collect_installed_distribution_versions",
         lambda paths: {"shared-lib": "2.0"},
     )
 
@@ -88,3 +90,26 @@ def test_find_missing_requirements_returns_none_when_precheck_gate_fails(
     missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing is None
+
+
+def test_parse_editable_or_direct_name_requires_egg_for_direct_reference():
+    assert (
+        requirements_utils._parse_editable_or_direct_name(
+            "git+https://example.com/demo.git#egg=demo-package"
+        )
+        == "demo-package"
+    )
+    assert (
+        requirements_utils._parse_editable_or_direct_name(
+            "git+https://example.com/demo.git"
+        )
+        is None
+    )
+
+
+def test_find_missing_requirements_or_raise_uses_requirements_exception(tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("-e ../sharedlib\n", encoding="utf-8")
+
+    with pytest.raises(requirements_utils.RequirementsPrecheckFailed):
+        requirements_utils.find_missing_requirements_or_raise(str(requirements_path))

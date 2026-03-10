@@ -7,25 +7,13 @@ from collections.abc import Iterator
 
 from packaging.requirements import Requirement
 
-from astrbot.core.utils.requirements_utils import canonicalize_distribution_name
+from astrbot.core.utils.requirements_utils import (
+    canonicalize_distribution_name,
+    collect_installed_distribution_versions,
+    get_requirement_check_paths,
+)
 
 logger = logging.getLogger("astrbot")
-
-
-def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
-    from astrbot.core.utils.requirements_utils import (
-        _collect_installed_distribution_versions as _collect,
-    )
-
-    return _collect(paths)
-
-
-def _get_requirement_check_paths() -> list[str]:
-    from astrbot.core.utils.requirements_utils import (
-        _get_requirement_check_paths as _get_paths,
-    )
-
-    return _get_paths()
 
 
 @functools.cache
@@ -69,8 +57,8 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
         if not dist or not dist.requires:
             return ()
 
-        installed = _collect_installed_distribution_versions(
-            _get_requirement_check_paths()
+        installed = collect_installed_distribution_versions(
+            get_requirement_check_paths()
         )
         if not installed:
             return ()

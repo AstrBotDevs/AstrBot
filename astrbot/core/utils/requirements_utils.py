@@ -17,6 +17,12 @@ from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 logger = logging.getLogger("astrbot")
 
 
+class RequirementsPrecheckFailed(Exception):
+    """Raised when the pre-check of requirements fails."""
+
+    pass
+
+
 @dataclass(frozen=True)
 class ParsedPackageInput:
     specs: tuple[str, ...]
@@ -81,6 +87,15 @@ def extract_requirement_name(raw_requirement: str) -> str | None:
     return canonicalize_distribution_name(candidate)
 
 
+def _parse_editable_or_direct_name(target: str) -> str | None:
+    name = extract_requirement_name(target)
+    if not name:
+        return None
+    if "#egg=" in target or not looks_like_direct_reference(target):
+        return name
+    return None
+
+
 def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozenset[str]:
     requirement_names: set[str] = set()
     skip_next_for: str | None = None
@@ -88,7 +103,7 @@ def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozens
     for token in tokens:
         if skip_next_for:
             if skip_next_for == "editable":
-                name = extract_requirement_name(token)
+                name = _parse_editable_or_direct_name(token)
                 if name:
                     requirement_names.add(name)
             skip_next_for = None
@@ -115,7 +130,7 @@ def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozens
 
         if token.startswith(("--editable=",)):
             editable_target = token.split("=", 1)[1]
-            name = extract_requirement_name(editable_target)
+            name = _parse_editable_or_direct_name(editable_target)
             if name:
                 requirement_names.add(name)
             continue
@@ -142,8 +157,8 @@ def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozens
         if token.startswith("-"):
             continue
 
-        name = extract_requirement_name(token)
-        if name and not looks_like_direct_reference(token):
+        name = _parse_editable_or_direct_name(token)
+        if name:
             requirement_names.add(name)
 
     return frozenset(requirement_names)
@@ -222,12 +237,15 @@ def _iter_requirement_lines(
 
 def _requirement_line_needs_precheck_fallback(line: str) -> bool:
     if line.startswith(("-e ", "--editable ")) or line.startswith("--editable="):
-        return "#egg=" not in line
+        return _parse_editable_or_direct_name(line) is None
 
     if line.startswith("-"):
         return False
 
-    return looks_like_direct_reference(line) and extract_requirement_name(line) is None
+    return (
+        looks_like_direct_reference(line)
+        and _parse_editable_or_direct_name(line) is None
+    )
 
 
 def _iter_requirements_from_lines(
@@ -251,16 +269,13 @@ def _iter_requirements_from_lines(
                 editable_target = tokens[0].split("=", 1)[1]
 
             if editable_target:
-                name = extract_requirement_name(editable_target)
-                if name and (
-                    "#egg=" in editable_target
-                    or not looks_like_direct_reference(editable_target)
-                ):
+                name = _parse_editable_or_direct_name(editable_target)
+                if name:
                     yield name, None
                 continue
 
-            name = extract_requirement_name(line)
-            if name and ("#egg=" in line or not looks_like_direct_reference(line)):
+            name = _parse_editable_or_direct_name(line)
+            if name:
                 yield name, None
             continue
 
@@ -284,7 +299,7 @@ def extract_requirement_names(requirements_path: str) -> set[str]:
         return set()
 
 
-def _get_requirement_check_paths() -> list[str]:
+def get_requirement_check_paths() -> list[str]:
     paths = list(sys.path)
     if is_packaged_desktop_runtime():
         target_site_packages = get_astrbot_site_packages_path()
@@ -293,7 +308,7 @@ def _get_requirement_check_paths() -> list[str]:
     return paths
 
 
-def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
+def collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
     installed: dict[str, str] = {}
     try:
         for distribution in importlib_metadata.distributions(path=paths):
@@ -345,7 +360,7 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
     if not required:
         return set()
 
-    installed = _collect_installed_distribution_versions(_get_requirement_check_paths())
+    installed = collect_installed_distribution_versions(get_requirement_check_paths())
     if installed is None:
         return None
 
@@ -358,4 +373,11 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
         if specifier and not _specifier_contains_version(specifier, installed_version):
             missing.add(name)
 
+    return missing
+
+
+def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
+    missing = find_missing_requirements(requirements_path)
+    if missing is None:
+        raise RequirementsPrecheckFailed(f"预检查失败: {requirements_path}")
     return missing

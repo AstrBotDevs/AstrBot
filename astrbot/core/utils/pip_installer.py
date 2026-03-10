@@ -21,7 +21,6 @@ from astrbot.core.utils.requirements_utils import (
 from astrbot.core.utils.requirements_utils import (
     extract_requirement_name,
     extract_requirement_names,
-    find_missing_requirements,
     parse_package_install_input,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
@@ -42,6 +41,7 @@ _PIP_FAILURE_PATTERNS = {
 _SENSITIVE_PIP_VALUE_KEYS = frozenset(
     {"password", "passwd", "pass", "api_token", "token", "auth_token"}
 )
+_MAX_PIP_OUTPUT_LINES = 200
 
 
 class DependencyConflictError(Exception):
@@ -53,12 +53,6 @@ class DependencyConflictError(Exception):
         super().__init__(message)
         self.errors = errors
         self.is_core_conflict = is_core_conflict
-
-
-class RequirementsPrecheckFailed(Exception):
-    """Raised when the pre-check of requirements fails."""
-
-    pass
 
 
 def _get_pip_main():
@@ -181,18 +175,11 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
     return False
 
 
-def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
-    missing = find_missing_requirements(requirements_path)
-    if missing is None:
-        raise RequirementsPrecheckFailed(f"预检查失败: {requirements_path}")
-    return missing
-
-
 class _StreamingLogWriter(io.TextIOBase):
-    def __init__(self, log_func) -> None:
+    def __init__(self, log_func, *, max_lines: int = _MAX_PIP_OUTPUT_LINES) -> None:
         self._log_func = log_func
+        self._lines = deque(maxlen=max_lines)
         self._buffer = ""
-        self.lines: list[str] = []
 
     def write(self, text: str) -> int:
         if not text:
@@ -203,15 +190,19 @@ class _StreamingLogWriter(io.TextIOBase):
             raw_line, self._buffer = self._buffer.split("\n", 1)
             line = raw_line.rstrip("\r\n")
             self._log_func(line)
-            self.lines.append(line)
+            self._lines.append(line)
         return len(text)
 
     def flush(self) -> None:
         line = self._buffer.rstrip("\r\n")
         if line:
             self._log_func(line)
-            self.lines.append(line)
+            self._lines.append(line)
         self._buffer = ""
+
+    @property
+    def lines(self) -> list[str]:
+        return list(self._lines)
 
 
 def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
