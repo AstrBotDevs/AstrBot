@@ -11,7 +11,7 @@ from dingtalk_stream import AckMessage
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -178,29 +178,110 @@ class DingtalkPlatformAdapter(Platform):
             abm.session_id = abm.sender.user_id
 
         message_type: str = cast(str, message.message_type)
+        robot_code = cast(str, message.robot_code or "")
+        raw_content = cast(dict, message.extensions.get("content") or {})
+        if not isinstance(raw_content, dict):
+            raw_content = {}
         match message_type:
             case "text":
                 abm.message_str = message.text.content.strip()
                 abm.message.append(Plain(abm.message_str))
+            case "picture":
+                if not robot_code:
+                    logger.error("钉钉图片消息解析失败: 回调中缺少 robotCode")
+                    await self._remember_sender_binding(message, abm)
+                    return abm
+                image_content = cast(
+                    dingtalk_stream.ImageContent | None,
+                    message.image_content,
+                )
+                download_code = cast(
+                    str, (image_content.download_code if image_content else "") or ""
+                )
+                if not download_code:
+                    logger.warning("钉钉图片消息缺少 downloadCode，已跳过")
+                else:
+                    f_path = await self.download_ding_file(
+                        download_code,
+                        robot_code,
+                        "jpg",
+                    )
+                    if f_path:
+                        abm.message.append(Image.fromFileSystem(f_path))
+                    else:
+                        logger.warning("钉钉图片消息下载失败，无法解析为图片")
             case "richText":
                 rtc: dingtalk_stream.RichTextContent = cast(
                     dingtalk_stream.RichTextContent, message.rich_text_content
                 )
                 contents: list[dict] = cast(list[dict], rtc.rich_text_list)
+                plain_parts: list[str] = []
                 for content in contents:
-                    plains = ""
                     if "text" in content:
-                        plains += content["text"]
-                        abm.message.append(Plain(plains))
+                        plain_text = cast(str, content.get("text") or "")
+                        if plain_text:
+                            plain_parts.append(plain_text)
+                            abm.message.append(Plain(plain_text))
                     elif "type" in content and content["type"] == "picture":
+                        download_code = cast(str, content.get("downloadCode") or "")
+                        if not download_code:
+                            logger.warning(
+                                "钉钉富文本图片消息缺少 downloadCode，已跳过"
+                            )
+                            continue
+                        if not robot_code:
+                            logger.error(
+                                "钉钉富文本图片消息解析失败: 回调中缺少 robotCode"
+                            )
+                            continue
                         f_path = await self.download_ding_file(
-                            content["downloadCode"],
-                            cast(str, message.robot_code),
+                            download_code,
+                            robot_code,
                             "jpg",
                         )
-                        abm.message.append(Image.fromFileSystem(f_path))
-            case "audio":
-                pass
+                        if f_path:
+                            abm.message.append(Image.fromFileSystem(f_path))
+                abm.message_str = "".join(plain_parts).strip()
+            case "audio" | "voice":
+                download_code = cast(str, raw_content.get("downloadCode") or "")
+                if not download_code:
+                    logger.warning("钉钉语音消息缺少 downloadCode，已跳过")
+                elif not robot_code:
+                    logger.error("钉钉语音消息解析失败: 回调中缺少 robotCode")
+                else:
+                    voice_ext = cast(str, raw_content.get("fileExtension") or "")
+                    if not voice_ext:
+                        voice_ext = "amr"
+                    voice_ext = voice_ext.lstrip(".")
+                    f_path = await self.download_ding_file(
+                        download_code,
+                        robot_code,
+                        voice_ext,
+                    )
+                    if f_path:
+                        abm.message.append(Record.fromFileSystem(f_path))
+            case "file":
+                download_code = cast(str, raw_content.get("downloadCode") or "")
+                if not download_code:
+                    logger.warning("钉钉文件消息缺少 downloadCode，已跳过")
+                elif not robot_code:
+                    logger.error("钉钉文件消息解析失败: 回调中缺少 robotCode")
+                else:
+                    file_name = cast(str, raw_content.get("fileName") or "")
+                    file_ext = Path(file_name).suffix.lstrip(".") if file_name else ""
+                    if not file_ext:
+                        file_ext = cast(str, raw_content.get("fileExtension") or "")
+                    if not file_ext:
+                        file_ext = "file"
+                    f_path = await self.download_ding_file(
+                        download_code,
+                        robot_code,
+                        file_ext,
+                    )
+                    if f_path:
+                        if not file_name:
+                            file_name = Path(f_path).name
+                        abm.message.append(File(name=file_name, file=f_path))
 
         await self._remember_sender_binding(message, abm)
         return abm  # 别忘了返回转换后的消息对象
@@ -270,13 +351,23 @@ class DingtalkPlatformAdapter(Platform):
                 )
                 return ""
             resp_data = await resp.json()
-            download_url = resp_data["data"]["downloadUrl"]
+            download_url = cast(
+                str,
+                (
+                    resp_data.get("downloadUrl")
+                    or resp_data.get("data", {}).get("downloadUrl")
+                    or ""
+                ),
+            )
+            if not download_url:
+                logger.error(f"下载钉钉文件失败: 未找到 downloadUrl, 响应: {resp_data}")
+                return ""
             await download_file(download_url, str(f_path))
         return str(f_path)
 
     async def get_access_token(self) -> str:
         try:
-            access_token = await asyncio.get_event_loop().run_in_executor(
+            access_token = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client_.get_access_token,
             )
@@ -541,6 +632,28 @@ class DingtalkPlatformAdapter(Platform):
                     self._safe_remove_file(cover_path)
                     if converted_video:
                         self._safe_remove_file(video_path)
+            elif isinstance(segment, File):
+                try:
+                    file_path = await segment.get_file()
+                    if not file_path:
+                        logger.warning("钉钉文件发送失败: 无法解析文件路径")
+                        continue
+                    media_id = await self.upload_media(file_path, "file")
+                    if not media_id:
+                        continue
+                    file_name = segment.name or Path(file_path).name
+                    file_type = Path(file_name).suffix.lstrip(".")
+                    await send_message(
+                        msg_key="sampleFile",
+                        msg_param={
+                            "mediaId": media_id,
+                            "fileName": file_name,
+                            "fileType": file_type,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(f"钉钉文件发送失败: {e}")
+                    continue
 
     async def send_message_chain_to_group(
         self,
@@ -647,7 +760,7 @@ class DingtalkPlatformAdapter(Platform):
                     return
                 logger.error(f"钉钉机器人启动失败: {e}")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, start_client, loop)
 
     async def terminate(self) -> None:
