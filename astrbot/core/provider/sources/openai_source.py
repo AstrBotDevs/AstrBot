@@ -47,6 +47,20 @@ from ..register import register_provider_adapter
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    _RESPONSES_DROPPED_CHAT_FIELDS = {
+        "audio",
+        "function_call",
+        "functions",
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "modalities",
+        "prediction",
+        "presence_penalty",
+        "seed",
+        "stop",
+        "web_search_options",
+    }
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -236,6 +250,106 @@ class ProviderOpenAIOfficial(Provider):
     def _should_use_responses_api(self) -> bool:
         return self.use_responses_api or self._openai_native_tools_enabled()
 
+    def _should_degrade_responses_field(
+        self,
+        response_payload: dict[str, Any],
+        key: str,
+        value: Any,
+    ) -> bool:
+        if key != "n":
+            return False
+        if value in (None, 1):
+            return True
+        logger.warning(
+            "Responses API currently uses a single-candidate flow in AstrBot; degrading `%s=%s` to `n=1`.",
+            key,
+            value,
+        )
+        return True
+
+    def _should_drop_responses_field(self, key: str, value: Any) -> bool:
+        if key not in self._RESPONSES_DROPPED_CHAT_FIELDS:
+            return False
+        logger.warning(
+            "Responses API does not support chat.completions field `%s`; dropping it.",
+            key,
+        )
+        return True
+
+    @staticmethod
+    def _map_field_to_responses_api(
+        key: str,
+        value: Any,
+    ) -> tuple[str, Any]:
+        if key in {"max_tokens", "max_completion_tokens"}:
+            return "max_output_tokens", value
+        return key, value
+
+    @staticmethod
+    def _merge_responses_text_config(
+        response_payload: dict[str, Any],
+        updates: dict[str, Any],
+    ) -> None:
+        text_payload = response_payload.get("text")
+        if isinstance(text_payload, dict):
+            merged_text_payload = dict(text_payload)
+        else:
+            merged_text_payload = {}
+        merged_text_payload.update(updates)
+        response_payload["text"] = merged_text_payload
+
+    @staticmethod
+    def _merge_responses_reasoning_config(
+        response_payload: dict[str, Any],
+        updates: dict[str, Any],
+    ) -> None:
+        reasoning_payload = response_payload.get("reasoning")
+        if isinstance(reasoning_payload, dict):
+            merged_reasoning_payload = dict(reasoning_payload)
+        else:
+            merged_reasoning_payload = {}
+        merged_reasoning_payload.update(updates)
+        response_payload["reasoning"] = merged_reasoning_payload
+
+    @staticmethod
+    def _apply_responses_text_format(
+        response_payload: dict[str, Any],
+        response_format: Any,
+    ) -> None:
+        if response_format is None:
+            return
+
+        ProviderOpenAIOfficial._merge_responses_text_config(
+            response_payload,
+            {"format": response_format},
+        )
+
+    @staticmethod
+    def _apply_responses_field_mapping(
+        response_payload: dict[str, Any],
+        key: str,
+        value: Any,
+    ) -> bool:
+        if key == "response_format":
+            ProviderOpenAIOfficial._apply_responses_text_format(
+                response_payload,
+                value,
+            )
+            return True
+        if key == "verbosity":
+            ProviderOpenAIOfficial._merge_responses_text_config(
+                response_payload,
+                {"verbosity": value},
+            )
+            return True
+        if key == "reasoning_effort":
+            ProviderOpenAIOfficial._merge_responses_reasoning_config(
+                response_payload,
+                {"effort": value},
+            )
+            return True
+        return False
+
     async def get_models(self):
         try:
             models_str = []
@@ -385,6 +499,36 @@ class ProviderOpenAIOfficial(Provider):
             result.append(payload)
         return result
 
+    @staticmethod
+    def _strip_tool_use_from_context(
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        sanitized_messages: list[dict[str, Any]] = []
+
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+
+            role = message.get("role")
+            if role == "tool":
+                continue
+
+            sanitized_message = dict(message)
+            if role == "assistant" and "tool_calls" in sanitized_message:
+                sanitized_message.pop("tool_calls", None)
+
+                content = sanitized_message.get("content")
+                if content is None:
+                    continue
+                if isinstance(content, str) and not content.strip():
+                    continue
+                if isinstance(content, list) and not content:
+                    continue
+
+            sanitized_messages.append(sanitized_message)
+
+        return sanitized_messages
+
     def _normalize_message_content_to_list(
         self, raw_content: Any, role: str
     ) -> list[dict[str, Any]]:
@@ -439,6 +583,18 @@ class ProviderOpenAIOfficial(Provider):
                 normalized_part = dict(part)
                 normalized_part.setdefault("detail", "auto")
                 content.append(normalized_part)
+            elif part_type == "file":
+                file_obj = part.get("file")
+                if isinstance(file_obj, dict):
+                    normalized_part = {"type": "input_file"}
+                    for key in ("file_id", "file_url", "file_data", "filename"):
+                        value = file_obj.get(key)
+                        if value:
+                            normalized_part[key] = value
+                    if len(normalized_part) > 1:
+                        content.append(normalized_part)
+            elif part_type == "input_file":
+                content.append(dict(part))
         return content
 
     def _build_responses_input_message(
@@ -465,12 +621,21 @@ class ProviderOpenAIOfficial(Provider):
     ) -> dict[str, Any] | None:
         output_content = []
         for part in content_parts:
-            if part.get("type") != "text":
+            part_type = part.get("type")
+            if part_type in {"text", "input_text"}:
+                text = str(part.get("text", ""))
+            else:
+                text = self._safe_json_dump(part) or str(part)
+                logger.warning(
+                    "Responses API assistant history does not support content part `%s`; preserving it as text.",
+                    part_type,
+                )
+            if not text:
                 continue
             output_content.append(
                 {
                     "type": "output_text",
-                    "text": str(part.get("text", "")),
+                    "text": text,
                     "annotations": [],
                 }
             )
@@ -517,12 +682,15 @@ class ProviderOpenAIOfficial(Provider):
             or tool_call.get("call_id")
             or f"call_{index}_{item_index}"
         )
+        response_item_id = str(tool_call.get("response_item_id") or "")
+        if not response_item_id.startswith("fc"):
+            response_item_id = f"fc_{index}_{item_index}"
         arguments = function_obj.get("arguments", "{}")
         if not isinstance(arguments, str):
             arguments = json.dumps(arguments, ensure_ascii=False)
         return {
             "type": "function_call",
-            "id": call_id,
+            "id": response_item_id,
             "call_id": call_id,
             "name": str(function_obj.get("name", "")),
             "arguments": arguments,
@@ -635,18 +803,40 @@ class ProviderOpenAIOfficial(Provider):
         response_payload: dict[str, Any] = {}
         extra_body: dict[str, Any] = {}
 
+        def _apply_fields(fields: dict[str, Any]) -> None:
+            for key, value in fields.items():
+                if self._should_degrade_responses_field(response_payload, key, value):
+                    continue
+                if self._should_drop_responses_field(key, value):
+                    continue
+                if self._apply_responses_field_mapping(response_payload, key, value):
+                    continue
+                mapped_key, mapped_value = self._map_field_to_responses_api(key, value)
+                if mapped_key in self.responses_default_params:
+                    if (
+                        mapped_key in {"text", "reasoning"}
+                        and isinstance(response_payload.get(mapped_key), dict)
+                        and isinstance(mapped_value, dict)
+                    ):
+                        response_payload[mapped_key] = {
+                            **response_payload[mapped_key],
+                            **mapped_value,
+                        }
+                    else:
+                        response_payload[mapped_key] = mapped_value
+                else:
+                    extra_body[mapped_key] = mapped_value
+
+        payload_fields = {
+            key: value
+            for key, value in payloads.items()
+            if key not in {"model", "messages"}
+        }
+        _apply_fields(payload_fields)
+
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
-
-        for key, value in payloads.items():
-            if key in {"model", "messages"}:
-                continue
-            target_key = "instructions" if key == "system_prompt" else key
-            if target_key in self.responses_default_params:
-                response_payload[target_key] = value
-            else:
-                extra_body[key] = value
+            _apply_fields(custom_extra_body)
 
         return response_payload, extra_body
 
@@ -732,8 +922,6 @@ class ProviderOpenAIOfficial(Provider):
                 )
             elif event.type == "response.completed":
                 final_response = event.response
-            # Tool/function call items are reconstructed from the final response payload.
-            # This keeps stream handling simple until we need true incremental tool events.
 
         if final_response is None:
             raise Exception("Responses API 流式返回缺少 response.completed 事件。")
@@ -1000,10 +1188,22 @@ class ProviderOpenAIOfficial(Provider):
                 tool_ids.append(item.call_id)
 
         completion_text = "".join(text_parts).strip()
+        think_reasoning = ""
         if completion_text:
-            llm_response.result_chain = MessageChain().message(completion_text)
+            reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+            matches = reasoning_pattern.findall(completion_text)
+            if matches:
+                think_reasoning = "\n".join(
+                    [match.strip() for match in matches]
+                ).strip()
+                completion_text = reasoning_pattern.sub("", completion_text).strip()
+            completion_text = re.sub(r"</think>\s*$", "", completion_text).strip()
+            if completion_text:
+                llm_response.result_chain = MessageChain().message(completion_text)
 
-        llm_response.reasoning_content = "".join(reasoning_parts).strip()
+        llm_response.reasoning_content = (
+            "".join(reasoning_parts).strip() or think_reasoning
+        )
 
         if tool_args:
             llm_response.role = "tool"
@@ -1174,12 +1374,14 @@ class ProviderOpenAIOfficial(Provider):
                 f"{self.get_model()} 不支持函数工具调用，已自动去除，不影响使用。",
             )
             payloads.pop("tools", None)
+            sanitized_context = self._strip_tool_use_from_context(context_query)
+            payloads["messages"] = sanitized_context
             return (
                 False,
                 chosen_key,
                 available_api_keys,
                 payloads,
-                context_query,
+                sanitized_context,
                 None,
                 image_fallback_used,
             )
