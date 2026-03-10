@@ -453,6 +453,7 @@ export default {
         return;
       }
       this.loading = true;
+      this.addServerDialogMessage = '';
       let configObj;
       try {
         configObj = JSON.parse(this.serverConfigJson);
@@ -466,11 +467,22 @@ export default {
       })
         .then(response => {
           this.loading = false;
-          this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
+          if (response.data.status === 'error') {
+            this.addServerDialogMessage = response.data.message || this.tm('messages.testError', { error: 'Unknown error' });
+            return;
+          }
+
+          const tools = Array.isArray(response.data.data)
+            ? response.data.data.join(', ')
+            : response.data.data;
+          const toolsSuffix = tools ? ` (tools: ${tools})` : '';
+          this.addServerDialogMessage = `${response.data.message}${toolsSuffix}`;
         })
         .catch(error => {
           this.loading = false;
-          this.showError(this.tm('messages.testError', { error: error.response?.data?.message || error.message }));
+          this.addServerDialogMessage = this.tm('messages.testError', {
+            error: error.response?.data?.message || error.message
+          });
         });
     },
     resetForm() {

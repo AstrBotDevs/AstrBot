@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import zipfile
+from contextlib import asynccontextmanager
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.agent import mcp_client as mcp_client_module
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
@@ -270,8 +272,43 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_test_connection_returns_clear_missing_stdio_command_message(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    @asynccontextmanager
+    async def fake_stdio_client(*args, **kwargs):
+        raise FileNotFoundError(2, "系统找不到指定的文件。")
+        yield
+
+    monkeypatch.setattr(mcp_client_module.mcp, "stdio_client", fake_stdio_client)
+
+    response = await test_client.post(
+        "/api/tools/mcp/test",
+        json={
+            "mcp_server_config": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"],
+            }
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == (
+        "Failed to test MCP connection: Failed to start MCP stdio server: "
+        "command 'uvx' was not found. Please install the command or fix the "
+        "configured path, and ensure it is available in PATH."
+    )
 
 
 @pytest.mark.asyncio

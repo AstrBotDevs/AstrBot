@@ -36,6 +36,19 @@ except (ModuleNotFoundError, ImportError):
     )
 
 
+class MCPStdioCommandNotFoundError(Exception):
+    """Raised when the configured stdio MCP command cannot be started."""
+
+
+def _build_missing_stdio_command_message(config: dict) -> str:
+    command = str(config.get("command") or "").strip() or "<unknown>"
+    return (
+        "Failed to start MCP stdio server: "
+        f"command '{command}' was not found. Please install the command or fix "
+        "the configured path, and ensure it is available in PATH."
+    )
+
+
 def _prepare_config(config: dict) -> dict:
     """Prepare configuration, handle nested format"""
     if config.get("mcpServers"):
@@ -218,17 +231,22 @@ class MCPClient:
                 # Handle MCP service error logs
                 self.server_errlogs.append(msg)
 
-            stdio_transport = await self.exit_stack.enter_async_context(
-                mcp.stdio_client(
-                    server_params,
-                    errlog=LogPipe(
-                        level=logging.ERROR,
-                        logger=logger,
-                        identifier=f"MCPServer-{name}",
-                        callback=callback,
-                    ),  # type: ignore
-                ),
-            )
+            try:
+                stdio_transport = await self.exit_stack.enter_async_context(
+                    mcp.stdio_client(
+                        server_params,
+                        errlog=LogPipe(
+                            level=logging.ERROR,
+                            logger=logger,
+                            identifier=f"MCPServer-{name}",
+                            callback=callback,
+                        ),  # type: ignore
+                    ),
+                )
+            except FileNotFoundError as exc:
+                raise MCPStdioCommandNotFoundError(
+                    _build_missing_stdio_command_message(cfg)
+                ) from exc
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
