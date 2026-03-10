@@ -251,11 +251,11 @@ def _extract_requirement_names(requirements_path: str) -> set[str]:
     return names
 
 
-def _iter_requirement_lines(
+def _iter_requirement_tokens(
     requirements_path: str,
     *,
     _visited_paths: set[str] | None = None,
-) -> Iterator[str]:
+) -> Iterator[tuple[list[str], str]]:
     visited_paths = _visited_paths or set()
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited_paths:
@@ -275,7 +275,7 @@ def _iter_requirement_lines(
             if not tokens:
                 continue
 
-            nested_path = None
+            nested_path: str | None = None
             if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
                 nested_path = tokens[1]
             elif tokens[0].startswith("--requirement="):
@@ -286,25 +286,22 @@ def _iter_requirement_lines(
                     nested_path = os.path.join(
                         os.path.dirname(resolved_path), nested_path
                     )
-                yield from _iter_requirement_lines(
+                yield from _iter_requirement_tokens(
                     nested_path, _visited_paths=visited_paths
                 )
                 continue
 
-            yield line
+            yield tokens, line
 
 
 def _iter_requirement_specs(
     requirements_path: str,
 ) -> Iterator[tuple[str, SpecifierSet | None]]:
-    for line in _iter_requirement_lines(requirements_path):
-        tokens = shlex.split(line)
-        if not tokens:
-            continue
-
+    for tokens, line in _iter_requirement_tokens(requirements_path):
         # constraints and pure options
         if tokens[0] in {"-c", "--constraint"}:
             continue
+
         if tokens[0].startswith("-"):
             requirement_name = _extract_requirement_name(line)
             if requirement_name:
@@ -312,23 +309,23 @@ def _iter_requirement_specs(
             continue
 
         try:
+            # Use the original line to preserve quotes for markers
             requirement = Requirement(line)
+            if requirement.marker and not requirement.marker.evaluate():
+                continue
+            yield (
+                _canonicalize_distribution_name(requirement.name),
+                requirement.specifier,
+            )
         except InvalidRequirement:
             requirement_name = _extract_requirement_name(line)
             if requirement_name:
                 yield requirement_name, None
             continue
 
-        if requirement.marker and not requirement.marker.evaluate():
-            continue
-
-        yield (
-            _canonicalize_distribution_name(requirement.name),
-            requirement.specifier,
-        )
-
 
 def _get_requirement_check_paths() -> list[str]:
+
     paths = list(sys.path)
     if is_packaged_desktop_runtime():
         target_site_packages = get_astrbot_site_packages_path()
@@ -442,9 +439,25 @@ def _get_core_constraints() -> list[str]:
     """
     constraints = []
     try:
+        # Robustly find the core distribution name.
+        # It's usually 'AstrBot', but we derive it from the package if possible.
+        core_dist_name = "AstrBot"
+        try:
+            # If we are inside the package, __package__ might help.
+            # Usually top-level is 'astrbot'.
+            if __package__:
+                top_pkg = __package__.split(".")[0]
+                for dist in importlib_metadata.distributions():
+                    # Look for a distribution that provides our top package.
+                    if top_pkg in (dist.read_text("top_level.txt") or "").splitlines():
+                        core_dist_name = dist.metadata["Name"]
+                        break
+        except Exception:
+            pass
+
         dist = None
         try:
-            dist = importlib_metadata.distribution("AstrBot")
+            dist = importlib_metadata.distribution(core_dist_name)
         except importlib_metadata.PackageNotFoundError:
             return []
 
@@ -966,32 +979,6 @@ class PipInstaller:
                 requested_requirements,
             )
         importlib.invalidate_caches()
-
-    def prefer_installed_dependencies(self, requirements_path: str) -> None:
-        """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
-        if not is_packaged_desktop_runtime():
-            return
-
-        target_site_packages = get_astrbot_site_packages_path()
-        if not os.path.isdir(target_site_packages):
-            return
-
-        requested_requirements = _extract_requirement_names(requirements_path)
-        if not requested_requirements:
-            return
-
-        _prepend_sys_path(target_site_packages)
-        _ensure_plugin_dependencies_preferred(
-            target_site_packages,
-            requested_requirements,
-        )
-        importlib.invalidate_caches()
-
-    def find_missing_requirements(self, requirements_path: str) -> set[str] | None:
-        return _find_missing_requirements(requirements_path)
-
-    def find_missing_requirements_or_raise(self, requirements_path: str) -> set[str]:
-        return find_missing_requirements_or_raise(requirements_path)
 
     async def _run_pip_in_process(self, args: list[str]) -> tuple[int, list[str]]:
         pip_main = _get_pip_main()

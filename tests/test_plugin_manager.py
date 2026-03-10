@@ -108,7 +108,7 @@ def _build_reload_mock(events):
 
 def _mock_missing_requirements(monkeypatch, missing: set[str]):
     monkeypatch.setattr(
-        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements_or_raise",
+        "astrbot.core.star.star_manager.find_missing_requirements_or_raise",
         lambda requirements_path: missing,
     )
 
@@ -120,7 +120,7 @@ def _mock_precheck_fails(monkeypatch):
         raise RequirementsPrecheckFailed("mock precheck failure")
 
     monkeypatch.setattr(
-        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements_or_raise",
+        "astrbot.core.star.star_manager.find_missing_requirements_or_raise",
         mock_fail,
     )
 

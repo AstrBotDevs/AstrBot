@@ -17,6 +17,7 @@ from packaging.version import InvalidVersion, Version
 from astrbot.core import (
     DependencyConflictError,
     RequirementsPrecheckFailed,
+    find_missing_requirements_or_raise,
     logger,
     pip_installer,
     sp,
@@ -218,9 +219,7 @@ class PluginManager:
 
         try:
             try:
-                missing = pip_installer.find_missing_requirements_or_raise(
-                    requirements_path
-                )
+                missing = find_missing_requirements_or_raise(requirements_path)
             except RequirementsPrecheckFailed:
                 logger.info(
                     f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
