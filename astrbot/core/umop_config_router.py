@@ -27,7 +27,7 @@ class UmopConfigRouter:
 
     @staticmethod
     def _split_umo(umo: str) -> tuple[str, str, str] | None:
-        """Split a UMO into 3 parts while preserving ':' inside session_id."""
+        """将 UMO 拆分为 3 个部分，同时保留 session_id 中的 ':'"""
         if not isinstance(umo, str):
             return None
         parts = umo.split(":", 2)
