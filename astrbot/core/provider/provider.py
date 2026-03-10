@@ -281,7 +281,24 @@ class TTSProvider(AbstractProvider):
             accumulated_text += text_part
 
     async def test(self) -> None:
-        await self.get_audio("hi")
+        audio_path = await self.get_audio("hi")
+
+        # 检查生成的音频文件是否有效
+        if not os.path.exists(audio_path):
+            raise Exception("TTS test failed: audio file was not created")
+
+        file_size = os.path.getsize(audio_path)
+        if file_size == 0:
+            raise Exception(
+                "TTS test failed: generated audio file is empty (0 bytes). "
+                "Please check your TTS provider configuration, especially required parameters like group_id for MiniMax."
+            )
+
+        # 清理测试文件
+        try:
+            os.remove(audio_path)
+        except Exception:
+            pass
 
 
 class EmbeddingProvider(AbstractProvider):
