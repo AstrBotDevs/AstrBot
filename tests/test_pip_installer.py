@@ -75,7 +75,9 @@ async def test_run_pip_in_process_streams_output_lines(monkeypatch):
     )
 
     installer = PipInstaller("")
-    task = asyncio.create_task(installer._run_pip_in_process(["install", "demo-package"]))
+    task = asyncio.create_task(
+        installer._run_pip_in_process(["install", "demo-package"])
+    )
 
     await asyncio.wait_for(first_line_seen.wait(), timeout=1)
     unblock_pip.set()
@@ -116,6 +118,39 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     assert result == (0, ["outerr", " line"])
     assert logged_lines[-2:] == ["outerr", " line"]
 
+
+@pytest.mark.asyncio
+async def test_run_pip_in_process_preserves_blank_lines(monkeypatch):
+    logged_lines = []
+
+    def fake_pip_main(args):
+        del args
+        print("Collecting demo-package")
+        print()
+        print("Installing collected packages")
+        return 0
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._get_pip_main",
+        lambda: fake_pip_main,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.logger.info",
+        lambda line, *args: logged_lines.append(line % args if args else line),
+    )
+
+    installer = PipInstaller("")
+    result = await installer._run_pip_in_process(["install", "demo-package"])
+
+    assert result == (
+        0,
+        ["Collecting demo-package", "", "Installing collected packages"],
+    )
+    assert logged_lines[-3:] == [
+        "Collecting demo-package",
+        "",
+        "Installing collected packages",
+    ]
 
 
 def _make_fake_distribution(name: str, version: str):
@@ -228,7 +263,9 @@ def test_find_missing_requirements_extracts_editable_vcs_requirement(
     assert missing == {"demo-package"}
 
 
-def test_find_missing_requirements_prefers_first_search_path_version(monkeypatch, tmp_path):
+def test_find_missing_requirements_prefers_first_search_path_version(
+    monkeypatch, tmp_path
+):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("demo-package>=2.0\n", encoding="utf-8")
 
@@ -371,7 +408,9 @@ async def test_install_splits_space_separated_packages_within_multiline_input(
     monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
 
     installer = PipInstaller("")
-    await installer.install(package_name="demo-package another-package\nextra-package\n")
+    await installer.install(
+        package_name="demo-package another-package\nextra-package\n"
+    )
 
     run_pip.assert_awaited_once()
     recorded_args = run_pip.await_args_list[0].args[0]
@@ -466,9 +505,7 @@ async def test_install_tracks_only_real_requirement_names_for_spaced_single_requ
     installer = PipInstaller("")
     await installer.install(package_name="demo-package >= 1.0, < 2.0")
 
-    assert ensure_preferred_calls == [
-        (str(site_packages_path), {"demo-package"})
-    ]
+    assert ensure_preferred_calls == [(str(site_packages_path), {"demo-package"})]
 
 
 def test_prefer_installed_dependencies_prefers_modules_for_requirements_in_desktop_runtime(
@@ -502,9 +539,7 @@ def test_prefer_installed_dependencies_prefers_modules_for_requirements_in_deskt
     installer.prefer_installed_dependencies(str(requirements_path))
 
     assert prepend_calls == [str(site_packages_path)]
-    assert preferred_calls == [
-        (str(site_packages_path), {"demo-package"})
-    ]
+    assert preferred_calls == [(str(site_packages_path), {"demo-package"})]
 
 
 @pytest.mark.asyncio
@@ -662,8 +697,7 @@ async def test_install_strips_inline_comment_from_option_line(monkeypatch):
     installer = PipInstaller("")
     await installer.install(
         package_name=(
-            "--extra-index-url https://example.com/simple  # mirror\n"
-            "demo-package\n"
+            "--extra-index-url https://example.com/simple  # mirror\ndemo-package\n"
         )
     )
 
@@ -703,16 +737,19 @@ async def test_install_ignores_whitespace_only_package_string(monkeypatch):
     installer = PipInstaller("")
     await installer.install(package_name="   ")
 
-    run_pip.assert_awaited_once()
-    recorded_args = run_pip.await_args_list[0].args[0]
+    run_pip.assert_not_awaited()
 
-    # Verify core install args are present; allow for extra args like -c constraints
-    assert "install" in recorded_args
-    # Verify --trusted-host and its value are present as a sequence
-    idx = recorded_args.index("--trusted-host")
-    assert recorded_args[idx + 1] == "mirrors.aliyun.com"
-    assert "-i" in recorded_args
-    assert "https://pypi.org/simple" in recorded_args
+
+@pytest.mark.asyncio
+async def test_install_ignores_missing_package_and_requirements(monkeypatch):
+    run_pip = AsyncMock(return_value=(0, []))
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install()
+
+    run_pip.assert_not_awaited()
 
 
 @pytest.mark.asyncio

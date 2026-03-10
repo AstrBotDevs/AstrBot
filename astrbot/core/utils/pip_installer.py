@@ -104,6 +104,17 @@ def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
     return specifier.contains(parsed_version, prereleases=True)
 
 
+def _iter_normalized_requirement_lines(raw_input: str) -> Iterator[str]:
+    normalized = raw_input.strip()
+    if not normalized:
+        return
+
+    for line in normalized.splitlines():
+        stripped = _strip_inline_requirement_comment(line)
+        if stripped:
+            yield stripped
+
+
 def _split_package_install_input(raw_input: str) -> list[str]:
     """
     Normalize the user-provided package string into a list of pip args.
@@ -113,16 +124,9 @@ def _split_package_install_input(raw_input: str) -> list[str]:
     - Preserves a single valid requirement string, even when it contains spaces.
     - Falls back to shlex splitting for command-style input and options.
     """
-    normalized = raw_input.strip()
-    if not normalized:
-        return []
-
     specs: list[str] = []
-    for line in normalized.splitlines():
-        stripped = _strip_inline_requirement_comment(line)
-        if not stripped:
-            continue
-        specs.extend(_split_package_install_line(stripped))
+    for line in _iter_normalized_requirement_lines(raw_input):
+        specs.extend(_split_package_install_line(line))
     return specs
 
 
@@ -135,23 +139,16 @@ def _split_package_install_line(line: str) -> list[str]:
 
 
 def _extract_requested_requirements_from_package_input(raw_input: str) -> set[str]:
-    normalized = raw_input.strip()
-    if not normalized:
-        return set()
-
     requirements: set[str] = set()
-    for line in normalized.splitlines():
-        stripped = _strip_inline_requirement_comment(line)
-        if not stripped:
-            continue
+    for line in _iter_normalized_requirement_lines(raw_input):
         try:
-            req = Requirement(stripped)
+            req = Requirement(line)
         except InvalidRequirement:
-            tokens = _split_package_install_line(stripped)
+            tokens = _split_package_install_line(line)
             if not tokens:
                 continue
             if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
-                requirement_name = _extract_requirement_name(stripped)
+                requirement_name = _extract_requirement_name(line)
                 if requirement_name:
                     requirements.add(requirement_name)
                 continue
@@ -215,49 +212,47 @@ def _iter_requirements(
     try:
         with open(resolved_path, encoding="utf-8") as f:
             for raw_line in f:
-                # Normalize line and strip comments
-                line = re.split(r"[ \t]+#", raw_line, maxsplit=1)[0].strip()
-                if not line or line.startswith("#"):
-                    continue
-
-                tokens = shlex.split(line)
-                if not tokens:
-                    continue
-
-                # Handle recursion
-                nested: str | None = None
-                if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
-                    nested = tokens[1]
-                elif tokens[0].startswith("--requirement="):
-                    nested = tokens[0].split("=", 1)[1]
-
-                if nested:
-                    if not os.path.isabs(nested):
-                        nested = os.path.join(os.path.dirname(resolved_path), nested)
-                    yield from _iter_requirements(nested, _visited=visited)
-                    continue
-
-                if tokens[0] in {"-c", "--constraint"}:
-                    continue
-
-                if tokens[0].startswith("-"):
-                    name = _extract_requirement_name(line)
-                    if name:
-                        yield name, None
-                    continue
-
-                try:
-                    req = Requirement(line)
-                    if req.marker and not req.marker.evaluate():
+                for line in _iter_normalized_requirement_lines(raw_line):
+                    tokens = shlex.split(line)
+                    if not tokens:
                         continue
-                    yield (
-                        _canonicalize_distribution_name(req.name),
-                        req.specifier or None,
-                    )
-                except InvalidRequirement:
-                    name = _extract_requirement_name(line)
-                    if name:
-                        yield name, None
+
+                    # Handle recursion
+                    nested: str | None = None
+                    if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
+                        nested = tokens[1]
+                    elif tokens[0].startswith("--requirement="):
+                        nested = tokens[0].split("=", 1)[1]
+
+                    if nested:
+                        if not os.path.isabs(nested):
+                            nested = os.path.join(
+                                os.path.dirname(resolved_path), nested
+                            )
+                        yield from _iter_requirements(nested, _visited=visited)
+                        continue
+
+                    if tokens[0] in {"-c", "--constraint"}:
+                        continue
+
+                    if tokens[0].startswith("-"):
+                        name = _extract_requirement_name(line)
+                        if name:
+                            yield name, None
+                        continue
+
+                    try:
+                        req = Requirement(line)
+                        if req.marker and not req.marker.evaluate():
+                            continue
+                        yield (
+                            _canonicalize_distribution_name(req.name),
+                            req.specifier or None,
+                        )
+                    except InvalidRequirement:
+                        name = _extract_requirement_name(line)
+                        if name:
+                            yield name, None
     except FileNotFoundError:
         # Rethrow to allow find_missing_requirements to return None
         raise
@@ -423,8 +418,6 @@ class _StreamingLogWriter(io.TextIOBase):
         while "\n" in self._buffer:
             raw_line, self._buffer = self._buffer.split("\n", 1)
             line = raw_line.rstrip("\r\n")
-            if not line:
-                continue
             self._log_func(line)
             self.lines.append(line)
         return len(text)
@@ -943,21 +936,30 @@ class PipInstaller:
         requirements_path: str | None,
         mirror: str | None,
     ) -> tuple[list[str], set[str]]:
-        args = ["install"]
+        args: list[str] = []
         requested_requirements: set[str] = set()
         pip_install_args = (
             shlex.split(self.pip_install_arg) if self.pip_install_arg else []
         )
+        normalized_requirements_path = (
+            requirements_path.strip() if requirements_path else ""
+        )
 
         if package_name:
             package_specs = _split_package_install_input(package_name)
-            args.extend(package_specs)
-            requested_requirements = _extract_requested_requirements_from_package_input(
-                package_name
+            if package_specs:
+                args = ["install", *package_specs]
+                requested_requirements = (
+                    _extract_requested_requirements_from_package_input(package_name)
+                )
+        elif normalized_requirements_path:
+            args = ["install", "-r", normalized_requirements_path]
+            requested_requirements = _extract_requirement_names(
+                normalized_requirements_path
             )
-        elif requirements_path:
-            args.extend(["-r", requirements_path])
-            requested_requirements = _extract_requirement_names(requirements_path)
+
+        if not args:
+            return [], requested_requirements
 
         if not _package_specs_override_index([*args[1:], *pip_install_args]):
             index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
@@ -977,6 +979,9 @@ class PipInstaller:
         args, requested_requirements = self._build_pip_args(
             package_name, requirements_path, mirror
         )
+        if not args:
+            logger.info("Pip 包管理器跳过安装：未提供有效的包名或 requirements 文件。")
+            return
 
         target_site_packages = None
         if is_packaged_desktop_runtime():
