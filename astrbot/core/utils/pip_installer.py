@@ -57,19 +57,23 @@ class _StreamingLogWriter(io.TextIOBase):
         if not text:
             return 0
 
+        # Normalize Windows newlines to Unix style but preserve other whitespace
         self._buffer += text.replace("\r", "\n")
         while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            line = line.strip()
-            if line:
+            raw_line, self._buffer = self._buffer.split("\n", 1)
+            # Ensure any trailing newline characters are removed without
+            # touching other leading/trailing whitespace
+            line = raw_line.rstrip("\r\n")
+            if line.strip():
                 if line.startswith("ERROR:"):
                     self.error_lines.append(line)
                 self._log_func(line)
         return len(text)
 
     def flush(self) -> None:
-        line = self._buffer.strip()
-        if line:
+        # Flush any remaining buffered text, preserving leading/trailing spaces
+        line = self._buffer.rstrip("\r\n")
+        if line.strip():
             if line.startswith("ERROR:"):
                 self.error_lines.append(line)
             self._log_func(line)

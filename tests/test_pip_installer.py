@@ -114,7 +114,7 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
     assert result == (0, [])
-    assert logged_lines[-2:] == ["outerr", "line"]
+    assert logged_lines[-2:] == ["outerr", " line"]
 
 
 def _make_fake_distribution(name: str, version: str):
@@ -637,8 +637,9 @@ async def test_install_ignores_whitespace_only_package_string(monkeypatch):
 
     # Verify core install args are present; allow for extra args like -c constraints
     assert "install" in recorded_args
-    assert "--trusted-host" in recorded_args
-    assert "mirrors.aliyun.com" in recorded_args
+    # Verify --trusted-host and its value are present as a sequence
+    idx = recorded_args.index("--trusted-host")
+    assert recorded_args[idx + 1] == "mirrors.aliyun.com"
     assert "-i" in recorded_args
     assert "https://pypi.org/simple" in recorded_args
 
