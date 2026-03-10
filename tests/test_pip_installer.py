@@ -481,6 +481,66 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
     assert distributions_calls == ["scan"]
 
 
+def test_get_core_constraints_skips_distributions_with_unreadable_top_level(
+    monkeypatch,
+):
+    class BrokenDistribution:
+        metadata = {"Name": "Broken-App"}
+        requires = []
+
+        def read_text(self, name):
+            if name == "top_level.txt":
+                raise OSError("cannot read top_level.txt")
+            return ""
+
+    class FakeFallbackDistribution:
+        metadata = {"Name": "AstrBot-App"}
+        requires = ["shared-lib>=1.0"]
+
+        def read_text(self, name):
+            if name == "top_level.txt":
+                return "astrbot\n"
+            return ""
+
+    broken_distribution = BrokenDistribution()
+    fake_distribution = FakeFallbackDistribution()
+
+    def mock_distribution(name):
+        if name == "AstrBot":
+            raise pip_installer_module.importlib_metadata.PackageNotFoundError
+        if name == "AstrBot-App":
+            return fake_distribution
+        raise pip_installer_module.importlib_metadata.PackageNotFoundError
+
+    def mock_distributions(path=None):
+        del path
+        return [broken_distribution, fake_distribution]
+
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distribution",
+        mock_distribution,
+    )
+    monkeypatch.setattr(
+        pip_installer_module.importlib_metadata,
+        "distributions",
+        mock_distributions,
+    )
+    monkeypatch.setattr(
+        pip_installer_module,
+        "_collect_installed_distribution_versions",
+        lambda paths: {"shared-lib": "2.0"},
+    )
+
+    pip_installer_module._get_core_constraints.cache_clear()
+    try:
+        constraints = pip_installer_module._get_core_constraints(None)
+    finally:
+        pip_installer_module._get_core_constraints.cache_clear()
+
+    assert constraints == ("shared-lib==2.0",)
+
+
 def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
     monkeypatch,
 ):

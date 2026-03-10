@@ -558,7 +558,12 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
             if resolved_core_dist_name is None and __package__:
                 top_pkg = __package__.split(".")[0]
                 for dist in importlib_metadata.distributions():
-                    if top_pkg in (dist.read_text("top_level.txt") or "").splitlines():
+                    try:
+                        top_level = dist.read_text("top_level.txt") or ""
+                    except Exception:
+                        continue
+
+                    if top_pkg in top_level.splitlines():
                         resolved_core_dist_name = dist.metadata["Name"]
                         break
 
@@ -784,7 +789,11 @@ def _collect_candidate_modules(
     by_name: dict[str, list[importlib_metadata.Distribution]] = {}
     try:
         for distribution in importlib_metadata.distributions(path=[site_packages_path]):
-            distribution_name = distribution.metadata.get("Name")
+            distribution_name = (
+                distribution.metadata["Name"]
+                if "Name" in distribution.metadata
+                else None
+            )
             if not distribution_name:
                 continue
             canonical_name = _canonicalize_distribution_name(distribution_name)

@@ -72,6 +72,32 @@ class PluginDependencyInstallError(Exception):
         self.error = error
 
 
+async def _install_requirements_with_precheck(
+    *,
+    plugin_label: str,
+    requirements_path: str,
+) -> None:
+    try:
+        missing = find_missing_requirements_or_raise(requirements_path)
+    except RequirementsPrecheckFailed:
+        logger.info(
+            f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
+            f"{requirements_path}"
+        )
+        await pip_installer.install(requirements_path=requirements_path)
+        return
+
+    if not missing:
+        logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
+        return
+
+    logger.info(
+        f"检测到插件 {plugin_label} 缺失依赖，正在按 requirements.txt 安装: "
+        f"{requirements_path} -> {sorted(missing)}"
+    )
+    await pip_installer.install(requirements_path=requirements_path)
+
+
 class PluginManager:
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         from .star_tools import StarTools
@@ -235,26 +261,10 @@ class PluginManager:
             return
 
         try:
-            try:
-                missing = find_missing_requirements_or_raise(requirements_path)
-            except RequirementsPrecheckFailed:
-                logger.info(
-                    f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
-                    f"{requirements_path}"
-                )
-                await pip_installer.install(requirements_path=requirements_path)
-                return
-
-            if not missing:
-                logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
-                return
-
-            logger.info(
-                f"检测到插件 {plugin_label} 缺失依赖，正在按 requirements.txt 安装: "
-                f"{requirements_path} -> {sorted(missing)}"
+            await _install_requirements_with_precheck(
+                plugin_label=plugin_label,
+                requirements_path=requirements_path,
             )
-            await pip_installer.install(requirements_path=requirements_path)
-
         except asyncio.CancelledError:
             raise
         except DependencyConflictError as e:
@@ -484,7 +494,7 @@ class PluginManager:
         root_dir_name: str,
         plugin_dir_path: str,
         reserved: bool,
-        error: Exception | str,
+        error: BaseException | str,
         error_trace: str,
     ) -> dict:
         record: dict = {
