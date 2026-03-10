@@ -65,26 +65,31 @@ class _StreamingLogWriter(io.TextIOBase):
             # touching other leading/trailing whitespace
             line = raw_line.rstrip("\r\n")
             if line.strip():
-                if line.startswith("ERROR:"):
+                # Revert: always use default log_func (usually logger.info)
+                self._log_func(line)
+
+                # Capture error and conflict details
+                if (
+                    line.startswith("ERROR:")
+                    or "The user requested" in line
+                    or "ResolutionImpossible" in line
+                ):
                     self.error_lines.append(line)
-                    logger.error(line)
-                elif line.startswith("WARNING:"):
-                    logger.warning(line)
-                else:
-                    self._log_func(line)
         return len(text)
 
     def flush(self) -> None:
         # Flush any remaining buffered text, preserving leading/trailing spaces
         line = self._buffer.rstrip("\r\n")
         if line.strip():
-            if line.startswith("ERROR:"):
+            # Revert: always use default log_func
+            self._log_func(line)
+
+            if (
+                line.startswith("ERROR:")
+                or "The user requested" in line
+                or "ResolutionImpossible" in line
+            ):
                 self.error_lines.append(line)
-                logger.error(line)
-            elif line.startswith("WARNING:"):
-                logger.warning(line)
-            else:
-                self._log_func(line)
         self._buffer = ""
 
 
@@ -869,10 +874,25 @@ class PipInstaller:
                     is_core_conflict = any(
                         "(constraint)" in line for line in error_lines
                     )
-                    error_msg = "检测到依赖冲突。"
+
+                    # Extract specific conflict info: e.g. "aiohttp==3.12.15 vs (constraint) aiohttp==3.13.3"
+                    constraints = [
+                        line.strip() for line in error_lines if "(constraint)" in line
+                    ]
+                    requested = [
+                        line.strip()
+                        for line in error_lines
+                        if "The user requested" in line and "(constraint)" not in line
+                    ]
+
+                    detail = ""
+                    if constraints and requested:
+                        detail = f" 冲突详情: {requested[0].replace('The user requested ', '')} vs {constraints[0].replace('The user requested ', '')}。"
+
+                    error_msg = f"检测到依赖冲突。{detail}"
                     if is_core_conflict:
                         error_msg = (
-                            "检测到核心依赖版本保护冲突。插件要求的依赖版本与 AstrBot 核心不兼容，"
+                            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
                             "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
                         )
                     raise DependencyConflictError(error_msg, error_lines)
