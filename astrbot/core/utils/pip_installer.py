@@ -142,7 +142,11 @@ def _split_package_install_input(raw_input: str) -> list[str]:
     if "\n" in normalized or "\r" in normalized:
         return _split_multiline_package_input(normalized)
 
-    normalized = _strip_inline_requirement_comment(normalized)
+    return _split_single_line_package_input(normalized)
+
+
+def _split_single_line_package_input(raw_input: str) -> list[str]:
+    normalized = _strip_inline_requirement_comment(raw_input)
     if not normalized:
         return []
 
@@ -173,13 +177,10 @@ def _is_valid_install_requirement(candidate: str) -> bool:
 def _split_multiline_package_input(raw_input: str) -> list[str]:
     requirements: list[str] = []
     for line in raw_input.splitlines():
-        candidate = _strip_inline_requirement_comment(line)
+        candidate = line.strip()
         if not candidate or candidate.startswith("#"):
             continue
-        if candidate.startswith("-"):
-            requirements.extend(_split_option_input(candidate))
-            continue
-        requirements.extend(_split_package_install_input(candidate))
+        requirements.extend(_split_single_line_package_input(candidate))
     return requirements
 
 
