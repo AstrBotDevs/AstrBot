@@ -51,7 +51,7 @@ class _StreamingLogWriter(io.TextIOBase):
     def __init__(self, log_func) -> None:
         self._log_func = log_func
         self._buffer = ""
-        self.error_lines: list[str] = []
+        self.lines: list[str] = []
 
     def write(self, text: str) -> int:
         if not text:
@@ -65,31 +65,16 @@ class _StreamingLogWriter(io.TextIOBase):
             # touching other leading/trailing whitespace
             line = raw_line.rstrip("\r\n")
             if line.strip():
-                # Revert: always use default log_func (usually logger.info)
                 self._log_func(line)
-
-                # Capture error and conflict details
-                if (
-                    line.startswith("ERROR:")
-                    or "The user requested" in line
-                    or "ResolutionImpossible" in line
-                ):
-                    self.error_lines.append(line)
+                self.lines.append(line)
         return len(text)
 
     def flush(self) -> None:
         # Flush any remaining buffered text, preserving leading/trailing spaces
         line = self._buffer.rstrip("\r\n")
         if line.strip():
-            # Revert: always use default log_func
             self._log_func(line)
-
-            if (
-                line.startswith("ERROR:")
-                or "The user requested" in line
-                or "ResolutionImpossible" in line
-            ):
-                self.error_lines.append(line)
+            self.lines.append(line)
         self._buffer = ""
 
 
@@ -101,7 +86,89 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
     ):
         result_code = pip_main(args)
     stream.flush()
-    return result_code, stream.error_lines
+    return result_code, stream.lines
+
+
+class PipFailureInfo:
+    def __init__(self, is_conflict: bool, is_core_conflict: bool, message: str):
+        self.is_conflict = is_conflict
+        self.is_core_conflict = is_core_conflict
+        self.message = message
+
+
+def _classify_pip_failure(lines: list[str]) -> PipFailureInfo | None:
+    error_lines = [
+        line
+        for line in lines
+        if line.startswith("ERROR:")
+        or "The user requested" in line
+        or "ResolutionImpossible" in line
+    ]
+    if not error_lines:
+        return None
+
+    is_conflict = any(
+        "conflict" in line.lower() or "resolutionimpossible" in line.lower()
+        for line in error_lines
+    )
+    if not is_conflict:
+        return None
+
+    is_core_conflict = any("(constraint)" in line for line in error_lines)
+
+    constraints = [l.strip() for l in error_lines if "(constraint)" in l]
+    requested = [
+        l.strip()
+        for l in error_lines
+        if "The user requested" in l and "(constraint)" not in l
+    ]
+
+    detail = ""
+    if constraints and requested:
+        detail = (
+            " 冲突详情: "
+            f"{requested[0].removeprefix('The user requested ')} vs "
+            f"{constraints[0].removeprefix('The user requested ')}。"
+        )
+
+    if is_core_conflict:
+        message = (
+            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
+            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+        )
+    else:
+        message = f"检测到依赖冲突。{detail}"
+
+    return PipFailureInfo(
+        is_conflict=True, is_core_conflict=is_core_conflict, message=message
+    )
+
+
+@contextlib.contextmanager
+def _core_constraints_file() -> Iterator[str | None]:
+    constraints = _get_core_constraints()
+    if not constraints:
+        yield None
+        return
+
+    path: str | None = None
+    try:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
+        ) as f:
+            f.write("\n".join(constraints))
+            path = f.name
+        logger.info("已启用核心依赖版本保护 (%d 个约束)", len(constraints))
+        yield path
+    except Exception as exc:
+        logger.warning("创建临时约束文件失败: %s", exc)
+        yield None
+    finally:
+        if path and os.path.exists(path):
+            with contextlib.suppress(Exception):
+                os.remove(path)
 
 
 def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
@@ -844,74 +911,31 @@ class PipInstaller:
         if pip_install_args:
             args.extend(pip_install_args)
 
-        # Add constraints to protect core dependencies
-        core_constraints = _get_core_constraints()
-        constraints_file_path = None
-        if core_constraints:
-            try:
-                import tempfile
-
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
-                ) as f:
-                    f.write("\n".join(core_constraints))
-                    constraints_file_path = f.name
+        with _core_constraints_file() as constraints_file_path:
+            if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
-                logger.info("已启用核心依赖版本保护 (%d 个约束)", len(core_constraints))
-            except Exception as exc:
-                logger.warning("创建临时约束文件失败: %s", exc)
 
-        try:
-            logger.info("Pip 包管理器 argv: %s", ["pip", *args])
-            result_code, error_lines = await self._run_pip_in_process(args)
+            try:
+                logger.info("Pip 包管理器 argv: %s", ["pip", *args])
+                result_code, lines = await self._run_pip_in_process(args)
 
-            if result_code != 0:
-                is_conflict = any(
-                    "conflict" in line.lower() or "resolutionimpossible" in line.lower()
-                    for line in error_lines
-                )
-                if is_conflict:
-                    is_core_conflict = any(
-                        "(constraint)" in line for line in error_lines
+                if result_code != 0:
+                    failure = _classify_pip_failure(lines)
+                    if failure and failure.is_conflict:
+                        raise DependencyConflictError(failure.message, lines)
+                    raise Exception(f"安装失败，错误码：{result_code}")
+
+                if target_site_packages:
+                    _prepend_sys_path(target_site_packages)
+                    _ensure_plugin_dependencies_preferred(
+                        target_site_packages,
+                        requested_requirements,
                     )
-
-                    # Extract specific conflict info: e.g. "aiohttp==3.12.15 vs (constraint) aiohttp==3.13.3"
-                    constraints = [
-                        line.strip() for line in error_lines if "(constraint)" in line
-                    ]
-                    requested = [
-                        line.strip()
-                        for line in error_lines
-                        if "The user requested" in line and "(constraint)" not in line
-                    ]
-
-                    detail = ""
-                    if constraints and requested:
-                        detail = f" 冲突详情: {requested[0].replace('The user requested ', '')} vs {constraints[0].replace('The user requested ', '')}。"
-
-                    error_msg = f"检测到依赖冲突。{detail}"
-                    if is_core_conflict:
-                        error_msg = (
-                            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
-                            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
-                        )
-                    raise DependencyConflictError(error_msg, error_lines)
-
-                raise Exception(f"安装失败，错误码：{result_code}")
-
-            if target_site_packages:
-                _prepend_sys_path(target_site_packages)
-                _ensure_plugin_dependencies_preferred(
-                    target_site_packages,
-                    requested_requirements,
-                )
-            importlib.invalidate_caches()
-        finally:
-            if constraints_file_path and os.path.exists(constraints_file_path):
-                try:
-                    os.remove(constraints_file_path)
-                except Exception:
-                    pass
+                importlib.invalidate_caches()
+            except DependencyConflictError:
+                raise
+            except Exception:
+                raise
 
     def prefer_installed_dependencies(self, requirements_path: str) -> None:
         """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""

@@ -81,7 +81,7 @@ async def test_run_pip_in_process_streams_output_lines(monkeypatch):
     unblock_pip.set()
     result = await task
 
-    assert result == (0, [])
+    assert result == (0, ["Collecting demo-package", "Downloading demo-package.whl"])
     assert logged_lines[-2:] == [
         "Collecting demo-package",
         "Downloading demo-package.whl",
@@ -113,7 +113,7 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result == (0, [])
+    assert result == (0, ["outerr", " line"])
     assert logged_lines[-2:] == ["outerr", " line"]
 
 
