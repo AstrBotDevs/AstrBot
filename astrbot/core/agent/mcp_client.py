@@ -221,7 +221,13 @@ class MCPClient:
             def callback(msg: str | mcp.types.LoggingMessageNotificationParams) -> None:
                 # Handle MCP service error logs
                 if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                    if msg.level in ("warning", "error", "critical", "alert", "emergency"):
+                    if msg.level in (
+                        "warning",
+                        "error",
+                        "critical",
+                        "alert",
+                        "emergency",
+                    ):
                         log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
                         self.server_errlogs.append(log_msg)
 
