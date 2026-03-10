@@ -152,7 +152,7 @@ class Context:
         tools: ToolSet | None = None,
         system_prompt: str | None = None,
         contexts: list[Message] | None = None,
-        max_steps: int = 30,
+        max_steps: int | None = 30,
         tool_call_timeout: int = 60,
         **kwargs: Any,
     ) -> LLMResponse:
@@ -168,7 +168,7 @@ class Context:
             tools: ToolSet of tools available to the LLM
             system_prompt: System prompt to guide the LLM's behavior, if provided, it will always insert as the first system message in the context
             contexts: context messages for the LLM
-            max_steps: Maximum number of tool calls before stopping the loop
+            max_steps: Maximum number of tool calls before stopping the loop. `None` means unlimited.
             **kwargs: Additional keyword arguments. The kwargs will not be passed to the LLM directly for now, but can include:
                 stream: bool - whether to stream the LLM response
                 agent_hooks: BaseAgentRunHooks[AstrAgentContext] - hooks to run during agent execution

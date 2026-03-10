@@ -72,6 +72,16 @@ class HandoffExecutor:
         return getattr(run_context.context.context, "subagent_orchestrator", None)
 
     @classmethod
+    def _get_subagent_config(
+        cls, run_context: ContextWrapper[AstrAgentContext]
+    ) -> T.Any | None:
+        orchestrator = cls._get_orchestrator(run_context)
+        config_getter = getattr(orchestrator, "get_config", None)
+        if callable(config_getter):
+            return config_getter()
+        return None
+
+    @classmethod
     def _resolve_max_nested_depth(
         cls, run_context: ContextWrapper[AstrAgentContext]
     ) -> int:
@@ -94,21 +104,47 @@ class HandoffExecutor:
         cls, run_context: ContextWrapper[AstrAgentContext]
     ) -> _HandoffExecutionSettings:
         provider_settings = cls._get_provider_settings(run_context)
+        subagent_config = cls._get_subagent_config(run_context)
+        execution = getattr(subagent_config, "execution", None)
+        runtime_override = getattr(execution, "computer_use_runtime", None)
+        default_max_steps_override = getattr(execution, "default_max_steps", None)
+        streaming_override = getattr(execution, "streaming_response", None)
+        timeout_override = getattr(execution, "tool_call_timeout", None)
         return _HandoffExecutionSettings(
-            runtime=str(provider_settings.get("computer_use_runtime", "none")),
+            runtime=str(
+                runtime_override
+                or provider_settings.get("computer_use_runtime", "none")
+            ),
             max_nested_depth=cls._resolve_max_nested_depth(run_context),
             default_max_steps=cls._safe_int(
-                provider_settings.get("max_agent_step", DEFAULT_MAX_STEPS),
+                default_max_steps_override
+                if default_max_steps_override is not None
+                else provider_settings.get("max_agent_step", DEFAULT_MAX_STEPS),
                 DEFAULT_MAX_STEPS,
             ),
-            streaming_response=bool(provider_settings.get("streaming_response", False)),
+            streaming_response=(
+                bool(streaming_override)
+                if streaming_override is not None
+                else bool(provider_settings.get("streaming_response", False))
+            ),
             tool_call_timeout=cls._safe_int(
-                getattr(run_context, "tool_call_timeout", 60), 60
+                timeout_override
+                if timeout_override is not None
+                else getattr(
+                    run_context,
+                    "tool_call_timeout",
+                    provider_settings.get("tool_call_timeout", 60),
+                ),
+                60,
             ),
         )
 
     @classmethod
-    def _resolve_agent_max_steps(cls, tool: HandoffTool, default_max_steps: int) -> int:
+    def _resolve_agent_max_steps(
+        cls, tool: HandoffTool, default_max_steps: int
+    ) -> int | None:
+        if bool(getattr(tool, "max_steps_unlimited", False)):
+            return None
         configured_max_step = getattr(tool, "max_steps", None)
         if isinstance(configured_max_step, int) and configured_max_step > 0:
             return configured_max_step
@@ -167,11 +203,13 @@ class HandoffExecutor:
             else agent_name
         )
         max_steps_raw = snapshot.get("max_steps")
+        max_steps_unlimited = bool(snapshot.get("max_steps_unlimited", False))
         handoff.max_steps = (
             int(max_steps_raw)
             if isinstance(max_steps_raw, int) and max_steps_raw > 0
             else None
         )
+        handoff.max_steps_unlimited = max_steps_unlimited  # type: ignore[attr-defined]
         return handoff
 
     @classmethod
@@ -278,8 +316,7 @@ class HandoffExecutor:
         run_context: ContextWrapper[AstrAgentContext],
         tools: list[str | FunctionTool] | None,
     ) -> ToolSet | None:
-        provider_settings = cls._get_provider_settings(run_context)
-        runtime = str(provider_settings.get("computer_use_runtime", "none"))
+        runtime = cls._resolve_execution_settings(run_context).runtime
         runtime_computer_tools = cls._get_runtime_computer_tools(runtime)
 
         if tools is None:
@@ -553,7 +590,7 @@ class HandoffExecutor:
         agent_ctx = AstrAgentContext(context=plugin_context, event=cron_event)
         wrapper = AgentContextWrapper(
             context=agent_ctx,
-            tool_call_timeout=int(meta.get("tool_call_timeout", 3600)),
+            tool_call_timeout=int(meta.get("tool_call_timeout", 600)),
         )
 
         handoff_args = dict(tool_args)

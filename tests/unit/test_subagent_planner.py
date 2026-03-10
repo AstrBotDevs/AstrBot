@@ -64,6 +64,7 @@ async def test_planner_builds_handoff_and_dedupe_set():
     assert all("transfer_to_x" not in msg for msg in plan.main_tool_exclude_set)
     assert any("recursive handoff" in d for d in plan.diagnostics)
     assert getattr(plan.handoffs[0], "max_steps", None) == 7
+    assert plan.handoffs[0].agent.instructions == "x"
 
 
 @pytest.mark.asyncio
@@ -106,8 +107,7 @@ async def test_planner_detects_safe_tool_name_conflict():
     assert plan.handoffs[0].name == "transfer_to_a_a"
     assert plan.handoffs[1].name == "transfer_to_a_a-2"
     assert any(
-        "duplicate subagent tool name" in d and "renamed" in d
-        for d in plan.diagnostics
+        "duplicate subagent tool name" in d and "renamed" in d for d in plan.diagnostics
     )
 
 
@@ -127,6 +127,8 @@ async def test_planner_respects_tools_scope_all_and_none():
     by_name = {handoff.agent.name: handoff for handoff in plan.handoffs}
     assert by_name["all_agent"].agent.tools is None
     assert by_name["none_agent"].agent.tools == []
+    assert getattr(by_name["all_agent"], "max_steps", None) == 200
+    assert getattr(by_name["none_agent"], "max_steps", None) == 200
 
 
 @pytest.mark.asyncio

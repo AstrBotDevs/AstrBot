@@ -102,7 +102,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         result_text = ""
         try:
             async for r in cls._execute_local(
-                tool, run_context, tool_call_timeout=3600, **tool_args
+                tool, run_context, tool_call_timeout=600, **tool_args
             ):
                 # collect results, currently we just collect the text results
                 if isinstance(r, mcp.types.CallToolResult):

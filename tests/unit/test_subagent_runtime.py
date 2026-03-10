@@ -342,3 +342,21 @@ async def test_runtime_enqueue_handles_idempotency_race_and_returns_existing_tas
     )
 
     assert task_id == "winner_task"
+
+
+@pytest.mark.asyncio
+async def test_runtime_process_once_logs_when_executor_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    db = _FakeDb()
+    runtime = SubagentRuntime(db)
+    warnings: list[str] = []
+
+    def _fake_warning(message: str, *args) -> None:
+        warnings.append(message % args if args else message)
+
+    monkeypatch.setattr("astrbot.core.subagent.runtime.logger.warning", _fake_warning)
+    processed = await runtime.process_once(batch_size=8)
+
+    assert processed == 0
+    assert any("task_executor is not set" in item for item in warnings)

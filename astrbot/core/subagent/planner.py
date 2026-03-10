@@ -83,6 +83,7 @@ class SubagentPlanner:
             handoff.provider_id = spec.provider_id
             handoff.agent_display_name = spec.name  # type: ignore[attr-defined]
             handoff.max_steps = spec.max_steps  # type: ignore[attr-defined]
+            handoff.max_steps_unlimited = spec.max_steps is None  # type: ignore[attr-defined]
             handoffs.append(handoff)
             handoff_map[handoff.name] = handoff
 

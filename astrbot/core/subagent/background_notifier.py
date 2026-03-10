@@ -9,10 +9,19 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
+from astrbot.core.subagent.constants import DEFAULT_MAX_STEPS
 from astrbot.core.utils.history_saver import persist_agent_history
 
 if T.TYPE_CHECKING:
     from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+def _coerce_positive_int(value: T.Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
 
 
 async def wake_main_agent_for_background_result(
@@ -106,7 +115,11 @@ async def wake_main_agent_for_background_result(
         return
 
     runner = result.agent_runner
-    async for _ in runner.step_until_done(30):
+    max_steps = _coerce_positive_int(
+        provider_settings.get("max_agent_step", DEFAULT_MAX_STEPS),
+        DEFAULT_MAX_STEPS,
+    )
+    async for _ in runner.step_until_done(max_steps):
         pass
     llm_resp = runner.get_final_llm_resp()
     task_meta = extras.get("background_task_result", {})

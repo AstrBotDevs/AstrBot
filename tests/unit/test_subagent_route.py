@@ -73,13 +73,35 @@ async def test_get_subagent_config_returns_compatible_shape(subagent_app):
     assert "agents" in body["data"]
     assert body["data"]["agents"][0]["system_prompt"] == "legacy prompt"
     assert "compat_warnings" in body["data"]
+    assert "runtime" in body["data"]
+    assert "worker" in body["data"]
+    assert "execution" in body["data"]
 
 
 @pytest.mark.asyncio
-async def test_post_subagent_config_returns_diagnostics_and_compat_warnings(subagent_app):
+async def test_post_subagent_config_returns_diagnostics_and_compat_warnings(
+    subagent_app,
+):
     app, lifecycle, astrbot_config = subagent_app
     payload = {
         "enable": True,
+        "runtime": {
+            "max_attempts": 4,
+            "base_delay_ms": 600,
+            "max_delay_ms": 9000,
+            "jitter_ratio": 0.25,
+        },
+        "worker": {
+            "poll_interval": 2.0,
+            "batch_size": 5,
+            "error_retry_max_interval": 16.0,
+        },
+        "execution": {
+            "computer_use_runtime": "local",
+            "default_max_steps": 12,
+            "streaming_response": False,
+            "tool_call_timeout": 88,
+        },
         "agents": [
             {
                 "name": "writer",
@@ -99,6 +121,10 @@ async def test_post_subagent_config_returns_diagnostics_and_compat_warnings(suba
     assert any("legacy field" in item for item in body["data"]["compat_warnings"])
     assert astrbot_config.get("_saved") is True
     lifecycle.subagent_orchestrator.reload_from_config.assert_awaited_once()
+    saved_payload = astrbot_config["subagent_orchestrator"]
+    assert saved_payload["runtime"]["max_attempts"] == 4
+    assert saved_payload["worker"]["poll_interval"] == 2.0
+    assert saved_payload["execution"]["tool_call_timeout"] == 88
 
 
 @pytest.mark.asyncio

@@ -3,13 +3,26 @@ from __future__ import annotations
 from typing import Any, Literal, cast
 
 from .constants import (
+    DEFAULT_AGENT_MAX_STEPS,
+    DEFAULT_BASE_DELAY_MS,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_ERROR_RETRY_MAX_INTERVAL,
     DEFAULT_FATAL_EXCEPTION_NAMES,
+    DEFAULT_JITTER_RATIO,
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_MAX_CONCURRENT_TASKS,
+    DEFAULT_MAX_DELAY_MS,
+    DEFAULT_MAX_NESTED_HANDOFF_DEPTH,
+    DEFAULT_POLL_INTERVAL,
     DEFAULT_TRANSIENT_EXCEPTION_NAMES,
 )
 from .models import (
     SubagentAgentSpec,
     SubagentConfig,
     SubagentErrorClassifierConfig,
+    SubagentExecutionConfig,
+    SubagentRuntimeConfig,
+    SubagentWorkerConfig,
     ToolsScope,
 )
 
@@ -25,6 +38,9 @@ _CONFIG_KEYS = {
     "max_concurrent_subagent_runs",
     "max_nested_depth",
     "error_classifier",
+    "runtime",
+    "worker",
+    "execution",
     "diagnostics",
     "compat_warnings",
 }
@@ -62,6 +78,44 @@ def _validate_no_unknown_keys(data: dict[str, Any], allowed: set[str]) -> None:
     if unknown:
         keys = ", ".join(sorted(unknown))
         raise ValueError(f"Unknown subagent config fields: {keys}")
+
+
+def _parse_int(value: Any, *, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"`{field_name}` must be an integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"`{field_name}` must be an integer") from exc
+
+
+def _parse_float(value: Any, *, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"`{field_name}` must be a number")
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"`{field_name}` must be a number") from exc
+
+
+def _parse_optional_int(value: Any, *, field_name: str) -> int | None:
+    if value is None or value == "":
+        return None
+    return _parse_int(value, field_name=field_name)
+
+
+def _parse_optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _parse_agent_max_steps(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    parsed = _parse_int(value, field_name="agents[].max_steps")
+    return parsed if parsed > 0 else None
 
 
 def _infer_tools_scope(item: dict[str, Any]) -> ToolsScope:
@@ -164,9 +218,9 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
                     item.get("instructions", item.get("system_prompt", ""))
                 ).strip(),
                 max_steps=(
-                    int(item["max_steps"])
-                    if item.get("max_steps") is not None
-                    else None
+                    _parse_agent_max_steps(item.get("max_steps"))
+                    if "max_steps" in item
+                    else DEFAULT_AGENT_MAX_STEPS
                 ),
                 extensions=extensions,
             )
@@ -214,6 +268,81 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
         ),
     )
 
+    runtime_raw = raw.get("runtime", {})
+    if runtime_raw is None:
+        runtime_raw = {}
+    if not isinstance(runtime_raw, dict):
+        raise ValueError("`runtime` must be an object")
+    runtime = SubagentRuntimeConfig(
+        max_attempts=_parse_int(
+            runtime_raw.get("max_attempts", DEFAULT_MAX_ATTEMPTS),
+            field_name="runtime.max_attempts",
+        ),
+        base_delay_ms=_parse_int(
+            runtime_raw.get("base_delay_ms", DEFAULT_BASE_DELAY_MS),
+            field_name="runtime.base_delay_ms",
+        ),
+        max_delay_ms=_parse_int(
+            runtime_raw.get("max_delay_ms", DEFAULT_MAX_DELAY_MS),
+            field_name="runtime.max_delay_ms",
+        ),
+        jitter_ratio=_parse_float(
+            runtime_raw.get("jitter_ratio", DEFAULT_JITTER_RATIO),
+            field_name="runtime.jitter_ratio",
+        ),
+    )
+
+    worker_raw = raw.get("worker", {})
+    if worker_raw is None:
+        worker_raw = {}
+    if not isinstance(worker_raw, dict):
+        raise ValueError("`worker` must be an object")
+    worker = SubagentWorkerConfig(
+        poll_interval=_parse_float(
+            worker_raw.get("poll_interval", DEFAULT_POLL_INTERVAL),
+            field_name="worker.poll_interval",
+        ),
+        batch_size=_parse_int(
+            worker_raw.get("batch_size", DEFAULT_BATCH_SIZE),
+            field_name="worker.batch_size",
+        ),
+        error_retry_max_interval=_parse_float(
+            worker_raw.get(
+                "error_retry_max_interval",
+                DEFAULT_ERROR_RETRY_MAX_INTERVAL,
+            ),
+            field_name="worker.error_retry_max_interval",
+        ),
+    )
+
+    execution_raw = raw.get("execution", {})
+    if execution_raw is None:
+        execution_raw = {}
+    if not isinstance(execution_raw, dict):
+        raise ValueError("`execution` must be an object")
+    streaming_response_raw = execution_raw.get("streaming_response")
+    execution = SubagentExecutionConfig(
+        computer_use_runtime=_parse_optional_str(
+            execution_raw.get("computer_use_runtime")
+        ),
+        default_max_steps=_parse_optional_int(
+            execution_raw.get("default_max_steps"),
+            field_name="execution.default_max_steps",
+        ),
+        streaming_response=(
+            _parse_bool(
+                streaming_response_raw,
+                field_name="execution.streaming_response",
+            )
+            if streaming_response_raw is not None
+            else None
+        ),
+        tool_call_timeout=_parse_optional_int(
+            execution_raw.get("tool_call_timeout"),
+            field_name="execution.tool_call_timeout",
+        ),
+    )
+
     extensions = {k: v for k, v in raw.items() if k.startswith("x-")}
     config = SubagentConfig(
         main_enable=main_enable,
@@ -227,9 +356,18 @@ def decode_subagent_config(raw: dict[str, Any]) -> tuple[SubagentConfig, list[st
         ),
         router_system_prompt=str(raw.get("router_system_prompt", "")).strip(),
         agents=agents,
-        max_concurrent_subagent_runs=int(raw.get("max_concurrent_subagent_runs", 8)),
-        max_nested_depth=int(raw.get("max_nested_depth", 2)),
+        max_concurrent_subagent_runs=_parse_int(
+            raw.get("max_concurrent_subagent_runs", DEFAULT_MAX_CONCURRENT_TASKS),
+            field_name="max_concurrent_subagent_runs",
+        ),
+        max_nested_depth=_parse_int(
+            raw.get("max_nested_depth", DEFAULT_MAX_NESTED_HANDOFF_DEPTH),
+            field_name="max_nested_depth",
+        ),
         error_classifier=error_classifier,
+        runtime=runtime,
+        worker=worker,
+        execution=execution,
         extensions=extensions,
     )
     diagnostics.extend(compat_warnings)
@@ -253,6 +391,23 @@ def encode_subagent_config(
             "fatal_exceptions": list(config.error_classifier.fatal_exceptions),
             "transient_exceptions": list(config.error_classifier.transient_exceptions),
             "default_class": str(config.error_classifier.default_class),
+        },
+        "runtime": {
+            "max_attempts": int(config.runtime.max_attempts),
+            "base_delay_ms": int(config.runtime.base_delay_ms),
+            "max_delay_ms": int(config.runtime.max_delay_ms),
+            "jitter_ratio": float(config.runtime.jitter_ratio),
+        },
+        "worker": {
+            "poll_interval": float(config.worker.poll_interval),
+            "batch_size": int(config.worker.batch_size),
+            "error_retry_max_interval": float(config.worker.error_retry_max_interval),
+        },
+        "execution": {
+            "computer_use_runtime": config.execution.computer_use_runtime,
+            "default_max_steps": config.execution.default_max_steps,
+            "streaming_response": config.execution.streaming_response,
+            "tool_call_timeout": config.execution.tool_call_timeout,
         },
         "agents": [],
     }

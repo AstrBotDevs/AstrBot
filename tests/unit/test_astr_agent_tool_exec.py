@@ -288,6 +288,118 @@ async def test_execute_handoff_forwards_run_context_tool_call_timeout():
 
 
 @pytest.mark.asyncio
+async def test_execute_handoff_prefers_subagent_execution_overrides():
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    orchestrator = SimpleNamespace(
+        get_config=lambda: SimpleNamespace(
+            execution=SimpleNamespace(
+                computer_use_runtime="none",
+                default_max_steps=17,
+                streaming_response=True,
+                tool_call_timeout=555,
+            )
+        ),
+        get_max_nested_depth=lambda: 2,
+    )
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                "max_agent_step": 30,
+                "streaming_response": False,
+                "tool_call_timeout": 60,
+            }
+        },
+        subagent_orchestrator=orchestrator,
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=context),
+        tool_call_timeout=321,
+    )
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        max_steps=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in HandoffExecutor.execute_foreground(
+        tool,
+        run_context,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["max_steps"] == 17
+    assert captured["tool_call_timeout"] == 555
+    assert captured["stream"] is True
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_allows_unlimited_max_steps_override():
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {"max_agent_step": 30}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        max_steps=None,
+        max_steps_unlimited=True,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in HandoffExecutor.execute_foreground(
+        tool,
+        run_context,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["max_steps"] is None
+
+
+@pytest.mark.asyncio
 async def test_execute_queued_task_uses_prepared_image_urls_and_notifies(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -589,7 +701,11 @@ async def test_wake_main_agent_for_background_result_uses_background_overrides(
     captured: dict = {}
 
     class _Runner:
+        def __init__(self):
+            self.max_steps = None
+
         async def step_until_done(self, _max_steps):
+            self.max_steps = _max_steps
             if False:
                 yield None
 
@@ -601,12 +717,14 @@ async def test_wake_main_agent_for_background_result_uses_background_overrides(
         _ = plugin_context
         return SimpleNamespace(history='[{"role":"user","content":"hello"}]')
 
+    runner = _Runner()
+
     async def _fake_build_main_agent(*, event, plugin_context, config, req):
         captured["event"] = event
         captured["plugin_context"] = plugin_context
         captured["config"] = config
         captured["req"] = req
-        return SimpleNamespace(agent_runner=_Runner())
+        return SimpleNamespace(agent_runner=runner)
 
     async def _fake_persist_agent_history(*args, **kwargs):
         _ = args
@@ -628,6 +746,7 @@ async def test_wake_main_agent_for_background_result_uses_background_overrides(
 
     provider_settings = {
         "tool_call_timeout": 123,
+        "max_agent_step": 41,
         "streaming_response": False,
         "computer_use_runtime": "none",
         "proactive_capability": {"add_cron_tools": False},
@@ -664,6 +783,7 @@ async def test_wake_main_agent_for_background_result_uses_background_overrides(
         "Below is your and the user's previous conversation history:"
         in captured["req"].system_prompt
     )
+    assert runner.max_steps == 41
 
 
 @pytest.mark.asyncio

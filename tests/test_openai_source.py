@@ -380,3 +380,25 @@ async def test_handle_api_error_unknown_image_error_raises():
             )
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_prepare_chat_payload_sanitizes_empty_tool_calls_and_orphan_tool_messages():
+    provider = _make_provider()
+    try:
+        payloads, _context_query = await provider._prepare_chat_payload(
+            prompt=None,
+            contexts=[
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "tool_calls": []},
+                {"role": "tool", "tool_call_id": "call_1", "content": "orphan"},
+                {"role": "assistant", "content": "world"},
+            ],
+        )
+
+        assert payloads["messages"] == [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "world"},
+        ]
+    finally:
+        await provider.terminate()

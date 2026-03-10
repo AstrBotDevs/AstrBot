@@ -40,10 +40,25 @@ class SubAgentOrchestrator:
         self._runtime = SubagentRuntime(db=db)
         self._runtime.set_task_executor(self._execute_background_task)
         self._worker = SubagentWorker(self._runtime)
+        self._apply_runtime_settings(self._config)
         self.handoffs: list[HandoffTool] = []
 
     def bind_context(self, context) -> None:
         self._context = context
+
+    def _apply_runtime_settings(self, config: SubagentConfig) -> None:
+        self._runtime.set_max_concurrent(config.max_concurrent_subagent_runs)
+        self._runtime.configure_retry_policy(
+            max_attempts=config.runtime.max_attempts,
+            base_delay_ms=config.runtime.base_delay_ms,
+            max_delay_ms=config.runtime.max_delay_ms,
+            jitter_ratio=config.runtime.jitter_ratio,
+        )
+        self._worker.configure(
+            poll_interval=config.worker.poll_interval,
+            batch_size=config.worker.batch_size,
+            error_retry_max_interval=config.worker.error_retry_max_interval,
+        )
 
     @staticmethod
     def _build_handoff_snapshot(handoff: HandoffTool) -> dict[str, Any]:
@@ -83,6 +98,7 @@ class SubAgentOrchestrator:
             if isinstance(max_steps_raw, int) and max_steps_raw > 0
             else None
         )
+        max_steps_unlimited = bool(getattr(handoff, "max_steps_unlimited", False))
         provider_id_raw = getattr(handoff, "provider_id", None)
         provider_id = (
             str(provider_id_raw).strip()
@@ -111,6 +127,7 @@ class SubAgentOrchestrator:
             "begin_dialogs": serialized_dialogs,
             "provider_id": provider_id,
             "max_steps": max_steps,
+            "max_steps_unlimited": max_steps_unlimited,
             "tool_description": tool_description,
         }
 
@@ -133,7 +150,7 @@ class SubAgentOrchestrator:
             return self._mount_plan.diagnostics
 
         self._config = canonical
-        self._runtime.set_max_concurrent(canonical.max_concurrent_subagent_runs)
+        self._apply_runtime_settings(canonical)
         classifier, classifier_diagnostics = build_error_classifier_from_config(
             canonical.error_classifier
         )
@@ -188,7 +205,7 @@ class SubAgentOrchestrator:
                 "role": getattr(event, "role", None),
                 "background_note": background_note,
                 "tool_call_timeout": int(
-                    getattr(run_context, "tool_call_timeout", 3600)
+                    getattr(run_context, "tool_call_timeout", 600)
                 ),
                 "subagent_handoff_depth": int(subagent_handoff_depth or 0),
             },

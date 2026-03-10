@@ -72,6 +72,19 @@ class SubagentRuntime:
             MIN_CONCURRENT_TASKS, min(int(value), MAX_CONCURRENT_TASKS)
         )
 
+    def configure_retry_policy(
+        self,
+        *,
+        max_attempts: int,
+        base_delay_ms: int,
+        max_delay_ms: int,
+        jitter_ratio: float,
+    ) -> None:
+        self._max_attempts = max(MIN_ATTEMPTS, int(max_attempts))
+        self._base_delay_ms = max(MIN_BASE_DELAY_MS, int(base_delay_ms))
+        self._max_delay_ms = max(self._base_delay_ms, int(max_delay_ms))
+        self._jitter_ratio = max(0.0, min(float(jitter_ratio), 1.0))
+
     def set_task_executor(
         self,
         executor: Callable[[SubagentTaskData], Awaitable[str]],
@@ -133,6 +146,9 @@ class SubagentRuntime:
         if not self._db:
             return 0
         if not self._task_executor:
+            logger.warning(
+                "[SubagentRuntime] task_executor is not set, skipping process_once."
+            )
             return 0
         if not self._running_recovery_done:
             try:
