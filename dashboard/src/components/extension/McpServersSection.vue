@@ -238,6 +238,7 @@
 import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import ItemCard from '@/components/shared/ItemCard.vue';
+import { MCP_TEST_CONNECTION_ERROR_CODES } from '@/constants/mcpTestConnectionErrorCodes';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import {
   askForConfirmation as askForConfirmationDialog,
@@ -477,7 +478,7 @@ export default {
     },
     buildAddServerDialogErrorFeedback(message, errorData = null) {
       const normalizedMessage = String(message || '').trim();
-      if (errorData?.code === 'mcp_stdio_command_not_found') {
+      if (errorData?.code === MCP_TEST_CONNECTION_ERROR_CODES.STDIO_COMMAND_NOT_FOUND) {
         return {
           type: 'error',
           icon: 'mdi-alert-circle',
@@ -491,7 +492,7 @@ export default {
           rawError: errorData.raw_error || ''
         };
       }
-      if (errorData?.code === 'mcp_test_connection_failed') {
+      if (errorData?.code === MCP_TEST_CONNECTION_ERROR_CODES.TEST_CONNECTION_FAILED) {
         const detail = String(errorData.detail || '').trim();
         return {
           type: 'error',

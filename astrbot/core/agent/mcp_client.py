@@ -15,6 +15,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
+from astrbot.dashboard.shared import MCP_STDIO_COMMAND_NOT_FOUND
 
 from .run_context import TContext
 from .tool import FunctionTool
@@ -39,7 +40,7 @@ except (ModuleNotFoundError, ImportError):
 class MCPStdioCommandNotFoundError(Exception):
     """Raised when the configured stdio MCP command cannot be started."""
 
-    code = "mcp_stdio_command_not_found"
+    code = MCP_STDIO_COMMAND_NOT_FOUND
 
     def __init__(
         self, command: str | None, original_error: Exception | None = None

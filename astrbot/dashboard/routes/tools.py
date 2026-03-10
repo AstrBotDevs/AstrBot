@@ -6,6 +6,7 @@ from astrbot.core import logger
 from astrbot.core.agent.mcp_client import MCPStdioCommandNotFoundError, MCPTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
+from astrbot.dashboard.shared import MCP_TEST_CONNECTION_FAILED
 
 from .route import Response, Route, RouteContext
 
@@ -92,7 +93,7 @@ class ToolsRoute(Route):
                 MCP_TEST_CONNECTION_ERROR_MESSAGE,
                 {
                     "error": {
-                        "code": "mcp_test_connection_failed",
+                        "code": MCP_TEST_CONNECTION_FAILED,
                         "detail": msg,
                     }
                 },

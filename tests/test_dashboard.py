@@ -18,6 +18,10 @@ from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.agent import mcp_client as mcp_client_module
+from astrbot.dashboard.shared import (
+    MCP_STDIO_COMMAND_NOT_FOUND,
+    MCP_TEST_CONNECTION_FAILED,
+)
 from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
@@ -307,7 +311,7 @@ async def test_mcp_test_connection_returns_clear_missing_stdio_command_message(
     assert data["message"] == "Unable to test the MCP connection. Review the details below."
     assert data["data"] == {
         "error": {
-            "code": "mcp_stdio_command_not_found",
+            "code": MCP_STDIO_COMMAND_NOT_FOUND,
             "command": "uvx",
             "raw_error": "[Errno 2] 系统找不到指定的文件。",
         }
@@ -349,7 +353,7 @@ async def test_mcp_test_connection_uses_fallback_for_blank_error_message(
     assert data["message"] == "Unable to test the MCP connection."
     assert data["data"] == {
         "error": {
-            "code": "mcp_test_connection_failed",
+            "code": MCP_TEST_CONNECTION_FAILED,
             "detail": "Unable to test the MCP connection.",
         }
     }
