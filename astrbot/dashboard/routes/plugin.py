@@ -5,7 +5,8 @@ import os
 import ssl
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 import aiohttp
 import certifi
@@ -407,6 +408,34 @@ class PluginRoute(Route):
             logger.warning(f"获取插件 Logo 失败: {e}")
             return None
 
+    def _resolve_plugin_dir(self, plugin) -> Path | None:
+        if not plugin.root_dir_name:
+            return None
+
+        base_dir = Path(
+            self.plugin_manager.reserved_plugin_path
+            if plugin.reserved
+            else self.plugin_manager.plugin_store_path
+        )
+        plugin_dir = base_dir / plugin.root_dir_name
+        if not plugin_dir.is_dir():
+            return None
+        return plugin_dir
+
+    def _get_plugin_installed_at(self, plugin) -> str | None:
+        plugin_dir = self._resolve_plugin_dir(plugin)
+        if plugin_dir is None:
+            return None
+
+        try:
+            return datetime.fromtimestamp(
+                plugin_dir.stat().st_mtime,
+                timezone.utc,
+            ).isoformat()
+        except OSError as exc:
+            logger.warning(f"获取插件安装时间失败 {plugin.name}: {exc!s}")
+            return None
+
     async def get_plugins(self):
         _plugin_resp = []
         plugin_name = request.args.get("name")
@@ -432,6 +461,7 @@ class PluginRoute(Route):
                 "logo": f"/api/file/{logo_url}" if logo_url else None,
                 "support_platforms": plugin.support_platforms,
                 "astrbot_version": plugin.astrbot_version,
+                "installed_at": self._get_plugin_installed_at(plugin),
             }
             # 检查是否为全空的幽灵插件
             if not any(

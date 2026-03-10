@@ -1,0 +1,43 @@
+name: release
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "docs/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # 运行环境
+    steps:
+      - name: checkout
+        uses: actions/checkout@master
+      - name: nodejs installation
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+      - name: npm install
+        run: npm add -D vitepress
+        working-directory: './docs' # working-directory 指定 shell 命令运行目录
+      - name: npm run build
+        run: npm run docs:build
+        working-directory: './docs'
+      - name: scp
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HOST_NEKO }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORDNEKO }}
+          source: 'docs/.vitepress/dist/*'
+          target: '/tmp/'
+      - name: script
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_NEKO }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORDNEKO }}
+          script: |
+            mkdir -p /root/docker_data/caddy/caddy_data/static_site/abv4/
+            rm -rf /root/docker_data/caddy/caddy_data/static_site/abv4/*
+            mv /tmp/docs/.vitepress/dist/* /root/docker_data/caddy/caddy_data/static_site/abv4/
+            rm -rf /tmp/docs/
