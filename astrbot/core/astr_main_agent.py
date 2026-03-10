@@ -833,6 +833,7 @@ def _apply_sandbox_tools(
 
     from astrbot.core.computer.computer_client import (
         get_default_sandbox_tools,
+        get_sandbox_capabilities,
         get_sandbox_prompt_parts,
         get_sandbox_tools,
     )
@@ -849,12 +850,15 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool)
 
     booter_type = config.sandbox_cfg.get("booter", "shipyard_neo")
+    capabilities = get_sandbox_capabilities(session_id) if source == "booted" else None
+    capability_value = list(capabilities) if capabilities is not None else "unknown"
     logger.info(
-        "[Computer] _apply_sandbox_tools: booter=%s, source=%s, tools=%d, session=%s",
+        "[Computer] sandbox_tool_binding target=main booter=%s source=%s tools=%d session=%s capabilities=%s",
         booter_type,
         source,
         len(tools),
         session_id,
+        capability_value,
     )
 
     # Prompts: shared sandbox prompt + booter-specific parts

@@ -182,6 +182,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if runtime == "sandbox":
             from astrbot.core.computer.computer_client import (
                 get_default_sandbox_tools,
+                get_sandbox_capabilities,
                 get_sandbox_tools,
             )
 
@@ -193,12 +194,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tools = get_default_sandbox_tools(sandbox_cfg or {})
                 source = "default"
             result = {t.name: t for t in tools} if tools else {}
+            capabilities = (
+                get_sandbox_capabilities(session_id)
+                if source == "booted" and session_id
+                else None
+            )
             logger.info(
-                "[Computer] Subagent handoff: runtime=%s, source=%s, tools=%d, session=%s",
+                "[Computer] sandbox_tool_binding target=subagent runtime=%s source=%s tools=%d session=%s capabilities=%s",
                 runtime,
                 source,
                 len(result),
                 session_id,
+                list(capabilities) if capabilities is not None else "unknown",
             )
             return result
         if runtime == "local":

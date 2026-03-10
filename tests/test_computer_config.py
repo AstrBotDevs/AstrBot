@@ -113,7 +113,7 @@ class TestDiscoverBayCredentials:
         assert result == "sk-bay-mismatch"
         mock_logger.warning.assert_called_once()
         warning_msg = mock_logger.warning.call_args[0][0]
-        assert "endpoint mismatch" in warning_msg
+        assert "bay_credentials_mismatch" in warning_msg
 
     def test_endpoint_match_no_warning(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
