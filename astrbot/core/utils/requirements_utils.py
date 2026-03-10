@@ -354,7 +354,16 @@ def _load_requirement_lines_for_precheck(
         (
             line
             for line in requirement_lines
-            if _requirement_line_needs_precheck_fallback(line)
+            if (
+                (
+                    line.startswith(("-e ", "--editable ", "--editable="))
+                    and "#egg=" not in line
+                )
+                or (
+                    _parse_requirement_line(line) is None
+                    and looks_like_direct_reference(line)
+                )
+            )
         ),
         None,
     )

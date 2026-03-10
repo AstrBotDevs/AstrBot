@@ -40,7 +40,8 @@ def _resolve_core_dist_name(core_dist_name: str | None) -> str | None:
         except Exception:
             continue
         if top_pkg in top_level.splitlines():
-            return dist.metadata["Name"]
+            if "Name" in dist.metadata:
+                return dist.metadata["Name"]
 
     return None
 

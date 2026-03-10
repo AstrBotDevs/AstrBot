@@ -74,6 +74,39 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
         core_constraints_module._get_core_constraints.cache_clear()
 
 
+def test_resolve_core_dist_name_skips_distribution_without_name(monkeypatch):
+    class NamelessDistribution:
+        metadata = {}
+
+        def read_text(self, name):
+            if name == "top_level.txt":
+                return "astrbot\n"
+            return ""
+
+    class NamedDistribution:
+        metadata = {"Name": "AstrBot-App"}
+
+        def read_text(self, name):
+            if name == "top_level.txt":
+                return "astrbot\n"
+            return ""
+
+    monkeypatch.setattr(
+        core_constraints_module.importlib_metadata,
+        "distribution",
+        lambda name: (_ for _ in ()).throw(
+            core_constraints_module.importlib_metadata.PackageNotFoundError
+        ),
+    )
+    monkeypatch.setattr(
+        core_constraints_module.importlib_metadata,
+        "distributions",
+        lambda: [NamelessDistribution(), NamedDistribution()],
+    )
+
+    assert core_constraints_module._resolve_core_dist_name(None) == "AstrBot-App"
+
+
 def test_find_missing_requirements_returns_none_when_precheck_gate_fails(
     monkeypatch,
     tmp_path,
@@ -130,3 +163,24 @@ def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
     assert missing is None
     assert any(str(requirements_path) in log for log in warning_logs)
     assert any("direct reference" in log for log in warning_logs)
+
+
+def test_load_requirement_lines_for_precheck_uses_parse_requirement_line_result(
+    monkeypatch,
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("git+https://example.com/demo.git\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        requirements_utils,
+        "_parse_requirement_line",
+        lambda line: ("demo-package", None) if line.startswith("git+") else None,
+    )
+
+    can_precheck, requirement_lines = (
+        requirements_utils._load_requirement_lines_for_precheck(str(requirements_path))
+    )
+
+    assert can_precheck is True
+    assert requirement_lines == ["git+https://example.com/demo.git"]
