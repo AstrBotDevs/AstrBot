@@ -440,8 +440,10 @@ class ToolsRoute(Route):
                 if isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
-                    # Add original tool name for MCP tools
-                    display_name = getattr(tool, "original_tool_name", tool.name)
+                    # Format: <ServerName>_<ToolName> for MCP tools
+                    # Normalize server name for display
+                    normalized_server = tool.mcp_server_name.replace(" ", "")
+                    display_name = f"{normalized_server}_{tool.original_tool_name}"
                 elif tool.handler_module_path and star_map.get(
                     tool.handler_module_path
                 ):
@@ -456,7 +458,7 @@ class ToolsRoute(Route):
 
                 tool_info = {
                     "name": tool.name,  # Keep namespaced name for internal use
-                    "display_name": display_name,  # Original name for display
+                    "display_name": display_name,  # Friendly name for display
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,

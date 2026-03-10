@@ -44,7 +44,7 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
             {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
           </v-icon>
           <div>
-            <div class="text-subtitle-1 font-weight-medium">{{ item.name }}</div>
+            <div class="text-subtitle-1 font-weight-medium">{{ item.display_name || item.name }}</div>
           </div>
         </div>
       </template>

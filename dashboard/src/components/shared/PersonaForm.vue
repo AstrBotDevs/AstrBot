@@ -98,7 +98,7 @@
                                                     </template>
 
                                                     <v-list-item-title>
-                                                        {{ item.name }}
+                                                        {{ item.display_name || item.name }}
 
                                                         <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
                                                             variant="tonal">
@@ -158,7 +158,7 @@
                                             <v-chip v-for="toolName in personaForm.tools" :key="toolName" size="small"
                                                 color="primary" variant="tonal" closable
                                                 @click:close="removeTool(toolName)">
-                                                {{ toolName }}
+                                                {{ getToolDisplayName(toolName) }}
                                             </v-chip>
                                         </div>
                                         <div v-else class="text-body-2 text-medium-emphasis">
@@ -818,6 +818,12 @@ export default {
             // 检查服务器的所有工具是否都已选中
             return Array.isArray(this.personaForm.tools) &&
                 server.tools.every(toolName => this.personaForm.tools.includes(toolName));
+        },
+
+        getToolDisplayName(toolName) {
+            // Find tool in availableTools and return display_name if available
+            const tool = this.availableTools.find(t => t.name === toolName);
+            return tool?.display_name || toolName;
         }
     }
 }

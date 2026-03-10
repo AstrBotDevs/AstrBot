@@ -380,8 +380,14 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
     ) -> None:
         # Add namespace prefix to avoid conflicts with plugin tools
-        # Format: mcp_<server_name>__<tool_name>
-        namespaced_name = f"mcp_{mcp_server_name}__{mcp_tool.name}"
+        # Normalize server name: remove spaces and special characters
+        normalized_server_name = mcp_server_name.replace(" ", "_").replace("-", "_")
+        # Remove any other special characters, keep only alphanumeric and underscore
+        normalized_server_name = "".join(
+            c for c in normalized_server_name if c.isalnum() or c == "_"
+        )
+        # Format: mcp_<normalized_server_name>__<tool_name>
+        namespaced_name = f"mcp_{normalized_server_name}__{mcp_tool.name}"
 
         super().__init__(
             name=namespaced_name,
