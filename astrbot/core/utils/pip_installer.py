@@ -110,7 +110,8 @@ def _split_package_install_input(raw_input: str) -> list[str]:
 
     - Supports multiline input (one requirement / options per line).
     - Strips inline comments (`# ...`) and empty lines.
-    - Uses shlex so quoting works as in a shell.
+    - Preserves a single valid requirement string, even when it contains spaces.
+    - Falls back to shlex splitting for command-style input and options.
     """
     normalized = raw_input.strip()
     if not normalized:
@@ -121,8 +122,48 @@ def _split_package_install_input(raw_input: str) -> list[str]:
         stripped = _strip_inline_requirement_comment(line)
         if not stripped:
             continue
-        specs.extend(shlex.split(stripped))
+        specs.extend(_split_package_install_line(stripped))
     return specs
+
+
+def _split_package_install_line(line: str) -> list[str]:
+    try:
+        Requirement(line)
+    except InvalidRequirement:
+        return shlex.split(line)
+    return [line]
+
+
+def _extract_requested_requirements_from_package_input(raw_input: str) -> set[str]:
+    normalized = raw_input.strip()
+    if not normalized:
+        return set()
+
+    requirements: set[str] = set()
+    for line in normalized.splitlines():
+        stripped = _strip_inline_requirement_comment(line)
+        if not stripped:
+            continue
+        try:
+            req = Requirement(stripped)
+        except InvalidRequirement:
+            tokens = _split_package_install_line(stripped)
+            if not tokens:
+                continue
+            if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
+                requirement_name = _extract_requirement_name(stripped)
+                if requirement_name:
+                    requirements.add(requirement_name)
+                continue
+            if tokens[0].startswith("-"):
+                continue
+            for token in tokens:
+                requirement_name = _extract_requirement_name(token)
+                if requirement_name:
+                    requirements.add(requirement_name)
+        else:
+            requirements.add(_canonicalize_distribution_name(req.name))
+    return requirements
 
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
@@ -911,10 +952,9 @@ class PipInstaller:
         if package_name:
             package_specs = _split_package_install_input(package_name)
             args.extend(package_specs)
-            for package_spec in package_specs:
-                requirement_name = _extract_requirement_name(package_spec)
-                if requirement_name:
-                    requested_requirements.add(requirement_name)
+            requested_requirements = _extract_requested_requirements_from_package_input(
+                package_name
+            )
         elif requirements_path:
             args.extend(["-r", requirements_path])
             requested_requirements = _extract_requirement_names(requirements_path)
@@ -972,6 +1012,26 @@ class PipInstaller:
                 target_site_packages,
                 requested_requirements,
             )
+        importlib.invalidate_caches()
+
+    def prefer_installed_dependencies(self, requirements_path: str) -> None:
+        """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
+        if not is_packaged_desktop_runtime():
+            return
+
+        target_site_packages = get_astrbot_site_packages_path()
+        if not os.path.isdir(target_site_packages):
+            return
+
+        requested_requirements = _extract_requirement_names(requirements_path)
+        if not requested_requirements:
+            return
+
+        _prepend_sys_path(target_site_packages)
+        _ensure_plugin_dependencies_preferred(
+            target_site_packages,
+            requested_requirements,
+        )
         importlib.invalidate_caches()
 
     async def _run_pip_in_process(self, args: list[str]) -> tuple[int, list[str]]:

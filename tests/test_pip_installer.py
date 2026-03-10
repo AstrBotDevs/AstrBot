@@ -396,10 +396,10 @@ async def test_install_keeps_single_requirement_with_marker_intact(monkeypatch):
     run_pip.assert_awaited_once()
     recorded_args = run_pip.await_args_list[0].args[0]
 
-    assert "install" in recorded_args
-    assert "demo-package" in recorded_args
-    assert ";" in recorded_args
-    assert "python_version" in recorded_args
+    assert recorded_args[0:2] == [
+        "install",
+        "demo-package ; python_version < '4'",
+    ]
 
 
 @pytest.mark.asyncio
@@ -414,9 +414,10 @@ async def test_install_keeps_single_requirement_with_compact_marker_intact(monke
     run_pip.assert_awaited_once()
     recorded_args = run_pip.await_args_list[0].args[0]
 
-    assert "install" in recorded_args
-    assert "demo-package;" in recorded_args
-    assert "python_version" in recorded_args
+    assert recorded_args[0:2] == [
+        "install",
+        'demo-package; python_version < "4"',
+    ]
 
 
 @pytest.mark.asyncio
@@ -431,10 +432,79 @@ async def test_install_keeps_single_requirement_with_version_range_intact(monkey
     run_pip.assert_awaited_once()
     recorded_args = run_pip.await_args_list[0].args[0]
 
-    assert "install" in recorded_args
-    assert "demo-package" in recorded_args
-    assert ">=" in recorded_args
-    assert "1.0," in recorded_args
+    assert recorded_args[0:2] == [
+        "install",
+        "demo-package >= 1.0, < 2.0",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_install_tracks_only_real_requirement_names_for_spaced_single_requirement(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = AsyncMock(return_value=(0, []))
+    ensure_preferred_calls = []
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._prepend_sys_path",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._ensure_plugin_dependencies_preferred",
+        lambda path, requirements: ensure_preferred_calls.append((path, requirements)),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(package_name="demo-package >= 1.0, < 2.0")
+
+    assert ensure_preferred_calls == [
+        (str(site_packages_path), {"demo-package"})
+    ]
+
+
+def test_prefer_installed_dependencies_prefers_modules_for_requirements_in_desktop_runtime(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    site_packages_path.mkdir()
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("demo-package>=1.0\n", encoding="utf-8")
+
+    prepend_calls = []
+    preferred_calls = []
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._prepend_sys_path",
+        lambda path: prepend_calls.append(path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._ensure_plugin_dependencies_preferred",
+        lambda path, requirements: preferred_calls.append((path, requirements)),
+    )
+
+    installer = PipInstaller("")
+    installer.prefer_installed_dependencies(str(requirements_path))
+
+    assert prepend_calls == [str(site_packages_path)]
+    assert preferred_calls == [
+        (str(site_packages_path), {"demo-package"})
+    ]
 
 
 @pytest.mark.asyncio
