@@ -189,6 +189,11 @@ def _guess_extension(mime_type: str, default_extension: str) -> str:
     return default_extension
 
 
+def _estimate_base64_decoded_size(encoded_data: str) -> int:
+    padding = encoded_data.count("=")
+    return max(0, (len(encoded_data) * 3) // 4 - padding)
+
+
 def _split_text_by_length(text: str, limit: int) -> list[str]:
     if len(text) <= limit:
         return [text]
@@ -480,9 +485,7 @@ class WeiboPlatformAdapter(Platform):
                 if attempt >= TOKEN_FETCH_MAX_RETRIES or not exc.retryable:
                     break
             except Exception as exc:
-                last_error = (
-                    exc if isinstance(exc, Exception) else RuntimeError(str(exc))
-                )
+                last_error = exc
                 if attempt >= TOKEN_FETCH_MAX_RETRIES:
                     break
 
@@ -714,6 +717,20 @@ class WeiboPlatformAdapter(Platform):
         if not encoded_data:
             return None, ""
 
+        limit = (
+            MAX_INBOUND_IMAGE_BYTES
+            if default_kind == "image"
+            else MAX_INBOUND_FILE_BYTES
+        )
+        estimated_size = _estimate_base64_decoded_size(encoded_data)
+        if estimated_size > limit:
+            logger.warning(
+                "[微博] 附件预估大小超过限制（%s 字节 > %s 字节）。",
+                estimated_size,
+                limit,
+            )
+            return None, ""
+
         try:
             buffer = base64.b64decode(encoded_data, validate=True)
         except Exception as exc:
@@ -723,11 +740,6 @@ class WeiboPlatformAdapter(Platform):
         filename = _sanitize_filename(
             str(part.get("filename", "")),
             fallback_stem=f"{default_kind}_{uuid.uuid4().hex}",
-        )
-        limit = (
-            MAX_INBOUND_IMAGE_BYTES
-            if default_kind == "image"
-            else MAX_INBOUND_FILE_BYTES
         )
         if len(buffer) > limit:
             logger.warning(

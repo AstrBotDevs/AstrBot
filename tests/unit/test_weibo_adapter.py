@@ -10,6 +10,7 @@ from astrbot.core.platform.manager import BUILTIN_PLATFORM_TYPES
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.weibo.weibo_adapter import (
     WeiboPlatformAdapter,
+    _estimate_base64_decoded_size,
     _normalize_allow_from,
 )
 
@@ -42,6 +43,10 @@ def weibo_adapter(tmp_path: Path) -> WeiboPlatformAdapter:
 
 def test_normalize_allow_from() -> None:
     assert _normalize_allow_from("123, 456\n789") == {"123", "456", "789"}
+
+
+def test_estimate_base64_decoded_size() -> None:
+    assert _estimate_base64_decoded_size(base64.b64encode(b"hello").decode()) == 5
 
 
 @pytest.mark.asyncio
@@ -158,3 +163,40 @@ def test_resolve_inbound_message_id_is_stable_without_message_id(
 
     assert first == second
     assert first.startswith("weibo_inbound_")
+
+
+@pytest.mark.asyncio
+async def test_build_astrbot_message_skips_oversized_attachment(
+    weibo_adapter: WeiboPlatformAdapter,
+) -> None:
+    oversized_binary = b"a" * (5 * 1024 * 1024 + 1)
+    payload = {
+        "messageId": "msg-oversized",
+        "fromUserId": "12345",
+        "timestamp": 1_710_000_000,
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "filename": "huge.bin",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/octet-stream",
+                            "data": base64.b64encode(oversized_binary).decode(),
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+
+    message = await weibo_adapter._build_astrbot_message(
+        {"type": "message", "payload": payload},
+        payload,
+        "msg-oversized",
+    )
+
+    assert message is None
