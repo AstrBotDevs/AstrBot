@@ -100,34 +100,34 @@ export default {
       noticeContent: '',
       noticeType: '',
       lastUpdated: '',
-      refreshInterval: null,
+      refreshTimeout: null,
       isRefreshing: false
     };
   },
 
   mounted() {
     this.lastUpdated = this.t('status.loading');
-    this.fetchData();
+    this.pollData();
     this.fetchNotice();
-    
-    // 设置自动刷新（每60秒）
-    this.refreshInterval = setInterval(() => {
-      this.fetchData();
-    }, 60000);
   },
-  
+
   beforeUnmount() {
     // 清除定时器
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
     }
   },
-  
+
   methods: {
+    async pollData() {
+      await this.fetchData();
+      this.refreshTimeout = setTimeout(() => this.pollData(), 60000);
+    },
+
     async fetchData() {
       this.isRefreshing = true;
       try {
-        const res = await axios.get('/api/stat/get');
+        const res = await axios.get('/api/stat/get', { timeout: 10000 });
         this.stat = res.data.data;
         this.lastUpdated = new Date().toLocaleTimeString();
         console.log('Dashboard data:', this.stat);

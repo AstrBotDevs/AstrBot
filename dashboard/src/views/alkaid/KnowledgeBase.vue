@@ -811,7 +811,7 @@ export default {
             this.importUrl = '';
             this.importing = false;
             if (this.pollingInterval) {
-                clearInterval(this.pollingInterval);
+                clearTimeout(this.pollingInterval);
                 this.pollingInterval = null;
             }
         },
@@ -1047,33 +1047,39 @@ export default {
         },
 
         pollTaskStatus(taskId) {
-            this.pollingInterval = setInterval(async () => {
+            const poll = async () => {
                 try {
-                    const statusResponse = await axios.post(`/api/plug/url_2_kb/status`, { task_id: taskId });
+                    const statusResponse = await axios.post(
+                        `/api/plug/url_2_kb/status`,
+                        { task_id: taskId },
+                        { timeout: 8000 }
+                    );
 
                     const taskData = statusResponse.data;
                     const taskStatus = taskData.status;
 
                     if (taskStatus === 'completed') {
-                        clearInterval(this.pollingInterval);
                         this.pollingInterval = null;
                         this.showSnackbar(this.tm('importFromUrl.uploadingChunks'), 'info');
                         this.handleImportResult(taskData);
                     } else if (taskStatus === 'failed') {
-                        clearInterval(this.pollingInterval);
                         this.pollingInterval = null;
                         const failureReason = taskData.result || 'Unknown reason.';
                         this.showSnackbar(`${this.tm('importFromUrl.importFailed')}: ${failureReason}`, 'error');
                         this.importing = false;
+                    } else {
+                        // 继续轮询
+                        this.pollingInterval = setTimeout(poll, 3000);
                     }
                 } catch (error) {
-                    clearInterval(this.pollingInterval);
                     this.pollingInterval = null;
                     const errorMessage = error.response?.data?.message || error.message || 'An unknown error occurred during polling.';
                     this.showSnackbar(`Polling Error: ${errorMessage}`, 'error');
                     this.importing = false;
                 }
-            }, 3000);
+            };
+            // 开始轮询
+            poll();
         },
 
         async handleImportResult(data) {
@@ -1162,7 +1168,7 @@ export default {
     },
     beforeUnmount() {
         if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
+            clearTimeout(this.pollingInterval);
         }
     },
 }

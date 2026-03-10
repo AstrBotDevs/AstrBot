@@ -237,7 +237,7 @@ export default {
   },
   data() {
     return {
-      refreshInterval: null,
+      refreshTimeout: null,
       mcpServers: [],
       showMcpServerDialog: false,
       selectedMcpServerProvider: 'modelscope',
@@ -282,40 +282,40 @@ export default {
     }
   },
   mounted() {
-    this.getServers();
-    this.refreshInterval = setInterval(() => {
-      this.getServers();
-    }, 5000);
+    this.pollServers();
   },
   unmounted() {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
     }
   },
   methods: {
     openurl(url) {
       window.open(url, '_blank');
     },
-    getServers() {
+    async pollServers() {
+      await this.getServers();
+      this.refreshTimeout = setTimeout(() => this.pollServers(), 5000);
+    },
+    async getServers() {
       this.loadingGettingServers = true;
-      axios.get('/api/tools/mcp/servers')
-        .then(response => {
-          if (response.data.status === 'error') {
-            this.showError(response.data.message || this.tm('messages.getServersError', { error: 'Unknown error' }));
-            return;
+      try {
+        const response = await axios.get('/api/tools/mcp/servers', { timeout: 4000 });
+        if (response.data.status === 'error') {
+          this.showError(response.data.message || this.tm('messages.getServersError', { error: 'Unknown error' }));
+          return;
+        }
+        this.mcpServers = response.data.data || [];
+        this.mcpServers.forEach(server => {
+          if (!this.mcpServerUpdateLoaders[server.name]) {
+            this.mcpServerUpdateLoaders[server.name] = false;
           }
-          this.mcpServers = response.data.data || [];
-          this.mcpServers.forEach(server => {
-            if (!this.mcpServerUpdateLoaders[server.name]) {
-              this.mcpServerUpdateLoaders[server.name] = false;
-            }
-          });
-        })
-        .catch(error => {
-          this.showError(this.tm('messages.getServersError', { error: error.message }));
-        }).finally(() => {
-          this.loadingGettingServers = false;
         });
+      } catch (error) {
+        this.showError(this.tm('messages.getServersError', { error: error.message }));
+      } finally {
+        this.loadingGettingServers = false;
+      }
     },
     validateJson() {
       try {

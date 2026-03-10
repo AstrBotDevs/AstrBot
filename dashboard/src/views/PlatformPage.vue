@@ -243,7 +243,7 @@ export default {
 
       // 平台统计信息
       platformStats: {},
-      statsRefreshInterval: null,
+      statsRefreshTimeout: null,
 
       // 错误详情对话框
       showErrorDialog: false,
@@ -275,19 +275,14 @@ export default {
 
   mounted() {
     this.getConfig();
-    this.getPlatformStats();
-    // 每 10 秒刷新一次平台状态
-    this.statsRefreshInterval = setInterval(() => {
-      this.getPlatformStats();
-    }, 10000);
-    
+    this.pollPlatformStats();
     // 监听语言切换事件，重新加载配置以获取插件的 i18n 数据
     window.addEventListener('astrbot-locale-changed', this.handleLocaleChange);
   },
 
   beforeUnmount() {
-    if (this.statsRefreshInterval) {
-      clearInterval(this.statsRefreshInterval);
+    if (this.statsRefreshTimeout) {
+      clearTimeout(this.statsRefreshTimeout);
     }
     // 移除语言切换事件监听器
     window.removeEventListener('astrbot-locale-changed', this.handleLocaleChange);
@@ -297,6 +292,11 @@ export default {
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
     handleLocaleChange() {
       this.getConfig();
+    },
+
+    async pollPlatformStats() {
+      await this.getPlatformStats();
+      this.statsRefreshTimeout = setTimeout(() => this.pollPlatformStats(), 10000);
     },
 
     // 从工具函数导入
@@ -326,8 +326,9 @@ export default {
       });
     },
 
-    getPlatformStats() {
-      axios.get('/api/platform/stats').then((res) => {
+    async getPlatformStats() {
+      try {
+        const res = await axios.get('/api/platform/stats', { timeout: 8000 });
         if (res.data.status === 'ok') {
           // 将数组转换为以 id 为 key 的对象，方便查找
           const stats = {};
@@ -336,9 +337,9 @@ export default {
           }
           this.platformStats = stats;
         }
-      }).catch((err) => {
+      } catch (err) {
         console.warn('获取平台统计信息失败:', err);
-      });
+      }
     },
 
     getPlatformStat(platformId) {

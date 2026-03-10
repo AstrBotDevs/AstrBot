@@ -4,6 +4,7 @@ import os
 import sys
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -758,3 +759,53 @@ async def test_batch_upload_skills_partial_success(
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
     ]
+
+
+def test_webui_freeze_regression_no_global_sse_autoconnect():
+    header_path = (
+        Path(__file__).resolve().parents[1]
+        / "dashboard"
+        / "src"
+        / "layouts"
+        / "full"
+        / "vertical-header"
+        / "VerticalHeader.vue"
+    )
+    content = header_path.read_text(encoding="utf-8")
+    assert "commonStore.createEventSource();" not in content
+
+
+def test_webui_freeze_regression_polling_uses_settimeout():
+    root = Path(__file__).resolve().parents[1]
+    polling_files = [
+        root
+        / "dashboard"
+        / "src"
+        / "components"
+        / "extension"
+        / "McpServersSection.vue",
+        root / "dashboard" / "src" / "views" / "PlatformPage.vue",
+        root
+        / "dashboard"
+        / "src"
+        / "views"
+        / "dashboards"
+        / "default"
+        / "DefaultDashboard.vue",
+        root
+        / "dashboard"
+        / "src"
+        / "views"
+        / "knowledge-base"
+        / "components"
+        / "DocumentsTab.vue",
+        root / "dashboard" / "src" / "views" / "alkaid" / "KnowledgeBase.vue",
+    ]
+    for file_path in polling_files:
+        content = file_path.read_text(encoding="utf-8")
+        assert "setTimeout(" in content, (
+            f"{file_path} should use setTimeout-based polling"
+        )
+        assert "setInterval(" not in content, (
+            f"{file_path} should not use setInterval-based polling"
+        )
