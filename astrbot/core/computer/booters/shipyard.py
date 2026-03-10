@@ -49,11 +49,15 @@ class ShipyardBooter(ComputerBooter):
             max_session_num=self._session_num,
             session_id=session_id,
         )
-        logger.info(f"Got sandbox ship: {ship.id} for session: {session_id}")
+        logger.info(
+            "[Computer] sandbox_created booter=shipyard ship_id=%s session=%s",
+            ship.id,
+            session_id,
+        )
         self._ship = ship
 
     async def shutdown(self) -> None:
-        logger.info("[Computer] Shipyard booter shutdown.")
+        logger.info("[Computer] booter_shutdown booter=shipyard status=done")
 
     @property
     def fs(self) -> FileSystemComponent:
@@ -70,14 +74,17 @@ class ShipyardBooter(ComputerBooter):
     async def upload_file(self, path: str, file_name: str) -> dict:
         """Upload file to sandbox"""
         result = await self._ship.upload_file(path, file_name)
-        logger.info("[Computer] File uploaded to Shipyard sandbox: %s", file_name)
+        logger.info(
+            "[Computer] file_upload booter=shipyard remote_path=%s",
+            file_name,
+        )
         return result
 
     async def download_file(self, remote_path: str, local_path: str):
         """Download file from sandbox."""
         result = await self._ship.download_file(remote_path, local_path)
         logger.info(
-            "[Computer] File downloaded from Shipyard sandbox: %s -> %s",
+            "[Computer] file_download booter=shipyard remote_path=%s local_path=%s",
             remote_path,
             local_path,
         )
@@ -93,18 +100,21 @@ class ShipyardBooter(ComputerBooter):
             ship_id = self._ship.id
             data = await self._sandbox_client.get_ship(ship_id)
             if not data:
-                logger.info(
-                    "[Computer] Shipyard sandbox health check: id=%s, healthy=False (no data)",
+                logger.debug(
+                    "[Computer] health_check booter=shipyard ship_id=%s healthy=false reason=no_data",
                     ship_id,
                 )
                 return False
             health = bool(data.get("status", 0) == 1)
-            logger.info(
-                "[Computer] Shipyard sandbox health check: id=%s, healthy=%s",
+            logger.debug(
+                "[Computer] health_check booter=shipyard ship_id=%s healthy=%s",
                 ship_id,
                 health,
             )
             return health
-        except Exception as e:
-            logger.error(f"Error checking Shipyard sandbox availability: {e}")
+        except Exception:
+            logger.exception(
+                "[Computer] health_check_failed booter=shipyard ship_id=%s",
+                getattr(getattr(self, "_ship", None), "id", "unknown"),
+            )
             return False

@@ -71,7 +71,7 @@ class MockShipyardSandboxClient:
                 async with session.post(url, data=data) as response:
                     if response.status == 200:
                         logger.info(
-                            "[Computer] File uploaded to Boxlite sandbox: %s",
+                            "[Computer] file_upload booter=boxlite remote_path=%s",
                             remote_path,
                         )
                         return {
@@ -81,6 +81,11 @@ class MockShipyardSandboxClient:
                         }
                     else:
                         error_text = await response.text()
+                        logger.warning(
+                            "[Computer] file_upload_failed booter=boxlite error=http_status status=%s remote_path=%s",
+                            response.status,
+                            remote_path,
+                        )
                         return {
                             "success": False,
                             "error": f"Server returned {response.status}: {error_text}",
@@ -88,30 +93,39 @@ class MockShipyardSandboxClient:
                         }
 
         except aiohttp.ClientError as e:
-            logger.error(f"Failed to upload file: {e}")
+            logger.error("[Computer] file_upload_failed booter=boxlite error=%s", e)
             return {
                 "success": False,
                 "error": f"Connection error: {str(e)}",
                 "message": "File upload failed",
             }
         except asyncio.TimeoutError:
+            logger.warning(
+                "[Computer] file_upload_failed booter=boxlite error=timeout remote_path=%s",
+                remote_path,
+            )
             return {
                 "success": False,
                 "error": "File upload timeout",
                 "message": "File upload failed",
             }
         except FileNotFoundError:
-            logger.error(f"File not found: {path}")
+            logger.error(
+                "[Computer] file_upload_failed booter=boxlite error=file_not_found path=%s",
+                path,
+            )
             return {
                 "success": False,
                 "error": f"File not found: {path}",
                 "message": "File upload failed",
             }
-        except Exception as e:
-            logger.error(f"Unexpected error uploading file: {e}")
+        except Exception as exc:
+            logger.exception(
+                "[Computer] file_upload_failed booter=boxlite error=unexpected"
+            )
             return {
                 "success": False,
-                "error": f"Internal error: {str(e)}",
+                "error": f"Internal error: {str(exc)}",
                 "message": "File upload failed",
             }
 
@@ -120,18 +134,35 @@ class MockShipyardSandboxClient:
         loop = 60
         while loop > 0:
             try:
-                logger.info(
-                    f"Checking health for sandbox {ship_id} on {self.sb_url}..."
+                logger.debug(
+                    "[Computer] health_check booter=boxlite ship_id=%s session=%s endpoint=%s attempt=%s healthy=pending",
+                    ship_id,
+                    session_id,
+                    self.sb_url,
+                    61 - loop,
                 )
                 url = f"{self.sb_url}/health"
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as response:
                         if response.status == 200:
-                            logger.info(f"Sandbox {ship_id} is healthy")
-                return
+                            logger.debug(
+                                "[Computer] health_check booter=boxlite ship_id=%s session=%s endpoint=%s healthy=true",
+                                ship_id,
+                                session_id,
+                                self.sb_url,
+                            )
+                            return
+                await asyncio.sleep(1)
+                loop -= 1
             except Exception:
                 await asyncio.sleep(1)
                 loop -= 1
+        logger.warning(
+            "[Computer] health_check_timeout booter=boxlite ship_id=%s session=%s endpoint=%s",
+            ship_id,
+            session_id,
+            self.sb_url,
+        )
 
 
 class BoxliteBooter(ComputerBooter):
@@ -151,7 +182,8 @@ class BoxliteBooter(ComputerBooter):
 
     async def boot(self, session_id: str) -> None:
         logger.info(
-            f"Booting(Boxlite) for session: {session_id}, this may take a while..."
+            "[Computer] booter_boot booter=boxlite session=%s status=starting",
+            session_id,
         )
         random_port = random.randint(20000, 30000)
         self.box = boxlite.SimpleBox(
@@ -166,7 +198,11 @@ class BoxliteBooter(ComputerBooter):
             ],
         )
         await self.box.start()
-        logger.info(f"Boxlite booter started for session: {session_id}")
+        logger.info(
+            "[Computer] booter_boot booter=boxlite session=%s status=ready ship_id=%s",
+            session_id,
+            self.box.id,
+        )
         self.mocked = MockShipyardSandboxClient(
             sb_url=f"http://127.0.0.1:{random_port}"
         )
@@ -189,9 +225,15 @@ class BoxliteBooter(ComputerBooter):
         await self.mocked.wait_healthy(self.box.id, session_id)
 
     async def shutdown(self) -> None:
-        logger.info(f"Shutting down Boxlite booter for ship: {self.box.id}")
+        logger.info(
+            "[Computer] booter_shutdown booter=boxlite ship_id=%s status=starting",
+            self.box.id,
+        )
         self.box.shutdown()
-        logger.info(f"Boxlite booter for ship: {self.box.id} stopped")
+        logger.info(
+            "[Computer] booter_shutdown booter=boxlite ship_id=%s status=done",
+            self.box.id,
+        )
 
     @property
     def fs(self) -> FileSystemComponent:
