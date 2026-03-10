@@ -2,9 +2,9 @@ name: release
 
 on:
   push:
-    branches: ["master"]
-    paths:
-      - "docs/**"
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
