@@ -26,6 +26,23 @@ _DISTLIB_FINDER_PATCH_ATTEMPTED = False
 _SITE_PACKAGES_IMPORT_LOCK = threading.RLock()
 
 
+class DependencyConflictError(Exception):
+    """Raised when pip encounters a dependency conflict."""
+
+    def __init__(
+        self, message: str, errors: list[str], *, is_core_conflict: bool
+    ) -> None:
+        super().__init__(message)
+        self.errors = errors
+        self.is_core_conflict = is_core_conflict
+
+
+class RequirementsPrecheckFailed(Exception):
+    """Raised when the pre-check of requirements fails."""
+
+    pass
+
+
 def _canonicalize_distribution_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).strip("-").lower()
 
@@ -47,127 +64,16 @@ def _get_pip_main():
     return pip_main
 
 
-class DependencyConflictError(Exception):
-    """Raised when pip encounters a dependency conflict."""
-
-    def __init__(
-        self, message: str, errors: list[str], *, is_core_conflict: bool
-    ) -> None:
-        super().__init__(message)
-        self.errors = errors
-        self.is_core_conflict = is_core_conflict
+def _strip_inline_requirement_comment(raw_input: str) -> str:
+    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
 
 
-class RequirementsPrecheckFailed(Exception):
-    """Raised when the pre-check of requirements fails."""
-
-    pass
-
-
-class _StreamingLogWriter(io.TextIOBase):
-    def __init__(self, log_func) -> None:
-        self._log_func = log_func
-        self.lines: list[str] = []
-
-    def write(self, text: str) -> int:
-        if not text:
-            return 0
-
-        for raw_line in text.splitlines():
-            line = raw_line.rstrip("\r\n")
-            if not line.strip():
-                continue
-            self._log_func(line)
-            self.lines.append(line)
-        return len(text)
-
-    def flush(self) -> None:
-        pass
-
-
-def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
-    stream = _StreamingLogWriter(logger.info)
-    with (
-        contextlib.redirect_stdout(stream),
-        contextlib.redirect_stderr(stream),
-    ):
-        result_code = pip_main(args)
-    return result_code, stream.lines
-
-
-def _classify_pip_failure(lines: list[str]) -> DependencyConflictError | None:
-    error_lines = [
-        line
-        for line in lines
-        if line.startswith("ERROR:")
-        or "The user requested" in line
-        or "ResolutionImpossible" in line
+def _prepend_sys_path(path: str) -> None:
+    normalized_target = os.path.realpath(path)
+    sys.path[:] = [
+        item for item in sys.path if os.path.realpath(item) != normalized_target
     ]
-    if not error_lines:
-        return None
-
-    is_conflict = any(
-        "conflict" in line.lower() or "resolutionimpossible" in line.lower()
-        for line in error_lines
-    )
-    if not is_conflict:
-        return None
-
-    is_core_conflict = any("(constraint)" in line for line in error_lines)
-
-    constraints = [line.strip() for line in error_lines if "(constraint)" in line]
-    requested = [
-        line.strip()
-        for line in error_lines
-        if "The user requested" in line and "(constraint)" not in line
-    ]
-
-    detail = ""
-    if constraints and requested:
-        detail = (
-            " 冲突详情: "
-            f"{requested[0].removeprefix('The user requested ')} vs "
-            f"{constraints[0].removeprefix('The user requested ')}。"
-        )
-
-    if is_core_conflict:
-        message = (
-            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
-            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
-        )
-    else:
-        message = f"检测到依赖冲突。{detail}"
-
-    return DependencyConflictError(
-        message, error_lines, is_core_conflict=is_core_conflict
-    )
-
-
-@contextlib.contextmanager
-def _core_constraints_file() -> Iterator[str | None]:
-    constraints = _get_core_constraints()
-    if not constraints:
-        yield None
-        return
-
-    path: str | None = None
-    try:
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
-        ) as f:
-            f.write("\n".join(constraints))
-            path = f.name
-        logger.info("已启用核心依赖版本保护 (%d 个约束)", len(constraints))
-        yield path
-    except Exception as exc:
-        logger.warning("创建临时约束文件失败: %s", exc)
-        yield None
-    finally:
-        if path and os.path.exists(path):
-            with contextlib.suppress(Exception):
-                os.remove(path)
+    sys.path.insert(0, normalized_target)
 
 
 def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> None:
@@ -181,151 +87,7 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
-def _prepend_sys_path(path: str) -> None:
-    normalized_target = os.path.realpath(path)
-    sys.path[:] = [
-        item for item in sys.path if os.path.realpath(item) != normalized_target
-    ]
-    sys.path.insert(0, normalized_target)
-
-
-def _module_exists_in_site_packages(module_name: str, site_packages_path: str) -> bool:
-    base_path = os.path.join(site_packages_path, *module_name.split("."))
-    package_init = os.path.join(base_path, "__init__.py")
-    module_file = f"{base_path}.py"
-    return os.path.isfile(package_init) or os.path.isfile(module_file)
-
-
-def _is_module_loaded_from_site_packages(
-    module_name: str,
-    site_packages_path: str,
-) -> bool:
-    module = sys.modules.get(module_name)
-    if module is None:
-        try:
-            module = importlib.import_module(module_name)
-        except Exception:
-            return False
-
-    module_file = getattr(module, "__file__", None)
-    if not module_file:
-        return False
-
-    module_path = os.path.realpath(module_file)
-    site_packages_real = os.path.realpath(site_packages_path)
-    try:
-        return (
-            os.path.commonpath([module_path, site_packages_real]) == site_packages_real
-        )
-    except ValueError:
-        return False
-
-
-def _extract_requirement_name(raw_requirement: str) -> str | None:
-    line = raw_requirement.split("#", 1)[0].strip()
-    if not line:
-        return None
-    if line.startswith(("-r", "--requirement", "-c", "--constraint")):
-        return None
-
-    egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
-    if egg_match:
-        return _canonicalize_distribution_name(egg_match.group(1))
-
-    if line.startswith("-"):
-        return None
-
-    candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
-    if not candidate:
-        return None
-    return _canonicalize_distribution_name(candidate)
-
-
-def _extract_requirement_names(requirements_path: str) -> set[str]:
-    names: set[str] = set()
-    try:
-        for requirement_name, _ in _iter_requirement_specs(requirements_path):
-            names.add(requirement_name)
-    except Exception as exc:
-        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
-    return names
-
-
-def _iter_requirement_tokens(
-    requirements_path: str,
-    *,
-    _visited_paths: set[str] | None = None,
-) -> Iterator[tuple[list[str], str]]:
-    visited_paths = _visited_paths or set()
-    resolved_path = os.path.realpath(requirements_path)
-    if resolved_path in visited_paths:
-        logger.warning(
-            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
-        )
-        return
-    visited_paths.add(resolved_path)
-
-    with open(resolved_path, encoding="utf-8") as requirements_file:
-        for raw_line in requirements_file:
-            line = _strip_inline_requirement_comment(raw_line)
-            if not line or line.startswith("#"):
-                continue
-
-            tokens = shlex.split(line)
-            if not tokens:
-                continue
-
-            nested_path: str | None = None
-            if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
-                nested_path = tokens[1]
-            elif tokens[0].startswith("--requirement="):
-                nested_path = tokens[0].split("=", 1)[1]
-
-            if nested_path:
-                if not os.path.isabs(nested_path):
-                    nested_path = os.path.join(
-                        os.path.dirname(resolved_path), nested_path
-                    )
-                yield from _iter_requirement_tokens(
-                    nested_path, _visited_paths=visited_paths
-                )
-                continue
-
-            yield tokens, line
-
-
-def _iter_requirement_specs(
-    requirements_path: str,
-) -> Iterator[tuple[str, SpecifierSet | None]]:
-    for tokens, line in _iter_requirement_tokens(requirements_path):
-        # constraints and pure options
-        if tokens[0] in {"-c", "--constraint"}:
-            continue
-
-        if tokens[0].startswith("-"):
-            requirement_name = _extract_requirement_name(line)
-            if requirement_name:
-                yield requirement_name, None
-            continue
-
-        try:
-            # Use the original line to preserve quotes for markers
-            requirement = Requirement(line)
-            if requirement.marker and not requirement.marker.evaluate():
-                continue
-            yield (
-                _canonicalize_distribution_name(requirement.name),
-                requirement.specifier,
-            )
-        except InvalidRequirement:
-            requirement_name = _extract_requirement_name(line)
-            if requirement_name:
-                yield requirement_name, None
-            continue
-
-
 def _get_requirement_check_paths() -> list[str]:
-
     paths = list(sys.path)
     if is_packaged_desktop_runtime():
         target_site_packages = get_astrbot_site_packages_path()
@@ -334,67 +96,12 @@ def _get_requirement_check_paths() -> list[str]:
     return paths
 
 
-def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
-    installed: dict[str, str] = {}
-    try:
-        for distribution in importlib_metadata.distributions(path=paths):
-            distribution_name = (
-                distribution.metadata["Name"]
-                if "Name" in distribution.metadata
-                else None
-            )
-            if not distribution_name:
-                continue
-            installed.setdefault(
-                _canonicalize_distribution_name(distribution_name),
-                distribution.version,
-            )
-    except Exception as exc:
-        logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
-        return None
-    return installed
-
-
-def _find_missing_requirements(requirements_path: str) -> set[str] | None:
-    try:
-        required = list(_iter_requirement_specs(requirements_path))
-    except Exception as exc:
-        logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
-        return None
-
-    if not required:
-        return set()
-
-    installed = _collect_installed_distribution_versions(_get_requirement_check_paths())
-    if installed is None:
-        return None
-
-    missing: set[str] = set()
-    for requirement_name, specifier in required:
-        installed_version = installed.get(requirement_name)
-        if not installed_version:
-            missing.add(requirement_name)
-            continue
-
-        if not specifier:
-            continue
-
-        if not _specifier_contains_version(specifier, installed_version):
-            missing.add(requirement_name)
-
-    return missing
-
-
 def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
     try:
         parsed_version = Version(version)
     except InvalidVersion:
         return False
     return specifier.contains(parsed_version, prereleases=True)
-
-
-def _strip_inline_requirement_comment(raw_input: str) -> str:
-    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
 
 
 def _split_package_install_input(raw_input: str) -> list[str]:
@@ -431,31 +138,180 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
     return False
 
 
-def _get_core_constraints() -> list[str]:
-    """
-    Get version constraints for core AstrBot dependencies to prevent downgrades.
-    It attempts to find the AstrBot distribution and its requirements,
-    then matches them with currently installed versions.
-    """
-    constraints = []
-    try:
-        # Robustly find the core distribution name.
-        # It's usually 'AstrBot', but we derive it from the package if possible.
-        core_dist_name = "AstrBot"
-        try:
-            # If we are inside the package, __package__ might help.
-            # Usually top-level is 'astrbot'.
-            if __package__:
-                top_pkg = __package__.split(".")[0]
-                for dist in importlib_metadata.distributions():
-                    # Look for a distribution that provides our top package.
-                    if top_pkg in (dist.read_text("top_level.txt") or "").splitlines():
-                        core_dist_name = dist.metadata["Name"]
-                        break
-        except Exception:
-            pass
+def _extract_requirement_name(raw_requirement: str) -> str | None:
+    line = raw_requirement.split("#", 1)[0].strip()
+    if not line:
+        return None
+    if line.startswith(("-r", "--requirement", "-c", "--constraint")):
+        return None
 
-        dist = None
+    egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
+    if egg_match:
+        return _canonicalize_distribution_name(egg_match.group(1))
+
+    if line.startswith("-"):
+        return None
+
+    candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
+    if not candidate:
+        return None
+    return _canonicalize_distribution_name(candidate)
+
+
+def _iter_requirements(
+    requirements_path: str,
+    _visited: set[str] | None = None,
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    visited = _visited or set()
+    resolved_path = os.path.realpath(requirements_path)
+    if resolved_path in visited:
+        logger.warning(
+            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
+        )
+        return
+    visited.add(resolved_path)
+
+    try:
+        with open(resolved_path, encoding="utf-8") as f:
+            for raw_line in f:
+                # Normalize line and strip comments
+                line = re.split(r"[ \t]+#", raw_line, maxsplit=1)[0].strip()
+                if not line or line.startswith("#"):
+                    continue
+
+                tokens = shlex.split(line)
+                if not tokens:
+                    continue
+
+                # Handle recursion
+                nested: str | None = None
+                if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
+                    nested = tokens[1]
+                elif tokens[0].startswith("--requirement="):
+                    nested = tokens[0].split("=", 1)[1]
+
+                if nested:
+                    if not os.path.isabs(nested):
+                        nested = os.path.join(os.path.dirname(resolved_path), nested)
+                    yield from _iter_requirements(nested, _visited=visited)
+                    continue
+
+                if tokens[0] in {"-c", "--constraint"}:
+                    continue
+
+                if tokens[0].startswith("-"):
+                    name = _extract_requirement_name(line)
+                    if name:
+                        yield name, None
+                    continue
+
+                try:
+                    req = Requirement(line)
+                    if req.marker and not req.marker.evaluate():
+                        continue
+                    yield (
+                        _canonicalize_distribution_name(req.name),
+                        req.specifier or None,
+                    )
+                except InvalidRequirement:
+                    name = _extract_requirement_name(line)
+                    if name:
+                        yield name, None
+    except FileNotFoundError:
+        # Rethrow to allow find_missing_requirements to return None
+        raise
+
+
+def _extract_requirement_names(requirements_path: str) -> set[str]:
+    try:
+        return {name for name, _ in _iter_requirements(requirements_path)}
+    except Exception as exc:
+        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
+        return set()
+
+
+def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
+    installed: dict[str, str] = {}
+    try:
+        for distribution in importlib_metadata.distributions(path=paths):
+            distribution_name = (
+                distribution.metadata["Name"]
+                if "Name" in distribution.metadata
+                else None
+            )
+            if not distribution_name:
+                continue
+            installed.setdefault(
+                _canonicalize_distribution_name(distribution_name),
+                distribution.version,
+            )
+    except Exception as exc:
+        logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
+        return None
+    return installed
+
+
+def _find_missing_requirements(requirements_path: str) -> set[str] | None:
+    try:
+        required = list(_iter_requirements(requirements_path))
+    except Exception as exc:
+        logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
+        return None
+
+    if not required:
+        return set()
+
+    installed = _collect_installed_distribution_versions(_get_requirement_check_paths())
+    if installed is None:
+        return None
+
+    missing: set[str] = set()
+    for name, specifier in required:
+        installed_version = installed.get(name)
+        if not installed_version:
+            missing.add(name)
+            continue
+        if specifier and not _specifier_contains_version(specifier, installed_version):
+            missing.add(name)
+
+    return missing
+
+
+def find_missing_requirements(requirements_path: str) -> set[str] | None:
+    return _find_missing_requirements(requirements_path)
+
+
+def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
+    missing = find_missing_requirements(requirements_path)
+    if missing is None:
+        raise RequirementsPrecheckFailed(f"预检查失败: {requirements_path}")
+    return missing
+
+
+def _get_core_constraints(core_dist_name: str | None) -> list[str]:
+    """
+    Get version constraints for core dependencies to prevent downgrades.
+    """
+    constraints: list[str] = []
+    try:
+        if core_dist_name is None:
+            core_dist_name = "AstrBot"
+            try:
+                importlib_metadata.distribution("AstrBot")
+            except importlib_metadata.PackageNotFoundError:
+                try:
+                    if __package__:
+                        top_pkg = __package__.split(".")[0]
+                        for dist in importlib_metadata.distributions():
+                            if (
+                                top_pkg
+                                in (dist.read_text("top_level.txt") or "").splitlines()
+                            ):
+                                core_dist_name = dist.metadata["Name"]
+                                break
+                except Exception:
+                    pass
+
         try:
             dist = importlib_metadata.distribution(core_dist_name)
         except importlib_metadata.PackageNotFoundError:
@@ -475,7 +331,6 @@ def _get_core_constraints() -> list[str]:
                 req = Requirement(req_str)
                 if req.marker and not req.marker.evaluate():
                     continue
-
                 name = _canonicalize_distribution_name(req.name)
                 if name in installed:
                     constraints.append(f"{name}=={installed[name]}")
@@ -483,8 +338,120 @@ def _get_core_constraints() -> list[str]:
                 continue
     except Exception as exc:
         logger.warning("获取核心依赖约束失败: %s", exc)
-
     return constraints
+
+
+@contextlib.contextmanager
+def _core_constraints_file(core_dist_name: str | None) -> Iterator[str | None]:
+    constraints = _get_core_constraints(core_dist_name)
+    if not constraints:
+        yield None
+        return
+
+    path: str | None = None
+    try:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
+        ) as f:
+            f.write("\n".join(constraints))
+            path = f.name
+        logger.info("已启用核心依赖版本保护 (%d 个约束)", len(constraints))
+        yield path
+    except Exception as exc:
+        logger.warning("创建临时约束文件失败: %s", exc)
+        yield None
+    finally:
+        if path and os.path.exists(path):
+            with contextlib.suppress(Exception):
+                os.remove(path)
+
+
+class _StreamingLogWriter(io.TextIOBase):
+    def __init__(self, log_func) -> None:
+        self._log_func = log_func
+        self._buffer = ""
+        self.lines: list[str] = []
+
+    def write(self, text: str) -> int:
+        if not text:
+            return 0
+
+        self._buffer += text.replace("\r", "\n")
+        while "\n" in self._buffer:
+            raw_line, self._buffer = self._buffer.split("\n", 1)
+            line = raw_line.rstrip("\r\n")
+            if not line:
+                continue
+            self._log_func(line)
+            self.lines.append(line)
+        return len(text)
+
+    def flush(self) -> None:
+        line = self._buffer.rstrip("\r\n")
+        if line:
+            self._log_func(line)
+            self.lines.append(line)
+        self._buffer = ""
+
+
+def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
+    stream = _StreamingLogWriter(logger.info)
+    with (
+        contextlib.redirect_stdout(stream),
+        contextlib.redirect_stderr(stream),
+    ):
+        result_code = pip_main(args)
+    stream.flush()
+    return result_code, stream.lines
+
+
+def _classify_pip_failure(lines: list[str]) -> DependencyConflictError | None:
+    error_lines = [
+        line
+        for line in lines
+        if line.startswith("ERROR:")
+        or "The user requested" in line
+        or "ResolutionImpossible" in line
+    ]
+    if not error_lines:
+        return None
+
+    is_conflict = any(
+        "conflict" in line.lower() or "resolutionimpossible" in line.lower()
+        for line in error_lines
+    )
+    if not is_conflict:
+        return None
+
+    is_core_conflict = any("(constraint)" in line for line in error_lines)
+    constraints = [line.strip() for line in error_lines if "(constraint)" in line]
+    requested = [
+        line.strip()
+        for line in error_lines
+        if "The user requested" in line and "(constraint)" not in line
+    ]
+
+    detail = ""
+    if constraints and requested:
+        detail = (
+            " 冲突详情: "
+            f"{requested[0].removeprefix('The user requested ')} vs "
+            f"{constraints[0].removeprefix('The user requested ')}。"
+        )
+
+    if is_core_conflict:
+        message = (
+            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
+            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+        )
+    else:
+        message = f"检测到依赖冲突。{detail}"
+
+    return DependencyConflictError(
+        message, error_lines, is_core_conflict=is_core_conflict
+    )
 
 
 def _extract_top_level_modules(
@@ -584,6 +551,38 @@ def _ensure_preferred_modules(
             f"冲突模块: {', '.join(unresolved_modules)}"
         )
         raise RuntimeError(conflict_message)
+
+
+def _module_exists_in_site_packages(module_name: str, site_packages_path: str) -> bool:
+    base_path = os.path.join(site_packages_path, *module_name.split("."))
+    package_init = os.path.join(base_path, "__init__.py")
+    module_file = f"{base_path}.py"
+    return os.path.isfile(package_init) or os.path.isfile(module_file)
+
+
+def _is_module_loaded_from_site_packages(
+    module_name: str,
+    site_packages_path: str,
+) -> bool:
+    module = sys.modules.get(module_name)
+    if module is None:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            return False
+
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
+        return False
+
+    module_path = os.path.realpath(module_file)
+    site_packages_real = os.path.realpath(site_packages_path)
+    try:
+        return (
+            os.path.commonpath([module_path, site_packages_real]) == site_packages_real
+        )
+    except ValueError:
+        return False
 
 
 def _prefer_module_from_site_packages(
@@ -886,21 +885,16 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             )
 
 
-def find_missing_requirements(requirements_path: str) -> set[str] | None:
-    return _find_missing_requirements(requirements_path)
-
-
-def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
-    missing = find_missing_requirements(requirements_path)
-    if missing is None:
-        raise RequirementsPrecheckFailed(f"预检查失败: {requirements_path}")
-    return missing
-
-
 class PipInstaller:
-    def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None) -> None:
+    def __init__(
+        self,
+        pip_install_arg: str,
+        pypi_index_url: str | None = None,
+        core_dist_name: str | None = "AstrBot",
+    ) -> None:
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
+        self.core_dist_name = core_dist_name
 
     def _build_pip_args(
         self,
@@ -959,7 +953,7 @@ class PipInstaller:
                 ]
             )
 
-        with _core_constraints_file() as constraints_file_path:
+        with _core_constraints_file(self.core_dist_name) as constraints_file_path:
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 

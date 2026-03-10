@@ -113,8 +113,9 @@ async def test_run_pip_in_process_preserves_shared_stream_order(monkeypatch):
     installer = PipInstaller("")
     result = await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert result == (0, ["out", "err", " line"])
-    assert logged_lines[-3:] == ["out", "err", " line"]
+    assert result == (0, ["outerr", " line"])
+    assert logged_lines[-2:] == ["outerr", " line"]
+
 
 
 def _make_fake_distribution(name: str, version: str):

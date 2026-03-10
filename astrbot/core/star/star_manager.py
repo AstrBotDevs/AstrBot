@@ -242,8 +242,10 @@ class PluginManager:
             raise
         except DependencyConflictError as e:
             logger.error(f"插件 {plugin_label} 依赖冲突: {e!s}")
+            raise
         except Exception as e:
             logger.exception(f"插件 {plugin_label} 依赖安装失败: {e!s}")
+            raise
 
     async def _import_plugin_with_dependency_recovery(
         self,
