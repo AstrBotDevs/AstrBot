@@ -67,7 +67,11 @@ class _StreamingLogWriter(io.TextIOBase):
             if line.strip():
                 if line.startswith("ERROR:"):
                     self.error_lines.append(line)
-                self._log_func(line)
+                    logger.error(line)
+                elif line.startswith("WARNING:"):
+                    logger.warning(line)
+                else:
+                    self._log_func(line)
         return len(text)
 
     def flush(self) -> None:
@@ -76,7 +80,11 @@ class _StreamingLogWriter(io.TextIOBase):
         if line.strip():
             if line.startswith("ERROR:"):
                 self.error_lines.append(line)
-            self._log_func(line)
+                logger.error(line)
+            elif line.startswith("WARNING:"):
+                logger.warning(line)
+            else:
+                self._log_func(line)
         self._buffer = ""
 
 
