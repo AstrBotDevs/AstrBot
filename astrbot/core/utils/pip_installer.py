@@ -594,17 +594,6 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
     )
 
 
-def _coerce_pip_run_result(
-    result: PipRunResult | tuple[int, list[str]],
-) -> PipRunResult:
-    if isinstance(result, PipRunResult):
-        return result
-
-    code, output_lines = result
-    conflict = _classify_pip_failure(output_lines) if code != 0 else None
-    return PipRunResult(code=code, output_lines=output_lines, conflict=conflict)
-
-
 def _extract_top_level_modules(
     distribution: importlib_metadata.Distribution,
 ) -> set[str]:
@@ -1126,7 +1115,7 @@ class PipInstaller:
                 "Pip 包管理器 argv: %s",
                 ["pip", *_redact_pip_args_for_logging(args)],
             )
-            run_result = _coerce_pip_run_result(await self._run_pip_in_process(args))
+            run_result = await self._run_pip_in_process(args)
 
             if run_result.code != 0:
                 if run_result.conflict:

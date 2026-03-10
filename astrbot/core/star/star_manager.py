@@ -56,6 +56,23 @@ class PluginVersionIncompatibleError(Exception):
     """Raised when plugin astrbot_version is incompatible with current AstrBot."""
 
 
+class PluginDependencyInstallError(Exception):
+    """Raised when plugin dependency installation fails."""
+
+    def __init__(
+        self,
+        *,
+        plugin_label: str,
+        requirements_path: str,
+        error: Exception,
+    ) -> None:
+        message = f"插件 {plugin_label} 依赖安装失败: {error!s}"
+        super().__init__(message)
+        self.plugin_label = plugin_label
+        self.requirements_path = requirements_path
+        self.error = error
+
+
 class _RequirementInstallStrategy(Enum):
     FULL_INSTALL = auto()
     SKIP = auto()
@@ -267,8 +284,13 @@ class PluginManager:
             logger.error(f"插件 {plugin_label} 依赖冲突: {e!s}")
             raise
         except Exception as e:
-            logger.exception(f"插件 {plugin_label} 依赖安装失败: {e!s}")
-            raise
+            dependency_error = PluginDependencyInstallError(
+                plugin_label=plugin_label,
+                requirements_path=requirements_path,
+                error=e,
+            )
+            logger.exception(str(dependency_error))
+            raise dependency_error from e
 
     async def _import_plugin_with_dependency_recovery(
         self,

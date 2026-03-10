@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 import pytest
 import yaml
+from astrbot.core.star.star_manager import PluginDependencyInstallError
 from astrbot.core.star.star_manager import PluginManager
 
 # --- Test Data & Helpers ---
@@ -184,7 +185,7 @@ async def test_install_plugin_dependency_install_flow(
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
 
     if dependency_install_fails:
-        with pytest.raises(Exception, match="pip failed"):
+        with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
         assert events == [("deps", str(plugin_path / "requirements.txt"))]
     else:
@@ -224,7 +225,7 @@ async def test_install_plugin_from_file_dependency_install_flow(
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
 
     if dependency_install_fails:
-        with pytest.raises(Exception, match="pip failed"):
+        with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.install_plugin_from_file(str(zip_file_path))
         assert any(e[0] == "deps" for e in events)
     else:
@@ -255,7 +256,7 @@ async def test_reload_failed_plugin_dependency_install_flow(
     monkeypatch.setattr(plugin_manager_pm, "load", mock_load_and_register)
 
     if dependency_install_fails:
-        with pytest.raises(Exception, match="pip failed"):
+        with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.reload_failed_plugin(TEST_PLUGIN_DIR)
         assert events == [("deps", str(local_updator / "requirements.txt"))]
     else:
@@ -289,6 +290,32 @@ async def test_ensure_plugin_requirements_reraises_cancelled_error(
 
 
 @pytest.mark.asyncio
+async def test_ensure_plugin_requirements_wraps_generic_dependency_install_failure(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    _write_requirements(local_updator)
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+
+    async def mock_install_requirements(*args, **kwargs):
+        raise RuntimeError("pip failed")
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+
+    with pytest.raises(PluginDependencyInstallError, match="pip failed") as exc_info:
+        await plugin_manager_pm._ensure_plugin_requirements(
+            str(local_updator),
+            TEST_PLUGIN_DIR,
+        )
+
+    assert exc_info.value.plugin_label == TEST_PLUGIN_DIR
+    assert exc_info.value.requirements_path == str(local_updator / "requirements.txt")
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dependency_install_fails", [False, True])
 async def test_update_plugin_dependency_install_flow(
     plugin_manager_pm: PluginManager,
@@ -315,7 +342,7 @@ async def test_update_plugin_dependency_install_flow(
     monkeypatch.setattr(plugin_manager_pm, "reload", _build_reload_mock(events))
 
     if dependency_install_fails:
-        with pytest.raises(Exception, match="pip failed"):
+        with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
         assert ("deps", str(local_updator / "requirements.txt")) in events
     else:
