@@ -15,7 +15,6 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
-from astrbot.dashboard.shared import MCP_STDIO_COMMAND_NOT_FOUND
 
 from .run_context import TContext
 from .tool import FunctionTool
@@ -35,44 +34,6 @@ except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
     )
-
-
-class MCPStdioCommandNotFoundError(Exception):
-    """Raised when the configured stdio MCP command cannot be started."""
-
-    code = MCP_STDIO_COMMAND_NOT_FOUND
-
-    def __init__(
-        self, command: str | None, original_error: Exception | None = None
-    ) -> None:
-        self.command = str(command or "").strip() or "<unknown>"
-        self.raw_error = str(original_error).strip() if original_error else ""
-        super().__init__(
-            _build_missing_stdio_command_message(self.command, self.raw_error or None)
-        )
-
-    def to_response_data(self) -> dict:
-        return {
-            "error": {
-                "code": self.code,
-                "command": self.command,
-                "raw_error": self.raw_error,
-            }
-        }
-
-
-def _build_missing_stdio_command_message(
-    command: str | None, original_error: str | None = None
-) -> str:
-    normalized_command = str(command or "").strip() or "<unknown>"
-    sections = [
-        "Unable to start the MCP stdio server",
-        f"Command '{normalized_command}' was not found.",
-        "Install the command, or set 'command' to the full executable path and ensure it is available in PATH.",
-    ]
-    if original_error is not None:
-        sections.append(f"Original error: {original_error!s}")
-    return "\n\n".join(sections)
 
 
 def _prepare_config(config: dict) -> dict:
@@ -183,10 +144,14 @@ class MCPClient:
 
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(msg: str) -> None:
+        def logging_callback(
+            msg: str | mcp.types.LoggingMessageNotificationParams,
+        ) -> None:
             # Handle MCP service error logs
-            print(f"MCP Server {name} Error: {msg}")
-            self.server_errlogs.append(msg)
+            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
+                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
+                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                    self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -253,24 +218,30 @@ class MCPClient:
                 **cfg,
             )
 
-            def callback(msg: str) -> None:
+            def callback(msg: str | mcp.types.LoggingMessageNotificationParams) -> None:
                 # Handle MCP service error logs
-                self.server_errlogs.append(msg)
+                if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
+                    if msg.level in (
+                        "warning",
+                        "error",
+                        "critical",
+                        "alert",
+                        "emergency",
+                    ):
+                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
+                        self.server_errlogs.append(log_msg)
 
-            try:
-                stdio_transport = await self.exit_stack.enter_async_context(
-                    mcp.stdio_client(
-                        server_params,
-                        errlog=LogPipe(
-                            level=logging.ERROR,
-                            logger=logger,
-                            identifier=f"MCPServer-{name}",
-                            callback=callback,
-                        ),  # type: ignore
-                    ),
-                )
-            except FileNotFoundError as exc:
-                raise MCPStdioCommandNotFoundError(cfg.get("command"), exc) from exc
+            stdio_transport = await self.exit_stack.enter_async_context(
+                mcp.stdio_client(
+                    server_params,
+                    errlog=LogPipe(
+                        level=logging.INFO,
+                        logger=logger,
+                        identifier=f"MCPServer-{name}",
+                        callback=callback,
+                    ),  # type: ignore
+                ),
+            )
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
