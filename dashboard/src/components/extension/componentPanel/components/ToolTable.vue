@@ -85,7 +85,10 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
       <template #item.name="{ item }">
         <div class="py-2">
           <div class="d-flex flex-wrap align-center ga-1">
-            <div class="tool-name text-body-2 font-weight-medium">{{ item.name }}</div>
+            <v-icon color="primary" class="mr-1" size="18">
+              {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+            </v-icon>
+            <div class="tool-name text-body-2 font-weight-medium">{{ item.display_name || item.name }}</div>
             <v-tooltip
               v-for="tag in enabledConfigTags(item)"
               :key="`${item.name}-${tag.conf_id}`"

@@ -115,7 +115,7 @@
                                                                 </template>
 
                                                                 <v-list-item-title>
-                                                                    {{ item.name }}
+                                                                    {{ item.display_name || item.name }}
 
                                                                     <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
                                                                         variant="tonal">
@@ -191,7 +191,7 @@
                                                         :closable="!isBuiltinToolName(toolName)"
                                                         @click:close="removeTool(toolName)"
                                                     >
-                                                        {{ toolName }}
+                                                        {{ getToolDisplayName(toolName) }}
                                                     </v-chip>
                                                 </template>
                                                 <span>{{ tm('form.builtinToolDisabledHint') }}</span>
@@ -868,6 +868,12 @@ export default {
             // 检查服务器的所有工具是否都已选中
             return Array.isArray(this.personaForm.tools) &&
                 server.tools.every(toolName => this.personaForm.tools.includes(toolName));
+        },
+
+        getToolDisplayName(toolName) {
+            // Find tool in availableTools and return display_name if available
+            const tool = this.availableTools.find(t => t.name === toolName);
+            return tool?.display_name || toolName;
         }
     }
 }
