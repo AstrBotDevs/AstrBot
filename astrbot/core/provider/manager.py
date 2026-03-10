@@ -331,29 +331,9 @@ class ProviderManager:
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
-        # Initialize MCP clients in background after providers are loaded.
-        # This avoids blocking startup when MCP endpoints are slow or unavailable.
-        strict_mcp_init = os.getenv("ASTRBOT_MCP_INIT_STRICT", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-
         async def _init_mcp_clients_bg() -> None:
             try:
-                mcp_init_summary = await self.llm_tools.init_mcp_clients(
-                    raise_on_all_failed=strict_mcp_init
-                )
-                if (
-                    mcp_init_summary.total > 0
-                    and mcp_init_summary.success == 0
-                    and not strict_mcp_init
-                ):
-                    logger.warning(
-                        "MCP 服务全部初始化失败，系统将继续启动（可设置 "
-                        "ASTRBOT_MCP_INIT_STRICT=1 以在此场景下中止启动）。"
-                    )
+                await self.llm_tools.init_mcp_clients()
             except Exception:
                 logger.error("MCP 后台初始化失败", exc_info=True)
 
