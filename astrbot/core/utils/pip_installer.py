@@ -47,35 +47,36 @@ def _get_pip_main():
     return pip_main
 
 
+class DependencyConflictError(Exception):
+    """Raised when pip encounters a dependency conflict."""
+
+    def __init__(
+        self, message: str, errors: list[str], *, is_core_conflict: bool
+    ) -> None:
+        super().__init__(message)
+        self.errors = errors
+        self.is_core_conflict = is_core_conflict
+
+
 class _StreamingLogWriter(io.TextIOBase):
     def __init__(self, log_func) -> None:
         self._log_func = log_func
-        self._buffer = ""
         self.lines: list[str] = []
 
     def write(self, text: str) -> int:
         if not text:
             return 0
 
-        # Normalize Windows newlines to Unix style but preserve other whitespace
-        self._buffer += text.replace("\r", "\n")
-        while "\n" in self._buffer:
-            raw_line, self._buffer = self._buffer.split("\n", 1)
-            # Ensure any trailing newline characters are removed without
-            # touching other leading/trailing whitespace
+        for raw_line in text.splitlines():
             line = raw_line.rstrip("\r\n")
-            if line.strip():
-                self._log_func(line)
-                self.lines.append(line)
+            if not line.strip():
+                continue
+            self._log_func(line)
+            self.lines.append(line)
         return len(text)
 
     def flush(self) -> None:
-        # Flush any remaining buffered text, preserving leading/trailing spaces
-        line = self._buffer.rstrip("\r\n")
-        if line.strip():
-            self._log_func(line)
-            self.lines.append(line)
-        self._buffer = ""
+        pass
 
 
 def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
@@ -85,18 +86,10 @@ def _run_pip_main_streaming(pip_main, args: list[str]) -> tuple[int, list[str]]:
         contextlib.redirect_stderr(stream),
     ):
         result_code = pip_main(args)
-    stream.flush()
     return result_code, stream.lines
 
 
-class PipFailureInfo:
-    def __init__(self, is_conflict: bool, is_core_conflict: bool, message: str):
-        self.is_conflict = is_conflict
-        self.is_core_conflict = is_core_conflict
-        self.message = message
-
-
-def _classify_pip_failure(lines: list[str]) -> PipFailureInfo | None:
+def _classify_pip_failure(lines: list[str]) -> DependencyConflictError | None:
     error_lines = [
         line
         for line in lines
@@ -116,11 +109,11 @@ def _classify_pip_failure(lines: list[str]) -> PipFailureInfo | None:
 
     is_core_conflict = any("(constraint)" in line for line in error_lines)
 
-    constraints = [l.strip() for l in error_lines if "(constraint)" in l]
+    constraints = [line.strip() for line in error_lines if "(constraint)" in line]
     requested = [
-        l.strip()
-        for l in error_lines
-        if "The user requested" in l and "(constraint)" not in l
+        line.strip()
+        for line in error_lines
+        if "The user requested" in line and "(constraint)" not in line
     ]
 
     detail = ""
@@ -139,8 +132,8 @@ def _classify_pip_failure(lines: list[str]) -> PipFailureInfo | None:
     else:
         message = f"检测到依赖冲突。{detail}"
 
-    return PipFailureInfo(
-        is_conflict=True, is_core_conflict=is_core_conflict, message=message
+    return DependencyConflictError(
+        message, error_lines, is_core_conflict=is_core_conflict
     )
 
 
@@ -252,11 +245,11 @@ def _extract_requirement_names(requirements_path: str) -> set[str]:
     return names
 
 
-def _iter_requirement_specs(
+def _iter_requirement_lines(
     requirements_path: str,
     *,
     _visited_paths: set[str] | None = None,
-) -> Iterator[tuple[str, SpecifierSet | None]]:
+) -> Iterator[str]:
     visited_paths = _visited_paths or set()
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited_paths:
@@ -284,36 +277,46 @@ def _iter_requirement_specs(
                     nested_path = os.path.join(
                         os.path.dirname(resolved_path), nested_path
                     )
-                yield from _iter_requirement_specs(
-                    nested_path,
-                    _visited_paths=visited_paths,
+                yield from _iter_requirement_lines(
+                    nested_path, _visited_paths=visited_paths
                 )
                 continue
 
-            if tokens[0] in {"-c", "--constraint"}:
-                continue
+            yield line
 
-            if tokens[0].startswith("-"):
-                requirement_name = _extract_requirement_name(line)
-                if requirement_name:
-                    yield requirement_name, None
-                continue
 
-            try:
-                requirement = Requirement(line)
-            except InvalidRequirement:
-                requirement_name = _extract_requirement_name(line)
-                if requirement_name:
-                    yield requirement_name, None
-                continue
+def _iter_requirement_specs(
+    requirements_path: str,
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    for line in _iter_requirement_lines(requirements_path):
+        tokens = shlex.split(line)
+        if not tokens:
+            continue
 
-            if requirement.marker and not requirement.marker.evaluate():
-                continue
+        # constraints and pure options
+        if tokens[0] in {"-c", "--constraint"}:
+            continue
+        if tokens[0].startswith("-"):
+            requirement_name = _extract_requirement_name(line)
+            if requirement_name:
+                yield requirement_name, None
+            continue
 
-            yield (
-                _canonicalize_distribution_name(requirement.name),
-                requirement.specifier,
-            )
+        try:
+            requirement = Requirement(line)
+        except InvalidRequirement:
+            requirement_name = _extract_requirement_name(line)
+            if requirement_name:
+                yield requirement_name, None
+            continue
+
+        if requirement.marker and not requirement.marker.evaluate():
+            continue
+
+        yield (
+            _canonicalize_distribution_name(requirement.name),
+            requirement.specifier,
+        )
 
 
 def _get_requirement_check_paths() -> list[str]:
@@ -861,30 +864,23 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             )
 
 
-class DependencyConflictError(Exception):
-    """Raised when pip encounters a dependency conflict."""
-
-    def __init__(self, message: str, errors: list[str]) -> None:
-        super().__init__(message)
-        self.errors = errors
-
-
 class PipInstaller:
     def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None) -> None:
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
 
-    async def install(
+    def _build_pip_args(
         self,
-        package_name: str | None = None,
-        requirements_path: str | None = None,
-        mirror: str | None = None,
-    ) -> None:
+        package_name: str | None,
+        requirements_path: str | None,
+        mirror: str | None,
+    ) -> tuple[list[str], set[str]]:
         args = ["install"]
+        requested_requirements: set[str] = set()
         pip_install_args = (
             shlex.split(self.pip_install_arg) if self.pip_install_arg else []
         )
-        requested_requirements: set[str] = set()
+
         if package_name:
             package_specs = _split_package_install_input(package_name)
             args.extend(package_specs)
@@ -900,42 +896,56 @@ class PipInstaller:
             index_url = mirror or self.pypi_index_url or "https://pypi.org/simple"
             args.extend(["--trusted-host", "mirrors.aliyun.com", "-i", index_url])
 
+        if pip_install_args:
+            args.extend(pip_install_args)
+
+        return args, requested_requirements
+
+    async def install(
+        self,
+        package_name: str | None = None,
+        requirements_path: str | None = None,
+        mirror: str | None = None,
+    ) -> None:
+        args, requested_requirements = self._build_pip_args(
+            package_name, requirements_path, mirror
+        )
+
         target_site_packages = None
         if is_packaged_desktop_runtime():
             target_site_packages = get_astrbot_site_packages_path()
             os.makedirs(target_site_packages, exist_ok=True)
             _prepend_sys_path(target_site_packages)
-            args.extend(["--target", target_site_packages])
-            args.extend(["--upgrade", "--upgrade-strategy", "only-if-needed"])
-
-        if pip_install_args:
-            args.extend(pip_install_args)
+            args.extend(
+                [
+                    "--target",
+                    target_site_packages,
+                    "--upgrade",
+                    "--upgrade-strategy",
+                    "only-if-needed",
+                ]
+            )
 
         with _core_constraints_file() as constraints_file_path:
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 
-            try:
-                logger.info("Pip 包管理器 argv: %s", ["pip", *args])
-                result_code, lines = await self._run_pip_in_process(args)
+            logger.info("Pip 包管理器 argv: %s", ["pip", *args])
+            result_code, lines = await self._run_pip_in_process(args)
 
-                if result_code != 0:
-                    failure = _classify_pip_failure(lines)
-                    if failure and failure.is_conflict:
-                        raise DependencyConflictError(failure.message, lines)
-                    raise Exception(f"安装失败，错误码：{result_code}")
+            if result_code != 0:
+                conflict = _classify_pip_failure(lines)
+                if conflict:
+                    raise conflict
+                raise Exception(f"安装失败，错误码：{result_code}")
 
-                if target_site_packages:
-                    _prepend_sys_path(target_site_packages)
-                    _ensure_plugin_dependencies_preferred(
-                        target_site_packages,
-                        requested_requirements,
-                    )
-                importlib.invalidate_caches()
-            except DependencyConflictError:
-                raise
-            except Exception:
-                raise
+        if target_site_packages:
+            _prepend_sys_path(target_site_packages)
+            _ensure_plugin_dependencies_preferred(
+                target_site_packages,
+                requested_requirements,
+            )
+        importlib.invalidate_caches()
 
     def prefer_installed_dependencies(self, requirements_path: str) -> None:
         """优先使用已安装在插件 site-packages 中的依赖，不执行安装。"""
