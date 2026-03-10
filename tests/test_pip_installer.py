@@ -802,6 +802,39 @@ async def test_install_splits_single_line_option_with_url(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_install_tracks_requirement_name_for_single_line_option_input(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ASTRBOT_DESKTOP_CLIENT", "1")
+    monkeypatch.delattr("sys.frozen", raising=False)
+
+    site_packages_path = tmp_path / "site-packages"
+    run_pip = _make_run_pip_mock()
+    ensure_preferred_calls = []
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.get_astrbot_site_packages_path",
+        lambda: str(site_packages_path),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._prepend_sys_path",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer._ensure_plugin_dependencies_preferred",
+        lambda path, requirements: ensure_preferred_calls.append((path, requirements)),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(
+        package_name="--index-url https://example.com/simple demo-package"
+    )
+
+    assert ensure_preferred_calls == [(str(site_packages_path), {"demo-package"})]
+
+
+@pytest.mark.asyncio
 async def test_install_keeps_equals_form_index_override(monkeypatch):
     run_pip = _make_run_pip_mock()
 
@@ -864,6 +897,17 @@ async def test_install_preserves_url_fragment_in_option_input(monkeypatch):
         "demo-package",
     ]
     assert "-i" not in recorded_args
+
+
+def test_find_missing_requirements_returns_none_for_editable_local_path_reference(
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("-e ../sharedlib\n", encoding="utf-8")
+
+    missing = pip_installer_module._find_missing_requirements(str(requirements_path))
+
+    assert missing is None
 
 
 @pytest.mark.asyncio
@@ -949,6 +993,30 @@ async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
     # Verify that default index overrides are NOT present
     assert "mirrors.aliyun.com" not in recorded_args
     assert "https://pypi.org/simple" not in recorded_args
+
+
+@pytest.mark.asyncio
+async def test_install_respects_no_index_with_find_links(monkeypatch):
+    run_pip = _make_run_pip_mock()
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+
+    installer = PipInstaller("")
+    await installer.install(
+        package_name="--no-index --find-links /tmp/wheels demo-package"
+    )
+
+    run_pip.assert_awaited_once()
+    recorded_args = run_pip.await_args_list[0].args[0]
+
+    assert recorded_args[0:5] == [
+        "install",
+        "--no-index",
+        "--find-links",
+        "/tmp/wheels",
+        "demo-package",
+    ]
+    assert "-i" not in recorded_args
 
 
 def test_redact_pip_args_for_logging_redacts_inline_url_credentials():

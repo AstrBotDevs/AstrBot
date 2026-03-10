@@ -60,6 +60,7 @@ class ParsedRequirementLine:
     raw: str
     tokens: tuple[str, ...]
     requirement_names: frozenset[str]
+    has_unresolved_requirement_source: bool = False
 
 
 @dataclass
@@ -130,6 +131,108 @@ def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
     return specifier.contains(parsed_version, prereleases=True)
 
 
+def _looks_like_local_path_reference(token: str) -> bool:
+    candidate = token.strip()
+    if not candidate:
+        return False
+    return candidate in {".", ".."} or candidate.startswith(("./", "../", "/", "~/"))
+
+
+def _looks_like_direct_reference(token: str) -> bool:
+    candidate = token.strip()
+    if not candidate:
+        return False
+    return (
+        _looks_like_local_path_reference(candidate)
+        or candidate.startswith("git+")
+        or "://" in candidate
+    )
+
+
+def _extract_names_from_pip_tokens(
+    tokens: list[str],
+) -> tuple[frozenset[str], bool]:
+    requirement_names: set[str] = set()
+    has_unresolved_requirement_source = False
+    skip_next_for: str | None = None
+
+    for token in tokens:
+        if skip_next_for:
+            if skip_next_for == "editable":
+                if _looks_like_direct_reference(token) and "#egg=" not in token:
+                    has_unresolved_requirement_source = True
+                else:
+                    name = _extract_requirement_name(token)
+                    if name:
+                        requirement_names.add(name)
+            skip_next_for = None
+            continue
+
+        if token in {"-e", "--editable"}:
+            skip_next_for = "editable"
+            continue
+
+        if token in {
+            "-i",
+            "--index-url",
+            "--extra-index-url",
+            "-f",
+            "--find-links",
+            "--trusted-host",
+            "-r",
+            "--requirement",
+            "-c",
+            "--constraint",
+        }:
+            skip_next_for = "option-value"
+            continue
+
+        if token.startswith(("--editable=",)):
+            editable_target = token.split("=", 1)[1]
+            if (
+                _looks_like_direct_reference(editable_target)
+                and "#egg=" not in editable_target
+            ):
+                has_unresolved_requirement_source = True
+            else:
+                name = _extract_requirement_name(editable_target)
+                if name:
+                    requirement_names.add(name)
+            continue
+
+        if token.startswith(
+            (
+                "--index-url=",
+                "--extra-index-url=",
+                "--find-links=",
+                "--trusted-host=",
+                "--requirement=",
+                "--constraint=",
+            )
+        ):
+            continue
+
+        if (
+            (token.startswith("-i") and token != "-i")
+            or (token.startswith("-f") and token != "-f")
+            or token == "--no-index"
+        ):
+            continue
+
+        if token.startswith("-"):
+            continue
+
+        name = _extract_requirement_name(token)
+        if name and not _looks_like_direct_reference(token):
+            requirement_names.add(name)
+            continue
+
+        if _looks_like_direct_reference(token):
+            has_unresolved_requirement_source = True
+
+    return frozenset(requirement_names), has_unresolved_requirement_source
+
+
 def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirementLine]:
     normalized = raw_input.strip()
     if not normalized:
@@ -140,7 +243,6 @@ def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirement
         if not line:
             continue
 
-        requirement_names: set[str] = set()
         try:
             req = Requirement(line)
         except InvalidRequirement:
@@ -148,45 +250,22 @@ def _iter_parsed_requirement_lines(raw_input: str) -> Iterator[ParsedRequirement
             if not tokens:
                 continue
 
-            if tokens[0] in {"-e", "--editable"} or tokens[0].startswith("--editable="):
-                name = _extract_requirement_name(line)
-                if name:
-                    requirement_names.add(name)
-                yield ParsedRequirementLine(
-                    raw=line,
-                    tokens=tuple(tokens),
-                    requirement_names=frozenset(requirement_names),
-                )
-                continue
-
-            if tokens[0].startswith("-"):
-                name = _extract_requirement_name(line)
-                if name:
-                    requirement_names.add(name)
-                yield ParsedRequirementLine(
-                    raw=line,
-                    tokens=tuple(tokens),
-                    requirement_names=frozenset(requirement_names),
-                )
-                continue
-
-            for token in tokens:
-                name = _extract_requirement_name(token)
-                if name:
-                    requirement_names.add(name)
+            requirement_names, has_unresolved_requirement_source = (
+                _extract_names_from_pip_tokens(tokens)
+            )
 
             yield ParsedRequirementLine(
                 raw=line,
                 tokens=tuple(tokens),
-                requirement_names=frozenset(requirement_names),
+                requirement_names=requirement_names,
+                has_unresolved_requirement_source=has_unresolved_requirement_source,
             )
             continue
 
-        requirement_names.add(_canonicalize_distribution_name(req.name))
         yield ParsedRequirementLine(
             raw=line,
             tokens=(line,),
-            requirement_names=frozenset(requirement_names),
+            requirement_names=frozenset({_canonicalize_distribution_name(req.name)}),
         )
 
 
@@ -248,6 +327,8 @@ def _redact_pip_args_for_logging(args: list[str]) -> list[str]:
 
 def _package_specs_override_index(package_specs: list[str]) -> bool:
     for index, spec in enumerate(package_specs):
+        if spec == "--no-index":
+            return True
         if spec in {"-i", "--index-url"}:
             if index + 1 < len(package_specs):
                 return True
@@ -300,6 +381,10 @@ def _iter_requirements(
                     tokens = list(parsed.tokens)
                     if not tokens:
                         continue
+                    if parsed.has_unresolved_requirement_source:
+                        raise ValueError(
+                            "unresolved direct requirement source in requirements file"
+                        )
 
                     # Handle recursion
                     nested: str | None = None
