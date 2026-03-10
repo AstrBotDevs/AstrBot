@@ -79,6 +79,7 @@ class ProviderManager:
         self._provider_change_hooks: list[
             Callable[[str, ProviderType, str | None], None]
         ] = []
+        self._mcp_init_task: asyncio.Task | None = None
 
     def set_provider_change_callback(
         self,
@@ -330,24 +331,36 @@ class ProviderManager:
         if not self.curr_tts_provider_inst and self.tts_provider_insts:
             self.curr_tts_provider_inst = self.tts_provider_insts[0]
 
-        # 初始化 MCP Client 连接（等待完成以确保工具可用）
+        # Initialize MCP clients in background after providers are loaded.
+        # This avoids blocking startup when MCP endpoints are slow or unavailable.
         strict_mcp_init = os.getenv("ASTRBOT_MCP_INIT_STRICT", "").strip().lower() in {
             "1",
             "true",
             "yes",
             "on",
         }
-        mcp_init_summary = await self.llm_tools.init_mcp_clients(
-            raise_on_all_failed=strict_mcp_init
-        )
-        if (
-            mcp_init_summary.total > 0
-            and mcp_init_summary.success == 0
-            and not strict_mcp_init
-        ):
-            logger.warning(
-                "MCP 服务全部初始化失败，系统将继续启动（可设置 "
-                "ASTRBOT_MCP_INIT_STRICT=1 以在此场景下中止启动）。"
+
+        async def _init_mcp_clients_bg() -> None:
+            try:
+                mcp_init_summary = await self.llm_tools.init_mcp_clients(
+                    raise_on_all_failed=strict_mcp_init
+                )
+                if (
+                    mcp_init_summary.total > 0
+                    and mcp_init_summary.success == 0
+                    and not strict_mcp_init
+                ):
+                    logger.warning(
+                        "MCP 服务全部初始化失败，系统将继续启动（可设置 "
+                        "ASTRBOT_MCP_INIT_STRICT=1 以在此场景下中止启动）。"
+                    )
+            except Exception:
+                logger.error("MCP 后台初始化失败", exc_info=True)
+
+        if self._mcp_init_task is None or self._mcp_init_task.done():
+            self._mcp_init_task = asyncio.create_task(
+                _init_mcp_clients_bg(),
+                name="provider-manager:mcp-init",
             )
 
     def dynamic_import_provider(self, type: str) -> None:
@@ -817,6 +830,13 @@ class ProviderManager:
             await self.load_provider(new_config)
 
     async def terminate(self) -> None:
+        if self._mcp_init_task and not self._mcp_init_task.done():
+            self._mcp_init_task.cancel()
+            try:
+                await self._mcp_init_task
+            except asyncio.CancelledError:
+                pass
+
         for provider_inst in self.provider_insts:
             if hasattr(provider_inst, "terminate"):
                 await provider_inst.terminate()  # type: ignore
