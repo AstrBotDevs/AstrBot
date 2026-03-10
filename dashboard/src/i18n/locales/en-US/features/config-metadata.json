@@ -550,6 +550,10 @@
         "description": "WeCom AI Bot Name",
         "hint": "Must be correct; otherwise some commands won't work."
       },
+      "wecom_ai_bot_connection_mode": {
+        "description": "WeCom AI Bot Connection Mode",
+        "hint": "Webhook mode requires Token/EncodingAESKey; long_connection mode requires BotID/Secret."
+      },
       "wecomaibot_friend_message_welcome_text": {
         "description": "WeCom AI Bot DM Welcome Message",
         "hint": "When a user enters a DM session on that day, reply with a welcome message. Leave empty to disable."
@@ -557,6 +561,30 @@
       "wecomaibot_init_respond_text": {
         "description": "WeCom AI Bot Initial Response Text",
         "hint": "First reply when the bot receives a message. Leave empty to disable."
+      },
+      "wecomaibot_token": {
+        "description": "WeCom AI Bot Token",
+        "hint": "Used for authentication in webhook callback mode."
+      },
+      "wecomaibot_encoding_aes_key": {
+        "description": "WeCom AI Bot EncodingAESKey",
+        "hint": "Used for message encryption/decryption in webhook callback mode."
+      },
+      "wecomaibot_ws_bot_id": {
+        "description": "Long Connection BotID",
+        "hint": "BotID credential for WeCom AI Bot long connection mode."
+      },
+      "wecomaibot_ws_secret": {
+        "description": "Long Connection Secret",
+        "hint": "Secret credential for WeCom AI Bot long connection mode."
+      },
+      "wecomaibot_ws_url": {
+        "description": "Long Connection WebSocket URL",
+        "hint": "Default is wss://openws.work.weixin.qq.com and usually does not need changes."
+      },
+      "wecomaibot_heartbeat_interval": {
+        "description": "Long Connection Heartbeat Interval",
+        "hint": "Heartbeat interval (seconds) in long connection mode. 30 seconds is recommended."
       },
       "wpp_active_message_poll": {
         "description": "Enable Proactive Message Polling",

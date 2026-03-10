@@ -1,21 +1,31 @@
 import asyncio
+import io
 import os
 import sys
+import zipfile
+from contextlib import asynccontextmanager
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 from quart import Quart
+from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.agent import mcp_client as mcp_client_module
+from astrbot.dashboard.shared import (
+    MCP_STDIO_COMMAND_NOT_FOUND,
+    MCP_TEST_CONNECTION_FAILED,
+)
+from astrbot.dashboard.routes.plugin import PluginRoute
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
-    MockPluginConfig,
     create_mock_updater_install,
     create_mock_updater_update,
 )
@@ -116,6 +126,13 @@ async def test_plugins(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    for plugin in data["data"]:
+        assert "installed_at" in plugin
+        installed_at = plugin["installed_at"]
+        if installed_at is None:
+            continue
+        assert isinstance(installed_at, str)
+        datetime.fromisoformat(installed_at)
 
     # 插件市场
     response = await test_client.get(
@@ -145,9 +162,7 @@ async def test_plugins(
     monkeypatch.setattr(
         core_lifecycle_td.plugin_manager.updator, "install", mock_install
     )
-    monkeypatch.setattr(
-        core_lifecycle_td.plugin_manager.updator, "update", mock_update
-    )
+    monkeypatch.setattr(core_lifecycle_td.plugin_manager.updator, "update", mock_update)
 
     try:
         # 插件安装
@@ -158,7 +173,21 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok", f"安装失败: {data.get('message', 'unknown error')}"
+        assert data["status"] == "ok", (
+            f"安装失败: {data.get('message', 'unknown error')}"
+        )
+
+        response = await test_client.get(
+            f"/api/plugin/get?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert len(data["data"]) == 1
+        installed_at = data["data"][0]["installed_at"]
+        assert installed_at is not None
+        datetime.fromisoformat(installed_at)
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -202,6 +231,28 @@ async def test_plugins(
 
 
 @pytest.mark.asyncio
+async def test_plugins_when_installed_at_unresolved(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    """Tests plugin payload when installed_at cannot be resolved."""
+    test_client = app.test_client()
+
+    monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    for plugin in data["data"]:
+        assert "name" in plugin
+        assert "installed_at" in plugin
+        assert plugin["installed_at"] is None
+
+
+@pytest.mark.asyncio
 async def test_commands_api(app: Quart, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()
@@ -225,8 +276,87 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_test_connection_returns_clear_missing_stdio_command_message(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    @asynccontextmanager
+    async def fake_stdio_client(*args, **kwargs):
+        raise FileNotFoundError(2, "系统找不到指定的文件。")
+        yield
+
+    monkeypatch.setattr(mcp_client_module.mcp, "stdio_client", fake_stdio_client)
+
+    response = await test_client.post(
+        "/api/tools/mcp/test",
+        json={
+            "mcp_server_config": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"],
+            }
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Unable to test the MCP connection. Review the details below."
+    assert data["data"] == {
+        "error": {
+            "code": MCP_STDIO_COMMAND_NOT_FOUND,
+            "command": "uvx",
+            "raw_error": "[Errno 2] 系统找不到指定的文件。",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_test_connection_uses_fallback_for_blank_error_message(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def raise_blank_error(*args, **kwargs):
+        raise Exception("   ")
+
+    monkeypatch.setattr(
+        core_lifecycle_td.provider_manager.llm_tools,
+        "test_mcp_server_connection",
+        raise_blank_error,
+    )
+
+    response = await test_client.post(
+        "/api/tools/mcp/test",
+        json={
+            "mcp_server_config": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"],
+            }
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Unable to test the MCP connection."
+    assert data["data"] == {
+        "error": {
+            "code": MCP_TEST_CONNECTION_FAILED,
+            "detail": "Unable to test the MCP connection.",
+        }
+    }
 
 
 @pytest.mark.asyncio
@@ -493,3 +623,223 @@ async def test_neo_skills_routes(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert data["data"]["skill_key"] == "neo.demo"
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_returns_error_when_all_files_invalid(
+    app: Quart,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"not-a-zip"),
+                filename="invalid.txt",
+                content_type="text/plain",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Upload failed for all 1 file(s)."
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_zip_files(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        assert zip_path.endswith(".zip")
+        return "demo_skill"
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=io.BytesIO(b"fake-zip"),
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "All 1 skill(s) uploaded successfully."
+    assert data["data"]["total"] == 1
+    assert data["data"]["succeeded"] == [
+        {"filename": "demo_skill.zip", "name": "demo_skill"}
+    ]
+    assert data["data"]["failed"] == []
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_accepts_valid_skill_archive(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    skills_dir = tmp_path / "skills"
+    temp_dir = tmp_path / "temp"
+    data_dir.mkdir()
+    skills_dir.mkdir()
+    temp_dir.mkdir()
+
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "demo_skill/SKILL.md",
+            "---\nname: demo-skill\ndescription: Demo skill\n---\n",
+        )
+        zf.writestr("demo_skill/notes.txt", "hello")
+        zf.writestr("__MACOSX/demo_skill/._SKILL.md", "")
+        zf.writestr("__MACOSX/._demo_skill", "")
+    archive.seek(0)
+
+    test_client = app.test_client()
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=authenticated_header,
+        files={
+            "files": FileStorage(
+                stream=archive,
+                filename="demo_skill.zip",
+                content_type="application/zip",
+            ),
+        },
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["succeeded"] == [
+        {"filename": "demo_skill.zip", "name": "demo_skill"}
+    ]
+    assert data["data"]["failed"] == []
+    assert (skills_dir / "demo_skill" / "SKILL.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_batch_upload_skills_partial_success(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    def _fake_install_skill_from_zip(
+        self,
+        zip_path: str,
+        *,
+        overwrite: bool = True,
+    ):
+        _ = self, overwrite
+        if "ok_skill" in zip_path:
+            return "ok_skill"
+        raise RuntimeError("install failed")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        _fake_install_skill_from_zip,
+    )
+
+    test_client = app.test_client()
+
+    boundary = "----AstrBotBatchBoundary"
+    body = (
+        (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="ok_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode()
+        + b"fake-zip-1\r\n"
+        + (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="files"; filename="bad_skill.zip"\r\n'
+            "Content-Type: application/zip\r\n\r\n"
+        ).encode()
+        + b"fake-zip-2\r\n"
+        + f"--{boundary}--\r\n".encode()
+    )
+    headers = dict(authenticated_header)
+    headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+
+    response = await test_client.post(
+        "/api/skills/batch-upload",
+        headers=headers,
+        data=body,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["message"] == "Partial success: 1/2 skill(s) uploaded."
+    assert data["data"]["total"] == 2
+    assert data["data"]["succeeded"] == [
+        {"filename": "ok_skill.zip", "name": "ok_skill"}
+    ]
+    assert data["data"]["failed"] == [
+        {"filename": "bad_skill.zip", "error": "install failed"}
+    ]

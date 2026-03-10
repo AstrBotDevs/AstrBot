@@ -45,9 +45,10 @@ class Response:
     message: str | None = None
     data: dict | list | None = None
 
-    def error(self, message: str):
+    def error(self, message: str, data: dict | list | None = None):
         self.status = "error"
         self.message = message
+        self.data = data
         return self
 
     def ok(self, data: dict | list | None = None, message: str | None = None):

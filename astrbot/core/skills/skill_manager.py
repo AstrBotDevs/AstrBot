@@ -26,6 +26,13 @@ _SANDBOX_SKILLS_CACHE_VERSION = 1
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
+def _is_ignored_zip_entry(name: str) -> bool:
+    parts = PurePosixPath(name).parts
+    if not parts:
+        return True
+    return parts[0] == "__MACOSX"
+
+
 @dataclass
 class SkillInfo:
     name: str
@@ -411,7 +418,11 @@ class SkillManager:
             raise ValueError("Uploaded file is not a valid zip archive.")
 
         with zipfile.ZipFile(zip_path) as zf:
-            names = [name.replace("\\", "/") for name in zf.namelist()]
+            names = [
+                name
+                for name in (entry.replace("\\", "/") for entry in zf.namelist())
+                if name and not _is_ignored_zip_entry(name)
+            ]
             file_names = [name for name in names if name and not name.endswith("/")]
             if not file_names:
                 raise ValueError("Zip archive is empty.")
@@ -446,7 +457,11 @@ class SkillManager:
                 raise ValueError("SKILL.md not found in the skill folder.")
 
             with tempfile.TemporaryDirectory(dir=get_astrbot_temp_path()) as tmp_dir:
-                zf.extractall(tmp_dir)
+                for member in zf.infolist():
+                    member_name = member.filename.replace("\\", "/")
+                    if not member_name or _is_ignored_zip_entry(member_name):
+                        continue
+                    zf.extract(member, tmp_dir)
                 src_dir = Path(tmp_dir) / skill_name
                 if not src_dir.exists():
                     raise ValueError("Skill folder not found after extraction.")
