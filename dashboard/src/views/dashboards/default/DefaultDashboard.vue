@@ -101,7 +101,8 @@ export default {
       noticeType: '',
       lastUpdated: '',
       refreshTimeout: null,
-      isRefreshing: false
+      isRefreshing: false,
+      isUnmounted: false
     };
   },
 
@@ -112,6 +113,7 @@ export default {
   },
 
   beforeUnmount() {
+    this.isUnmounted = true;
     // 清除定时器
     if (this.refreshTimeout) {
       clearTimeout(this.refreshTimeout);
@@ -121,6 +123,7 @@ export default {
   methods: {
     async pollData() {
       await this.fetchData();
+      if (this.isUnmounted) return;
       this.refreshTimeout = setTimeout(() => this.pollData(), 60000);
     },
 

@@ -244,6 +244,7 @@ export default {
       // 平台统计信息
       platformStats: {},
       statsRefreshTimeout: null,
+      isUnmounted: false,
 
       // 错误详情对话框
       showErrorDialog: false,
@@ -281,6 +282,7 @@ export default {
   },
 
   beforeUnmount() {
+    this.isUnmounted = true;
     if (this.statsRefreshTimeout) {
       clearTimeout(this.statsRefreshTimeout);
     }
@@ -296,6 +298,7 @@ export default {
 
     async pollPlatformStats() {
       await this.getPlatformStats();
+      if (this.isUnmounted) return;
       this.statsRefreshTimeout = setTimeout(() => this.pollPlatformStats(), 10000);
     },
 

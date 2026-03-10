@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import re
 import sys
 import zipfile
 from datetime import datetime
@@ -772,7 +773,8 @@ def test_webui_freeze_regression_no_global_sse_autoconnect():
         / "VerticalHeader.vue"
     )
     content = header_path.read_text(encoding="utf-8")
-    assert "commonStore.createEventSource();" not in content
+    # Use regex to be robust against whitespace/formatting changes
+    assert not re.search(r"commonStore\.createEventSource\s*\(", content)
 
 
 def test_webui_freeze_regression_polling_uses_settimeout():
@@ -803,9 +805,10 @@ def test_webui_freeze_regression_polling_uses_settimeout():
     ]
     for file_path in polling_files:
         content = file_path.read_text(encoding="utf-8")
-        assert "setTimeout(" in content, (
+        # Use regex to be robust against whitespace/formatting changes
+        assert re.search(r"setTimeout\s*\(", content), (
             f"{file_path} should use setTimeout-based polling"
         )
-        assert "setInterval(" not in content, (
+        assert not re.search(r"setInterval\s*\(", content), (
             f"{file_path} should not use setInterval-based polling"
         )

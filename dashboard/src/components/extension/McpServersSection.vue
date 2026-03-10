@@ -238,6 +238,7 @@ export default {
   data() {
     return {
       refreshTimeout: null,
+      isUnmounted: false,
       mcpServers: [],
       showMcpServerDialog: false,
       selectedMcpServerProvider: 'modelscope',
@@ -285,6 +286,7 @@ export default {
     this.pollServers();
   },
   unmounted() {
+    this.isUnmounted = true;
     if (this.refreshTimeout) {
       clearTimeout(this.refreshTimeout);
     }
@@ -295,6 +297,7 @@ export default {
     },
     async pollServers() {
       await this.getServers();
+      if (this.isUnmounted) return;
       this.refreshTimeout = setTimeout(() => this.pollServers(), 5000);
     },
     async getServers() {

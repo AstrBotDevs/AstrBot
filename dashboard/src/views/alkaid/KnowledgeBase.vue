@@ -530,6 +530,7 @@ export default {
             },
             importing: false,
             pollingInterval: null,
+            isUnmounted: false,
             // 插件更新相关
             checkingUpdate: false,
             updatingPlugin: false,
@@ -1047,6 +1048,11 @@ export default {
         },
 
         pollTaskStatus(taskId) {
+            // Clear any existing polling timeout to prevent multiple concurrent polls
+            if (this.pollingInterval) {
+                clearTimeout(this.pollingInterval);
+                this.pollingInterval = null;
+            }
             const poll = async () => {
                 try {
                     const statusResponse = await axios.post(
@@ -1069,6 +1075,7 @@ export default {
                         this.importing = false;
                     } else {
                         // 继续轮询
+                        if (this.isUnmounted) return;
                         this.pollingInterval = setTimeout(poll, 3000);
                     }
                 } catch (error) {
@@ -1167,6 +1174,7 @@ export default {
         },
     },
     beforeUnmount() {
+        this.isUnmounted = true;
         if (this.pollingInterval) {
             clearTimeout(this.pollingInterval);
         }
