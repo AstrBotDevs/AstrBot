@@ -1,0 +1,349 @@
+import importlib.metadata as importlib_metadata
+import logging
+import os
+import re
+import shlex
+import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
+
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion, Version
+
+from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
+
+logger = logging.getLogger("astrbot")
+
+
+@dataclass(frozen=True)
+class ParsedPackageInput:
+    specs: tuple[str, ...]
+    requirement_names: frozenset[str]
+
+
+def canonicalize_distribution_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).strip("-").lower()
+
+
+def _strip_inline_requirement_comment(raw_input: str) -> str:
+    if raw_input.lstrip().startswith("#"):
+        return ""
+    return re.split(r"[ \t]+#", raw_input, maxsplit=1)[0].strip()
+
+
+def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
+    try:
+        parsed_version = Version(version)
+    except InvalidVersion:
+        return False
+    return specifier.contains(parsed_version, prereleases=True)
+
+
+def _looks_like_local_path_reference(token: str) -> bool:
+    candidate = token.strip()
+    if not candidate:
+        return False
+    return candidate in {".", ".."} or candidate.startswith(
+        ("./", "../", "/", "~/", ".\\", "..\\", "\\")
+    )
+
+
+def looks_like_direct_reference(token: str) -> bool:
+    candidate = token.strip()
+    if not candidate:
+        return False
+    return (
+        _looks_like_local_path_reference(candidate)
+        or candidate.startswith("git+")
+        or "://" in candidate
+    )
+
+
+def extract_requirement_name(raw_requirement: str) -> str | None:
+    line = raw_requirement.split("#", 1)[0].strip()
+    if not line:
+        return None
+    if line.startswith(("-r", "--requirement", "-c", "--constraint")):
+        return None
+
+    egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
+    if egg_match:
+        return canonicalize_distribution_name(egg_match.group(1))
+
+    if line.startswith("-"):
+        return None
+
+    candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
+    if not candidate:
+        return None
+    return canonicalize_distribution_name(candidate)
+
+
+def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozenset[str]:
+    requirement_names: set[str] = set()
+    skip_next_for: str | None = None
+
+    for token in tokens:
+        if skip_next_for:
+            if skip_next_for == "editable":
+                name = extract_requirement_name(token)
+                if name:
+                    requirement_names.add(name)
+            skip_next_for = None
+            continue
+
+        if token in {"-e", "--editable"}:
+            skip_next_for = "editable"
+            continue
+
+        if token in {
+            "-i",
+            "--index-url",
+            "--extra-index-url",
+            "-f",
+            "--find-links",
+            "--trusted-host",
+            "-r",
+            "--requirement",
+            "-c",
+            "--constraint",
+        }:
+            skip_next_for = "option-value"
+            continue
+
+        if token.startswith(("--editable=",)):
+            editable_target = token.split("=", 1)[1]
+            name = extract_requirement_name(editable_target)
+            if name:
+                requirement_names.add(name)
+            continue
+
+        if token.startswith(
+            (
+                "--index-url=",
+                "--extra-index-url=",
+                "--find-links=",
+                "--trusted-host=",
+                "--requirement=",
+                "--constraint=",
+            )
+        ):
+            continue
+
+        if (
+            (token.startswith("-i") and token != "-i")
+            or (token.startswith("-f") and token != "-f")
+            or token == "--no-index"
+        ):
+            continue
+
+        if token.startswith("-"):
+            continue
+
+        name = extract_requirement_name(token)
+        if name and not looks_like_direct_reference(token):
+            requirement_names.add(name)
+
+    return frozenset(requirement_names)
+
+
+def parse_package_install_input(raw_input: str) -> ParsedPackageInput:
+    specs: list[str] = []
+    requirement_names: set[str] = set()
+    normalized = raw_input.strip()
+    if not normalized:
+        return ParsedPackageInput(specs=(), requirement_names=frozenset())
+
+    for raw_line in normalized.splitlines():
+        line = _strip_inline_requirement_comment(raw_line)
+        if not line:
+            continue
+
+        try:
+            req = Requirement(line)
+        except InvalidRequirement:
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
+            specs.extend(tokens)
+            requirement_names.update(
+                _extract_requirement_names_from_package_tokens(tokens)
+            )
+            continue
+
+        specs.append(line)
+        requirement_names.add(canonicalize_distribution_name(req.name))
+
+    return ParsedPackageInput(
+        specs=tuple(specs),
+        requirement_names=frozenset(requirement_names),
+    )
+
+
+def _iter_requirement_lines(
+    requirements_path: str,
+    _visited: set[str] | None = None,
+) -> Iterator[str]:
+    visited = _visited or set()
+    resolved_path = os.path.realpath(requirements_path)
+    if resolved_path in visited:
+        logger.warning(
+            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
+        )
+        return
+    visited.add(resolved_path)
+
+    with open(resolved_path, encoding="utf-8") as f:
+        for raw_line in f:
+            line = _strip_inline_requirement_comment(raw_line)
+            if not line:
+                continue
+
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
+
+            nested: str | None = None
+            if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
+                nested = tokens[1]
+            elif tokens[0].startswith("--requirement="):
+                nested = tokens[0].split("=", 1)[1]
+
+            if nested:
+                if not os.path.isabs(nested):
+                    nested = os.path.join(os.path.dirname(resolved_path), nested)
+                yield from _iter_requirement_lines(nested, _visited=visited)
+                continue
+
+            yield line
+
+
+def _requirement_line_needs_precheck_fallback(line: str) -> bool:
+    if line.startswith(("-e ", "--editable ")) or line.startswith("--editable="):
+        return "#egg=" not in line
+
+    if line.startswith("-"):
+        return False
+
+    return looks_like_direct_reference(line) and extract_requirement_name(line) is None
+
+
+def _iter_requirements_from_lines(
+    requirement_lines: Iterator[str] | list[str],
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    for line in requirement_lines:
+        if line.startswith(("-c", "--constraint")):
+            continue
+
+        try:
+            req = Requirement(line)
+        except InvalidRequirement:
+            tokens = shlex.split(line)
+            if not tokens:
+                continue
+
+            editable_target: str | None = None
+            if tokens[0] in {"-e", "--editable"} and len(tokens) > 1:
+                editable_target = tokens[1]
+            elif tokens[0].startswith("--editable="):
+                editable_target = tokens[0].split("=", 1)[1]
+
+            if editable_target:
+                name = extract_requirement_name(editable_target)
+                if name and (
+                    "#egg=" in editable_target
+                    or not looks_like_direct_reference(editable_target)
+                ):
+                    yield name, None
+                continue
+
+            name = extract_requirement_name(line)
+            if name and ("#egg=" in line or not looks_like_direct_reference(line)):
+                yield name, None
+            continue
+
+        if req.marker and not req.marker.evaluate():
+            continue
+
+        yield (canonicalize_distribution_name(req.name), req.specifier or None)
+
+
+def _iter_requirements(
+    requirements_path: str,
+) -> Iterator[tuple[str, SpecifierSet | None]]:
+    yield from _iter_requirements_from_lines(_iter_requirement_lines(requirements_path))
+
+
+def extract_requirement_names(requirements_path: str) -> set[str]:
+    try:
+        return {name for name, _ in _iter_requirements(requirements_path)}
+    except Exception as exc:
+        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
+        return set()
+
+
+def _get_requirement_check_paths() -> list[str]:
+    paths = list(sys.path)
+    if is_packaged_desktop_runtime():
+        target_site_packages = get_astrbot_site_packages_path()
+        if os.path.isdir(target_site_packages):
+            paths.insert(0, target_site_packages)
+    return paths
+
+
+def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
+    installed: dict[str, str] = {}
+    try:
+        for distribution in importlib_metadata.distributions(path=paths):
+            distribution_name = (
+                distribution.metadata["Name"]
+                if "Name" in distribution.metadata
+                else None
+            )
+            if not distribution_name:
+                continue
+            installed.setdefault(
+                canonicalize_distribution_name(distribution_name),
+                distribution.version,
+            )
+    except Exception as exc:
+        logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
+        return None
+    return installed
+
+
+def find_missing_requirements(requirements_path: str) -> set[str] | None:
+    try:
+        requirement_lines = list(_iter_requirement_lines(requirements_path))
+    except Exception as exc:
+        logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
+        return None
+
+    if any(
+        _requirement_line_needs_precheck_fallback(line) for line in requirement_lines
+    ):
+        logger.warning(
+            "预检查缺失依赖失败，将回退到完整安装: unresolved direct requirement source in requirements file"
+        )
+        return None
+
+    required = list(_iter_requirements_from_lines(requirement_lines))
+    if not required:
+        return set()
+
+    installed = _collect_installed_distribution_versions(_get_requirement_check_paths())
+    if installed is None:
+        return None
+
+    missing: set[str] = set()
+    for name, specifier in required:
+        installed_version = installed.get(name)
+        if not installed_version:
+            missing.add(name)
+            continue
+        if specifier and not _specifier_contains_version(specifier, installed_version):
+            missing.add(name)
+
+    return missing

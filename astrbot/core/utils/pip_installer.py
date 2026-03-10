@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import functools
 import importlib
 import importlib.metadata as importlib_metadata
 import importlib.util
@@ -16,11 +15,36 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from packaging.requirements import InvalidRequirement, Requirement
-from packaging.specifiers import SpecifierSet
-from packaging.version import InvalidVersion, Version
-
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
+from astrbot.core.utils.core_constraints import CoreConstraintsProvider
+from astrbot.core.utils.core_constraints import (
+    _core_constraints_file as _shared_core_constraints_file,
+)
+from astrbot.core.utils.core_constraints import (
+    _get_core_constraints as _shared_get_core_constraints,
+)
+from astrbot.core.utils.requirements_utils import ParsedPackageInput
+from astrbot.core.utils.requirements_utils import (
+    _collect_installed_distribution_versions as _shared_collect_installed_distribution_versions,
+)
+from astrbot.core.utils.requirements_utils import (
+    _iter_requirement_lines as _shared_iter_requirement_lines,
+)
+from astrbot.core.utils.requirements_utils import (
+    canonicalize_distribution_name as _canonicalize_distribution_name,
+)
+from astrbot.core.utils.requirements_utils import (
+    extract_requirement_name as _shared_extract_requirement_name,
+)
+from astrbot.core.utils.requirements_utils import (
+    extract_requirement_names as _shared_extract_requirement_names,
+)
+from astrbot.core.utils.requirements_utils import (
+    find_missing_requirements as _shared_find_missing_requirements,
+)
+from astrbot.core.utils.requirements_utils import (
+    parse_package_install_input as _shared_parse_package_install_input,
+)
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime
 
 logger = logging.getLogger("astrbot")
@@ -58,21 +82,11 @@ class RequirementsPrecheckFailed(Exception):
     pass
 
 
-@dataclass(frozen=True)
-class ParsedPackageInput:
-    specs: tuple[str, ...]
-    requirement_names: frozenset[str]
-
-
 @dataclass
 class PipRunResult:
     code: int
     output_lines: list[str]
     conflict: DependencyConflictError | None = None
-
-
-def _canonicalize_distribution_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).strip("-").lower()
 
 
 def _get_pip_main():
@@ -117,145 +131,19 @@ def _cleanup_added_root_handlers(original_handlers: list[logging.Handler]) -> No
                 handler.close()
 
 
-def _get_requirement_check_paths() -> list[str]:
-    paths = list(sys.path)
-    if is_packaged_desktop_runtime():
-        target_site_packages = get_astrbot_site_packages_path()
-        if os.path.isdir(target_site_packages):
-            paths.insert(0, target_site_packages)
-    return paths
-
-
-def _specifier_contains_version(specifier: SpecifierSet, version: str) -> bool:
-    try:
-        parsed_version = Version(version)
-    except InvalidVersion:
-        return False
-    return specifier.contains(parsed_version, prereleases=True)
-
-
-def _looks_like_local_path_reference(token: str) -> bool:
-    candidate = token.strip()
-    if not candidate:
-        return False
-    return candidate in {".", ".."} or candidate.startswith(
-        ("./", "../", "/", "~/", ".\\", "..\\", "\\")
-    )
-
-
-def _looks_like_direct_reference(token: str) -> bool:
-    candidate = token.strip()
-    if not candidate:
-        return False
-    return (
-        _looks_like_local_path_reference(candidate)
-        or candidate.startswith("git+")
-        or "://" in candidate
-    )
-
-
-def _extract_requirement_names_from_package_tokens(
-    tokens: list[str],
-) -> frozenset[str]:
-    requirement_names: set[str] = set()
-    skip_next_for: str | None = None
-
-    for token in tokens:
-        if skip_next_for:
-            if skip_next_for == "editable":
-                name = _extract_requirement_name(token)
-                if name:
-                    requirement_names.add(name)
-            skip_next_for = None
-            continue
-
-        if token in {"-e", "--editable"}:
-            skip_next_for = "editable"
-            continue
-
-        if token in {
-            "-i",
-            "--index-url",
-            "--extra-index-url",
-            "-f",
-            "--find-links",
-            "--trusted-host",
-            "-r",
-            "--requirement",
-            "-c",
-            "--constraint",
-        }:
-            skip_next_for = "option-value"
-            continue
-
-        if token.startswith(("--editable=",)):
-            editable_target = token.split("=", 1)[1]
-            name = _extract_requirement_name(editable_target)
-            if name:
-                requirement_names.add(name)
-            continue
-
-        if token.startswith(
-            (
-                "--index-url=",
-                "--extra-index-url=",
-                "--find-links=",
-                "--trusted-host=",
-                "--requirement=",
-                "--constraint=",
-            )
-        ):
-            continue
-
-        if (
-            (token.startswith("-i") and token != "-i")
-            or (token.startswith("-f") and token != "-f")
-            or token == "--no-index"
-        ):
-            continue
-
-        if token.startswith("-"):
-            continue
-
-        name = _extract_requirement_name(token)
-        if name and not _looks_like_direct_reference(token):
-            requirement_names.add(name)
-
-    return frozenset(requirement_names)
-
-
 def _parse_package_install_input(raw_input: str) -> ParsedPackageInput:
-    """Parse the user-provided package string into pip args and requirement names."""
-    specs: list[str] = []
-    requirement_names: set[str] = set()
-    normalized = raw_input.strip()
-    if not normalized:
-        return ParsedPackageInput(specs=(), requirement_names=frozenset())
+    return _shared_parse_package_install_input(raw_input)
 
-    for raw_line in normalized.splitlines():
-        line = _strip_inline_requirement_comment(raw_line)
-        if not line:
-            continue
 
-        try:
-            req = Requirement(line)
-        except InvalidRequirement:
-            tokens = shlex.split(line)
-            if not tokens:
-                continue
-            specs.extend(tokens)
-            requirement_names.update(
-                _extract_requirement_names_from_package_tokens(tokens)
-            )
-            continue
+def _extract_requirement_name(raw_requirement: str) -> str | None:
+    return _shared_extract_requirement_name(raw_requirement)
 
-        specs.append(line)
-        requirement_names.add(_canonicalize_distribution_name(req.name))
 
-    return ParsedPackageInput(
-        specs=tuple(specs),
-        requirement_names=frozenset(requirement_names),
-    )
+def _iter_requirement_lines(
+    requirements_path: str,
+    _visited: set[str] | None = None,
+) -> Iterator[str]:
+    return _shared_iter_requirement_lines(requirements_path, _visited=_visited)
 
 
 def _get_trusted_host_for_index_url(index_url: str) -> str | None:
@@ -342,187 +230,16 @@ def _package_specs_override_index(package_specs: list[str]) -> bool:
     return False
 
 
-def _extract_requirement_name(raw_requirement: str) -> str | None:
-    line = raw_requirement.split("#", 1)[0].strip()
-    if not line:
-        return None
-    if line.startswith(("-r", "--requirement", "-c", "--constraint")):
-        return None
-
-    egg_match = re.search(r"#egg=([A-Za-z0-9_.-]+)", raw_requirement)
-    if egg_match:
-        return _canonicalize_distribution_name(egg_match.group(1))
-
-    if line.startswith("-"):
-        return None
-
-    candidate = re.split(r"[<>=!~;\s\[]", line, maxsplit=1)[0].strip()
-    if not candidate:
-        return None
-    return _canonicalize_distribution_name(candidate)
-
-
-def _iter_requirement_lines(
-    requirements_path: str,
-    _visited: set[str] | None = None,
-) -> Iterator[str]:
-    visited = _visited or set()
-    resolved_path = os.path.realpath(requirements_path)
-    if resolved_path in visited:
-        logger.warning(
-            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
-        )
-        return
-    visited.add(resolved_path)
-
-    with open(resolved_path, encoding="utf-8") as f:
-        for raw_line in f:
-            line = _strip_inline_requirement_comment(raw_line)
-            if not line:
-                continue
-
-            tokens = shlex.split(line)
-            if not tokens:
-                continue
-
-            nested: str | None = None
-            if tokens[0] in {"-r", "--requirement"} and len(tokens) > 1:
-                nested = tokens[1]
-            elif tokens[0].startswith("--requirement="):
-                nested = tokens[0].split("=", 1)[1]
-
-            if nested:
-                if not os.path.isabs(nested):
-                    nested = os.path.join(os.path.dirname(resolved_path), nested)
-                yield from _iter_requirement_lines(nested, _visited=visited)
-                continue
-
-            yield line
-
-
-def _requirement_line_needs_precheck_fallback(line: str) -> bool:
-    if line.startswith(("-e ", "--editable ")) or line.startswith("--editable="):
-        return "#egg=" not in line
-
-    if line.startswith("-"):
-        return False
-
-    return (
-        _looks_like_direct_reference(line) and _extract_requirement_name(line) is None
-    )
-
-
-def _iter_requirements_from_lines(
-    requirement_lines: Iterator[str] | list[str],
-) -> Iterator[tuple[str, SpecifierSet | None]]:
-    for line in requirement_lines:
-        if line.startswith(("-c", "--constraint")):
-            continue
-
-        try:
-            req = Requirement(line)
-        except InvalidRequirement:
-            tokens = shlex.split(line)
-            if not tokens:
-                continue
-
-            editable_target: str | None = None
-            if tokens[0] in {"-e", "--editable"} and len(tokens) > 1:
-                editable_target = tokens[1]
-            elif tokens[0].startswith("--editable="):
-                editable_target = tokens[0].split("=", 1)[1]
-
-            if editable_target:
-                name = _extract_requirement_name(editable_target)
-                if name and (
-                    "#egg=" in editable_target
-                    or not _looks_like_direct_reference(editable_target)
-                ):
-                    yield name, None
-                continue
-
-            name = _extract_requirement_name(line)
-            if name and ("#egg=" in line or not _looks_like_direct_reference(line)):
-                yield name, None
-            continue
-
-        if req.marker and not req.marker.evaluate():
-            continue
-
-        yield (
-            _canonicalize_distribution_name(req.name),
-            req.specifier or None,
-        )
-
-
-def _iter_requirements(
-    requirements_path: str,
-) -> Iterator[tuple[str, SpecifierSet | None]]:
-    yield from _iter_requirements_from_lines(_iter_requirement_lines(requirements_path))
-
-
 def _extract_requirement_names(requirements_path: str) -> set[str]:
-    try:
-        return {name for name, _ in _iter_requirements(requirements_path)}
-    except Exception as exc:
-        logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
-        return set()
+    return _shared_extract_requirement_names(requirements_path)
 
 
 def _collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
-    installed: dict[str, str] = {}
-    try:
-        for distribution in importlib_metadata.distributions(path=paths):
-            distribution_name = (
-                distribution.metadata["Name"]
-                if "Name" in distribution.metadata
-                else None
-            )
-            if not distribution_name:
-                continue
-            installed.setdefault(
-                _canonicalize_distribution_name(distribution_name),
-                distribution.version,
-            )
-    except Exception as exc:
-        logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
-        return None
-    return installed
+    return _shared_collect_installed_distribution_versions(paths)
 
 
 def _find_missing_requirements(requirements_path: str) -> set[str] | None:
-    try:
-        requirement_lines = list(_iter_requirement_lines(requirements_path))
-    except Exception as exc:
-        logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
-        return None
-
-    if any(
-        _requirement_line_needs_precheck_fallback(line) for line in requirement_lines
-    ):
-        logger.warning(
-            "预检查缺失依赖失败，将回退到完整安装: unresolved direct requirement source in requirements file"
-        )
-        return None
-
-    required = list(_iter_requirements_from_lines(requirement_lines))
-    if not required:
-        return set()
-
-    installed = _collect_installed_distribution_versions(_get_requirement_check_paths())
-    if installed is None:
-        return None
-
-    missing: set[str] = set()
-    for name, specifier in required:
-        installed_version = installed.get(name)
-        if not installed_version:
-            missing.add(name)
-            continue
-        if specifier and not _specifier_contains_version(specifier, installed_version):
-            missing.add(name)
-
-    return missing
+    return _shared_find_missing_requirements(requirements_path)
 
 
 def find_missing_requirements(requirements_path: str) -> set[str] | None:
@@ -536,99 +253,14 @@ def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
     return missing
 
 
-@functools.cache
 def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
-    """Get version constraints for core dependencies to prevent downgrades."""
-    constraints: list[str] = []
-    try:
-        resolved_core_dist_name: str | None = None
-        if core_dist_name:
-            try:
-                importlib_metadata.distribution(core_dist_name)
-                resolved_core_dist_name = core_dist_name
-            except importlib_metadata.PackageNotFoundError:
-                return ()
-        else:
-            try:
-                importlib_metadata.distribution("AstrBot")
-                resolved_core_dist_name = "AstrBot"
-            except importlib_metadata.PackageNotFoundError:
-                pass
-
-            if resolved_core_dist_name is None and __package__:
-                top_pkg = __package__.split(".")[0]
-                for dist in importlib_metadata.distributions():
-                    try:
-                        top_level = dist.read_text("top_level.txt") or ""
-                    except Exception:
-                        continue
-
-                    if top_pkg in top_level.splitlines():
-                        resolved_core_dist_name = dist.metadata["Name"]
-                        break
-
-        if not resolved_core_dist_name:
-            return ()
-
-        try:
-            dist = importlib_metadata.distribution(resolved_core_dist_name)
-        except importlib_metadata.PackageNotFoundError:
-            return ()
-
-        if not dist or not dist.requires:
-            return ()
-
-        installed = _collect_installed_distribution_versions(
-            _get_requirement_check_paths()
-        )
-        if not installed:
-            return ()
-
-        for req_str in dist.requires:
-            try:
-                req = Requirement(req_str)
-                if req.marker and not req.marker.evaluate():
-                    continue
-                name = _canonicalize_distribution_name(req.name)
-                if name in installed:
-                    constraints.append(f"{name}=={installed[name]}")
-            except Exception:
-                continue
-    except Exception as exc:
-        logger.warning("获取核心依赖约束失败: %s", exc)
-        return ()
-
-    return tuple(constraints)
+    return _shared_get_core_constraints(core_dist_name)
 
 
 @contextlib.contextmanager
 def _core_constraints_file(core_dist_name: str | None) -> Iterator[str | None]:
-    constraints = _get_core_constraints(core_dist_name)
-    if not constraints:
-        yield None
-        return
-
-    path: str | None = None
-    try:
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix="_constraints.txt", delete=False, encoding="utf-8"
-        ) as f:
-            f.write("\n".join(constraints))
-            path = f.name
-        logger.info("已启用核心依赖版本保护 (%d 个约束)", len(constraints))
-    except Exception as exc:
-        logger.warning("创建临时约束文件失败: %s", exc)
-        yield None
-        return
-
-    try:
-        yield path
-    finally:
-        if path and os.path.exists(path):
-            with contextlib.suppress(Exception):
-                os.remove(path)
+    with _shared_core_constraints_file(core_dist_name) as constraints_path:
+        yield constraints_path
 
 
 class _StreamingLogWriter(io.TextIOBase):
@@ -1210,6 +842,7 @@ class PipInstaller:
         self.pip_install_arg = pip_install_arg
         self.pypi_index_url = pypi_index_url
         self.core_dist_name = core_dist_name
+        self._core_constraints = CoreConstraintsProvider(core_dist_name)
 
     def _build_pip_args(
         self,
@@ -1281,7 +914,7 @@ class PipInstaller:
                 ]
             )
 
-        with _core_constraints_file(self.core_dist_name) as constraints_file_path:
+        with self._core_constraints.constraints_file() as constraints_file_path:
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.utils import core_constraints as core_constraints_module
 from astrbot.core.utils import pip_installer as pip_installer_module
 from astrbot.core.utils.pip_installer import PipInstaller
 
@@ -453,27 +454,27 @@ def test_get_core_constraints_caches_fallback_resolution(monkeypatch):
         return [fake_distribution]
 
     monkeypatch.setattr(
-        pip_installer_module.importlib_metadata,
+        core_constraints_module.importlib_metadata,
         "distribution",
         mock_distribution,
     )
     monkeypatch.setattr(
-        pip_installer_module.importlib_metadata,
+        core_constraints_module.importlib_metadata,
         "distributions",
         mock_distributions,
     )
     monkeypatch.setattr(
-        pip_installer_module,
+        core_constraints_module,
         "_collect_installed_distribution_versions",
         lambda paths: {"shared-lib": "2.0"},
     )
 
-    pip_installer_module._get_core_constraints.cache_clear()
+    core_constraints_module._get_core_constraints.cache_clear()
     try:
-        first = pip_installer_module._get_core_constraints(None)
-        second = pip_installer_module._get_core_constraints(None)
+        first = core_constraints_module._get_core_constraints(None)
+        second = core_constraints_module._get_core_constraints(None)
     finally:
-        pip_installer_module._get_core_constraints.cache_clear()
+        core_constraints_module._get_core_constraints.cache_clear()
 
     assert first == ("shared-lib==2.0",)
     assert second == ("shared-lib==2.0",)
@@ -517,26 +518,26 @@ def test_get_core_constraints_skips_distributions_with_unreadable_top_level(
         return [broken_distribution, fake_distribution]
 
     monkeypatch.setattr(
-        pip_installer_module.importlib_metadata,
+        core_constraints_module.importlib_metadata,
         "distribution",
         mock_distribution,
     )
     monkeypatch.setattr(
-        pip_installer_module.importlib_metadata,
+        core_constraints_module.importlib_metadata,
         "distributions",
         mock_distributions,
     )
     monkeypatch.setattr(
-        pip_installer_module,
+        core_constraints_module,
         "_collect_installed_distribution_versions",
         lambda paths: {"shared-lib": "2.0"},
     )
 
-    pip_installer_module._get_core_constraints.cache_clear()
+    core_constraints_module._get_core_constraints.cache_clear()
     try:
-        constraints = pip_installer_module._get_core_constraints(None)
+        constraints = core_constraints_module._get_core_constraints(None)
     finally:
-        pip_installer_module._get_core_constraints.cache_clear()
+        core_constraints_module._get_core_constraints.cache_clear()
 
     assert constraints == ("shared-lib==2.0",)
 
@@ -552,7 +553,7 @@ def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
     )
 
     monkeypatch.setattr(
-        pip_installer_module,
+        core_constraints_module,
         "_get_core_constraints",
         lambda core_dist_name: ("aiohttp==3.13.3",),
     )
@@ -565,7 +566,9 @@ def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
         pip_installer_module.DependencyConflictError,
         match="core conflict",
     ):
-        with pip_installer_module._core_constraints_file("AstrBot") as constraints_path:
+        with core_constraints_module._core_constraints_file(
+            "AstrBot"
+        ) as constraints_path:
             assert constraints_path is not None
             raise conflict
 

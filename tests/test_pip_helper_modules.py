@@ -1,0 +1,72 @@
+from pathlib import Path
+
+from astrbot.core.utils import core_constraints as core_constraints_module
+from astrbot.core.utils import requirements_utils
+from astrbot.core.utils.core_constraints import CoreConstraintsProvider
+
+
+def test_requirements_utils_parse_package_install_input_collects_specs_and_names():
+    parsed = requirements_utils.parse_package_install_input(
+        "--index-url https://example.com/simple demo-package\nanother-package>=1.0\n"
+    )
+
+    assert parsed.specs == (
+        "--index-url",
+        "https://example.com/simple",
+        "demo-package",
+        "another-package>=1.0",
+    )
+    assert parsed.requirement_names == {"demo-package", "another-package"}
+
+
+def test_core_constraints_provider_writes_constraints_file_from_fallback_distribution(
+    monkeypatch,
+):
+    class FakeFallbackDistribution:
+        metadata = {"Name": "AstrBot-App"}
+        requires = ["shared-lib>=1.0"]
+
+        def read_text(self, name):
+            if name == "top_level.txt":
+                return "astrbot\n"
+            return ""
+
+    fake_distribution = FakeFallbackDistribution()
+
+    def mock_distribution(name):
+        if name == "AstrBot":
+            raise core_constraints_module.importlib_metadata.PackageNotFoundError
+        if name == "AstrBot-App":
+            return fake_distribution
+        raise core_constraints_module.importlib_metadata.PackageNotFoundError
+
+    def mock_distributions(path=None):
+        del path
+        return [fake_distribution]
+
+    monkeypatch.setattr(
+        core_constraints_module.importlib_metadata,
+        "distribution",
+        mock_distribution,
+    )
+    monkeypatch.setattr(
+        core_constraints_module.importlib_metadata,
+        "distributions",
+        mock_distributions,
+    )
+    monkeypatch.setattr(
+        core_constraints_module,
+        "_collect_installed_distribution_versions",
+        lambda paths: {"shared-lib": "2.0"},
+    )
+
+    core_constraints_module._get_core_constraints.cache_clear()
+    try:
+        provider = CoreConstraintsProvider(None)
+        with provider.constraints_file() as constraints_path:
+            assert constraints_path is not None
+            assert (
+                Path(constraints_path).read_text(encoding="utf-8") == "shared-lib==2.0"
+            )
+    finally:
+        core_constraints_module._get_core_constraints.cache_clear()
