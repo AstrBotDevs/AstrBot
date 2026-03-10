@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import uuid
+import aiohttp
+from PIL import Image as PILImage
+import base64
+import io
 import asyncio
 import copy
 import datetime
@@ -487,7 +492,7 @@ async def _ensure_img_caption(
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            req.image_urls,
+            [await _compress_image_internal(url) for url in req.image_urls],
             plugin_context,
         )
         if caption:
@@ -497,6 +502,11 @@ async def _ensure_img_caption(
             req.image_urls = []
     except Exception as exc:  # noqa: BLE001
         logger.error("处理图片描述失败: %s", exc)
+    finally:
+        req.extra_user_content_parts.append(
+            TextPart(text=f"图片解析失败")
+        )
+        req.image_urls = []
 
 
 def _append_quoted_image_attachment(req: ProviderRequest, image_path: str) -> None:
@@ -562,7 +572,7 @@ async def _process_quote_message(
             if prov and isinstance(prov, Provider):
                 llm_resp = await prov.text_chat(
                     prompt="Please describe the image content.",
-                    image_urls=[await image_seg.convert_to_file_path()],
+                    image_urls=[await _compress_image_internal(await image_seg.convert_to_file_path())],
                 )
                 if llm_resp.completion_text:
                     content_parts.append(
@@ -1220,3 +1230,36 @@ async def build_main_agent(
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
     )
+
+# 压缩用户上传的大体积图片 未来可以提取为通用工具
+async def _compress_image_internal(url_or_path: str) -> str:
+    try:
+        data = None
+        # 若为远程图片则直接返回原值 无需压缩
+        if url_or_path.startswith('http'):
+            return url_or_path
+        elif url_or_path.startswith('data:image'):
+            header, encoded = url_or_path.split(',', 1)
+            data = base64.b64decode(encoded)
+        elif os.path.exists(url_or_path):
+            if os.path.getsize(url_or_path) < 1024 * 1024: return url_or_path
+            with open(url_or_path, 'rb') as f: data = f.read()
+        if not data: return url_or_path
+        import io
+        from PIL import Image as PILImage
+        img = PILImage.open(io.BytesIO(data))
+        if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
+        max_size = 1280
+        if max(img.size) > max_size: img.thumbnail((max_size, max_size), PILImage.LANCZOS)
+        out_io = io.BytesIO()
+        img.save(out_io, format='JPEG', quality=75, optimize=True)
+        temp_dir = '/www/server/python_project/AstrBot/data/temp'
+        if not os.path.exists(temp_dir): os.makedirs(temp_dir)
+        import uuid
+        temp_path = os.path.join(temp_dir, f'compressed_{uuid.uuid4().hex}.jpg')
+        with open(temp_path, 'wb') as f: f.write(out_io.getvalue())
+        return temp_path
+    except Exception as e:
+        from astrbot.core import logger
+        logger.warning(f'图片压缩失败: {e}')
+        return url_or_path
