@@ -848,6 +848,46 @@ async def test_install_respects_index_override_in_pip_install_arg(monkeypatch):
     assert "https://pypi.org/simple" not in recorded_args
 
 
+def test_redact_pip_args_for_logging_redacts_inline_url_credentials():
+    redacted_args = pip_installer_module._redact_pip_args_for_logging(
+        [
+            "install",
+            "--index-url=https://user:secret@example.com/simple",
+            "demo-package",
+        ]
+    )
+
+    assert redacted_args == [
+        "install",
+        "--index-url=https://<redacted>@example.com/simple",
+        "demo-package",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_install_logs_redacted_pip_argv_when_credentials_present(monkeypatch):
+    run_pip = AsyncMock(return_value=(0, []))
+    logged_lines = []
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", run_pip)
+    monkeypatch.setattr(
+        "astrbot.core.utils.pip_installer.logger.info",
+        lambda line, *args: logged_lines.append(line % args if args else line),
+    )
+
+    installer = PipInstaller("")
+    await installer.install(
+        package_name="--index-url https://user:secret@example.com/simple demo-package"
+    )
+
+    argv_logs = [line for line in logged_lines if line.startswith("Pip 包管理器 argv:")]
+
+    assert len(argv_logs) == 1
+    assert "secret" not in argv_logs[0]
+    assert "user:" not in argv_logs[0]
+    assert "https://<redacted>@example.com/simple" in argv_logs[0]
+
+
 @pytest.mark.asyncio
 async def test_install_does_not_add_aliyun_trusted_host_for_default_index(monkeypatch):
     run_pip = AsyncMock(return_value=(0, []))

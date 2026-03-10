@@ -229,6 +229,32 @@ def _get_trusted_host_for_index_url(index_url: str) -> str | None:
     return None
 
 
+def _redact_url_credentials(raw_value: str) -> str:
+    parsed = urlparse(raw_value)
+    if "@" not in parsed.netloc:
+        return raw_value
+
+    _, host = parsed.netloc.rsplit("@", 1)
+    return parsed._replace(netloc=f"<redacted>@{host}").geturl()
+
+
+def _redact_pip_args_for_logging(args: list[str]) -> list[str]:
+    redacted_args: list[str] = []
+    for arg in args:
+        if arg.startswith("--") and "=" in arg:
+            option, value = arg.split("=", 1)
+            redacted_args.append(f"{option}={_redact_url_credentials(value)}")
+            continue
+
+        if arg.startswith("-i") and arg != "-i":
+            redacted_args.append(f"-i{_redact_url_credentials(arg[2:])}")
+            continue
+
+        redacted_args.append(_redact_url_credentials(arg))
+
+    return redacted_args
+
+
 def _package_specs_override_index(package_specs: list[str]) -> bool:
     for index, spec in enumerate(package_specs):
         if spec in {"-i", "--index-url"}:
@@ -1096,7 +1122,10 @@ class PipInstaller:
             if constraints_file_path:
                 args.extend(["-c", constraints_file_path])
 
-            logger.info("Pip 包管理器 argv: %s", ["pip", *args])
+            logger.info(
+                "Pip 包管理器 argv: %s",
+                ["pip", *_redact_pip_args_for_logging(args)],
+            )
             run_result = _coerce_pip_run_result(await self._run_pip_in_process(args))
 
             if run_result.code != 0:
