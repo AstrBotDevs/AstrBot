@@ -381,7 +381,7 @@ export default {
               return;
             }
             this.showMcpServerDialog = false;
-            this.addServerDialogMessage = '';
+            this.setAddServerDialogMessage('');
             this.getServers();
             this.showSuccess(response.data.message || this.tm('messages.saveSuccess'));
             this.resetForm();
@@ -445,15 +445,18 @@ export default {
     },
     closeServerDialog() {
       this.showMcpServerDialog = false;
-      this.addServerDialogMessage = '';
+      this.setAddServerDialogMessage('');
       this.resetForm();
+    },
+    setAddServerDialogMessage(message = '') {
+      this.addServerDialogMessage = message;
     },
     testServerConnection() {
       if (!this.validateJson()) {
         return;
       }
       this.loading = true;
-      this.addServerDialogMessage = '';
+      this.setAddServerDialogMessage('');
       let configObj;
       try {
         configObj = JSON.parse(this.serverConfigJson);
@@ -468,7 +471,10 @@ export default {
         .then(response => {
           this.loading = false;
           if (response.data.status === 'error') {
-            this.addServerDialogMessage = response.data.message || this.tm('messages.testError', { error: 'Unknown error' });
+            this.showError(
+              response.data.message || this.tm('messages.testError', { error: 'Unknown error' }),
+              { inlineDialog: true }
+            );
             return;
           }
 
@@ -476,13 +482,13 @@ export default {
             ? response.data.data.join(', ')
             : response.data.data;
           const toolsSuffix = tools ? ` (tools: ${tools})` : '';
-          this.addServerDialogMessage = `${response.data.message}${toolsSuffix}`;
+          this.setAddServerDialogMessage(`${response.data.message}${toolsSuffix}`);
         })
         .catch(error => {
           this.loading = false;
-          this.addServerDialogMessage = this.tm('messages.testError', {
+          this.showError(this.tm('messages.testError', {
             error: error.response?.data?.message || error.message
-          });
+          }), { inlineDialog: true });
         });
     },
     resetForm() {
@@ -501,7 +507,11 @@ export default {
       this.save_message_success = 'success';
       this.save_message_snack = true;
     },
-    showError(message) {
+    showError(message, options = {}) {
+      if (options.inlineDialog) {
+        this.setAddServerDialogMessage(message);
+        return;
+      }
       this.save_message = message;
       this.save_message_success = 'error';
       this.save_message_snack = true;
