@@ -58,6 +58,12 @@ class DependencyConflictError(Exception):
         self.is_core_conflict = is_core_conflict
 
 
+class RequirementsPrecheckFailed(Exception):
+    """Raised when the pre-check of requirements fails."""
+
+    pass
+
+
 class _StreamingLogWriter(io.TextIOBase):
     def __init__(self, log_func) -> None:
         self._log_func = log_func
@@ -253,6 +259,9 @@ def _iter_requirement_lines(
     visited_paths = _visited_paths or set()
     resolved_path = os.path.realpath(requirements_path)
     if resolved_path in visited_paths:
+        logger.warning(
+            "检测到循环依赖的 requirements 包含: %s，将跳过该文件", resolved_path
+        )
         return
     visited_paths.add(resolved_path)
 
@@ -864,6 +873,17 @@ def _patch_distlib_finder_for_frozen_runtime() -> None:
             )
 
 
+def find_missing_requirements(requirements_path: str) -> set[str] | None:
+    return _find_missing_requirements(requirements_path)
+
+
+def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
+    missing = find_missing_requirements(requirements_path)
+    if missing is None:
+        raise RequirementsPrecheckFailed(f"预检查失败: {requirements_path}")
+    return missing
+
+
 class PipInstaller:
     def __init__(self, pip_install_arg: str, pypi_index_url: str | None = None) -> None:
         self.pip_install_arg = pip_install_arg
@@ -969,6 +989,9 @@ class PipInstaller:
 
     def find_missing_requirements(self, requirements_path: str) -> set[str] | None:
         return _find_missing_requirements(requirements_path)
+
+    def find_missing_requirements_or_raise(self, requirements_path: str) -> set[str]:
+        return find_missing_requirements_or_raise(requirements_path)
 
     async def _run_pip_in_process(self, args: list[str]) -> tuple[int, list[str]]:
         pip_main = _get_pip_main()

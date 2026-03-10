@@ -108,9 +108,22 @@ def _build_reload_mock(events):
 
 def _mock_missing_requirements(monkeypatch, missing: set[str]):
     monkeypatch.setattr(
-        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements",
+        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements_or_raise",
         lambda requirements_path: missing,
     )
+
+
+def _mock_precheck_fails(monkeypatch):
+    from astrbot.core import RequirementsPrecheckFailed
+
+    def mock_fail(requirements_path):
+        raise RequirementsPrecheckFailed("mock precheck failure")
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements_or_raise",
+        mock_fail,
+    )
+
 
 
 @pytest_asyncio.fixture
@@ -391,7 +404,7 @@ async def test_install_plugin_requirements_with_logging_reraises_cancelled_error
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await plugin_manager_pm._install_plugin_requirements_with_logging(
+        await plugin_manager_pm._ensure_plugin_requirements(
             str(plugin_path),
             TEST_PLUGIN_DIR,
         )
@@ -472,10 +485,7 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
         _write_requirements(plugin_path)
         return str(plugin_path)
 
-    monkeypatch.setattr(
-        "astrbot.core.star.star_manager.pip_installer.find_missing_requirements",
-        lambda requirements_path: None,
-    )
+    _mock_precheck_fails(monkeypatch)
     monkeypatch.setattr(plugin_manager_pm.updator, "install", mock_install)
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",

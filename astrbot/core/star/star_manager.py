@@ -14,7 +14,13 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from astrbot.core import DependencyConflictError, logger, pip_installer, sp
+from astrbot.core import (
+    DependencyConflictError,
+    RequirementsPrecheckFailed,
+    logger,
+    pip_installer,
+    sp,
+)
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
@@ -198,10 +204,10 @@ class PluginManager:
                 to_update.append(p.root_dir_name)
         for p in to_update:
             plugin_path = os.path.join(plugin_dir, p)
-            await self._install_plugin_requirements_with_logging(plugin_path, p)
+            await self._ensure_plugin_requirements(plugin_path, p)
         return True
 
-    async def _install_plugin_requirements(
+    async def _ensure_plugin_requirements(
         self,
         plugin_dir_path: str,
         plugin_label: str,
@@ -210,30 +216,29 @@ class PluginManager:
         if not os.path.exists(requirements_path):
             return
 
-        missing_requirements = pip_installer.find_missing_requirements(
-            requirements_path
-        )
-        if missing_requirements == set():
-            logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
-            return
-
-        if missing_requirements is None:
-            logger.info(
-                f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: {requirements_path}"
-            )
-        else:
-            logger.info(
-                f"正在安装插件 {plugin_label} 缺失的依赖库: {requirements_path} -> {sorted(missing_requirements)}"
-            )
-        await pip_installer.install(requirements_path=requirements_path)
-
-    async def _install_plugin_requirements_with_logging(
-        self,
-        plugin_dir_path: str,
-        plugin_label: str,
-    ) -> None:
         try:
-            await self._install_plugin_requirements(plugin_dir_path, plugin_label)
+            try:
+                missing = pip_installer.find_missing_requirements_or_raise(
+                    requirements_path
+                )
+            except RequirementsPrecheckFailed:
+                logger.info(
+                    f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
+                    f"{requirements_path}"
+                )
+                await pip_installer.install(requirements_path=requirements_path)
+                return
+
+            if not missing:
+                logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
+                return
+
+            logger.info(
+                f"正在安装插件 {plugin_label} 缺失的依赖库: "
+                f"{requirements_path} -> {sorted(missing)}"
+            )
+            await pip_installer.install(requirements_path=requirements_path)
+
         except asyncio.CancelledError:
             raise
         except DependencyConflictError as e:
@@ -530,7 +535,7 @@ class PluginManager:
             self._cleanup_plugin_state(dir_name)
 
             plugin_path = os.path.join(self.plugin_store_path, dir_name)
-            await self._install_plugin_requirements_with_logging(plugin_path, dir_name)
+            await self._ensure_plugin_requirements(plugin_path, dir_name)
 
             success, error = await self.load(specified_dir_name=dir_name)
             if success:
@@ -1115,7 +1120,7 @@ class PluginManager:
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
-                await self._install_plugin_requirements_with_logging(
+                await self._ensure_plugin_requirements(
                     plugin_path,
                     dir_name,
                 )
@@ -1360,7 +1365,7 @@ class PluginManager:
         await self.updator.update(plugin, proxy=proxy)
         if plugin.root_dir_name:
             plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
-            await self._install_plugin_requirements_with_logging(
+            await self._ensure_plugin_requirements(
                 plugin_dir_path,
                 plugin_name,
             )
@@ -1535,7 +1540,7 @@ class PluginManager:
                 os.remove(zip_file_path)
             except BaseException as e:
                 logger.warning(f"删除插件压缩包失败: {e!s}")
-            await self._install_plugin_requirements_with_logging(desti_dir, dir_name)
+            await self._ensure_plugin_requirements(desti_dir, dir_name)
             # await self.reload()
             success, error_message = await self.load(
                 specified_dir_name=dir_name,
