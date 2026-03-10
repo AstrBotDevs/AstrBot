@@ -90,6 +90,7 @@
       "feedback": {
         "successTitle": "连接测试通过",
         "errorTitle": "连接测试失败",
+        "genericDetail": "连接测试未能成功完成。",
         "availableTools": "可用工具：{tools}",
         "rawError": "原始错误：",
         "stdioCommandNotFound": {

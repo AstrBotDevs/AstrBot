@@ -90,6 +90,7 @@
       "feedback": {
         "successTitle": "Connection test passed",
         "errorTitle": "Connection test failed",
+        "genericDetail": "The connection test did not complete successfully.",
         "availableTools": "Available tools: {tools}",
         "rawError": "Original error:",
         "stdioCommandNotFound": {

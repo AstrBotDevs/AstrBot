@@ -39,9 +39,29 @@ except (ModuleNotFoundError, ImportError):
 class MCPStdioCommandNotFoundError(Exception):
     """Raised when the configured stdio MCP command cannot be started."""
 
+    code = "mcp_stdio_command_not_found"
+
+    def __init__(
+        self, command: str | None, original_error: Exception | None = None
+    ) -> None:
+        self.command = str(command or "").strip() or "<unknown>"
+        self.raw_error = str(original_error).strip() if original_error else ""
+        super().__init__(
+            _build_missing_stdio_command_message(self.command, self.raw_error or None)
+        )
+
+    def to_response_data(self) -> dict:
+        return {
+            "error": {
+                "code": self.code,
+                "command": self.command,
+                "raw_error": self.raw_error,
+            }
+        }
+
 
 def _build_missing_stdio_command_message(
-    command: str | None, original_error: Exception | None = None
+    command: str | None, original_error: str | None = None
 ) -> str:
     normalized_command = str(command or "").strip() or "<unknown>"
     sections = [
@@ -249,9 +269,7 @@ class MCPClient:
                     ),
                 )
             except FileNotFoundError as exc:
-                raise MCPStdioCommandNotFoundError(
-                    _build_missing_stdio_command_message(cfg.get("command"), exc)
-                ) from exc
+                raise MCPStdioCommandNotFoundError(cfg.get("command"), exc) from exc
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(

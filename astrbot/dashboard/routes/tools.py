@@ -3,13 +3,17 @@ import traceback
 from quart import request
 
 from astrbot.core import logger
-from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.mcp_client import MCPStdioCommandNotFoundError, MCPTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 
 from .route import Response, Route, RouteContext
 
 DEFAULT_MCP_CONFIG = {"mcpServers": {}}
+MCP_TEST_CONNECTION_ERROR_MESSAGE = "Unable to test the MCP connection."
+MCP_TEST_CONNECTION_DETAILS_MESSAGE = (
+    "Unable to test the MCP connection. Review the details below."
+)
 
 
 class EmptyMcpServersError(ValueError):
@@ -69,6 +73,32 @@ class ToolsRoute(Route):
         except Exception:
             logger.error(traceback.format_exc())
             return False
+
+    def _build_mcp_test_error_response(self, error: Exception) -> dict:
+        if isinstance(error, MCPStdioCommandNotFoundError):
+            return (
+                Response()
+                .error(
+                    MCP_TEST_CONNECTION_DETAILS_MESSAGE,
+                    error.to_response_data(),
+                )
+                .__dict__
+            )
+
+        msg = str(error).strip() or MCP_TEST_CONNECTION_ERROR_MESSAGE
+        return (
+            Response()
+            .error(
+                MCP_TEST_CONNECTION_ERROR_MESSAGE,
+                {
+                    "error": {
+                        "code": "mcp_test_connection_failed",
+                        "detail": msg,
+                    }
+                },
+            )
+            .__dict__
+        )
 
     async def get_mcp_servers(self):
         try:
@@ -423,11 +453,7 @@ class ToolsRoute(Route):
 
         except Exception as e:
             logger.error(traceback.format_exc())
-            return (
-                Response()
-                .error(f"{e!s}" or "Unable to test the MCP connection.")
-                .__dict__
-            )
+            return self._build_mcp_test_error_response(e)
 
     async def get_tool_list(self):
         """Get all registered tools."""

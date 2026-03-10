@@ -475,56 +475,40 @@ export default {
     clearAddServerDialogFeedback() {
       this.setAddServerDialogFeedback(null);
     },
-    buildAddServerDialogErrorFeedback(message) {
+    buildAddServerDialogErrorFeedback(message, errorData = null) {
       const normalizedMessage = String(message || '').trim();
-      const sections = normalizedMessage
-        .split(/\n\s*\n/)
-        .map(section => section.trim())
-        .filter(Boolean);
-      if (sections.length > 1) {
-        const [title, ...rest] = sections;
-        const rawErrorPrefix = 'Original error:';
-        const details = [];
-        let rawError = '';
-        rest.forEach(section => {
-          if (section.startsWith(rawErrorPrefix)) {
-            rawError = section.slice(rawErrorPrefix.length).trim();
-            return;
-          }
-          details.push(section);
-        });
-        const missingCommandMatch = details[0]?.match(/^Command '(.+)' was not found\.$/);
-        if (
-          title === 'Unable to start the MCP stdio server'
-          && missingCommandMatch
-        ) {
-          return {
-            type: 'error',
-            icon: 'mdi-alert-circle',
-            title: this.tm('dialogs.addServer.feedback.stdioCommandNotFound.title'),
-            details: [
-              this.tm('dialogs.addServer.feedback.stdioCommandNotFound.reason', {
-                command: missingCommandMatch[1]
-              }),
-              this.tm('dialogs.addServer.feedback.stdioCommandNotFound.action')
-            ],
-            rawError
-          };
-        }
+      if (errorData?.code === 'mcp_stdio_command_not_found') {
         return {
           type: 'error',
           icon: 'mdi-alert-circle',
-          title,
-          details,
-          rawError
+          title: this.tm('dialogs.addServer.feedback.stdioCommandNotFound.title'),
+          details: [
+            this.tm('dialogs.addServer.feedback.stdioCommandNotFound.reason', {
+              command: errorData.command || '<unknown>'
+            }),
+            this.tm('dialogs.addServer.feedback.stdioCommandNotFound.action')
+          ],
+          rawError: errorData.raw_error || ''
+        };
+      }
+      if (errorData?.code === 'mcp_test_connection_failed') {
+        const detail = String(errorData.detail || '').trim();
+        return {
+          type: 'error',
+          icon: 'mdi-alert-circle',
+          title: this.tm('dialogs.addServer.feedback.errorTitle'),
+          details: [detail || this.tm('dialogs.addServer.feedback.genericDetail')],
+          rawError: errorData.raw_error || ''
         };
       }
       return {
         type: 'error',
         icon: 'mdi-alert-circle',
         title: this.tm('dialogs.addServer.feedback.errorTitle'),
-        details: normalizedMessage ? [normalizedMessage] : [this.tm('messages.testError', { error: 'Unknown error' })],
-        rawError: ''
+        details: [
+          normalizedMessage || this.tm('dialogs.addServer.feedback.genericDetail')
+        ],
+        rawError: errorData?.raw_error || ''
       };
     },
     buildAddServerDialogSuccessFeedback(message, tools = '') {
@@ -564,8 +548,11 @@ export default {
           this.loading = false;
           if (response.data.status === 'error') {
             this.showError(
-              response.data.message || 'Unknown error',
-              { inlineDialog: true }
+              response.data.message || this.tm('dialogs.addServer.feedback.genericDetail'),
+              {
+                inlineDialog: true,
+                errorData: response.data.data?.error
+              }
             );
             return;
           }
@@ -580,8 +567,11 @@ export default {
         .catch(error => {
           this.loading = false;
           this.showError(
-            error.response?.data?.message || error.message || 'Unknown error',
-            { inlineDialog: true }
+            error.response?.data?.message || error.message || this.tm('dialogs.addServer.feedback.genericDetail'),
+            {
+              inlineDialog: true,
+              errorData: error.response?.data?.data?.error
+            }
           );
         });
     },
@@ -603,7 +593,9 @@ export default {
     },
     showError(message, options = {}) {
       if (options.inlineDialog) {
-        this.setAddServerDialogFeedback(this.buildAddServerDialogErrorFeedback(message));
+        this.setAddServerDialogFeedback(
+          this.buildAddServerDialogErrorFeedback(message, options.errorData)
+        );
         return;
       }
       this.save_message = message;

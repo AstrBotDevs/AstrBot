@@ -304,13 +304,55 @@ async def test_mcp_test_connection_returns_clear_missing_stdio_command_message(
 
     data = await response.get_json()
     assert data["status"] == "error"
-    assert data["message"] == (
-        "Unable to start the MCP stdio server\n\n"
-        "Command 'uvx' was not found.\n\n"
-        "Install the command, or set 'command' to the full executable path "
-        "and ensure it is available in PATH.\n\n"
-        "Original error: [Errno 2] 系统找不到指定的文件。"
+    assert data["message"] == "Unable to test the MCP connection. Review the details below."
+    assert data["data"] == {
+        "error": {
+            "code": "mcp_stdio_command_not_found",
+            "command": "uvx",
+            "raw_error": "[Errno 2] 系统找不到指定的文件。",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_mcp_test_connection_uses_fallback_for_blank_error_message(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def raise_blank_error(*args, **kwargs):
+        raise Exception("   ")
+
+    monkeypatch.setattr(
+        core_lifecycle_td.provider_manager.llm_tools,
+        "test_mcp_server_connection",
+        raise_blank_error,
     )
+
+    response = await test_client.post(
+        "/api/tools/mcp/test",
+        json={
+            "mcp_server_config": {
+                "command": "uvx",
+                "args": ["mcp-server-fetch"],
+            }
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Unable to test the MCP connection."
+    assert data["data"] == {
+        "error": {
+            "code": "mcp_test_connection_failed",
+            "detail": "Unable to test the MCP connection.",
+        }
+    }
 
 
 @pytest.mark.asyncio
