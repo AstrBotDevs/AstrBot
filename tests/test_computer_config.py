@@ -1,20 +1,18 @@
-"""Tests for _discover_bay_credentials() auto-discovery and _log_computer_config_changes()."""
+"""Tests for discover_bay_credentials() auto-discovery and config logging."""
 
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from astrbot.core.computer.computer_client import _discover_bay_credentials
+from astrbot.core.computer.computer_client import discover_bay_credentials
 from astrbot.dashboard.routes.config import _log_computer_config_changes
 
-
 # ═══════════════════════════════════════════════════════════════
-# _discover_bay_credentials
+# discover_bay_credentials
 # ═══════════════════════════════════════════════════════════════
 
 
@@ -48,7 +46,7 @@ class TestDiscoverBayCredentials:
         self._write_creds(cred_file, api_key="sk-bay-from-env-dir")
         monkeypatch.setenv("BAY_DATA_DIR", str(data_dir))
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
         assert result == "sk-bay-from-env-dir"
 
     def test_discover_from_cwd(
@@ -60,7 +58,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("BAY_DATA_DIR", raising=False)
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
         assert result == "sk-bay-from-cwd"
 
     def test_returns_empty_when_no_credentials_found(
@@ -70,7 +68,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("BAY_DATA_DIR", raising=False)
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
         assert result == ""
 
     def test_skips_empty_api_key(
@@ -82,7 +80,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("BAY_DATA_DIR", raising=False)
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
         assert result == ""
 
     def test_skips_malformed_json(
@@ -95,7 +93,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("BAY_DATA_DIR", raising=False)
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
         assert result == ""
 
     @patch("astrbot.core.computer.computer_client.logger")
@@ -110,7 +108,7 @@ class TestDiscoverBayCredentials:
         )
         monkeypatch.setenv("BAY_DATA_DIR", str(data_dir))
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
 
         assert result == "sk-bay-mismatch"
         mock_logger.warning.assert_called_once()
@@ -129,7 +127,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.setenv("BAY_DATA_DIR", str(data_dir))
 
         with patch("astrbot.core.computer.computer_client.logger") as mock_logger:
-            result = _discover_bay_credentials("http://127.0.0.1:8114")
+            result = discover_bay_credentials("http://127.0.0.1:8114")
 
         assert result == "sk-bay-match"
         mock_logger.warning.assert_not_called()
@@ -145,7 +143,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.setenv("BAY_DATA_DIR", str(env_dir))
         monkeypatch.chdir(cwd_dir)
 
-        result = _discover_bay_credentials("http://127.0.0.1:8114")
+        result = discover_bay_credentials("http://127.0.0.1:8114")
         assert result == "sk-bay-env-wins"
 
     def test_trailing_slash_normalization(
@@ -160,7 +158,7 @@ class TestDiscoverBayCredentials:
         monkeypatch.setenv("BAY_DATA_DIR", str(data_dir))
 
         with patch("astrbot.core.computer.computer_client.logger") as mock_logger:
-            result = _discover_bay_credentials("http://127.0.0.1:8114")
+            result = discover_bay_credentials("http://127.0.0.1:8114")
 
         assert result == "sk-bay-slash"
         mock_logger.warning.assert_not_called()
@@ -184,7 +182,10 @@ class TestLogComputerConfigChanges:
 
         mock_logger.info.assert_called()
         call_args = [str(c) for c in mock_logger.info.call_args_list]
-        assert any("computer_use_runtime" in c and "none" in c and "sandbox" in c for c in call_args)
+        assert any(
+            "computer_use_runtime" in c and "none" in c and "sandbox" in c
+            for c in call_args
+        )
 
     @patch("astrbot.dashboard.routes.config.logger")
     def test_no_log_when_runtime_unchanged(self, mock_logger) -> None:
@@ -214,7 +215,9 @@ class TestLogComputerConfigChanges:
                 assert args[3] == "shipyard_neo"
                 found = True
                 break
-        assert found, f"Expected booter change in log calls: {mock_logger.info.call_args_list}"
+        assert found, (
+            f"Expected booter change in log calls: {mock_logger.info.call_args_list}"
+        )
 
     @patch("astrbot.dashboard.routes.config.logger")
     def test_masks_token_values(self, mock_logger) -> None:
@@ -237,9 +240,7 @@ class TestLogComputerConfigChanges:
     def test_masks_empty_token_as_empty_label(self, mock_logger) -> None:
         """Empty token values show as '(empty)' not '***'."""
         old = {
-            "provider_settings": {
-                "sandbox": {"shipyard_neo_access_token": "old-key"}
-            }
+            "provider_settings": {"sandbox": {"shipyard_neo_access_token": "old-key"}}
         }
         new = {"provider_settings": {"sandbox": {"shipyard_neo_access_token": ""}}}
 
@@ -313,9 +314,7 @@ class TestLogComputerConfigChanges:
     def test_secret_key_masked(self, mock_logger) -> None:
         """Any key containing 'secret' is also masked."""
         old = {"provider_settings": {"sandbox": {"my_secret_key": ""}}}
-        new = {
-            "provider_settings": {"sandbox": {"my_secret_key": "very-secret-value"}}
-        }
+        new = {"provider_settings": {"sandbox": {"my_secret_key": "very-secret-value"}}}
 
         _log_computer_config_changes(old, new)
 

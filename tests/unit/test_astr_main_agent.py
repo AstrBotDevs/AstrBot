@@ -1,6 +1,5 @@
 """Tests for astr_main_agent module."""
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1399,8 +1398,8 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch):
-        """Test sandbox tools with shipyard booter configuration."""
+    def test_apply_sandbox_tools_with_shipyard_booter(self):
+        """Test sandbox tools with shipyard booter registers 4 basic tools."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
@@ -1412,56 +1411,33 @@ class TestApplySandboxTools:
             },
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
-
-        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
-        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
 
         module._apply_sandbox_tools(config, req, "session-123")
 
-        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
-        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
+        names = req.func_tool.names()
+        assert "astrbot_execute_shell" in names
+        assert len(names) == 4
 
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self):
-        """Test that shipyard config is skipped when endpoint is missing."""
+    def test_apply_sandbox_tools_neo_booter_registers_18_tools(self):
+        """Test sandbox tools with Neo booter registers all 18 tools."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
             computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "",
-                "shipyard_access_token": "test-token",
-            },
+            sandbox_cfg={"booter": "shipyard_neo"},
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
+        with patch(
+            "astrbot.core.computer.computer_client.get_sandbox_tools",
+            return_value=[],
+        ):
             module._apply_sandbox_tools(config, req, "session-123")
 
-        mock_logger.error.assert_called_once()
-        assert (
-            "Shipyard sandbox configuration is incomplete"
-            in mock_logger.error.call_args[0][0]
-        )
-
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self):
-        """Test that shipyard config is skipped when access token is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
+        names = req.func_tool.names()
+        assert "astrbot_create_skill_candidate" in names
+        assert "astrbot_execute_browser" in names
+        assert len(names) == 18
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self):
         """Test that existing tools are preserved when adding sandbox tools."""
