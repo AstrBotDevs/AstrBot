@@ -261,7 +261,6 @@ import { useModuleI18n } from '@/i18n/composables'
 type ToolsScope = 'all' | 'none' | 'list' | 'persona'
 
 type SubAgentItem = {
-
   __key: string
   name: string
   persona_id: string
@@ -272,17 +271,22 @@ type SubAgentItem = {
   tools?: string[]
   max_steps?: number
   instructions?: string
+  extensions?: Record<string, unknown>
 }
 
 type SubAgentConfig = {
   main_enable: boolean
   remove_main_duplicate_tools: boolean
+  router_system_prompt: string
+  max_concurrent_subagent_runs: number
+  max_nested_depth: number
   error_classifier?: {
     type?: string
     fatal_exceptions?: string[]
     transient_exceptions?: string[]
     default_class?: string
   }
+  extensions?: Record<string, unknown>
   agents: SubAgentItem[]
 }
 
@@ -320,6 +324,10 @@ function tf(
 const cfg = ref<SubAgentConfig>({
   main_enable: false,
   remove_main_duplicate_tools: false,
+  router_system_prompt: '',
+  max_concurrent_subagent_runs: 8,
+  max_nested_depth: 2,
+  extensions: {},
   error_classifier: {
     type: 'default',
     fatal_exceptions: ['ValueError', 'PermissionError', 'KeyError'],
@@ -363,6 +371,16 @@ function inferToolsScope(a: any): ToolsScope {
 function normalizeConfig(raw: any): SubAgentConfig {
   const main_enable = !!raw?.main_enable
   const remove_main_duplicate_tools = !!raw?.remove_main_duplicate_tools
+  const router_system_prompt = (raw?.router_system_prompt ?? '').toString()
+  const max_concurrent_subagent_runs = Number.isFinite(Number(raw?.max_concurrent_subagent_runs))
+    ? Number(raw.max_concurrent_subagent_runs)
+    : 8
+  const max_nested_depth = Number.isFinite(Number(raw?.max_nested_depth))
+    ? Number(raw.max_nested_depth)
+    : 2
+  const extensions = Object.fromEntries(
+    Object.entries(raw ?? {}).filter(([key]) => key.startsWith('x-'))
+  )
   const error_classifier = raw?.error_classifier && typeof raw.error_classifier === 'object'
     ? {
       type: (raw.error_classifier.type ?? 'default').toString(),
@@ -397,6 +415,9 @@ function normalizeConfig(raw: any): SubAgentConfig {
       a?.max_steps === null || a?.max_steps === undefined || a?.max_steps === ''
         ? undefined
         : Number(a.max_steps)
+    const extensions = Object.fromEntries(
+      Object.entries(a ?? {}).filter(([key]) => key.startsWith('x-'))
+    )
 
     return {
       __key: `${Date.now()}_${i}_${Math.random().toString(16).slice(2)}`,
@@ -408,11 +429,21 @@ function normalizeConfig(raw: any): SubAgentConfig {
       tools_scope,
       tools,
       max_steps: Number.isFinite(max_steps) ? max_steps : undefined,
-      instructions
+      instructions,
+      extensions
     }
   })
 
-  return { main_enable, remove_main_duplicate_tools, error_classifier, agents }
+  return {
+    main_enable,
+    remove_main_duplicate_tools,
+    router_system_prompt,
+    max_concurrent_subagent_runs,
+    max_nested_depth,
+    extensions,
+    error_classifier,
+    agents
+  }
 }
 
 async function loadConfig() {
@@ -439,10 +470,11 @@ function addAgent() {
     public_description: '',
     enabled: true,
     provider_id: undefined,
-    tools_scope: 'persona',
-    tools: [],
+    tools_scope: 'all',
+    tools: undefined,
     max_steps: undefined,
-    instructions: ''
+    instructions: '',
+    extensions: {}
   })
 }
 
@@ -481,6 +513,10 @@ async function save() {
     const payload = {
       main_enable: cfg.value.main_enable,
       remove_main_duplicate_tools: cfg.value.remove_main_duplicate_tools,
+      router_system_prompt: cfg.value.router_system_prompt,
+      max_concurrent_subagent_runs: cfg.value.max_concurrent_subagent_runs,
+      max_nested_depth: cfg.value.max_nested_depth,
+      ...(cfg.value.extensions ?? {}),
       error_classifier: cfg.value.error_classifier ?? {
         type: 'default',
         fatal_exceptions: ['ValueError', 'PermissionError', 'KeyError'],
@@ -488,6 +524,7 @@ async function save() {
         default_class: 'transient'
       },
       agents: cfg.value.agents.map((a) => ({
+        ...(a.extensions ?? {}),
         name: a.name,
         persona_id: a.persona_id,
         public_description: a.public_description,

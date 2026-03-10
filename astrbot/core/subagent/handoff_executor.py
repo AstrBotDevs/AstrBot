@@ -42,6 +42,7 @@ class _HandoffExecutionSettings:
     max_nested_depth: int
     default_max_steps: int
     streaming_response: bool
+    tool_call_timeout: int
 
 
 class HandoffExecutor:
@@ -101,6 +102,9 @@ class HandoffExecutor:
                 DEFAULT_MAX_STEPS,
             ),
             streaming_response=bool(provider_settings.get("streaming_response", False)),
+            tool_call_timeout=cls._safe_int(
+                getattr(run_context, "tool_call_timeout", 60), 60
+            ),
         )
 
     @classmethod
@@ -402,6 +406,7 @@ class HandoffExecutor:
                 tools=toolset,
                 contexts=contexts,
                 max_steps=agent_max_step,
+                tool_call_timeout=execution_settings.tool_call_timeout,
                 stream=stream,
             )
         finally:
@@ -533,6 +538,12 @@ class HandoffExecutor:
         )
         if role := meta.get("role"):
             cron_event.role = role
+        set_extra = getattr(cron_event, "set_extra", None)
+        if callable(set_extra):
+            set_extra(
+                "subagent_handoff_depth",
+                cls._safe_int(meta.get("subagent_handoff_depth"), 0),
+            )
 
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,

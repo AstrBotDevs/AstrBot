@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -20,9 +20,13 @@ class _DummyEvent:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
         self.role = "assistant"
+        self._extras: dict[str, object] = {}
 
-    def get_extra(self, _key: str):
-        return None
+    def get_extra(self, key: str):
+        return self._extras.get(key)
+
+    def set_extra(self, key: str, value: object) -> None:
+        self._extras[key] = value
 
 
 class _DummyTool:
@@ -237,6 +241,53 @@ async def test_execute_handoff_uses_subagent_max_steps_override(
 
 
 @pytest.mark.asyncio
+async def test_execute_handoff_forwards_run_context_tool_call_timeout():
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {"max_agent_step": 30}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=event, context=context),
+        tool_call_timeout=321,
+    )
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        max_steps=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+
+    results = []
+    async for result in HandoffExecutor.execute_foreground(
+        tool,
+        run_context,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["tool_call_timeout"] == 321
+
+
+@pytest.mark.asyncio
 async def test_execute_queued_task_uses_prepared_image_urls_and_notifies(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -329,6 +380,101 @@ async def test_execute_queued_task_uses_prepared_image_urls_and_notifies(
 
 
 @pytest.mark.asyncio
+async def test_execute_queued_task_restores_nested_depth_from_meta(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    class _FakeAstrAgentContext:
+        def __init__(self, *, context, event):
+            self.context = context
+            self.event = event
+
+    class _FakeAgentContextWrapper:
+        def __init__(self, *, context, tool_call_timeout):
+            self.context = context
+            self.tool_call_timeout = tool_call_timeout
+
+    async def _fake_execute_foreground(_tool, run_context, **kwargs):
+        captured["depth"] = run_context.context.event.get_extra(
+            "subagent_handoff_depth"
+        )
+        captured["timeout"] = run_context.tool_call_timeout
+        captured["kwargs"] = kwargs
+        yield mcp.types.CallToolResult(
+            content=[mcp.types.TextContent(type="text", text="done from queued depth")]
+        )
+
+    async def _fake_notify(**kwargs):
+        captured["notify"] = kwargs
+
+    monkeypatch.setattr(HandoffExecutor, "execute_foreground", _fake_execute_foreground)
+    monkeypatch.setattr(
+        "astrbot.core.subagent.handoff_executor.wake_main_agent_for_background_result",
+        _fake_notify,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_context.AstrAgentContext",
+        _FakeAstrAgentContext,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_context.AgentContextWrapper",
+        _FakeAgentContextWrapper,
+    )
+
+    task = SubagentTaskData(
+        task_id="task_queued_depth",
+        idempotency_key="idem_depth",
+        umo="webchat:FriendMessage:webchat!user!session",
+        subagent_name="subagent",
+        handoff_tool_name="transfer_to_subagent",
+        status="running",
+        attempt=1,
+        max_attempts=3,
+        next_run_at=None,
+        payload_json=json.dumps(
+            {
+                "_meta": {
+                    "background_note": "finished",
+                    "tool_call_timeout": 222,
+                    "subagent_handoff_depth": 2,
+                },
+                "tool_args": {"image_urls": [], "input": "hello"},
+            }
+        ),
+        error_class=None,
+        last_error=None,
+        result_text=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        finished_at=None,
+    )
+
+    handoff = SimpleNamespace(
+        name="transfer_to_subagent",
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+        provider_id=None,
+        max_steps=None,
+    )
+
+    result = await HandoffExecutor.execute_queued_task(
+        task=task,
+        plugin_context=SimpleNamespace(),
+        handoff=handoff,
+    )
+
+    assert "done from queued depth" in result
+    assert captured["depth"] == 2
+    assert captured["timeout"] == 222
+
+
+@pytest.mark.asyncio
 async def test_execute_queued_task_restores_handoff_from_snapshot_when_missing(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -392,7 +538,10 @@ async def test_execute_queued_task_restores_handoff_from_snapshot_when_missing(
                     "tool_description": "snapshot desc",
                 },
                 "_meta": {"background_note": "done", "tool_call_timeout": 60},
-                "tool_args": {"image_urls": ["https://example.com/a.png"], "input": "hi"},
+                "tool_args": {
+                    "image_urls": ["https://example.com/a.png"],
+                    "input": "hi",
+                },
             }
         ),
         error_class=None,
@@ -507,7 +656,7 @@ async def test_wake_main_agent_for_background_result_uses_background_overrides(
     )
 
     cfg = captured["config"]
-    assert cfg.tool_call_timeout == 3600
+    assert cfg.tool_call_timeout == 900
     assert cfg.computer_use_runtime == "none"
     assert cfg.add_cron_tools is False
     assert cfg.provider_settings["computer_use_runtime"] == "none"

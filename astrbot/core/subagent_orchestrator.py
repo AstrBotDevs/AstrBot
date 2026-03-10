@@ -171,6 +171,11 @@ class SubAgentOrchestrator:
         background_note = (
             event_get_extra("background_note") if callable(event_get_extra) else None
         )
+        subagent_handoff_depth = (
+            event_get_extra("subagent_handoff_depth")
+            if callable(event_get_extra)
+            else None
+        )
         umo = getattr(event, "unified_msg_origin", None)
         if not isinstance(umo, str) or not umo:
             raise ValueError(
@@ -185,6 +190,7 @@ class SubAgentOrchestrator:
                 "tool_call_timeout": int(
                     getattr(run_context, "tool_call_timeout", 3600)
                 ),
+                "subagent_handoff_depth": int(subagent_handoff_depth or 0),
             },
         }
         return await self._runtime.enqueue(
