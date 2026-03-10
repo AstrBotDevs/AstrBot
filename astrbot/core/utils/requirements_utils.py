@@ -96,6 +96,42 @@ def _parse_editable_or_direct_name(target: str) -> str | None:
     return None
 
 
+def _parse_requirement_line(
+    line: str,
+) -> tuple[str, SpecifierSet | None] | None:
+    if line.startswith(("-c", "--constraint")):
+        return None
+
+    try:
+        req = Requirement(line)
+    except InvalidRequirement:
+        tokens = shlex.split(line)
+        if not tokens:
+            return None
+
+        editable_target: str | None = None
+        if tokens[0] in {"-e", "--editable"} and len(tokens) > 1:
+            editable_target = tokens[1]
+        elif tokens[0].startswith("--editable="):
+            editable_target = tokens[0].split("=", 1)[1]
+
+        if editable_target:
+            name = _parse_editable_or_direct_name(editable_target)
+            if name:
+                return name, None
+
+        name = _parse_editable_or_direct_name(line)
+        if name:
+            return name, None
+
+        return None
+
+    if req.marker and not req.marker.evaluate():
+        return None
+
+    return canonicalize_distribution_name(req.name), (req.specifier or None)
+
+
 def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozenset[str]:
     requirement_names: set[str] = set()
     skip_next_for: str | None = None
@@ -252,37 +288,9 @@ def _iter_requirements_from_lines(
     requirement_lines: Iterator[str] | list[str],
 ) -> Iterator[tuple[str, SpecifierSet | None]]:
     for line in requirement_lines:
-        if line.startswith(("-c", "--constraint")):
-            continue
-
-        try:
-            req = Requirement(line)
-        except InvalidRequirement:
-            tokens = shlex.split(line)
-            if not tokens:
-                continue
-
-            editable_target: str | None = None
-            if tokens[0] in {"-e", "--editable"} and len(tokens) > 1:
-                editable_target = tokens[1]
-            elif tokens[0].startswith("--editable="):
-                editable_target = tokens[0].split("=", 1)[1]
-
-            if editable_target:
-                name = _parse_editable_or_direct_name(editable_target)
-                if name:
-                    yield name, None
-                continue
-
-            name = _parse_editable_or_direct_name(line)
-            if name:
-                yield name, None
-            continue
-
-        if req.marker and not req.marker.evaluate():
-            continue
-
-        yield (canonicalize_distribution_name(req.name), req.specifier or None)
+        parsed = _parse_requirement_line(line)
+        if parsed is not None:
+            yield parsed
 
 
 def _iter_requirements(

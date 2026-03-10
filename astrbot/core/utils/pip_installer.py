@@ -11,6 +11,7 @@ import shlex
 import sys
 import threading
 from collections import deque
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from astrbot.core.utils.astrbot_path import get_astrbot_site_packages_path
@@ -61,6 +62,16 @@ class PipInstallError(Exception):
     def __init__(self, message: str, *, code: int) -> None:
         super().__init__(message)
         self.code = code
+
+
+@dataclass
+class PipConflictContext:
+    relevant_lines: list[str]
+    requested_lines: list[str]
+    dependency_detail_lines: list[str]
+    constraint_lines: list[str]
+    has_strong_conflict_signal: bool
+    has_contextual_conflict_signal: bool
 
 
 def _get_pip_main():
@@ -241,7 +252,7 @@ def _normalize_conflict_detail_line(line: str) -> str:
     return stripped
 
 
-def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | None:
+def _build_pip_conflict_context(output_lines: list[str]) -> PipConflictContext | None:
     matched_indices = [
         index
         for index, line in enumerate(output_lines)
@@ -264,14 +275,6 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
     if not relevant_output_lines:
         return None
 
-    has_strong_conflict_signal = any(
-        _matches_pip_failure_pattern(
-            line,
-            "resolution_impossible",
-            "cannot_install",
-        )
-        for line in relevant_output_lines
-    )
     dependency_detail_lines = [
         line.strip()
         for line in relevant_output_lines
@@ -295,31 +298,55 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
         if _matches_pip_failure_pattern(line, "constraint")
     ]
 
+    has_strong_conflict_signal = any(
+        _matches_pip_failure_pattern(
+            line,
+            "resolution_impossible",
+            "cannot_install",
+        )
+        for line in relevant_output_lines
+    )
+
     has_contextual_conflict_signal = any(
         _matches_pip_failure_pattern(line, "conflict") for line in relevant_output_lines
     ) and bool(dependency_detail_lines or requested_lines or constraint_lines)
 
+    return PipConflictContext(
+        relevant_lines=relevant_output_lines,
+        requested_lines=requested_lines,
+        dependency_detail_lines=dependency_detail_lines,
+        constraint_lines=constraint_lines,
+        has_strong_conflict_signal=has_strong_conflict_signal,
+        has_contextual_conflict_signal=has_contextual_conflict_signal,
+    )
+
+
+def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | None:
+    context = _build_pip_conflict_context(output_lines)
+    if context is None:
+        return None
+
     if (
-        not has_strong_conflict_signal
-        and not has_contextual_conflict_signal
-        and not (requested_lines and constraint_lines)
+        not context.has_strong_conflict_signal
+        and not context.has_contextual_conflict_signal
+        and not (context.requested_lines and context.constraint_lines)
     ):
         return None
 
-    is_core_conflict = bool(constraint_lines)
+    is_core_conflict = bool(context.constraint_lines)
 
     detail = ""
-    if constraint_lines and requested_lines:
+    if context.constraint_lines and context.requested_lines:
         detail = (
             " 冲突详情: "
-            f"{_normalize_conflict_detail_line(requested_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(constraint_lines[0])}。"
+            f"{_normalize_conflict_detail_line(context.requested_lines[0])} vs "
+            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}。"
         )
-    elif len(dependency_detail_lines) >= 2:
+    elif len(context.dependency_detail_lines) >= 2:
         detail = (
             " 冲突详情: "
-            f"{_normalize_conflict_detail_line(dependency_detail_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(dependency_detail_lines[1])}。"
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[0])} vs "
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}。"
         )
 
     if is_core_conflict:
@@ -332,7 +359,7 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
 
     return DependencyConflictError(
         message,
-        relevant_output_lines,
+        context.relevant_lines,
         is_core_conflict=is_core_conflict,
     )
 
@@ -867,12 +894,7 @@ class PipInstaller:
                 "Pip 包管理器 argv: %s",
                 ["pip", *_redact_pip_args_for_logging(args)],
             )
-            result_code = await self._run_pip_in_process(args)
-
-            if result_code != 0:
-                raise PipInstallError(
-                    f"安装失败，错误码：{result_code}", code=result_code
-                )
+            await self._run_pip_with_classification(args)
 
         if target_site_packages:
             _prepend_sys_path(target_site_packages)
@@ -920,3 +942,8 @@ class PipInstaller:
                 raise conflict
 
         return result_code
+
+    async def _run_pip_with_classification(self, args: list[str]) -> None:
+        result_code = await self._run_pip_in_process(args)
+        if result_code != 0:
+            raise PipInstallError(f"安装失败，错误码：{result_code}", code=result_code)

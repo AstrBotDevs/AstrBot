@@ -272,6 +272,22 @@ async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failur
 
 
 @pytest.mark.asyncio
+async def test_run_pip_with_classification_raises_install_error_on_non_conflict_failure(
+    monkeypatch,
+):
+    async def failing_run_pip(self, args):
+        del self, args
+        return 3
+
+    monkeypatch.setattr(PipInstaller, "_run_pip_in_process", failing_run_pip)
+
+    installer = PipInstaller("")
+
+    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：3"):
+        await installer._run_pip_with_classification(["install", "demo-package"])
+
+
+@pytest.mark.asyncio
 async def test_run_pip_in_process_bounds_retained_conflict_lines(monkeypatch):
     original_limit = pip_installer_module._MAX_PIP_OUTPUT_LINES
 
