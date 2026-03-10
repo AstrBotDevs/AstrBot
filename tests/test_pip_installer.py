@@ -249,6 +249,7 @@ async def test_run_pip_in_process_classifies_nonstandard_conflict_output(monkeyp
         await installer._run_pip_in_process(["install", "demo-package"])
 
     assert exc_info.value.is_core_conflict is True
+    assert "demo-package" in str(exc_info.value)
     assert "demo-package depends on shared-lib>=3.0" in str(exc_info.value)
     assert "AstrBot (constraint) depends on shared-lib==2.0" in str(exc_info.value)
 
@@ -596,9 +597,8 @@ def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
         pip_installer_module.DependencyConflictError,
         match="core conflict",
     ):
-        with core_constraints_module._core_constraints_file(
-            "AstrBot"
-        ) as constraints_path:
+        provider = core_constraints_module.CoreConstraintsProvider("AstrBot")
+        with provider.constraints_file() as constraints_path:
             assert constraints_path is not None
             raise conflict
 

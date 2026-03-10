@@ -335,14 +335,26 @@ def _load_requirement_lines_for_precheck(
     try:
         requirement_lines = list(_iter_requirement_lines(requirements_path))
     except Exception as exc:
-        logger.warning("预检查缺失依赖失败，将回退到完整安装: %s", exc)
+        logger.warning(
+            "预检查缺失依赖失败，将回退到完整安装: %s (%s)",
+            requirements_path,
+            exc,
+        )
         return False, None
 
-    if any(
-        _requirement_line_needs_precheck_fallback(line) for line in requirement_lines
-    ):
+    fallback_line = next(
+        (
+            line
+            for line in requirement_lines
+            if _requirement_line_needs_precheck_fallback(line)
+        ),
+        None,
+    )
+    if fallback_line is not None:
         logger.warning(
-            "预检查缺失依赖失败，将回退到完整安装: unresolved direct requirement source in requirements file"
+            "预检查缺失依赖失败，将回退到完整安装: unresolved direct reference in %s: %s",
+            requirements_path,
+            fallback_line,
         )
         return False, None
 

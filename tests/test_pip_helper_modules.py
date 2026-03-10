@@ -92,19 +92,16 @@ def test_find_missing_requirements_returns_none_when_precheck_gate_fails(
     assert missing is None
 
 
-def test_parse_editable_or_direct_name_requires_egg_for_direct_reference():
-    assert (
-        requirements_utils._parse_editable_or_direct_name(
-            "git+https://example.com/demo.git#egg=demo-package"
-        )
-        == "demo-package"
+def test_parse_package_install_input_tracks_only_named_direct_references():
+    named = requirements_utils.parse_package_install_input(
+        "git+https://example.com/demo.git#egg=demo-package"
     )
-    assert (
-        requirements_utils._parse_editable_or_direct_name(
-            "git+https://example.com/demo.git"
-        )
-        is None
+    unnamed = requirements_utils.parse_package_install_input(
+        "git+https://example.com/demo.git"
     )
+
+    assert named.requirement_names == {"demo-package"}
+    assert unnamed.requirement_names == set()
 
 
 def test_find_missing_requirements_or_raise_uses_requirements_exception(tmp_path):
@@ -113,3 +110,23 @@ def test_find_missing_requirements_or_raise_uses_requirements_exception(tmp_path
 
     with pytest.raises(requirements_utils.RequirementsPrecheckFailed):
         requirements_utils.find_missing_requirements_or_raise(str(requirements_path))
+
+
+def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
+    monkeypatch,
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("git+https://example.com/demo.git\n", encoding="utf-8")
+    warning_logs = []
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.requirements_utils.logger.warning",
+        lambda line, *args: warning_logs.append(line % args if args else line),
+    )
+
+    missing = requirements_utils.find_missing_requirements(str(requirements_path))
+
+    assert missing is None
+    assert any(str(requirements_path) in log for log in warning_logs)
+    assert any("direct reference" in log for log in warning_logs)
