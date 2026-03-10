@@ -539,13 +539,36 @@ class Reply(BaseMessageComponent):
 
 
 class Poke(BaseMessageComponent):
-    type: str = ComponentType.Poke
-    id: int | None = 0
-    qq: int | None = 0
+    type: ComponentType = ComponentType.Poke
+    _type: str | int = "126"
+    id: int | str | None = 0
+    qq: int | str | None = 0  # deprecated: legacy field, kept for compatibility
 
-    def __init__(self, type: str, **_) -> None:
-        type = f"Poke:{type}"
-        super().__init__(type=type, **_)
+    def __init__(self, poke_type: str | int | None = None, **_) -> None:
+        # Backward compatible with old signature: Poke(type="poke", ...)
+        legacy_type = _.pop("type", None)
+        if poke_type is None:
+            poke_type = legacy_type
+        if poke_type in (None, "", "poke", "Poke"):
+            poke_type = "126"
+        super().__init__(_type=str(poke_type), **_)
+
+    def target_id(self) -> str | None:
+        """Return normalized target id, compatible with old `qq` field."""
+        for value in (self.id, self.qq):
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text and text != "0":
+                return text
+        return None
+
+    def toDict(self):
+        target_id = self.target_id()
+        data = {"type": str(self._type or "126")}
+        if target_id:
+            data["id"] = target_id
+        return {"type": "poke", "data": data}
 
 
 class Forward(BaseMessageComponent):
@@ -676,21 +699,24 @@ class File(BaseMessageComponent):
 
         if self.url:
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    logger.warning(
-                        "不可以在异步上下文中同步等待下载! "
-                        "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
-                        "请使用 await get_file() 代替直接获取 <File>.file 字段",
-                    )
-                    return ""
-                # 等待下载完成
-                loop.run_until_complete(self._download_file())
+                # 检查是否有正在运行的 event loop
+                asyncio.get_running_loop()
+                logger.warning(
+                    "不可以在异步上下文中同步等待下载! "
+                    "这个警告通常发生于某些逻辑试图通过 <File>.file 获取文件消息段的文件内容。"
+                    "请使用 await get_file() 代替直接获取 <File>.file 字段",
+                )
+                return ""
+            except RuntimeError:
+                # 没有运行中的 event loop，可以同步执行
+                try:
+                    # 使用 asyncio.run 安全地创建和关闭事件循环
+                    asyncio.run(self._download_file())
+                except Exception:
+                    logger.exception("文件下载失败")
 
                 if self.file_ and os.path.exists(self.file_):
                     return os.path.abspath(self.file_)
-            except Exception as e:
-                logger.error(f"文件下载失败: {e}")
 
         return ""
 
