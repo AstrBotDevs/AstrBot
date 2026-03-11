@@ -1048,9 +1048,26 @@ class SessionManagementRoute(Route):
 
             # 同步到所有成员 UMO
             umos = group.get("umos", [])
-            success_count, failed_umos = await self._sync_group_config_to_umos(
-                config, umos
-            )
+
+            if not config:
+                # 空配置 → 清除成员上的所有分组下发规则
+                success_count = 0
+                failed_umos = []
+                for umo in umos:
+                    try:
+                        for rule_key in AVAILABLE_SESSION_RULE_KEYS:
+                            try:
+                                await sp.session_remove(umo, rule_key)
+                            except Exception:
+                                pass
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"清除 {umo} 规则失败: {e!s}")
+                        failed_umos.append(umo)
+            else:
+                success_count, failed_umos = await self._sync_group_config_to_umos(
+                    config, umos
+                )
 
             msg = f"分组 '{group['name']}' 配置已保存并同步到 {success_count}/{len(umos)} 个会话"
             if failed_umos:
