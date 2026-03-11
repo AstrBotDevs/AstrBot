@@ -1688,6 +1688,17 @@ CONFIG_METADATA_2 = {
                         "timeout": 180,
                         "launch_model_if_not_running": False,
                     },
+                    "火山引擎_STT(API)": {
+                        "id": "volcengine_stt",
+                        "type": "volcengine_stt",
+                        "provider": "volcengine",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "appid": "",
+                        "api_base": "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash",
+                        "hint": "需要开通火山引擎大模型录音文件极速版识别API,参考文档:https://www.volcengine.com/docs/6561/1631584?lang=zh",
+                    },
                 },
                 "items": {
                     "genie_onnx_model_dir": {

@@ -37,7 +37,8 @@ export function getProviderIcon(type) {
     'aihubmix': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/aihubmix-color.svg',
     'openrouter': 'https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/openrouter.svg',
     "tokenpony": "https://tokenpony.cn/tokenpony-web/logo.png",
-    "compshare": "https://compshare.cn/favicon.ico"
+    "compshare": "https://compshare.cn/favicon.ico",
+    "volcengine": "https://registry.npmmirror.com/@lobehub/icons-static-svg/latest/files/icons/volcengine-color.svg",
   };
   return icons[type] || '';
 }
