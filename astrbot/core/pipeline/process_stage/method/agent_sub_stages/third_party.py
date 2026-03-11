@@ -161,6 +161,48 @@ async def _close_runner_if_supported(runner: "BaseAgentRunner") -> None:
         logger.warning(f"Failed to close third-party runner cleanly: {e}")
 
 
+async def _prepare_images_for_third_party_runner(
+    *,
+    req: ProviderRequest,
+    runner_type: str,
+    provider_settings: dict,
+    plugin_context,
+) -> None:
+    """Normalize image input for third-party runners that cannot consume images directly."""
+    if runner_type != "dashscope" or not req.image_urls:
+        return
+
+    prompt = (req.prompt or "").strip()
+    image_caption_provider_id = (
+        provider_settings.get("default_image_caption_provider_id") or ""
+    )
+
+    if image_caption_provider_id:
+        try:
+            from astrbot.core.astr_main_agent import _request_img_caption
+
+            caption = await _request_img_caption(
+                image_caption_provider_id,
+                provider_settings,
+                req.image_urls,
+                plugin_context,
+            )
+            if caption:
+                caption_block = f"<image_caption>{caption}</image_caption>"
+                req.prompt = f"{prompt}\n{caption_block}" if prompt else caption_block
+                req.image_urls = []
+                return
+        except Exception as exc:  # noqa: BLE001
+            logger.error("第三方 Agent 图片转述失败: %s", exc)
+
+    req.prompt = prompt or "[图片]"
+    req.image_urls = []
+    logger.warning(
+        "第三方 Agent Runner `%s` 暂不支持图片输入，已回退为文本占位。",
+        runner_type,
+    )
+
+
 class ThirdPartyAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
@@ -317,6 +359,17 @@ class ThirdPartyAgentSubStage(Stage):
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()
                 req.image_urls.append(image_path)
+
+        provider_settings = (
+            self.ctx.plugin_manager.context.get_config(umo=event.unified_msg_origin)
+            or {}
+        ).get("provider_settings", {})
+        await _prepare_images_for_third_party_runner(
+            req=req,
+            runner_type=self.runner_type,
+            provider_settings=provider_settings,
+            plugin_context=self.ctx.plugin_manager.context,
+        )
 
         if not req.prompt and not req.image_urls:
             return
