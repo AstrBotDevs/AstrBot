@@ -111,6 +111,12 @@ def _sanitize_prompt_description(description: str) -> str:
     return description
 
 
+def _sanitize_skill_display_name(name: str) -> str:
+    if _SKILL_NAME_RE.fullmatch(name):
+        return name
+    return "<invalid_skill_name>"
+
+
 def _render_skill_inventory_description(skill: SkillInfo) -> str:
     description = skill.description or "No description"
     if skill.source_type == "sandbox_only":
@@ -123,7 +129,8 @@ def _render_skill_inventory_description(skill: SkillInfo) -> str:
 
 def _render_skill_inventory_path(skill: SkillInfo) -> str:
     if skill.source_type == "sandbox_only":
-        return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill.name}/SKILL.md"
+        safe_name = _sanitize_skill_display_name(skill.name)
+        return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{safe_name}/SKILL.md"
     path = _sanitize_prompt_path(skill.path)
     return path or "<skills_root>/<skill_name>/SKILL.md"
 
@@ -148,10 +155,11 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     skills_lines: list[str] = []
     example_path = ""
     for skill in skills:
+        display_name = _sanitize_skill_display_name(skill.name)
         description = _render_skill_inventory_description(skill)
         rendered_path = _render_skill_inventory_path(skill)
         skills_lines.append(
-            f"- **{skill.name}**: {description}\n  File: `{rendered_path}`"
+            f"- **{display_name}**: {description}\n  File: `{rendered_path}`"
         )
         if not example_path:
             example_path = rendered_path

@@ -199,6 +199,25 @@ def test_build_skills_prompt_sanitizes_sandbox_skill_metadata_in_inventory():
     assert "`/workspace/skills/sandbox-skill/SKILL.md`" in prompt
 
 
+def test_build_skills_prompt_sanitizes_invalid_sandbox_skill_name_in_path():
+    skills = [
+        SkillInfo(
+            name="sandbox-skill`\nrm -rf /",
+            description="safe description",
+            path="/workspace/skills/sandbox-skill/SKILL.md",
+            active=True,
+            source_type="sandbox_only",
+            source_label="sandbox_preset",
+            local_exists=False,
+            sandbox_exists=True,
+        )
+    ]
+
+    prompt = build_skills_prompt(skills)
+
+    assert "`/workspace/skills/<invalid_skill_name>/SKILL.md`" in prompt
+
+
 def test_build_skills_prompt_preserves_safe_unicode_sandbox_description():
     skills = [
         SkillInfo(

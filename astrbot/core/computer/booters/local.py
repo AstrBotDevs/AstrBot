@@ -60,7 +60,7 @@ def _decode_shell_output(output: bytes | str | None) -> str:
         return output
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
-    encodings = [preferred, "utf-8"]
+    encodings = ["utf-8", preferred]
     if os.name == "nt":
         encodings.extend(["mbcs", "cp936", "gbk", "gb18030"])
 
