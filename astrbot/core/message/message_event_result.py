@@ -190,6 +190,8 @@ class ResultContentType(enum.Enum):
     """调用 LLM 产生的流式结果"""
     STREAMING_FINISH = enum.auto()
     """流式输出完成"""
+    POST_STREAM_RESULT = enum.auto()
+    """流式输出完成后的追加结果"""
 
 
 @dataclass
@@ -246,13 +248,19 @@ class MessageEventResult(MessageChain):
 
     def is_llm_result(self) -> bool:
         """是否为 LLM 结果。"""
-        return self.result_content_type == ResultContentType.LLM_RESULT
+        return self.result_content_type in (
+            ResultContentType.LLM_RESULT,
+            ResultContentType.STREAMING_FINISH,
+            ResultContentType.POST_STREAM_RESULT,
+        )
 
     def is_model_result(self) -> bool:
         """Whether result comes from model execution (including runner errors)."""
         return self.result_content_type in (
             ResultContentType.LLM_RESULT,
             ResultContentType.AGENT_RUNNER_ERROR,
+            ResultContentType.STREAMING_FINISH,
+            ResultContentType.POST_STREAM_RESULT,
         )
 
 

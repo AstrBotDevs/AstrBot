@@ -165,10 +165,6 @@ class ResultDecorateStage(Stage):
                 logger.debug(
                     f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
                 )
-                if is_stream:
-                    logger.warning(
-                        "启用流式输出时，依赖发送消息前事件钩子的插件可能无法正常工作",
-                    )
                 await handler.handler(event)
 
                 if (result := event.get_result()) is None or not result.chain:
@@ -184,19 +180,14 @@ class ResultDecorateStage(Stage):
                 )
                 return
 
-        # 流式输出不执行下面的逻辑
-        if is_stream:
-            logger.info("流式输出已启用，跳过结果装饰阶段")
-            return
-
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
         result = event.get_result()
-        if result is None:
+        if result is None or not result.chain:
             return
 
         if len(result.chain) > 0:
-            # 回复前缀
-            if self.reply_prefix:
+            # 回复前缀仅对首条非流式消息生效，避免在流式结束后追加重复文本。
+            if self.reply_prefix and not is_stream:
                 for comp in result.chain:
                     if isinstance(comp, Plain):
                         comp.text = self.reply_prefix + comp.text
@@ -369,8 +360,8 @@ class ResultDecorateStage(Stage):
                         else:
                             result.chain = [Image.fromFileSystem(url)]
 
-            # 触发转发消息
-            if event.get_platform_name() == "aiocqhttp":
+            # 触发转发消息仅适用于首条常规回复，避免流式完成后重复发送全文。
+            if not is_stream and event.get_platform_name() == "aiocqhttp":
                 word_cnt = 0
                 for comp in result.chain:
                     if isinstance(comp, Plain):
@@ -383,11 +374,11 @@ class ResultDecorateStage(Stage):
                     )
                     result.chain = [node]
 
-            # at 回复 / 引用回复仅适用于纯文本或图文消息
+            # at 回复 / 引用回复仅适用于首条非流式消息。
             can_decorate = all(
                 isinstance(item, (Plain, Image)) for item in result.chain
             )
-            if can_decorate:
+            if can_decorate and not is_stream:
                 # at 回复
                 if (
                     self.reply_with_mention
@@ -403,3 +394,7 @@ class ResultDecorateStage(Stage):
                 # 引用回复
                 if self.reply_with_quote:
                     result.chain.insert(0, Reply(id=event.message_obj.message_id))
+
+        if is_stream:
+            logger.info("流式输出已完成，执行结果装饰并准备追加发送")
+            result.set_result_content_type(ResultContentType.POST_STREAM_RESULT)

@@ -128,6 +128,19 @@ class RespondStage(Stage):
         # 如果所有组件都为空
         return True
 
+    def _should_send_post_stream_result(
+        self,
+        chain: list[BaseMessageComponent],
+    ) -> bool:
+        """真流式模式下，仅在后处理生成了非纯文本内容时追加发送。"""
+        text_only_types = {
+            ComponentType.Plain,
+            ComponentType.At,
+            ComponentType.AtAll,
+            ComponentType.Reply,
+        }
+        return any(comp.type not in text_only_types for comp in chain)
+
     def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
         """检查是否需要分段回复"""
         if not self.enable_seg:
@@ -174,11 +187,16 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
-        if event.get_extra("_streaming_finished", False):
+
+        is_post_stream_result = (
+            result.result_content_type == ResultContentType.POST_STREAM_RESULT
+        )
+        if event.get_extra("_streaming_finished", False) and not is_post_stream_result:
             # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
             return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
+            event.clear_result()
             return
 
         logger.info(
@@ -200,6 +218,13 @@ class RespondStage(Stage):
             logger.info(f"应用流式输出({event.get_platform_id()})")
             await event.send_streaming(result.async_stream, realtime_segmenting)
             return
+
+        if is_post_stream_result and not self._should_send_post_stream_result(result.chain):
+            logger.info("流式后处理结果仅包含纯文本，跳过追加发送。")
+            event.set_extra("_streaming_finished", True)
+            event.clear_result()
+            return
+
         if len(result.chain) > 0:
             # 检查路径映射
             if mappings := self.platform_settings.get("path_mapping", []):
@@ -213,6 +238,9 @@ class RespondStage(Stage):
             try:
                 if await self._is_empty_message_chain(result.chain):
                     logger.info("消息为空，跳过发送阶段")
+                    if is_post_stream_result:
+                        event.set_extra("_streaming_finished", True)
+                        event.clear_result()
                     return
             except Exception as e:
                 logger.warning(f"空内容检查异常: {e}")
@@ -241,6 +269,9 @@ class RespondStage(Stage):
                     logger.warning(
                         f"实际消息链为空, 跳过发送阶段。header_chain: {header_comps}, actual_chain: {result.chain}",
                     )
+                    if is_post_stream_result:
+                        event.set_extra("_streaming_finished", True)
+                        event.clear_result()
                     return
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
@@ -265,6 +296,9 @@ class RespondStage(Stage):
                     logger.warning(
                         f"消息链全为 Reply 和 At 消息段, 跳过发送阶段。chain: {result.chain}",
                     )
+                    if is_post_stream_result:
+                        event.set_extra("_streaming_finished", True)
+                        event.clear_result()
                     return
                 sep_comps = self._extract_comp(
                     result.chain,
@@ -289,6 +323,9 @@ class RespondStage(Stage):
                             f"发送消息链失败: chain = {chain}, error = {e}",
                             exc_info=True,
                         )
+
+        if is_post_stream_result:
+            event.set_extra("_streaming_finished", True)
 
         if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
             return
