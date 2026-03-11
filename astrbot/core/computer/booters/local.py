@@ -59,14 +59,7 @@ def _decode_shell_output(output: bytes | str | None) -> str:
     if isinstance(output, str):
         return output
 
-    encodings = _shell_output_encodings()
-
-    seen: set[str] = set()
-    for encoding in encodings:
-        normalized = encoding.lower()
-        if normalized in seen:
-            continue
-        seen.add(normalized)
+    for encoding in _shell_output_encodings():
         try:
             return output.decode(encoding)
         except (LookupError, UnicodeDecodeError):
@@ -117,7 +110,7 @@ class LocalShellComponent(ShellComponent):
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
                 # Safety relies on `_is_safe_command()` and the allowed-root checks.
-                proc = subprocess.Popen(
+                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     command,
                     shell=shell,
                     cwd=working_dir,
@@ -129,7 +122,7 @@ class LocalShellComponent(ShellComponent):
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 shell=shell,
                 cwd=working_dir,

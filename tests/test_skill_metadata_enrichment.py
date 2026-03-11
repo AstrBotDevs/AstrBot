@@ -135,6 +135,22 @@ def test_build_skills_prompt_normalizes_windows_backslashes_in_example():
     assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
 
 
+def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="C:/AstrBot/data/skills/fo`o/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    assert "type C:/AstrBot/data/skills/foo/SKILL.md" in prompt
+
+    example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
+    assert example_fragment == "type C:/AstrBot/data/skills/foo/SKILL.md"
+
+
 def test_build_skills_prompt_progressive_disclosure_rules():
     """The prompt should contain the key progressive disclosure rules."""
     skills = [
