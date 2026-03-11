@@ -329,6 +329,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { matchesToolSearch, resolveToolDisplayName } from '@/utils/toolDisplayName';
 
 export default {
     name: 'PersonaForm',
@@ -405,12 +406,7 @@ export default {
             if (!this.toolSearch) {
                 return this.availableTools;
             }
-            const search = this.toolSearch.toLowerCase();
-            return this.availableTools.filter(tool =>
-                tool.name.toLowerCase().includes(search) ||
-                (tool.description && tool.description.toLowerCase().includes(search)) ||
-                (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search))
-            );
+            return this.availableTools.filter(tool => matchesToolSearch(tool, this.toolSearch));
         },
         filteredSkills() {
             if (!this.skillSearch) {
@@ -821,9 +817,7 @@ export default {
         },
 
         getToolDisplayName(toolName) {
-            // Find tool in availableTools and return display_name if available
-            const tool = this.availableTools.find(t => t.name === toolName);
-            return tool?.display_name || toolName;
+            return resolveToolDisplayName(toolName, this.availableTools);
         }
     }
 }

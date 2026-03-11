@@ -41,7 +41,7 @@ const parameterEntries = (tool: ToolItem) => Object.entries(tool.parameters?.pro
       <template #item.name="{ item }">
         <div class="d-flex align-center py-2">
           <v-icon color="primary" class="mr-2" size="18">
-            {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+            {{ item.origin === 'mcp' ? 'mdi-server-network' : 'mdi-function-variant' }}
           </v-icon>
           <div>
             <div class="text-subtitle-1 font-weight-medium">{{ item.display_name || item.name }}</div>
