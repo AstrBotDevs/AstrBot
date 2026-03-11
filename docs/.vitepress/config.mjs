@@ -245,7 +245,7 @@ export default defineConfig({
           next: '下一篇'
         },
         editLink: {
-          pattern: 'https://github.com/AstrBotdevs/AstrBot-docs/edit/v4/:path',
+          pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: '发现文档有问题？在 GitHub 上编辑此页',
         },
         logo: '/logo_prod.png',
@@ -484,7 +484,7 @@ export default defineConfig({
           next: 'Next'
         },
         editLink: {
-          pattern: 'https://github.com/AstrBotdevs/AstrBot-docs/edit/v4/:path',
+          pattern: 'https://github.com/AstrBotdevs/AstrBot/edit/master/docs/:path',
           text: 'Edit this page on GitHub',
         },
         logo: '/logo_prod.png',
