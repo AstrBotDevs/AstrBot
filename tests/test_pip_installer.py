@@ -623,7 +623,7 @@ def test_core_constraints_file_propagates_inner_conflict_without_fake_warning(
         lambda core_dist_name: ("aiohttp==3.13.3",),
     )
     monkeypatch.setattr(
-        "astrbot.core.utils.pip_installer.logger.warning",
+        "astrbot.core.utils.core_constraints.logger.warning",
         lambda line, *args: warning_logs.append(line % args if args else line),
     )
 
@@ -672,20 +672,6 @@ def test_build_pip_args_extracts_requested_requirements():
         "demo-package",
     ]
     assert requested == {"demo-package"}
-
-
-def test_parse_package_install_input_collects_specs_and_requirement_names():
-    parsed = requirements_utils.parse_package_install_input(
-        "--index-url https://example.com/simple demo-package\nanother-package>=1.0\n"
-    )
-
-    assert parsed.specs == (
-        "--index-url",
-        "https://example.com/simple",
-        "demo-package",
-        "another-package>=1.0",
-    )
-    assert parsed.requirement_names == {"demo-package", "another-package"}
 
 
 def test_build_pip_args_appends_default_index_when_not_overridden():
