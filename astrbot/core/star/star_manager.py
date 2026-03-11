@@ -14,7 +14,12 @@ import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-from astrbot.core import logger, pip_installer, sp
+from astrbot.core import (
+    DependencyConflictError,
+    logger,
+    pip_installer,
+    sp,
+)
 from astrbot.core.agent.handoff import FunctionTool, HandoffTool
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import VERSION
@@ -27,6 +32,10 @@ from astrbot.core.utils.astrbot_path import (
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
+from astrbot.core.utils.requirements_utils import (
+    RequirementsPrecheckFailed,
+    find_missing_requirements_or_raise,
+)
 
 from . import StarMetadata
 from .command_management import sync_command_configs
@@ -46,6 +55,49 @@ except ImportError:
 
 class PluginVersionIncompatibleError(Exception):
     """Raised when plugin astrbot_version is incompatible with current AstrBot."""
+
+
+class PluginDependencyInstallError(Exception):
+    """Raised when plugin dependency installation fails."""
+
+    def __init__(
+        self,
+        *,
+        plugin_label: str,
+        requirements_path: str,
+        error: Exception,
+    ) -> None:
+        message = f"插件 {plugin_label} 依赖安装失败: {error!s}"
+        super().__init__(message)
+        self.plugin_label = plugin_label
+        self.requirements_path = requirements_path
+        self.error = error
+
+
+async def _install_requirements_with_precheck(
+    *,
+    plugin_label: str,
+    requirements_path: str,
+) -> None:
+    try:
+        missing = find_missing_requirements_or_raise(requirements_path)
+    except RequirementsPrecheckFailed:
+        logger.info(
+            f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
+            f"{requirements_path}"
+        )
+        await pip_installer.install(requirements_path=requirements_path)
+        return
+
+    if not missing:
+        logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
+        return
+
+    logger.info(
+        f"检测到插件 {plugin_label} 缺失依赖，正在按 requirements.txt 安装: "
+        f"{requirements_path} -> {sorted(missing)}"
+    )
+    await pip_installer.install(requirements_path=requirements_path)
 
 
 class PluginManager:
@@ -198,14 +250,36 @@ class PluginManager:
                 to_update.append(p.root_dir_name)
         for p in to_update:
             plugin_path = os.path.join(plugin_dir, p)
-            if os.path.exists(os.path.join(plugin_path, "requirements.txt")):
-                pth = os.path.join(plugin_path, "requirements.txt")
-                logger.info(f"正在安装插件 {p} 所需的依赖库: {pth}")
-                try:
-                    await pip_installer.install(requirements_path=pth)
-                except Exception as e:
-                    logger.error(f"更新插件 {p} 的依赖失败。Code: {e!s}")
+            await self._ensure_plugin_requirements(plugin_path, p)
         return True
+
+    async def _ensure_plugin_requirements(
+        self,
+        plugin_dir_path: str,
+        plugin_label: str,
+    ) -> None:
+        requirements_path = os.path.join(plugin_dir_path, "requirements.txt")
+        if not os.path.exists(requirements_path):
+            return
+
+        try:
+            await _install_requirements_with_precheck(
+                plugin_label=plugin_label,
+                requirements_path=requirements_path,
+            )
+        except asyncio.CancelledError:
+            raise
+        except DependencyConflictError as e:
+            logger.error(f"插件 {plugin_label} 依赖冲突: {e!s}")
+            raise
+        except Exception as e:
+            dependency_error = PluginDependencyInstallError(
+                plugin_label=plugin_label,
+                requirements_path=requirements_path,
+                error=e,
+            )
+            logger.exception(str(dependency_error))
+            raise dependency_error from e
 
     async def _import_plugin_with_dependency_recovery(
         self,
@@ -422,7 +496,7 @@ class PluginManager:
         root_dir_name: str,
         plugin_dir_path: str,
         reserved: bool,
-        error: Exception | str,
+        error: BaseException | str,
         error_trace: str,
     ) -> dict:
         record: dict = {
@@ -494,6 +568,9 @@ class PluginManager:
                 return False, "插件不存在于失败列表中"
 
             self._cleanup_plugin_state(dir_name)
+
+            plugin_path = os.path.join(self.plugin_store_path, dir_name)
+            await self._ensure_plugin_requirements(plugin_path, dir_name)
 
             success, error = await self.load(specified_dir_name=dir_name)
             if success:
@@ -1078,6 +1155,10 @@ class PluginManager:
 
                 # reload the plugin
                 dir_name = os.path.basename(plugin_path)
+                await self._ensure_plugin_requirements(
+                    plugin_path,
+                    dir_name,
+                )
                 success, error_message = await self.load(
                     specified_dir_name=dir_name,
                     ignore_version_check=ignore_version_check,
@@ -1317,6 +1398,12 @@ class PluginManager:
             raise Exception("该插件是 AstrBot 保留插件，无法更新。")
 
         await self.updator.update(plugin, proxy=proxy)
+        if plugin.root_dir_name:
+            plugin_dir_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
+            await self._ensure_plugin_requirements(
+                plugin_dir_path,
+                plugin_name,
+            )
         await self.reload(plugin_name)
 
     async def turn_off_plugin(self, plugin_name: str) -> None:
@@ -1488,6 +1575,7 @@ class PluginManager:
                 os.remove(zip_file_path)
             except BaseException as e:
                 logger.warning(f"删除插件压缩包失败: {e!s}")
+            await self._ensure_plugin_requirements(desti_dir, dir_name)
             # await self.reload()
             success, error_message = await self.load(
                 specified_dir_name=dir_name,
