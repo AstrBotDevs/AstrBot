@@ -425,6 +425,8 @@ async def get_booter(
     runtime = config.get("provider_settings", {}).get("computer_use_runtime", "local")
     if runtime == "local":
         return get_local_booter()
+    elif runtime == "none":
+        raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "shipyard_neo")
