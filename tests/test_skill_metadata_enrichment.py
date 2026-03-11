@@ -91,7 +91,7 @@ def test_build_skills_prompt_preserves_windows_absolute_path_in_example():
         ),
     ]
     prompt = build_skills_prompt(skills)
-    assert "type C:/AstrBot/data/skills/foo/SKILL.md" in prompt
+    assert 'type "C:/AstrBot/data/skills/foo/SKILL.md"' in prompt
 
 
 def test_build_skills_prompt_uses_windows_friendly_command_for_windows_paths():
@@ -104,8 +104,8 @@ def test_build_skills_prompt_uses_windows_friendly_command_for_windows_paths():
         ),
     ]
     prompt = build_skills_prompt(skills)
-    assert "type D:/skills/foo/SKILL.md" in prompt
-    assert "cat D:/skills/foo/SKILL.md" not in prompt
+    assert 'type "D:/skills/foo/SKILL.md"' in prompt
+    assert 'cat "D:/skills/foo/SKILL.md"' not in prompt
 
 
 def test_build_skills_prompt_quotes_windows_paths_with_spaces():
@@ -144,7 +144,7 @@ def test_build_skills_prompt_uses_windows_command_for_unc_paths():
         ),
     ]
     prompt = build_skills_prompt(skills)
-    assert "type //server/share/skills/foo/SKILL.md" in prompt
+    assert 'type "//server/share/skills/foo/SKILL.md"' in prompt
 
 
 def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars():
@@ -157,10 +157,10 @@ def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars
         ),
     ]
     prompt = build_skills_prompt(skills)
-    assert "type C:/AstrBot/data/skills/foo/SKILL.md" in prompt
+    assert 'type "C:/AstrBot/data/skills/foo/SKILL.md"' in prompt
 
     example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
-    assert example_fragment == "type C:/AstrBot/data/skills/foo/SKILL.md"
+    assert example_fragment == 'type "C:/AstrBot/data/skills/foo/SKILL.md"'
 
 
 def test_build_skills_prompt_strips_non_drive_colons_from_example_path():

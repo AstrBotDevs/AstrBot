@@ -157,7 +157,7 @@ def _prepare_skill_prompt_fields(skill: SkillInfo) -> SkillPromptFields:
 def _build_skill_read_command_example(path: str) -> str:
     if _is_windows_prompt_path(path):
         command = "type"
-        path_arg = f'"{path}"' if " " in path else path
+        path_arg = f'"{path}"'
     else:
         command = "cat"
         path_arg = shlex.quote(path)

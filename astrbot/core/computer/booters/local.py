@@ -105,8 +105,8 @@ class LocalShellComponent(ShellComponent):
                     shell=shell,
                     cwd=working_dir,
                     env=run_env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
             # `command` is intentionally executed through the current shell so
