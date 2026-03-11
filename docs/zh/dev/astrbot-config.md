@@ -509,10 +509,15 @@ AstrBot WebUI 配置。
 - `enable`: 是否启用飞书消息预回复表情。默认为 `false`。
 - `emojis`: 预回复的表情列表。默认为 `["Typing"]`。表情枚举名参考：[表情文案说明](https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce)
 
-#### telegram
+##### telegram
 
 - `enable`: 是否启用 Telegram 消息预回复表情。默认为 `false`。
 - `emojis`: 预回复的表情列表。默认为 `["✍️"]`。Telegram 仅支持固定反应集合，参考：[reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9)
+
+##### discord
+
+- `enable`: 是否启用 Discord 消息预回复表情。默认为 `false`。
+- `emojis`: 预回复的表情列表。默认为 `["🤔"]`。Discord反应支持参考：[Discord Reaction FAQ](https://support.discord.com/hc/en-us/articles/12102061808663-Reactions-and-Super-Reactions-FAQ)
 
 ### `wake_prefix`
 

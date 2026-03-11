@@ -514,6 +514,11 @@ When enabled, AstrBot sends a pre-reply emoji before requesting the LLM to infor
 - `enable`: Whether to enable pre-reply emojis for Telegram messages. Default is `false`.
 - `emojis`: List of pre-reply emojis. Default is `["✍️"]`. Telegram only supports a fixed set of reactions; refer to [reactions.txt](https://gist.github.com/Soulter/3f22c8e5f9c7e152e967e8bc28c97fc9).
 
+##### discord
+
+- `enable`: Whether to enable pre-reply emojis for Discord messages. Default is `false`.
+- `emojis`: List of pre-reply emojis. Default is `["🤔"]`. Refer to [Discord Reaction FAQ](https://support.discord.com/hc/en-us/articles/12102061808663-Reactions-and-Super-Reactions-FAQ).
+
 ### `wake_prefix`
 
 Wake prefix. Default is `/`. When a message starts with `/`, AstrBot is awakened.
