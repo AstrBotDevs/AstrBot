@@ -73,9 +73,10 @@ sudo docker run -itd -p 6185:6185 -p 6199:6199 -v $PWD/data:/AstrBot/data -v /et
 > ```
 >
 > (感谢 DaoCloud ❤️)
-
+> 
 > Windows 下不需要加 sudo，下同
-> Windows 同步 Host Time（需要WSL2）
+>
+Windows 同步 Host Time（需要WSL2）
 
 ```
 -v \\wsl.localhost\(your-wsl-os)\etc\timezone:/etc/timezone:ro
