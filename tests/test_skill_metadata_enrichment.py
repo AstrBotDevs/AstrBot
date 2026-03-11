@@ -169,6 +169,23 @@ def test_build_skills_prompt_keeps_posix_double_slash_paths_on_non_windows(monke
     assert example_fragment == "cat //server/share/skills/foo/SKILL.md"
 
 
+def test_build_skills_prompt_normalizes_windows_backslashes_on_non_windows_host(
+    monkeypatch,
+):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "posix")
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path=r"C:\Users\Alice\技能\SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
+    assert example_fragment == "cat 'C:/Users/Alice/技能/SKILL.md'"
+
+
 def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars(
     monkeypatch,
 ):

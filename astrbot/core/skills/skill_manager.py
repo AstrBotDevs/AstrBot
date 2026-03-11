@@ -96,7 +96,7 @@ def _sanitize_prompt_path_for_prompt(path: str) -> str:
     if not path:
         return ""
 
-    if _is_windows_prompt_path(path):
+    if _WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path):
         path = path.replace("\\", "/")
 
     drive_prefix = ""
