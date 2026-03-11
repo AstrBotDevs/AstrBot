@@ -196,7 +196,7 @@ def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozens
         if token.startswith("-"):
             continue
 
-        name = _parse_editable_or_direct_name(token)
+        name, _ = _parse_requirement_name_and_spec(token)
         if name:
             requirement_names.add(name)
 

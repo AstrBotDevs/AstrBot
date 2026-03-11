@@ -255,3 +255,12 @@ def test_parse_requirement_name_and_spec_preserves_direct_reference_rules():
 
     assert named == ("demo-package", None)
     assert unnamed == (None, None)
+
+
+def test_parse_requirement_name_and_spec_handles_plain_requirement_token():
+    parsed = requirements_utils._parse_requirement_name_and_spec("demo-package>=1.0")
+
+    assert parsed == (
+        "demo-package",
+        requirements_utils.Requirement("demo-package>=1.0").specifier,
+    )
