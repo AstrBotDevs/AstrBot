@@ -81,7 +81,8 @@ def test_build_skills_prompt_absolute_path_in_example():
     assert "cat /home/pan/AstrBot/skills/foo/SKILL.md" in prompt
 
 
-def test_build_skills_prompt_preserves_windows_absolute_path_in_example():
+def test_build_skills_prompt_preserves_windows_absolute_path_in_example(monkeypatch):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [
         SkillInfo(
             name="foo",
@@ -94,7 +95,10 @@ def test_build_skills_prompt_preserves_windows_absolute_path_in_example():
     assert 'type "C:/AstrBot/data/skills/foo/SKILL.md"' in prompt
 
 
-def test_build_skills_prompt_uses_windows_friendly_command_for_windows_paths():
+def test_build_skills_prompt_uses_windows_friendly_command_for_windows_paths(
+    monkeypatch,
+):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [
         SkillInfo(
             name="foo",
@@ -108,7 +112,8 @@ def test_build_skills_prompt_uses_windows_friendly_command_for_windows_paths():
     assert 'cat "D:/skills/foo/SKILL.md"' not in prompt
 
 
-def test_build_skills_prompt_quotes_windows_paths_with_spaces():
+def test_build_skills_prompt_quotes_windows_paths_with_spaces(monkeypatch):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [
         SkillInfo(
             name="foo",
@@ -121,7 +126,8 @@ def test_build_skills_prompt_quotes_windows_paths_with_spaces():
     assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
 
 
-def test_build_skills_prompt_normalizes_windows_backslashes_in_example():
+def test_build_skills_prompt_normalizes_windows_backslashes_in_example(monkeypatch):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [
         SkillInfo(
             name="foo",
@@ -134,7 +140,8 @@ def test_build_skills_prompt_normalizes_windows_backslashes_in_example():
     assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
 
 
-def test_build_skills_prompt_uses_windows_command_for_unc_paths():
+def test_build_skills_prompt_uses_windows_command_for_unc_paths(monkeypatch):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [
         SkillInfo(
             name="foo",
@@ -147,7 +154,25 @@ def test_build_skills_prompt_uses_windows_command_for_unc_paths():
     assert 'type "//server/share/skills/foo/SKILL.md"' in prompt
 
 
-def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars():
+def test_build_skills_prompt_keeps_posix_double_slash_paths_on_non_windows(monkeypatch):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "posix")
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="//server/share/skills/foo/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
+    assert example_fragment == "cat //server/share/skills/foo/SKILL.md"
+
+
+def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars(
+    monkeypatch,
+):
+    monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [
         SkillInfo(
             name="foo",
