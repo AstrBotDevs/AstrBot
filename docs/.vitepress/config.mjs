@@ -194,6 +194,7 @@ export default defineConfig({
                   { text: "会话控制器", link: "/guides/session-control" },
                   { text: "杂项", link: "/guides/other" },
                   { text: "发布插件", link: "/plugin-publish" },
+                  { text: "插件热重载", link: "/guides/hot-reload" },
                   { text: "插件指南（旧）", link: "/plugin" },
                 ],
               },
@@ -429,6 +430,7 @@ export default defineConfig({
                   { text: "HTML to Image", link: "/guides/html-to-pic" },
                   { text: "Session Control", link: "/guides/session-control" },
                   { text: "Publish Plugin", link: "/plugin-publish" },
+                  { text: "Hot reload", link: "/guides/hot-reload" },
                 ],
               },
               {
