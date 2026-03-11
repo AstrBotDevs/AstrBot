@@ -278,7 +278,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     try:
                         md_text = telegramify_markdown.markdownify(
                             chunk,
-                            normalize_whitespace=False,
                         )
                         await client.send_message(
                             text=md_text,
@@ -456,7 +455,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
         try:
             markdown_text = telegramify_markdown.markdownify(
                 delta,
-                normalize_whitespace=False,
             )
             await self.client.send_message(
                 text=markdown_text,
@@ -537,7 +535,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         try:
                             md = telegramify_markdown.markdownify(
                                 draft_text,
-                                normalize_whitespace=False,
                             )
                             await self._send_message_draft(
                                 user_name,
@@ -695,7 +692,6 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 try:
                     markdown_text = telegramify_markdown.markdownify(
                         delta,
-                        normalize_whitespace=False,
                     )
                     await self.client.edit_message_text(
                         text=markdown_text,
