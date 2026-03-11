@@ -58,21 +58,16 @@ def _decode_shell_output(output: bytes | None) -> str:
         return ""
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
-    encodings = tuple(
-        dict.fromkeys(
-            [
-                "utf-8",
-                preferred,
-                *(("mbcs", "cp936", "gbk", "gb18030") if os.name == "nt" else ()),
-            ]
-        )
-    )
+    try:
+        return output.decode(preferred)
+    except (LookupError, UnicodeDecodeError):
+        pass
 
-    for encoding in encodings:
+    if os.name == "nt":
         try:
-            return output.decode(encoding)
+            return output.decode("mbcs")
         except (LookupError, UnicodeDecodeError):
-            continue
+            pass
 
     return output.decode("utf-8", errors="replace")
 

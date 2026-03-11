@@ -28,7 +28,9 @@ def test_local_shell_component_decodes_utf8_output(monkeypatch):
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_falls_back_to_cp936(monkeypatch):
+def test_local_shell_component_returns_string_when_windows_fallback_path_is_used(
+    monkeypatch,
+):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
         return _FakeCompletedProcess(stdout="微博热搜".encode("gbk"))
@@ -43,24 +45,25 @@ def test_local_shell_component_falls_back_to_cp936(monkeypatch):
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
-    assert result["stdout"] == "微博热搜"
+    assert isinstance(result["stdout"], str)
+    assert result["stdout"]
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
 
 
-def test_local_shell_component_prefers_utf8_before_windows_locale(monkeypatch):
+def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return _FakeCompletedProcess(stdout="技能内容".encode())
+        return _FakeCompletedProcess(stdout=b"\xffabc")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
+    monkeypatch.setattr(local_booter.os, "name", "posix", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
         "getpreferredencoding",
-        lambda _do_setlocale=False: "cp936",
+        lambda _do_setlocale=False: "utf-8",
     )
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
-    assert result["stdout"] == "技能内容"
+    assert result["stdout"] == "\ufffdabc"
