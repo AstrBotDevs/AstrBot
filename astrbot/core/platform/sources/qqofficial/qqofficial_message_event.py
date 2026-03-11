@@ -18,7 +18,7 @@ from botpy.types.message import MarkdownPayload, Media
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain, Record
+from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
@@ -47,6 +47,10 @@ _patch_qq_botpy_formdata()
 
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
+    IMAGE_FILE_TYPE = 1
+    VIDEO_FILE_TYPE = 2
+    VOICE_FILE_TYPE = 3
+    FILE_FILE_TYPE = 4
 
     def __init__(
         self,
@@ -126,6 +130,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             image_base64,
             image_path,
             record_file_path,
+            video_file_source,
+            file_source,
+            file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(self.send_buffer)
 
         if (
@@ -133,6 +140,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             and not image_base64
             and not image_path
             and not record_file_path
+            and not video_file_source
+            and not file_source
         ):
             return None
 
@@ -157,7 +166,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64,
-                        1,
+                        self.IMAGE_FILE_TYPE,
                         group_openid=source.group_openid,
                     )
                     payload["media"] = media
@@ -165,15 +174,39 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload.pop("markdown", None)
                     payload["content"] = plain_text or None
                 if record_file_path:  # group record msg
-                    media = await self.upload_group_and_c2c_record(
+                    media = await self.upload_group_and_c2c_media(
                         record_file_path,
-                        3,
+                        self.VOICE_FILE_TYPE,
                         group_openid=source.group_openid,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                    payload.pop("markdown", None)
-                    payload["content"] = plain_text or None
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
+                if video_file_source:
+                    media = await self.upload_group_and_c2c_media(
+                        video_file_source,
+                        self.VIDEO_FILE_TYPE,
+                        group_openid=source.group_openid,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
+                if file_source:
+                    media = await self.upload_group_and_c2c_media(
+                        file_source,
+                        self.FILE_FILE_TYPE,
+                        file_name=file_name,
+                        group_openid=source.group_openid,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
                         group_openid=source.group_openid,  # type: ignore
@@ -187,7 +220,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 if image_base64:
                     media = await self.upload_group_and_c2c_image(
                         image_base64,
-                        1,
+                        self.IMAGE_FILE_TYPE,
                         openid=source.author.user_openid,
                     )
                     payload["media"] = media
@@ -195,15 +228,39 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     payload.pop("markdown", None)
                     payload["content"] = plain_text or None
                 if record_file_path:  # c2c record
-                    media = await self.upload_group_and_c2c_record(
+                    media = await self.upload_group_and_c2c_media(
                         record_file_path,
-                        3,
+                        self.VOICE_FILE_TYPE,
                         openid=source.author.user_openid,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                    payload.pop("markdown", None)
-                    payload["content"] = plain_text or None
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
+                if video_file_source:
+                    media = await self.upload_group_and_c2c_media(
+                        video_file_source,
+                        self.VIDEO_FILE_TYPE,
+                        openid=source.author.user_openid,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
+                if file_source:
+                    media = await self.upload_group_and_c2c_media(
+                        file_source,
+                        self.FILE_FILE_TYPE,
+                        file_name=file_name,
+                        openid=source.author.user_openid,
+                    )
+                    if media:
+                        payload["media"] = media
+                        payload["msg_type"] = 7
+                        payload.pop("markdown", None)
+                        payload["content"] = plain_text or None
                 if stream:
                     ret = await self._send_with_markdown_fallback(
                         send_func=lambda retry_payload: self.post_c2c_message(
@@ -327,16 +384,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             ttl=result.get("ttl", 0),
         )
 
-    async def upload_group_and_c2c_record(
+    async def upload_group_and_c2c_media(
         self,
         file_source: str,
         file_type: int,
         srv_send_msg: bool = False,
+        file_name: str | None = None,
         **kwargs,
     ) -> Media | None:
         """上传媒体文件"""
         # 构建基础payload
         payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
+        if file_name:
+            payload["file_name"] = file_name
 
         # 处理文件数据
         if os.path.exists(file_source):
@@ -416,6 +476,9 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         image_base64 = None  # only one img supported
         image_file_path = None
         record_file_path = None
+        video_file_source = None
+        file_source = None
+        file_name = None
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
@@ -454,6 +517,30 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
+            elif isinstance(i, Video) and not video_file_source:
+                if i.file.startswith("file:///"):
+                    video_file_source = i.file[8:]
+                else:
+                    video_file_source = i.file
+            elif isinstance(i, File) and not file_source:
+                file_name = i.name
+                if i.file_:
+                    file_path = i.file_
+                    if file_path.startswith("file:///"):
+                        file_path = file_path[8:]
+                    elif file_path.startswith("file://"):
+                        file_path = file_path[7:]
+                    file_source = file_path
+                elif i.url:
+                    file_source = i.url
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
-        return plain_text, image_base64, image_file_path, record_file_path
+        return (
+            plain_text,
+            image_base64,
+            image_file_path,
+            record_file_path,
+            video_file_source,
+            file_source,
+            file_name,
+        )

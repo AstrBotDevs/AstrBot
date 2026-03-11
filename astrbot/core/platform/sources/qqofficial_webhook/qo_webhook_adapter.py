@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import random
-from types import SimpleNamespace
 from typing import Any, cast
 
 import botpy
@@ -15,7 +13,6 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
-from ..qqofficial.qqofficial_message_event import QQOfficialMessageEvent
 from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
 from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from .qo_webhook_server import QQOfficialWebhook
@@ -123,95 +120,11 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
-        (
-            plain_text,
-            image_base64,
-            image_path,
-            record_file_path,
-        ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_chain)
-        if not plain_text and not image_path:
-            return
-
-        msg_id = self._session_last_message_id.get(session.session_id)
-        if not msg_id:
-            logger.warning(
-                "[QQOfficialWebhook] No cached msg_id for session: %s, skip send_by_session",
-                session.session_id,
-            )
-            return
-
-        payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
-        ret: Any = None
-        send_helper = SimpleNamespace(bot=self.client)
-        if session.message_type == MessageType.GROUP_MESSAGE:
-            scene = self._session_scene.get(session.session_id)
-            if scene == "group":
-                payload["msg_seq"] = random.randint(1, 10000)
-                if image_base64:
-                    media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
-                        send_helper,  # type: ignore
-                        image_base64,
-                        1,
-                        group_openid=session.session_id,
-                    )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                if record_file_path:
-                    media = await QQOfficialMessageEvent.upload_group_and_c2c_record(
-                        send_helper,  # type: ignore
-                        record_file_path,
-                        3,
-                        group_openid=session.session_id,
-                    )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                ret = await self.client.api.post_group_message(
-                    group_openid=session.session_id,
-                    **payload,
-                )
-            else:
-                if image_path:
-                    payload["file_image"] = image_path
-                ret = await self.client.api.post_message(
-                    channel_id=session.session_id,
-                    **payload,
-                )
-        elif session.message_type == MessageType.FRIEND_MESSAGE:
-            payload["msg_seq"] = random.randint(1, 10000)
-            if image_base64:
-                media = await QQOfficialMessageEvent.upload_group_and_c2c_image(
-                    send_helper,  # type: ignore
-                    image_base64,
-                    1,
-                    openid=session.session_id,
-                )
-                payload["media"] = media
-                payload["msg_type"] = 7
-            if record_file_path:
-                media = await QQOfficialMessageEvent.upload_group_and_c2c_record(
-                    send_helper,  # type: ignore
-                    record_file_path,
-                    3,
-                    openid=session.session_id,
-                )
-                payload["media"] = media
-                payload["msg_type"] = 7
-            ret = await QQOfficialMessageEvent.post_c2c_message(
-                send_helper,  # type: ignore
-                openid=session.session_id,
-                **payload,
-            )
-        else:
-            logger.warning(
-                "[QQOfficialWebhook] Unsupported message type for send_by_session: %s",
-                session.message_type,
-            )
-            return
-
-        sent_message_id = self._extract_message_id(ret)
-        if sent_message_id:
-            self.remember_session_message_id(session.session_id, sent_message_id)
-        await super().send_by_session(session, message_chain)
+        await QQOfficialPlatformAdapter._send_by_session_common(
+            cast(Any, self),
+            session,
+            message_chain,
+        )
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
         if not session_id or not message_id:
