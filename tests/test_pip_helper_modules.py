@@ -184,3 +184,27 @@ def test_load_requirement_lines_for_precheck_uses_parse_requirement_line_result(
 
     assert can_precheck is True
     assert requirement_lines == ["git+https://example.com/demo.git"]
+
+
+def test_collect_installed_distribution_versions_skips_nameless_distribution(
+    monkeypatch,
+):
+    class NamelessDistribution:
+        metadata = {}
+        version = "1.0"
+
+    class NamedDistribution:
+        metadata = {"Name": "demo-package"}
+        version = "2.0"
+
+    monkeypatch.setattr(
+        requirements_utils.importlib_metadata,
+        "distributions",
+        lambda path: [NamelessDistribution(), NamedDistribution()],
+    )
+
+    installed = requirements_utils.collect_installed_distribution_versions(
+        ["/tmp/test"]
+    )
+
+    assert installed == {"demo-package": "2.0"}

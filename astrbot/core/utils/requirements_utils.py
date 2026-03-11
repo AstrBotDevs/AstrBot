@@ -271,19 +271,6 @@ def _iter_requirement_lines(
             yield line
 
 
-def _requirement_line_needs_precheck_fallback(line: str) -> bool:
-    if line.startswith(("-e ", "--editable ")) or line.startswith("--editable="):
-        return _parse_editable_or_direct_name(line) is None
-
-    if line.startswith("-"):
-        return False
-
-    return (
-        looks_like_direct_reference(line)
-        and _parse_editable_or_direct_name(line) is None
-    )
-
-
 def _iter_requirements_from_lines(
     requirement_lines: Iterator[str] | list[str],
 ) -> Iterator[tuple[str, SpecifierSet | None]]:
@@ -316,21 +303,23 @@ def get_requirement_check_paths() -> list[str]:
     return paths
 
 
+def _canonical_distribution_identity(distribution) -> tuple[str | None, str | None]:
+    distribution_name = (
+        distribution.metadata["Name"] if "Name" in distribution.metadata else None
+    )
+    if not distribution_name:
+        return None, None
+    return canonicalize_distribution_name(distribution_name), distribution.version
+
+
 def collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] | None:
     installed: dict[str, str] = {}
     try:
         for distribution in importlib_metadata.distributions(path=paths):
-            distribution_name = (
-                distribution.metadata["Name"]
-                if "Name" in distribution.metadata
-                else None
-            )
-            if not distribution_name:
+            distribution_name, version = _canonical_distribution_identity(distribution)
+            if not distribution_name or not version:
                 continue
-            installed.setdefault(
-                canonicalize_distribution_name(distribution_name),
-                distribution.version,
-            )
+            installed.setdefault(distribution_name, version)
     except Exception as exc:
         logger.warning("读取已安装依赖失败，跳过缺失依赖预检查: %s", exc)
         return None
