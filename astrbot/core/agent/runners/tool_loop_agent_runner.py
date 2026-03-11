@@ -362,6 +362,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
+        got_complete_response = False
 
         # do truncate and compress
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
@@ -408,6 +409,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     break
                 continue
             llm_resp_result = llm_response
+            got_complete_response = True
 
             if not llm_response.is_chunk and llm_response.usage:
                 # only count the token usage of the final response for computation purpose
@@ -422,7 +424,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             else:
                 return
 
-        if self._stop_requested:
+        if self._stop_requested and not got_complete_response:
             logger.info("Agent execution was requested to stop by user.")
             llm_resp = llm_resp_result
             if llm_resp.role != "assistant":
@@ -461,6 +463,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             self._resolve_unconsumed_follow_ups()
             return
+
+        if self._stop_requested and got_complete_response:
+            logger.info(
+                "Agent was requested to stop, but LLM already returned a "
+                "complete response. Proceeding with normal response delivery."
+            )
 
         # 处理 LLM 响应
         llm_resp = llm_resp_result
