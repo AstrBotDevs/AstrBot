@@ -43,6 +43,7 @@ class SessionManagementRoute(Route):
             "/session/group/create": ("POST", self.create_group),
             "/session/group/update": ("POST", self.update_group),
             "/session/group/delete": ("POST", self.delete_group),
+            "/session/group/update-config": ("POST", self.update_group_config),
         }
         self.conv_mgr = core_lifecycle.conversation_manager
         self.core_lifecycle = core_lifecycle
@@ -145,9 +146,20 @@ class SessionManagementRoute(Route):
                 page=page, page_size=page_size, search=search
             )
 
-            # 构建规则列表
+            # 收集属于有配置分组的 UMO，避免重复显示
+            grouped_umos = set()
+            groups = self._get_groups()
+            for group_data in groups.values():
+                if group_data.get("config"):
+                    grouped_umos.update(group_data.get("umos", []))
+
+            # 构建规则列表（排除已被分组管理的 UMO）
             rules_list = []
+            filtered_count = 0
             for umo, rules in umo_rules.items():
+                if umo in grouped_umos:
+                    filtered_count += 1
+                    continue
                 rule_info = {
                     "umo": umo,
                     "rules": rules,
@@ -159,6 +171,7 @@ class SessionManagementRoute(Route):
                     rule_info["message_type"] = parts[1]
                     rule_info["session_id"] = parts[2]
                 rules_list.append(rule_info)
+            total -= filtered_count
 
             # 获取可用的 providers 和 personas
             provider_manager = self.core_lifecycle.provider_manager
@@ -240,6 +253,7 @@ class SessionManagementRoute(Route):
                         "available_plugins": available_plugins,
                         "available_kbs": available_kbs,
                         "available_rule_keys": AVAILABLE_SESSION_RULE_KEYS,
+                        "group_rules": self._get_group_rules(),
                     }
                 )
                 .__dict__
@@ -793,6 +807,51 @@ class SessionManagementRoute(Route):
         """保存分组"""
         sp.put("session_groups", groups)
 
+    def _get_group_rules(self) -> list:
+        """获取有配置的分组列表，用于在规则列表中显示"""
+        groups = self._get_groups()
+        group_rules = []
+        for group_id, group_data in groups.items():
+            config = group_data.get("config", {})
+            if config:  # 只返回有配置的分组
+                group_rules.append(
+                    {
+                        "group_id": group_id,
+                        "name": group_data.get("name", ""),
+                        "umo_count": len(group_data.get("umos", [])),
+                        "config": config,
+                    }
+                )
+        return group_rules
+
+    async def _sync_group_config_to_umos(
+        self, config: dict, umos: list[str]
+    ) -> tuple[int, list[str]]:
+        """将分组配置同步到指定的 UMO 列表
+
+        Returns:
+            (success_count, failed_umos)
+        """
+        success_count = 0
+        failed_umos = []
+        for umo in umos:
+            try:
+                for rule_key, rule_value in config.items():
+                    if rule_key not in AVAILABLE_SESSION_RULE_KEYS:
+                        continue
+                    if rule_value is None:
+                        continue
+                    if rule_key == "session_plugin_config":
+                        # session_plugin_config 需要包裹 umo key
+                        await sp.session_put(umo, rule_key, {umo: rule_value})
+                    else:
+                        await sp.session_put(umo, rule_key, rule_value)
+                success_count += 1
+            except Exception as e:
+                logger.error(f"同步配置到 {umo} 失败: {e!s}")
+                failed_umos.append(umo)
+        return success_count, failed_umos
+
     async def list_groups(self):
         """获取所有分组列表"""
         try:
@@ -806,6 +865,7 @@ class SessionManagementRoute(Route):
                         "name": group_data.get("name", ""),
                         "umos": group_data.get("umos", []),
                         "umo_count": len(group_data.get("umos", [])),
+                        "config": group_data.get("config", {}),
                     }
                 )
             return Response().ok({"groups": groups_list}).__dict__
@@ -875,6 +935,7 @@ class SessionManagementRoute(Route):
                 return Response().error(f"分组 '{group_id}' 不存在").__dict__
 
             group = groups[group_id]
+            old_umos = set(group.get("umos", []))
 
             # 更新名称
             if name is not None:
@@ -883,6 +944,7 @@ class SessionManagementRoute(Route):
             # 直接设置 umos 列表
             if umos is not None:
                 group["umos"] = umos
+                new_umos = set(umos)
             else:
                 # 增量更新
                 current_umos = set(group.get("umos", []))
@@ -891,8 +953,20 @@ class SessionManagementRoute(Route):
                 if remove_umos:
                     current_umos.difference_update(remove_umos)
                 group["umos"] = list(current_umos)
+                new_umos = current_umos
 
             self._save_groups(groups)
+
+            # 自动同步分组配置给新加入的成员
+            group_config = group.get("config", {})
+            newly_added = new_umos - old_umos
+            if group_config and newly_added:
+                sync_count, _ = await self._sync_group_config_to_umos(
+                    group_config, list(newly_added)
+                )
+                logger.info(
+                    f"自动同步分组 '{group['name']}' 配置到 {sync_count} 个新成员"
+                )
 
             return (
                 Response()
@@ -936,3 +1010,64 @@ class SessionManagementRoute(Route):
         except Exception as e:
             logger.error(f"删除分组失败: {e!s}")
             return Response().error(f"删除分组失败: {e!s}").__dict__
+
+    async def update_group_config(self):
+        """更新分组的配置，并同步到所有成员 UMO
+
+        请求体:
+        {
+            "group_id": "分组ID",
+            "config": {
+                "session_service_config": {...},
+                "session_plugin_config": {...},
+                "kb_config": {...},
+                "provider_perf_chat_completion": ...,
+                "provider_perf_speech_to_text": ...,
+                "provider_perf_text_to_speech": ...
+            }
+        }
+        """
+        try:
+            data = await request.get_json()
+            group_id = data.get("group_id")
+            config = data.get("config", {})
+
+            if not group_id:
+                return Response().error("缺少必要参数: group_id").__dict__
+
+            groups = self._get_groups()
+
+            if group_id not in groups:
+                return Response().error(f"分组 '{group_id}' 不存在").__dict__
+
+            group = groups[group_id]
+
+            # 保存配置到分组
+            group["config"] = config
+            self._save_groups(groups)
+
+            # 同步到所有成员 UMO
+            umos = group.get("umos", [])
+            success_count, failed_umos = await self._sync_group_config_to_umos(
+                config, umos
+            )
+
+            msg = f"分组 '{group['name']}' 配置已保存并同步到 {success_count}/{len(umos)} 个会话"
+            if failed_umos:
+                msg += f"，{len(failed_umos)} 个失败"
+
+            return (
+                Response()
+                .ok(
+                    {
+                        "message": msg,
+                        "success_count": success_count,
+                        "failed_count": len(failed_umos),
+                        "failed_umos": failed_umos,
+                    }
+                )
+                .__dict__
+            )
+        except Exception as e:
+            logger.error(f"更新分组配置失败: {e!s}")
+            return Response().error(f"更新分组配置失败: {e!s}").__dict__
