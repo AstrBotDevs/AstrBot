@@ -81,6 +81,20 @@ def test_build_skills_prompt_absolute_path_in_example():
     assert "cat /home/pan/AstrBot/skills/foo/SKILL.md" in prompt
 
 
+def test_build_skills_prompt_keeps_placeholder_example_literal():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="`\n",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
+    assert example_fragment == "cat <skills_root>/<skill_name>/SKILL.md"
+
+
 def test_build_skills_prompt_preserves_windows_absolute_path_in_example(monkeypatch):
     monkeypatch.setattr("astrbot.core.skills.skill_manager.os.name", "nt")
     skills = [

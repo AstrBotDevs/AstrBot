@@ -59,15 +59,21 @@ def _decode_shell_output(output: bytes | None) -> str:
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
     try:
-        return output.decode(preferred)
+        return output.decode("utf-8")
     except (LookupError, UnicodeDecodeError):
         pass
 
     if os.name == "nt":
-        try:
-            return output.decode("mbcs")
-        except (LookupError, UnicodeDecodeError):
-            pass
+        for encoding in ("mbcs", "cp936", "gbk", "gb18030"):
+            try:
+                return output.decode(encoding)
+            except (LookupError, UnicodeDecodeError):
+                continue
+
+    try:
+        return output.decode(preferred)
+    except (LookupError, UnicodeDecodeError):
+        pass
 
     return output.decode("utf-8", errors="replace")
 

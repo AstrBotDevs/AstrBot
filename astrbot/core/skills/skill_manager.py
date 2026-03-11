@@ -124,6 +124,8 @@ def _sanitize_skill_display_name(name: str) -> str:
 
 
 def _build_skill_read_command_example(path: str) -> str:
+    if path == "<skills_root>/<skill_name>/SKILL.md":
+        return f"cat {path}"
     if _is_windows_prompt_path(path):
         command = "type"
         path_arg = f'"{path}"'
@@ -168,8 +170,11 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
             example_path = rendered_path
     skills_block = "\n".join(skills_lines)
     # Sanitize example_path — it may originate from sandbox cache (untrusted)
-    example_path = _sanitize_prompt_path_for_prompt(example_path)
-    example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
+    if example_path == "<skills_root>/<skill_name>/SKILL.md":
+        example_path = "<skills_root>/<skill_name>/SKILL.md"
+    else:
+        example_path = _sanitize_prompt_path_for_prompt(example_path)
+        example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
     example_command = _build_skill_read_command_example(example_path)
 
     return (
