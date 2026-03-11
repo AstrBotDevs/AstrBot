@@ -304,6 +304,9 @@
         "max_agent_step": {
           "description": "Maximum Tool Call Rounds"
         },
+        "shell_call_timeout": {
+          "description": "Shell Call Timeout (s)"
+        },
         "tool_call_timeout": {
           "description": "Tool Call Timeout (seconds)"
         },

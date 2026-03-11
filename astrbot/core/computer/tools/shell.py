@@ -58,7 +58,10 @@ class ExecuteShellTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
         try:
-            result = await sb.shell.exec(command, background=background, env=env)
+            config = context.context.context.get_config()
+            timeout = config.get("provider_settings", {}).get("shell_call_timeout", 30)
+            
+            result = await sb.shell.exec(command, background=background, env=env, timeout=timeout)
             return json.dumps(result)
         except Exception as e:
             return f"Error executing command: {str(e)}"
