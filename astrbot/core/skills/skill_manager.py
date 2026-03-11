@@ -82,12 +82,40 @@ def _parse_frontmatter_description(text: str) -> str:
 # safe path characters to prevent prompt injection via crafted skill paths.
 _SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_:./ -]")
 _WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:/")
+_SAFE_DESCRIPTION_RE = re.compile(r"[^A-Za-z0-9 .,;:!?'\"()/_+-]")
 
 
 def _normalize_prompt_example_path(path: str) -> str:
     if re.match(r"^[A-Za-z]:\\", path):
         path = path.replace("\\", "/")
     return path
+
+
+def _sanitize_prompt_path(path: str) -> str:
+    path = _normalize_prompt_example_path(path)
+    return _SAFE_PATH_RE.sub("", path) if path else ""
+
+
+def _sanitize_prompt_description(description: str) -> str:
+    description = " ".join(description.split())
+    return _SAFE_DESCRIPTION_RE.sub("", description)
+
+
+def _render_skill_inventory_description(skill: SkillInfo) -> str:
+    description = skill.description or "No description"
+    if skill.source_type == "sandbox_only":
+        description = _sanitize_prompt_description(description)
+        if not description:
+            return "Read SKILL.md for details."
+        return "Read SKILL.md for details."
+    return description
+
+
+def _render_skill_inventory_path(skill: SkillInfo) -> str:
+    if skill.source_type == "sandbox_only":
+        return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{skill.name}/SKILL.md"
+    path = _sanitize_prompt_path(skill.path)
+    return path or "<skills_root>/<skill_name>/SKILL.md"
 
 
 def _build_skill_read_command_example(path: str) -> str:
@@ -110,16 +138,16 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     skills_lines: list[str] = []
     example_path = ""
     for skill in skills:
-        description = skill.description or "No description"
+        description = _render_skill_inventory_description(skill)
+        rendered_path = _render_skill_inventory_path(skill)
         skills_lines.append(
-            f"- **{skill.name}**: {description}\n  File: `{skill.path}`"
+            f"- **{skill.name}**: {description}\n  File: `{rendered_path}`"
         )
         if not example_path:
-            example_path = skill.path
+            example_path = rendered_path
     skills_block = "\n".join(skills_lines)
     # Sanitize example_path — it may originate from sandbox cache (untrusted)
-    example_path = _normalize_prompt_example_path(example_path)
-    example_path = _SAFE_PATH_RE.sub("", example_path) if example_path else ""
+    example_path = _sanitize_prompt_path(example_path)
     example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
     example_command = _build_skill_read_command_example(example_path)
 

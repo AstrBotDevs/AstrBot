@@ -20,7 +20,7 @@ class _FakeCompletedProcess:
 def test_local_shell_component_decodes_utf8_output(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return _FakeCompletedProcess(stdout="技能内容".encode("utf-8"))
+        return _FakeCompletedProcess(stdout="技能内容".encode())
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
