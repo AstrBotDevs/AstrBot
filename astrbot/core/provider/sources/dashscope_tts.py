@@ -64,6 +64,12 @@ class ProviderDashscopeTTSAPI(TTSProvider):
         return path
 
     def _call_qwen_tts(self, model: str, text: str):
+        if self._is_qwen_realtime_vc_model(model):
+            raise RuntimeError(
+                f"DashScope realtime voice-clone model '{model}' is not supported by the built-in dashscope_tts provider yet. "
+                "Please use a non-realtime DashScope TTS model or the astrbot_plugin_qwen_tts plugin instead.",
+            )
+
         if MultiModalConversation is None:
             raise RuntimeError(
                 "dashscope SDK missing MultiModalConversation. Please upgrade the dashscope package to use Qwen TTS models.",
@@ -161,3 +167,7 @@ class ProviderDashscopeTTSAPI(TTSProvider):
     def _is_qwen_tts_model(self, model: str) -> bool:
         model_lower = model.lower()
         return "tts" in model_lower and model_lower.startswith("qwen")
+
+    def _is_qwen_realtime_vc_model(self, model: str) -> bool:
+        model_lower = model.lower()
+        return model_lower.startswith("qwen") and "tts-vc-realtime" in model_lower
