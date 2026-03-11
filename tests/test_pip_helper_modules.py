@@ -208,3 +208,26 @@ def test_collect_installed_distribution_versions_skips_nameless_distribution(
     )
 
     assert installed == {"demo-package": "2.0"}
+
+
+def test_get_core_constraints_logs_resolution_step_context(monkeypatch):
+    warning_logs = []
+
+    monkeypatch.setattr(
+        core_constraints_module,
+        "_resolve_core_dist_name",
+        lambda core_dist_name: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.utils.core_constraints.logger.warning",
+        lambda line, *args: warning_logs.append(line % args if args else line),
+    )
+
+    core_constraints_module._get_core_constraints.cache_clear()
+    try:
+        constraints = core_constraints_module._get_core_constraints(None)
+    finally:
+        core_constraints_module._get_core_constraints.cache_clear()
+
+    assert constraints == ()
+    assert any("解析核心分发名称失败" in log for log in warning_logs)

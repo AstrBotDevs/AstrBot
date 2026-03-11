@@ -50,38 +50,39 @@ def _resolve_core_dist_name(core_dist_name: str | None) -> str | None:
 def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
     try:
         resolved_core_dist_name = _resolve_core_dist_name(core_dist_name)
-
-        if not resolved_core_dist_name:
-            return ()
-
-        try:
-            dist = importlib_metadata.distribution(resolved_core_dist_name)
-        except importlib_metadata.PackageNotFoundError:
-            return ()
-
-        if not dist or not dist.requires:
-            return ()
-
-        installed = collect_installed_distribution_versions(
-            get_requirement_check_paths()
-        )
-        if not installed:
-            return ()
-
-        constraints: list[str] = []
-        for req_str in dist.requires:
-            try:
-                req = Requirement(req_str)
-                if req.marker and not req.marker.evaluate():
-                    continue
-                name = canonicalize_distribution_name(req.name)
-                if name in installed:
-                    constraints.append(f"{name}=={installed[name]}")
-            except Exception:
-                continue
     except Exception as exc:
-        logger.warning("获取核心依赖约束失败: %s", exc)
+        logger.warning("解析核心分发名称失败: %s", exc)
         return ()
+
+    if not resolved_core_dist_name:
+        return ()
+
+    try:
+        dist = importlib_metadata.distribution(resolved_core_dist_name)
+    except importlib_metadata.PackageNotFoundError:
+        return ()
+    except Exception as exc:
+        logger.warning("读取核心分发元数据失败 (%s): %s", resolved_core_dist_name, exc)
+        return ()
+
+    if not dist or not dist.requires:
+        return ()
+
+    installed = collect_installed_distribution_versions(get_requirement_check_paths())
+    if not installed:
+        return ()
+
+    constraints: list[str] = []
+    for req_str in dist.requires:
+        try:
+            req = Requirement(req_str)
+            if req.marker and not req.marker.evaluate():
+                continue
+            name = canonicalize_distribution_name(req.name)
+            if name in installed:
+                constraints.append(f"{name}=={installed[name]}")
+        except Exception:
+            continue
 
     return tuple(constraints)
 
