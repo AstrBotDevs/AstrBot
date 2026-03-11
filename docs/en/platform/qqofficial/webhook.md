@@ -7,17 +7,17 @@
 
 ## Supported Basic Message Types
 
-> Version v4.15.0.
+> Version v4.19.6.
 
 | Message Type | Receive | Send | Notes |
 | --- | --- | --- | --- |
 | Text | Yes | Yes | |
 | Image | Yes | Yes | |
-| Voice | No | No | |
-| Video | No | No | |
-| File | No | No | |
+| Voice | Yes | Yes | |
+| Video | Yes | Yes | |
+| File | Yes | Yes | |
 
-Proactive message push: Not supported.
+Proactive message push: Supported.
 
 ## Apply for a Bot
 
