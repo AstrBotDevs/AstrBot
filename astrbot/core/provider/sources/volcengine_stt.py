@@ -1,6 +1,7 @@
+import asyncio
 import base64
-import os
 import uuid
+from pathlib import Path
 
 import aiohttp
 
@@ -34,12 +35,11 @@ class ProviderVolcengineSTT(STTProvider):
         self.appid = provider_config.get("appid")
         self.api_key = provider_config.get("api_key")
 
-    async def _get_audio_format(self, file_path) -> str | None:
+    async def _get_audio_format(self, file_path: Path) -> str | None:
         silk_header = b"SILK"
         amr_header = b"#!AMR"
         try:
-            with open(file_path, "rb") as f:
-                file_header = f.read(8)
+            file_header = file_path.read_bytes()[:8]
             if silk_header in file_header:
                 return "silk"
             if amr_header in file_header:
@@ -52,38 +52,40 @@ class ProviderVolcengineSTT(STTProvider):
         """
         获取音频文件的转录文本。
         """
-        temp_files = []  # 记录所有产生的临时文件，确保最后全部清理
-        final_audio_path = audio_url
+        temp_files: list[Path] = []  # 记录所有产生的临时文件，确保最后全部清理
+        final_audio_path: Path = None
         try:
             # --- 步骤 1: 处理远程 URL 下载 ---
             if audio_url.startswith("http"):
                 is_tencent = "multimedia.nt.qq.com.cn" in audio_url
-                temp_dir = get_astrbot_temp_path()
-                downloaded_path = os.path.join(
-                    temp_dir, f"volc_stt_{uuid.uuid4().hex[:8]}.input"
-                )
-                await download_file(audio_url, downloaded_path)
+                temp_dir = Path(get_astrbot_temp_path())
+                downloaded_path = temp_dir / f"volc_stt_{uuid.uuid4().hex[:8]}.input"
+                await download_file(audio_url, str(downloaded_path))
                 temp_files.append(downloaded_path)
                 final_audio_path = downloaded_path
             else:
                 is_tencent = False
+                final_audio_path = Path(audio_url)
 
-            if not os.path.exists(final_audio_path):
+            if not final_audio_path.exists():
                 logger.error(f"音频文件不存在: {final_audio_path}")
+                return None
 
             # --- 步骤 2: 格式检测与转换 (Silk/AMR) ---
-            if final_audio_path.endswith((".amr", ".silk")) or is_tencent:
+            if final_audio_path.suffix in [".amr", ".silk"] or is_tencent:
                 file_format = await self._get_audio_format(final_audio_path)
                 if file_format in ["silk", "amr"]:
-                    temp_dir = get_astrbot_temp_path()
-                    converted_path = os.path.join(
-                        temp_dir, f"volc_stt_{uuid.uuid4().hex[:8]}.wav"
-                    )
+                    temp_dir = Path(get_astrbot_temp_path())
+                    converted_path = temp_dir / f"volc_stt_{uuid.uuid4().hex[:8]}.wav"
 
                     if file_format == "silk":
-                        await tencent_silk_to_wav(final_audio_path, converted_path)
+                        await tencent_silk_to_wav(
+                            str(final_audio_path), str(converted_path)
+                        )
                     else:
-                        await convert_to_pcm_wav(final_audio_path, converted_path)
+                        await convert_to_pcm_wav(
+                            str(final_audio_path), str(converted_path)
+                        )
 
                     temp_files.append(converted_path)
                     final_audio_path = converted_path
@@ -95,17 +97,17 @@ class ProviderVolcengineSTT(STTProvider):
         finally:
             # --- 步骤 4: 彻底清理所有协议产生的临时文件 ---
             for f_path in temp_files:
-                if os.path.exists(f_path):
+                if f_path.exists():
                     try:
-                        os.remove(f_path)
+                        f_path.unlink()
                     except Exception as e:
                         logger.error(f"清理火山引擎 STT 临时文件失败: {f_path}, {e}")
+                        raise e
 
-    async def _recognize_audio(self, file_path: str) -> str:
+    async def _recognize_audio(self, file_path: Path) -> str:
         """执行具体的 API 请求"""
         if not self.appid or not self.api_key:
-            logger.error("火山引擎 STT 配置不完整：需要 appid 和 api_key")
-            return None
+            raise ValueError("火山引擎 STT 配置不完整：需要 appid 和 api_key")
 
         headers = {
             "X-Api-App-Key": self.appid,
@@ -115,8 +117,11 @@ class ProviderVolcengineSTT(STTProvider):
             "X-Api-Sequence": "-1",
         }
 
-        with open(file_path, "rb") as f:
-            audio_b64 = base64.b64encode(f.read()).decode()
+        try:
+            audio_data = file_path.read_bytes()
+            audio_b64 = base64.b64encode(audio_data).decode()
+        except Exception as e:
+            raise OSError(f"读取音频文件失败: {e}")
 
         request_body = {
             "user": {"uid": str(uuid.uuid4())},
@@ -124,20 +129,76 @@ class ProviderVolcengineSTT(STTProvider):
             "request": {"model_name": "bigmodel"},
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self.base_url, json=request_body, headers=headers
-            ) as resp:
-                status_code = resp.headers.get("X-Api-Status-Code")
-                data = await resp.json()
-                if status_code == "20000000":
-                    text = data.get("result", {}).get("text", "")
-                    return text
-                else:
-                    logger.debug(f"data原始数据{data}")
-                    error_msg = data.get("message", "未知错误")
-                    logger.error(
-                        f"火山引擎 STT API 错误 (Status: {status_code}): {error_msg}"
-                    )
-                    logger.error(f"火山引擎 STT 识别失败: {error_msg}")
-                    return None
+        timeout = aiohttp.ClientTimeout(total=30)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(
+                    self.base_url, json=request_body, headers=headers
+                ) as resp:
+                    if resp.status != 200:
+                        content = await resp.text()
+                        error_msg = (
+                            f"火山引擎 STT HTTP 错误 (Status: {resp.status}): {content}"
+                        )
+                        raise ConnectionError(error_msg)
+
+                    status_code = resp.headers.get("X-Api-Status-Code")
+                    data = await resp.json()
+                    if status_code == "20000000":
+                        text = data.get("result", {}).get("text", "")
+                        if not text:
+                            logger.warning("火山引擎 STT 返回成功但内容为空")
+                        return "用户输入内容为空"
+                    elif status_code == "20000001":
+                        logger.warning("火山引擎 STT 正在处理中")
+                        return "音频文件正在处理中"
+                    elif status_code == "20000002":
+                        logger.warning("任务在队列中")
+                        return "音频文件在队列中"
+                    elif status_code == "20000003":
+                        logger.warning("空文本语音")
+                        return "用户输入内容为空"
+                    elif status_code == "45000001":
+                        logger.warning(
+                            "火山引擎 STT 请求参数缺失必需字段 / 字段值无效 / 重复请求"
+                        )
+                        return (
+                            "火山引擎 STT 请求参数缺失必需字段 / 字段值无效 / 重复请求"
+                        )
+                    elif status_code == "45000002":
+                        logger.warning("火山引擎 STT 空音频")
+                        return "用户输入内容为空"
+                    elif status_code == "45000151":
+                        logger.warning("火山引擎 STT 音频格式不支持")
+                        return "音频格式不支持"
+                    elif status_code == "55000031":
+                        logger.warning("火山引擎stt服务过载，无法处理当前请求。")
+                        return "火山引擎stt服务过载，无法处理当前请求。"
+                    elif status_code.startswith("550"):
+                        logger.warning("火山引擎stt服务内部处理错误")
+                        return "火山引擎stt服务内部处理错误"
+                    else:
+                        error_msg = data.get("message", "未知业务错误")
+                        full_error = f"火山引擎 STT API 业务错误 (Code: {status_code}): {error_msg}"
+                        logger.error(full_error)
+                        raise RuntimeError(full_error)
+
+        except asyncio.TimeoutError:
+            error_msg = "火山引擎 STT 请求超时 (超过 30 秒)"
+            logger.error(error_msg)
+            raise TimeoutError(error_msg)
+
+        except aiohttp.ClientError as e:
+            error_msg = f"火山引擎 STT 网络请求错误: {e}"
+            logger.error(error_msg)
+            raise ConnectionError(error_msg) from e
+
+        except Exception as e:
+            # 避免重复抛出已经包装过的异常
+            if isinstance(
+                e, (ValueError, IOError, ConnectionError, TimeoutError, RuntimeError)
+            ):
+                raise
+            error_msg = f"火山引擎 STT 发生未知异常: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg) from e
