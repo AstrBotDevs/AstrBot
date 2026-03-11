@@ -86,7 +86,7 @@ const enabledConfigTags = (tool: ToolItem): BuiltinToolConfigTag[] => {
         <div class="py-2">
           <div class="d-flex flex-wrap align-center ga-1">
             <v-icon color="primary" class="mr-1" size="18">
-              {{ item.name.includes(':') ? 'mdi-server-network' : 'mdi-function-variant' }}
+              {{ item.origin === 'mcp' ? 'mdi-server-network' : 'mdi-function-variant' }}
             </v-icon>
             <div class="tool-name text-body-2 font-weight-medium">{{ item.display_name || item.name }}</div>
             <v-tooltip

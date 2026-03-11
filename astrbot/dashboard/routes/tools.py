@@ -472,6 +472,7 @@ class ToolsRoute(Route):
                 if self.tool_mgr.is_builtin_tool(tool.name):
                     origin = "builtin"
                     origin_name = "AstrBot Core"
+                    display_name = tool.name
                     readonly = True
                     builtin_config_statuses = get_builtin_tool_config_statuses(
                         tool.name,

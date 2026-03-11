@@ -16,6 +16,7 @@ import { computed, onActivated, onMounted, ref, watch} from 'vue';
 import axios from 'axios';
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
+import { matchesToolSearch } from '@/utils/toolDisplayName';
 
 // Composables
 import { useComponentData } from './composables/useComponentData';
@@ -86,10 +87,7 @@ const {
 const filteredTools = computed(() => {
   const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
   if (!query) return tools.value;
-  return tools.value.filter(tool => 
-    tool.name?.toLowerCase().includes(query) ||
-    tool.description?.toLowerCase().includes(query)
-  );
+  return tools.value.filter(tool => matchesToolSearch(tool, query));
 });
 
 // 处理切换指令状态

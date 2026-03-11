@@ -281,6 +281,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { resolveToolDisplayName } from '@/utils/toolDisplayName';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
@@ -432,8 +433,7 @@ export default defineComponent({
         },
 
         getToolDisplayName(toolName: string): string {
-            const tool = this.availableTools.find(t => t.name === toolName);
-            return tool?.display_name || toolName;
+            return resolveToolDisplayName(toolName, this.availableTools);
         },
 
         // Persona 操作

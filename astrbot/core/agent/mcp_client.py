@@ -8,6 +8,7 @@ from contextlib import AsyncExitStack
 from datetime import timedelta
 from pathlib import Path, PureWindowsPath
 from typing import Any, Generic
+from urllib.parse import quote
 
 from tenacity import (
     before_sleep_log,
@@ -657,8 +658,6 @@ class MCPTool(FunctionTool, Generic[TContext]):
     ) -> None:
         # Add namespace prefix to avoid conflicts with plugin tools
         # URL-encode the server name to create a safe and unique identifier part
-        from urllib.parse import quote
-
         normalized_server_name = quote(mcp_server_name, safe="")
         # Format: mcp_<normalized_server_name>__<tool_name>
         namespaced_name = f"mcp_{normalized_server_name}__{mcp_tool.name}"
