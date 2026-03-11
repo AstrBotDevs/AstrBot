@@ -14,6 +14,10 @@
 
 Proactive message push: Supported.
 
+Streaming output: Supported. You must enable the `Create and update cards (cardkit:card:write)` permission for your app in the Lark Developer Console.
+
+The Lark client version must be >= 7.20. Lower versions only display the title and an upgrade prompt.
+
 ## Creating a Bot
 
 Navigate to the [Developer Console](https://open.feishu.cn/app) and create a custom enterprise application.
@@ -87,6 +91,8 @@ Then click the `Save` button at the top.
 Next, click on "Permission Management," click "Enable Permissions," and enter `im:message:send,im:message,im:message:send_as_bot`. Add the filtered permissions.
 
 Enter `im:resource:upload,im:resource` again to enable image upload permissions.
+
+If you want to use streaming output, additionally enable `Create and update cards (cardkit:card:write)`.
 
 The final set of permissions should look like this:
 
