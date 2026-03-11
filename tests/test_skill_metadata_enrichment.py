@@ -134,6 +134,19 @@ def test_build_skills_prompt_normalizes_windows_backslashes_in_example():
     assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
 
 
+def test_build_skills_prompt_uses_windows_command_for_unc_paths():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path=r"\\server\share\skills\foo\SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    assert "type //server/share/skills/foo/SKILL.md" in prompt
+
+
 def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars():
     skills = [
         SkillInfo(
@@ -148,6 +161,20 @@ def test_build_skills_prompt_preserves_drive_colon_while_sanitizing_unsafe_chars
 
     example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
     assert example_fragment == "type C:/AstrBot/data/skills/foo/SKILL.md"
+
+
+def test_build_skills_prompt_strips_non_drive_colons_from_example_path():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="/tmp/evil:payload/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
+    assert example_fragment == "cat /tmp/evilpayload/SKILL.md"
 
 
 def test_build_skills_prompt_sanitizes_sandbox_skill_metadata_in_inventory():

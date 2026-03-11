@@ -4,10 +4,7 @@ import asyncio
 import subprocess
 
 from astrbot.core.computer.booters import local as local_booter
-from astrbot.core.computer.booters.local import (
-    LocalShellComponent,
-    _shell_output_encodings,
-)
+from astrbot.core.computer.booters.local import LocalShellComponent
 
 
 class _FakeCompletedProcess:
@@ -49,29 +46,3 @@ def test_local_shell_component_falls_back_to_cp936(monkeypatch):
     assert result["stdout"] == "微博热搜"
     assert result["stderr"] == ""
     assert result["exit_code"] == 0
-
-
-def test_shell_output_encodings_skip_windows_fallbacks_on_non_windows(monkeypatch):
-    monkeypatch.setattr(local_booter.os, "name", "posix", raising=False)
-    monkeypatch.setattr(
-        local_booter.locale,
-        "getpreferredencoding",
-        lambda _do_setlocale=False: "utf-8",
-    )
-
-    encodings = _shell_output_encodings()
-
-    assert encodings == ["utf-8"]
-
-
-def test_shell_output_encodings_include_windows_fallbacks_on_windows(monkeypatch):
-    monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
-    monkeypatch.setattr(
-        local_booter.locale,
-        "getpreferredencoding",
-        lambda _do_setlocale=False: "cp936",
-    )
-
-    encodings = _shell_output_encodings()
-
-    assert encodings == ["utf-8", "cp936", "mbcs", "gbk", "gb18030"]

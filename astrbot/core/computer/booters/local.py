@@ -59,32 +59,23 @@ def _decode_shell_output(output: bytes | str | None) -> str:
     if isinstance(output, str):
         return output
 
-    for encoding in _shell_output_encodings():
-        try:
-            return output.decode(encoding)
-        except (LookupError, UnicodeDecodeError):
-            continue
-
-    return output.decode("utf-8", errors="replace")
-
-
-def _shell_output_encodings() -> list[str]:
-    encodings: list[str] = ["utf-8"]
-    preferred_encoding = locale.getpreferredencoding(False)
-    if preferred_encoding:
-        encodings.append(preferred_encoding)
+    preferred = locale.getpreferredencoding(False) or "utf-8"
+    encodings = [preferred, "utf-8"]
     if os.name == "nt":
         encodings.extend(["mbcs", "cp936", "gbk", "gb18030"])
 
-    deduped: list[str] = []
     seen: set[str] = set()
     for encoding in encodings:
         normalized = encoding.lower()
         if normalized in seen:
             continue
         seen.add(normalized)
-        deduped.append(encoding)
-    return deduped
+        try:
+            return output.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+
+    return output.decode("utf-8", errors="replace")
 
 
 @dataclass

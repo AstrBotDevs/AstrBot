@@ -80,20 +80,28 @@ def _parse_frontmatter_description(text: str) -> str:
 
 # Regex for sanitizing paths used in prompt examples — only allow
 # safe path characters to prevent prompt injection via crafted skill paths.
-_SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_:./ -]")
-_WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:/")
+_SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_./ -]")
+_WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:/|\\)")
+_WINDOWS_UNC_PATH_RE = re.compile(r"^(//|\\\\)[^/\\]+[/\\][^/\\]+")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
 
 
 def _normalize_prompt_example_path(path: str) -> str:
-    if re.match(r"^[A-Za-z]:\\", path):
+    if _WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path):
         path = path.replace("\\", "/")
     return path
 
 
 def _sanitize_prompt_path(path: str) -> str:
     path = _normalize_prompt_example_path(path)
-    return _SAFE_PATH_RE.sub("", path) if path else ""
+    if not path:
+        return ""
+    drive_prefix = ""
+    if _WINDOWS_DRIVE_PATH_RE.match(path):
+        drive_prefix = path[:2]
+        path = path[2:]
+    sanitized = _SAFE_PATH_RE.sub("", path)
+    return f"{drive_prefix}{sanitized}"
 
 
 def _sanitize_prompt_description(description: str) -> str:
@@ -121,7 +129,7 @@ def _render_skill_inventory_path(skill: SkillInfo) -> str:
 
 
 def _build_skill_read_command_example(path: str) -> str:
-    if _WINDOWS_ABS_PATH_RE.match(path):
+    if _WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path):
         command = "type"
         path_arg = f'"{path}"' if " " in path else path
     else:
