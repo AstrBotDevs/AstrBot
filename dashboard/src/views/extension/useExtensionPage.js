@@ -1426,7 +1426,7 @@ export const useExtensionPage = () => {
   
       toast(tm("messages.refreshSuccess"), "success");
     } catch (err) {
-      toast(tm("messages.refreshFailed") + " " + err, "error");
+      toast(resolveErrorMessage(err, tm("messages.refreshFailed")), "error");
     } finally {
       refreshingMarket.value = false;
     }
@@ -1448,7 +1448,7 @@ export const useExtensionPage = () => {
       const updateCount = updatableExtensions.value.length;
       toast(tm("messages.checkUpdatesSuccess", { count: updateCount }), "success");
     } catch (err) {
-      toast(tm("messages.checkUpdatesFailed") + " " + err, "error");
+      toast(resolveErrorMessage(err, tm("messages.checkUpdatesFailed")), "error");
     } finally {
       isCheckingUpdates.value = false;
     }
