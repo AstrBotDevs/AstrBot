@@ -1,4 +1,3 @@
-
 # Handling Message Events
 
 Event listeners can receive message content delivered by the platform and implement features such as commands, command groups, and event listening.
@@ -307,6 +306,8 @@ async def on_decorating_result(self, event: AstrMessageEvent):
 ```
 
 > You cannot use yield to send messages here. This hook is only for decorating event.get_result().chain. If you need to send, please use the `event.send()` method directly.
+>
+> When streaming output is enabled, this hook will run again after the streamed text completes with the **full final result**, so plugins that convert the final text into audio, images, files, or other non-text content usually do not need a separate streaming code path. Because some text has already been sent in real time, plain-text rewrites cannot replace the streamed text; if you need extra text, call `event.send()` yourself.
 
 #### After Message Sent
 
