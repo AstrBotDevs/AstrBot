@@ -53,23 +53,22 @@ def _ensure_safe_path(path: str) -> str:
     return abs_path
 
 
-def _decode_shell_output(output: bytes | str | None) -> str:
+def _decode_shell_output(output: bytes | None) -> str:
     if output is None:
         return ""
-    if isinstance(output, str):
-        return output
 
     preferred = locale.getpreferredencoding(False) or "utf-8"
-    encodings = ["utf-8", preferred]
-    if os.name == "nt":
-        encodings.extend(["mbcs", "cp936", "gbk", "gb18030"])
+    encodings = tuple(
+        dict.fromkeys(
+            [
+                "utf-8",
+                preferred,
+                *(("mbcs", "cp936", "gbk", "gb18030") if os.name == "nt" else ()),
+            ]
+        )
+    )
 
-    seen: set[str] = set()
     for encoding in encodings:
-        normalized = encoding.lower()
-        if normalized in seen:
-            continue
-        seen.add(normalized)
         try:
             return output.decode(encoding)
         except (LookupError, UnicodeDecodeError):

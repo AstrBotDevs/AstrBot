@@ -177,6 +177,20 @@ def test_build_skills_prompt_strips_non_drive_colons_from_example_path():
     assert example_fragment == "cat /tmp/evilpayload/SKILL.md"
 
 
+def test_build_skills_prompt_preserves_unicode_local_path_in_example():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="/home/pan/技能/العربية/café/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    example_fragment = prompt.split("(e.g. `", 1)[1].split("`).", 1)[0]
+    assert "/home/pan/技能/العربية/café/SKILL.md" in example_fragment
+
+
 def test_build_skills_prompt_sanitizes_sandbox_skill_metadata_in_inventory():
     skills = [
         SkillInfo(

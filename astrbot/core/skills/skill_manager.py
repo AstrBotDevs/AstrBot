@@ -46,6 +46,13 @@ class SkillInfo:
     sandbox_exists: bool = False
 
 
+@dataclass
+class SkillPromptFields:
+    display_name: str
+    description: str
+    rendered_path: str
+
+
 def _parse_frontmatter_description(text: str) -> str:
     """Extract the ``description`` value from YAML frontmatter.
 
@@ -80,26 +87,30 @@ def _parse_frontmatter_description(text: str) -> str:
 
 # Regex for sanitizing paths used in prompt examples — only allow
 # safe path characters to prevent prompt injection via crafted skill paths.
-_SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_./ -]")
+_SAFE_PATH_RE = re.compile(r"[^\w./ ,()'\-]", re.UNICODE)
 _WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:/|\\)")
 _WINDOWS_UNC_PATH_RE = re.compile(r"^(//|\\\\)[^/\\]+[/\\][^/\\]+")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
 
 
-def _normalize_prompt_example_path(path: str) -> str:
-    if _WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path):
-        path = path.replace("\\", "/")
-    return path
+def _is_windows_prompt_path(path: str) -> bool:
+    return bool(_WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path))
 
 
-def _sanitize_prompt_path(path: str) -> str:
-    path = _normalize_prompt_example_path(path)
+def _sanitize_prompt_path_for_prompt(path: str) -> str:
     if not path:
         return ""
+
+    if _is_windows_prompt_path(path):
+        path = path.replace("\\", "/")
+
     drive_prefix = ""
     if _WINDOWS_DRIVE_PATH_RE.match(path):
         drive_prefix = path[:2]
         path = path[2:]
+
+    path = path.replace("`", "")
+    path = _CONTROL_CHARS_RE.sub("", path)
     sanitized = _SAFE_PATH_RE.sub("", path)
     return f"{drive_prefix}{sanitized}"
 
@@ -131,12 +142,20 @@ def _render_skill_inventory_path(skill: SkillInfo) -> str:
     if skill.source_type == "sandbox_only":
         safe_name = _sanitize_skill_display_name(skill.name)
         return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{safe_name}/SKILL.md"
-    path = _sanitize_prompt_path(skill.path)
+    path = _sanitize_prompt_path_for_prompt(skill.path)
     return path or "<skills_root>/<skill_name>/SKILL.md"
 
 
+def _prepare_skill_prompt_fields(skill: SkillInfo) -> SkillPromptFields:
+    return SkillPromptFields(
+        display_name=_sanitize_skill_display_name(skill.name),
+        description=_render_skill_inventory_description(skill),
+        rendered_path=_render_skill_inventory_path(skill),
+    )
+
+
 def _build_skill_read_command_example(path: str) -> str:
-    if _WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path):
+    if _is_windows_prompt_path(path):
         command = "type"
         path_arg = f'"{path}"' if " " in path else path
     else:
@@ -155,17 +174,16 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     skills_lines: list[str] = []
     example_path = ""
     for skill in skills:
-        display_name = _sanitize_skill_display_name(skill.name)
-        description = _render_skill_inventory_description(skill)
-        rendered_path = _render_skill_inventory_path(skill)
+        fields = _prepare_skill_prompt_fields(skill)
         skills_lines.append(
-            f"- **{display_name}**: {description}\n  File: `{rendered_path}`"
+            f"- **{fields.display_name}**: {fields.description}\n"
+            f"  File: `{fields.rendered_path}`"
         )
         if not example_path:
-            example_path = rendered_path
+            example_path = fields.rendered_path
     skills_block = "\n".join(skills_lines)
     # Sanitize example_path — it may originate from sandbox cache (untrusted)
-    example_path = _sanitize_prompt_path(example_path)
+    example_path = _sanitize_prompt_path_for_prompt(example_path)
     example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
     example_command = _build_skill_read_command_example(example_path)
 
