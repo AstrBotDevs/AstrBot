@@ -100,7 +100,9 @@ class ToolsRoute(Route):
                     if key != "active":  # active 已经处理
                         server_info[key] = value
 
-                # 如果MCP客户端已初始化，从客户端获取工具名称
+                # If MCP client is initialized, get tool names from client
+                # Note: mcp_client.tools contains raw MCP tools (mcp.Tool), not MCPTool
+                # So we use tool.name directly (no namespace prefix to strip)
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
@@ -434,18 +436,25 @@ class ToolsRoute(Route):
                 if isinstance(tool, MCPTool):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
+                    # Format: <ServerName>_<ToolName> for MCP tools
+                    # Normalize server name for display
+                    normalized_server = tool.mcp_server_name.replace(" ", "")
+                    display_name = f"{normalized_server}_{tool.original_tool_name}"
                 elif tool.handler_module_path and star_map.get(
                     tool.handler_module_path
                 ):
                     star = star_map[tool.handler_module_path]
                     origin = "plugin"
                     origin_name = star.name
+                    display_name = tool.name
                 else:
                     origin = "unknown"
                     origin_name = "unknown"
+                    display_name = tool.name
 
                 tool_info = {
-                    "name": tool.name,
+                    "name": tool.name,  # Keep namespaced name for internal use
+                    "display_name": display_name,  # Friendly name for display
                     "description": tool.description,
                     "parameters": tool.parameters,
                     "active": tool.active,

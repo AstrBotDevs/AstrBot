@@ -98,7 +98,7 @@
                                                     </template>
 
                                                     <v-list-item-title>
-                                                        {{ item.name }}
+                                                        {{ item.display_name || item.name }}
 
                                                         <v-chip v-if="item.origin" size="x-small" color="info" class="mr-2"
                                                             variant="tonal">
@@ -158,7 +158,7 @@
                                             <v-chip v-for="toolName in personaForm.tools" :key="toolName" size="small"
                                                 color="primary" variant="tonal" closable
                                                 @click:close="removeTool(toolName)">
-                                                {{ toolName }}
+                                                {{ getToolDisplayName(toolName) }}
                                             </v-chip>
                                         </div>
                                         <div v-else class="text-body-2 text-medium-emphasis">
@@ -329,6 +329,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { matchesToolSearch, resolveToolDisplayName } from '@/utils/toolDisplayName';
 
 export default {
     name: 'PersonaForm',
@@ -405,12 +406,7 @@ export default {
             if (!this.toolSearch) {
                 return this.availableTools;
             }
-            const search = this.toolSearch.toLowerCase();
-            return this.availableTools.filter(tool =>
-                tool.name.toLowerCase().includes(search) ||
-                (tool.description && tool.description.toLowerCase().includes(search)) ||
-                (tool.mcp_server_name && tool.mcp_server_name.toLowerCase().includes(search))
-            );
+            return this.availableTools.filter(tool => matchesToolSearch(tool, this.toolSearch));
         },
         filteredSkills() {
             if (!this.skillSearch) {
@@ -818,6 +814,10 @@ export default {
             // 检查服务器的所有工具是否都已选中
             return Array.isArray(this.personaForm.tools) &&
                 server.tools.every(toolName => this.personaForm.tools.includes(toolName));
+        },
+
+        getToolDisplayName(toolName) {
+            return resolveToolDisplayName(toolName, this.availableTools);
         }
     }
 }

@@ -164,7 +164,7 @@
                             class="d-flex flex-wrap ga-1">
                             <v-chip v-for="toolName in viewingPersona.tools" :key="toolName" size="small"
                                 color="primary" variant="tonal">
-                                {{ toolName }}
+                                {{ getToolDisplayName(toolName) }}
                             </v-chip>
                         </div>
                         <div v-else class="text-body-2 text-medium-emphasis">
@@ -265,6 +265,7 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue';
+import axios from 'axios';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
 import { mapState, mapActions } from 'pinia';
@@ -280,6 +281,7 @@ import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
 } from '@/utils/confirmDialog';
+import { resolveToolDisplayName } from '@/utils/toolDisplayName';
 
 import type { Folder, FolderTreeNode } from '@/components/folder/types';
 
@@ -347,7 +349,10 @@ export default defineComponent({
 
             // 骨架屏延迟显示控制
             showSkeleton: false,
-            skeletonTimer: null as ReturnType<typeof setTimeout> | null
+            skeletonTimer: null as ReturnType<typeof setTimeout> | null,
+
+            // 工具列表用于显示名称
+            availableTools: [] as any[]
         };
     },
     computed: {
@@ -411,8 +416,24 @@ export default defineComponent({
         async initialize() {
             await Promise.all([
                 this.loadFolderTree(),
-                this.navigateToFolder(null)
+                this.navigateToFolder(null),
+                this.loadTools()
             ]);
+        },
+
+        async loadTools() {
+            try {
+                const response = await axios.get('/api/tools/list');
+                if (response.data.status === 'ok') {
+                    this.availableTools = response.data.data || [];
+                }
+            } catch (error) {
+                console.error('Failed to load tools:', error);
+            }
+        },
+
+        getToolDisplayName(toolName: string): string {
+            return resolveToolDisplayName(toolName, this.availableTools);
         },
 
         // Persona 操作

@@ -3,6 +3,7 @@ import logging
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Generic
+from urllib.parse import quote
 
 from tenacity import (
     before_sleep_log,
@@ -379,20 +380,30 @@ class MCPTool(FunctionTool, Generic[TContext]):
     def __init__(
         self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
     ) -> None:
+        # Add namespace prefix to avoid conflicts with plugin tools
+        # URL-encode the server name to create a safe and unique identifier part
+        normalized_server_name = quote(mcp_server_name, safe="")
+        # Format: mcp_<normalized_server_name>__<tool_name>
+        namespaced_name = f"mcp_{normalized_server_name}__{mcp_tool.name}"
+
         super().__init__(
-            name=mcp_tool.name,
+            name=namespaced_name,
             description=mcp_tool.description or "",
             parameters=mcp_tool.inputSchema,
         )
         self.mcp_tool = mcp_tool
         self.mcp_client = mcp_client
         self.mcp_server_name = mcp_server_name
+        self.original_tool_name = (
+            mcp_tool.name
+        )  # Store original name for display and calling
 
     async def call(
         self, context: ContextWrapper[TContext], **kwargs
     ) -> mcp.types.CallToolResult:
+        # Use original tool name when calling MCP server
         return await self.mcp_client.call_tool_with_reconnect(
-            tool_name=self.mcp_tool.name,
+            tool_name=self.original_tool_name,
             arguments=kwargs,
             read_timeout_seconds=timedelta(seconds=context.tool_call_timeout),
         )

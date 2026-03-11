@@ -123,7 +123,7 @@ const resolvedTools = computed(() =>
   normalizedTools.value.map((toolName) => {
     const meta = toolMetaMap.value[toolName] || {}
     return {
-      name: toolName,
+      name: meta.display_name || toolName,  // Use display_name for showing
       origin: meta.origin || '',
       origin_name: meta.origin_name || '',
       active: meta.active
@@ -142,6 +142,7 @@ async function loadToolsMeta() {
           continue
         }
         nextMap[tool.name] = {
+          display_name: tool.display_name || tool.name,
           origin: tool.origin || '',
           origin_name: tool.origin_name || '',
           active: tool.active

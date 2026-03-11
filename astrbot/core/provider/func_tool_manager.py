@@ -311,9 +311,31 @@ class FunctionToolManager:
                 break
 
     def get_func(self, name) -> FuncTool | None:
+        # First try exact match
         for f in self.func_list:
             if f.name == name:
                 return f
+
+        # Fallback: try to find MCP tool by original name for backward compatibility
+        # This handles cases where personas reference tools by their original names
+        mcp_matches = []
+        for f in self.func_list:
+            if isinstance(f, MCPTool) and f.original_tool_name == name:
+                mcp_matches.append(f)
+
+        if len(mcp_matches) == 1:
+            return mcp_matches[0]
+        elif len(mcp_matches) > 1:
+            # Multiple MCP servers provide the same tool name
+            # Sort by namespaced name for deterministic selection
+            mcp_matches.sort(key=lambda f: f.name)
+            logger.warning(
+                f"Multiple MCP tools found with original name '{name}': "
+                f"{[f.name for f in mcp_matches]}. Using {mcp_matches[0].name}"
+            )
+            return mcp_matches[0]
+
+        return None
 
     def get_full_tool_set(self) -> ToolSet:
         """获取完整工具集"""
@@ -504,6 +526,8 @@ class FunctionToolManager:
 
         lifecycle_task = asyncio.create_task(lifecycle(), name=f"mcp-client:{name}")
         async with self._runtime_lock:
+            # After successful initialization, mcp_client is guaranteed to be non-None
+            assert mcp_client is not None
             self._mcp_server_runtime[name] = _MCPServerRuntime(
                 name=name,
                 client=mcp_client,
