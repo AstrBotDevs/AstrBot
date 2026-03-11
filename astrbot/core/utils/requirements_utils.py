@@ -96,18 +96,18 @@ def _parse_editable_or_direct_name(target: str) -> str | None:
     return None
 
 
-def _parse_requirement_line(
+def _parse_requirement_name_and_spec(
     line: str,
-) -> tuple[str, SpecifierSet | None] | None:
+) -> tuple[str | None, SpecifierSet | None]:
     if line.startswith(("-c", "--constraint")):
-        return None
+        return None, None
 
     try:
         req = Requirement(line)
     except InvalidRequirement:
         tokens = shlex.split(line)
         if not tokens:
-            return None
+            return None, None
 
         editable_target: str | None = None
         if tokens[0] in {"-e", "--editable"} and len(tokens) > 1:
@@ -117,19 +117,22 @@ def _parse_requirement_line(
 
         if editable_target:
             name = _parse_editable_or_direct_name(editable_target)
-            if name:
-                return name, None
+            return (name, None) if name else (None, None)
 
         name = _parse_editable_or_direct_name(line)
-        if name:
-            return name, None
-
-        return None
+        return (name, None) if name else (None, None)
 
     if req.marker and not req.marker.evaluate():
-        return None
+        return None, None
 
     return canonicalize_distribution_name(req.name), (req.specifier or None)
+
+
+def _parse_requirement_line(
+    line: str,
+) -> tuple[str, SpecifierSet | None] | None:
+    name, specifier = _parse_requirement_name_and_spec(line)
+    return (name, specifier) if name else None
 
 
 def _extract_requirement_names_from_package_tokens(tokens: list[str]) -> frozenset[str]:
@@ -213,7 +216,7 @@ def parse_package_install_input(raw_input: str) -> ParsedPackageInput:
             continue
 
         try:
-            req = Requirement(line)
+            Requirement(line)
         except InvalidRequirement:
             tokens = shlex.split(line)
             if not tokens:
@@ -225,7 +228,9 @@ def parse_package_install_input(raw_input: str) -> ParsedPackageInput:
             continue
 
         specs.append(line)
-        requirement_names.add(canonicalize_distribution_name(req.name))
+        name, _ = _parse_requirement_name_and_spec(line)
+        if name:
+            requirement_names.add(name)
 
     return ParsedPackageInput(
         specs=tuple(specs),

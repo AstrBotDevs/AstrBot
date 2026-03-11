@@ -243,3 +243,15 @@ def test_iter_requirements_supports_direct_line_input():
     assert parsed == [
         ("demo-package", requirements_utils.Requirement("demo-package>=1.0").specifier)
     ]
+
+
+def test_parse_requirement_name_and_spec_preserves_direct_reference_rules():
+    named = requirements_utils._parse_requirement_name_and_spec(
+        "git+https://example.com/demo.git#egg=demo-package"
+    )
+    unnamed = requirements_utils._parse_requirement_name_and_spec(
+        "git+https://example.com/demo.git"
+    )
+
+    assert named == ("demo-package", None)
+    assert unnamed == (None, None)
