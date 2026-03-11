@@ -3,6 +3,7 @@
  */
 import { ref, computed, type Ref } from 'vue';
 import type { CommandItem, FilterState } from '../types';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 export function useCommandFilters(commands: Ref<CommandItem[]>) {
   // 过滤状态
@@ -95,7 +96,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
    * 过滤后的指令列表（支持层级结构）
    */
   const filteredCommands = computed(() => {
-    const query = (searchQuery.value || '').toLowerCase();
+    const query = normalizeTextInput(searchQuery.value).toLowerCase();
     const conflictCmds: CommandItem[] = [];
     const normalCmds: CommandItem[] = [];
 

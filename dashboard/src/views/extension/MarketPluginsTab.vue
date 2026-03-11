@@ -3,6 +3,7 @@ import MarketPluginCard from "@/components/extension/MarketPluginCard.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import { computed } from "vue";
+import { normalizeTextInput } from "@/utils/inputValue";
 
 const props = defineProps({
   state: {
@@ -212,7 +213,8 @@ const marketSortItems = computed(() => [
                 </div>
 
                 <v-text-field
-                  v-model="marketSearch"
+                  :model-value="marketSearch"
+                  @update:model-value="marketSearch = normalizeTextInput($event)"
                   class="ml-auto"
                   density="compact"
                   :label="tm('search.marketPlaceholder')"

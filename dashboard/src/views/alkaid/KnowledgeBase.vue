@@ -353,7 +353,8 @@
                         <v-window-item value="search">
                             <div class="search-container pa-4">
                                 <v-form @submit.prevent="searchKnowledgeBase" class="d-flex align-center">
-                                    <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')"
+                                    <v-text-field :model-value="searchQuery"
+                                        @update:model-value="onSearchQueryInput" :label="tm('search.queryLabel')"
                                         append-icon="mdi-magnify" variant="outlined" class="flex-grow-1 me-2"
                                         @click:append="searchKnowledgeBase" @keyup.enter="searchKnowledgeBase"
                                         :placeholder="tm('search.queryPlaceholder')" hide-details clearable></v-text-field>
@@ -434,6 +435,7 @@
 import axios from 'axios';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 export default {
     name: 'KnowledgeBase',
@@ -580,6 +582,9 @@ export default {
         this.getProviderList();
     },
     methods: {
+        onSearchQueryInput(value) {
+            this.searchQuery = normalizeTextInput(value);
+        },
         getSelectedGitHubProxy() {
             if (typeof window === "undefined" || !window.localStorage) return "";
             return localStorage.getItem("githubProxyRadioValue") === "1"
@@ -903,7 +908,8 @@ export default {
         },
 
         searchKnowledgeBase() {
-            if (!this.searchQuery.trim()) {
+            const query = normalizeTextInput(this.searchQuery).trim();
+            if (!query) {
                 this.showSnackbar(this.tm('messages.pleaseEnterSearchContent'), 'warning');
                 return;
             }
@@ -914,7 +920,7 @@ export default {
             axios.get(`/api/plug/alkaid/kb/collection/search`, {
                 params: {
                     collection_name: this.currentKB.collection_name,
-                    query: this.searchQuery,
+                    query,
                     top_k: this.topK
                 }
             })

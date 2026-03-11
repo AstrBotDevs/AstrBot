@@ -2,6 +2,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import axios from 'axios'
 import { getProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
+import { normalizeTextInput } from '@/utils/inputValue'
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string
@@ -157,7 +158,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   })
 
   const filteredMergedModelEntries = computed(() => {
-    const term = (modelSearch.value || '').trim().toLowerCase()
+    const term = normalizeTextInput(modelSearch.value).trim().toLowerCase()
     if (!term) return mergedModelEntries.value
 
     return mergedModelEntries.value.filter((entry: any) => {
