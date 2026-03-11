@@ -105,6 +105,7 @@ class ProviderVolcengineSTT(STTProvider):
         """执行具体的 API 请求"""
         if not self.appid or not self.api_key:
             logger.error("火山引擎 STT 配置不完整：需要 appid 和 api_key")
+            return None
 
         headers = {
             "X-Api-App-Key": self.appid,
@@ -139,3 +140,4 @@ class ProviderVolcengineSTT(STTProvider):
                         f"火山引擎 STT API 错误 (Status: {status_code}): {error_msg}"
                     )
                     logger.error(f"火山引擎 STT 识别失败: {error_msg}")
+                    return None
