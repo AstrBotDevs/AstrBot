@@ -1431,6 +1431,28 @@ export const useExtensionPage = () => {
       refreshingMarket.value = false;
     }
   };
+
+  // 手动检查插件更新：刷新市场数据并重新比对已安装插件版本
+  const isCheckingUpdates = ref(false);
+  const checkPluginUpdates = async () => {
+    isCheckingUpdates.value = true;
+    try {
+      const data = await commonStore.getPluginCollections(
+        true,
+        selectedSource.value,
+      );
+      pluginMarketData.value = data;
+      trimExtensionName();
+      checkAlreadyInstalled();
+      checkUpdate();
+      const updateCount = updatableExtensions.value.length;
+      toast(tm("messages.checkUpdatesSuccess", { count: updateCount }), "success");
+    } catch (err) {
+      toast(tm("messages.checkUpdatesFailed") + " " + err, "error");
+    } finally {
+      isCheckingUpdates.value = false;
+    }
+  };
   
   // 生命周期
   onMounted(async () => {
@@ -1695,6 +1717,8 @@ export const useExtensionPage = () => {
     selectedInstallPlugin,
     checkInstallCompatibility,
     refreshPluginMarket,
+    isCheckingUpdates,
+    checkPluginUpdates,
     handleLocaleChange,
     searchDebounceTimer,
   };

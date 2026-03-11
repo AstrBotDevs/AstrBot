@@ -52,6 +52,7 @@
     "selectFile": "Select File",
     "refresh": "Refresh",
     "updateAll": "Update All",
+    "checkUpdates": "Check Updates",
     "deleteSource": "Delete Source",
     "reshuffle": "Shuffle Again"
   },
@@ -214,7 +215,9 @@
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
     "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
     "invalidUrl": "Please enter a valid URL",
-    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data"
+    "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
+    "checkUpdatesSuccess": "Update check complete, {count} plugin(s) have updates available",
+    "checkUpdatesFailed": "Failed to check for plugin updates:"
   },
   "upload": {
     "fromFile": "Install from File",
