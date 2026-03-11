@@ -303,7 +303,7 @@ class WorkerRuntime:
                     method="handshake",
                 ),
             ),
-            timeout=15.0,
+            timeout=60.0,
         )
         if not isinstance(response, JSONRPCSuccessResponse):
             raise RuntimeError(f"Handshake failed for plugin {self.plugin.name}")

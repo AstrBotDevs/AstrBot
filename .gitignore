@@ -1,12 +1,38 @@
-# Python-generated files
+# OS files
+.DS_Store
+
+# Python bytecode and caches
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
 build/
 dist/
+site/
 wheels/
-*.egg-info
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
 
 # Virtual environments
-.venv
+.venv/
+venv/
+env/
+ENV/
+plugins/.venv/
 
-.DS_Store
+# Tool caches
+.uv-cache/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
