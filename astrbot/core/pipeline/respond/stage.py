@@ -177,6 +177,11 @@ class RespondStage(Stage):
         if event.get_extra("_streaming_finished", False):
             # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
             return
+        if event.get_extra("_send_message_to_user_current_session", False):
+            logger.info(
+                "send_message_to_user already delivered the reply for this session, skip respond stage",
+            )
+            return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
             return
