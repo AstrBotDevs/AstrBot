@@ -129,7 +129,7 @@ AstrBot 默认配置如下：
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
         },
         "discord": {
-            "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
         },
     },
     "wake_prefix": ["/"],
