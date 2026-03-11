@@ -289,8 +289,6 @@ async def test_run_pip_with_classification_raises_install_error_on_non_conflict_
 
 @pytest.mark.asyncio
 async def test_run_pip_in_process_bounds_retained_conflict_lines(monkeypatch):
-    original_limit = pip_installer_module._MAX_PIP_OUTPUT_LINES
-
     def fake_pip_main(args):
         del args
         for index in range(10):
@@ -311,17 +309,11 @@ async def test_run_pip_in_process_bounds_retained_conflict_lines(monkeypatch):
     monkeypatch.setattr("astrbot.core.utils.pip_installer._MAX_PIP_OUTPUT_LINES", 4)
 
     installer = PipInstaller("")
-    try:
-        with pytest.raises(pip_installer_module.DependencyConflictError) as exc_info:
-            await installer._run_pip_in_process(["install", "demo-package"])
-    finally:
-        monkeypatch.setattr(
-            "astrbot.core.utils.pip_installer._MAX_PIP_OUTPUT_LINES", original_limit
-        )
+    with pytest.raises(pip_installer_module.DependencyConflictError) as exc_info:
+        await installer._run_pip_in_process(["install", "demo-package"])
 
-    assert len(exc_info.value.errors) == 5
-    assert exc_info.value.errors[0] == "noise-9"
-    assert exc_info.value.errors[1].startswith("Cannot install demo-package")
+    assert len(exc_info.value.errors) == 4
+    assert exc_info.value.errors[0].startswith("Cannot install demo-package")
     assert (
         exc_info.value.errors[-1]
         == "    AstrBot (constraint) depends on shared-lib==2.0"
