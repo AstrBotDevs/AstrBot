@@ -7,6 +7,7 @@
         v-model="modelSearchProxy"
         density="compact"
         prepend-inner-icon="mdi-magnify"
+        clearable
         hide-details
         variant="solo-filled"
         flat
@@ -161,6 +162,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { normalizeTextInput } from '@/utils/inputValue'
 
 const props = defineProps({
   entries: {
@@ -222,7 +224,7 @@ const emit = defineEmits([
 
 const modelSearchProxy = computed({
   get: () => props.modelSearch,
-  set: (val) => emit('update:modelSearch', val)
+  set: (val) => emit('update:modelSearch', normalizeTextInput(val))
 })
 
 const isProviderTesting = (providerId) => props.testingProviders.includes(providerId)
