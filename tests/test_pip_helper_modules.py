@@ -231,3 +231,15 @@ def test_get_core_constraints_logs_resolution_step_context(monkeypatch):
 
     assert constraints == ()
     assert any("解析核心分发名称失败" in log for log in warning_logs)
+
+
+def test_iter_requirements_supports_direct_line_input():
+    parsed = list(
+        requirements_utils.iter_requirements(
+            lines=["demo-package>=1.0", 'other-package; sys_platform == "win32"']
+        )
+    )
+
+    assert parsed == [
+        ("demo-package", requirements_utils.Requirement("demo-package>=1.0").specifier)
+    ]

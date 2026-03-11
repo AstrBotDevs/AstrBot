@@ -4,7 +4,7 @@ import os
 import re
 import shlex
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -271,24 +271,26 @@ def _iter_requirement_lines(
             yield line
 
 
-def _iter_requirements_from_lines(
-    requirement_lines: Iterator[str] | list[str],
+def iter_requirements(
+    requirements_path: str | None = None,
+    lines: Iterable[str] | None = None,
 ) -> Iterator[tuple[str, SpecifierSet | None]]:
-    for line in requirement_lines:
+    if lines is None:
+        if requirements_path is None:
+            raise ValueError("Either requirements_path or lines must be provided")
+        lines = _iter_requirement_lines(requirements_path)
+
+    for line in lines:
         parsed = _parse_requirement_line(line)
         if parsed is not None:
             yield parsed
 
 
-def _iter_requirements(
-    requirements_path: str,
-) -> Iterator[tuple[str, SpecifierSet | None]]:
-    yield from _iter_requirements_from_lines(_iter_requirement_lines(requirements_path))
-
-
 def extract_requirement_names(requirements_path: str) -> set[str]:
     try:
-        return {name for name, _ in _iter_requirements(requirements_path)}
+        return {
+            name for name, _ in iter_requirements(requirements_path=requirements_path)
+        }
     except Exception as exc:
         logger.warning("读取依赖文件失败，跳过冲突检测: %s", exc)
         return set()
@@ -374,7 +376,7 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
     if not can_precheck or requirement_lines is None:
         return None
 
-    required = list(_iter_requirements_from_lines(requirement_lines))
+    required = list(iter_requirements(lines=requirement_lines))
     if not required:
         return set()
 
