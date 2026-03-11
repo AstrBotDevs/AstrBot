@@ -82,6 +82,46 @@ def test_build_skills_prompt_absolute_path_in_example():
     assert "cat /home/pan/AstrBot/skills/foo/SKILL.md" in prompt
 
 
+def test_build_skills_prompt_preserves_windows_absolute_path_in_example():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="C:/AstrBot/data/skills/foo/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    assert "type C:/AstrBot/data/skills/foo/SKILL.md" in prompt
+
+
+def test_build_skills_prompt_uses_windows_friendly_command_for_windows_paths():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="D:/skills/foo/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    assert "type D:/skills/foo/SKILL.md" in prompt
+    assert "cat D:/skills/foo/SKILL.md" not in prompt
+
+
+def test_build_skills_prompt_quotes_windows_paths_with_spaces():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path="C:/AstrBot/My Skills/foo/SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
+
+
 def test_build_skills_prompt_progressive_disclosure_rules():
     """The prompt should contain the key progressive disclosure rules."""
     skills = [

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import locale
 import os
 import shutil
 import subprocess
@@ -52,6 +53,32 @@ def _ensure_safe_path(path: str) -> str:
     return abs_path
 
 
+def _decode_shell_output(output: bytes | str | None) -> str:
+    if output is None:
+        return ""
+    if isinstance(output, str):
+        return output
+
+    encodings: list[str] = ["utf-8"]
+    preferred_encoding = locale.getpreferredencoding(False)
+    if preferred_encoding:
+        encodings.append(preferred_encoding)
+    encodings.extend(["mbcs", "cp936", "gbk", "gb18030"])
+
+    seen: set[str] = set()
+    for encoding in encodings:
+        normalized = encoding.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        try:
+            return output.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+
+    return output.decode("utf-8", errors="replace")
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     async def exec(
@@ -79,7 +106,6 @@ class LocalShellComponent(ShellComponent):
                     env=run_env,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    text=True,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
             result = subprocess.run(
@@ -89,11 +115,10 @@ class LocalShellComponent(ShellComponent):
                 env=run_env,
                 timeout=timeout,
                 capture_output=True,
-                text=True,
             )
             return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
+                "stdout": _decode_shell_output(result.stdout),
+                "stderr": _decode_shell_output(result.stderr),
                 "exit_code": result.returncode,
             }
 
