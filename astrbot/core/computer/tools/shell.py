@@ -58,12 +58,16 @@ class ExecuteShellTool(FunctionTool):
                 context.context.event.unified_msg_origin,
             )
         try:
-            config = context.context.context.get_config(umo=context.context.event.unified_msg_origin)
+            config = context.context.context.get_config(
+                umo=context.context.event.unified_msg_origin
+            )
             timeout = config.get("provider_settings", {}).get("shell_call_timeout", 30)
             # 将timeout转为int
             timeout = int(timeout)
-            
-            result = await sb.shell.exec(command, background=background, env=env, timeout=timeout)
+
+            result = await sb.shell.exec(
+                command, background=background, env=env, timeout=timeout
+            )
             return json.dumps(result)
         except Exception as e:
             return f"Error executing command: {str(e)}"
