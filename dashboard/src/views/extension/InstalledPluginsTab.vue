@@ -109,6 +109,7 @@ const {
   failedPluginItems,
   getExtensions,
   reloadFailedPlugin,
+  reinstallFailedPlugin,
   checkUpdate,
   uninstallExtension,
   requestUninstallFailedPlugin,
@@ -311,6 +312,17 @@ const {
                           @click="reloadFailedPlugin(plugin.dir_name)"
                         >
                           {{ tm("buttons.reload") }}
+                        </v-btn>
+                        <v-btn
+                          v-if="plugin.repo"
+                          size="small"
+                          variant="tonal"
+                          color="warning"
+                          class="mr-2"
+                          prepend-icon="mdi-package-variant-closed-sync"
+                          @click="reinstallFailedPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("card.actions.reinstall") }}
                         </v-btn>
                         <v-btn
                           size="small"

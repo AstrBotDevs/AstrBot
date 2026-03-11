@@ -60,6 +60,7 @@ class PluginRoute(Route):
             "/plugin/update-all": ("POST", self.update_all_plugins),
             "/plugin/uninstall": ("POST", self.uninstall_plugin),
             "/plugin/uninstall-failed": ("POST", self.uninstall_failed_plugin),
+            "/plugin/reinstall-failed": ("POST", self.reinstall_failed_plugin),
             "/plugin/market_list": ("GET", self.get_online_plugins),
             "/plugin/off": ("POST", self.off_plugin),
             "/plugin/on": ("POST", self.on_plugin),
@@ -620,6 +621,43 @@ class PluginRoute(Route):
             )
             logger.info(f"卸载失败插件 {dir_name} 成功")
             return Response().ok(None, "卸载成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
+
+    async def reinstall_failed_plugin(self):
+        if DEMO_MODE:
+            return (
+                Response()
+                .error("You are not permitted to do this operation in demo mode")
+                .__dict__
+            )
+
+        post_data = await request.get_json()
+        dir_name = post_data.get("dir_name", "")
+        proxy: str = post_data.get("proxy", None)
+        if proxy:
+            proxy = proxy.removesuffix("/")
+        if not dir_name:
+            return Response().error("缺少失败插件目录名").__dict__
+
+        try:
+            logger.info(f"正在重新安装失败插件 {dir_name}")
+            plugin_info = await self.plugin_manager.reinstall_failed_plugin(
+                dir_name,
+                proxy=proxy or "",
+            )
+            logger.info(f"重新安装失败插件 {dir_name} 成功")
+            return Response().ok(plugin_info, "重新安装成功。").__dict__
+        except PluginVersionIncompatibleError as e:
+            return {
+                "status": "warning",
+                "message": str(e),
+                "data": {
+                    "warning_type": "astrbot_version_incompatible",
+                    "can_ignore": True,
+                },
+            }
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__

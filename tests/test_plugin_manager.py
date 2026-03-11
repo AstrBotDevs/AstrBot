@@ -275,6 +275,115 @@ async def test_reload_failed_plugin_dependency_install_flow(
 
 
 @pytest.mark.asyncio
+async def test_reinstall_failed_plugin_reuses_repo_install_flow(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+):
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+        "error": "init fail",
+        "repo": TEST_PLUGIN_REPO,
+    }
+    events = []
+
+    async def mock_install(repo_url: str, proxy=""):
+        events.append(("install", repo_url, proxy))
+        return {"repo": repo_url, "name": TEST_PLUGIN_NAME}
+
+    monkeypatch.setattr(plugin_manager_pm, "install_plugin", mock_install)
+
+    result = await plugin_manager_pm.reinstall_failed_plugin(
+        TEST_PLUGIN_DIR,
+        proxy="https://ghproxy.example",
+    )
+
+    assert result == {"repo": TEST_PLUGIN_REPO, "name": TEST_PLUGIN_NAME}
+    assert events == [
+        ("install", TEST_PLUGIN_REPO, "https://ghproxy.example"),
+    ]
+    assert TEST_PLUGIN_DIR not in plugin_manager_pm.failed_plugin_dict
+    assert not local_updator.exists()
+
+
+@pytest.mark.asyncio
+async def test_reinstall_failed_plugin_requires_repo_source(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+):
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+        "error": "init fail",
+    }
+
+    with pytest.raises(Exception, match="缺少仓库地址"):
+        await plugin_manager_pm.reinstall_failed_plugin(TEST_PLUGIN_DIR)
+
+    assert TEST_PLUGIN_DIR in plugin_manager_pm.failed_plugin_dict
+    assert local_updator.exists()
+
+
+@pytest.mark.asyncio
+async def test_reinstall_failed_plugin_restores_failed_record_when_install_fails(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+):
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+        "error": "init fail",
+        "repo": TEST_PLUGIN_REPO,
+        "display_name": "Hello World",
+    }
+
+    async def mock_install(repo_url: str, proxy=""):
+        del proxy
+        assert repo_url == TEST_PLUGIN_REPO
+        raise ValueError("network down")
+
+    monkeypatch.setattr(plugin_manager_pm, "install_plugin", mock_install)
+
+    with pytest.raises(ValueError, match="network down"):
+        await plugin_manager_pm.reinstall_failed_plugin(TEST_PLUGIN_DIR)
+
+    restored_info = plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR]
+    assert restored_info["repo"] == TEST_PLUGIN_REPO
+    assert restored_info["display_name"] == "Hello World"
+    assert restored_info["error"] == "network down"
+    assert "ValueError: network down" in restored_info["traceback"]
+    assert not local_updator.exists()
+
+
+@pytest.mark.asyncio
+async def test_reinstall_failed_plugin_keeps_new_failed_record_from_install_flow(
+    plugin_manager_pm: PluginManager,
+    local_updator: Path,
+    monkeypatch,
+):
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+        "error": "init fail",
+        "repo": TEST_PLUGIN_REPO,
+    }
+
+    async def mock_install(repo_url: str, proxy=""):
+        del repo_url, proxy
+        plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+            "error": "new fail",
+            "repo": TEST_PLUGIN_REPO,
+            "traceback": "tracked",
+        }
+        plugin_manager_pm._rebuild_failed_plugin_info()
+        raise RuntimeError("new fail")
+
+    monkeypatch.setattr(plugin_manager_pm, "install_plugin", mock_install)
+
+    with pytest.raises(RuntimeError, match="new fail"):
+        await plugin_manager_pm.reinstall_failed_plugin(TEST_PLUGIN_DIR)
+
+    restored_info = plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR]
+    assert restored_info["error"] == "new fail"
+    assert restored_info["traceback"] == "tracked"
+    assert not local_updator.exists()
+
+
+@pytest.mark.asyncio
 async def test_ensure_plugin_requirements_reraises_cancelled_error(
     plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
 ):
@@ -337,7 +446,9 @@ async def test_ensure_plugin_requirements_wraps_pip_install_error(
         mock_install_requirements,
     )
 
-    with pytest.raises(PluginDependencyInstallError, match="install failed") as exc_info:
+    with pytest.raises(
+        PluginDependencyInstallError, match="install failed"
+    ) as exc_info:
         await plugin_manager_pm._ensure_plugin_requirements(
             str(local_updator),
             TEST_PLUGIN_DIR,

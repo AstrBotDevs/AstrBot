@@ -13,7 +13,7 @@
   },
   "failedPlugins": {
     "title": "Failed to Load Plugins ({count})",
-    "hint": "These plugins failed to load. You can try reload or uninstall them directly.",
+    "hint": "These plugins failed to load. You can try reload, reinstall, or uninstall them directly.",
     "columns": {
       "plugin": "Plugin",
       "error": "Error"
@@ -197,6 +197,8 @@
     "operationFailed": "Operation failed",
     "reloadSuccess": "Reload successful",
     "reloadFailed": "Reload failed",
+    "reinstallSuccess": "Reinstall successful",
+    "reinstallFailed": "Reinstall failed",
     "updateSuccess": "Update successful!",
     "addSuccess": "Add successful!",
     "saveSuccess": "Save successful!",

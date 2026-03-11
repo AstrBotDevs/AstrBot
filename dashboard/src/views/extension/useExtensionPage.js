@@ -634,6 +634,29 @@ export const useExtensionPage = () => {
     }
   };
 
+  const reinstallFailedPlugin = async (dirName) => {
+    if (!dirName) return;
+
+    try {
+      const res = await axios.post("/api/plugin/reinstall-failed", {
+        dir_name: dirName,
+        proxy: getSelectedGitHubProxy(),
+      });
+      if (res.data.status === "error") {
+        toast(res.data.message || tm("messages.reinstallFailed"), "error");
+        return;
+      }
+      if (res.data.status === "warning") {
+        toast(res.data.message || tm("messages.reinstallFailed"), "warning");
+        return;
+      }
+      toast(res.data.message || tm("messages.reinstallSuccess"), "success");
+      await getExtensions();
+    } catch (err) {
+      toast(resolveErrorMessage(err, tm("messages.reinstallFailed")), "error");
+    }
+  };
+
   const requestUninstall = (target) => {
     if (!target?.id || !target?.kind) return;
     uninstallTarget.value = target;
@@ -1651,6 +1674,7 @@ export const useExtensionPage = () => {
     getExtensions,
     handleReloadAllFailed,
     reloadFailedPlugin,
+    reinstallFailedPlugin,
     checkUpdate,
     uninstallExtension,
     requestUninstallPlugin,

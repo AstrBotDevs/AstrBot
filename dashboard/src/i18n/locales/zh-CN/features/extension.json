@@ -13,7 +13,7 @@
   },
   "failedPlugins": {
     "title": "加载失败插件（{count}）",
-    "hint": "这些插件加载失败，仍可尝试重载或直接卸载。",
+    "hint": "这些插件加载失败，仍可尝试重载、重新安装或直接卸载。",
     "columns": {
       "plugin": "插件",
       "error": "错误"
@@ -197,6 +197,8 @@
     "operationFailed": "操作失败",
     "reloadSuccess": "重载成功",
     "reloadFailed": "重载失败",
+    "reinstallSuccess": "重新安装成功",
+    "reinstallFailed": "重新安装失败",
     "updateSuccess": "更新成功!",
     "addSuccess": "添加成功!",
     "saveSuccess": "保存成功!",

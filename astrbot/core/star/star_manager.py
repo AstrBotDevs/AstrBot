@@ -1,6 +1,7 @@
 """插件的重载、启停、安装、卸载等操作。"""
 
 import asyncio
+import copy
 import functools
 import inspect
 import json
@@ -1325,6 +1326,65 @@ class PluginManager:
 
             self.failed_plugin_dict.pop(dir_name, None)
             self._rebuild_failed_plugin_info()
+
+    async def reinstall_failed_plugin(self, dir_name: str, proxy: str = ""):
+        """重新安装加载失败的插件（按目录名）。
+
+        仅支持包含仓库地址的失败插件。该操作会移除当前失败安装目录，
+        但保留已有的配置和插件数据，然后按原仓库地址重新安装。
+        """
+
+        repo_url = ""
+        failed_info_snapshot = None
+        async with self._pm_lock:
+            failed_info = self.failed_plugin_dict.get(dir_name)
+            if not failed_info:
+                raise Exception(
+                    format_plugin_error("not_found_in_failed_list"),
+                )
+
+            if isinstance(failed_info, dict) and failed_info.get("reserved"):
+                raise Exception(
+                    format_plugin_error("reserved_plugin_cannot_uninstall"),
+                )
+
+            if isinstance(failed_info, dict):
+                repo_url = str(failed_info.get("repo") or "").strip()
+            if not repo_url:
+                raise Exception("失败插件缺少仓库地址，无法重新安装。")
+
+            failed_info_snapshot = copy.deepcopy(failed_info)
+            self._cleanup_plugin_state(dir_name)
+
+            plugin_path = os.path.join(self.plugin_store_path, dir_name)
+            if os.path.exists(plugin_path):
+                try:
+                    remove_dir(plugin_path)
+                except Exception as e:
+                    raise Exception(
+                        format_plugin_error(
+                            "failed_plugin_dir_remove_error",
+                            error=f"{e!s}",
+                        ),
+                    )
+
+            self.failed_plugin_dict.pop(dir_name, None)
+            self._rebuild_failed_plugin_info()
+
+        try:
+            return await self.install_plugin(repo_url, proxy=proxy)
+        except Exception as e:
+            async with self._pm_lock:
+                if dir_name not in self.failed_plugin_dict:
+                    restored_info = failed_info_snapshot
+                    if isinstance(restored_info, dict):
+                        restored_info["error"] = str(e)
+                        restored_info["traceback"] = traceback.format_exc()
+                    else:
+                        restored_info = str(e)
+                    self.failed_plugin_dict[dir_name] = restored_info
+                    self._rebuild_failed_plugin_info()
+            raise
 
     async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str) -> None:
         """解绑并移除一个插件。
