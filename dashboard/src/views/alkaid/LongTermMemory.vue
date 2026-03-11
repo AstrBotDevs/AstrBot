@@ -37,10 +37,12 @@
         <h3>{{ tm('search.title') }}</h3>
         <v-card variant="outlined" class="mt-2 pa-3">
           <div>
-            <v-text-field v-model="searchMemoryUserId" :label="tm('search.userIdLabel')" variant="outlined" density="compact" hide-details
-              class="mb-2"></v-text-field>
-            <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')" variant="outlined" density="compact" hide-details
-              @keyup.enter="searchMemory" class="mb-2"></v-text-field>
+            <v-text-field :model-value="searchMemoryUserId"
+              @update:model-value="onSearchMemoryUserIdInput" :label="tm('search.userIdLabel')" variant="outlined" density="compact" hide-details
+              class="mb-2" clearable></v-text-field>
+            <v-text-field :model-value="searchQuery"
+              @update:model-value="onSearchQueryInput" :label="tm('search.queryLabel')" variant="outlined" density="compact" hide-details
+              @keyup.enter="searchMemory" class="mb-2" clearable></v-text-field>
             <v-btn color="info" @click="searchMemory" :loading="isSearching" variant="tonal">
               <v-icon start>mdi-text-search</v-icon>
               {{ tm('search.searchButton') }}
@@ -254,6 +256,7 @@
 import axios from 'axios';
 // import * as d3 from "d3"; // npm install d3
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 export default {
   name: 'LongTermMemory',
@@ -336,9 +339,16 @@ export default {
     this.searchResults = [];
   },
   methods: {
+    onSearchMemoryUserIdInput(value) {
+      this.searchMemoryUserId = normalizeTextInput(value);
+    },
+    onSearchQueryInput(value) {
+      this.searchQuery = normalizeTextInput(value);
+    },
     // 添加搜索记忆方法
     searchMemory() {
-      if (!this.searchQuery.trim()) {
+      const query = normalizeTextInput(this.searchQuery).trim();
+      if (!query) {
         this.$toast.warning(this.tm('messages.searchQueryRequired'));
         return;
       }
@@ -349,12 +359,13 @@ export default {
 
       // 构建查询参数
       const params = {
-        query: this.searchQuery
+        query
       };
 
       // 如果有选择用户ID，也加入查询参数
-      if (this.searchMemoryUserId) {
-        params.user_id = this.searchMemoryUserId;
+      const normalizedUserId = normalizeTextInput(this.searchMemoryUserId).trim();
+      if (normalizedUserId) {
+        params.user_id = normalizedUserId;
       }
 
       axios.get('/api/plug/alkaid/ltm/graph/search', { params })

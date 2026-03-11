@@ -3,6 +3,7 @@ import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
+import { normalizeTextInput } from "@/utils/inputValue";
 
 const props = defineProps({
   state: {
@@ -164,10 +165,12 @@ const {
 
                 <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
                   <v-text-field
-                    v-model="pluginSearch"
+                    :model-value="pluginSearch"
+                    @update:model-value="pluginSearch = normalizeTextInput($event)"
                     density="compact"
                     :label="tm('search.placeholder')"
                     prepend-inner-icon="mdi-magnify"
+                    clearable
                     variant="solo-filled"
                     flat
                     hide-details

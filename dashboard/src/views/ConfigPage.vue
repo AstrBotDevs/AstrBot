@@ -13,9 +13,11 @@
           </v-select>
           <v-text-field
             class="config-search-input"
-            v-model="configSearchKeyword"
+            :model-value="configSearchKeyword"
+            @update:model-value="onConfigSearchInput"
             prepend-inner-icon="mdi-magnify"
             :label="tm('search.placeholder')"
+            clearable
             hide-details
             density="compact"
             rounded="md"
@@ -211,6 +213,7 @@ import {
   useConfirmDialog
 } from '@/utils/confirmDialog';
 import UnsavedChangesConfirmDialog from '@/components/config/UnsavedChangesConfirmDialog.vue';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 export default {
   name: 'ConfigPage',
@@ -419,6 +422,9 @@ export default {
 
   },
   methods: {
+    onConfigSearchInput(value) {
+      this.configSearchKeyword = normalizeTextInput(value);
+    },
     extractConfigTypeFromHash(hash) {
       const rawHash = String(hash || '');
       const lastHashIndex = rawHash.lastIndexOf('#');
