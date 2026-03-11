@@ -6,7 +6,7 @@ import os
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import DEFAULT_VALUE_MAP
+from astrbot.core.config.default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 
 
@@ -290,6 +290,11 @@ class TestConfigValidation:
 
         assert "level2" in config.nested["level1"]
         assert config.nested["level1"]["level2"]["value"] == 42
+
+    def test_default_platform_specific_includes_discord(self):
+        """Test Discord platform defaults exist in DEFAULT_CONFIG."""
+        assert "discord" in DEFAULT_CONFIG["platform_specific"]
+        assert "pre_ack_emoji" in DEFAULT_CONFIG["platform_specific"]["discord"]
 
 
 class TestConfigHotReload:
