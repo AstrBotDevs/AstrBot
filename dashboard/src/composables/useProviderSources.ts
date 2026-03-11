@@ -157,7 +157,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   })
 
   const filteredMergedModelEntries = computed(() => {
-    const term = modelSearch.value.trim().toLowerCase()
+    const term = (modelSearch.value || '').trim().toLowerCase()
     if (!term) return mergedModelEntries.value
 
     return mergedModelEntries.value.filter((entry: any) => {

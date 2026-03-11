@@ -217,6 +217,7 @@ const marketSortItems = computed(() => [
                   density="compact"
                   :label="tm('search.marketPlaceholder')"
                   prepend-inner-icon="mdi-magnify"
+                  clearable
                   variant="solo-filled"
                   flat
                   hide-details

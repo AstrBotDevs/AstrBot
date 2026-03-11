@@ -38,9 +38,9 @@
         <v-card variant="outlined" class="mt-2 pa-3">
           <div>
             <v-text-field v-model="searchMemoryUserId" :label="tm('search.userIdLabel')" variant="outlined" density="compact" hide-details
-              class="mb-2"></v-text-field>
+              class="mb-2" clearable></v-text-field>
             <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')" variant="outlined" density="compact" hide-details
-              @keyup.enter="searchMemory" class="mb-2"></v-text-field>
+              @keyup.enter="searchMemory" class="mb-2" clearable></v-text-field>
             <v-btn color="info" @click="searchMemory" :loading="isSearching" variant="tonal">
               <v-icon start>mdi-text-search</v-icon>
               {{ tm('search.searchButton') }}

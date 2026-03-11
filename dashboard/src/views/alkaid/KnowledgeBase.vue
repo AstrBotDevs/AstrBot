@@ -356,7 +356,7 @@
                                     <v-text-field v-model="searchQuery" :label="tm('search.queryLabel')"
                                         append-icon="mdi-magnify" variant="outlined" class="flex-grow-1 me-2"
                                         @click:append="searchKnowledgeBase" @keyup.enter="searchKnowledgeBase"
-                                        :placeholder="tm('search.queryPlaceholder')" hide-details></v-text-field>
+                                        :placeholder="tm('search.queryPlaceholder')" hide-details clearable></v-text-field>
 
                                     <v-select v-model="topK" :items="[3, 5, 10, 20]"
                                         :label="tm('search.resultCountLabel')" variant="outlined"

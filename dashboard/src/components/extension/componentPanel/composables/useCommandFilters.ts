@@ -95,7 +95,7 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
    * 过滤后的指令列表（支持层级结构）
    */
   const filteredCommands = computed(() => {
-    const query = searchQuery.value.toLowerCase();
+    const query = (searchQuery.value || '').toLowerCase();
     const conflictCmds: CommandItem[] = [];
     const normalCmds: CommandItem[] = [];
 
@@ -184,4 +184,3 @@ export function useCommandFilters(commands: Ref<CommandItem[]>) {
     isGroupExpanded
   };
 }
-

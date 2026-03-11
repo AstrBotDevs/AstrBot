@@ -168,6 +168,7 @@ const {
                     density="compact"
                     :label="tm('search.placeholder')"
                     prepend-inner-icon="mdi-magnify"
+                    clearable
                     variant="solo-filled"
                     flat
                     hide-details

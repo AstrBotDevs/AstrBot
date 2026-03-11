@@ -83,7 +83,7 @@ const {
 } = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
 
 const filteredTools = computed(() => {
-  const query = toolSearch.value.trim().toLowerCase();
+  const query = (toolSearch.value || '').trim().toLowerCase();
   if (!query) return tools.value;
   return tools.value.filter(tool => 
     tool.name?.toLowerCase().includes(query) ||

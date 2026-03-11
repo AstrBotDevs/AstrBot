@@ -16,6 +16,7 @@
             v-model="configSearchKeyword"
             prepend-inner-icon="mdi-magnify"
             :label="tm('search.placeholder')"
+            clearable
             hide-details
             density="compact"
             rounded="md"
