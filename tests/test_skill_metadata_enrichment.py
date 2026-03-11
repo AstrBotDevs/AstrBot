@@ -269,6 +269,26 @@ def test_build_skills_prompt_sanitizes_sandbox_skill_metadata_in_inventory():
     assert "`/workspace/skills/sandbox-skill/SKILL.md`" in prompt
 
 
+def test_build_skills_prompt_preserves_cached_absolute_sandbox_path():
+    skills = [
+        SkillInfo(
+            name="docx",
+            description="Read and write Word documents.",
+            path="/home/ship_0d0fba63/workspace/skills/docx/SKILL.md",
+            active=True,
+            source_type="sandbox_only",
+            source_label="sandbox_preset",
+            local_exists=False,
+            sandbox_exists=True,
+        )
+    ]
+
+    prompt = build_skills_prompt(skills)
+
+    assert "`/home/ship_0d0fba63/workspace/skills/docx/SKILL.md`" in prompt
+    assert "cat /home/ship_0d0fba63/workspace/skills/docx/SKILL.md" in prompt
+
+
 def test_build_skills_prompt_sanitizes_invalid_sandbox_skill_name_in_path():
     skills = [
         SkillInfo(
