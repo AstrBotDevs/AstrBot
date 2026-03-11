@@ -1,81 +1,119 @@
 <template>
 
-  <div style="display: flex; flex-direction: column; align-items: center;">
-    <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel"
-      style="display: flex; flex-direction: column; align-items: start;">
-
-      <div class="config-toolbar d-flex flex-row pr-4"
-        style="margin-bottom: 16px; align-items: center; gap: 12px; width: 100%; justify-content: space-between;">
-        <div class="config-toolbar-controls d-flex flex-row align-center" style="gap: 12px;">
-          <v-select class="config-select" style="min-width: 130px;" :model-value="selectedConfigID" :items="configSelectItems" item-title="name" :disabled="initialConfigId !== null"
-            v-if="!isSystemConfig" item-value="id" :label="tm('configSelection.selectConfig')" hide-details density="compact" rounded="md"
-            variant="outlined" @update:model-value="onConfigSelect">
-          </v-select>
-          <v-text-field
-            class="config-search-input"
-            v-model="configSearchKeyword"
-            prepend-inner-icon="mdi-magnify"
-            :label="tm('search.placeholder')"
-            hide-details
-            density="compact"
-            rounded="md"
-            variant="outlined"
-            style="min-width: 280px;"
+  <div class="config-page-wrap">
+    <div v-if="selectedConfigID || isSystemConfig" class="mt-4 config-panel">
+      <div class="config-workbench" :class="{ 'config-workbench--system': isSystemConfig || !!initialConfigId }">
+        <aside v-if="!isSystemConfig && !initialConfigId" class="config-sidebar">
+          <ConfigProfileSidebar
+            :configs="configInfoList"
+            :selected-config-id="selectedConfigID"
+            :bindings-by-config-id="configBindingsById"
+            :disabled="initialConfigId !== null"
+            @select="onConfigSelect"
+            @manage="openConfigManageDialog"
+            @manage-routes="openRouteManageDialog"
           />
-          <!-- <a style="color: inherit;" href="https://blog.astrbot.app/posts/what-is-changed-in-4.0.0/#%E5%A4%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6" target="_blank"><v-btn icon="mdi-help-circle" size="small" variant="plain"></v-btn></a> -->
+        </aside>
 
-        </div>
+        <section class="config-main">
+          <div class="config-toolbar d-flex flex-row">
+            <div class="config-toolbar-controls d-flex flex-row align-center">
+              <div v-if="!isSystemConfig" class="config-current-title">
+                <h2 class="config-current-title__name">
+                  {{ selectedConfigInfo.name || selectedConfigID }}
+                </h2>
+                <div class="config-current-title__id text-caption text-medium-emphasis">
+                  ID: {{ selectedConfigID }}
+                </div>
+              </div>
+              <v-select
+                v-if="!isSystemConfig && !initialConfigId"
+                class="config-select config-select--mobile"
+                :model-value="selectedConfigID"
+                :items="configSelectItems"
+                item-title="name"
+                :disabled="initialConfigId !== null"
+                item-value="id"
+                :label="tm('configSelection.selectConfig')"
+                hide-details
+                density="compact"
+                rounded="md"
+                variant="outlined"
+                @update:model-value="onConfigSelect"
+              />
+              <v-tooltip v-if="!isSystemConfig && !initialConfigId" :text="tm('configManagement.manageConfigs')" location="top">
+                <template #activator="{ props: tooltipProps }">
+                  <v-btn
+                    v-bind="tooltipProps"
+                    class="config-manage-mobile"
+                    variant="text"
+                    icon="mdi-cog"
+                    :disabled="initialConfigId !== null"
+                    @click="openConfigManageDialog"
+                  />
+                </template>
+              </v-tooltip>
+              <v-text-field
+                class="config-search-input"
+                v-model="configSearchKeyword"
+                prepend-inner-icon="mdi-magnify"
+                :label="tm('search.placeholder')"
+                hide-details
+                density="compact"
+                rounded="md"
+                variant="outlined"
+              />
+            </div>
+          </div>
+
+          <v-fade-transition>
+            <div v-if="fetched && hasUnsavedChanges && !isLoadingConfig" class="unsaved-changes-banner-wrap">
+              <v-banner
+                icon="$warning"
+                lines="one"
+                class="unsaved-changes-banner my-4"
+              >
+                {{ tm('messages.unsavedChangesNotice') }}
+              </v-banner>
+            </div>
+          </v-fade-transition>
+
+          <v-fade-transition mode="out-in">
+            <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content">
+              <AstrBotCoreConfigWrapper
+                :metadata="metadata"
+                :config_data="config_data"
+                :search-keyword="configSearchKeyword"
+              />
+
+              <v-tooltip :text="tm('actions.save')" location="left">
+                <template v-slot:activator="{ props }">
+                  <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
+                    color="darkprimary" @click="updateConfig">
+                  </v-btn>
+                </template>
+              </v-tooltip>
+
+              <v-tooltip :text="tm('codeEditor.title')" location="left">
+                <template v-slot:activator="{ props }">
+                  <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
+                    @click="configToString(); codeEditorDialog = true">
+                  </v-btn>
+                </template>
+              </v-tooltip>
+
+              <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
+                <template v-slot:activator="{ props }">
+                  <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large"
+                    style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
+                    @click="openTestChat">
+                  </v-btn>
+                </template>
+              </v-tooltip>
+            </div>
+          </v-fade-transition>
+        </section>
       </div>
-      <v-slide-y-transition>
-        <div v-if="fetched && hasUnsavedChanges" class="unsaved-changes-banner-wrap">
-          <v-banner
-            icon="$warning"
-            lines="one"
-            class="unsaved-changes-banner my-4"
-          >
-            {{ tm('messages.unsavedChangesNotice') }}
-          </v-banner>
-        </div>
-      </v-slide-y-transition>
-      <!-- <v-progress-linear v-if="!fetched" indeterminate color="primary"></v-progress-linear> -->
-
-      <v-slide-y-transition mode="out-in">
-        <div v-if="(selectedConfigID || isSystemConfig) && fetched" :key="configContentKey" class="config-content" style="width: 100%;">
-          <!-- 可视化编辑 -->
-          <AstrBotCoreConfigWrapper 
-            :metadata="metadata" 
-            :config_data="config_data"
-            :search-keyword="configSearchKeyword"
-          />
-
-          <v-tooltip :text="tm('actions.save')" location="left">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-content-save" size="x-large" style="position: fixed; right: 52px; bottom: 52px;"
-                color="darkprimary" @click="updateConfig">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-          <v-tooltip :text="tm('codeEditor.title')" location="left">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-code-json" size="x-large" style="position: fixed; right: 52px; bottom: 124px;" color="primary"
-                @click="configToString(); codeEditorDialog = true">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-          <v-tooltip text="测试当前配置" location="left" v-if="!isSystemConfig">
-            <template v-slot:activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-chat-processing" size="x-large" 
-                style="position: fixed; right: 52px; bottom: 196px;" color="secondary"
-                @click="openTestChat">
-              </v-btn>
-            </template>
-          </v-tooltip>
-
-        </div>
-      </v-slide-y-transition>
-
     </div>
   </div>
 
@@ -158,6 +196,18 @@
     </v-card>
   </v-dialog>
 
+  <ConfigRouteManagerDialog
+    v-model="routeManageDialog"
+    :config-id="routeManageConfigId"
+    :config-name="routeManageConfigName"
+    :loading="routeManageLoading"
+    :saving="routeManageSaving"
+    :items="routeManageItems"
+    :platform-type-map="routeManagePlatformTypeMap"
+    @remove-route="removeRouteItem"
+    @save="saveRouteManageDialog"
+  />
+
   <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack">
     {{ save_message }}
   </v-snackbar>
@@ -201,6 +251,8 @@
 <script>
 import axios from 'axios';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
+import ConfigProfileSidebar from '@/components/config/ConfigProfileSidebar.vue';
+import ConfigRouteManagerDialog from '@/components/config/ConfigRouteManagerDialog.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
@@ -216,6 +268,8 @@ export default {
   name: 'ConfigPage',
   components: {
     AstrBotCoreConfigWrapper,
+    ConfigProfileSidebar,
+    ConfigRouteManagerDialog,
     VueMonacoEditor,
     WaitingForRestart,
     StandaloneChat,
@@ -295,19 +349,7 @@ export default {
       return this.configInfoList.find(info => info.id === this.selectedConfigID) || {};
     },
     configSelectItems() {
-      const items = [...this.configInfoList];
-      items.push({
-        id: '_%manage%_',
-        name: this.tm('configManagement.manageConfigs'),
-        umop: []
-      });
-      return items;
-    },
-    hasUnsavedChanges() {
-      if (!this.fetched) {
-        return false;
-      }
-      return this.getConfigSnapshot(this.config_data) !== this.lastSavedConfigSnapshot;
+      return [...this.configInfoList];
     }
   },
   watch: {
@@ -317,7 +359,7 @@ export default {
     config_data: {
       deep: true,
       handler() {
-        if (this.fetched) {
+        if (this.fetched && !this.isLoadingConfig) {
           this.hasUnsavedChanges = this.configHasChanges;
         }
       }
@@ -338,6 +380,13 @@ export default {
     return {
       codeEditorDialog: false,
       configManageDialog: false,
+      routeManageDialog: false,
+      routeManageLoading: false,
+      routeManageSaving: false,
+      routeManageConfigId: '',
+      routeManageConfigName: '',
+      routeManageItems: [],
+      routeManagePlatformTypeMap: {},
       showConfigForm: false,
       isEditingConfig: false,
       config_data_has_changed: false,
@@ -345,13 +394,13 @@ export default {
       config_data: {
         config: {}
       },
+      isLoadingConfig: false,
       fetched: false,
       metadata: {},
       save_message_snack: false,
       save_message: "",
       save_message_success: "",
-  configContentKey: 0,
-      lastSavedConfigSnapshot: '',
+      configContentKey: 0,
 
       // 配置类型切换
       configType: 'normal', // 'normal' 或 'system'
@@ -364,6 +413,7 @@ export default {
       selectedConfigID: null, // 用于存储当前选中的配置项信息
       currentConfigId: null, // 跟踪当前正在编辑的配置id
       configInfoList: [],
+      configBindingsById: {},
       configFormData: {
         name: '',
       },
@@ -409,16 +459,12 @@ export default {
   methods: {
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
     handleLocaleChange() {
-      // 重新加载当前配置
       if (this.selectedConfigID) {
         this.getConfig(this.selectedConfigID);
       } else if (this.isSystemConfig) {
         this.getConfig();
       }
     },
-
-  },
-  methods: {
     extractConfigTypeFromHash(hash) {
       const rawHash = String(hash || '');
       const lastHashIndex = rawHash.lastIndexOf('#');
@@ -438,10 +484,232 @@ export default {
       await this.onConfigTypeToggle();
       return true;
     },
+    openConfigManageDialog() {
+      this.configManageDialog = true;
+    },
+    parseUmop(umop) {
+      const raw = String(umop || '');
+      const parts = raw.split(':');
+      if (parts.length < 3) {
+        return {
+          platformId: raw || '*',
+          messageType: '*',
+          sessionId: '*'
+        };
+      }
+      return {
+        platformId: parts[0] || '*',
+        messageType: parts[1] || '*',
+        sessionId: parts.slice(2).join(':') || '*'
+      };
+    },
+    createRouteItem(umop) {
+      const parsed = this.parseUmop(umop);
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        platformId: parsed.platformId,
+        umop
+      };
+    },
+    isRouteEntryForConfig(umop, confId, targetConfigId) {
+      if (String(confId || '') !== String(targetConfigId || '')) {
+        return false;
+      }
+      const parsed = this.parseUmop(umop);
+      return parsed.platformId !== 'webchat';
+    },
+    async openRouteManageDialog(payload) {
+      const configId = payload?.configId;
+      if (!configId) {
+        return;
+      }
+
+      this.routeManageDialog = true;
+      this.routeManageLoading = true;
+      this.routeManageConfigId = configId;
+      this.routeManageConfigName = this.configInfoList.find((item) => item.id === configId)?.name || configId;
+      this.routeManageItems = [];
+      this.routeManagePlatformTypeMap = {};
+
+      try {
+        const [routeRes, platformRes] = await Promise.all([
+          axios.get('/api/config/umo_abconf_routes'),
+          axios.get('/api/config/platform/list')
+        ]);
+        const routing = routeRes?.data?.data?.routing || {};
+        const platforms = platformRes?.data?.data?.platforms || [];
+
+        const typeMap = {};
+        for (const platform of platforms) {
+          const pid = String(platform?.id || '').trim();
+          if (!pid) {
+            continue;
+          }
+          typeMap[pid] = platform.platform_type || platform.type || pid;
+        }
+        this.routeManagePlatformTypeMap = typeMap;
+
+        const matched = [];
+        for (const [umop, conf] of Object.entries(routing)) {
+          if (!this.isRouteEntryForConfig(umop, conf, configId)) {
+            continue;
+          }
+          matched.push(this.createRouteItem(umop));
+        }
+        this.routeManageItems = matched.sort((a, b) => {
+          const platformCompare = a.platformId.localeCompare(b.platformId);
+          if (platformCompare !== 0) {
+            return platformCompare;
+          }
+          return a.umop.localeCompare(b.umop);
+        });
+      } catch (err) {
+        console.error('Failed to load routes for route manager:', err);
+        this.save_message = this.tm('routeManager.loadFailed');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+        this.routeManageItems = [];
+      } finally {
+        this.routeManageLoading = false;
+      }
+    },
+    removeRouteItem(entryId) {
+      this.routeManageItems = this.routeManageItems.filter((item) => item.id !== entryId);
+    },
+    async saveRouteManageDialog() {
+      if (!this.routeManageConfigId) {
+        return;
+      }
+
+      this.routeManageSaving = true;
+      try {
+        const res = await axios.get('/api/config/umo_abconf_routes');
+        const routing = res?.data?.data?.routing || {};
+        const entries = Object.entries(routing);
+        const nonTargetEntries = [];
+        const nonTargetUmopSet = new Set();
+        let firstTargetIndex = -1;
+
+        entries.forEach(([umop, confId], index) => {
+          if (this.isRouteEntryForConfig(umop, confId, this.routeManageConfigId)) {
+            if (firstTargetIndex === -1) {
+              firstTargetIndex = index;
+            }
+            return;
+          }
+          nonTargetEntries.push([umop, confId]);
+          nonTargetUmopSet.add(umop);
+        });
+
+        const targetEntries = [];
+        for (const item of this.routeManageItems) {
+          const umop = String(item.umop || '').trim();
+          if (!umop) {
+            continue;
+          }
+          if (nonTargetUmopSet.has(umop)) {
+            this.save_message = this.tm('routeManager.routeOccupied', { umop });
+            this.save_message_snack = true;
+            this.save_message_success = "error";
+            this.routeManageSaving = false;
+            return;
+          }
+          targetEntries.push([umop, this.routeManageConfigId]);
+        }
+
+        const insertIndex = firstTargetIndex === -1 ? nonTargetEntries.length : Math.min(firstTargetIndex, nonTargetEntries.length);
+        const mergedEntries = [
+          ...nonTargetEntries.slice(0, insertIndex),
+          ...targetEntries,
+          ...nonTargetEntries.slice(insertIndex)
+        ];
+        const mergedRouting = Object.fromEntries(mergedEntries);
+
+        await axios.post('/api/config/umo_abconf_route/update_all', {
+          routing: mergedRouting
+        });
+
+        this.routeManageDialog = false;
+        this.save_message = this.tm('routeManager.saveSuccess');
+        this.save_message_snack = true;
+        this.save_message_success = "success";
+        await this.refreshConfigBindings();
+      } catch (err) {
+        console.error('Failed to save routes for route manager:', err);
+        this.save_message = this.tm('routeManager.saveFailed');
+        this.save_message_snack = true;
+        this.save_message_success = "error";
+      } finally {
+        this.routeManageSaving = false;
+      }
+    },
+    buildConfigBindingMap(routingTable, platforms) {
+      const platformTypeMap = {};
+      for (const platform of platforms || []) {
+        if (!platform?.id) {
+          continue;
+        }
+        platformTypeMap[platform.id] = platform.platform_type || platform.type || platform.id;
+      }
+
+      const grouped = {};
+      for (const [umop, confId] of Object.entries(routingTable || {})) {
+        const resolvedConfigId = String(confId || 'default');
+        const parsed = this.parseUmop(umop);
+        const platformId = parsed.platformId || '*';
+        if (platformId === 'webchat') {
+          continue;
+        }
+
+        if (!grouped[resolvedConfigId]) {
+          grouped[resolvedConfigId] = {};
+        }
+        if (!grouped[resolvedConfigId][platformId]) {
+          grouped[resolvedConfigId][platformId] = {
+            platformId,
+            platformType: platformTypeMap[platformId] || platformId,
+            umops: []
+          };
+        }
+        grouped[resolvedConfigId][platformId].umops.push(umop);
+      }
+
+      const bindingMap = {};
+      for (const [confId, platformsById] of Object.entries(grouped)) {
+        bindingMap[confId] = Object.values(platformsById).sort((a, b) => {
+          return a.platformId.localeCompare(b.platformId);
+        });
+      }
+      return bindingMap;
+    },
+    async refreshConfigBindings() {
+      try {
+        const [routesRes, platformsRes] = await Promise.all([
+          axios.get('/api/config/umo_abconf_routes'),
+          axios.get('/api/config/platform/list')
+        ]);
+        const routing = routesRes?.data?.data?.routing || {};
+        const platforms = platformsRes?.data?.data?.platforms || [];
+        this.configBindingsById = this.buildConfigBindingMap(routing, platforms);
+      } catch (err) {
+        console.error('Failed to load config bindings:', err);
+        this.configBindingsById = {};
+      }
+    },
     getConfigInfoList(abconf_id) {
       // 获取配置列表
       axios.get('/api/config/abconfs').then((res) => {
-        this.configInfoList = res.data.data.info_list;
+        const infoList = Array.isArray(res.data?.data?.info_list) ? res.data.data.info_list : [];
+        this.configInfoList = [...infoList].sort((a, b) => {
+          if (a.id === 'default' && b.id !== 'default') {
+            return -1;
+          }
+          if (a.id !== 'default' && b.id === 'default') {
+            return 1;
+          }
+          return 0;
+        });
+        this.refreshConfigBindings();
 
         if (abconf_id) {
           let matched = false;
@@ -466,9 +734,12 @@ export default {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
         this.save_message_success = "error";
+        this.configBindingsById = {};
       });
     },
     getConfig(abconf_id) {
+      this.isLoadingConfig = true;
+      this.hasUnsavedChanges = false;
       this.fetched = false
       const params = {};
 
@@ -482,22 +753,20 @@ export default {
         params: params
       }).then((res) => {
         this.config_data = res.data.data.config;
-        this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
-        this.fetched = true
         this.metadata = res.data.data.metadata;
+        this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
+        this.hasUnsavedChanges = false;
         this.configContentKey += 1;
-        // 获取配置后更新
-          this.$nextTick(() => {
-            this.originalConfigData = JSON.parse(JSON.stringify(this.config_data));
-            this.hasUnsavedChanges = false;
-            if (!this.isSystemConfig) {
-              this.currentConfigId = abconf_id || this.selectedConfigID;
-            }
-          });
+        if (!this.isSystemConfig) {
+          this.currentConfigId = abconf_id || this.selectedConfigID;
+        }
+        this.fetched = true;
       }).catch((err) => {
         this.save_message = this.messages.loadError;
         this.save_message_snack = true;
         this.save_message_success = "error";
+      }).finally(() => {
+        this.isLoadingConfig = false;
       });
     },
     updateConfig() {
@@ -515,7 +784,6 @@ export default {
 
       return axios.post('/api/config/astrbot/update', postData).then((res) => {
         if (res.data.status === "ok") {
-          this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
           this.save_message = res.data.message || this.messages.saveSuccess;
           this.save_message_snack = true;
           this.save_message_success = "success";
@@ -584,52 +852,38 @@ export default {
       });
     },
     async onConfigSelect(value) {
-      if (value === '_%manage%_') {
-        this.configManageDialog = true;
-        // 重置选择到之前的值
-        this.$nextTick(() => {
-          this.selectedConfigID = this.selectedConfigInfo.id || 'default';
-          this.getConfig(this.selectedConfigID);
+      if (!value || value === this.selectedConfigID) {
+        return;
+      }
+      if (this.hasUnsavedChanges) {
+        const prevConfigId = this.isSystemConfig ? 'default' : (this.currentConfigId || this.selectedConfigID || 'default');
+        const message = this.tm('unsavedChangesWarning.switchConfig');
+        const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
+          title: this.tm('unsavedChangesWarning.dialogTitle'),
+          message: message,
+          confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
+          cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
+          closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
         });
-      } else {
-        // 检查是否有未保存的更改
-        if (this.hasUnsavedChanges) {
-          // 获取之前正在编辑的配置id
-          const prevConfigId = this.isSystemConfig ? 'default' : (this.currentConfigId || this.selectedConfigID || 'default');
-          const message = this.tm('unsavedChangesWarning.switchConfig');
-          const saveAndSwitch = await this.$refs.unsavedChangesDialog?.open({
-            title: this.tm('unsavedChangesWarning.dialogTitle'),
-            message: message,
-            confirmHint: `${this.tm('unsavedChangesWarning.options.saveAndSwitch')}:${this.tm('unsavedChangesWarning.options.confirm')}`,
-            cancelHint: `${this.tm('unsavedChangesWarning.options.discardAndSwitch')}:${this.tm('unsavedChangesWarning.options.cancel')}`,
-            closeHint: `${this.tm('unsavedChangesWarning.options.closeCard')}:"x"`
-          });
-          // 关闭弹窗不切换
-          if (saveAndSwitch === 'close') {
-            return;
-          }
-          if (saveAndSwitch) {
-            // 设置临时变量保存切换后的id
-            const currentSelectedId = this.selectedConfigID;
-            // 把id设置回切换前的用于保存上一次的配置，保存完后恢复id为切换后的
-            this.selectedConfigID = prevConfigId;
-            const result = await this.updateConfig();
-            this.selectedConfigID = currentSelectedId;
-            if (result?.success) {
-              this.selectedConfigID = value;
-              this.getConfig(value);
-            }
-            return;
-          } else {
-            // 取消保存并切换配置
+        if (saveAndSwitch === 'close') {
+          return;
+        }
+        if (saveAndSwitch) {
+          const currentSelectedId = this.selectedConfigID;
+          this.selectedConfigID = prevConfigId;
+          const result = await this.updateConfig();
+          this.selectedConfigID = currentSelectedId;
+          if (result?.success) {
             this.selectedConfigID = value;
             this.getConfig(value);
           }
-        } else {
-          // 无未保存更改直接切换
-          this.selectedConfigID = value;
-          this.getConfig(value);
+          return;
         }
+        this.selectedConfigID = value;
+        this.getConfig(value);
+      } else {
+        this.selectedConfigID = value;
+        this.getConfig(value);
       }
     },
     startCreateConfig() {
@@ -758,6 +1012,7 @@ export default {
         // 切换到系统配置
         this.getConfig();
       } else {
+        this.refreshConfigBindings();
         // 切换回普通配置，如果有选中的配置文件则加载，否则加载default
         if (this.selectedConfigID) {
           this.getConfig(this.selectedConfigID);
@@ -785,9 +1040,6 @@ export default {
     closeTestChat() {
       this.testChatDrawer = false;
       this.testConfigId = null;
-    },
-    getConfigSnapshot(config) {
-      return JSON.stringify(config ?? {});
     }
   },
 }
@@ -797,6 +1049,80 @@ export default {
 <style>
 .v-tab {
   text-transform: none !important;
+}
+
+.config-page-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.config-panel {
+  width: min(1160px, calc(100vw - 48px));
+}
+
+.config-workbench {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.config-workbench--system {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.config-sidebar {
+  position: sticky;
+  top: calc(var(--v-layout-top, 64px) + 16px);
+}
+
+.config-main {
+  min-width: 0;
+}
+
+.config-current-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.config-current-title__name {
+  font-family: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-current-title__id {
+  line-height: 1.2;
+}
+
+.config-toolbar {
+  margin-bottom: 16px;
+  align-items: center;
+  width: 100%;
+}
+
+.config-toolbar-controls {
+  width: 100%;
+  gap: 12px;
+}
+
+.config-search-input {
+  min-width: 180px;
+  max-width: 300px;
+  width: 100%;
+  margin-left: auto;
+}
+
+.config-select--mobile,
+.config-manage-mobile {
+  display: none;
 }
 
 .unsaved-changes-banner {
@@ -852,35 +1178,53 @@ export default {
   font-style: italic;
 }
 
-@media (min-width: 768px) {
-  .config-panel {
-    width: 750px;
+@media (max-width: 959px) {
+  .config-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .config-sidebar {
+    display: none;
+  }
+
+  .config-select--mobile,
+  .config-manage-mobile {
+    display: inline-flex;
+  }
+
+  .config-select--mobile {
+    min-width: 180px;
+    max-width: 280px;
   }
 }
 
 @media (max-width: 767px) {
-  .v-container {
-    padding: 4px;
-  }
-
   .config-panel {
     width: 100%;
+    margin-top: 0 !important;
   }
 
-  .config-toolbar {
-    padding-right: 0 !important;
+  .config-page-wrap {
+    padding: 0 8px;
   }
 
   .config-toolbar-controls {
-    width: 100%;
     flex-wrap: wrap;
   }
 
-  .config-select,
+  .config-select--mobile,
   .config-search-input {
     width: 100%;
-    min-width: 0 !important;
+    max-width: 100%;
+    min-width: 0;
   }
+
+  .config-manage-mobile {
+    width: auto;
+    max-width: none;
+    min-width: auto;
+  }
+
 }
 
 /* 测试聊天抽屉样式 */

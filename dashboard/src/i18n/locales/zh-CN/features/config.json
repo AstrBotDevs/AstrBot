@@ -69,6 +69,26 @@
     "normalConfig": "普通",
     "systemConfig": "系统"
   },
+  "profileSidebar": {
+    "title": "配置文件列表",
+    "platformId": "平台 ID",
+    "umop": "绑定 UMOP",
+    "noBindings": "暂无平台绑定"
+  },
+  "routeManager": {
+    "title": "路由管理",
+    "targetConfig": "配置：{config}",
+    "hint": "AstrBot 支持多配置文件，路由用于决定“哪个会话用哪个配置”。这里展示的是当前配置文件接管的全部路由：左侧是机器人 ID、右侧是匹配的消息会话来源。",
+    "empty": "暂无可管理的路由。",
+    "platform": "平台",
+    "umop": "UMOP",
+    "allSessions": "全部会话",
+    "delete": "删除路由",
+    "loadFailed": "加载路由失败",
+    "saveSuccess": "路由已保存",
+    "saveFailed": "保存路由失败",
+    "routeOccupied": "该路由已被其他配置占用：{umop}"
+  },
   "search": {
     "placeholder": "搜索配置项（字段名/描述/提示）",
     "noResult": "未找到匹配的配置项"
