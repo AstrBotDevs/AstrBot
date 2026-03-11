@@ -63,7 +63,8 @@
         <!-- Text (Markdown) -->
         <MarkdownRender
             v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
-            custom-id="message-list" :custom-html-tags="['ref']" :content="renderPart.part.text" :typewriter="false"
+            custom-id="message-list" :custom-html-tags="['ref']"
+            :content="normalizeMarkdownContent(renderPart.part.text)" :typewriter="false"
             class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
 
         <!-- Image -->
@@ -149,6 +150,21 @@ const emitOpenImage = (url) => {
 
 const emitDownloadFile = (file) => {
     emit('download-file', file);
+};
+
+const isMarkdownCodeFence = (text) => /^(```|~~~)/.test(text.trim());
+
+const looksLikeStandaloneHtml = (text) => {
+    const normalized = text.trim();
+    if (!normalized) return false;
+    if (!/(<!doctype\s+html|<html\b|<head\b|<body\b)/i.test(normalized)) return false;
+    return /(<\/html>|<\/body>|<\/head>|<form\b|<input\b|<button\b)/i.test(normalized);
+};
+
+const normalizeMarkdownContent = (text) => {
+    if (typeof text !== 'string') return text;
+    if (isMarkdownCodeFence(text) || !looksLikeStandaloneHtml(text)) return text;
+    return `\`\`\`\`html\n${text}\n\`\`\`\``;
 };
 
 const formatDuration = (seconds) => {
