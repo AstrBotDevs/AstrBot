@@ -38,6 +38,7 @@ class StdioServer(JSONRPCServer):
         self._stdout = stdout or sys.stdout
         self._read_task: asyncio.Task | None = None
         self._write_lock = asyncio.Lock()
+        self._closed_event = asyncio.Event()
 
     async def start(self) -> None:
         """Start the server and begin reading from stdin."""
@@ -55,6 +56,7 @@ class StdioServer(JSONRPCServer):
             return
 
         self._running = False
+        self._closed_event.set()
 
         # Cancel read task
         if self._read_task:
@@ -101,6 +103,8 @@ class StdioServer(JSONRPCServer):
                 if not line:
                     # EOF reached
                     logger.info("EOF reached on stdin")
+                    self._running = False
+                    self._closed_event.set()
                     break
 
                 line = line.strip()
@@ -120,7 +124,11 @@ class StdioServer(JSONRPCServer):
         except Exception as e:
             logger.error(f"Error in read loop: {e}")
         finally:
+            self._closed_event.set()
             logger.debug("Stopped reading from stdin")
+
+    async def wait_closed(self) -> None:
+        await self._closed_event.wait()
 
     def _parse_message(self, line: str) -> JSONRPCMessage:
         """Parse a JSON-RPC message from a string.

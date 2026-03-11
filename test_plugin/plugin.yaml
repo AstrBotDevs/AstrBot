@@ -4,6 +4,8 @@ display_name: HelloWorld 插件
 desc: 一个简单的问候插件示例
 author: Soulter
 version: 0.1.0
+runtime:
+  python: "3.12"
 components: # 组件列表，将支持自动生成
   - class: commands.hello:HelloCommand
     type: command

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import inspect
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
 from loguru import logger
@@ -177,7 +178,7 @@ class NewStdioStar(NewStar):
 
     def __init__(
         self,
-        plugin_dir: str,
+        plugins_dir: str,
         python_executable: str = "python",
         context: Any = None,
         **kwargs: Any,
@@ -185,18 +186,33 @@ class NewStdioStar(NewStar):
         """Initialize a STDIO-based NewStar.
 
         Args:
-            plugin_dir: Path to the plugin directory
+            plugins_dir: Path to the plugins directory
             python_executable: Python executable to use (defaults to 'python')
             context: Context instance for managing managers and their functions
         """
-        # Construct the command to start the plugin
-        if not os.path.exists(plugin_dir):
-            raise FileNotFoundError(f"Plugin directory not found: {plugin_dir}")
+        if not os.path.exists(plugins_dir):
+            raise FileNotFoundError(f"Plugins directory not found: {plugins_dir}")
 
-        command = [python_executable, "-m", "astrbot_sdk", "run", "--stdio"]
+        repo_src_dir = str(Path(__file__).resolve().parents[3])
+        env = os.environ.copy()
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (
+            f"{repo_src_dir}{os.pathsep}{existing_pythonpath}"
+            if existing_pythonpath
+            else repo_src_dir
+        )
+
+        command = [
+            python_executable,
+            "-m",
+            "astrbot_sdk",
+            "run",
+            "--plugins-dir",
+            plugins_dir,
+        ]
 
         # Create StdioClient with subprocess management
-        client = StdioClient(command=command, cwd=plugin_dir)
+        client = StdioClient(command=command, cwd=plugins_dir, env=env)
         super().__init__(client, context=context)
 
 

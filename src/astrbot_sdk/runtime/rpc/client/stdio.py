@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 from typing import IO, Any
 
@@ -23,6 +24,7 @@ class StdioClient(JSONRPCClient):
         self,
         command: list[str],
         cwd: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> None:
         """Initialize the STDIO client.
 
@@ -33,6 +35,7 @@ class StdioClient(JSONRPCClient):
         super().__init__()
         self._command = command
         self._cwd = cwd
+        self._env = env or os.environ.copy()
         self._process: subprocess.Popen | None = None
         self._stdin: IO[Any] | None = None
         self._stdout: IO[Any] | None = None
@@ -64,6 +67,7 @@ class StdioClient(JSONRPCClient):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=self._cwd,
+                env=self._env,
                 text=True,
                 bufsize=1,  # Line buffered
             )
@@ -116,6 +120,11 @@ class StdioClient(JSONRPCClient):
 
         # Terminate subprocess if running
         if self._process:
+            if self._stdout:
+                try:
+                    self._stdout.close()
+                except Exception:
+                    logger.debug("Failed to close subprocess stdin cleanly")
             logger.info("Terminating subprocess...")
             self._process.terminate()
             try:
