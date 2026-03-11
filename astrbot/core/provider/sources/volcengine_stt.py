@@ -56,7 +56,14 @@ class ProviderVolcengineSTT(STTProvider):
         final_audio_path: Path = None
         try:
             # --- 步骤 1: 处理远程 URL 下载 ---
+            # 这里的url来自项目认可的消息平台的url,具有安全性
             if audio_url.startswith("http"):
+                async with aiohttp.ClientSession() as session:
+                    async with session.head(audio_url) as resp:
+                        size = int(resp.headers.get("Content-Length", 0))
+                        if size > 20 * 1024 * 1024:
+                            logger.warning(f"音频文件过大: {size} bytes")
+                            raise ValueError("音频文件过大")
                 is_tencent = "multimedia.nt.qq.com.cn" in audio_url
                 temp_dir = Path(get_astrbot_temp_path())
                 downloaded_path = temp_dir / f"volc_stt_{uuid.uuid4().hex[:8]}.input"
@@ -102,12 +109,13 @@ class ProviderVolcengineSTT(STTProvider):
                         f_path.unlink()
                     except Exception as e:
                         logger.error(f"清理火山引擎 STT 临时文件失败: {f_path}, {e}")
-                        raise e
+                        return ""
 
     async def _recognize_audio(self, file_path: Path) -> str:
         """执行具体的 API 请求"""
         if not self.appid or not self.api_key:
-            raise ValueError("火山引擎 STT 配置不完整：需要 appid 和 api_key")
+            logger.error("火山引擎 STT 配置不完整：需要 appid 和 api_key")
+            return ""
 
         headers = {
             "X-Api-App-Key": self.appid,
@@ -121,7 +129,8 @@ class ProviderVolcengineSTT(STTProvider):
             audio_data = file_path.read_bytes()
             audio_b64 = base64.b64encode(audio_data).decode()
         except Exception as e:
-            raise OSError(f"读取音频文件失败: {e}")
+            logger.error(f"读取音频文件失败: {e}")
+            return ""
 
         request_body = {
             "user": {"uid": str(uuid.uuid4())},
@@ -137,18 +146,18 @@ class ProviderVolcengineSTT(STTProvider):
                 ) as resp:
                     if resp.status != 200:
                         content = await resp.text()
-                        error_msg = (
-                            f"火山引擎 STT HTTP 错误 (Status: {resp.status}): {content}"
+                        logger.debug(f"原始数据{content}")
+                        error_msg = content.get("message", "未知错误")
+                        logger.error(
+                            f"火山引擎 STT 识别失败 (Status: {resp.status}): {error_msg}"
                         )
-                        raise ConnectionError(error_msg)
+                        return ""
 
                     status_code = resp.headers.get("X-Api-Status-Code")
                     data = await resp.json()
                     if status_code == "20000000":
                         text = data.get("result", {}).get("text", "")
-                        if not text:
-                            logger.warning("火山引擎 STT 返回成功但内容为空")
-                        return "用户输入内容为空"
+                        return text
                     elif status_code == "20000001":
                         logger.warning("火山引擎 STT 正在处理中")
                         return "音频文件正在处理中"
@@ -181,17 +190,17 @@ class ProviderVolcengineSTT(STTProvider):
                         error_msg = data.get("message", "未知业务错误")
                         full_error = f"火山引擎 STT API 业务错误 (Code: {status_code}): {error_msg}"
                         logger.error(full_error)
-                        raise RuntimeError(full_error)
+                        return "火山引擎stt服务内部处理错误"
 
         except asyncio.TimeoutError:
-            error_msg = "火山引擎 STT 请求超时 (超过 30 秒)"
+            error_msg = "火山引擎 STT 请求超时 (超过 300 秒)"
             logger.error(error_msg)
-            raise TimeoutError(error_msg)
+            return "火山引擎 STT 请求超时 (超过 300 秒)"
 
         except aiohttp.ClientError as e:
             error_msg = f"火山引擎 STT 网络请求错误: {e}"
             logger.error(error_msg)
-            raise ConnectionError(error_msg) from e
+            return "火山引擎 STT 网络请求错误"
 
         except Exception as e:
             # 避免重复抛出已经包装过的异常
@@ -201,4 +210,18 @@ class ProviderVolcengineSTT(STTProvider):
                 raise
             error_msg = f"火山引擎 STT 发生未知异常: {e}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            return "火山引擎stt服务内部处理错误"
+
+    async def get_audio_size(self, audio_url: str) -> int:
+        """获取音频文件大小（字节）"""
+        if audio_url.startswith("http"):
+            # 远程文件：使用 HEAD 请求获取 Content-Length
+            async with aiohttp.ClientSession() as session:
+                async with session.head(audio_url) as resp:
+                    return int(resp.headers.get("Content-Length", 0))
+        else:
+            # 本地文件
+            path = Path(audio_url)
+            if path.exists():
+                return path.stat().st_size
+        return 0
