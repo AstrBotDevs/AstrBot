@@ -82,16 +82,7 @@ def _parse_frontmatter_description(text: str) -> str:
 # safe path characters to prevent prompt injection via crafted skill paths.
 _SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_:./ -]")
 _WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:/")
-_SAFE_DESCRIPTION_RE = re.compile(
-    r"[^A-Za-z0-9"
-    r"\u00C0-\u024F"
-    r"\u0370-\u03FF"
-    r"\u0400-\u04FF"
-    r"\u3040-\u30FF"
-    r"\u3400-\u4DBF"
-    r"\u4E00-\u9FFF"
-    r" .,;:!?'\"()/_+-]"
-)
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
 
 
 def _normalize_prompt_example_path(path: str) -> str:
@@ -106,8 +97,10 @@ def _sanitize_prompt_path(path: str) -> str:
 
 
 def _sanitize_prompt_description(description: str) -> str:
+    description = description.replace("`", "")
+    description = _CONTROL_CHARS_RE.sub(" ", description)
     description = " ".join(description.split())
-    return _SAFE_DESCRIPTION_RE.sub("", description)
+    return description
 
 
 def _render_skill_inventory_description(skill: SkillInfo) -> str:
