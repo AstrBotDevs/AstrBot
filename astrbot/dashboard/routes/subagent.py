@@ -1,3 +1,4 @@
+import re
 import traceback
 
 from quart import jsonify, request
@@ -5,8 +6,16 @@ from quart import jsonify, request
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.subagent.codec import decode_subagent_config, encode_subagent_config
 
 from .route import Response, Route, RouteContext
+
+_TASK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_task_id(task_id: str) -> bool:
+    """Validate task_id format to prevent injection attacks."""
+    return bool(_TASK_ID_PATTERN.match(task_id))
 
 
 class SubAgentRoute(Route):
@@ -23,42 +32,42 @@ class SubAgentRoute(Route):
             ("/subagent/config", ("GET", self.get_config)),
             ("/subagent/config", ("POST", self.update_config)),
             ("/subagent/available-tools", ("GET", self.get_available_tools)),
+            ("/subagent/tasks", ("GET", self.get_tasks)),
+            ("/subagent/tasks/<task_id>/retry", ("POST", self.retry_task)),
+            ("/subagent/tasks/<task_id>/cancel", ("POST", self.cancel_task)),
         ]
         self.register_routes()
+
+    @staticmethod
+    def _split_compat_warnings(
+        diagnostics: list[str] | None,
+    ) -> tuple[list[str], list[str]]:
+        if not diagnostics:
+            return [], []
+        compat_warnings: list[str] = []
+        normal_diagnostics: list[str] = []
+        for item in diagnostics:
+            if "legacy field" in item:
+                compat_warnings.append(item)
+            else:
+                normal_diagnostics.append(item)
+        return normal_diagnostics, compat_warnings
 
     async def get_config(self):
         try:
             cfg = self.core_lifecycle.astrbot_config
-            data = cfg.get("subagent_orchestrator")
-
-            # First-time access: return a sane default instead of erroring.
-            if not isinstance(data, dict):
-                data = {
-                    "main_enable": False,
-                    "remove_main_duplicate_tools": False,
-                    "agents": [],
-                }
-
-            # Backward compatibility: older config used `enable`.
-            if (
-                isinstance(data, dict)
-                and "main_enable" not in data
-                and "enable" in data
-            ):
-                data["main_enable"] = bool(data.get("enable", False))
-
-            # Ensure required keys exist.
-            data.setdefault("main_enable", False)
-            data.setdefault("remove_main_duplicate_tools", False)
-            data.setdefault("agents", [])
-
-            # Backward/forward compatibility: ensure each agent contains provider_id.
-            # None means follow global/default provider settings.
-            if isinstance(data.get("agents"), list):
-                for a in data["agents"]:
-                    if isinstance(a, dict):
-                        a.setdefault("provider_id", None)
-                        a.setdefault("persona_id", None)
+            raw = cfg.get("subagent_orchestrator")
+            if not isinstance(raw, dict):
+                raw = {}
+            canonical, diagnostics = decode_subagent_config(raw)
+            normal_diagnostics, compat_warnings = self._split_compat_warnings(
+                diagnostics
+            )
+            data = encode_subagent_config(
+                canonical,
+                diagnostics=normal_diagnostics,
+                compat_warnings=compat_warnings,
+            )
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -69,9 +78,13 @@ class SubAgentRoute(Route):
             data = await request.json
             if not isinstance(data, dict):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
+            # Canonical field is `instructions`; `system_prompt` is accepted for
+            # backward compatibility and serialized as a deprecated mirror field.
+            canonical, diagnostics = decode_subagent_config(data)
+            normalized = encode_subagent_config(canonical)
 
             cfg = self.core_lifecycle.astrbot_config
-            cfg["subagent_orchestrator"] = data
+            cfg["subagent_orchestrator"] = normalized
 
             # Persist to cmd_config.json
             # AstrBotConfigManager does not expose a `save()` method; persist via AstrBotConfig.
@@ -79,10 +92,27 @@ class SubAgentRoute(Route):
 
             # Reload dynamic handoff tools if orchestrator exists
             orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+            reload_diagnostics: list[str] = []
             if orch is not None:
-                await orch.reload_from_config(data)
+                res = await orch.reload_from_config(normalized)
+                if isinstance(res, list):
+                    reload_diagnostics = res
+            merged_diagnostics = diagnostics + reload_diagnostics
+            normal_diagnostics, compat_warnings = self._split_compat_warnings(
+                merged_diagnostics
+            )
 
-            return jsonify(Response().ok(message="保存成功").__dict__)
+            return jsonify(
+                Response()
+                .ok(
+                    message="保存成功",
+                    data={
+                        "diagnostics": normal_diagnostics,
+                        "compat_warnings": compat_warnings,
+                    },
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"保存 subagent 配置失败: {e!s}").__dict__)
@@ -115,3 +145,54 @@ class SubAgentRoute(Route):
         except Exception as e:
             logger.error(traceback.format_exc())
             return jsonify(Response().error(f"获取可用工具失败: {e!s}").__dict__)
+
+    async def get_tasks(self):
+        try:
+            status = request.args.get("status", default=None, type=str)
+            limit = request.args.get("limit", default=100, type=int)
+            if limit < 1:
+                limit = 1
+            if limit > 1000:
+                limit = 1000
+            orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+            if orch is None:
+                return jsonify(Response().ok(data=[]).__dict__)
+            tasks = await orch.list_tasks(status=status, limit=limit)
+            return jsonify(Response().ok(data=tasks).__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(Response().error(f"获取任务列表失败: {e!s}").__dict__)
+
+    async def retry_task(self, task_id: str):
+        try:
+            if not _validate_task_id(task_id):
+                return jsonify(Response().error("无效的任务ID格式").__dict__)
+            orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+            if orch is None:
+                return jsonify(
+                    Response().error("subagent orchestrator 不存在").__dict__
+                )
+            ok = await orch.retry_task(task_id)
+            if not ok:
+                return jsonify(Response().error("任务不存在或无法重试").__dict__)
+            return jsonify(Response().ok(message="重试已提交").__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(Response().error(f"重试任务失败: {e!s}").__dict__)
+
+    async def cancel_task(self, task_id: str):
+        try:
+            if not _validate_task_id(task_id):
+                return jsonify(Response().error("无效的任务ID格式").__dict__)
+            orch = getattr(self.core_lifecycle, "subagent_orchestrator", None)
+            if orch is None:
+                return jsonify(
+                    Response().error("subagent orchestrator 不存在").__dict__
+                )
+            ok = await orch.cancel_task(task_id)
+            if not ok:
+                return jsonify(Response().error("任务不存在或无法取消").__dict__)
+            return jsonify(Response().ok(message="任务已取消").__dict__)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return jsonify(Response().error(f"取消任务失败: {e!s}").__dict__)

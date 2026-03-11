@@ -308,7 +308,7 @@ class CronJobManager:
             cron_event.role = "admin"
 
         config = MainAgentBuildConfig(
-            tool_call_timeout=3600,
+            tool_call_timeout=600,
             llm_safety_mode=False,
             streaming_response=False,
         )

@@ -33,6 +33,10 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         # Optional provider override for this subagent. When set, the handoff
         # execution will use this chat provider id instead of the global/default.
         self.provider_id: str | None = None
+        # Human-readable display name shown in orchestration UI/logs.
+        self.agent_display_name: str | None = None
+        # Optional per-subagent max steps override.
+        self.max_steps: int | None = None
         # Note: Must assign after super().__init__() to prevent parent class from overriding this attribute
         self.agent = agent
 
@@ -62,4 +66,4 @@ class HandoffTool(FunctionTool, Generic[TContext]):
 
     def default_description(self, agent_name: str | None) -> str:
         agent_name = agent_name or "another"
-        return f"Delegate tasks to {self.name} agent to handle the request."
+        return f"Delegate tasks to {agent_name} agent to handle the request."

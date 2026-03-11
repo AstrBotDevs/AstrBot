@@ -4,6 +4,8 @@ import os
 from collections.abc import AsyncGenerator
 from typing import TypeAlias, Union
 
+from astrbot import logger
+from astrbot.core.agent.context.truncator import ContextTruncator
 from astrbot.core.agent.message import ContentPart, Message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
@@ -184,9 +186,68 @@ class Provider(AbstractProvider):
             if isinstance(message, Message):
                 dicts.append(message.model_dump())
             else:
-                dicts.append(message)
+                dicts.append(dict(message))
 
-        return dicts
+        return self._sanitize_outbound_messages(dicts)
+
+    def _sanitize_outbound_messages(self, messages: list[dict]) -> list[dict]:
+        """Normalize outbound messages before they are sent to chat providers."""
+        sanitized: list[dict] = []
+        removed_empty_tool_calls = 0
+        removed_invalid_assistants = 0
+
+        for message in messages:
+            role = message.get("role")
+            if role != "assistant":
+                sanitized.append(message)
+                continue
+
+            tool_calls = message.get("tool_calls")
+            if isinstance(tool_calls, list) and len(tool_calls) == 0:
+                message.pop("tool_calls", None)
+                removed_empty_tool_calls += 1
+
+            content = message.get("content")
+            has_content = False
+            if isinstance(content, str):
+                has_content = bool(content.strip())
+            elif isinstance(content, list):
+                has_content = len(content) > 0
+            else:
+                has_content = content is not None
+
+            tool_calls = message.get("tool_calls")
+            has_tool_calls = isinstance(tool_calls, list) and len(tool_calls) > 0
+
+            if not has_content and not has_tool_calls:
+                removed_invalid_assistants += 1
+                continue
+
+            sanitized.append(message)
+
+        if not sanitized:
+            return sanitized
+
+        truncator = ContextTruncator()
+        fixed_messages = truncator.fix_messages(
+            [Message.model_validate(message) for message in sanitized]
+        )
+
+        removed_orphaned_pairs = len(sanitized) - len(fixed_messages)
+        if (
+            removed_empty_tool_calls
+            or removed_invalid_assistants
+            or removed_orphaned_pairs
+        ):
+            logger.warning(
+                "Sanitized outbound messages: removed_empty_tool_calls=%s, "
+                "removed_invalid_assistants=%s, removed_orphaned_pairs=%s",
+                removed_empty_tool_calls,
+                removed_invalid_assistants,
+                removed_orphaned_pairs,
+            )
+
+        return [message.model_dump() for message in fixed_messages]
 
     async def test(self, timeout: float = 45.0) -> None:
         await asyncio.wait_for(

@@ -57,6 +57,7 @@ class AstrBotCoreLifecycle:
         self.db = db  # 初始化数据库
 
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
+        self._subagent_worker_started = False
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
 
@@ -91,9 +92,13 @@ class AstrBotCoreLifecycle:
                     self.provider_manager.llm_tools,
                     self.persona_mgr,
                 )
-            await self.subagent_orchestrator.reload_from_config(
+            diagnostics = await self.subagent_orchestrator.reload_from_config(
                 self.astrbot_config.get("subagent_orchestrator", {}),
             )
+            if not isinstance(diagnostics, list):
+                diagnostics = []
+            for diagnostic in diagnostics:
+                logger.warning("Subagent diagnostic: %s", diagnostic)
         except Exception as e:
             logger.error(f"Subagent orchestrator init failed: {e}", exc_info=True)
 
@@ -193,6 +198,8 @@ class AstrBotCoreLifecycle:
             self.cron_manager,
             self.subagent_orchestrator,
         )
+        if self.subagent_orchestrator:
+            self.subagent_orchestrator.bind_context(self.star_context)
 
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
@@ -263,6 +270,11 @@ class AstrBotCoreLifecycle:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
             tasks_.append(temp_dir_cleaner_task)
+        if self.subagent_orchestrator and not self._subagent_worker_started:
+            worker_task = self.subagent_orchestrator.start_worker()
+            if isinstance(worker_task, asyncio.Task):
+                tasks_.append(worker_task)
+                self._subagent_worker_started = True
         for task in tasks_:
             self.curr_tasks.append(
                 asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
@@ -314,6 +326,12 @@ class AstrBotCoreLifecycle:
 
     async def stop(self) -> None:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
+        if self.subagent_orchestrator and self._subagent_worker_started:
+            stop_result = self.subagent_orchestrator.stop_worker()
+            if asyncio.iscoroutine(stop_result):
+                await stop_result
+            self._subagent_worker_started = False
+
         if self.temp_dir_cleaner:
             await self.temp_dir_cleaner.stop()
 

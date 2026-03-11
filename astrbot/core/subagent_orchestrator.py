@@ -3,17 +3,28 @@ from __future__ import annotations
 from typing import Any
 
 from astrbot import logger
-from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.persona_mgr import PersonaManager
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.subagent.codec import decode_subagent_config
+from astrbot.core.subagent.error_classifier import build_error_classifier_from_config
+from astrbot.core.subagent.handoff_executor import HandoffExecutor
+from astrbot.core.subagent.models import (
+    SubagentConfig,
+    SubagentMountPlan,
+    SubagentTaskData,
+)
+from astrbot.core.subagent.planner import SubagentPlanner
+from astrbot.core.subagent.runtime import SubagentRuntime
+from astrbot.core.subagent.worker import SubagentWorker
 
 
 class SubAgentOrchestrator:
-    """Loads subagent definitions from config and registers handoff tools.
+    """Subagent orchestration facade.
 
-    This is intentionally lightweight: it does not execute agents itself.
-    Execution happens via HandoffTool in FunctionToolExecutor.
+    This class holds canonical config + mount plan, and delegates heavy lifting to:
+    - planner: deterministic handoff plan generation
+    - runtime/worker: background task queue and retries
     """
 
     def __init__(
@@ -21,78 +32,211 @@ class SubAgentOrchestrator:
     ) -> None:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
+        self._planner = SubagentPlanner(tool_mgr, persona_mgr)
+        self._config = SubagentConfig()
+        self._mount_plan = SubagentMountPlan()
+        self._context = None
+        db = getattr(persona_mgr, "db", None)
+        self._runtime = SubagentRuntime(db=db)
+        self._runtime.set_task_executor(self._execute_background_task)
+        self._worker = SubagentWorker(self._runtime)
+        self._apply_runtime_settings(self._config)
         self.handoffs: list[HandoffTool] = []
 
-    async def reload_from_config(self, cfg: dict[str, Any]) -> None:
-        from astrbot.core.astr_agent_context import AstrAgentContext
+    def bind_context(self, context) -> None:
+        self._context = context
 
-        agents = cfg.get("agents", [])
-        if not isinstance(agents, list):
-            logger.warning("subagent_orchestrator.agents must be a list")
-            return
+    def _apply_runtime_settings(self, config: SubagentConfig) -> None:
+        self._runtime.set_max_concurrent(config.max_concurrent_subagent_runs)
+        self._runtime.configure_retry_policy(
+            max_attempts=config.runtime.max_attempts,
+            base_delay_ms=config.runtime.base_delay_ms,
+            max_delay_ms=config.runtime.max_delay_ms,
+            jitter_ratio=config.runtime.jitter_ratio,
+        )
+        self._worker.configure(
+            poll_interval=config.worker.poll_interval,
+            batch_size=config.worker.batch_size,
+            error_retry_max_interval=config.worker.error_retry_max_interval,
+        )
 
-        handoffs: list[HandoffTool] = []
-        for item in agents:
-            if not isinstance(item, dict):
-                continue
-            if not item.get("enabled", True):
-                continue
+    @staticmethod
+    def _build_handoff_snapshot(handoff: HandoffTool) -> dict[str, Any]:
+        tools_raw = getattr(handoff.agent, "tools", None)
+        serialized_tools: list[str] | None
+        if tools_raw is None:
+            serialized_tools = None
+        elif isinstance(tools_raw, list):
+            serialized_tools = []
+            for item in tools_raw:
+                if isinstance(item, str):
+                    tool_name = item.strip()
+                else:
+                    tool_name = str(getattr(item, "name", "")).strip()
+                if tool_name:
+                    serialized_tools.append(tool_name)
+        else:
+            serialized_tools = []
 
-            name = str(item.get("name", "")).strip()
-            if not name:
-                continue
+        dialogs_raw = getattr(handoff.agent, "begin_dialogs", None)
+        serialized_dialogs: list[dict[str, Any]] | None = None
+        if isinstance(dialogs_raw, list):
+            serialized_dialogs = []
+            for item in dialogs_raw:
+                if isinstance(item, dict):
+                    serialized_dialogs.append(item)
+                    continue
+                model_dump = getattr(item, "model_dump", None)
+                if callable(model_dump):
+                    dumped = model_dump(mode="python")
+                    if isinstance(dumped, dict):
+                        serialized_dialogs.append(dumped)
 
-            persona_id = item.get("persona_id")
-            persona_data = None
-            if persona_id:
-                try:
-                    persona_data = await self._persona_mgr.get_persona(persona_id)
-                except StopIteration:
-                    logger.warning(
-                        "SubAgent persona %s not found, fallback to inline prompt.",
-                        persona_id,
-                    )
+        max_steps_raw = getattr(handoff, "max_steps", None)
+        max_steps = (
+            int(max_steps_raw)
+            if isinstance(max_steps_raw, int) and max_steps_raw > 0
+            else None
+        )
+        max_steps_unlimited = bool(getattr(handoff, "max_steps_unlimited", False))
+        provider_id_raw = getattr(handoff, "provider_id", None)
+        provider_id = (
+            str(provider_id_raw).strip()
+            if isinstance(provider_id_raw, str) and provider_id_raw.strip()
+            else None
+        )
+        tool_description_raw = getattr(handoff, "description", None)
+        tool_description = (
+            str(tool_description_raw).strip()
+            if isinstance(tool_description_raw, str) and tool_description_raw.strip()
+            else None
+        )
+        display_name_raw = getattr(handoff, "agent_display_name", None)
+        display_name = (
+            str(display_name_raw).strip()
+            if isinstance(display_name_raw, str) and display_name_raw.strip()
+            else handoff.agent.name
+        )
 
-            instructions = str(item.get("system_prompt", "")).strip()
-            public_description = str(item.get("public_description", "")).strip()
-            provider_id = item.get("provider_id")
-            if provider_id is not None:
-                provider_id = str(provider_id).strip() or None
-            tools = item.get("tools", [])
-            begin_dialogs = None
+        return {
+            "name": handoff.name,
+            "agent_name": handoff.agent.name,
+            "agent_display_name": display_name,
+            "instructions": str(getattr(handoff.agent, "instructions", "") or ""),
+            "tools": serialized_tools,
+            "begin_dialogs": serialized_dialogs,
+            "provider_id": provider_id,
+            "max_steps": max_steps,
+            "max_steps_unlimited": max_steps_unlimited,
+            "tool_description": tool_description,
+        }
 
-            if persona_data:
-                instructions = persona_data.system_prompt or instructions
-                begin_dialogs = persona_data.begin_dialogs
-                tools = persona_data.tools
-                if public_description == "" and persona_data.system_prompt:
-                    public_description = persona_data.system_prompt[:120]
-            if tools is None:
-                tools = None
-            elif not isinstance(tools, list):
-                tools = []
-            else:
-                tools = [str(t).strip() for t in tools if str(t).strip()]
+    def start_worker(self):
+        return self._worker.start()
 
-            agent = Agent[AstrAgentContext](
-                name=name,
-                instructions=instructions,
-                tools=tools,  # type: ignore
+    async def stop_worker(self) -> None:
+        await self._worker.stop()
+
+    async def reload_from_config(self, cfg: dict[str, Any]) -> list[str]:
+        try:
+            canonical, diagnostics = decode_subagent_config(cfg)
+        except Exception as exc:
+            logger.error("Invalid subagent config: %s", exc)
+            self._config = SubagentConfig()
+            self._mount_plan = SubagentMountPlan(
+                diagnostics=[f"ERROR: invalid config: {exc}"]
             )
-            agent.begin_dialogs = begin_dialogs
-            # The tool description should be a short description for the main LLM,
-            # while the subagent system prompt can be longer/more specific.
-            handoff = HandoffTool(
-                agent=agent,
-                tool_description=public_description or None,
+            self.handoffs = []
+            return self._mount_plan.diagnostics
+
+        self._config = canonical
+        self._apply_runtime_settings(canonical)
+        classifier, classifier_diagnostics = build_error_classifier_from_config(
+            canonical.error_classifier
+        )
+        self._runtime.set_error_classifier(classifier)
+        diagnostics.extend(classifier_diagnostics)
+        mount_plan = await self._planner.build_mount_plan(canonical)
+        mount_plan.diagnostics = diagnostics + mount_plan.diagnostics
+        self._mount_plan = mount_plan
+        self.handoffs = mount_plan.handoffs
+        return mount_plan.diagnostics
+
+    def get_mount_plan(self) -> SubagentMountPlan:
+        return self._mount_plan
+
+    def get_config(self) -> SubagentConfig:
+        return self._config
+
+    def get_max_nested_depth(self) -> int:
+        return int(self._config.max_nested_depth)
+
+    async def submit_handoff(
+        self,
+        *,
+        handoff: HandoffTool,
+        run_context,
+        payload: dict[str, Any],
+        background: bool,
+        tool_call_id: str | None = None,
+    ) -> str | None:
+        if not background:
+            return None
+
+        event = run_context.context.event
+        event_get_extra = getattr(event, "get_extra", None)
+        background_note = (
+            event_get_extra("background_note") if callable(event_get_extra) else None
+        )
+        subagent_handoff_depth = (
+            event_get_extra("subagent_handoff_depth")
+            if callable(event_get_extra)
+            else None
+        )
+        umo = getattr(event, "unified_msg_origin", None)
+        if not isinstance(umo, str) or not umo:
+            raise ValueError(
+                "Cannot submit subagent handoff without unified_msg_origin"
             )
+        task_payload = {
+            "tool_args": payload,
+            "_handoff_snapshot": self._build_handoff_snapshot(handoff),
+            "_meta": {
+                "role": getattr(event, "role", None),
+                "background_note": background_note,
+                "tool_call_timeout": int(
+                    getattr(run_context, "tool_call_timeout", 600)
+                ),
+                "subagent_handoff_depth": int(subagent_handoff_depth or 0),
+            },
+        }
+        return await self._runtime.enqueue(
+            umo=umo,
+            subagent_name=getattr(handoff, "agent_display_name", handoff.agent.name),
+            handoff_tool_name=handoff.name,
+            payload=task_payload,
+            tool_call_id=tool_call_id,
+        )
 
-            # Optional per-subagent chat provider override.
-            handoff.provider_id = provider_id
+    async def list_tasks(
+        self, status: str | None = None, limit: int = 100
+    ) -> list[dict]:
+        return await self._runtime.list_tasks(status=status, limit=limit)
 
-            handoffs.append(handoff)
+    async def retry_task(self, task_id: str) -> bool:
+        return await self._runtime.retry_task(task_id)
 
-        for handoff in handoffs:
-            logger.info(f"Registered subagent handoff tool: {handoff.name}")
+    async def cancel_task(self, task_id: str) -> bool:
+        return await self._runtime.cancel_task(task_id)
 
-        self.handoffs = handoffs
+    def find_handoff(self, handoff_tool_name: str) -> HandoffTool | None:
+        return self._mount_plan.handoff_by_tool_name.get(handoff_tool_name)
+
+    async def _execute_background_task(self, task: SubagentTaskData) -> str:
+        if not self._context:
+            raise RuntimeError("Subagent orchestrator context is not bound.")
+        return await HandoffExecutor.execute_queued_task(
+            task=task,
+            plugin_context=self._context,
+            handoff=self.find_handoff(task.handoff_tool_name),
+        )

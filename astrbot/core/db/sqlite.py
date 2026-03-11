@@ -25,6 +25,7 @@ from astrbot.core.db.po import (
     Preference,
     SessionProjectRelation,
     SQLModel,
+    SubagentTask,
 )
 from astrbot.core.db.po import (
     Platform as DeprecatedPlatformStat,
@@ -1849,5 +1850,258 @@ class SQLiteDatabase(BaseDatabase):
             if job_type:
                 query = query.where(col(CronJob.job_type) == job_type)
             query = query.order_by(desc(CronJob.created_at))
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    # ====
+    # Subagent Background Task Management
+    # ====
+
+    async def create_subagent_task(
+        self,
+        *,
+        task_id: str,
+        idempotency_key: str,
+        umo: str,
+        subagent_name: str,
+        handoff_tool_name: str,
+        payload_json: str,
+        max_attempts: int = 3,
+    ) -> SubagentTask:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                task = SubagentTask(
+                    task_id=task_id,
+                    idempotency_key=idempotency_key,
+                    umo=umo,
+                    subagent_name=subagent_name,
+                    handoff_tool_name=handoff_tool_name,
+                    payload_json=payload_json,
+                    max_attempts=max(1, int(max_attempts)),
+                    status="pending",
+                    next_run_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(task)
+                await session.flush()
+                await session.refresh(task)
+                return task
+
+    async def get_subagent_task_by_idempotency(
+        self, idempotency_key: str
+    ) -> SubagentTask | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(SubagentTask).where(
+                    col(SubagentTask.idempotency_key) == idempotency_key
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def claim_due_subagent_tasks(
+        self,
+        *,
+        now: datetime,
+        limit: int = 20,
+    ) -> list[SubagentTask]:
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = (
+                select(SubagentTask)
+                .where(
+                    col(SubagentTask.status).in_(["pending", "retrying"]),
+                    or_(
+                        col(SubagentTask.next_run_at).is_(None),
+                        col(SubagentTask.next_run_at) <= now,
+                    ),
+                )
+                .order_by(col(SubagentTask.created_at))
+                .limit(max(1, int(limit)))
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def mark_subagent_task_running(self, task_id: str) -> SubagentTask | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status).in_(["pending", "retrying"]),
+                    )
+                    .values(
+                        status="running",
+                        attempt=col(SubagentTask.attempt) + 1,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                if res.rowcount == 0:
+                    return None
+                result = await session.execute(
+                    select(SubagentTask).where(col(SubagentTask.task_id) == task_id)
+                )
+                return result.scalar_one_or_none()
+
+    async def mark_subagent_task_retrying(
+        self,
+        *,
+        task_id: str,
+        next_run_at: datetime,
+        error_class: str,
+        last_error: str,
+    ) -> bool:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status) == "running",
+                    )
+                    .values(
+                        status="retrying",
+                        next_run_at=next_run_at,
+                        error_class=error_class,
+                        last_error=last_error,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                return bool(res.rowcount)
+
+    async def reschedule_subagent_task(
+        self,
+        *,
+        task_id: str,
+        next_run_at: datetime,
+        error_class: str,
+        last_error: str,
+    ) -> bool:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status).in_(
+                            ["failed", "canceled", "succeeded", "pending", "retrying"]
+                        ),
+                    )
+                    .values(
+                        status="retrying",
+                        attempt=0,
+                        next_run_at=next_run_at,
+                        error_class=error_class,
+                        last_error=last_error,
+                        result_text=None,
+                        finished_at=None,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                return bool(res.rowcount)
+
+    async def mark_subagent_task_succeeded(
+        self,
+        task_id: str,
+        *,
+        result_text: str,
+    ) -> bool:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status) == "running",
+                    )
+                    .values(
+                        status="succeeded",
+                        result_text=result_text,
+                        finished_at=now,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                return bool(res.rowcount)
+
+    async def mark_subagent_task_failed(
+        self,
+        *,
+        task_id: str,
+        error_class: str,
+        last_error: str,
+    ) -> bool:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status) == "running",
+                    )
+                    .values(
+                        status="failed",
+                        error_class=error_class,
+                        last_error=last_error,
+                        finished_at=now,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                return bool(res.rowcount)
+
+    async def cancel_subagent_task(self, task_id: str) -> bool:
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                now = datetime.now(timezone.utc)
+                stmt = (
+                    update(SubagentTask)
+                    .where(
+                        col(SubagentTask.task_id) == task_id,
+                        col(SubagentTask.status).in_(
+                            ["pending", "retrying", "running"]
+                        ),
+                    )
+                    .values(
+                        status="canceled",
+                        finished_at=now,
+                        updated_at=now,
+                    )
+                )
+                res = await session.execute(stmt)
+                return bool(res.rowcount)
+
+    async def list_subagent_tasks(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[SubagentTask]:
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(SubagentTask)
+            if status:
+                query = query.where(col(SubagentTask.status) == status)
+            query = query.order_by(desc(SubagentTask.created_at)).limit(
+                max(1, int(limit))
+            )
             result = await session.execute(query)
             return list(result.scalars().all())

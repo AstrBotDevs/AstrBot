@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from sqlalchemy import Index
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -170,6 +171,37 @@ class CronJob(TimestampMixin, SQLModel, table=True):
     last_run_at: datetime | None = Field(default=None)
     next_run_time: datetime | None = Field(default=None)
     last_error: str | None = Field(default=None, sa_type=Text)
+
+
+class SubagentTask(TimestampMixin, SQLModel, table=True):
+    """Persistent subagent background task."""
+
+    __tablename__: str = "subagent_tasks"
+    __table_args__ = (
+        Index(
+            "idx_subagent_tasks_status_next_run_created",
+            "status",
+            "next_run_at",
+            "created_at",
+        ),
+    )
+
+    task_id: str = Field(primary_key=True, max_length=64)
+    idempotency_key: str = Field(
+        nullable=False, max_length=128, unique=True, index=True
+    )
+    umo: str = Field(nullable=False, max_length=255, index=True)
+    subagent_name: str = Field(nullable=False, max_length=255)
+    handoff_tool_name: str = Field(nullable=False, max_length=255)
+    status: str = Field(default="pending", nullable=False, max_length=32)
+    attempt: int = Field(default=0, nullable=False)
+    max_attempts: int = Field(default=3, nullable=False)
+    next_run_at: datetime | None = Field(default=None, nullable=True)
+    error_class: str | None = Field(default=None, max_length=32)
+    last_error: str | None = Field(default=None, sa_type=Text)
+    payload_json: str = Field(default="{}", nullable=False, sa_type=Text)
+    result_text: str | None = Field(default=None, sa_type=Text)
+    finished_at: datetime | None = Field(default=None, nullable=True)
 
 
 class Preference(TimestampMixin, SQLModel, table=True):

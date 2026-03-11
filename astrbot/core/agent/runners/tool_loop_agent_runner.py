@@ -619,17 +619,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self.req.append_tool_calls_result(tool_calls_result)
 
     async def step_until_done(
-        self, max_step: int
+        self, max_step: int | None
     ) -> T.AsyncGenerator[AgentResponse, None]:
         """Process steps until the agent is done."""
         step_count = 0
-        while not self.done() and step_count < max_step:
+        while not self.done() and (max_step is None or step_count < max_step):
             step_count += 1
             async for resp in self.step():
                 yield resp
 
-        #  如果循环结束了但是 agent 还没有完成，说明是达到了 max_step
-        if not self.done():
+        # If the loop exits while the agent is still running, we hit the limit.
+        if max_step is not None and not self.done():
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response."
             )
@@ -750,6 +750,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 executor = self.tool_executor.execute(
                     tool=func_tool,
                     run_context=self.run_context,
+                    tool_call_id=func_tool_id,
                     **valid_params,  # 只传递有效的参数
                 )
 

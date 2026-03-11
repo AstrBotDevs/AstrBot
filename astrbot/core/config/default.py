@@ -151,6 +151,36 @@ DEFAULT_CONFIG = {
     "subagent_orchestrator": {
         "main_enable": False,
         "remove_main_duplicate_tools": False,
+        "max_concurrent_subagent_runs": 8,
+        "max_nested_depth": 2,
+        "runtime": {
+            "max_attempts": 3,
+            "base_delay_ms": 500,
+            "max_delay_ms": 30000,
+            "jitter_ratio": 0.1,
+        },
+        "worker": {
+            "poll_interval": 1.0,
+            "batch_size": 8,
+            "error_retry_max_interval": 30.0,
+        },
+        "execution": {
+            "computer_use_runtime": None,
+            "default_max_steps": None,
+            "streaming_response": None,
+            "tool_call_timeout": None,
+        },
+        "error_classifier": {
+            "type": "default",
+            "fatal_exceptions": ["ValueError", "PermissionError", "KeyError"],
+            "transient_exceptions": [
+                "asyncio.TimeoutError",
+                "TimeoutError",
+                "ConnectionError",
+                "ConnectionResetError",
+            ],
+            "default_class": "transient",
+        },
         "router_system_prompt": (
             "You are a task router. Your job is to chat naturally, recognize user intent, "
             "and delegate work to the most suitable subagent using transfer_to_* tools. "

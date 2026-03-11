@@ -1,9 +1,5 @@
 <template>
   <div class="persona-preview-card">
-    <div class="preview-header">
-      <small>{{ tm('personaQuickPreview.title') }}</small>
-    </div>
-
     <div v-if="loading" class="preview-loading">
       <v-progress-circular indeterminate size="18" width="2" color="primary" class="mr-2" />
       <small class="text-grey">{{ tm('personaQuickPreview.loading') }}</small>
@@ -231,14 +227,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .persona-preview-card {
-  background-color: rgba(var(--v-theme-primary), 0.05);
-  border: 1px solid rgba(var(--v-theme-primary), 0.1);
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.preview-header {
-  margin-bottom: 8px;
+  display: grid;
+  gap: 14px;
 }
 
 .preview-loading,
@@ -250,27 +240,31 @@ onBeforeUnmount(() => {
 
 .section-title {
   font-size: 0.75rem;
-  color: rgb(var(--v-theme-primaryText));
-  opacity: 0.85;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-weight: 600;
+  margin-bottom: 6px;
 }
 
 .prompt-content {
-  margin-top: 6px;
   max-height: 180px;
   overflow: auto;
   font-size: 0.78rem;
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 6px;
-  padding: 8px;
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.7));
+  border-radius: 10px;
+  padding: 12px;
 }
 
 .chip-wrap {
   display: grid;
   gap: 6px;
-  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.018);
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.55));
+  border-radius: 10px;
 }
 
 .tools-wrap {
@@ -291,6 +285,18 @@ onBeforeUnmount(() => {
 
 .tool-inactive {
   font-size: 0.74rem;
+}
+
+.preview-content :deep(.v-chip) {
+  font-weight: 500;
+}
+
+.preview-content :deep(.v-chip--variant-tonal) {
+  background: rgba(var(--v-theme-success), 0.1) !important;
+}
+
+.preview-content :deep(.v-chip--variant-outlined) {
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 @media (max-width: 600px) {

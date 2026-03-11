@@ -744,6 +744,32 @@ class TestAstrBotCoreLifecycleStopAdditional:
             # Verify warning was logged about plugin termination failure
             mock_logger.warning.assert_called()
 
+    @pytest.mark.asyncio
+    async def test_stop_worker_is_idempotent(self, mock_log_broker, mock_db):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        lifecycle.subagent_orchestrator = MagicMock()
+        lifecycle.subagent_orchestrator.stop_worker = AsyncMock()
+        lifecycle._subagent_worker_started = True
+
+        lifecycle.temp_dir_cleaner = None
+        lifecycle.cron_manager = None
+        lifecycle.plugin_manager = MagicMock()
+        lifecycle.plugin_manager.context = MagicMock()
+        lifecycle.plugin_manager.context.get_all_stars = MagicMock(return_value=[])
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+        lifecycle.curr_tasks = []
+
+        await lifecycle.stop()
+        await lifecycle.stop()
+
+        lifecycle.subagent_orchestrator.stop_worker.assert_awaited_once()
+
 
 class TestAstrBotCoreLifecycleRestart:
     """Tests for AstrBotCoreLifecycle.restart method."""
