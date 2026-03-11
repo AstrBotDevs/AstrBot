@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import tempfile
 import zipfile
@@ -79,7 +80,59 @@ def _parse_frontmatter_description(text: str) -> str:
 
 # Regex for sanitizing paths used in prompt examples — only allow
 # safe path characters to prevent prompt injection via crafted skill paths.
-_SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_./ -]")
+_SAFE_PATH_RE = re.compile(r"[^\w./ ,()'\-]", re.UNICODE)
+_WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:/|\\)")
+_WINDOWS_UNC_PATH_RE = re.compile(r"^(//|\\\\)[^/\\]+[/\\][^/\\]+")
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1F\x7F]")
+
+
+def _is_windows_prompt_path(path: str) -> bool:
+    if os.name != "nt":
+        return False
+    return bool(_WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path))
+
+
+def _sanitize_prompt_path_for_prompt(path: str) -> str:
+    if not path:
+        return ""
+
+    if _WINDOWS_DRIVE_PATH_RE.match(path) or _WINDOWS_UNC_PATH_RE.match(path):
+        path = path.replace("\\", "/")
+
+    drive_prefix = ""
+    if _WINDOWS_DRIVE_PATH_RE.match(path):
+        drive_prefix = path[:2]
+        path = path[2:]
+
+    path = path.replace("`", "")
+    path = _CONTROL_CHARS_RE.sub("", path)
+    sanitized = _SAFE_PATH_RE.sub("", path)
+    return f"{drive_prefix}{sanitized}"
+
+
+def _sanitize_prompt_description(description: str) -> str:
+    description = description.replace("`", "")
+    description = _CONTROL_CHARS_RE.sub(" ", description)
+    description = " ".join(description.split())
+    return description
+
+
+def _sanitize_skill_display_name(name: str) -> str:
+    if _SKILL_NAME_RE.fullmatch(name):
+        return name
+    return "<invalid_skill_name>"
+
+
+def _build_skill_read_command_example(path: str) -> str:
+    if path == "<skills_root>/<skill_name>/SKILL.md":
+        return f"cat {path}"
+    if _is_windows_prompt_path(path):
+        command = "type"
+        path_arg = f'"{path}"'
+    else:
+        command = "cat"
+        path_arg = shlex.quote(path)
+    return f"{command} {path_arg}"
 
 
 def build_skills_prompt(skills: list[SkillInfo]) -> str:
@@ -92,16 +145,37 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
     skills_lines: list[str] = []
     example_path = ""
     for skill in skills:
+        display_name = _sanitize_skill_display_name(skill.name)
+
         description = skill.description or "No description"
+        if skill.source_type == "sandbox_only":
+            description = _sanitize_prompt_description(description)
+            if not description:
+                description = "Read SKILL.md for details."
+
+        if skill.source_type == "sandbox_only":
+            rendered_path = (
+                f"{str(SANDBOX_WORKSPACE_ROOT)}/{str(SANDBOX_SKILLS_ROOT)}/"
+                f"{display_name}/SKILL.md"
+            )
+        else:
+            rendered_path = _sanitize_prompt_path_for_prompt(skill.path)
+            if not rendered_path:
+                rendered_path = "<skills_root>/<skill_name>/SKILL.md"
+
         skills_lines.append(
-            f"- **{skill.name}**: {description}\n  File: `{skill.path}`"
+            f"- **{display_name}**: {description}\n  File: `{rendered_path}`"
         )
         if not example_path:
-            example_path = skill.path
+            example_path = rendered_path
     skills_block = "\n".join(skills_lines)
     # Sanitize example_path — it may originate from sandbox cache (untrusted)
-    example_path = _SAFE_PATH_RE.sub("", example_path) if example_path else ""
-    example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
+    if example_path == "<skills_root>/<skill_name>/SKILL.md":
+        example_path = "<skills_root>/<skill_name>/SKILL.md"
+    else:
+        example_path = _sanitize_prompt_path_for_prompt(example_path)
+        example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
+    example_command = _build_skill_read_command_example(example_path)
 
     return (
         "## Skills\n\n"
@@ -119,8 +193,9 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         "*Never silently skip a matching skill* — either use it or briefly "
         "explain why you chose not to.\n"
         "3. **Mandatory grounding** — Before executing any skill you MUST "
-        "first read its `SKILL.md` by running a shell command with the "
-        f"**absolute path** shown above (e.g. `cat {example_path}`). "
+        "first read its `SKILL.md` by running a shell command compatible "
+        "with the current runtime shell and using the **absolute path** "
+        f"shown above (e.g. `{example_command}`). "
         "Never rely on memory or assumptions about a skill's content.\n"
         "4. **Progressive disclosure** — Load only what is directly "
         "referenced from `SKILL.md`:\n"
