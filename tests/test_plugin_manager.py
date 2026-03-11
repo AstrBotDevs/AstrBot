@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
+from astrbot.core.utils.pip_installer import PipInstallError
 
 # --- Test Data & Helpers ---
 
@@ -319,6 +320,30 @@ async def test_ensure_plugin_requirements_wraps_generic_dependency_install_failu
     assert exc_info.value.plugin_label == TEST_PLUGIN_DIR
     assert exc_info.value.requirements_path == str(local_updator / "requirements.txt")
     assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_ensure_plugin_requirements_wraps_pip_install_error(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    _write_requirements(local_updator)
+    _mock_missing_requirements(monkeypatch, {"networkx"})
+
+    async def mock_install_requirements(*args, **kwargs):
+        raise PipInstallError("install failed", code=2)
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+
+    with pytest.raises(PluginDependencyInstallError, match="install failed") as exc_info:
+        await plugin_manager_pm._ensure_plugin_requirements(
+            str(local_updator),
+            TEST_PLUGIN_DIR,
+        )
+
+    assert isinstance(exc_info.value.__cause__, PipInstallError)
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.dashboard.server import AstrBotDashboard
 from tests.fixtures.helpers import (
     MockPluginBuilder,
@@ -314,6 +315,35 @@ async def test_do_update(
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+
+
+@pytest.mark.asyncio
+async def test_install_pip_package_returns_pip_install_error_message(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def mock_pip_install(*args, **kwargs):
+        del args, kwargs
+        raise PipInstallError("install failed", code=2)
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.pip_installer.install",
+        mock_pip_install,
+    )
+
+    response = await test_client.post(
+        "/api/update/pip-install",
+        headers=authenticated_header,
+        json={"package": "demo-package"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "install failed"
 
 
 class _FakeNeoSkills:
