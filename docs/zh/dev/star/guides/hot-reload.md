@@ -34,7 +34,7 @@ export ASTRBOT_RELOAD=1
 
 ## VSCode 配置
 
-以下为样例`launch.json`配置,可以让vsc每次启动Astrbot时都自动填入环境变量
+以下为样例`launch.json`配置,可以让 VS Code 每次启动Astrbot时都自动填入环境变量
 
 ```json
 {
