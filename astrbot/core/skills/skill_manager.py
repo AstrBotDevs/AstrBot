@@ -84,6 +84,12 @@ _SAFE_PATH_RE = re.compile(r"[^A-Za-z0-9_:./ -]")
 _WINDOWS_ABS_PATH_RE = re.compile(r"^[A-Za-z]:/")
 
 
+def _normalize_prompt_example_path(path: str) -> str:
+    if re.match(r"^[A-Za-z]:\\", path):
+        path = path.replace("\\", "/")
+    return path
+
+
 def _build_skill_read_command_example(path: str) -> str:
     if _WINDOWS_ABS_PATH_RE.match(path):
         command = "type"
@@ -112,6 +118,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
             example_path = skill.path
     skills_block = "\n".join(skills_lines)
     # Sanitize example_path — it may originate from sandbox cache (untrusted)
+    example_path = _normalize_prompt_example_path(example_path)
     example_path = _SAFE_PATH_RE.sub("", example_path) if example_path else ""
     example_path = example_path or "<skills_root>/<skill_name>/SKILL.md"
     example_command = _build_skill_read_command_example(example_path)

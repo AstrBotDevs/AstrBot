@@ -122,6 +122,19 @@ def test_build_skills_prompt_quotes_windows_paths_with_spaces():
     assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
 
 
+def test_build_skills_prompt_normalizes_windows_backslashes_in_example():
+    skills = [
+        SkillInfo(
+            name="foo",
+            description="do foo",
+            path=r"C:\AstrBot\My Skills\foo\SKILL.md",
+            active=True,
+        ),
+    ]
+    prompt = build_skills_prompt(skills)
+    assert 'type "C:/AstrBot/My Skills/foo/SKILL.md"' in prompt
+
+
 def test_build_skills_prompt_progressive_disclosure_rules():
     """The prompt should contain the key progressive disclosure rules."""
     skills = [

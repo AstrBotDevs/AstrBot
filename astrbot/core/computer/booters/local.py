@@ -59,11 +59,7 @@ def _decode_shell_output(output: bytes | str | None) -> str:
     if isinstance(output, str):
         return output
 
-    encodings: list[str] = ["utf-8"]
-    preferred_encoding = locale.getpreferredencoding(False)
-    if preferred_encoding:
-        encodings.append(preferred_encoding)
-    encodings.extend(["mbcs", "cp936", "gbk", "gb18030"])
+    encodings = _shell_output_encodings()
 
     seen: set[str] = set()
     for encoding in encodings:
@@ -77,6 +73,25 @@ def _decode_shell_output(output: bytes | str | None) -> str:
             continue
 
     return output.decode("utf-8", errors="replace")
+
+
+def _shell_output_encodings() -> list[str]:
+    encodings: list[str] = ["utf-8"]
+    preferred_encoding = locale.getpreferredencoding(False)
+    if preferred_encoding:
+        encodings.append(preferred_encoding)
+    if os.name == "nt":
+        encodings.extend(["mbcs", "cp936", "gbk", "gb18030"])
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for encoding in encodings:
+        normalized = encoding.lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(encoding)
+    return deduped
 
 
 @dataclass
@@ -99,6 +114,9 @@ class LocalShellComponent(ShellComponent):
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = _ensure_safe_path(cwd) if cwd else get_astrbot_root()
             if background:
+                # `command` is intentionally executed through the current shell so
+                # local computer-use behavior matches existing tool semantics.
+                # Safety relies on `_is_safe_command()` and the allowed-root checks.
                 proc = subprocess.Popen(
                     command,
                     shell=shell,
@@ -108,6 +126,9 @@ class LocalShellComponent(ShellComponent):
                     stderr=subprocess.PIPE,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
+            # `command` is intentionally executed through the current shell so
+            # local computer-use behavior matches existing tool semantics.
+            # Safety relies on `_is_safe_command()` and the allowed-root checks.
             result = subprocess.run(
                 command,
                 shell=shell,
