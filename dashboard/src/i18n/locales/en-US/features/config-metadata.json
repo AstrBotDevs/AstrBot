@@ -873,7 +873,8 @@
             ]
           },
           "regex": {
-            "description": "Segmentation Regular Expression"
+            "description": "Segmentation Regular Expression",
+            "hint": "Used to identify split points with a regular expression. Prefer patterns that match separators."
           },
           "split_words": {
             "description": "Split Word List",
