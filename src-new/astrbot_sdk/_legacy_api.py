@@ -117,7 +117,15 @@ class LegacyContext:
     async def send_message(self, session: str, message_chain: Any) -> None:
         _warn_once("context.send_message()", "ctx.platform.send(session, text)")
         ctx = self.require_runtime_context()
-        await ctx.platform.send(session, str(message_chain))
+        # 正确序列化 MessageChain 对象
+        # 优先使用 get_plain_text() 方法（旧版 MessageChain）
+        if hasattr(message_chain, "get_plain_text") and callable(message_chain.get_plain_text):
+            text = message_chain.get_plain_text()
+        elif hasattr(message_chain, "to_text") and callable(message_chain.to_text):
+            text = message_chain.to_text()
+        else:
+            text = str(message_chain)
+        await ctx.platform.send(session, text)
 
     async def add_llm_tools(self, *tools: Any) -> None:
         _warn_once("context.add_llm_tools()", "ctx.llm.chat_raw(..., tools=...)")

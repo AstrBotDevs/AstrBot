@@ -29,7 +29,10 @@ class HandlerDispatcher:
         if loaded.legacy_context is not None:
             loaded.legacy_context.bind_runtime_context(ctx)
 
-        task = asyncio.create_task(self._run_handler(loaded, event, ctx))
+        # 提取 legacy args 用于兼容旧版 handler 签名
+        legacy_args = message.input.get("args") or {}
+
+        task = asyncio.create_task(self._run_handler(loaded, event, ctx, legacy_args))
         self._active[message.id] = (task, cancel_token)
         try:
             await task
@@ -50,9 +53,10 @@ class HandlerDispatcher:
         loaded: LoadedHandler,
         event: MessageEvent,
         ctx: Context,
+        legacy_args: dict[str, Any] | None = None,
     ) -> None:
         try:
-            result = loaded.callable(*self._build_args(loaded.callable, event, ctx))
+            result = loaded.callable(*self._build_args(loaded.callable, event, ctx, legacy_args))
             if inspect.isasyncgen(result):
                 async for item in result:
                     await self._consume_legacy_result(item, event)
@@ -65,9 +69,16 @@ class HandlerDispatcher:
             await self._handle_error(loaded.owner, exc, event, ctx)
             raise
 
-    def _build_args(self, handler, event: MessageEvent, ctx: Context) -> list[Any]:
+    def _build_args(
+        self,
+        handler,
+        event: MessageEvent,
+        ctx: Context,
+        legacy_args: dict[str, Any] | None = None,
+    ) -> list[Any]:
         signature = inspect.signature(handler)
         args: list[Any] = []
+        legacy_args = legacy_args or {}
         for parameter in signature.parameters.values():
             if parameter.kind not in (
                 inspect.Parameter.POSITIONAL_ONLY,
@@ -78,6 +89,9 @@ class HandlerDispatcher:
                 args.append(event)
             elif parameter.name in {"ctx", "context"}:
                 args.append(ctx)
+            elif parameter.name in legacy_args:
+                # 支持从 legacy args 中注入参数（如命令参数、regex 捕获组等）
+                args.append(legacy_args[parameter.name])
         return args
 
     async def _consume_legacy_result(self, item: Any, event: MessageEvent) -> None:

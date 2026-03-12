@@ -5,6 +5,7 @@ import inspect
 import os
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any
 
@@ -71,11 +72,13 @@ class WorkerSession:
         repo_root: Path,
         env_manager: PluginEnvironmentManager,
         capability_router: CapabilityRouter,
+        on_closed: Callable[[], None] | None = None,
     ) -> None:
         self.plugin = plugin
         self.repo_root = repo_root.resolve()
         self.env_manager = env_manager
         self.capability_router = capability_router
+        self.on_closed = on_closed
         self.peer: Peer | None = None
         self.handlers = []
 
@@ -110,11 +113,41 @@ class WorkerSession:
         self.peer.set_invoke_handler(self._handle_capability_invoke)
         try:
             await self.peer.start()
-            await self.peer.wait_until_remote_initialized()
+            # 同时监听初始化完成和连接关闭，避免 worker 崩溃时等满超时
+            init_task = asyncio.create_task(self.peer.wait_until_remote_initialized(timeout=None))
+            closed_task = asyncio.create_task(self.peer.wait_closed())
+            done, pending = await asyncio.wait(
+                {init_task, closed_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            if closed_task in done:
+                raise RuntimeError(f"插件 {self.plugin.name} worker 进程在初始化阶段退出")
+
             self.handlers = list(self.peer.remote_handlers)
+
+            # 启动后台任务监听连接关闭
+            if self.on_closed is not None:
+                asyncio.create_task(self._watch_connection())
         except Exception:
             await self.stop()
             raise
+
+    async def _watch_connection(self) -> None:
+        """监听 Worker 连接关闭，触发清理回调"""
+        if self.peer is not None:
+            await self.peer.wait_closed()
+        if self.on_closed is not None:
+            try:
+                self.on_closed()
+            except Exception:
+                logger.exception("on_closed callback failed for plugin {}", self.plugin.name)
 
     async def stop(self) -> None:
         if self.peer is not None:
@@ -220,6 +253,7 @@ class SupervisorRuntime:
                     repo_root=self.repo_root,
                     env_manager=self.env_manager,
                     capability_router=self.capability_router,
+                    on_closed=lambda name=plugin.name: self._handle_worker_closed(name),
                 )
                 try:
                     await session.start()
@@ -247,6 +281,19 @@ class SupervisorRuntime:
         except Exception:
             await self.stop()
             raise
+
+    def _handle_worker_closed(self, plugin_name: str) -> None:
+        """Worker 连接关闭时的清理回调"""
+        session = self.worker_sessions.pop(plugin_name, None)
+        if session is None:
+            return
+        # 从 handler_to_worker 中移除该 worker 的所有 handlers
+        for handler in session.handlers:
+            self.handler_to_worker.pop(handler.id, None)
+        # 从 loaded_plugins 中移除
+        if plugin_name in self.loaded_plugins:
+            self.loaded_plugins.remove(plugin_name)
+        logger.warning("插件 {} worker 连接已关闭，已清理相关 handlers", plugin_name)
 
     async def stop(self) -> None:
         for session in list(self.worker_sessions.values()):
@@ -312,7 +359,12 @@ class PluginWorkerRuntime:
             [item.descriptor for item in self.loaded_plugin.handlers],
             metadata={"plugin_id": self.plugin.name},
         )
-        await self._run_lifecycle("on_start")
+        try:
+            await self._run_lifecycle("on_start")
+        except Exception:
+            # on_start 失败时，通知 Supervisor 并退出
+            await self.peer.stop()
+            raise
 
     async def stop(self) -> None:
         try:

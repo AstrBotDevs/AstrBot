@@ -67,6 +67,22 @@ class Peer:
 
     async def stop(self) -> None:
         self._closed = True
+        # 终止所有挂起的 RPC，避免调用方永久挂起
+        for future in list(self._pending_results.values()):
+            if not future.done():
+                future.set_exception(AstrBotError.internal_error("连接已关闭"))
+        self._pending_results.clear()
+
+        for queue in list(self._pending_streams.values()):
+            await queue.put(AstrBotError.internal_error("连接已关闭"))
+        self._pending_streams.clear()
+
+        # 取消所有入站任务
+        for task, token in list(self._inbound_tasks.values()):
+            token.cancel()
+            task.cancel()
+        self._inbound_tasks.clear()
+
         await self.transport.stop()
 
     async def wait_closed(self) -> None:
@@ -296,13 +312,15 @@ class Peer:
             if queue is not None:
                 await queue.put(AstrBotError.protocol_error("stream=true 调用不应收到 result"))
             return
-        future.set_result(message)
+        # 检查 future 是否已完成（可能被调用方取消）
+        if not future.done():
+            future.set_result(message)
 
     async def _handle_event(self, message: EventMessage) -> None:
         queue = self._pending_streams.get(message.id)
         if queue is None:
             future = self._pending_results.get(message.id)
-            if future is not None:
+            if future is not None and not future.done():
                 future.set_exception(AstrBotError.protocol_error("stream=false 调用不应收到 event"))
             return
         await queue.put(message)
