@@ -1,6 +1,7 @@
 """
 Tests for clients/_proxy.py - CapabilityProxy implementation.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from astrbot_sdk.errors import AstrBotError
 @dataclass
 class MockCapabilityDescriptor:
     """Mock capability descriptor for testing."""
+
     name: str
     supports_stream: bool | None = None
 
@@ -44,9 +46,7 @@ class TestCapabilityProxyGetDescriptor:
     def test_get_descriptor_returns_descriptor(self):
         """_get_descriptor should return descriptor if found."""
         peer = MagicMock()
-        peer.remote_capability_map = {
-            "db.get": MockCapabilityDescriptor(name="db.get")
-        }
+        peer.remote_capability_map = {"db.get": MockCapabilityDescriptor(name="db.get")}
         proxy = CapabilityProxy(peer)
 
         result = proxy._get_descriptor("db.get")
@@ -89,7 +89,9 @@ class TestCapabilityProxyEnsureAvailable:
     def test_ensure_available_raises_capability_not_found(self):
         """_ensure_available should raise capability_not_found when missing."""
         peer = MagicMock()
-        peer.remote_capability_map = {"other.cap": MockCapabilityDescriptor(name="other.cap")}
+        peer.remote_capability_map = {
+            "other.cap": MockCapabilityDescriptor(name="other.cap")
+        }
         proxy = CapabilityProxy(peer)
 
         with pytest.raises(AstrBotError) as exc_info:
@@ -156,9 +158,7 @@ class TestCapabilityProxyCall:
     async def test_call_invokes_peer(self):
         """call() should invoke peer with correct parameters."""
         peer = MockPeer()
-        peer.remote_capability_map = {
-            "db.get": MockCapabilityDescriptor(name="db.get")
-        }
+        peer.remote_capability_map = {"db.get": MockCapabilityDescriptor(name="db.get")}
         proxy = CapabilityProxy(peer)
 
         result = await proxy.call("db.get", {"key": "test"})
@@ -214,6 +214,7 @@ class MockAsyncIterator:
 @dataclass
 class MockEvent:
     """Mock stream event for testing."""
+
     phase: str
     data: dict
 
@@ -234,7 +235,9 @@ class TestCapabilityProxyStream:
         ]
         peer.invoke_stream = AsyncMock(return_value=MockAsyncIterator(events))
         peer.remote_capability_map = {
-            "llm.stream": MockCapabilityDescriptor(name="llm.stream", supports_stream=True)
+            "llm.stream": MockCapabilityDescriptor(
+                name="llm.stream", supports_stream=True
+            )
         }
         proxy = CapabilityProxy(peer)
 
@@ -259,7 +262,9 @@ class TestCapabilityProxyStream:
         ]
         peer.invoke_stream = AsyncMock(return_value=MockAsyncIterator(events))
         peer.remote_capability_map = {
-            "test.stream": MockCapabilityDescriptor(name="test.stream", supports_stream=True)
+            "test.stream": MockCapabilityDescriptor(
+                name="test.stream", supports_stream=True
+            )
         }
         proxy = CapabilityProxy(peer)
 

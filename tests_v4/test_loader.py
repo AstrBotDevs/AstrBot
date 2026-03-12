@@ -1,6 +1,7 @@
 """
 Tests for runtime/loader.py - Plugin loading utilities.
 """
+
 from __future__ import annotations
 
 import sys
@@ -12,7 +13,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from astrbot_sdk.decorators import HandlerMeta
 from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor
 from astrbot_sdk.runtime.loader import (
     LoadedHandler,
@@ -37,15 +37,22 @@ class TestVenvPythonPath:
 
     def test_linux_path(self):
         """_venv_python_path should return correct Linux path."""
+        # 使用 PurePath 进行路径拼接测试，避免跨平台问题
+        from pathlib import PurePosixPath
+
+        # 测试逻辑：posix 系统返回 bin/python
         with patch("os.name", "posix"):
-            path = _venv_python_path(Path("/home/user/.venv"))
-            assert path == Path("/home/user/.venv/bin/python")
+            path = _venv_python_path(PurePosixPath("/home/user/.venv"))
+            # 结果应该是字符串形式比较
+            assert str(path) == "/home/user/.venv/bin/python"
 
     def test_windows_path(self):
         """_venv_python_path should return correct Windows path."""
+        from pathlib import PureWindowsPath
+
         with patch("os.name", "nt"):
-            path = _venv_python_path(Path("C:\\venv"))
-            assert path == Path("C:\\venv\\Scripts\\python.exe")
+            path = _venv_python_path(PureWindowsPath("C:\\venv"))
+            assert str(path) == "C:\\venv\\Scripts\\python.exe"
 
 
 class TestPluginSpec:
@@ -156,6 +163,7 @@ class TestIsNewStarComponent:
 
     def test_non_star_subclass_returns_false(self):
         """_is_new_star_component should return False for non-Star class."""
+
         class NotAStar:
             pass
 
@@ -215,22 +223,31 @@ class TestIterHandlerNames:
 
     def test_with_handlers_attribute(self):
         """_iter_handler_names should use __handlers__ if available."""
-        instance = MagicMock()
-        instance.__class__.__handlers__ = ("handler1", "handler2")
 
+        # 创建一个真实的类来测试，而不是 MagicMock
+        class InstanceWithHandlers:
+            __handlers__ = ("handler1", "handler2")
+
+        instance = InstanceWithHandlers()
         names = _iter_handler_names(instance)
         assert names == ["handler1", "handler2"]
 
     def test_without_handlers_attribute(self):
         """_iter_handler_names should fall back to dir() if no __handlers__."""
-        instance = MagicMock()
-        # Remove __handlers__ attribute
-        del instance.__class__.__handlers__
 
-        # Mock dir to return specific names
-        with patch.object(instance, "__dir__", return_value=["method1", "method2"]):
-            names = _iter_handler_names(instance)
-            assert "method1" in names or "method2" in names
+        # 创建一个没有 __handlers__ 的真实类
+        class InstanceWithoutHandlers:
+            def method1(self):
+                pass
+
+            def method2(self):
+                pass
+
+        instance = InstanceWithoutHandlers()
+        names = _iter_handler_names(instance)
+        # 应该返回 dir(instance) 的结果
+        assert "method1" in names
+        assert "method2" in names
 
 
 class TestLoadPluginSpec:
@@ -244,10 +261,12 @@ class TestLoadPluginSpec:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.11"},
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.11"},
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")
@@ -310,11 +329,13 @@ class TestDiscoverPlugins:
             hidden_dir = plugins_dir / ".hidden"
             hidden_dir.mkdir()
             (hidden_dir / "plugin.yaml").write_text(
-                yaml.dump({
-                    "name": "hidden",
-                    "runtime": {"python": "3.12"},
-                    "components": [{"class": "test:Test"}],
-                }),
+                yaml.dump(
+                    {
+                        "name": "hidden",
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "test:Test"}],
+                    }
+                ),
                 encoding="utf-8",
             )
             (hidden_dir / "requirements.txt").write_text("", encoding="utf-8")
@@ -362,10 +383,12 @@ class TestDiscoverPlugins:
             plugin_dir = plugins_dir / "missing_name"
             plugin_dir.mkdir()
             (plugin_dir / "plugin.yaml").write_text(
-                yaml.dump({
-                    "runtime": {"python": "3.12"},
-                    "components": [{"class": "test:Test"}],
-                }),
+                yaml.dump(
+                    {
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "test:Test"}],
+                    }
+                ),
                 encoding="utf-8",
             )
             (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
@@ -384,11 +407,13 @@ class TestDiscoverPlugins:
                 plugin_dir = plugins_dir / dirname
                 plugin_dir.mkdir()
                 (plugin_dir / "plugin.yaml").write_text(
-                    yaml.dump({
-                        "name": "duplicate_name",  # Same name
-                        "runtime": {"python": "3.12"},
-                        "components": [{"class": "test:Test"}],
-                    }),
+                    yaml.dump(
+                        {
+                            "name": "duplicate_name",  # Same name
+                            "runtime": {"python": "3.12"},
+                            "components": [{"class": "test:Test"}],
+                        }
+                    ),
                     encoding="utf-8",
                 )
                 (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
@@ -407,11 +432,13 @@ class TestDiscoverPlugins:
             plugin_dir = plugins_dir / "bad_components"
             plugin_dir.mkdir()
             (plugin_dir / "plugin.yaml").write_text(
-                yaml.dump({
-                    "name": "test",
-                    "runtime": {"python": "3.12"},
-                    "components": "not_a_list",
-                }),
+                yaml.dump(
+                    {
+                        "name": "test",
+                        "runtime": {"python": "3.12"},
+                        "components": "not_a_list",
+                    }
+                ),
                 encoding="utf-8",
             )
             (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
@@ -429,11 +456,13 @@ class TestDiscoverPlugins:
             plugin_dir = plugins_dir / "valid_plugin"
             plugin_dir.mkdir()
             (plugin_dir / "plugin.yaml").write_text(
-                yaml.dump({
-                    "name": "valid_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [{"class": "module:Class"}],
-                }),
+                yaml.dump(
+                    {
+                        "name": "valid_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "module:Class"}],
+                    }
+                ),
                 encoding="utf-8",
             )
             (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
@@ -464,19 +493,26 @@ class TestPluginEnvironmentManager:
     def test_prepare_environment_without_uv_raises(self):
         """prepare_environment should raise if uv not found."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary=None)
+            # 创建 requirements.txt，否则 _fingerprint 会失败
+            requirements_path = Path(temp_dir) / "requirements.txt"
+            requirements_path.write_text("", encoding="utf-8")
 
-            spec = PluginSpec(
-                name="test",
-                plugin_dir=Path(temp_dir),
-                manifest_path=Path(temp_dir) / "plugin.yaml",
-                requirements_path=Path(temp_dir) / "requirements.txt",
-                python_version="3.12",
-                manifest_data={},
-            )
+            # Mock shutil.which 在 loader 模块中返回 None，确保 uv_binary 为 None
+            with patch("astrbot_sdk.runtime.loader.shutil.which", return_value=None):
+                manager = PluginEnvironmentManager(Path(temp_dir), uv_binary=None)
+                assert manager.uv_binary is None
 
-            with pytest.raises(RuntimeError, match="uv"):
-                manager.prepare_environment(spec)
+                spec = PluginSpec(
+                    name="test",
+                    plugin_dir=Path(temp_dir),
+                    manifest_path=Path(temp_dir) / "plugin.yaml",
+                    requirements_path=requirements_path,
+                    python_version="3.12",
+                    manifest_data={},
+                )
+
+                with pytest.raises(RuntimeError, match="uv"):
+                    manager.prepare_environment(spec)
 
     def test_fingerprint(self):
         """_fingerprint should create consistent fingerprint."""
@@ -503,7 +539,9 @@ class TestPluginEnvironmentManager:
     def test_load_state_missing_file(self):
         """_load_state should return empty dict for missing file."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            state = PluginEnvironmentManager._load_state(Path(temp_dir) / "missing.json")
+            state = PluginEnvironmentManager._load_state(
+                Path(temp_dir) / "missing.json"
+            )
             assert state == {}
 
     def test_load_state_invalid_json(self):
@@ -531,6 +569,7 @@ class TestPluginEnvironmentManager:
             PluginEnvironmentManager._write_state(state_path, spec, "test_fingerprint")
 
             import json
+
             state = json.loads(state_path.read_text(encoding="utf-8"))
 
             assert state["plugin"] == "test"
@@ -588,11 +627,13 @@ class TestLoadPlugin:
             )
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [{"class": "mymodule.component:MyComponent"}],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "mymodule.component:MyComponent"}],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")

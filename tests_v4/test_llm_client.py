@@ -1,9 +1,9 @@
 """
 Tests for clients/llm.py - LLMClient and related models.
 """
+
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -224,7 +224,9 @@ class TestLLMClientStreamChat:
         client = LLMClient(proxy)
         history = [ChatMessage(role="user", content="Hi")]
         chunks = []
-        async for chunk in client.stream_chat("Test", system="Be nice", history=history):
+        async for chunk in client.stream_chat(
+            "Test", system="Be nice", history=history
+        ):
             chunks.append(chunk)
 
         assert captured_payload["system"] == "Be nice"

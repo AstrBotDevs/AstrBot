@@ -1,11 +1,16 @@
 """
 Tests for protocol/legacy_adapter.py - Legacy protocol adapter.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from astrbot_sdk.protocol.descriptors import EventTrigger, HandlerDescriptor, Permissions
+from astrbot_sdk.protocol.descriptors import (
+    EventTrigger,
+    HandlerDescriptor,
+    Permissions,
+)
 from astrbot_sdk.protocol.legacy_adapter import (
     LEGACY_ADAPTER_MESSAGE_EVENT,
     LEGACY_CONTEXT_CAPABILITY,
@@ -322,6 +327,8 @@ class TestLegacyAdapterStreamMethods:
 
         assert isinstance(msg, EventMessage)
         assert msg.phase == "completed"
+        # completed phase 需要有 output 字段
+        assert msg.output is not None
 
     def test_handler_stream_end_failed(self):
         """legacy_request_to_message should convert handler_stream_end (failed)."""
@@ -560,7 +567,10 @@ class TestLegacyAdapterV4ToLegacy:
     def test_event_to_legacy_notification_completed(self):
         """event_to_legacy_notification should convert completed event."""
         adapter = LegacyAdapter()
-        event_msg = EventMessage(id="msg_001", phase="completed")
+        # completed phase 需要 output 字段
+        event_msg = EventMessage(
+            id="msg_001", phase="completed", output={"result": "done"}
+        )
         result = adapter.event_to_legacy_notification(event_msg)
 
         assert result["method"] == "handler_stream_end"

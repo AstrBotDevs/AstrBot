@@ -1,25 +1,31 @@
 """
 Tests for runtime/bootstrap.py - Bootstrap and runtime classes.
 """
+
 from __future__ import annotations
 
 import asyncio
-import signal
 import sys
 import tempfile
-import textwrap
 from io import StringIO
 from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
-from astrbot_sdk.protocol.descriptors import CapabilityDescriptor, CommandTrigger, HandlerDescriptor
-from astrbot_sdk.protocol.messages import InitializeMessage, InitializeOutput, InvokeMessage, PeerInfo
+from astrbot_sdk.protocol.descriptors import (
+    CommandTrigger,
+    HandlerDescriptor,
+)
+from astrbot_sdk.protocol.messages import (
+    InitializeMessage,
+    InitializeOutput,
+    InvokeMessage,
+    PeerInfo,
+)
 from astrbot_sdk.runtime.bootstrap import (
     PluginWorkerRuntime,
     SupervisorRuntime,
@@ -58,29 +64,23 @@ async def start_test_core_peer(transport: MemoryTransport) -> Peer:
 class TestInstallSignalHandlers:
     """Tests for _install_signal_handlers function."""
 
-    def test_installs_handlers(self):
+    @pytest.mark.asyncio
+    async def test_installs_handlers(self):
         """_install_signal_handlers should install signal handlers."""
         stop_event = asyncio.Event()
+        _install_signal_handlers(stop_event)
+        # Just verify it doesn't raise on platforms that support it
 
-        async def run_test():
-            _install_signal_handlers(stop_event)
-            # Just verify it doesn't raise on platforms that support it
-
-        asyncio.get_event_loop().run_until_complete(run_test())
-
-    def test_handles_not_implemented(self):
+    @pytest.mark.asyncio
+    async def test_handles_not_implemented(self):
         """_install_signal_handlers should handle NotImplementedError."""
         stop_event = asyncio.Event()
-
-        async def run_test():
-            with patch.object(
-                asyncio.get_running_loop(),
-                "add_signal_handler",
-                side_effect=NotImplementedError,
-            ):
-                _install_signal_handlers(stop_event)
-
-        asyncio.get_event_loop().run_until_complete(run_test())
+        with patch.object(
+            asyncio.get_running_loop(),
+            "add_signal_handler",
+            side_effect=NotImplementedError,
+        ):
+            _install_signal_handlers(stop_event)
 
 
 class TestPrepareStdioTransport:
@@ -99,13 +99,24 @@ class TestPrepareStdioTransport:
 
     def test_without_streams(self):
         """_prepare_stdio_transport should use sys.stdin/stdout."""
+        # 保存原始值
+        original_stdin = sys.stdin
         original_stdout = sys.stdout
 
-        in_stream, out_stream, original = _prepare_stdio_transport(None, None)
+        try:
+            in_stream, out_stream, original = _prepare_stdio_transport(None, None)
 
-        assert in_stream is sys.stdin
-        assert out_stream is sys.stdout
-        assert original is original_stdout
+            # in_stream 应该是原始的 sys.stdin
+            assert in_stream is original_stdin
+            # out_stream 应该是原始的 sys.stdout（在修改前）
+            assert out_stream is original_stdout
+            # original 也应该是原始的 sys.stdout
+            assert original is original_stdout
+            # 函数会修改 sys.stdout 为 sys.stderr
+            assert sys.stdout is sys.stderr
+        finally:
+            # 恢复
+            sys.stdout = original_stdout
 
     def test_redirects_stdout(self):
         """_prepare_stdio_transport should redirect sys.stdout to stderr."""
@@ -125,9 +136,13 @@ class TestWaitForShutdown:
     @pytest.mark.asyncio
     async def test_waits_for_stop_event(self):
         """_wait_for_shutdown should wait for stop_event."""
-        left, right = make_transport_pair()
         peer = MagicMock()
-        peer.wait_closed = AsyncMock()
+
+        # wait_closed 应该返回一个永不完成的协程
+        async def never_complete():
+            await asyncio.sleep(3600)
+
+        peer.wait_closed = MagicMock(return_value=never_complete())
 
         stop_event = asyncio.Event()
 
@@ -144,17 +159,15 @@ class TestWaitForShutdown:
     @pytest.mark.asyncio
     async def test_waits_for_peer_closed(self):
         """_wait_for_shutdown should wait for peer.wait_closed()."""
-        left, right = make_transport_pair()
         peer = MagicMock()
-        peer.wait_closed = AsyncMock()
 
-        stop_event = asyncio.Event()
-
-        # Set wait_closed to complete
-        async def complete_wait_closed():
+        # wait_closed 应该返回一个会完成的协程
+        async def complete_soon():
             await asyncio.sleep(0.05)
 
-        peer.wait_closed.return_value = complete_wait_closed()
+        peer.wait_closed = MagicMock(return_value=complete_soon())
+
+        stop_event = asyncio.Event()
 
         await _wait_for_shutdown(peer, stop_event)
 
@@ -392,7 +405,9 @@ class TestSupervisorRuntimeMethods:
             # Add fake session
             mock_session = MagicMock()
             mock_session.handlers = [
-                HandlerDescriptor(id="test.handler", trigger=CommandTrigger(command="test"))
+                HandlerDescriptor(
+                    id="test.handler", trigger=CommandTrigger(command="test")
+                )
             ]
 
             runtime.worker_sessions["test_plugin"] = mock_session
@@ -433,11 +448,13 @@ class TestPluginWorkerRuntimeInit:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")
@@ -464,11 +481,13 @@ class TestPluginWorkerRuntimeMethods:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")
@@ -495,11 +514,13 @@ class TestPluginWorkerRuntimeMethods:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")
@@ -529,11 +550,13 @@ class TestPluginWorkerRuntimeMethods:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")
@@ -563,11 +586,13 @@ class TestPluginWorkerRuntimeMethods:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": "3.12"},
-                    "components": [],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")
@@ -625,11 +650,15 @@ class TestIntegrationWithTransportPair:
             requirements_path = plugin_dir / "requirements.txt"
 
             manifest_path.write_text(
-                yaml.dump({
-                    "name": "test_plugin",
-                    "runtime": {"python": f"{sys.version_info.major}.{sys.version_info.minor}"},
-                    "components": [],
-                }),
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {
+                            "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                        },
+                        "components": [],
+                    }
+                ),
                 encoding="utf-8",
             )
             requirements_path.write_text("", encoding="utf-8")

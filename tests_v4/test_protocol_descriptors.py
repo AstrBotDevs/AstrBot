@@ -1,6 +1,7 @@
 """
 Tests for protocol/descriptors.py - Descriptor models.
 """
+
 from __future__ import annotations
 
 import pytest

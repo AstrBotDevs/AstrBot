@@ -1,6 +1,7 @@
 """
 Tests for clients/platform.py - PlatformClient implementation.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock

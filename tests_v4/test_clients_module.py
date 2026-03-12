@@ -1,9 +1,9 @@
 """
 Tests for clients/__init__.py - Module exports.
 """
+
 from __future__ import annotations
 
-import pytest
 
 
 class TestClientsModuleExports:

@@ -1,12 +1,10 @@
 """
 Tests for runtime/capability_router.py - CapabilityRouter implementation.
 """
+
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,10 +14,7 @@ from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
 from astrbot_sdk.runtime.capability_router import (
     CAPABILITY_NAME_PATTERN,
     RESERVED_CAPABILITY_PREFIXES,
-    CallHandler,
-    FinalizeHandler,
     StreamExecution,
-    StreamHandler,
     _CapabilityRegistration,
 )
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
@@ -30,6 +25,7 @@ class TestStreamExecution:
 
     def test_init(self):
         """StreamExecution should store iterator and finalize."""
+
         async def gen():
             yield {"text": "a"}
 
@@ -104,7 +100,9 @@ class TestCapabilityNamePattern:
             "llm-chat",  # Hyphen instead of dot
         ]
         for name in invalid_names:
-            assert not CAPABILITY_NAME_PATTERN.fullmatch(name), f"{name} should be invalid"
+            assert not CAPABILITY_NAME_PATTERN.fullmatch(name), (
+                f"{name} should be invalid"
+            )
 
 
 class TestReservedCapabilityPrefixes:
@@ -132,10 +130,10 @@ class TestReservedCapabilityPrefixes:
 class TestCapabilityRouterInit:
     """Tests for CapabilityRouter initialization."""
 
-    def test_init_creates_empty_registrations(self):
-        """CapabilityRouter should start with empty registrations."""
+    def test_init_creates_empty_stores(self):
+        """CapabilityRouter should start with empty stores."""
         router = CapabilityRouter()
-        assert router._registrations == {}
+        # _registrations 会有内置 capabilities，但 stores 应该为空
         assert router.db_store == {}
         assert router.memory_store == {}
         assert router.sent_messages == []
@@ -342,7 +340,7 @@ class TestCapabilityRouterExecute:
         router = CapabilityRouter()
         token = CancelToken()
 
-        with pytest.raises(AstrBotError, match="capability_not_found"):
+        with pytest.raises(AstrBotError, match="未找到能力"):
             await router.execute(
                 "unknown.cap",
                 {},

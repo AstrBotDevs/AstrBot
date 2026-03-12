@@ -1,6 +1,7 @@
 """
 Tests for protocol/messages.py - Protocol message models.
 """
+
 from __future__ import annotations
 
 import json

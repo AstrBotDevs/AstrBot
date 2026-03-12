@@ -5,7 +5,6 @@ Tests for API module exports and re-exports.
 from __future__ import annotations
 
 
-
 class TestApiStarModule:
     """Tests for api/star module exports."""
 

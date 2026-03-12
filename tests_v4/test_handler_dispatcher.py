@@ -1,17 +1,21 @@
 """
 Tests for runtime/handler_dispatcher.py - HandlerDispatcher implementation.
 """
+
 from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent, PlainTextResult
-from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor, Permissions
+from astrbot_sdk.protocol.descriptors import (
+    CommandTrigger,
+    HandlerDescriptor,
+)
 from astrbot_sdk.protocol.messages import InvokeMessage
 from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
 from astrbot_sdk.runtime.loader import LoadedHandler
@@ -22,6 +26,22 @@ class MockPeer:
 
     def __init__(self):
         self.sent_messages: list[dict[str, Any]] = []
+        self.platform = self  # platform.send 通过 self.send 调用
+        # CapabilityProxy 需要的属性
+        self.remote_capability_map: dict[str, Any] = {}
+
+    async def send(self, session_id: str, text: str) -> None:
+        """模拟 platform.send 方法"""
+        self.sent_messages.append({"session_id": session_id, "text": text})
+
+    async def invoke(
+        self, name: str, payload: dict[str, Any], stream: bool = False
+    ) -> dict[str, Any]:
+        """模拟 peer.invoke 方法，用于 CapabilityProxy"""
+        if name == "platform.send":
+            await self.send(payload.get("session_id", ""), payload.get("text", ""))
+            return {}
+        return {}
 
 
 def create_mock_handler(
@@ -119,9 +139,16 @@ class TestHandlerDispatcherInvoke:
     async def test_invoke_calls_handler(self):
         """invoke should call the registered handler."""
         peer = MockPeer()
-        reply_called = []
-        event = create_message_event()
-        event._reply_handler = lambda text: reply_called.append(text)
+        sent_messages = []
+
+        # 记录 platform.send 的调用
+        original_send = peer.send
+
+        async def track_send(session_id: str, text: str) -> None:
+            sent_messages.append({"session_id": session_id, "text": text})
+            await original_send(session_id, text)
+
+        peer.send = track_send
 
         handler_called = []
 
@@ -146,10 +173,12 @@ class TestHandlerDispatcherInvoke:
             handlers=[handler],
         )
 
+        event = create_message_event()
+        # MessageEvent 使用 to_payload() 而不是 model_dump()
         message = InvokeMessage(
             id="msg_001",
             capability="handler.invoke",
-            input={"handler_id": "test.handler", "event": event.model_dump()},
+            input={"handler_id": "test.handler", "event": event.to_payload()},
         )
 
         cancel_token = CancelToken()
@@ -157,7 +186,8 @@ class TestHandlerDispatcherInvoke:
 
         assert result == {}
         assert len(handler_called) == 1
-        assert "response" in reply_called
+        # 验证 reply 通过 platform.send 发送
+        assert any("response" in m.get("text", "") for m in sent_messages)
 
     @pytest.mark.asyncio
     async def test_invoke_missing_handler_raises(self):
@@ -459,7 +489,12 @@ class TestHandlerDispatcherConsumeResult:
 
         replies = []
         event = create_message_event()
-        event._reply_handler = lambda text: replies.append(text)
+
+        # reply_handler 必须是异步的
+        async def async_reply(text: str) -> None:
+            replies.append(text)
+
+        event._reply_handler = async_reply
 
         result = PlainTextResult(text="plain text")
         await dispatcher._consume_legacy_result(result, event)
@@ -478,7 +513,12 @@ class TestHandlerDispatcherConsumeResult:
 
         replies = []
         event = create_message_event()
-        event._reply_handler = lambda text: replies.append(text)
+
+        # reply_handler 必须是异步的
+        async def async_reply(text: str) -> None:
+            replies.append(text)
+
+        event._reply_handler = async_reply
 
         await dispatcher._consume_legacy_result("string reply", event)
 
@@ -496,7 +536,12 @@ class TestHandlerDispatcherConsumeResult:
 
         replies = []
         event = create_message_event()
-        event._reply_handler = lambda text: replies.append(text)
+
+        # reply_handler 必须是异步的
+        async def async_reply(text: str) -> None:
+            replies.append(text)
+
+        event._reply_handler = async_reply
 
         await dispatcher._consume_legacy_result({"text": "dict reply"}, event)
 
@@ -563,8 +608,14 @@ class TestHandlerDispatcherHandleError:
         ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
         exc = ValueError("test error")
 
+        # owner 是 MagicMock，on_error 方法返回 MagicMock 而不是协程
+        # 但 _handle_error 会 await owner.on_error(...)
+        # 所以我们需要让 owner.on_error 返回一个协程
+        owner = MagicMock()
+        owner.on_error = AsyncMock()
+
         # Should not raise
-        await dispatcher._handle_error(MagicMock(), exc, event, ctx)
+        await dispatcher._handle_error(owner, exc, event, ctx)
 
 
 class TestHandlerDispatcherRunHandler:
@@ -667,7 +718,12 @@ class TestHandlerDispatcherRunHandler:
         )
 
         event = create_message_event()
-        event._reply_handler = lambda text: replies.append(text)
+
+        # reply_handler 必须是异步的
+        async def async_reply(text: str) -> None:
+            replies.append(text)
+
+        event._reply_handler = async_reply
         ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
 
         await dispatcher._run_handler(handler, event, ctx)
@@ -687,10 +743,13 @@ class TestHandlerDispatcherRunHandler:
             id="failing.handler",
             trigger=CommandTrigger(command="fail"),
         )
+        # owner.on_error 需要是异步的
+        owner = MagicMock()
+        owner.on_error = AsyncMock()
         handler = LoadedHandler(
             descriptor=descriptor,
             callable=failing_handler,
-            owner=MagicMock(),
+            owner=owner,
             legacy_context=None,
         )
 
