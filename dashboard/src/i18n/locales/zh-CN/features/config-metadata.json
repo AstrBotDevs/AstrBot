@@ -1022,8 +1022,8 @@
         "description": "直连地址列表"
       },
       "github_api_token": {
-        "description": "GitHub API 令牌。用于检查更新、安装插件。",
-        "hint": "可以在 https://github.com/settings/personal-access-tokens/new 创建。"
+        "description": "GitHub API 令牌",
+        "hint": "用于检查更新、安装插件。可以在 https://github.com/settings/personal-access-tokens/new 创建。"
       }
     }
   },

@@ -36,7 +36,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
             with httpx.Client(
                 proxy=proxy if proxy else None,
                 follow_redirects=True,
-                headers=get_github_api_auth_header()
+                headers=get_github_api_auth_header(),
             ) as client:
                 resp = client.get(release_url)
                 resp.raise_for_status()

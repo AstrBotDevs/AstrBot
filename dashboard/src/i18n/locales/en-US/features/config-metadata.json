@@ -1019,8 +1019,8 @@
         "description": "Direct Connection Address List"
       },
       "github_api_token": {
-        "description": "GitHub API Token, for update check and plugin installation.",
-        "hint": "Can be created at https://github.com/settings/personal-access-tokens/new"
+        "description": "GitHub API Token",
+        "hint": "For update check and plugin installation. Can be created at https://github.com/settings/personal-access-tokens/new"
       }
     }
   },
