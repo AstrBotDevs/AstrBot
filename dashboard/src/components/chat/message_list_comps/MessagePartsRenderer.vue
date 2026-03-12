@@ -60,6 +60,14 @@
             </template>
         </ToolCallItem>
 
+        <ElicitationCard
+            v-else-if="renderPart.part.type === 'elicitation' && renderPart.part.payload"
+            :payload="renderPart.part.payload"
+            :is-dark="isDark"
+            :interactive="interactiveElicitation"
+            :submit-elicitation="submitElicitation"
+        />
+
         <!-- Text (Markdown) -->
         <MarkdownRender
             v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
@@ -117,6 +125,7 @@
 <script setup>
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { MarkdownRender } from 'markstream-vue';
+import ElicitationCard from './ElicitationCard.vue';
 import IPythonToolBlock from './IPythonToolBlock.vue';
 import ToolCallItem from './ToolCallItem.vue';
 
@@ -136,6 +145,14 @@ const props = defineProps({
     downloadingFiles: {
         type: Object,
         default: () => new Set()
+    },
+    interactiveElicitation: {
+        type: Boolean,
+        default: false
+    },
+    submitElicitation: {
+        type: Function,
+        default: null
     }
 });
 

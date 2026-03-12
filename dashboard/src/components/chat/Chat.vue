@@ -51,6 +51,7 @@
                             <MessageList :messages="messages" :isDark="isDark"
                                 :isStreaming="isStreaming || isConvRunning" 
                                 :isLoadingMessages="isLoadingMessages"
+                                :submit-elicitation="handleSubmitElicitation"
                                 @openImagePreview="openImagePreview"
                                 @replyMessage="handleReplyMessage"
                                 @replyWithText="handleReplyWithText"
@@ -301,6 +302,7 @@ const {
     currentSessionProject,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
+    submitElicitationResponse,
     stopMessage: stopMsg,
     toggleStreaming,
     setTransportMode,
@@ -648,6 +650,17 @@ async function handleSendMessage() {
 
 async function handleStopMessage() {
     await stopMsg();
+}
+
+async function handleSubmitElicitation(replyText: string, displayText: string) {
+    if (!currSessionId.value) {
+        return;
+    }
+
+    await submitElicitationResponse(currSessionId.value, replyText, displayText);
+    nextTick(() => {
+        messageList.value?.scrollToBottom();
+    });
 }
 
 // 路由变化监听

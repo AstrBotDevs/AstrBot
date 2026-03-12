@@ -97,6 +97,8 @@
 
                                 <MessagePartsRenderer :parts="msg.content.message" :is-dark="isDark"
                                     :current-time="currentTime" :downloading-files="downloadingFiles"
+                                    :interactive-elicitation="isActiveElicitationMessage(index, msg)"
+                                    :submit-elicitation="submitElicitation"
                                     @open-image-preview="openImagePreview" @download-file="downloadFile" />
                             </template>
                         </div>
@@ -221,6 +223,10 @@ export default {
         isLoadingMessages: {
             type: Boolean,
             default: false
+        },
+        submitElicitation: {
+            type: Function,
+            default: null
         }
     },
     emits: ['openImagePreview', 'replyMessage', 'replyWithText', 'openRefs'],
@@ -415,6 +421,14 @@ export default {
         hasAudio(messageParts) {
             if (!Array.isArray(messageParts)) return false;
             return messageParts.some(part => part.type === 'record' && part.embedded_url);
+        },
+
+        isActiveElicitationMessage(index, msg) {
+            if (!this.isStreaming || index !== this.messages.length - 1) {
+                return false;
+            }
+            return Array.isArray(msg?.content?.message)
+                && msg.content.message.some(part => part.type === 'elicitation' && part.payload);
         },
 
         // 获取被引用消息的内容

@@ -10,6 +10,9 @@ from quart import Response as QuartResponse
 from quart import g, make_response, request, send_file
 
 from astrbot.core import logger, sp
+from astrbot.core.agent.mcp_elicitation_registry import (
+    submit_pending_mcp_elicitation_reply,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.message_type import MessageType
@@ -50,6 +53,7 @@ class ChatRoute(Route):
             "/chat/sessions": ("GET", self.get_sessions),
             "/chat/get_session": ("GET", self.get_session),
             "/chat/stop": ("POST", self.stop_session),
+            "/chat/respond_elicitation": ("POST", self.respond_elicitation),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
             "/chat/update_session_display_name": (
                 "POST",
@@ -72,6 +76,18 @@ class ChatRoute(Route):
         self.umop_config_router = core_lifecycle.umop_config_router
 
         self.running_convs: dict[str, bool] = {}
+
+    @staticmethod
+    def _build_webchat_session_umo(session) -> str:
+        message_type = (
+            MessageType.GROUP_MESSAGE.value
+            if session.is_group
+            else MessageType.FRIEND_MESSAGE.value
+        )
+        return (
+            f"{session.platform_id}:{message_type}:"
+            f"{session.platform_id}!{session.creator}!{session.session_id}"
+        )
 
     async def get_file(self):
         filename = request.args.get("filename")
@@ -447,6 +463,19 @@ class ChatRoute(Route):
                             )
                             if part:
                                 accumulated_parts.append(part)
+                        elif msg_type == "elicitation":
+                            if accumulated_text:
+                                accumulated_parts.append(
+                                    {"type": "plain", "text": accumulated_text}
+                                )
+                                accumulated_text = ""
+                            if isinstance(result_text, dict):
+                                accumulated_parts.append(
+                                    {
+                                        "type": "elicitation",
+                                        "payload": result_text,
+                                    }
+                                )
 
                         # 消息结束处理
                         if msg_type == "end":
@@ -565,18 +594,71 @@ class ChatRoute(Route):
         if session.creator != username:
             return Response().error("Permission denied").__dict__
 
-        message_type = (
-            MessageType.GROUP_MESSAGE.value
-            if session.is_group
-            else MessageType.FRIEND_MESSAGE.value
-        )
-        umo = (
-            f"{session.platform_id}:{message_type}:"
-            f"{session.platform_id}!{username}!{session_id}"
-        )
+        umo = self._build_webchat_session_umo(session)
         stopped_count = active_event_registry.request_agent_stop_all(umo)
 
         return Response().ok(data={"stopped_count": stopped_count}).__dict__
+
+    async def respond_elicitation(self):
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_id = str(post_data.get("session_id", "")).strip()
+        reply_text = str(post_data.get("reply_text", "")).strip()
+        display_text = str(post_data.get("display_text", reply_text)).strip()
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        if not reply_text:
+            return Response().error("Missing key: reply_text").__dict__
+
+        username = g.get("username", "guest")
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        umo = self._build_webchat_session_umo(session)
+        if not submit_pending_mcp_elicitation_reply(
+            umo,
+            username,
+            reply_text,
+            reply_outline=display_text,
+        ):
+            return (
+                Response().error("No pending MCP elicitation for this session").__dict__
+            )
+
+        saved_record = await self.platform_history_mgr.insert(
+            platform_id=session.platform_id,
+            user_id=session_id,
+            content={
+                "type": "user",
+                "message": [{"type": "plain", "text": display_text or reply_text}],
+            },
+            sender_id=username,
+            sender_name=username,
+        )
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "saved_message": {
+                        "id": saved_record.id,
+                        "created_at": to_utc_isoformat(saved_record.created_at),
+                        "content": {
+                            "type": "user",
+                            "message": [
+                                {"type": "plain", "text": display_text or reply_text}
+                            ],
+                        },
+                    }
+                }
+            )
+            .__dict__
+        )
 
     async def delete_webchat_session(self):
         """Delete a Platform session and all its related data."""

@@ -451,6 +451,19 @@ class OpenApiRoute(Route):
                     )
                     if part:
                         accumulated_parts.append(part)
+                elif msg_type == "elicitation":
+                    if accumulated_text:
+                        accumulated_parts.append(
+                            {"type": "plain", "text": accumulated_text}
+                        )
+                        accumulated_text = ""
+                    if isinstance(result_text, dict):
+                        accumulated_parts.append(
+                            {
+                                "type": "elicitation",
+                                "payload": result_text,
+                            }
+                        )
 
                 if msg_type == "end":
                     break

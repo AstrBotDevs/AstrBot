@@ -97,6 +97,21 @@
     "replyTo": "Reply to",
     "notFound": "Message not found"
   },
+  "elicitation": {
+    "title": "{server} needs more information",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "decline": "Decline",
+    "done": "Done",
+    "otherInput": "If none fit, enter a custom reply",
+    "arrayPlaceholder": "Use commas or new lines for multiple values",
+    "requiredField": "Please fill in {field}",
+    "emptyReply": "Please provide at least one field",
+    "submitted": "Submitted. Waiting for AstrBot to continue",
+    "submitFailed": "Failed to submit the elicitation reply",
+    "accepted": "Accepted",
+    "booleanLabel": "Turn on for true, off for false"
+  },
   "project": {
     "title": "Projects",
     "create": "Create Project",

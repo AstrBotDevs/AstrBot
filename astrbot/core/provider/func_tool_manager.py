@@ -8,6 +8,7 @@ import threading
 import urllib.parse
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -16,6 +17,12 @@ import aiohttp
 from astrbot import logger
 from astrbot.core import sp
 from astrbot.core.agent.mcp_client import MCPClient, MCPTool
+from astrbot.core.agent.mcp_prompt_bridge import build_mcp_prompt_tools
+from astrbot.core.agent.mcp_resource_bridge import build_mcp_resource_tools
+from astrbot.core.agent.mcp_subcapability_bridge import (
+    normalize_mcp_config,
+    normalize_mcp_server_config,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -145,7 +152,10 @@ def _prepare_config(config: dict) -> dict:
     if config.get("mcpServers"):
         first_key = next(iter(config["mcpServers"]))
         config = config["mcpServers"][first_key]
+    config = normalize_mcp_server_config(config)
     config.pop("active", None)
+    config.pop("client_capabilities", None)
+    config.pop("provider", None)
     return config
 
 
@@ -320,6 +330,13 @@ class FunctionToolManager:
         tool_set = ToolSet(self.func_list.copy())
         return tool_set
 
+    def _remove_mcp_bound_tools(self, name: str) -> None:
+        self.func_list = [
+            tool
+            for tool in self.func_list
+            if getattr(tool, "mcp_server_name", None) != name
+        ]
+
     @staticmethod
     def _log_safe_mcp_debug_config(cfg: dict) -> None:
         # 仅记录脱敏后的摘要，避免泄露 command/args/url 中的敏感信息
@@ -370,18 +387,15 @@ class FunctionToolManager:
         - 初始化超时使用环境变量 ASTRBOT_MCP_INIT_TIMEOUT 或默认值。
         - 动态启用超时使用 ASTRBOT_MCP_ENABLE_TIMEOUT（独立于初始化超时）。
         """
-        data_dir = get_astrbot_data_path()
-
-        mcp_json_file = os.path.join(data_dir, "mcp_server.json")
-        if not os.path.exists(mcp_json_file):
+        mcp_json_file = Path(get_astrbot_data_path()) / "mcp_server.json"
+        if not mcp_json_file.exists():
             # 配置文件不存在错误处理
-            with open(mcp_json_file, "w", encoding="utf-8") as f:
+            with mcp_json_file.open("w", encoding="utf-8") as f:
                 json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
             logger.info(f"未找到 MCP 服务配置文件，已创建默认配置文件 {mcp_json_file}")
             return MCPInitSummary(total=0, success=0, failed=[])
 
-        with open(mcp_json_file, encoding="utf-8") as f:
-            mcp_server_json_obj: dict[str, dict] = json.load(f)["mcpServers"]
+        mcp_server_json_obj = self.load_mcp_config()["mcpServers"]
 
         init_timeout = self._init_timeout_default
         timeout_display = f"{init_timeout:g}"
@@ -583,6 +597,8 @@ class FunctionToolManager:
         try:
             await mcp_client.connect_to_server(config, name)
             tools_res = await mcp_client.list_tools_and_save()
+            await mcp_client.load_resource_capabilities()
+            await mcp_client.load_prompt_capabilities()
         except asyncio.CancelledError:
             await self._cleanup_mcp_client_safely(mcp_client, name)
             raise
@@ -591,13 +607,11 @@ class FunctionToolManager:
             raise
         logger.debug(f"MCP server {name} list tools response: {tools_res}")
         tool_names = [tool.name for tool in tools_res.tools]
+        tool_names.extend(getattr(mcp_client, "resource_bridge_tool_names", []))
+        tool_names.extend(getattr(mcp_client, "prompt_bridge_tool_names", []))
 
         # 移除该MCP服务之前的工具（如有）
-        self.func_list = [
-            f
-            for f in self.func_list
-            if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-        ]
+        self._remove_mcp_bound_tools(name)
 
         # 将 MCP 工具转换为 FuncTool 并添加到 func_list
         for tool in mcp_client.tools:
@@ -607,6 +621,11 @@ class FunctionToolManager:
                 mcp_server_name=name,
             )
             self.func_list.append(func_tool)
+
+        for resource_tool in build_mcp_resource_tools(mcp_client, name):
+            self.func_list.append(resource_tool)
+        for prompt_tool in build_mcp_prompt_tools(mcp_client, name):
+            self.func_list.append(prompt_tool)
 
         logger.info(f"Connected to MCP server {name}, Tools: {tool_names}")
         return mcp_client
@@ -620,11 +639,7 @@ class FunctionToolManager:
             # 关闭MCP连接
             await self._cleanup_mcp_client_safely(client, name)
             # 移除关联的FuncTool
-            self.func_list = [
-                f
-                for f in self.func_list
-                if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-            ]
+            self._remove_mcp_bound_tools(name)
             async with self._runtime_lock:
                 self._mcp_server_runtime.pop(name, None)
                 self._mcp_starting.discard(name)
@@ -632,11 +647,7 @@ class FunctionToolManager:
             return
 
         # Runtime missing but stale tools may still exist after failed flows.
-        self.func_list = [
-            f
-            for f in self.func_list
-            if not (isinstance(f, MCPTool) and f.mcp_server_name == name)
-        ]
+        self._remove_mcp_bound_tools(name)
         async with self._runtime_lock:
             self._mcp_starting.discard(name)
 
@@ -652,7 +663,11 @@ class FunctionToolManager:
             logger.debug(f"testing MCP server connection with config: {config}")
             await mcp_client.connect_to_server(config, "test")
             tools_res = await mcp_client.list_tools_and_save()
+            await mcp_client.load_resource_capabilities()
+            await mcp_client.load_prompt_capabilities()
             tool_names = [tool.name for tool in tools_res.tools]
+            tool_names.extend(getattr(mcp_client, "resource_bridge_tool_names", []))
+            tool_names.extend(getattr(mcp_client, "prompt_bridge_tool_names", []))
         finally:
             logger.debug("Cleaning up MCP client after testing connection.")
             await mcp_client.cleanup()
@@ -820,28 +835,29 @@ class FunctionToolManager:
 
     @property
     def mcp_config_path(self):
-        data_dir = get_astrbot_data_path()
-        return os.path.join(data_dir, "mcp_server.json")
+        return Path(get_astrbot_data_path()) / "mcp_server.json"
 
     def load_mcp_config(self):
-        if not os.path.exists(self.mcp_config_path):
+        if not self.mcp_config_path.exists():
             # 配置文件不存在，创建默认配置
-            os.makedirs(os.path.dirname(self.mcp_config_path), exist_ok=True)
-            with open(self.mcp_config_path, "w", encoding="utf-8") as f:
+            self.mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.mcp_config_path.open("w", encoding="utf-8") as f:
                 json.dump(DEFAULT_MCP_CONFIG, f, ensure_ascii=False, indent=4)
-            return DEFAULT_MCP_CONFIG
+            return normalize_mcp_config(DEFAULT_MCP_CONFIG)
 
         try:
-            with open(self.mcp_config_path, encoding="utf-8") as f:
-                return json.load(f)
+            with self.mcp_config_path.open(encoding="utf-8") as f:
+                return normalize_mcp_config(json.load(f))
         except Exception as e:
             logger.error(f"加载 MCP 配置失败: {e}")
-            return DEFAULT_MCP_CONFIG
+            return normalize_mcp_config(DEFAULT_MCP_CONFIG)
 
     def save_mcp_config(self, config: dict) -> bool:
         try:
-            with open(self.mcp_config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
+            normalized = normalize_mcp_config(config)
+            self.mcp_config_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.mcp_config_path.open("w", encoding="utf-8") as f:
+                json.dump(normalized, f, ensure_ascii=False, indent=4)
             return True
         except Exception as e:
             logger.error(f"保存 MCP 配置失败: {e}")

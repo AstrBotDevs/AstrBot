@@ -104,7 +104,13 @@ class ToolsRoute(Route):
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        server_info["tools"] = (
+                            [tool.name for tool in mcp_client.tools]
+                            + list(
+                                getattr(mcp_client, "resource_bridge_tool_names", [])
+                            )
+                            + list(getattr(mcp_client, "prompt_bridge_tool_names", []))
+                        )
                         server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
@@ -431,7 +437,7 @@ class ToolsRoute(Route):
             tools = self.tool_mgr.func_list
             tools_dict = []
             for tool in tools:
-                if isinstance(tool, MCPTool):
+                if isinstance(tool, MCPTool) or getattr(tool, "mcp_server_name", None):
                     origin = "mcp"
                     origin_name = tool.mcp_server_name
                 elif tool.handler_module_path and star_map.get(

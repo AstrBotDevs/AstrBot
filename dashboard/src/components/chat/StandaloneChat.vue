@@ -5,7 +5,8 @@
                 <!-- 聊天内容区域 -->
                 <div class="chat-content-panel">
                     <MessageList v-if="messages && messages.length > 0" :messages="messages" :isDark="isDark"
-                        :isStreaming="isStreaming || isConvRunning" @openImagePreview="openImagePreview"
+                        :isStreaming="isStreaming || isConvRunning" :submit-elicitation="handleSubmitElicitation"
+                        @openImagePreview="openImagePreview"
                         ref="messageList" />
                     <div class="welcome-container fade-in" v-else>
                         <div class="welcome-title">
@@ -158,6 +159,7 @@ const {
     enableStreaming,
     getSessionMessages: getSessionMsg,
     sendMessage: sendMsg,
+    submitElicitationResponse,
     stopMessage: stopMsg,
     toggleStreaming
 } = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
@@ -241,6 +243,17 @@ async function handleSendMessage() {
 
 async function handleStopMessage() {
     await stopMsg();
+}
+
+async function handleSubmitElicitation(replyText: string, displayText: string) {
+    if (!currSessionId.value) {
+        return;
+    }
+
+    await submitElicitationResponse(currSessionId.value, replyText, displayText);
+    nextTick(() => {
+        messageList.value?.scrollToBottom();
+    });
 }
 
 onMounted(async () => {
