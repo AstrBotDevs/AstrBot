@@ -120,7 +120,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     self.send_buffer.chain.extend(chain.chain)
 
                 # 节流：按时间间隔发送中间分片
-                current_time = asyncio.get_event_loop().time()
+                current_time = asyncio.get_running_loop().time()
                 if current_time - last_edit_time >= throttle_interval:
                     ret = cast(
                         message.Message,
@@ -130,7 +130,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     ret_id = self._extract_response_message_id(ret)
                     if ret_id is not None:
                         stream_payload["id"] = ret_id
-                    last_edit_time = asyncio.get_event_loop().time()
+                    last_edit_time = asyncio.get_running_loop().time()
                     self.send_buffer = None  # 清空已发送的分片，避免下次重复发送旧内容
 
             if isinstance(source, botpy.message.C2CMessage):
