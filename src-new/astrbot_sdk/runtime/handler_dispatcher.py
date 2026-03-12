@@ -241,10 +241,16 @@ class HandlerDispatcher:
             if len(non_none_types) == 1:
                 param_type = non_none_types[0]
 
-        # 注入 MessageEvent 及其子类
-        if param_type is MessageEvent or (
-            isinstance(param_type, type) and issubclass(param_type, MessageEvent)
-        ):
+        # 注入 MessageEvent 及其子类。旧版 compat 事件类型会通过
+        # from_message_event() 包装成带便捷方法的对象。
+        if param_type is MessageEvent:
+            return event
+        if isinstance(param_type, type) and issubclass(param_type, MessageEvent):
+            if isinstance(event, param_type):
+                return event
+            factory = getattr(param_type, "from_message_event", None)
+            if callable(factory):
+                return factory(event)
             return event
 
         # 注入 Context 及其子类
@@ -256,6 +262,13 @@ class HandlerDispatcher:
         return None
 
     async def _consume_legacy_result(self, item: Any, event: MessageEvent) -> None:
+        from ..api.event.event_result import MessageEventResult
+
+        if isinstance(item, MessageEventResult):
+            plain_text = item.get_plain_text()
+            if plain_text:
+                await event.reply(plain_text)
+            return
         if isinstance(item, PlainTextResult):
             await event.reply(item.text)
             return
@@ -273,6 +286,8 @@ class HandlerDispatcher:
         ctx: Context,
     ) -> None:
         if hasattr(owner, "on_error") and callable(owner.on_error):
-            await owner.on_error(exc, event, ctx)
+            result = owner.on_error(exc, event, ctx)
+            if inspect.isawaitable(result):
+                await result
             return
         await Star().on_error(exc, event, ctx)

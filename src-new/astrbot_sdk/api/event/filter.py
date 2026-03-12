@@ -1,47 +1,253 @@
-"""事件过滤器模块。
+"""旧版事件过滤器兼容层。
 
-提供事件处理器的注册装饰器，用于声明式地定义事件触发条件。
-此模块是旧版 filter API 的兼容层。
+当前兼容层保证以下能力可运行：
 
-使用方式：
-    # 方式一：直接使用函数
-    @command("hello")
-    async def handle_hello(ctx):
-        ...
+- ``command(name)`` -> ``on_command(name)``
+- ``regex(pattern)`` -> ``on_message(regex=pattern)``
+- ``permission(ADMIN)`` / ``permission_type(PermissionType.ADMIN)``
+  -> ``require_admin``
 
-    # 方式二：使用 filter 命名空间（旧版风格）
-    @filter.command("hello")
-    async def handle_hello(ctx):
-        ...
+其余旧版高级过滤器和生命周期钩子在 v4 运行时中没有等价执行链路，
+兼容层保留名称用于导入兼容，但会在调用时显式报错，避免静默失效。
+"""
 
-新版建议直接使用 astrbot_sdk.decorators 模块中的装饰器。
+from __future__ import annotations
 
-# TODO: 相比旧版 filter.py，新版缺少以下装饰器和类型：
+import enum
+from abc import ABCMeta, abstractmethod
+from typing import Any
 
-## 缺失的装饰器：
-1. custom_filter: 自定义过滤器装饰器
-2. event_message_type: 事件消息类型过滤器
-3. platform_adapter_type: 平台适配器类型过滤器
-4. after_message_sent: 消息发送后钩子
-5. on_astrbot_loaded: AstrBot 加载完成钩子
-6. on_platform_loaded: 平台加载完成钩子
-7. on_decorating_result: 结果装饰钩子
-8. on_llm_request: LLM 请求钩子
-9. on_llm_response: LLM 响应钩子
-10. command_group: 命令组装饰器
-11. llm_tool: LLM 工具注册 (旧版已注释)
+from ...decorators import on_command, on_message, require_admin
+from ..basic.astrbot_config import AstrBotConfig
+from .astr_message_event import AstrMessageEvent
+from .message_type import MessageType
 
-## 缺失的类型导出：
-1. CustomFilter: 自定义过滤器基类
-2. EventMessageType: 事件消息类型枚举
-3. EventMessageTypeFilter: 事件消息类型过滤器类
-4. PermissionType: 权限类型枚举
-5. PermissionTypeFilter: 权限类型过滤器类
-6. PlatformAdapterType: 平台适配器类型枚举
-7. PlatformAdapterTypeFilter: 平台适配器类型过滤器类
+ADMIN = "admin"
 
-## 旧版导出列表 (参考):
+
+class PermissionType(enum.Flag):
+    ADMIN = enum.auto()
+    MEMBER = enum.auto()
+
+
+class PermissionTypeFilter:
+    def __init__(self, permission_type: PermissionType, raise_error: bool = True):
+        self.permission_type = permission_type
+        self.raise_error = raise_error
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        if self.permission_type == PermissionType.ADMIN:
+            return event.is_admin()
+        return True
+
+
+class EventMessageType(enum.Flag):
+    GROUP_MESSAGE = enum.auto()
+    PRIVATE_MESSAGE = enum.auto()
+    OTHER_MESSAGE = enum.auto()
+    ALL = GROUP_MESSAGE | PRIVATE_MESSAGE | OTHER_MESSAGE
+
+
+MESSAGE_TYPE_2_EVENT_MESSAGE_TYPE = {
+    MessageType.GROUP_MESSAGE: EventMessageType.GROUP_MESSAGE,
+    MessageType.FRIEND_MESSAGE: EventMessageType.PRIVATE_MESSAGE,
+    MessageType.OTHER_MESSAGE: EventMessageType.OTHER_MESSAGE,
+}
+
+
+class EventMessageTypeFilter:
+    def __init__(self, event_message_type: EventMessageType):
+        self.event_message_type = event_message_type
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        event_message_type = MESSAGE_TYPE_2_EVENT_MESSAGE_TYPE.get(
+            event.get_message_type()
+        )
+        if event_message_type is None:
+            return False
+        return bool(event_message_type & self.event_message_type)
+
+
+class PlatformAdapterType(enum.Flag):
+    AIOCQHTTP = enum.auto()
+    QQOFFICIAL = enum.auto()
+    TELEGRAM = enum.auto()
+    WECOM = enum.auto()
+    LARK = enum.auto()
+    WECHATPADPRO = enum.auto()
+    DINGTALK = enum.auto()
+    DISCORD = enum.auto()
+    SLACK = enum.auto()
+    KOOK = enum.auto()
+    VOCECHAT = enum.auto()
+    WEIXIN_OFFICIAL_ACCOUNT = enum.auto()
+    SATORI = enum.auto()
+    MISSKEY = enum.auto()
+    ALL = (
+        AIOCQHTTP
+        | QQOFFICIAL
+        | TELEGRAM
+        | WECOM
+        | LARK
+        | WECHATPADPRO
+        | DINGTALK
+        | DISCORD
+        | SLACK
+        | KOOK
+        | VOCECHAT
+        | WEIXIN_OFFICIAL_ACCOUNT
+        | SATORI
+        | MISSKEY
+    )
+
+
+ADAPTER_NAME_2_TYPE = {
+    "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
+    "qq_official": PlatformAdapterType.QQOFFICIAL,
+    "telegram": PlatformAdapterType.TELEGRAM,
+    "wecom": PlatformAdapterType.WECOM,
+    "lark": PlatformAdapterType.LARK,
+    "dingtalk": PlatformAdapterType.DINGTALK,
+    "discord": PlatformAdapterType.DISCORD,
+    "slack": PlatformAdapterType.SLACK,
+    "kook": PlatformAdapterType.KOOK,
+    "wechatpadpro": PlatformAdapterType.WECHATPADPRO,
+    "vocechat": PlatformAdapterType.VOCECHAT,
+    "weixin_official_account": PlatformAdapterType.WEIXIN_OFFICIAL_ACCOUNT,
+    "satori": PlatformAdapterType.SATORI,
+    "misskey": PlatformAdapterType.MISSKEY,
+}
+
+
+class PlatformAdapterTypeFilter:
+    def __init__(self, platform_adapter_type_or_str: PlatformAdapterType | str):
+        if isinstance(platform_adapter_type_or_str, str):
+            self.platform_type = ADAPTER_NAME_2_TYPE.get(platform_adapter_type_or_str)
+        else:
+            self.platform_type = platform_adapter_type_or_str
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        adapter_type = ADAPTER_NAME_2_TYPE.get(event.get_platform_name())
+        if adapter_type is None or self.platform_type is None:
+            return False
+        return bool(adapter_type & self.platform_type)
+
+
+class CustomFilterMeta(ABCMeta):
+    def __and__(cls, other):
+        if not issubclass(other, CustomFilter):
+            raise TypeError("Operands must be subclasses of CustomFilter.")
+        return CustomFilterAnd(cls(), other())
+
+    def __or__(cls, other):
+        if not issubclass(other, CustomFilter):
+            raise TypeError("Operands must be subclasses of CustomFilter.")
+        return CustomFilterOr(cls(), other())
+
+
+class CustomFilter(metaclass=CustomFilterMeta):
+    def __init__(self, raise_error: bool = True, **kwargs: Any):
+        self.raise_error = raise_error
+
+    @abstractmethod
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        raise NotImplementedError
+
+    def __or__(self, other):
+        return CustomFilterOr(self, other)
+
+    def __and__(self, other):
+        return CustomFilterAnd(self, other)
+
+
+class CustomFilterOr(CustomFilter):
+    def __init__(self, filter1: CustomFilter, filter2: CustomFilter):
+        super().__init__()
+        self.filter1 = filter1
+        self.filter2 = filter2
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        return self.filter1.filter(event, cfg) or self.filter2.filter(event, cfg)
+
+
+class CustomFilterAnd(CustomFilter):
+    def __init__(self, filter1: CustomFilter, filter2: CustomFilter):
+        super().__init__()
+        self.filter1 = filter1
+        self.filter2 = filter2
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        return self.filter1.filter(event, cfg) and self.filter2.filter(event, cfg)
+
+
+def command(name: str):
+    return on_command(name)
+
+
+def regex(pattern: str):
+    return on_message(regex=pattern)
+
+
+def permission(level: str | PermissionType):
+    if level in {ADMIN, PermissionType.ADMIN}:
+        return require_admin
+
+    def decorator(func):
+        return func
+
+    return decorator
+
+
+def permission_type(level: PermissionType, raise_error: bool = True):
+    return permission(level)
+
+
+def _unsupported_factory(name: str, replacement: str | None = None):
+    suggestion = f"请改用 {replacement}" if replacement else "当前没有直接替代实现"
+    message = (
+        f"astrbot_sdk.api.event.filter.{name}() 尚未在 v4 兼容层中实现。"
+        f"{suggestion}，或改写为新版插件结构。"
+    )
+
+    def factory(*args, **kwargs):
+        raise NotImplementedError(message)
+
+    return factory
+
+
+custom_filter = _unsupported_factory("custom_filter")
+event_message_type = _unsupported_factory("event_message_type")
+platform_adapter_type = _unsupported_factory("platform_adapter_type")
+after_message_sent = _unsupported_factory("after_message_sent")
+on_astrbot_loaded = _unsupported_factory("on_astrbot_loaded")
+on_platform_loaded = _unsupported_factory("on_platform_loaded")
+on_decorating_result = _unsupported_factory("on_decorating_result")
+on_llm_request = _unsupported_factory("on_llm_request")
+on_llm_response = _unsupported_factory("on_llm_response")
+command_group = _unsupported_factory("command_group")
+
+
+class _FilterNamespace:
+    command = staticmethod(command)
+    regex = staticmethod(regex)
+    permission = staticmethod(permission)
+    permission_type = staticmethod(permission_type)
+    custom_filter = staticmethod(custom_filter)
+    event_message_type = staticmethod(event_message_type)
+    platform_adapter_type = staticmethod(platform_adapter_type)
+    after_message_sent = staticmethod(after_message_sent)
+    on_astrbot_loaded = staticmethod(on_astrbot_loaded)
+    on_platform_loaded = staticmethod(on_platform_loaded)
+    on_decorating_result = staticmethod(on_decorating_result)
+    on_llm_request = staticmethod(on_llm_request)
+    on_llm_response = staticmethod(on_llm_response)
+    command_group = staticmethod(command_group)
+
+
+filter = _FilterNamespace()
+
 __all__ = [
+    "ADMIN",
     "CustomFilter",
     "EventMessageType",
     "EventMessageTypeFilter",
@@ -54,103 +260,14 @@ __all__ = [
     "command_group",
     "custom_filter",
     "event_message_type",
-    # "llm_tool",
+    "filter",
     "on_astrbot_loaded",
     "on_decorating_result",
     "on_llm_request",
     "on_llm_response",
     "on_platform_loaded",
+    "permission",
     "permission_type",
     "platform_adapter_type",
     "regex",
 ]
-"""
-
-from __future__ import annotations
-
-from ...decorators import on_command, on_message, require_admin
-
-# 管理员权限级别常量
-ADMIN = "admin"
-
-
-def command(name: str):
-    """注册命令处理器装饰器。
-
-    Args:
-        name: 命令名称，用户发送以此开头的消息时触发
-
-    Returns:
-        装饰器函数
-
-    示例:
-        @command("hello")
-        async def handle_hello(ctx):
-            await ctx.reply("Hello!")
-    """
-    return on_command(name)
-
-
-def regex(pattern: str):
-    """注册正则匹配处理器装饰器。
-
-    Args:
-        pattern: 正则表达式模式，匹配的消息将触发处理器
-
-    Returns:
-        装饰器函数
-
-    示例:
-        @regex(r"hello\\s+(\\w+)")
-        async def handle_hello(ctx, match):
-            name = match.group(1)
-            await ctx.reply(f"Hello, {name}!")
-    """
-    return on_message(regex=pattern)
-
-
-def permission(level):
-    """权限检查装饰器。
-
-    Args:
-        level: 权限级别，目前仅支持 ADMIN
-
-    Returns:
-        装饰器函数，仅当用户具有指定权限时才执行处理器
-
-    示例:
-        @command("admin_cmd")
-        @permission(ADMIN)
-        async def admin_only(ctx):
-            await ctx.reply("管理员命令已执行")
-    """
-    if level == ADMIN:
-        return require_admin
-
-    def decorator(func):
-        return func
-
-    return decorator
-
-
-class _FilterNamespace:
-    """过滤器命名空间，提供旧版风格的方法调用。
-
-    用于支持 filter.command()、filter.regex() 等调用方式，
-    保持与旧版 API 的兼容性。
-
-    示例:
-        @filter.command("hello")
-        async def handle_hello(ctx):
-            ...
-    """
-
-    command = staticmethod(command)
-    regex = staticmethod(regex)
-    permission = staticmethod(permission)
-
-
-# 过滤器命名空间实例，支持 filter.command() 等调用方式
-filter = _FilterNamespace()
-
-__all__ = ["ADMIN", "command", "regex", "permission", "filter"]

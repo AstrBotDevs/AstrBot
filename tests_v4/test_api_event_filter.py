@@ -5,7 +5,18 @@ Tests for api/event/filter.py - Event filter decorators and utilities.
 from __future__ import annotations
 
 
-from astrbot_sdk.api.event.filter import ADMIN, command, filter, permission, regex
+import pytest
+
+from astrbot_sdk.api.event.filter import (
+    ADMIN,
+    PermissionType,
+    command,
+    command_group,
+    filter,
+    permission,
+    permission_type,
+    regex,
+)
 from astrbot_sdk.decorators import get_handler_meta
 from astrbot_sdk.protocol.descriptors import CommandTrigger, MessageTrigger
 
@@ -99,6 +110,27 @@ class TestPermissionFilter:
         assert meta.trigger.command == "admin"
         assert meta.permissions.require_admin is True
 
+    def test_permission_type_admin_sets_require_admin(self):
+        """permission_type(PermissionType.ADMIN) should map to admin permission."""
+
+        @permission_type(PermissionType.ADMIN)
+        async def admin_handler():
+            pass
+
+        meta = get_handler_meta(admin_handler)
+        assert meta is not None
+        assert meta.permissions.require_admin is True
+
+    def test_permission_type_member_passes_through(self):
+        """permission_type(PermissionType.MEMBER) should be a no-op."""
+
+        @permission_type(PermissionType.MEMBER)
+        async def member_handler():
+            pass
+
+        meta = get_handler_meta(member_handler)
+        assert meta is None or not meta.permissions.require_admin
+
 
 class TestFilterNamespace:
     """Tests for filter namespace object."""
@@ -169,3 +201,12 @@ class TestModuleExports:
         assert "regex" in __all__
         assert "permission" in __all__
         assert "filter" in __all__
+
+
+class TestUnsupportedCompatFilters:
+    """Tests for explicitly unsupported legacy helpers."""
+
+    def test_unsupported_filter_raises_explicitly(self):
+        """Unsupported helpers should fail loudly instead of silently no-oping."""
+        with pytest.raises(NotImplementedError, match="command_group"):
+            command_group("group_name")

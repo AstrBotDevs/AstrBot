@@ -21,6 +21,14 @@ class TestApiStarModule:
 
         assert Context is LegacyContext
 
+    def test_star_module_exports_metadata(self):
+        """api.star should export StarMetadata."""
+        from astrbot_sdk.api.star import StarMetadata
+
+        metadata = StarMetadata(name="demo", version="1.0.0")
+        assert metadata.name == "demo"
+        assert metadata.version == "1.0.0"
+
 
 class TestApiComponentsModule:
     """Tests for api/components module exports."""
@@ -50,12 +58,12 @@ class TestApiEventModule:
         assert filter is not None
         assert AstrMessageEvent is not None
 
-    def test_astr_message_event_is_message_event(self):
-        """AstrMessageEvent should be MessageEvent."""
+    def test_astr_message_event_is_message_event_subclass(self):
+        """AstrMessageEvent should be a MessageEvent-compatible subclass."""
         from astrbot_sdk.api.event import AstrMessageEvent
         from astrbot_sdk.events import MessageEvent
 
-        assert AstrMessageEvent is MessageEvent
+        assert issubclass(AstrMessageEvent, MessageEvent)
 
     def test_all_exports(self):
         """api.event should export all expected names."""
@@ -64,6 +72,18 @@ class TestApiEventModule:
         assert "ADMIN" in __all__
         assert "AstrMessageEvent" in __all__
         assert "filter" in __all__
+
+    def test_event_module_exports_legacy_types(self):
+        """api.event should expose common legacy helper types."""
+        from astrbot_sdk.api.event import (
+            MessageEventResult,
+            MessageSession,
+            MessageType,
+        )
+
+        assert MessageEventResult is not None
+        assert MessageSession is not None
+        assert MessageType is not None
 
 
 class TestApiModule:
@@ -74,3 +94,12 @@ class TestApiModule:
         import astrbot_sdk.api
 
         assert astrbot_sdk.api is not None
+
+    def test_api_subpackages_exist(self):
+        """New compat subpackages should be importable."""
+        from astrbot_sdk.api import basic, message, platform, provider
+
+        assert basic is not None
+        assert message is not None
+        assert platform is not None
+        assert provider is not None

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot_sdk.api.event import AstrMessageEvent
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent, PlainTextResult
 from astrbot_sdk.protocol.descriptors import (
@@ -39,7 +40,10 @@ class MockPeer:
     ) -> dict[str, Any]:
         """模拟 peer.invoke 方法，用于 CapabilityProxy"""
         if name == "platform.send":
-            await self.send(payload.get("session_id", ""), payload.get("text", ""))
+            await self.send(
+                payload.get("session", payload.get("session_id", "")),
+                payload.get("text", ""),
+            )
             return {}
         return {}
 
@@ -313,6 +317,58 @@ class TestHandlerDispatcherInvoke:
 
         # After completion, should be cleared
         assert "msg_001" not in dispatcher._active
+
+    @pytest.mark.asyncio
+    async def test_invoke_wraps_legacy_astr_message_event(self):
+        """Annotated AstrMessageEvent handlers should receive the compat wrapper."""
+        peer = MockPeer()
+        received_types = []
+        replies = []
+
+        async def handler_func(event: AstrMessageEvent):
+            received_types.append(type(event))
+            yield event.plain_result("legacy reply")
+
+        async def track_send(session_id: str, text: str) -> None:
+            replies.append({"session_id": session_id, "text": text})
+
+        peer.send = track_send
+
+        descriptor = HandlerDescriptor(
+            id="legacy.handler",
+            trigger=CommandTrigger(command="hello"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=None,
+        )
+
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_legacy",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.handler",
+                "event": {
+                    "text": "hello",
+                    "session_id": "session-legacy",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        await dispatcher.invoke(message, CancelToken())
+
+        assert received_types == [AstrMessageEvent]
+        assert replies == [{"session_id": "session-legacy", "text": "legacy reply"}]
 
 
 class TestHandlerDispatcherCancel:
