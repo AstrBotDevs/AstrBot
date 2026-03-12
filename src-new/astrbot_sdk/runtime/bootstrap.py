@@ -1,3 +1,87 @@
+"""启动引导模块。
+
+定义 SupervisorRuntime 和 PluginWorkerRuntime 的启动逻辑。
+Supervisor 管理多个 Worker 进程，Worker 运行单个插件。
+
+架构层次：
+    AstrBot Core (Python)
+        |
+        v
+    SupervisorRuntime (管理多插件)
+        |
+        +-- WorkerSession (插件 A) -- StdioTransport -- PluginWorkerRuntime (子进程)
+        |
+        +-- WorkerSession (插件 B) -- StdioTransport -- PluginWorkerRuntime (子进程)
+        |
+        +-- WorkerSession (插件 C) -- StdioTransport -- PluginWorkerRuntime (子进程)
+
+核心类：
+    SupervisorRuntime: 监管者运行时
+        - 发现并加载所有插件
+        - 为每个插件启动 Worker 进程
+        - 聚合所有 handler 并向 Core 注册
+        - 路由 Core 的调用请求到对应 Worker
+        - 处理 Worker 进程崩溃和重连
+
+    WorkerSession: Worker 会话
+        - 管理单个插件 Worker 进程
+        - 通过 Peer 与 Worker 通信
+        - 提供 invoke_handler 和 cancel 方法
+        - 处理连接关闭回调
+
+    PluginWorkerRuntime: 插件 Worker 运行时
+        - 加载单个插件
+        - 通过 Peer 与 Supervisor 通信
+        - 分发 handler 调用
+        - 处理生命周期回调 (on_start, on_stop)
+
+与旧版对比：
+    旧版 supervisor.py:
+        - WorkerRuntime 管理单个插件进程
+        - SupervisorRuntime 管理所有 Worker
+        - 使用 JSON-RPC 协议通信
+        - call_context_function 调用核心功能
+        - 使用 RPCRequestHelper 管理请求
+
+    新版 bootstrap.py:
+        - WorkerSession 封装 Worker 会话
+        - SupervisorRuntime 使用 Peer 通信
+        - 使用新协议 (initialize/invoke/event/cancel)
+        - 通过 CapabilityRouter 路由能力调用
+        - 支持 Worker 连接关闭回调
+        - 支持 handler 冲突检测和警告
+
+启动流程：
+    Supervisor 启动:
+        1. discover_plugins() 发现所有插件
+        2. 为每个插件创建 WorkerSession
+        3. 调用 session.start() 启动 Worker 进程
+        4. 等待 Worker 初始化完成
+        5. 聚合所有 handler 并向 Core 发送 initialize
+        6. 等待 Core 的 initialize_result
+
+    Worker 启动:
+        1. load_plugin_spec() 加载插件规范
+        2. load_plugin() 加载插件组件
+        3. 创建 Peer 并设置处理器
+        4. 向 Supervisor 发送 initialize
+        5. 等待 Supervisor 的 initialize_result
+        6. 执行 on_start 生命周期回调
+
+信号处理：
+    - SIGTERM: 设置 stop_event，触发优雅关闭
+    - SIGINT: 设置 stop_event，触发优雅关闭
+
+TODO:
+    - 添加 Worker 进程健康检查
+    - 添加 Worker 进程自动重启
+    - 添加优雅关闭的超时机制
+    - 添加插件启动超时配置
+    - 添加分布式部署支持（多节点 Supervisor）
+    - 添加插件状态持久化和恢复
+    - 添加 WebSocket 传输的 Supervisor 模式
+"""
+
 from __future__ import annotations
 
 import asyncio

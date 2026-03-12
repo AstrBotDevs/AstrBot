@@ -1,3 +1,69 @@
+"""传输层抽象模块。
+
+定义 Transport 抽象基类及其实现，负责底层的消息传输。
+传输层只关心"发送字符串"和"接收字符串"，不处理协议细节。
+
+传输类型：
+    Transport: 抽象基类，定义 start/stop/send 接口
+    StdioTransport: 标准输入输出传输，支持进程模式和文件模式
+    WebSocketServerTransport: WebSocket 服务端传输
+    WebSocketClientTransport: WebSocket 客户端传输
+
+与旧版对比：
+    旧版传输层:
+        - 分离的 client/ 和 server/ 目录
+        - JSONRPCClient 基类
+            - StdioClient: 子进程通信
+            - WebSocketClient: WebSocket 客户端
+        - JSONRPCServer 基类
+            - StdioServer: 标准输入输出
+            - WebSocketServer: WebSocket 服务端
+        - 每个实现都处理 JSON-RPC 消息序列化
+
+    新版传输层:
+        - 统一的 Transport 抽象
+        - StdioTransport:
+            - 支持启动子进程模式 (command 参数)
+            - 支持文件描述符模式 (stdin/stdout 参数)
+        - WebSocketServerTransport:
+            - 单连接限制
+            - 支持心跳配置
+        - WebSocketClientTransport:
+            - 自动重连需要外部实现
+        - 传输层只处理字符串，协议由 Peer 层处理
+
+使用示例：
+    # 子进程模式
+    transport = StdioTransport(
+        command=["python", "-m", "my_plugin"],
+        cwd="/path/to/plugin",
+    )
+
+    # 标准输入输出模式
+    transport = StdioTransport(stdin=sys.stdin, stdout=sys.stdout)
+
+    # WebSocket 服务端
+    transport = WebSocketServerTransport(host="0.0.0.0", port=8765)
+
+    # WebSocket 客户端
+    transport = WebSocketClientTransport(url="ws://localhost:8765")
+
+    # 统一接口
+    transport.set_message_handler(my_handler)
+    await transport.start()
+    await transport.send(json_string)
+    await transport.stop()
+
+TODO:
+    - 添加 TCP Socket 传输实现
+    - 添加 Unix Domain Socket 传输实现
+    - 添加共享内存传输实现（高性能场景）
+    - 添加消息压缩支持
+    - 添加断线重连机制（WebSocketClientTransport）
+    - 添加连接状态变更回调
+    - 添加带宽限制支持
+"""
+
 from __future__ import annotations
 
 import asyncio

@@ -1,3 +1,54 @@
+# =============================================================================
+# 新旧对比 - _legacy_api.py
+# =============================================================================
+#
+# 【说明】
+# _legacy_api.py 是新版新增的兼容层，提供旧版 API 的兼容实现。
+# 旧版没有这个文件，相关功能分散在 api/star/ 目录下。
+#
+# 【提供的兼容类型】
+# - LegacyContext: 旧版 Context 兼容实现
+#   - 提供 llm_generate(), tool_loop_agent(), send_message() 等方法
+#   - 内部委托给新版 Context 的客户端
+#
+# - LegacyConversationManager: 旧版会话管理器兼容实现
+#   - 提供 new_conversation(), switch_conversation(), delete_conversation() 等方法
+#   - 使用 db 客户端存储会话数据
+#
+# - CommandComponent: 旧版命令组件基类
+#   - 继承自 Star，标记为旧版 (__astrbot_is_new_star__ = False)
+#
+# - Context: 别名指向 LegacyContext
+#
+# 【旧版对应位置】
+# - Context: src/astrbot_sdk/api/star/context.py
+# - BaseConversationManager: src/astrbot_sdk/api/basic/conversation_mgr.py
+# - CommandComponent: 旧版可能是 Star 的别名或独立类
+#
+# =============================================================================
+# TODO: 功能缺失
+# =============================================================================
+#
+# 1. LegacyContext 方法不完整
+#    - 缺少 _register_component() 方法（旧版有）
+#    - add_llm_tools() 抛出 NotImplementedError（旧版支持）
+#
+# 2. LegacyConversationManager 方法不完整
+#    - get_filtered_conversations(): 抛出 NotImplementedError
+#    - get_human_readable_context(): 抛出 NotImplementedError
+#    - 这些方法在旧版存在但新版不支持
+#
+# 3. 缺少旧版依赖类型的兼容
+#    - ToolSet, FunctionTool: 旧版从 astr_agent_sdk 导入
+#    - Message: 旧版从 astr_agent_sdk 导入
+#    - MessageChain: 旧版从 api/message/chain.py 导入
+#    - 新版需要考虑是否提供兼容导入路径
+#
+# 4. 迁移文档链接
+#    - MIGRATION_DOC_URL 需要更新为实际迁移文档地址
+#
+# =============================================================================
+
 from __future__ import annotations
 
 from collections import defaultdict

@@ -1,3 +1,65 @@
+"""协议对等端模块。
+
+定义 Peer 类，封装双向传输通道上的消息收发、初始化握手、能力调用、
+流式事件转发与取消处理。这里的 peer 指"通信对端/本端"这一网络协议概念，
+而不是业务上的用户、群聊或会话对象。
+
+核心职责：
+    - 消息序列化/反序列化
+    - 初始化握手协议
+    - 能力调用（同步/流式）
+    - 取消处理
+    - 连接生命周期管理
+
+与旧版对比：
+    旧版 JSON-RPC:
+        - 分离的 JSONRPCClient 和 JSONRPCServer
+        - 通过 method 字段区分操作类型
+        - 使用 JSONRPCRequest/Response 消息类型
+        - 流式通过独立的 notification 实现
+        - 无统一的取消机制
+
+    新版 Peer:
+        - 统一的 Peer 抽象，既是客户端也是服务端
+        - 通过 type 字段区分消息类型
+        - 使用 InitializeMessage/InvokeMessage/EventMessage 等
+        - 流式通过 EventMessage(phase=delta) 实现
+        - 统一的 CancelMessage 取消机制
+
+使用示例：
+    # 作为客户端发起调用
+    peer = Peer(transport=transport, peer_info=PeerInfo(...))
+    await peer.start()
+    output = await peer.initialize(handlers)
+    result = await peer.invoke("llm.chat", {"prompt": "hello"})
+
+    # 作为服务端处理调用
+    peer.set_invoke_handler(my_handler)
+    await peer.start()
+
+消息处理流程：
+    入站消息:
+        ResultMessage -> 唤醒等待的 Future
+        EventMessage -> 投递到流式队列
+        InitializeMessage -> 调用 _initialize_handler
+        InvokeMessage -> 创建任务调用 _invoke_handler
+        CancelMessage -> 取消对应的任务
+
+    出站消息:
+        initialize() -> InitializeMessage
+        invoke() -> InvokeMessage(stream=False)
+        invoke_stream() -> InvokeMessage(stream=True)
+        cancel() -> CancelMessage
+
+TODO:
+    - 添加消息优先级支持
+    - 添加消息过期时间支持
+    - 添加消息重试计数支持
+    - 添加消息追踪 ID (trace_id) 支持
+    - 添加连接状态变更回调
+    - 添加心跳检测机制
+"""
+
 from __future__ import annotations
 
 import asyncio

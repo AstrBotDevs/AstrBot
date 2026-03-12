@@ -1,3 +1,93 @@
+"""能力路由模块。
+
+定义 CapabilityRouter 类，负责能力的注册、发现和执行路由。
+能力是核心侧提供给插件侧调用的功能，如 LLM 聊天、存储、消息发送等。
+
+核心概念：
+    CapabilityDescriptor: 能力描述符，声明能力名称、输入输出 Schema 等
+    CallHandler: 同步调用处理器，返回单次结果
+    StreamHandler: 流式调用处理器，返回异步迭代器
+    FinalizeHandler: 流式结果聚合器
+
+内置能力：
+    llm.chat: 同步 LLM 聊天
+    llm.chat_raw: 同步 LLM 聊天（完整响应）
+    llm.stream_chat: 流式 LLM 聊天
+    memory.search: 搜索记忆
+    memory.save: 保存记忆
+    memory.delete: 删除记忆
+    db.get: 读取 KV 存储
+    db.set: 写入 KV 存储
+    db.delete: 删除 KV 存储
+    db.list: 列出 KV 键
+    platform.send: 发送消息
+    platform.send_image: 发送图片
+    platform.get_members: 获取群成员
+
+与旧版对比：
+    旧版:
+        - 无显式的能力声明系统
+        - 通过 call_context_function 调用核心功能
+        - 上下文函数名硬编码
+        - 无输入输出 Schema 验证
+        - 不支持流式能力
+
+    新版 CapabilityRouter:
+        - 使用 CapabilityDescriptor 声明能力
+        - JSON Schema 验证输入输出
+        - 支持同步和流式两种调用模式
+        - 统一的错误处理
+        - 能力命名规范: namespace.action
+
+能力命名规范：
+    - 格式: {namespace}.{action}
+    - 内置能力命名空间: llm, memory, db, platform
+    - 保留命名空间前缀: handler., system., internal.
+
+使用示例：
+    router = CapabilityRouter()
+
+    # 注册同步能力
+    router.register(
+        CapabilityDescriptor(
+            name="my_plugin.calculate",
+            description="执行计算",
+            input_schema={"type": "object", "properties": {"x": {"type": "number"}}},
+            output_schema={"type": "object", "properties": {"result": {"type": "number"}}},
+        ),
+        call_handler=my_calculate,
+    )
+
+    # 注册流式能力
+    async def stream_data(request_id, payload, token):
+        for i in range(10):
+            yield {"index": i}
+
+    router.register(
+        CapabilityDescriptor(
+            name="my_plugin.stream",
+            description="流式数据",
+            supports_stream=True,
+            cancelable=True,
+        ),
+        stream_handler=stream_data,
+        finalize=lambda chunks: {"count": len(chunks)},
+    )
+
+    # 执行能力
+    result = await router.execute("my_plugin.calculate", {"x": 42}, stream=False, ...)
+    stream_result = await router.execute("my_plugin.stream", {}, stream=True, ...)
+
+TODO:
+    - 添加能力版本控制
+    - 添加能力权限控制
+    - 添加能力调用计数/限流
+    - 添加能力调用超时配置
+    - 添加能力健康检查
+    - 添加能力缓存支持
+    - 添加能力熔断机制
+"""
+
 from __future__ import annotations
 
 import asyncio
