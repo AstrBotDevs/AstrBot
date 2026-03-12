@@ -1,0 +1,155 @@
+﻿{
+    "title": "База знаний",
+    "subtitle": "Управление контентом базы знаний и поиск",
+    "documents": {
+        "title": "Список документов",
+        "name": "Имя файла",
+        "size": "Размер",
+        "uploadTime": "Дата загрузки",
+        "status": "Статус",
+        "actions": "Действия"
+    },
+    "management": {
+        "delete": "Удалить",
+        "preview": "Предпросмотр",
+        "download": "Скачать",
+        "reindex": "Переиндексировать"
+    },
+    "notInstalled": {
+        "title": "Плагин базы знаний не установлен",
+        "install": "Установить сейчас"
+    },
+    "empty": {
+        "title": "База знаний пуста. Создайте свою первую базу! 🙂",
+        "create": "Создать базу знаний"
+    },
+    "list": {
+        "title": "Список баз знаний",
+        "create": "Создать базу знаний",
+        "config": "Настройка",
+        "checkUpdate": "Проверить обновления плагина",
+        "updatePlugin": "Обновить плагин до версии {version}",
+        "knowledgeCount": "записей",
+        "tips": "Совет: используйте команду /kb в чате, чтобы узнать, как пользоваться базой!"
+    },
+    "createDialog": {
+        "title": "Создание базы знаний",
+        "nameLabel": "Название",
+        "descriptionLabel": "Описание",
+        "descriptionPlaceholder": "Краткое описание...",
+        "embeddingModelLabel": "Embedding модель",
+        "rerankModelLabel": "Rerank модель",
+        "providerInfo": "Провайдер: {id} | Размерность: {dimensions}",
+        "rerankProviderInfo": "Провайдер: {id}",
+        "tips": "Совет: после выбора Embedding модели не рекомендуется менять провайдера или размерность векторов, так как это сделает текущий индекс нечитаемым.",
+        "cancel": "Отмена",
+        "create": "Создать"
+    },
+    "emojiPicker": {
+        "title": "Выберите иконку",
+        "close": "Закрыть",
+        "categories": {
+            "emotions": "Смайлы",
+            "animals": "Животные и природа",
+            "food": "Еда и напитки",
+            "activities": "Занятия и вещи",
+            "travel": "Места и путешествия",
+            "symbols": "Символы и флаги"
+        }
+    },
+    "contentDialog": {
+        "title": "Управление базой знаний",
+        "embeddingModel": "Embedding модель",
+        "vectorDimension": "Размерность",
+        "usage": "Использование: введите «/kb use {name}» в чате",
+        "tabs": {
+            "upload": "Загрузка файлов",
+            "search": "Поиск",
+            "fromURL": "Импорт из URL"
+        }
+    },
+    "upload": {
+        "title": "Загрузка файлов",
+        "subtitle": "Поддерживаются форматы txt, pdf, word, excel и др.",
+        "dropzone": "Перетащите файлы сюда или нажмите для выбора",
+        "chunkSettings": {
+            "title": "Настройка фрагментации (Chunking)",
+            "tooltip": "Размер фрагмента определяет объем текста в одном блоке. Перекрытие позволяет сохранить контекст между соседними блоками.\nМаленькие фрагменты точнее, но увеличивают объем базы.",
+            "chunkSizeLabel": "Размер фрагмента",
+            "chunkSizeHint": "Длина текста в одном блоке (пусто = по умолчанию)",
+            "overlapLabel": "Перекрытие",
+            "overlapHint": "Нахлест между соседними блоками (пусто = по умолчанию)"
+        },
+        "upload": "Начать загрузку",
+        "uploading": "Загрузка..."
+    },
+    "search": {
+        "queryLabel": "Поиск по базе знаний",
+        "queryPlaceholder": "Введите ключевые слова...",
+        "resultCountLabel": "Количество результатов",
+        "searching": "Поиск...",
+        "resultsTitle": "Результаты поиска",
+        "relevance": "Релевантность",
+        "noResults": "Совпадений не найдено"
+    },
+    "deleteDialog": {
+        "title": "Подтверждение удаления",
+        "confirmText": "Вы уверены, что хотите удалить базу знаний «{name}»?",
+        "warning": "Это действие необратимо. Весь контент базы знаний будет навсегда удален.",
+        "cancel": "Отмена",
+        "delete": "Удалить"
+    },
+    "messages": {
+        "pluginNotAvailable": "Плагин не установлен или недоступен",
+        "pluginNotActivated": "Плагин astrbot_plugin_knowledge_base не включен. Пожалуйста, активируйте его в разделе плагинов и перезапустите AstrBot.",
+        "checkPluginFailed": "Не удалось проверить плагин",
+        "installFailed": "Ошибка установки",
+        "installPluginFailed": "Не удалось установить плагин",
+        "getKnowledgeBaseListFailed": "Ошибка получения списка баз знаний",
+        "knowledgeBaseCreated": "База знаний создана",
+        "createFailed": "Ошибка создания",
+        "createKnowledgeBaseFailed": "Не удалось создать базу знаний",
+        "pleaseEnterKnowledgeBaseName": "Укажите название базы знаний",
+        "pleaseSelectFile": "Пожалуйста, сначала выберите файл",
+        "operationSuccess": "Успешно: {message}",
+        "uploadFailed": "Ошибка загрузки",
+        "fileUploadFailed": "Не удалось загрузить файл",
+        "pleaseEnterSearchContent": "Введите текст для поиска",
+        "noMatchingContent": "Ничего не найдено",
+        "searchFailed": "Ошибка поиска",
+        "searchKnowledgeBaseFailed": "Не удалось выполнить поиск",
+        "deleteTargetNotExists": "Объект для удаления не найден",
+        "knowledgeBaseDeleted": "База знаний удалена",
+        "deleteFailed": "Ошибка удаления",
+        "deleteKnowledgeBaseFailed": "Не удалось удалить базу знаний",
+        "getEmbeddingModelListFailed": "Не удалось загрузить список Embedding моделей",
+        "updateAvailable": "Доступна новая версия: {current} -> {latest}",
+        "pluginUpToDate": "У вас последняя версия плагина",
+        "pluginNotFoundInMarket": "Плагин не найден в магазине",
+        "checkUpdateFailed": "Ошибка проверки обновлений",
+        "updateSuccess": "Плагин успешно обновлен",
+        "updateFailed": "Ошибка обновления",
+        "updatePluginFailed": "Не удалось обновить плагин"
+    },
+    "importFromUrl": {
+        "title": "Импорт из URL",
+        "urlLabel": "Адрес страницы",
+        "urlPlaceholder": "Введите URL для извлечения знаний",
+        "optionsTitle": "Настройки импорта",
+        "tooltip": "Эти параметры управляют извлечением текста из URL.\nЕсли оставить пустыми, будут использованы настройки по умолчанию.\nТекстовая очистка через LLM может занять время.",
+        "useLlmRepairLabel": "Исправление текста через LLM",
+        "useClusteringSummaryLabel": "Кластеризация и суммаризация",
+        "repairLlmProviderIdLabel": "Модель для очистки",
+        "summarizeLlmProviderIdLabel": "Модель для суммаризации",
+        "embeddingProviderIdLabel": "Embedding модель",
+        "chunkSizeLabel": "Размер фрагмента",
+        "chunkOverlapLabel": "Перекрытие",
+        "startImport": "Начать импорт",
+        "importing": "Импорт...",
+        "importSuccess": "Импортировано успешно",
+        "importFailed": "Ошибка импорта",
+        "uploadingChunks": "Текст извлечен, загрузка фрагментов...",
+        "preRequisite": "Примечание: сначала установите плагин astrbot_plugin_url_2_knowledge_base и выполните установку playwright согласно документации.",
+        "allChunksUploaded": "Все фрагменты успешно загружены"
+    }
+}
