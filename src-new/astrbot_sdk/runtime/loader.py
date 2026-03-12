@@ -13,7 +13,6 @@ from typing import Any
 
 import yaml
 
-from ..compat import LegacyContext
 from ..decorators import get_handler_meta
 from ..protocol.descriptors import HandlerDescriptor
 from ..star import Star
@@ -48,7 +47,7 @@ class LoadedHandler:
     descriptor: HandlerDescriptor
     callable: Any
     owner: Any
-    legacy_context: LegacyContext | None = None
+    legacy_context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -56,6 +55,15 @@ class LoadedPlugin:
     plugin: PluginSpec
     handlers: list[LoadedHandler]
     instances: list[Any]
+
+
+def _create_legacy_context(component_cls: Any, plugin_name: str) -> Any:
+    factory = getattr(component_cls, "_astrbot_create_legacy_context", None)
+    if callable(factory):
+        return factory(plugin_name)
+    from ..api.star.context import Context as LegacyContext
+
+    return LegacyContext(plugin_name)
 
 
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
@@ -264,11 +272,11 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
         if not isinstance(class_path, str) or ":" not in class_path:
             continue
         component_cls = import_string(class_path)
-        legacy_context: LegacyContext | None = None
+        legacy_context = None
         if isinstance(component_cls, type) and issubclass(component_cls, Star):
             instance = component_cls()
         else:
-            legacy_context = LegacyContext(plugin.name)
+            legacy_context = _create_legacy_context(component_cls, plugin.name)
             try:
                 instance = component_cls(legacy_context)
             except TypeError:

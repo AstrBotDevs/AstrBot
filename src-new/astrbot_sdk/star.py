@@ -9,6 +9,12 @@ from .errors import AstrBotError
 
 
 class Star:
+    async def on_start(self, ctx: Any | None = None) -> None:
+        return None
+
+    async def on_stop(self, ctx: Any | None = None) -> None:
+        return None
+
     async def on_error(self, error: Exception, event, ctx) -> None:
         if isinstance(error, AstrBotError):
             if error.retryable:

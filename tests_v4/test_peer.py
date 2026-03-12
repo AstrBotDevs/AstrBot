@@ -37,6 +37,7 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 message.input,
                 stream=message.stream,
                 cancel_token=token,
+                request_id=message.id,
             )
         )
 
@@ -172,6 +173,7 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 message.input,
                 stream=message.stream,
                 cancel_token=token,
+                request_id=message.id,
             )
         )
 

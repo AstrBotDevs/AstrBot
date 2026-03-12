@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import signal
 import sys
@@ -9,7 +10,9 @@ from typing import IO, Any
 
 from loguru import logger
 
+from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
+from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import InitializeOutput, PeerInfo
 from .capability_router import CapabilityRouter
 from .handler_dispatcher import HandlerDispatcher
@@ -153,6 +156,7 @@ class WorkerSession:
             message.input,
             stream=message.stream,
             cancel_token=cancel_token,
+            request_id=message.id,
         )
 
 
@@ -180,6 +184,31 @@ class SupervisorRuntime:
         self.active_requests: dict[str, WorkerSession] = {}
         self.loaded_plugins: list[str] = []
         self.skipped_plugins: dict[str, str] = {}
+        self._register_internal_capabilities()
+
+    def _register_internal_capabilities(self) -> None:
+        self.capability_router.register(
+            CapabilityDescriptor(
+                name="handler.invoke",
+                description="框架内部：转发到插件 handler",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "handler_id": {"type": "string"},
+                        "event": {"type": "object"},
+                    },
+                    "required": ["handler_id", "event"],
+                },
+                output_schema={
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+                cancelable=True,
+            ),
+            call_handler=self._route_handler_invoke,
+            exposed=False,
+        )
 
     async def start(self) -> None:
         discovery = discover_plugins(self.plugins_dir)
@@ -224,22 +253,34 @@ class SupervisorRuntime:
             await session.stop()
         await self.peer.stop()
 
-    async def _handle_upstream_invoke(self, message, _cancel_token):
-        if message.capability != "handler.invoke":
-            raise AstrBotError.capability_not_found(message.capability)
-        handler_id = str(message.input.get("handler_id", ""))
+    async def _handle_upstream_invoke(self, message, cancel_token):
+        return await self.capability_router.execute(
+            message.capability,
+            message.input,
+            stream=message.stream,
+            cancel_token=cancel_token,
+            request_id=message.id,
+        )
+
+    async def _route_handler_invoke(
+        self,
+        request_id: str,
+        payload: dict[str, Any],
+        _cancel_token,
+    ) -> dict[str, Any]:
+        handler_id = str(payload.get("handler_id", ""))
         session = self.handler_to_worker.get(handler_id)
         if session is None:
             raise AstrBotError.invalid_input(f"handler not found: {handler_id}")
-        self.active_requests[message.id] = session
+        self.active_requests[request_id] = session
         try:
             return await session.invoke_handler(
                 handler_id,
-                message.input.get("event", {}),
-                request_id=message.id,
+                payload.get("event", {}),
+                request_id=request_id,
             )
         finally:
-            self.active_requests.pop(message.id, None)
+            self.active_requests.pop(request_id, None)
 
     async def _handle_upstream_cancel(self, request_id: str) -> None:
         session = self.active_requests.get(request_id)
@@ -261,6 +302,7 @@ class PluginWorkerRuntime:
             peer=self.peer,
             handlers=self.loaded_plugin.handlers,
         )
+        self._lifecycle_context = RuntimeContext(peer=self.peer, plugin_id=self.plugin.name)
         self.peer.set_invoke_handler(self._handle_invoke)
         self.peer.set_cancel_handler(self.dispatcher.cancel)
 
@@ -270,14 +312,43 @@ class PluginWorkerRuntime:
             [item.descriptor for item in self.loaded_plugin.handlers],
             metadata={"plugin_id": self.plugin.name},
         )
+        await self._run_lifecycle("on_start")
 
     async def stop(self) -> None:
-        await self.peer.stop()
+        try:
+            await self._run_lifecycle("on_stop")
+        finally:
+            await self.peer.stop()
 
     async def _handle_invoke(self, message, cancel_token):
         if message.capability != "handler.invoke":
             raise AstrBotError.capability_not_found(message.capability)
         return await self.dispatcher.invoke(message, cancel_token)
+
+    async def _run_lifecycle(self, method_name: str) -> None:
+        for instance in self.loaded_plugin.instances:
+            hook = getattr(instance, method_name, None)
+            if hook is None or not callable(hook):
+                continue
+            args = []
+            try:
+                signature = inspect.signature(hook)
+            except (TypeError, ValueError):
+                signature = None
+            if signature is not None:
+                positional_params = [
+                    parameter
+                    for parameter in signature.parameters.values()
+                    if parameter.kind in (
+                        inspect.Parameter.POSITIONAL_ONLY,
+                        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    )
+                ]
+                if positional_params:
+                    args.append(self._lifecycle_context)
+            result = hook(*args)
+            if inspect.isawaitable(result):
+                await result
 
 
 async def run_supervisor(

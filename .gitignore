@@ -36,3 +36,4 @@ plugins/.venv/
 .idea/
 .vscode/
 *.iml
+uv.lock

@@ -9,8 +9,8 @@ from typing import Any
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 
-CallHandler = Callable[[dict[str, Any], object], Awaitable[dict[str, Any]]]
-StreamHandler = Callable[[dict[str, Any], object], AsyncIterator[dict[str, Any]]]
+CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
+StreamHandler = Callable[[str, dict[str, Any], object], AsyncIterator[dict[str, Any]]]
 FinalizeHandler = Callable[[list[dict[str, Any]]], dict[str, Any]]
 
 
@@ -26,6 +26,7 @@ class _CapabilityRegistration:
     call_handler: CallHandler | None = None
     stream_handler: StreamHandler | None = None
     finalize: FinalizeHandler | None = None
+    exposed: bool = True
 
 
 class CapabilityRouter:
@@ -37,7 +38,11 @@ class CapabilityRouter:
         self._register_builtin_capabilities()
 
     def descriptors(self) -> list[CapabilityDescriptor]:
-        return [entry.descriptor for entry in self._registrations.values()]
+        return [
+            entry.descriptor
+            for entry in self._registrations.values()
+            if entry.exposed
+        ]
 
     def register(
         self,
@@ -46,12 +51,14 @@ class CapabilityRouter:
         call_handler: CallHandler | None = None,
         stream_handler: StreamHandler | None = None,
         finalize: FinalizeHandler | None = None,
+        exposed: bool = True,
     ) -> None:
         self._registrations[descriptor.name] = _CapabilityRegistration(
             descriptor=descriptor,
             call_handler=call_handler,
             stream_handler=stream_handler,
             finalize=finalize,
+            exposed=exposed,
         )
 
     async def execute(
@@ -61,6 +68,7 @@ class CapabilityRouter:
         *,
         stream: bool,
         cancel_token,
+        request_id: str,
     ) -> dict[str, Any] | StreamExecution:
         registration = self._registrations.get(capability)
         if registration is None:
@@ -72,13 +80,13 @@ class CapabilityRouter:
                 raise AstrBotError.invalid_input(f"{capability} 不支持 stream=true")
             finalize = registration.finalize or (lambda chunks: {"items": chunks})
             return StreamExecution(
-                iterator=registration.stream_handler(payload, cancel_token),
+                iterator=registration.stream_handler(request_id, payload, cancel_token),
                 finalize=finalize,
             )
 
         if registration.call_handler is None:
             raise AstrBotError.invalid_input(f"{capability} 只能以 stream=true 调用")
-        output = await registration.call_handler(payload, cancel_token)
+        output = await registration.call_handler(request_id, payload, cancel_token)
         self._validate_schema(registration.descriptor.output_schema, output)
         return output
 
@@ -90,11 +98,11 @@ class CapabilityRouter:
                 "required": required,
             }
 
-        async def llm_chat(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def llm_chat(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             prompt = str(payload.get("prompt", ""))
             return {"text": f"Echo: {prompt}"}
 
-        async def llm_chat_raw(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def llm_chat_raw(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             prompt = str(payload.get("prompt", ""))
             text = f"Echo: {prompt}"
             return {
@@ -108,6 +116,7 @@ class CapabilityRouter:
             }
 
         async def llm_stream(
+            _request_id: str,
             payload: dict[str, Any],
             token,
         ) -> AsyncIterator[dict[str, Any]]:
@@ -117,7 +126,7 @@ class CapabilityRouter:
                 await asyncio.sleep(0)
                 yield {"text": char}
 
-        async def memory_search(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def memory_search(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             query = str(payload.get("query", ""))
             items = [
                 {"key": key, "value": value}
@@ -126,7 +135,7 @@ class CapabilityRouter:
             ]
             return {"items": items}
 
-        async def memory_save(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def memory_save(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             key = str(payload.get("key", ""))
             value = payload.get("value")
             if not isinstance(value, dict):
@@ -134,14 +143,14 @@ class CapabilityRouter:
             self.memory_store[key] = value
             return {}
 
-        async def memory_delete(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def memory_delete(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             self.memory_store.pop(str(payload.get("key", "")), None)
             return {}
 
-        async def db_get(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_get(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             return {"value": self.db_store.get(str(payload.get("key", "")))}
 
-        async def db_set(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_set(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             key = str(payload.get("key", ""))
             value = payload.get("value")
             if not isinstance(value, dict):
@@ -149,18 +158,18 @@ class CapabilityRouter:
             self.db_store[key] = value
             return {}
 
-        async def db_delete(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_delete(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             self.db_store.pop(str(payload.get("key", "")), None)
             return {}
 
-        async def db_list(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_list(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             prefix = payload.get("prefix")
             keys = sorted(self.db_store.keys())
             if isinstance(prefix, str):
                 keys = [item for item in keys if item.startswith(prefix)]
             return {"keys": keys}
 
-        async def platform_send(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def platform_send(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             session = str(payload.get("session", ""))
             text = str(payload.get("text", ""))
             message_id = f"msg_{len(self.sent_messages) + 1}"
@@ -173,7 +182,7 @@ class CapabilityRouter:
             )
             return {"message_id": message_id}
 
-        async def platform_send_image(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def platform_send_image(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             session = str(payload.get("session", ""))
             image_url = str(payload.get("image_url", ""))
             message_id = f"img_{len(self.sent_messages) + 1}"
@@ -186,7 +195,7 @@ class CapabilityRouter:
             )
             return {"message_id": message_id}
 
-        async def platform_get_members(payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def platform_get_members(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
             session = str(payload.get("session", ""))
             return {
                 "members": [

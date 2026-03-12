@@ -161,9 +161,11 @@ class WebSocketServerTransport(Transport):
         self._site: web.TCPSite | None = None
         self._ws: web.WebSocketResponse | None = None
         self._write_lock = asyncio.Lock()
+        self._connected = asyncio.Event()
 
     async def start(self) -> None:
         self._closed.clear()
+        self._connected.clear()
         self._app = web.Application()
         self._app.router.add_get(self._path, self._handle_socket)
         self._runner = web.AppRunner(self._app)
@@ -175,6 +177,7 @@ class WebSocketServerTransport(Transport):
             self._actual_port = socket.getsockname()[1]
 
     async def stop(self) -> None:
+        self._connected.clear()
         if self._ws is not None and not self._ws.closed:
             await self._ws.close()
         if self._site is not None:
@@ -186,6 +189,8 @@ class WebSocketServerTransport(Transport):
         self._closed.set()
 
     async def send(self, payload: str) -> None:
+        if self._ws is None or self._ws.closed:
+            await asyncio.wait_for(self._connected.wait(), timeout=30.0)
         if self._ws is None or self._ws.closed:
             raise RuntimeError("WebSocket 尚未连接")
         async with self._write_lock:
@@ -203,6 +208,7 @@ class WebSocketServerTransport(Transport):
         )
         await ws.prepare(request)
         self._ws = ws
+        self._connected.set()
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
@@ -213,6 +219,7 @@ class WebSocketServerTransport(Transport):
                     logger.error("websocket server error: {}", ws.exception())
                     break
         finally:
+            self._connected.clear()
             self._closed.set()
             self._ws = None
         return ws
