@@ -517,11 +517,16 @@ def get_local_booter(work_dir: str = "") -> ComputerBooter:
 
     Args:
         work_dir: The working directory for local execution. Empty string means default.
+            The path will be normalized to an absolute path for caching.
 
     Returns:
         A LocalBooter instance configured with the specified working directory.
     """
-    key = work_dir or "__default__"
+    # Normalize work_dir to absolute path for consistent caching
+    abs_work_dir = os.path.abspath(work_dir) if work_dir else ""
+    key = abs_work_dir or "__default__"
     if key not in _local_booters:
-        _local_booters[key] = LocalBooter(work_dir=work_dir)
+        booter = LocalBooter(work_dir=work_dir)
+        # Use the normalized path from the booter for cache key consistency
+        _local_booters[booter.work_dir or "__default__"] = booter
     return _local_booters[key]

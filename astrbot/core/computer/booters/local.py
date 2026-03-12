@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,20 +42,47 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
-def _ensure_safe_path(path: str, extra_allowed_roots: list[str] | None = None) -> str:
+def _is_path_under_root(abs_path: str, root: str) -> bool:
+    """Check if abs_path is under the given root directory using commonpath.
+
+    This avoids the prefix-matching issue with startswith (e.g., /data matching /data2).
+    """
+    try:
+        return os.path.commonpath([abs_path, root]) == root
+    except ValueError:
+        # Different drives on Windows
+        return False
+
+
+def _ensure_safe_path(path: str, extra_allowed_roots: Iterable[str] = ()) -> str:
     abs_path = os.path.abspath(path)
     allowed_roots = [
         os.path.abspath(get_astrbot_root()),
         os.path.abspath(get_astrbot_data_path()),
         os.path.abspath(get_astrbot_temp_path()),
     ]
-    if extra_allowed_roots:
-        for root in extra_allowed_roots:
-            if root:
-                allowed_roots.append(os.path.abspath(root))
-    if not any(abs_path.startswith(root) for root in allowed_roots):
+    allowed_roots.extend(os.path.abspath(r) for r in extra_allowed_roots if r)
+
+    if not any(_is_path_under_root(abs_path, root) for root in allowed_roots):
         raise PermissionError("Path is outside the allowed computer roots.")
     return abs_path
+
+
+def _resolve_work_dir(
+    cwd: str | None,
+    configured_work_dir: str | None,
+    extra_allowed_roots: Iterable[str] = (),
+) -> str:
+    """Resolve the working directory with consistent priority rules.
+
+    Priority:
+    1. User-supplied cwd (requires safety check)
+    2. Configured work_dir
+    3. Default AstrBot root directory
+    """
+    if cwd:
+        return _ensure_safe_path(cwd, extra_allowed_roots)
+    return configured_work_dir or get_astrbot_root()
 
 
 def _decode_shell_output(output: bytes | None) -> str:
@@ -103,12 +131,11 @@ class LocalShellComponent(ShellComponent):
             run_env = os.environ.copy()
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
-            if cwd:
-                working_dir = _ensure_safe_path(cwd, self._extra_allowed_roots)
-            elif self._work_dir:
-                working_dir = self._work_dir
-            else:
-                working_dir = get_astrbot_root()
+            working_dir = _resolve_work_dir(
+                cwd=cwd,
+                configured_work_dir=self._work_dir,
+                extra_allowed_roots=self._extra_allowed_roots,
+            )
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
@@ -153,7 +180,10 @@ class LocalPythonComponent(PythonComponent):
         timeout: int = 30,
         silent: bool = False,
     ) -> dict[str, Any]:
-        work_dir = self._work_dir if self._work_dir else get_astrbot_root()
+        work_dir = _resolve_work_dir(
+            cwd=None,
+            configured_work_dir=self._work_dir,
+        )
 
         def _run() -> dict[str, Any]:
             try:
@@ -247,12 +277,13 @@ class LocalFileSystemComponent(FileSystemComponent):
 
 class LocalBooter(ComputerBooter):
     def __init__(self, work_dir: str = "") -> None:
-        self._work_dir = work_dir
+        # Normalize work_dir to an absolute path once and use it consistently
+        abs_work_dir = os.path.abspath(work_dir) if work_dir else ""
+        self._work_dir = abs_work_dir
         self._extra_allowed_roots: list[str] = []
 
         # Auto-create work directory if configured and not exists
-        if work_dir:
-            abs_work_dir = os.path.abspath(work_dir)
+        if abs_work_dir:
             if not os.path.exists(abs_work_dir):
                 try:
                     os.makedirs(abs_work_dir, exist_ok=True)
@@ -266,9 +297,9 @@ class LocalBooter(ComputerBooter):
         self._fs = LocalFileSystemComponent(
             _extra_allowed_roots=self._extra_allowed_roots
         )
-        self._python = LocalPythonComponent(_work_dir=work_dir)
+        self._python = LocalPythonComponent(_work_dir=abs_work_dir)
         self._shell = LocalShellComponent(
-            _work_dir=work_dir, _extra_allowed_roots=self._extra_allowed_roots
+            _work_dir=abs_work_dir, _extra_allowed_roots=self._extra_allowed_roots
         )
 
     @property
