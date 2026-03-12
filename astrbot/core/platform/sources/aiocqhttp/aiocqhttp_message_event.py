@@ -16,6 +16,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.platform.astrbot_message import normalize_message_member_role
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -244,7 +245,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                 MessageMember(
                     user_id=member["user_id"],
                     nickname=member.get("nickname") or member.get("card"),
-                    role=member.get("role"),
+                    role=normalize_message_member_role(member.get("role")),
                 )
                 for member in members
             ],

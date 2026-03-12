@@ -5,6 +5,16 @@ from astrbot.core.message.components import BaseMessageComponent
 
 from .message_type import MessageType
 
+VALID_MESSAGE_MEMBER_ROLES = frozenset({"admin", "owner", "member"})
+ADMIN_MESSAGE_MEMBER_ROLES = frozenset({"admin", "owner"})
+
+
+def normalize_message_member_role(role: object) -> str | None:
+    """Normalize platform member roles to the supported role set."""
+    if isinstance(role, str) and role in VALID_MESSAGE_MEMBER_ROLES:
+        return role
+    return None
+
 
 @dataclass
 class MessageMember:

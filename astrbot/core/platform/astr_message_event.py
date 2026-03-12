@@ -26,7 +26,12 @@ from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.trace import TraceSpan
 
-from .astrbot_message import AstrBotMessage, Group
+from .astrbot_message import (
+    ADMIN_MESSAGE_MEMBER_ROLES,
+    AstrBotMessage,
+    Group,
+    normalize_message_member_role,
+)
 from .message_session import MessageSesion, MessageSession  # noqa
 from .platform_metadata import PlatformMetadata
 
@@ -45,11 +50,11 @@ class AstrMessageEvent(abc.ABC):
         """消息对象, AstrBotMessage。带有完整的消息结构。"""
         self.platform_meta = platform_meta
         """消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp"""
-        sender_role = getattr(getattr(message_obj, "sender", None), "role", None)
-        self.role = (
-            sender_role if sender_role in {"admin", "owner", "member"} else "member"
+        sender_role = normalize_message_member_role(
+            getattr(getattr(message_obj, "sender", None), "role", None)
         )
-        """User role within the current context (e.g. group chat)."""
+        self.role = sender_role or "member"
+        """用户在当前上下文中的角色（例如群聊中的管理员/群主/成员）。"""
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
         self.is_at_or_wake_command = False
@@ -241,7 +246,7 @@ class AstrMessageEvent(abc.ABC):
 
     def is_admin(self) -> bool:
         """是否是管理员。"""
-        return self.role in {"admin", "owner"}
+        return self.role in ADMIN_MESSAGE_MEMBER_ROLES
 
     async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
         """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。"""

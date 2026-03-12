@@ -4,12 +4,34 @@ import time
 from unittest.mock import patch
 
 from astrbot.core.message.components import Image, Plain
-from astrbot.core.platform.astrbot_message import AstrBotMessage, Group, MessageMember
+from astrbot.core.platform.astrbot_message import (
+    ADMIN_MESSAGE_MEMBER_ROLES,
+    AstrBotMessage,
+    Group,
+    MessageMember,
+    VALID_MESSAGE_MEMBER_ROLES,
+    normalize_message_member_role,
+)
 from astrbot.core.platform.message_type import MessageType
 
 
 class TestMessageMember:
     """Tests for MessageMember dataclass."""
+
+    def test_normalize_message_member_role_accepts_supported_roles(self):
+        """Test supported platform roles are preserved."""
+        for role in VALID_MESSAGE_MEMBER_ROLES:
+            assert normalize_message_member_role(role) == role
+
+    def test_normalize_message_member_role_rejects_invalid_values(self):
+        """Test unsupported platform roles are rejected."""
+        assert normalize_message_member_role("super-admin") is None
+        assert normalize_message_member_role(123) is None
+        assert normalize_message_member_role(None) is None
+
+    def test_admin_message_member_roles_constant(self):
+        """Test admin role constant stays aligned with role semantics."""
+        assert ADMIN_MESSAGE_MEMBER_ROLES == {"admin", "owner"}
 
     def test_message_member_creation_basic(self):
         """Test creating a MessageMember with required fields."""

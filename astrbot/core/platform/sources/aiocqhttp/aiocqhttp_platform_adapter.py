@@ -19,6 +19,7 @@ from astrbot.api.platform import (
     MessageType,
     Platform,
     PlatformMetadata,
+    normalize_message_member_role,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 
@@ -208,9 +209,7 @@ class AiocqhttpAdapter(Platform):
         assert event.sender is not None
         abm = AstrBotMessage()
         abm.self_id = str(event.self_id)
-        sender_role = event.sender.get("role")
-        if sender_role not in {"admin", "owner", "member"}:
-            sender_role = None
+        sender_role = normalize_message_member_role(event.sender.get("role"))
         abm.sender = MessageMember(
             str(event.sender["user_id"]),
             event.sender.get("card") or event.sender.get("nickname", "N/A"),
