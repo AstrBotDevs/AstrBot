@@ -977,7 +977,17 @@ class BackupRoute(Route):
                 if not jwt_secret:
                     return Response().error("服务器配置错误").__dict__
 
-                jwt.decode(token, jwt_secret, algorithms=["HS256"])
+                # Verify JWT token with strict security options
+                jwt.decode(
+                    token,
+                    jwt_secret,
+                    algorithms=["HS256"],
+                    options={
+                        "require": ["exp"],  # Require expiration claim
+                        "verify_signature": True,  # Explicitly verify signature
+                        "verify_exp": True,  # Verify expiration
+                    }
+                )
             except jwt.ExpiredSignatureError:
                 return Response().error("Token 已过期，请刷新页面后重试").__dict__
             except jwt.InvalidTokenError:
