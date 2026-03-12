@@ -29,8 +29,6 @@ https://discord.gg/PxgzhmxJ
 
 - [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot)
 
-- [AstrBotDevs/AstrBot-Docs](https://github.com/AstrBotDevs/AstrBot-docs)
-
 ## 成为 AstrBot 组织成员
 
 欢迎加入我们！

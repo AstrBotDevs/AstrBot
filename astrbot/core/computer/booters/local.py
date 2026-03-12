@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import locale
 import os
 import shutil
 import subprocess
@@ -52,6 +53,31 @@ def _ensure_safe_path(path: str) -> str:
     return abs_path
 
 
+def _decode_shell_output(output: bytes | None) -> str:
+    if output is None:
+        return ""
+
+    preferred = locale.getpreferredencoding(False) or "utf-8"
+    try:
+        return output.decode("utf-8")
+    except (LookupError, UnicodeDecodeError):
+        pass
+
+    if os.name == "nt":
+        for encoding in ("mbcs", "cp936", "gbk", "gb18030"):
+            try:
+                return output.decode(encoding)
+            except (LookupError, UnicodeDecodeError):
+                continue
+
+    try:
+        return output.decode(preferred)
+    except (LookupError, UnicodeDecodeError):
+        pass
+
+    return output.decode("utf-8", errors="replace")
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     async def exec(
@@ -72,28 +98,32 @@ class LocalShellComponent(ShellComponent):
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = _ensure_safe_path(cwd) if cwd else get_astrbot_root()
             if background:
-                proc = subprocess.Popen(
+                # `command` is intentionally executed through the current shell so
+                # local computer-use behavior matches existing tool semantics.
+                # Safety relies on `_is_safe_command()` and the allowed-root checks.
+                proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     command,
                     shell=shell,
                     cwd=working_dir,
                     env=run_env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
-            result = subprocess.run(
+            # `command` is intentionally executed through the current shell so
+            # local computer-use behavior matches existing tool semantics.
+            # Safety relies on `_is_safe_command()` and the allowed-root checks.
+            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
                 timeout=timeout,
                 capture_output=True,
-                text=True,
             )
             return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
+                "stdout": _decode_shell_output(result.stdout),
+                "stderr": _decode_shell_output(result.stderr),
                 "exit_code": result.returncode,
             }
 
