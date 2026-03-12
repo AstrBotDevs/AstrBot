@@ -6,6 +6,8 @@ These tests demonstrate the pytest fixtures defined in conftest.py.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from astrbot_sdk.errors import AstrBotError
@@ -162,6 +164,3 @@ class TestCapabilityRouter:
 
         descriptors = router.descriptors()
         assert "system.health" not in [d.name for d in descriptors]
-
-
-import asyncio  # Import at end to avoid circular import issues in test file

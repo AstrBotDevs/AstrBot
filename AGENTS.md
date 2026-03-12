@@ -18,7 +18,6 @@
 在提交代码前，请依次运行以下命令：
 
 ```bash
-pyclean .          # 清理 Python 缓存文件
 ruff format .      # 使用 ruff 格式化代码
 ruff check . --fix # 使用 ruff 检查并自动修复问题
 ```

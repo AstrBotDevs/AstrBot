@@ -663,13 +663,10 @@ class TestEnvironmentCacheReuse:
                 # 记录 _rebuild 调用
                 rebuild_called = []
 
-                original_rebuild = manager._rebuild
-
                 def tracked_rebuild(*args, **kwargs):
                     rebuild_called.append(True)
                     # 不实际执行重建，只是模拟
                     venv_dir = args[1]
-                    python_path = args[2]
                     venv_dir.mkdir(exist_ok=True)
                     # 创建假的 python 可执行文件标记
                     (venv_dir / "python").touch()

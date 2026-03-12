@@ -214,11 +214,13 @@ PLATFORM_SEND_INPUT_SCHEMA
 PLATFORM_SEND_OUTPUT_SCHEMA
 PLATFORM_SEND_IMAGE_INPUT_SCHEMA
 PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA
+PLATFORM_SEND_CHAIN_INPUT_SCHEMA      # 新增: 发送消息链
+PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA     # 新增: 发送消息链
 PLATFORM_GET_MEMBERS_INPUT_SCHEMA
 PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA
 
 # 汇总字典
-BUILTIN_CAPABILITY_SCHEMAS: dict[str, tuple[JSONSchema, JSONSchema]]
+BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]]
 ```
 
 ---
@@ -562,6 +564,7 @@ class StreamExecution:
 | `db.list` | 列出 KV |
 | `platform.send` | 发送消息 |
 | `platform.send_image` | 发送图片 |
+| `platform.send_chain` | 发送消息链 |
 | `platform.get_members` | 获取群成员 |
 
 **Capability 命名规则:**
@@ -682,6 +685,7 @@ class MemoryClient:
 class PlatformClient:
     async def send(self, session: str, text: str) -> dict[str, Any]: ...
     async def send_image(self, session: str, image_url: str) -> dict[str, Any]: ...
+    async def send_chain(self, session: str, chain: list[dict]) -> dict[str, Any]: ...
     async def get_members(self, session: str) -> list[dict[str, Any]]: ...
 ```
 
@@ -708,7 +712,22 @@ class _FilterNamespace:
     command = staticmethod(command)
     regex = staticmethod(regex)
     permission = staticmethod(permission)
+    event_message_type = staticmethod(event_message_type)
+    platform_adapter_type = staticmethod(platform_adapter_type)
 filter = _FilterNamespace()
+
+# api/message/chain.py - MessageChain 兼容类
+class MessageChain:
+    def message(self, text) -> "MessageChain": ...
+    def at(self, name, qq) -> "MessageChain": ...
+    def at_all(self) -> "MessageChain": ...
+    def url_image(self, url) -> "MessageChain": ...
+    def to_payload(self) -> list[dict]: ...
+    def is_plain_text_only(self) -> bool: ...
+
+# api/message/components.py - 消息组件
+class Plain, Image, At, AtAll, Reply, Node, Face, File, ...
+ComponentTypes: dict[str, type[BaseMessageComponent]]
 ```
 
 ---
@@ -898,6 +917,17 @@ class AstrBotError(Exception):
 #### `_legacy_api.py` - 兼容层
 
 ```python
+class LegacyConversationManager:
+    """旧版会话管理器兼容实现"""
+    async def new_conversation(self, unified_msg_origin, ...) -> str: ...
+    async def switch_conversation(self, unified_msg_origin, conversation_id) -> None: ...
+    async def delete_conversation(self, unified_msg_origin, conversation_id) -> None: ...
+    async def get_curr_conversation_id(self, unified_msg_origin) -> str | None: ...
+    async def get_conversation(self, unified_msg_origin, conversation_id, ...) -> dict | None: ...
+    async def get_conversations(self, ...) -> list[dict]: ...
+    async def update_conversation(self, unified_msg_origin, conversation_id, ...) -> None: ...
+    async def add_message_pair(self, cid, user_message, assistant_message) -> None: ...
+
 class LegacyContext:
     """v3 Context 兼容实现"""
     def __init__(self, plugin_id: str):
@@ -906,19 +936,29 @@ class LegacyContext:
         self.conversation_manager = LegacyConversationManager(self)
 
     def bind_runtime_context(self, runtime_context: NewContext) -> None: ...
+    def _register_component(self, *components) -> None: ...
+    async def execute_registered_function(self, func_full_name, args) -> Any: ...
+    async def call_context_function(self, func_full_name, args) -> dict: ...
 
     async def llm_generate(self, chat_provider_id, prompt, ...) -> LLMResponse: ...
     async def tool_loop_agent(self, chat_provider_id, prompt, ...) -> LLMResponse: ...
     async def send_message(self, session, message_chain) -> None: ...
     async def put_kv_data(self, key, value) -> None: ...
-    async def get_kv_data(self, key) -> dict | None: ...
+    async def get_kv_data(self, key, default=None) -> Any: ...
     async def delete_kv_data(self, key) -> None: ...
 
-class CommandComponent(Star):
-    """v3 插件基类"""
+class LegacyStar(Star):
+    """旧版 astrbot.api.star.Star 兼容基类"""
+    def __init__(self, context: LegacyContext | None = None, config: Any | None = None): ...
     @classmethod
     def __astrbot_is_new_star__(cls) -> bool:
-        return False  # 标识为旧版
+        return False
+
+class CommandComponent(LegacyStar):
+    """v3 插件基类 (LegacyStar 的别名)"""
+
+def register(name=None, author=None, desc=None, version=None, repo=None):
+    """旧版插件元数据装饰器兼容入口"""
 ```
 
 ---
@@ -1181,9 +1221,11 @@ class MyTransport(Transport):
 | **API 层** | `api/` | ✅ 完成 | 兼容层 |
 | | `star/context.py` | ✅ | LegacyContext 导出 |
 | | `components/command.py` | ✅ | CommandComponent 导出 |
-| | `event/filter.py` | ✅ | filter 命名空间 |
+| | `event/filter.py` | ✅ | filter 命名空间 + 平台/消息类型过滤 |
+| | `message/chain.py` | ✅ | MessageChain + to_payload |
+| | `message/components.py` | ✅ | 20+ 消息组件类型 |
+| | `basic/astrbot_config.py` | ✅ | AstrBotConfig + save_config |
 | | `basic/` | ✅ | 基础实体与配置 |
-| | `message/` | ✅ | MessageChain |
 | | `platform/` | ✅ | 平台元数据 |
 | | `provider/` | ✅ | Provider 实体 |
 | **核心文件** | 根目录 | ✅ 完成 | |
@@ -1193,26 +1235,31 @@ class MyTransport(Transport):
 | | `decorators.py` | ✅ | on_command/on_message/on_event/on_schedule |
 | | `events.py` | ✅ | MessageEvent |
 | | `errors.py` | ✅ | AstrBotError |
-| | `_legacy_api.py` | ✅ | LegacyContext + CommandComponent |
+| | `_legacy_api.py` | ✅ | LegacyContext + LegacyStar + register + LegacyConversationManager |
 | | `cli.py` | ✅ | Click 命令行工具 |
 | | `__main__.py` | ✅ | python -m astrbot_sdk 入口 |
 
 ### 测试覆盖
 
-测试文件位于 `tests_v4/` 目录，共 35+ 个测试文件：
+测试文件位于 `tests_v4/` 目录，共 37 个测试文件：
 
 ```
 tests_v4/
+├── conftest.py                   # pytest 配置与共享 fixtures
+├── helpers.py                    # 测试辅助函数
 ├── test_protocol.py              # 协议层基础测试
 ├── test_protocol_descriptors.py  # 描述符测试
 ├── test_protocol_messages.py     # 消息类型测试
 ├── test_protocol_legacy_adapter.py # Legacy 适配器测试
+├── test_protocol_package.py      # 协议包测试
 ├── test_peer.py                  # Peer 测试
 ├── test_transport.py             # Transport 测试
 ├── test_capability_router.py     # CapabilityRouter 测试
 ├── test_handler_dispatcher.py    # HandlerDispatcher 测试
 ├── test_loader.py                # 加载器测试
 ├── test_bootstrap.py             # Bootstrap 测试
+├── test_runtime.py               # 运行时测试
+├── test_runtime_integration.py   # 运行时集成测试
 ├── test_context.py               # Context 测试
 ├── test_events.py                # 事件测试
 ├── test_decorators.py            # 装饰器测试
@@ -1226,11 +1273,14 @@ tests_v4/
 ├── test_api_decorators.py        # API 装饰器测试
 ├── test_api_event_filter.py      # filter 命名空间测试
 ├── test_api_legacy_context.py    # Legacy Context 测试
+├── test_api_message_components.py # 消息组件测试
 ├── test_api_contract.py          # API 契约测试
-├── test_runtime_integration.py   # 运行时集成测试
+├── test_entrypoints.py           # 入口点测试
+├── test_top_level_modules.py     # 顶层模块测试
+├── test_conftest_fixtures.py     # pytest fixtures 测试
+├── test_legacy_adapter.py        # Legacy 适配器测试
 ├── test_script_migrations.py     # 脚本迁移测试
-├── test_supervisor_migration.py  # Supervisor 迁移测试
-└── ...                           # 更多测试文件
+└── test_supervisor_migration.py  # Supervisor 迁移测试
 ```
 
 ---

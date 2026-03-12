@@ -1,5 +1,12 @@
+"""Pytest shared fixtures and test bootstrap helpers."""
+
+# ruff: noqa: E402
+
 # Test configuration
 import asyncio
+import sys
+import tempfile
+import textwrap
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -7,8 +14,6 @@ from typing import Any
 import pytest
 
 # 将 src-new 加入路径 - 这使得测试可以运行，但不算"已安装"
-import sys
-
 SRC_NEW_PATH = str(Path(__file__).parent.parent / "src-new")
 sys.path.insert(0, SRC_NEW_PATH)
 
@@ -91,10 +96,6 @@ def fake_env_manager() -> FakeEnvManager:
     return FakeEnvManager()
 
 
-# ============================================================
-# Peer Fixtures
-# ============================================================
-
 from astrbot_sdk.protocol.messages import InitializeOutput, PeerInfo
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 from astrbot_sdk.runtime.peer import Peer
@@ -148,14 +149,6 @@ async def plugin_peer(transport_pair: tuple[MemoryTransport, MemoryTransport]) -
     await peer.start()
     yield peer
     await peer.stop()
-
-
-# ============================================================
-# Temporary Plugin Fixtures
-# ============================================================
-
-import tempfile
-import textwrap
 
 
 @pytest.fixture

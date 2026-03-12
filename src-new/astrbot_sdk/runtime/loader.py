@@ -294,9 +294,17 @@ def _normalize_config_value(field_schema: dict[str, Any], value: Any) -> Any:
     if field_type == "dict":
         return copy.deepcopy(value) if isinstance(value, dict) else default_value
     if field_type == "int":
-        return value if isinstance(value, int) and not isinstance(value, bool) else default_value
+        return (
+            value
+            if isinstance(value, int) and not isinstance(value, bool)
+            else default_value
+        )
     if field_type == "float":
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else default_value
+        return (
+            value
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else default_value
+        )
     if field_type == "bool":
         return value if isinstance(value, bool) else default_value
     if field_type in {"string", "text"}:

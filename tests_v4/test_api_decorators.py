@@ -4,6 +4,8 @@ Unit tests for API decorators and Star class.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from astrbot_sdk import Context, MessageEvent, Star
@@ -244,6 +246,3 @@ class TestTriggerModels:
 
         trigger = ScheduleTrigger(interval_seconds=30)
         assert trigger.interval_seconds == 30
-
-
-import asyncio  # For the async test
