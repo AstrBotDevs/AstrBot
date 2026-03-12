@@ -332,10 +332,11 @@ class CronJobManager:
             cron_job=cron_job_str
         )
         req.prompt = (
-            "You are now responding to a scheduled task"
+            "A scheduled task has been triggered. "
             "Proceed according to your system instructions. "
-            "Output using same language as previous conversation."
-            "After completing your task, summarize and output your actions and results."
+            "You MUST call the `send_message_to_user` tool to deliver any message to the user. "
+            "Your direct text response is NOT visible to the user — only tool calls take effect. "
+            "Use the same language as the previous conversation."
         )
         if not req.func_tool:
             req.func_tool = ToolSet()
@@ -353,25 +354,34 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
-        cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
-        if llm_resp and llm_resp.role == "assistant":
-            summary_note += (
-                f"I finished this job, here is the result: {llm_resp.completion_text}"
-            )
-
-        await persist_agent_history(
-            self.ctx.conversation_manager,
-            event=cron_event,
-            req=req,
-            summary_note=summary_note,
-        )
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return
+
+        # 仅当 agent 实际调用了工具时才写入历史，避免未发送消息的失败执行产生误导性记录
+        tool_was_called = any(msg.role == "tool" for msg in runner.run_context.messages)
+        if tool_was_called:
+            cron_meta = extras.get("cron_job", {}) if extras else {}
+            # role == "assistant" 表示 LLM 正常完成，排除 role="err" 的错误响应写入历史
+            status = "task completed successfully." if llm_resp.role == "assistant" else f"task ended with error: {llm_resp.completion_text}"
+            summary_note = (
+                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
+                f"{cron_meta.get('description', '')} "
+                f"triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+                f"{status}"
+            )
+            await persist_agent_history(
+                self.ctx.conversation_manager,
+                event=cron_event,
+                req=req,
+                summary_note=summary_note,
+            )
+        else:
+            logger.warning(
+                "Cron job agent did not call any tools. "
+                "The message was likely NOT delivered to the user. "
+                "Skipping history persistence to avoid misleading future context."
+            )
 
 
 __all__ = ["CronJobManager"]
