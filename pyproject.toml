@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "astrbot-sdk"
 version = "0.1.0"
@@ -19,3 +23,9 @@ dependencies = [
 
 [project.scripts]
 astr = "astrbot_sdk.cli:cli"
+
+[tool.setuptools]
+package-dir = {"" = "src-new"}
+
+[tool.setuptools.packages.find]
+where = ["src-new"]

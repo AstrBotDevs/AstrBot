@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+import asyncio
+import inspect
+from typing import Any
+
+from ..context import CancelToken, Context
+from ..events import MessageEvent, PlainTextResult
+from ..star import Star
+from .loader import LoadedHandler
+
+
+class HandlerDispatcher:
+    def __init__(self, *, plugin_id: str, peer, handlers: list[LoadedHandler]) -> None:
+        self._plugin_id = plugin_id
+        self._peer = peer
+        self._handlers = {item.descriptor.id: item for item in handlers}
+        self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
+
+    async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
+        handler_id = str(message.input.get("handler_id", ""))
+        loaded = self._handlers.get(handler_id)
+        if loaded is None:
+            raise LookupError(f"handler not found: {handler_id}")
+
+        ctx = Context(peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token)
+        event = MessageEvent.from_payload(message.input.get("event", {}), context=ctx)
+        if loaded.legacy_context is not None:
+            loaded.legacy_context.bind_runtime_context(ctx)
+
+        task = asyncio.create_task(self._run_handler(loaded, event, ctx))
+        self._active[message.id] = (task, cancel_token)
+        try:
+            await task
+            return {}
+        finally:
+            self._active.pop(message.id, None)
+
+    async def cancel(self, request_id: str) -> None:
+        active = self._active.get(request_id)
+        if active is None:
+            return
+        task, cancel_token = active
+        cancel_token.cancel()
+        task.cancel()
+
+    async def _run_handler(
+        self,
+        loaded: LoadedHandler,
+        event: MessageEvent,
+        ctx: Context,
+    ) -> None:
+        try:
+            result = loaded.callable(*self._build_args(loaded.callable, event, ctx))
+            if inspect.isasyncgen(result):
+                async for item in result:
+                    await self._consume_legacy_result(item, event)
+                return
+            if inspect.isawaitable(result):
+                result = await result
+            if result is not None:
+                await self._consume_legacy_result(result, event)
+        except Exception as exc:
+            await self._handle_error(loaded.owner, exc, event, ctx)
+            raise
+
+    def _build_args(self, handler, event: MessageEvent, ctx: Context) -> list[Any]:
+        signature = inspect.signature(handler)
+        args: list[Any] = []
+        for parameter in signature.parameters.values():
+            if parameter.kind not in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                continue
+            if parameter.name == "event":
+                args.append(event)
+            elif parameter.name in {"ctx", "context"}:
+                args.append(ctx)
+        return args
+
+    async def _consume_legacy_result(self, item: Any, event: MessageEvent) -> None:
+        if isinstance(item, PlainTextResult):
+            await event.reply(item.text)
+            return
+        if isinstance(item, str):
+            await event.reply(item)
+            return
+        if isinstance(item, dict) and "text" in item:
+            await event.reply(str(item["text"]))
+
+    async def _handle_error(
+        self,
+        owner: Any,
+        exc: Exception,
+        event: MessageEvent,
+        ctx: Context,
+    ) -> None:
+        if hasattr(owner, "on_error") and callable(owner.on_error):
+            await owner.on_error(exc, event, ctx)
+            return
+        await Star().on_error(exc, event, ctx)
