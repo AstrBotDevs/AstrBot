@@ -212,6 +212,7 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("msg_id", None)
                 if file_source:
                     media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                         send_helper,  # type: ignore
@@ -223,6 +224,7 @@ class QQOfficialPlatformAdapter(Platform):
                     if media:
                         payload["media"] = media
                         payload["msg_type"] = 7
+                        payload.pop("msg_id", None)
                 ret = await self.client.api.post_group_message(
                     group_openid=session.session_id,
                     **payload,
@@ -266,6 +268,9 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    # QQ API rejects msg_id for media (video/file) messages sent
+                    # via the proactive tool-call path; remove it to avoid 越权 error.
+                    payload.pop("msg_id", None)
             if file_source:
                 media = await QQOfficialMessageEvent.upload_group_and_c2c_media(
                     send_helper,  # type: ignore
@@ -277,6 +282,7 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+                    payload.pop("msg_id", None)
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,  # type: ignore
