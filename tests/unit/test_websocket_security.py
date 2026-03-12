@@ -51,6 +51,34 @@ def test_to_websocket_url_converts_https_to_wss() -> None:
     )
 
 
+def test_to_websocket_url_rejects_unsupported_scheme() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Misskey instance URL must use http://, https://, ws:// or wss://",
+    ):
+        to_websocket_url("ftp://example.com", label="Misskey instance URL")
+
+
+@pytest.mark.asyncio
+async def test_streaming_client_connects_with_secure_websocket_url() -> None:
+    client = StreamingClient("https://example.com", "token")
+    websocket = AsyncMock()
+
+    with patch(
+        "astrbot.core.platform.sources.misskey.misskey_api.websockets.connect",
+        new_callable=AsyncMock,
+    ) as mock_connect:
+        mock_connect.return_value = websocket
+
+        assert await client.connect() is True
+
+    mock_connect.assert_awaited_once_with(
+        "wss://example.com/streaming?i=token",
+        ping_interval=30,
+        ping_timeout=10,
+    )
+
+
 @pytest.mark.asyncio
 async def test_streaming_client_rejects_remote_http_instance() -> None:
     client = StreamingClient("http://example.com", "token")

@@ -18,6 +18,7 @@ spec:
         app: astrbot-standalone
     spec:
       securityContext:
+        # Keep these IDs in sync with the `astrbot` user declared in Dockerfile.
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000

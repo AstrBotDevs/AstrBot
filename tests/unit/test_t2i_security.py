@@ -21,10 +21,11 @@ async def test_network_strategy_render_preserves_backticks():
 
 
 def test_t2i_templates_use_json_serialization_for_text():
-    template_paths = [
-        Path("astrbot/core/utils/t2i/template/base.html"),
-        Path("astrbot/core/utils/t2i/template/astrbot_powershell.html"),
-    ]
+    template_paths = sorted(
+        Path("astrbot/core/utils/t2i/template").glob("*.html"),
+    )
+
+    assert template_paths
 
     for template_path in template_paths:
         content = template_path.read_text(encoding="utf-8")

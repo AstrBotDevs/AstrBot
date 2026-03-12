@@ -23,6 +23,7 @@ spec:
       # 优雅关闭时间，给 NapCat 足够时间保存状态
       terminationGracePeriodSeconds: 60
       securityContext:
+        # Keep these IDs in sync with the `astrbot` user declared in Dockerfile.
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000

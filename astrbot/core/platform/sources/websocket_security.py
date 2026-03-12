@@ -43,14 +43,36 @@ def require_secure_transport_url(
     return parsed
 
 
-def to_websocket_url(url: str) -> str:
-    parsed = urlsplit(url.rstrip("/"))
+def to_websocket_url(url: str, *, label: str = "WebSocket URL") -> str:
+    normalized_url = url.rstrip("/")
+    parsed = urlsplit(normalized_url)
+    allowed_schemes = {"http", "https", "ws", "wss"}
+
+    if parsed.scheme not in allowed_schemes:
+        raise ValueError(
+            f"{label} must use http://, https://, ws:// or wss://: {normalized_url}",
+        )
+
+    parsed = require_secure_transport_url(
+        normalized_url,
+        label=label,
+        allowed_schemes=allowed_schemes,
+    )
     scheme_map = {
         "http": "ws",
         "https": "wss",
         "ws": "ws",
         "wss": "wss",
     }
+
+    try:
+        ws_scheme = scheme_map[parsed.scheme]
+    except KeyError as exc:
+        raise ValueError(
+            f"{label} must use http://, https://, ws:// or wss://: "
+            f"{normalized_url}",
+        ) from exc
+
     return urlunsplit(
-        parsed._replace(scheme=scheme_map[parsed.scheme]),
+        parsed._replace(scheme=ws_scheme),
     )
