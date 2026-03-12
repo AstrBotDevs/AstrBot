@@ -84,7 +84,7 @@ async def _install_requirements_with_precheck(
 
     if install_plan is None:
         logger.info(
-            f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
+            f"正在安装插件 {plugin_label} 的依赖库（缺失依赖预检查不可裁剪，回退到完整安装）: "
             f"{requirements_path}"
         )
         await pip_installer.install(requirements_path=requirements_path)
@@ -92,6 +92,17 @@ async def _install_requirements_with_precheck(
 
     if not install_plan.missing_names:
         logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
+        return
+
+    if not install_plan.install_lines:
+        fallback_reason = install_plan.fallback_reason or "unknown reason"
+        logger.info(
+            "检测到插件 %s 缺失依赖，但无法安全裁剪 requirements，回退到完整安装: %s (%s)",
+            plugin_label,
+            requirements_path,
+            fallback_reason,
+        )
+        await pip_installer.install(requirements_path=requirements_path)
         return
 
     logger.info(
@@ -118,7 +129,14 @@ async def _install_requirements_with_precheck(
         await pip_installer.install(requirements_path=filtered_requirements_path)
     finally:
         if filtered_requirements_path and os.path.exists(filtered_requirements_path):
-            os.remove(filtered_requirements_path)
+            try:
+                os.remove(filtered_requirements_path)
+            except OSError as exc:
+                logger.warning(
+                    "删除临时插件依赖文件失败：%s（路径：%s）",
+                    exc,
+                    filtered_requirements_path,
+                )
 
 
 class PluginManager:

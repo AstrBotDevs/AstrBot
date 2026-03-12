@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -647,7 +648,14 @@ async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_
 
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.plan_missing_requirements_install",
-        lambda path: None,
+        lambda path: __import__(
+            "astrbot.core.utils.requirements_utils",
+            fromlist=["MissingRequirementsPlan"],
+        ).MissingRequirementsPlan(
+            missing_names=frozenset({"botocore"}),
+            install_lines=(),
+            fallback_reason="unmapped missing requirement names",
+        ),
     )
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
@@ -660,3 +668,49 @@ async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_
     )
 
     assert events == [("deps", str(requirements_path))]
+
+
+@pytest.mark.asyncio
+async def test_ensure_plugin_requirements_does_not_mask_install_error_when_cleanup_fails(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch, tmp_path
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("boto3\n", encoding="utf-8")
+    temp_dir = tmp_path / "cleanup-fails"
+    _mock_missing_requirements_plan(monkeypatch, {"boto3"}, ["boto3"])
+    warning_logs = []
+
+    async def mock_install_requirements(
+        *, requirements_path: str | None = None, **kwargs
+    ):
+        del kwargs, requirements_path
+        raise RuntimeError("pip failed")
+
+    original_remove = os.remove
+
+    def flaky_remove(path):
+        if str(path).endswith("_plugin_requirements.txt"):
+            raise OSError("cleanup failed")
+        return original_remove(path)
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        mock_install_requirements,
+    )
+    monkeypatch.setattr("astrbot.core.star.star_manager.os.remove", flaky_remove)
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.logger.warning",
+        lambda line, *args: warning_logs.append(line % args if args else line),
+    )
+
+    with pytest.raises(PluginDependencyInstallError, match="pip failed"):
+        await plugin_manager_pm._ensure_plugin_requirements(
+            str(local_updator),
+            TEST_PLUGIN_DIR,
+        )
+
+    assert any("删除临时插件依赖文件失败" in log for log in warning_logs)

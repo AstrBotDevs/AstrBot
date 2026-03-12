@@ -33,6 +33,7 @@ class ParsedPackageInput:
 class MissingRequirementsPlan:
     missing_names: frozenset[str]
     install_lines: tuple[str, ...]
+    fallback_reason: str | None = None
 
 
 def canonicalize_distribution_name(name: str) -> str:
@@ -370,8 +371,8 @@ def _load_requirement_lines_for_precheck(
         None,
     )
     if fallback_line is not None:
-        logger.warning(
-            "预检查缺失依赖失败，将回退到完整安装: unresolved direct reference in %s: %s",
+        logger.info(
+            "缺失依赖预检查发现无法安全裁剪的 option/direct-reference 行，将回退到完整安装: %s (%s)",
             requirements_path,
             fallback_line,
         )
@@ -423,6 +424,11 @@ def build_missing_requirements_install_lines(
         parsed = _parse_requirement_line(line)
         if parsed is None:
             if looks_like_direct_reference(line) or line.startswith(("-", "--")):
+                logger.debug(
+                    "缺失依赖行筛选回退到完整安装：requirements 中包含无法安全裁剪的 option/direct-reference 行: %s (%s)",
+                    requirements_path,
+                    line,
+                )
                 return None
             continue
 
@@ -449,7 +455,11 @@ def plan_missing_requirements_install(
             requirements_path,
             sorted(missing),
         )
-        return None
+        return MissingRequirementsPlan(
+            missing_names=frozenset(missing),
+            install_lines=(),
+            fallback_reason="unmapped missing requirement names",
+        )
 
     return MissingRequirementsPlan(
         missing_names=frozenset(missing),

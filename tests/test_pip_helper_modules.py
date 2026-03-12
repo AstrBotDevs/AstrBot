@@ -222,7 +222,35 @@ def test_plan_missing_requirements_install_returns_none_when_missing_names_canno
 
     plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
 
-    assert plan is None
+    assert plan is not None
+    assert plan.missing_names == frozenset({"botocore"})
+    assert plan.install_lines == ()
+    assert plan.fallback_reason == "unmapped missing requirement names"
+
+
+def test_build_missing_requirements_install_lines_logs_why_option_lines_fall_back(
+    monkeypatch,
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        "--extra-index-url https://example.com/simple\nboto3\n",
+        encoding="utf-8",
+    )
+    info_logs = []
+
+    monkeypatch.setattr(
+        "astrbot.core.utils.requirements_utils.logger.info",
+        lambda line, *args: info_logs.append(line % args if args else line),
+    )
+
+    install_lines = requirements_utils.build_missing_requirements_install_lines(
+        str(requirements_path), {"boto3"}
+    )
+
+    assert install_lines is None
+    assert any(str(requirements_path) in log for log in info_logs)
+    assert any("option/direct-reference" in log for log in info_logs)
 
 
 def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
@@ -231,18 +259,18 @@ def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
 ):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("git+https://example.com/demo.git\n", encoding="utf-8")
-    warning_logs = []
+    info_logs = []
 
     monkeypatch.setattr(
-        "astrbot.core.utils.requirements_utils.logger.warning",
-        lambda line, *args: warning_logs.append(line % args if args else line),
+        "astrbot.core.utils.requirements_utils.logger.info",
+        lambda line, *args: info_logs.append(line % args if args else line),
     )
 
     missing = requirements_utils.find_missing_requirements(str(requirements_path))
 
     assert missing is None
-    assert any(str(requirements_path) in log for log in warning_logs)
-    assert any("direct reference" in log for log in warning_logs)
+    assert any(str(requirements_path) in log for log in info_logs)
+    assert any("option/direct-reference" in log for log in info_logs)
 
 
 def test_load_requirement_lines_for_precheck_uses_parse_requirement_line_result(
