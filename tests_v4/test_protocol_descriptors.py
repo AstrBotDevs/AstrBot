@@ -59,6 +59,8 @@ class TestCommandTrigger:
         assert trigger.command == "hello"
         assert trigger.aliases == []
         assert trigger.description is None
+        assert trigger.platforms == []
+        assert trigger.message_types == []
 
     def test_with_aliases_and_description(self):
         """CommandTrigger should accept aliases and description."""
@@ -92,6 +94,7 @@ class TestMessageTrigger:
         assert trigger.regex is None
         assert trigger.keywords == []
         assert trigger.platforms == []
+        assert trigger.message_types == []
 
     def test_with_regex(self):
         """MessageTrigger should accept regex pattern."""
@@ -114,10 +117,12 @@ class TestMessageTrigger:
             regex=r"test",
             keywords=["keyword"],
             platforms=["platform"],
+            message_types=["private"],
         )
         assert trigger.regex == "test"
         assert trigger.keywords == ["keyword"]
         assert trigger.platforms == ["platform"]
+        assert trigger.message_types == ["private"]
 
 
 class TestEventTrigger:

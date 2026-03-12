@@ -2,8 +2,10 @@
 
 当前兼容层保证以下能力可运行：
 
-- ``command(name)`` -> ``on_command(name)``
-- ``regex(pattern)`` -> ``on_message(regex=pattern)``
+- ``command(name, alias=..., priority=...)`` -> ``CommandTrigger``
+- ``regex(pattern, priority=...)`` -> ``MessageTrigger``
+- ``event_message_type(...)`` -> 记录消息类型约束
+- ``platform_adapter_type(...)`` -> 记录平台约束
 - ``permission(ADMIN)`` / ``permission_type(PermissionType.ADMIN)``
   -> ``require_admin``
 
@@ -17,7 +19,8 @@ import enum
 from abc import ABCMeta, abstractmethod
 from typing import Any
 
-from ...decorators import on_command, on_message, require_admin
+from ...decorators import _get_or_create_meta, require_admin
+from ...protocol.descriptors import CommandTrigger, MessageTrigger
 from ..basic.astrbot_config import AstrBotConfig
 from .astr_message_event import AstrMessageEvent
 from .message_type import MessageType
@@ -71,6 +74,7 @@ class EventMessageTypeFilter:
 class PlatformAdapterType(enum.Flag):
     AIOCQHTTP = enum.auto()
     QQOFFICIAL = enum.auto()
+    GEWECHAT = enum.auto()
     TELEGRAM = enum.auto()
     WECOM = enum.auto()
     LARK = enum.auto()
@@ -86,6 +90,7 @@ class PlatformAdapterType(enum.Flag):
     ALL = (
         AIOCQHTTP
         | QQOFFICIAL
+        | GEWECHAT
         | TELEGRAM
         | WECOM
         | LARK
@@ -104,6 +109,7 @@ class PlatformAdapterType(enum.Flag):
 ADAPTER_NAME_2_TYPE = {
     "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
     "qq_official": PlatformAdapterType.QQOFFICIAL,
+    "gewechat": PlatformAdapterType.GEWECHAT,
     "telegram": PlatformAdapterType.TELEGRAM,
     "wecom": PlatformAdapterType.WECOM,
     "lark": PlatformAdapterType.LARK,
@@ -180,12 +186,113 @@ class CustomFilterAnd(CustomFilter):
         return self.filter1.filter(event, cfg) and self.filter2.filter(event, cfg)
 
 
-def command(name: str):
-    return on_command(name)
+EVENT_MESSAGE_TYPE_NAMES = {
+    EventMessageType.GROUP_MESSAGE: "group",
+    EventMessageType.PRIVATE_MESSAGE: "private",
+    EventMessageType.OTHER_MESSAGE: "other",
+}
 
 
-def regex(pattern: str):
-    return on_message(regex=pattern)
+def _merge_unique(existing: list[str], additions: list[str]) -> list[str]:
+    merged: list[str] = []
+    for item in [*existing, *additions]:
+        if item not in merged:
+            merged.append(item)
+    return merged
+
+
+def _normalize_aliases(*alias_groups: Any) -> list[str]:
+    aliases: list[str] = []
+    for alias_group in alias_groups:
+        if alias_group is None:
+            continue
+        if isinstance(alias_group, str):
+            values = [alias_group]
+        elif isinstance(alias_group, set):
+            values = sorted(str(item) for item in alias_group)
+        else:
+            values = [str(item) for item in alias_group]
+        aliases = _merge_unique(aliases, values)
+    return aliases
+
+
+def _existing_trigger_constraints(
+    trigger: CommandTrigger | MessageTrigger | None,
+) -> tuple[list[str], list[str], list[str]]:
+    if isinstance(trigger, CommandTrigger):
+        return list(trigger.platforms), list(trigger.message_types), []
+    if isinstance(trigger, MessageTrigger):
+        return (
+            list(trigger.platforms),
+            list(trigger.message_types),
+            list(trigger.keywords),
+        )
+    return [], [], []
+
+
+def _apply_priority(meta, priority: int | None) -> None:
+    if priority is not None:
+        meta.priority = priority
+
+
+def _selected_message_types(event_type: EventMessageType) -> list[str]:
+    selected: list[str] = []
+    for flag, name in EVENT_MESSAGE_TYPE_NAMES.items():
+        if event_type & flag:
+            selected.append(name)
+    return selected
+
+
+def _selected_platforms(
+    platform_type: PlatformAdapterType | str,
+) -> list[str]:
+    if isinstance(platform_type, str):
+        return [platform_type]
+    selected: list[str] = []
+    for name, flag in ADAPTER_NAME_2_TYPE.items():
+        if platform_type & flag:
+            selected.append(name)
+    return selected
+
+
+def command(
+    name: str,
+    alias: set[str] | list[str] | tuple[str, ...] | str | None = None,
+    *,
+    aliases: set[str] | list[str] | tuple[str, ...] | str | None = None,
+    priority: int | None = None,
+    desc: str | None = None,
+):
+    def decorator(func):
+        meta = _get_or_create_meta(func)
+        platforms, message_types, _ = _existing_trigger_constraints(meta.trigger)
+        meta.trigger = CommandTrigger(
+            command=name,
+            aliases=_normalize_aliases(alias, aliases),
+            description=desc,
+            platforms=platforms,
+            message_types=message_types,
+        )
+        _apply_priority(meta, priority)
+        return func
+
+    return decorator
+
+
+def regex(pattern: str, *, priority: int | None = None):
+    def decorator(func):
+        meta = _get_or_create_meta(func)
+        platforms, message_types, keywords = _existing_trigger_constraints(meta.trigger)
+        meta.trigger = MessageTrigger(
+            regex=pattern,
+            keywords=keywords,
+            platforms=platforms,
+            message_types=message_types,
+        )
+        _apply_priority(meta, priority)
+        return func
+
+    return decorator
 
 
 def permission(level: str | PermissionType):
@@ -216,8 +323,6 @@ def _unsupported_factory(name: str, replacement: str | None = None):
 
 
 custom_filter = _unsupported_factory("custom_filter")
-event_message_type = _unsupported_factory("event_message_type")
-platform_adapter_type = _unsupported_factory("platform_adapter_type")
 after_message_sent = _unsupported_factory("after_message_sent")
 on_astrbot_loaded = _unsupported_factory("on_astrbot_loaded")
 on_platform_loaded = _unsupported_factory("on_platform_loaded")
@@ -225,6 +330,62 @@ on_decorating_result = _unsupported_factory("on_decorating_result")
 on_llm_request = _unsupported_factory("on_llm_request")
 on_llm_response = _unsupported_factory("on_llm_response")
 command_group = _unsupported_factory("command_group")
+
+
+def event_message_type(
+    level: EventMessageType,
+    *,
+    priority: int | None = None,
+):
+    message_types = _selected_message_types(level)
+
+    def decorator(func):
+        meta = _get_or_create_meta(func)
+        if meta.trigger is None:
+            meta.trigger = MessageTrigger(message_types=message_types)
+        elif isinstance(meta.trigger, MessageTrigger):
+            meta.trigger.message_types = _merge_unique(
+                meta.trigger.message_types,
+                message_types,
+            )
+        elif isinstance(meta.trigger, CommandTrigger):
+            meta.trigger.message_types = _merge_unique(
+                meta.trigger.message_types,
+                message_types,
+            )
+        else:
+            raise NotImplementedError(
+                "event_message_type() 目前只支持消息/命令处理器。"
+            )
+        _apply_priority(meta, priority)
+        return func
+
+    return decorator
+
+
+def platform_adapter_type(
+    level: PlatformAdapterType | str,
+    *,
+    priority: int | None = None,
+):
+    platforms = _selected_platforms(level)
+
+    def decorator(func):
+        meta = _get_or_create_meta(func)
+        if meta.trigger is None:
+            meta.trigger = MessageTrigger(platforms=platforms)
+        elif isinstance(meta.trigger, MessageTrigger):
+            meta.trigger.platforms = _merge_unique(meta.trigger.platforms, platforms)
+        elif isinstance(meta.trigger, CommandTrigger):
+            meta.trigger.platforms = _merge_unique(meta.trigger.platforms, platforms)
+        else:
+            raise NotImplementedError(
+                "platform_adapter_type() 目前只支持消息/命令处理器。"
+            )
+        _apply_priority(meta, priority)
+        return func
+
+    return decorator
 
 
 class _FilterNamespace:

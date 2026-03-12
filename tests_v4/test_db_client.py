@@ -49,15 +49,15 @@ class TestDBClientGet:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_returns_none_for_non_dict_value(self):
-        """get() should return None when value is not a dict."""
+    async def test_get_returns_scalar_value(self):
+        """get() should preserve non-dict scalar values."""
         proxy = AsyncMock(spec=CapabilityProxy)
-        proxy.call = AsyncMock(return_value={"value": "not a dict"})
+        proxy.call = AsyncMock(return_value={"value": True})
 
         client = DBClient(proxy)
         result = await client.get("my_key")
 
-        assert result is None
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_get_returns_none_when_value_key_missing(self):
@@ -126,13 +126,18 @@ class TestDBClientSet:
         )
 
     @pytest.mark.asyncio
-    async def test_set_raises_type_error_for_non_dict_value(self):
-        """set() should reject non-dict values before calling proxy."""
+    async def test_set_accepts_scalar_value(self):
+        """set() should accept scalar JSON values."""
         proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={})
         client = DBClient(proxy)
 
-        with pytest.raises(TypeError, match="db.set 的 value 必须是 dict"):
-            await client.set("bad", "not a dict")
+        await client.set("flag", True)
+
+        proxy.call.assert_called_once_with(
+            "db.set",
+            {"key": "flag", "value": True},
+        )
 
 
 class TestDBClientDelete:

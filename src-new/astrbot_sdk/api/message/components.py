@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class ComponentType(str, Enum):
@@ -50,30 +50,60 @@ class Plain(BaseMessageComponent):
 
 class Image(BaseMessageComponent):
     type: Literal[CompT.Image] = CompT.Image
-    file: str
+    file: str = Field(validation_alias=AliasChoices("file", "url", "path"))
+
+    @classmethod
+    def fromURL(cls, url: str) -> "Image":
+        return cls(file=url)
+
+    @classmethod
+    def fromFileSystem(cls, path: str) -> "Image":
+        return cls(file=path)
 
 
 class Record(BaseMessageComponent):
     type: Literal[CompT.Record] = CompT.Record
-    file: str
+    file: str = Field(validation_alias=AliasChoices("file", "url", "path"))
+
+    @classmethod
+    def fromURL(cls, url: str) -> "Record":
+        return cls(file=url)
+
+    @classmethod
+    def fromFileSystem(cls, path: str) -> "Record":
+        return cls(file=path)
 
 
 class Video(BaseMessageComponent):
     type: Literal[CompT.Video] = CompT.Video
-    file: str
+    file: str = Field(validation_alias=AliasChoices("file", "url", "path"))
+
+    @classmethod
+    def fromURL(cls, url: str) -> "Video":
+        return cls(file=url)
+
+    @classmethod
+    def fromFileSystem(cls, path: str) -> "Video":
+        return cls(file=path)
 
 
 class File(BaseMessageComponent):
     type: Literal[CompT.File] = CompT.File
-    file_name: str
+    file_name: str = Field(validation_alias=AliasChoices("file_name", "name"))
     mime_type: str | None = None
-    file: str
+    file: str = Field(validation_alias=AliasChoices("file", "url", "path"))
 
 
 class At(BaseMessageComponent):
     type: Literal[CompT.At] = CompT.At
-    user_id: str | None = None
-    user_name: str | None = None
+    user_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("user_id", "qq"),
+    )
+    user_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("user_name", "name"),
+    )
 
 
 class AtAll(At):
@@ -92,8 +122,11 @@ class Reply(BaseMessageComponent):
 
 class Node(BaseMessageComponent):
     type: Literal[CompT.Node] = CompT.Node
-    sender_id: str
-    nickname: str | None = None
+    sender_id: str = Field(validation_alias=AliasChoices("sender_id", "uin"))
+    nickname: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("nickname", "name"),
+    )
     content: list[BaseMessageComponent] = Field(default_factory=list)
 
 

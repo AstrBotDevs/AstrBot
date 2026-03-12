@@ -16,7 +16,7 @@
 
 功能说明：
     - 数据永久存储，除非用户显式删除
-    - 值类型为 dict，支持结构化数据
+    - 值类型支持任意 JSON 数据
     - 支持前缀查询键列表
 
 TODO:
@@ -48,14 +48,14 @@ class DBClient:
         """
         self._proxy = proxy
 
-    async def get(self, key: str) -> dict[str, Any] | None:
+    async def get(self, key: str) -> Any | None:
         """获取指定键的值。
 
         Args:
             key: 数据键名
 
         Returns:
-            存储的字典值，若键不存在或值非 dict 则返回 None
+            存储的值，若键不存在则返回 None
 
         示例:
             data = await ctx.db.get("user_settings")
@@ -63,24 +63,19 @@ class DBClient:
                 print(data["theme"])
         """
         output = await self._proxy.call("db.get", {"key": key})
-        value = output.get("value")
-        return value if isinstance(value, dict) else None
+        return output.get("value")
 
-    async def set(self, key: str, value: dict[str, Any]) -> None:
+    async def set(self, key: str, value: Any) -> None:
         """设置键值对。
 
         Args:
             key: 数据键名
-            value: 要存储的字典值
-
-        Raises:
-            TypeError: 如果 value 不是 dict
+            value: 要存储的 JSON 值
 
         示例:
             await ctx.db.set("user_settings", {"theme": "dark", "lang": "zh"})
+            await ctx.db.set("greeted", True)
         """
-        if not isinstance(value, dict):
-            raise TypeError("db.set 的 value 必须是 dict")
         await self._proxy.call("db.set", {"key": key, "value": value})
 
     async def delete(self, key: str) -> None:

@@ -759,19 +759,28 @@ class TestBuiltinDbCapabilities:
         assert "other" not in result["keys"]
 
     @pytest.mark.asyncio
-    async def test_db_set_invalid_value(self):
-        """db.set should reject non-object value."""
+    async def test_db_set_scalar_value(self):
+        """db.set should accept scalar JSON values."""
         router = CapabilityRouter()
         token = CancelToken()
 
-        with pytest.raises(AstrBotError, match="value 必须是 object"):
-            await router.execute(
-                "db.set",
-                {"key": "test", "value": "not_an_object"},
-                stream=False,
-                cancel_token=token,
-                request_id="req-1",
-            )
+        await router.execute(
+            "db.set",
+            {"key": "test", "value": True},
+            stream=False,
+            cancel_token=token,
+            request_id="req-1",
+        )
+
+        result = await router.execute(
+            "db.get",
+            {"key": "test"},
+            stream=False,
+            cancel_token=token,
+            request_id="req-2",
+        )
+
+        assert result["value"] is True
 
 
 class TestBuiltinPlatformCapabilities:

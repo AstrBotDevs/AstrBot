@@ -520,15 +520,16 @@ class LegacyContext:
             f"迁移文档：{MIGRATION_DOC_URL}"
         )
 
-    async def put_kv_data(self, key: str, value: dict[str, Any]) -> None:
+    async def put_kv_data(self, key: str, value: Any) -> None:
         _warn_once("context.put_kv_data()", "ctx.db.set(key, value)")
         ctx = self.require_runtime_context()
         await ctx.db.set(key, value)
 
-    async def get_kv_data(self, key: str) -> dict[str, Any] | None:
+    async def get_kv_data(self, key: str, default: Any = None) -> Any:
         _warn_once("context.get_kv_data()", "ctx.db.get(key)")
         ctx = self.require_runtime_context()
-        return await ctx.db.get(key)
+        value = await ctx.db.get(key)
+        return default if value is None else value
 
     async def delete_kv_data(self, key: str) -> None:
         _warn_once("context.delete_kv_data()", "ctx.db.delete(key)")

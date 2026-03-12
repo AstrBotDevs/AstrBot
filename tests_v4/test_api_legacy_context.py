@@ -233,6 +233,21 @@ class TestLegacyContextMethods:
         mock_db.set.assert_called_once_with("test_key", {"value": 123})
 
     @pytest.mark.asyncio
+    async def test_put_kv_data_accepts_scalar_value(self):
+        """put_kv_data() should support scalar JSON values."""
+        mock_db = AsyncMock()
+
+        mock_ctx = MagicMock()
+        mock_ctx.db = mock_db
+
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx._runtime_context = mock_ctx
+
+        await legacy_ctx.put_kv_data("greeted", True)
+
+        mock_db.set.assert_called_once_with("greeted", True)
+
+    @pytest.mark.asyncio
     async def test_get_kv_data(self):
         """get_kv_data() should delegate to db.get()."""
         mock_db = AsyncMock()
@@ -248,6 +263,23 @@ class TestLegacyContextMethods:
 
         mock_db.get.assert_called_once_with("my_key")
         assert result == {"data": "hello"}
+
+    @pytest.mark.asyncio
+    async def test_get_kv_data_returns_default_when_missing(self):
+        """get_kv_data() should honor the legacy default parameter."""
+        mock_db = AsyncMock()
+        mock_db.get = AsyncMock(return_value=None)
+
+        mock_ctx = MagicMock()
+        mock_ctx.db = mock_db
+
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx._runtime_context = mock_ctx
+
+        result = await legacy_ctx.get_kv_data("missing", False)
+
+        mock_db.get.assert_called_once_with("missing")
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_delete_kv_data(self):

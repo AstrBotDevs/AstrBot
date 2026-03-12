@@ -1,6 +1,6 @@
 """v4 协议描述符模型。
 
-`protocol` 是 v4 新引入的协议层抽象，不对应旧树中的一个同名目录。这里
+`protocol` 是 v4 新引入的协议层抽象，不对应旧树(圣诞树)中的一个同名目录。这里
 定义的是跨进程握手和调度时使用的声明式元数据，而不是运行时的具体处理器/
 能力实现。
 """
@@ -107,12 +107,12 @@ DB_GET_INPUT_SCHEMA = _object_schema(
 )
 DB_GET_OUTPUT_SCHEMA = _object_schema(
     required=("value",),
-    value=_nullable({"type": "object"}),
+    value=_nullable({}),
 )
 DB_SET_INPUT_SCHEMA = _object_schema(
     required=("key", "value"),
     key={"type": "string"},
-    value={"type": "object"},
+    value={},
 )
 DB_SET_OUTPUT_SCHEMA = _object_schema()
 DB_DELETE_INPUT_SCHEMA = _object_schema(
@@ -260,12 +260,16 @@ class CommandTrigger(_DescriptorBase):
         command: 命令名称（不含前缀，如 "help"）
         aliases: 命令别名列表
         description: 命令描述，用于帮助文档
+        platforms: 允许的平台列表，为空表示所有平台
+        message_types: 限定的消息类型列表，为空表示不限
     """
 
     type: Literal["command"] = "command"
     command: str
     aliases: list[str] = Field(default_factory=list)
     description: str | None = None
+    platforms: list[str] = Field(default_factory=list)
+    message_types: list[str] = Field(default_factory=list)
 
 
 class MessageTrigger(_DescriptorBase):
@@ -280,6 +284,7 @@ class MessageTrigger(_DescriptorBase):
         regex: 正则表达式模式，匹配消息文本
         keywords: 关键词列表，消息包含任一关键词即触发
         platforms: 目标平台列表，为空表示所有平台
+        message_types: 限定的消息类型列表，为空表示不限
 
     Note:
         `regex` 和 `keywords` 可以同时为空，此时表示“任意消息均可触发”，
@@ -290,6 +295,7 @@ class MessageTrigger(_DescriptorBase):
     regex: str | None = None
     keywords: list[str] = Field(default_factory=list)
     platforms: list[str] = Field(default_factory=list)
+    message_types: list[str] = Field(default_factory=list)
 
 
 class EventTrigger(_DescriptorBase):

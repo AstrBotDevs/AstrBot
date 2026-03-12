@@ -122,7 +122,7 @@ class _CapabilityRegistration:
 class CapabilityRouter:
     def __init__(self) -> None:
         self._registrations: dict[str, _CapabilityRegistration] = {}
-        self.db_store: dict[str, dict[str, Any]] = {}
+        self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
         self.sent_messages: list[dict[str, Any]] = []
         self._register_builtin_capabilities()
@@ -277,10 +277,7 @@ class CapabilityRouter:
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
             key = str(payload.get("key", ""))
-            value = payload.get("value")
-            if not isinstance(value, dict):
-                raise AstrBotError.invalid_input("db.set 的 value 必须是 object")
-            self.db_store[key] = value
+            self.db_store[key] = payload.get("value")
             return {}
 
         async def db_delete(
