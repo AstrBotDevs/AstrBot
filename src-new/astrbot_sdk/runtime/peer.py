@@ -1,4 +1,73 @@
-"""运行时协议对等端。
+"""协议对等端模块。
+
+定义 Peer 类，封装双向传输通道上的消息收发、初始化握手、能力调用、
+流式事件转发与取消处理。这里的 peer 指"通信对端/本端"这一网络协议概念，
+而不是业务上的用户、群聊或会话对象。
+
+核心职责：
+    - 消息序列化/反序列化
+    - 初始化握手协议
+    - 能力调用（同步/流式）
+    - 取消处理
+    - 连接生命周期管理
+消息处理：
+    入站:
+        ResultMessage -> 唤醒等待的 Future
+        EventMessage -> 投递到流式队列
+        InitializeMessage -> 调用 initialize_handler
+        InvokeMessage -> 创建任务调用 invoke_handler
+        CancelMessage -> 取消对应的任务
+
+    出站:
+        initialize() -> InitializeMessage
+        invoke() -> InvokeMessage(stream=False)
+        invoke_stream() -> InvokeMessage(stream=True)
+        cancel() -> CancelMessage
+    
+与旧版对比：
+    旧版 JSON-RPC:
+        - 分离的 JSONRPCClient 和 JSONRPCServer
+        - 通过 method 字段区分操作类型
+        - 使用 JSONRPCRequest/Response 消息类型
+        - 流式通过独立的 notification 实现
+        - 无统一的取消机制
+
+    新版 Peer:
+        - 统一的 Peer 抽象，既是客户端也是服务端
+        - 通过 type 字段区分消息类型
+        - 使用 InitializeMessage/InvokeMessage/EventMessage 等
+        - 流式通过 EventMessage(phase=delta) 实现
+        - 统一的 CancelMessage 取消机制
+
+使用示例：
+    # 作为客户端发起调用
+    peer = Peer(transport=transport, peer_info=PeerInfo(...))
+    await peer.start()
+    output = await peer.initialize(handlers)
+    result = await peer.invoke("llm.chat", {"prompt": "hello"})
+
+    # 作为服务端处理调用
+    peer.set_invoke_handler(my_handler)
+    await peer.start()
+
+消息处理流程：
+    入站消息:
+        ResultMessage -> 唤醒等待的 Future
+        EventMessage -> 投递到流式队列
+        InitializeMessage -> 调用 _initialize_handler
+        InvokeMessage -> 创建任务调用 _invoke_handler
+        CancelMessage -> 取消对应的任务
+
+    出站消息:
+        initialize() -> InitializeMessage
+        invoke() -> InvokeMessage(stream=False)
+        invoke_stream() -> InvokeMessage(stream=True)
+        cancel() -> CancelMessage
+
+取消机制：
+    - CancelToken 用于检查取消状态
+    - 入站任务在收到 CancelMessage 时被取消
+    - 早到取消：在任务执行前检查 cancel_token，避免竞态条件
 
 `Peer` 把 `Transport` 和 v4 协议消息模型接起来，负责：
 
@@ -344,7 +413,7 @@ class Peer:
             if isinstance(exc, AstrBotError):
                 error = exc
             else:
-                error = AstrBotError.protocol_error(f"协议消息处理失败: {exc}")
+                error = AstrBotError.protocol_error(f"无法解析协议消息: {exc}")
             await self._fail_connection(error)
             raise error from exc
 

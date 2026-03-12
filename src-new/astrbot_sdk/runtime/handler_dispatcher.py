@@ -1,4 +1,63 @@
-"""插件侧 handler 调度器。
+"""处理器分发模块。
+
+定义 HandlerDispatcher 类，负责将能力调用分发到具体的处理器函数。
+支持参数注入、流式执行、错误处理和生命周期回调。
+
+核心职责：
+    - 根据处理器 ID 查找处理器
+    - 构建处理器参数（支持类型注解注入）
+    - 执行处理器并处理结果
+    - 处理异步生成器流式结果
+    - 统一的错误处理
+
+参数注入优先级：
+    1. 按类型注解注入（支持 Optional[Type]）
+    2. 按参数名注入（兼容无类型注解）
+    3. 从 legacy_args 注入（命令参数等）
+
+支持的注入类型：
+    - MessageEvent: 消息事件
+    - Context: 运行时上下文
+
+与旧版对比：
+    旧版 HandlerExecutor:
+        - 从 star_handlers_registry 获取处理器
+        - 直接调用 handler(event, **args)
+        - 无参数注入支持
+        - 通过 JSON-RPC notification 发送流式结果
+        - 错误通过 JSON-RPC error 响应
+
+    新版 HandlerDispatcher:
+        - 从 LoadedHandler 映射获取处理器
+        - 支持类型注解注入 (MessageEvent, Context)
+        - 支持参数名注入 (event, ctx, context)
+        - 支持 legacy_args 注入
+        - 支持 Optional[Type] 类型
+        - 支持默认值
+        - 统一的错误处理和 on_error 回调
+
+处理器签名兼容：
+    # 旧版签名
+    def handler(event: AstrMessageEvent) -> str:
+        return "result"
+
+    # 新版签名（类型注入）
+    async def handler(event: MessageEvent, ctx: Context) -> None:
+        await event.reply("result")
+
+    # 新版签名（名字注入）
+    async def handler(event, ctx) -> None:
+        await ctx.platform.send(event.session_id, "result")
+
+    # 流式处理器
+    async def streaming_handler(event: MessageEvent):
+        yield "chunk 1"
+        yield "chunk 2"
+
+结果处理：
+    - PlainTextResult: 调用 event.reply()
+    - str: 调用 event.reply()
+    - dict with "text": 调用 event.reply(str(item["text"]))
 
 `HandlerDispatcher` 把运行时收到的 `handler.invoke` 请求转成真实 Python 调用。
 它的职责只包括参数注入、legacy 返回值兼容和错误回调；不负责 handler 发现或
