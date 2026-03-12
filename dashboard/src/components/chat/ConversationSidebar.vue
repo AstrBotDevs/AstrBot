@@ -21,10 +21,29 @@
         </div>
 
         <div style="padding: 8px; opacity: 0.6;">
-            <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
-                v-if="!sidebarCollapsed || isMobile" prepend-icon="mdi-square-edit-outline">{{ tm('actions.newChat') }}</v-btn>
-            <v-btn icon="mdi-square-edit-outline" rounded="xl" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId" 
+            <div class="new-chat-row" v-if="!sidebarCollapsed || isMobile">
+                <v-btn block variant="text" class="new-chat-btn" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
+                    prepend-icon="mdi-square-edit-outline">{{ tm('actions.newChat') }}</v-btn>
+                <v-btn v-if="sessions.length > 0" icon size="small" variant="text" @click="toggleBatchMode"
+                    :color="batchMode ? 'primary' : undefined">
+                    <v-icon>mdi-checkbox-multiple-marked-outline</v-icon>
+                </v-btn>
+            </div>
+            <v-btn icon="mdi-square-edit-outline" rounded="xl" @click="$emit('newChat')" :disabled="!currSessionId && !selectedProjectId"
                 v-if="sidebarCollapsed && !isMobile" elevation="0"></v-btn>
+        </div>
+
+        <!-- Batch action bar -->
+        <div v-if="batchMode && (!sidebarCollapsed || isMobile)" class="batch-action-bar">
+            <v-btn size="x-small" variant="text" @click="toggleSelectAll">
+                {{ isAllSelected ? tm('batch.deselectAll') : tm('batch.selectAll') }}
+            </v-btn>
+            <span class="batch-selected-count">{{ tm('batch.selected', { count: batchSelected.length }) }}</span>
+            <v-spacer />
+            <v-btn size="x-small" variant="text" color="error" :disabled="batchSelected.length === 0"
+                @click="handleBatchDelete">
+                {{ tm('batch.delete') }}
+            </v-btn>
         </div>
 
         <!-- 项目列表组件 -->
@@ -41,10 +60,23 @@
             v-if="!sidebarCollapsed || isMobile">
             <v-card v-if="sessions.length > 0" flat style="background-color: transparent;">
                 <v-list density="compact" nav class="conversation-list"
-                    style="background-color: transparent;" :selected="selectedSessions"
-                    @update:selected="$emit('selectConversation', $event)">
+                    style="background-color: transparent;" :selected="batchMode ? [] : selectedSessions"
+                    @update:selected="handleListSelect">
                     <v-list-item v-for="item in sessions" :key="item.session_id" :value="item.session_id"
-                        rounded="lg" class="conversation-item" active-color="secondary">
+                        rounded="lg" class="conversation-item" active-color="secondary"
+                        @click="batchMode ? toggleBatchItem(item.session_id) : undefined">
+
+                        <template v-if="batchMode && (!sidebarCollapsed || isMobile)" v-slot:prepend>
+                            <v-checkbox-btn
+                                :model-value="batchSelected.includes(item.session_id)"
+                                @update:model-value="toggleBatchItem(item.session_id)"
+                                @click.stop
+                                density="compact"
+                                hide-details
+                                class="batch-checkbox"
+                            />
+                        </template>
+
                         <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title"
                             :style="{ color: isDark ? '#ffffff' : '#000000' }">
                             {{ item.display_name || tm('conversation.newConversation') }}
@@ -53,7 +85,7 @@
                             {{ new Date(item.updated_at).toLocaleString() }}
                         </v-list-item-subtitle> -->
 
-                        <template v-if="!sidebarCollapsed || isMobile" v-slot:append>
+                        <template v-if="!batchMode && (!sidebarCollapsed || isMobile)" v-slot:append>
                             <div class="conversation-actions">
                                 <v-btn icon="mdi-pencil" size="x-small" variant="text"
                                     class="edit-title-btn"
@@ -162,7 +194,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { Session } from '@/composables/useSessions';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
@@ -194,6 +226,7 @@ const emit = defineEmits<{
     selectConversation: [sessionIds: string[]];
     editTitle: [sessionId: string, title: string];
     deleteConversation: [sessionId: string];
+    batchDeleteConversations: [sessionIds: string[]];
     closeMobileSidebar: [];
     toggleTheme: [];
     toggleFullscreen: [];
@@ -211,6 +244,53 @@ const confirmDialog = useConfirmDialog();
 
 const sidebarCollapsed = ref(true);
 const showProviderConfigDialog = ref(false);
+
+// Batch mode state
+const batchMode = ref(false);
+const batchSelected = ref<string[]>([]);
+
+const isAllSelected = computed(() =>
+    props.sessions.length > 0 && batchSelected.value.length === props.sessions.length
+);
+
+function toggleBatchMode() {
+    batchMode.value = !batchMode.value;
+    batchSelected.value = [];
+}
+
+function toggleBatchItem(sessionId: string) {
+    const idx = batchSelected.value.indexOf(sessionId);
+    if (idx >= 0) {
+        batchSelected.value.splice(idx, 1);
+    } else {
+        batchSelected.value.push(sessionId);
+    }
+}
+
+function toggleSelectAll() {
+    if (isAllSelected.value) {
+        batchSelected.value = [];
+    } else {
+        batchSelected.value = props.sessions.map(s => s.session_id);
+    }
+}
+
+async function handleBatchDelete() {
+    const count = batchSelected.value.length;
+    if (count === 0) return;
+    const message = tm('batch.confirmDelete', { count });
+    if (await askForConfirmation(message, confirmDialog)) {
+        emit('batchDeleteConversations', [...batchSelected.value]);
+        batchSelected.value = [];
+        batchMode.value = false;
+    }
+}
+
+function handleListSelect(sessionIds: string[]) {
+    if (!batchMode.value) {
+        emit('selectConversation', sessionIds);
+    }
+}
 const transportOptions = [
     { label: tm('transport.sse'), value: 'sse' as const },
     { label: tm('transport.websocket'), value: 'websocket' as const }
@@ -404,5 +484,34 @@ function handleTransportModeChange(mode: string | null) {
 
 .transport-mode-select {
     min-width: 120px;
+}
+
+.new-chat-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.new-chat-row .new-chat-btn {
+    flex: 1;
+    min-width: 0;
+}
+
+.batch-action-bar {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.batch-selected-count {
+    font-size: 12px;
+    opacity: 0.7;
+    white-space: nowrap;
+}
+
+.batch-checkbox {
+    flex: none;
 }
 </style>

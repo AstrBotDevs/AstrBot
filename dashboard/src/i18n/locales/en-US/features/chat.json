@@ -141,5 +141,15 @@
   "errors": {
     "sendMessageFailed": "Failed to send message, please try again",
     "createSessionFailed": "Failed to create session, please refresh the page"
+  },
+  "batch": {
+    "selected": "{count} selected",
+    "confirmDelete": "Are you sure you want to delete {count} conversation(s)? This action cannot be undone.",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "delete": "Delete",
+    "exit": "Exit",
+    "partialFailure": "{failed} of {total} conversations failed to delete",
+    "requestFailed": "Failed to delete conversations. Please try again."
   }
 } 

@@ -51,6 +51,7 @@ class ChatRoute(Route):
             "/chat/get_session": ("GET", self.get_session),
             "/chat/stop": ("POST", self.stop_session),
             "/chat/delete_session": ("GET", self.delete_webchat_session),
+            "/chat/batch_delete_sessions": ("POST", self.batch_delete_sessions),
             "/chat/update_session_display_name": (
                 "POST",
                 self.update_session_display_name,
@@ -578,19 +579,9 @@ class ChatRoute(Route):
 
         return Response().ok(data={"stopped_count": stopped_count}).__dict__
 
-    async def delete_webchat_session(self):
-        """Delete a Platform session and all its related data."""
-        session_id = request.args.get("session_id")
-        if not session_id:
-            return Response().error("Missing key: session_id").__dict__
-        username = g.get("username", "guest")
-
-        # 验证会话是否存在且属于当前用户
-        session = await self.db.get_platform_session_by_id(session_id)
-        if not session:
-            return Response().error(f"Session {session_id} not found").__dict__
-        if session.creator != username:
-            return Response().error("Permission denied").__dict__
+    async def _delete_session_internal(self, session, username: str) -> None:
+        """Delete a single session and all its related data."""
+        session_id = session.session_id
 
         # 删除该会话下的所有对话
         message_type = "GroupMessage" if session.is_group else "FriendMessage"
@@ -632,7 +623,65 @@ class ChatRoute(Route):
         # 删除会话
         await self.db.delete_platform_session(session_id)
 
+    async def delete_webchat_session(self):
+        """Delete a Platform session and all its related data."""
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return Response().error("Missing key: session_id").__dict__
+        username = g.get("username", "guest")
+
+        session = await self.db.get_platform_session_by_id(session_id)
+        if not session:
+            return Response().error(f"Session {session_id} not found").__dict__
+        if session.creator != username:
+            return Response().error("Permission denied").__dict__
+
+        await self._delete_session_internal(session, username)
+
         return Response().ok().__dict__
+
+    async def batch_delete_sessions(self):
+        """Batch delete multiple Platform sessions."""
+        post_data = await request.json
+        if post_data is None:
+            return Response().error("Missing JSON body").__dict__
+
+        session_ids = post_data.get("session_ids")
+        if not session_ids or not isinstance(session_ids, list):
+            return Response().error("Missing or invalid key: session_ids").__dict__
+
+        username = g.get("username", "guest")
+        deleted_count = 0
+        failed_items = []
+
+        for sid in session_ids:
+            try:
+                session = await self.db.get_platform_session_by_id(sid)
+                if not session:
+                    failed_items.append({"session_id": sid, "reason": "not found"})
+                    continue
+                if session.creator != username:
+                    failed_items.append(
+                        {"session_id": sid, "reason": "permission denied"}
+                    )
+                    continue
+                await self._delete_session_internal(session, username)
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete session {sid}: {e}")
+                failed_items.append({"session_id": sid, "reason": str(e)})
+
+        return (
+            Response()
+            .ok(
+                data={
+                    "deleted_count": deleted_count,
+                    "failed_count": len(failed_items),
+                    "failed_items": failed_items,
+                }
+            )
+            .__dict__
+        )
 
     def _extract_attachment_ids(self, history_list) -> list[str]:
         """从消息历史中提取所有 attachment_id"""
