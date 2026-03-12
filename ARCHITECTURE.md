@@ -13,6 +13,7 @@
 4. [五大硬性协议规则](#五大硬性协议规则)
 5. [数据流与通信模型](#数据流与通信模型)
 6. [扩展机制](#扩展机制)
+7. [实现状态](#实现状态)
 
 ---
 
@@ -49,7 +50,7 @@ AstrBot SDK v4 采用分层架构设计，从上到下分为：
 
 ```
 src-new/astrbot_sdk/
-├── __init__.py              # 顶层导出
+├── __init__.py              # 顶层导出 (Star, Context, decorators, events, errors)
 ├── __main__.py              # CLI 入口点
 ├── cli.py                   # Click 命令行工具
 ├── star.py                  # Star 基类与 Handler 发现
@@ -60,40 +61,56 @@ src-new/astrbot_sdk/
 ├── compat.py                # 兼容层导出
 ├── _legacy_api.py           # Legacy Context 与 CommandComponent
 │
-├── protocol/                # 协议层
-│   ├── __init__.py
+├── protocol/                # 协议层 (已完成)
+│   ├── __init__.py          # 公共入口，导出所有协议类型
 │   ├── descriptors.py       # HandlerDescriptor, CapabilityDescriptor
+│   │                        # 内置能力 JSON Schema 常量
 │   ├── messages.py          # 五种协议消息类型
-│   └── legacy_adapter.py    # v3 JSON-RPC ↔ v4 协议转换
+│   └── legacy_adapter.py    # v3 JSON-RPC ↔ v4 协议双向转换
 │
-├── runtime/                 # 运行时层
-│   ├── __init__.py
+├── runtime/                 # 运行时层 (已完成)
+│   ├── __init__.py          # 公共入口
 │   ├── peer.py              # 核心通信端点
-│   ├── transport.py         # 传输层实现
-│   ├── loader.py            # 插件加载器
+│   ├── transport.py         # 传输层实现 (Stdio/WebSocket)
+│   ├── loader.py            # 插件加载器与环境管理
 │   ├── handler_dispatcher.py # Handler 分发器
 │   ├── capability_router.py # Capability 路由器
 │   └── bootstrap.py         # Supervisor/Worker 运行时
 │
-├── clients/                 # 客户端层
-│   ├── __init__.py
+├── clients/                 # 客户端层 (已完成)
+│   ├── __init__.py          # 导出所有客户端
 │   ├── _proxy.py            # CapabilityProxy 代理
 │   ├── llm.py               # LLM 客户端
 │   ├── db.py                # 数据库客户端
 │   ├── memory.py            # 记忆客户端
 │   └── platform.py          # 平台客户端
 │
-└── api/                     # API 层
-    ├── __init__.py
+└── api/                     # API 层 - 兼容层
+    ├── __init__.py          # 子模块导出
+    ├── basic/               # 基础实体与配置
+    │   ├── astrbot_config.py
+    │   ├── conversation_mgr.py
+    │   └── entities.py
     ├── components/          # 组件导出
-    │   ├── __init__.py
     │   └── command.py       # CommandComponent 导出
     ├── event/               # 事件相关
-    │   ├── __init__.py
-    │   └── filter.py        # filter 命名空间
+    │   ├── astr_message_event.py
+    │   ├── astrbot_message.py
+    │   ├── event_result.py
+    │   ├── event_type.py
+    │   ├── filter.py        # filter 命名空间
+    │   ├── message_session.py
+    │   └── message_type.py
+    ├── message/             # 消息链
+    │   ├── chain.py
+    │   └── components.py
+    ├── platform/            # 平台元数据
+    │   └── platform_metadata.py
+    ├── provider/            # Provider 实体
+    │   └── entities.py
     └── star/                # Star 相关
-        ├── __init__.py
-        └── context.py       # Legacy Context 导出
+        ├── context.py       # Legacy Context 导出
+        └── star.py
 ```
 
 ---
@@ -102,9 +119,11 @@ src-new/astrbot_sdk/
 
 ### 协议层 (protocol/)
 
+协议层负责消息格式定义和 legacy 兼容转换，是 v4 新引入的抽象层。
+
 #### `descriptors.py` - 描述符定义
 
-定义了 Handler 和 Capability 的元数据结构。
+定义了 Handler 和 Capability 的元数据结构，以及内置能力的 JSON Schema 常量。
 
 **核心类型:**
 
@@ -159,6 +178,49 @@ class CapabilityDescriptor(_DescriptorBase):
     cancelable: bool = False
 ```
 
+**内置能力 Schema 常量:**
+
+```python
+# LLM 相关
+LLM_CHAT_INPUT_SCHEMA
+LLM_CHAT_OUTPUT_SCHEMA
+LLM_CHAT_RAW_INPUT_SCHEMA
+LLM_CHAT_RAW_OUTPUT_SCHEMA
+LLM_STREAM_CHAT_INPUT_SCHEMA
+LLM_STREAM_CHAT_OUTPUT_SCHEMA
+
+# Memory 相关
+MEMORY_SEARCH_INPUT_SCHEMA
+MEMORY_SEARCH_OUTPUT_SCHEMA
+MEMORY_SAVE_INPUT_SCHEMA
+MEMORY_SAVE_OUTPUT_SCHEMA
+MEMORY_GET_INPUT_SCHEMA
+MEMORY_GET_OUTPUT_SCHEMA
+MEMORY_DELETE_INPUT_SCHEMA
+MEMORY_DELETE_OUTPUT_SCHEMA
+
+# DB 相关
+DB_GET_INPUT_SCHEMA
+DB_GET_OUTPUT_SCHEMA
+DB_SET_INPUT_SCHEMA
+DB_SET_OUTPUT_SCHEMA
+DB_DELETE_INPUT_SCHEMA
+DB_DELETE_OUTPUT_SCHEMA
+DB_LIST_INPUT_SCHEMA
+DB_LIST_OUTPUT_SCHEMA
+
+# Platform 相关
+PLATFORM_SEND_INPUT_SCHEMA
+PLATFORM_SEND_OUTPUT_SCHEMA
+PLATFORM_SEND_IMAGE_INPUT_SCHEMA
+PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA
+PLATFORM_GET_MEMBERS_INPUT_SCHEMA
+PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA
+
+# 汇总字典
+BUILTIN_CAPABILITY_SCHEMAS: dict[str, tuple[JSONSchema, JSONSchema]]
+```
+
 ---
 
 #### `messages.py` - 协议消息
@@ -175,6 +237,61 @@ class CapabilityDescriptor(_DescriptorBase):
 | `EventMessage` | 流式事件 | `phase` (started/delta/completed/failed) |
 | `CancelMessage` | 取消请求 | `reason` |
 
+**核心结构:**
+
+```python
+class ErrorPayload(_MessageBase):
+    code: str
+    message: str
+    hint: str = ""
+    retryable: bool = False
+
+class PeerInfo(_MessageBase):
+    name: str
+    role: Literal["plugin", "supervisor", "core"]
+    version: str = "4.0"
+
+class InitializeMessage(_MessageBase):
+    type: Literal["initialize"] = "initialize"
+    id: str
+    peer: PeerInfo
+    handlers: list[HandlerDescriptor] = []
+    metadata: dict[str, Any] = {}
+
+class InitializeOutput(_MessageBase):
+    peer: PeerInfo
+    capabilities: list[CapabilityDescriptor] = []
+    metadata: dict[str, Any] = {}
+
+class ResultMessage(_MessageBase):
+    type: Literal["result"] = "result"
+    id: str
+    kind: str  # "initialize_result" 或 capability 名称
+    success: bool
+    output: dict[str, Any] | None = None
+    error: ErrorPayload | None = None
+
+class InvokeMessage(_MessageBase):
+    type: Literal["invoke"] = "invoke"
+    id: str
+    capability: str
+    input: dict[str, Any] = {}
+    stream: bool = False
+
+class EventMessage(_MessageBase):
+    type: Literal["event"] = "event"
+    id: str
+    phase: Literal["started", "delta", "completed", "failed"]
+    data: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    error: ErrorPayload | None = None
+
+class CancelMessage(_MessageBase):
+    type: Literal["cancel"] = "cancel"
+    id: str
+    reason: str = "user_cancelled"
+```
+
 **核心函数:**
 
 ```python
@@ -188,21 +305,52 @@ def parse_message(payload: str | bytes | dict) -> ProtocolMessage:
 
 实现 v3 JSON-RPC 与 v4 协议的双向转换。
 
-**核心类:**
+**核心类型:**
 
 ```python
-class LegacyAdapter:
-    def legacy_to_v4(self, payload) -> LegacyToV4Message:
-        """Legacy JSON-RPC → v4 Message"""
+class LegacyRequest(_LegacyMessageBase):
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: str | None = None
+    method: str
+    params: dict[str, Any] = {}
 
-    def legacy_request_to_message(self, payload) -> InitializeMessage | InvokeMessage | ...:
-        """Legacy Request 转换"""
+class LegacySuccessResponse(_LegacyMessageBase):
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: str | None = None
+    result: Any
 
-    def initialize_to_legacy_handshake_response(self, message) -> dict:
-        """v4 Initialize → Legacy Response"""
+class LegacyErrorResponse(_LegacyMessageBase):
+    jsonrpc: Literal["2.0"] = "2.0"
+    id: str | None = None
+    error: LegacyErrorData
 
-    def invoke_to_legacy_request(self, message) -> dict:
-        """v4 Invoke → Legacy Request"""
+LegacyMessage = LegacyRequest | LegacySuccessResponse | LegacyErrorResponse
+LegacyToV4Message = InitializeMessage | InvokeMessage | CancelMessage | None
+```
+
+**核心函数:**
+
+```python
+def parse_legacy_message(payload: str | dict) -> LegacyMessage:
+    """解析 legacy JSON-RPC 消息"""
+
+def legacy_message_to_v4(legacy: LegacyMessage) -> LegacyToV4Message:
+    """Legacy JSON-RPC → v4 Message"""
+
+def initialize_to_legacy_handshake_response(message: InitializeMessage, output: InitializeOutput) -> dict:
+    """v4 Initialize → Legacy Response"""
+
+def invoke_to_legacy_request(message: InvokeMessage) -> dict:
+    """v4 Invoke → Legacy Request"""
+
+def result_to_legacy_response(message: ResultMessage) -> dict:
+    """v4 Result → Legacy Response"""
+
+def event_to_legacy_notification(message: EventMessage) -> dict:
+    """v4 Event → Legacy Notification"""
+
+def cancel_to_legacy_request(message: CancelMessage) -> dict:
+    """v4 Cancel → Legacy Request"""
 ```
 
 **常量:**
@@ -211,12 +359,15 @@ class LegacyAdapter:
 LEGACY_JSONRPC_VERSION = "2.0"
 LEGACY_CONTEXT_CAPABILITY = "internal.legacy.call_context_function"
 LEGACY_HANDSHAKE_METADATA_KEY = "legacy_handshake_payload"
+LEGACY_PLUGIN_KEYS_METADATA_KEY = "legacy_plugin_keys"
 LEGACY_ADAPTER_MESSAGE_EVENT = 3
 ```
 
 ---
 
 ### 运行时层 (runtime/)
+
+运行时层负责把协议、传输、插件加载和生命周期管理拼成一条完整执行链。
 
 #### `peer.py` - 核心通信端点
 
@@ -229,6 +380,8 @@ class Peer:
     # 生命周期
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
+    async def wait_closed(self) -> None: ...
+    async def wait_until_remote_initialized(self, timeout: float = 30.0) -> None: ...
 
     # 初始化
     async def initialize(self, handlers, metadata) -> InitializeOutput: ...
@@ -241,9 +394,9 @@ class Peer:
     async def cancel(self, request_id, reason="user_cancelled") -> None: ...
 
     # Handler 设置
-    def set_initialize_handler(self, handler): ...
-    def set_invoke_handler(self, handler): ...
-    def set_cancel_handler(self, handler): ...
+    def set_initialize_handler(self, handler: InitializeHandler): ...
+    def set_invoke_handler(self, handler: InvokeHandler): ...
+    def set_cancel_handler(self, handler: CancelHandler): ...
 ```
 
 **内部状态:**
@@ -252,6 +405,8 @@ class Peer:
 self._pending_results: dict[str, asyncio.Future[ResultMessage]]  # 普通调用
 self._pending_streams: dict[str, asyncio.Queue]                  # 流式调用
 self._inbound_tasks: dict[str, tuple[Task, CancelToken]]         # 入站任务
+self._remote_initialized: asyncio.Event                          # 远端初始化状态
+self._unusable: bool                                             # 连接是否不可用
 ```
 
 ---
@@ -277,9 +432,9 @@ Transport (ABC)
 
 **WebSocket 特性:**
 
-- 心跳机制
+- 心跳机制 (通过 `heartbeat` 参数配置)
 - 单连接限制 (Server 端)
-- 自动重连 (Client 端)
+- 自动重连需要外部实现
 
 ---
 
@@ -311,6 +466,11 @@ class LoadedPlugin:
     plugin: PluginSpec
     handlers: list[LoadedHandler]
     instances: list[Any]
+
+@dataclass
+class PluginDiscoveryResult:
+    plugins: list[PluginSpec]
+    errors: dict[str, str]
 ```
 
 **核心函数:**
@@ -318,6 +478,9 @@ class LoadedPlugin:
 ```python
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     """扫描插件目录，发现所有有效插件"""
+
+def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
+    """从插件目录加载插件规范"""
 
 def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     """加载插件，返回 Handler 列表"""
@@ -390,6 +553,7 @@ class StreamExecution:
 | `llm.chat_raw` | 对话 (返回完整响应) |
 | `llm.stream_chat` | 流式对话 |
 | `memory.search` | 搜索记忆 |
+| `memory.get` | 获取记忆 |
 | `memory.save` | 保存记忆 |
 | `memory.delete` | 删除记忆 |
 | `db.get` | 读取 KV |
@@ -403,7 +567,7 @@ class StreamExecution:
 **Capability 命名规则:**
 
 ```python
-RESERVED_CAPABILITY_PREFIXES = ("handler.", "system.", "internal.")
+RESERVED_CAPABILITY_NAMESPACES = ("handler", "system", "internal")
 CAPABILITY_NAME_PATTERN = r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$"
 ```
 
@@ -426,6 +590,7 @@ class WorkerSession:
     """Supervisor 管理的单插件会话"""
     async def start(self) -> None: ...
     async def invoke_handler(self, handler_id, event_payload, request_id) -> dict: ...
+    async def cancel(self, request_id) -> None: ...
 
 class SupervisorRuntime:
     """Supervisor 运行时"""
@@ -446,9 +611,9 @@ class PluginWorkerRuntime:
 
 ### 客户端层 (clients/)
 
-#### `_proxy.py` - Capability 代理
+客户端层提供类型安全的 Capability 调用接口。
 
-提供类型安全的 Capability 调用接口。
+#### `_proxy.py` - Capability 代理
 
 ```python
 class CapabilityProxy:
@@ -464,6 +629,16 @@ class CapabilityProxy:
 #### `llm.py` - LLM 客户端
 
 ```python
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+class LLMResponse(BaseModel):
+    text: str
+    usage: dict[str, Any] | None = None
+    finish_reason: str | None = None
+    tool_calls: list[dict[str, Any]] = []
+
 class LLMClient:
     async def chat(self, prompt, system=None, history=None, model=None, temperature=None) -> str:
         """简单对话，返回文本"""
@@ -473,12 +648,6 @@ class LLMClient:
 
     async def stream_chat(self, prompt, system=None, history=None) -> AsyncGenerator[str, None]:
         """流式对话"""
-
-class LLMResponse(BaseModel):
-    text: str
-    usage: dict[str, Any] | None = None
-    finish_reason: str | None = None
-    tool_calls: list[dict[str, Any]] = []
 ```
 
 ---
@@ -500,6 +669,7 @@ class DBClient:
 ```python
 class MemoryClient:
     async def search(self, query: str) -> list[dict[str, Any]]: ...
+    async def get(self, key: str) -> dict[str, Any] | None: ...
     async def save(self, key: str, value: dict[str, Any] | None = None, **extra) -> None: ...
     async def delete(self, key: str) -> None: ...
 ```
@@ -518,6 +688,54 @@ class PlatformClient:
 ---
 
 ### API 层 (api/)
+
+API 层作为兼容层，通过 thin re-export 方式暴露旧版 API。
+
+#### 兼容层设计
+
+```python
+# api/__init__.py
+from . import basic, components, event, message, platform, provider, star
+
+# api/star/context.py - Legacy Context 导出
+from ..._legacy_api import LegacyContext as Context
+
+# api/components/command.py - CommandComponent 导出
+from ..._legacy_api import CommandComponent
+
+# api/event/filter.py - filter 命名空间
+class _FilterNamespace:
+    command = staticmethod(command)
+    regex = staticmethod(regex)
+    permission = staticmethod(permission)
+filter = _FilterNamespace()
+```
+
+---
+
+### 核心文件
+
+#### 顶层导出 (`__init__.py`)
+
+```python
+from .context import Context
+from .decorators import on_command, on_event, on_message, on_schedule, require_admin
+from .errors import AstrBotError
+from .events import MessageEvent
+from .star import Star
+
+__all__ = [
+    "AstrBotError",
+    "Context",
+    "MessageEvent",
+    "Star",
+    "on_command",
+    "on_event",
+    "on_message",
+    "on_schedule",
+    "require_admin",
+]
+```
 
 #### `star.py` - Star 基类
 
@@ -580,7 +798,7 @@ def admin_handler(event): ...
 #### `context.py` - 运行时 Context
 
 ```python
-@dataclass
+@dataclass(slots=True)
 class CancelToken:
     def cancel(self) -> None: ...
     @property
@@ -590,10 +808,12 @@ class CancelToken:
 
 class Context:
     def __init__(self, *, peer, plugin_id, cancel_token=None, logger=None):
-        self.llm = LLMClient(CapabilityProxy(peer))
-        self.memory = MemoryClient(CapabilityProxy(peer))
-        self.db = DBClient(CapabilityProxy(peer))
-        self.platform = PlatformClient(CapabilityProxy(peer))
+        proxy = CapabilityProxy(peer)
+        self.peer = peer
+        self.llm = LLMClient(proxy)
+        self.memory = MemoryClient(proxy)
+        self.db = DBClient(proxy)
+        self.platform = PlatformClient(proxy)
         self.plugin_id = plugin_id
         self.logger = logger or base_logger.bind(plugin_id=plugin_id)
         self.cancel_token = cancel_token or CancelToken()
@@ -635,14 +855,6 @@ class MessageEvent:
 
     def plain_result(self, text: str) -> PlainTextResult:
         """创建纯文本结果"""
-```
-
-**依赖注入模式:**
-
-```python
-# HandlerDispatcher 中
-event = MessageEvent.from_payload(message.input.get("event", {}))
-event.bind_reply_handler(lambda text: ctx.platform.send(event.session_id, text))
 ```
 
 ---
@@ -710,34 +922,6 @@ class CommandComponent(Star):
 ```
 
 ---
-
-#### `api/event/filter.py` - filter 命名空间
-
-```python
-ADMIN = "admin"
-
-def command(name: str):
-    return on_command(name)
-
-def regex(pattern: str):
-    return on_message(regex=pattern)
-
-def permission(level):
-    if level == ADMIN:
-        return require_admin
-    return lambda func: func
-
-class _FilterNamespace:
-    command = staticmethod(command)
-    regex = staticmethod(regex)
-    permission = staticmethod(permission)
-
-filter = _FilterNamespace()
-```
-
----
-
-### 核心文件
 
 #### `cli.py` - 命令行接口
 
@@ -971,6 +1155,86 @@ class MyTransport(Transport):
 
 ---
 
+## 实现状态
+
+### 已完成模块
+
+| 模块 | 文件 | 状态 | 说明 |
+|------|------|------|------|
+| **协议层** | `protocol/` | ✅ 完成 | |
+| | `descriptors.py` | ✅ | Handler/Capability 描述符 + 内置 Schema 常量 |
+| | `messages.py` | ✅ | 5 种消息类型 + parse_message |
+| | `legacy_adapter.py` | ✅ | JSON-RPC ↔ v4 双向转换 |
+| **运行时层** | `runtime/` | ✅ 完成 | |
+| | `peer.py` | ✅ | 对称通信端点 + 取消 + 流式 |
+| | `transport.py` | ✅ | Stdio + WebSocket Server/Client |
+| | `loader.py` | ✅ | 插件发现 + 环境管理 + 加载 |
+| | `handler_dispatcher.py` | ✅ | Handler 分发 + 参数注入 |
+| | `capability_router.py` | ✅ | 能力路由 + 内置能力注册 |
+| | `bootstrap.py` | ✅ | Supervisor + Worker + WebSocket |
+| **客户端层** | `clients/` | ✅ 完成 | |
+| | `_proxy.py` | ✅ | CapabilityProxy 代理 |
+| | `llm.py` | ✅ | LLM 客户端 (chat/chat_raw/stream) |
+| | `memory.py` | ✅ | Memory 客户端 (search/get/save/delete) |
+| | `db.py` | ✅ | DB 客户端 (get/set/delete/list) |
+| | `platform.py` | ✅ | Platform 客户端 (send/send_image/get_members) |
+| **API 层** | `api/` | ✅ 完成 | 兼容层 |
+| | `star/context.py` | ✅ | LegacyContext 导出 |
+| | `components/command.py` | ✅ | CommandComponent 导出 |
+| | `event/filter.py` | ✅ | filter 命名空间 |
+| | `basic/` | ✅ | 基础实体与配置 |
+| | `message/` | ✅ | MessageChain |
+| | `platform/` | ✅ | 平台元数据 |
+| | `provider/` | ✅ | Provider 实体 |
+| **核心文件** | 根目录 | ✅ 完成 | |
+| | `__init__.py` | ✅ | 顶层导出 |
+| | `star.py` | ✅ | Star 基类 + Handler 发现 |
+| | `context.py` | ✅ | Context + CancelToken |
+| | `decorators.py` | ✅ | on_command/on_message/on_event/on_schedule |
+| | `events.py` | ✅ | MessageEvent |
+| | `errors.py` | ✅ | AstrBotError |
+| | `_legacy_api.py` | ✅ | LegacyContext + CommandComponent |
+| | `cli.py` | ✅ | Click 命令行工具 |
+| | `__main__.py` | ✅ | python -m astrbot_sdk 入口 |
+
+### 测试覆盖
+
+测试文件位于 `tests_v4/` 目录，共 35+ 个测试文件：
+
+```
+tests_v4/
+├── test_protocol.py              # 协议层基础测试
+├── test_protocol_descriptors.py  # 描述符测试
+├── test_protocol_messages.py     # 消息类型测试
+├── test_protocol_legacy_adapter.py # Legacy 适配器测试
+├── test_peer.py                  # Peer 测试
+├── test_transport.py             # Transport 测试
+├── test_capability_router.py     # CapabilityRouter 测试
+├── test_handler_dispatcher.py    # HandlerDispatcher 测试
+├── test_loader.py                # 加载器测试
+├── test_bootstrap.py             # Bootstrap 测试
+├── test_context.py               # Context 测试
+├── test_events.py                # 事件测试
+├── test_decorators.py            # 装饰器测试
+├── test_clients_module.py        # 客户端模块测试
+├── test_llm_client.py            # LLM 客户端测试
+├── test_memory_client.py         # Memory 客户端测试
+├── test_db_client.py             # DB 客户端测试
+├── test_platform_client.py       # Platform 客户端测试
+├── test_capability_proxy.py      # CapabilityProxy 测试
+├── test_api_modules.py           # API 模块测试
+├── test_api_decorators.py        # API 装饰器测试
+├── test_api_event_filter.py      # filter 命名空间测试
+├── test_api_legacy_context.py    # Legacy Context 测试
+├── test_api_contract.py          # API 契约测试
+├── test_runtime_integration.py   # 运行时集成测试
+├── test_script_migrations.py     # 脚本迁移测试
+├── test_supervisor_migration.py  # Supervisor 迁移测试
+└── ...                           # 更多测试文件
+```
+
+---
+
 ## 版本兼容性
 
 | 组件 | v3 | v4 |
@@ -982,3 +1246,15 @@ class MyTransport(Transport):
 | 通信 | 单向 | 双向对称 |
 
 **兼容策略**: `LegacyAdapter` 实现协议转换，`CommandComponent` 继承 `Star` 并标记 `__astrbot_is_new_star__ = False`。
+
+**迁移指南**:
+
+```python
+# 旧版 (将在未来版本废弃)
+from astrbot_sdk.api.event import AstrMessageEvent
+from astrbot_sdk.api.star.context import Context
+
+# 新版 (推荐)
+from astrbot_sdk.events import MessageEvent
+from astrbot_sdk.context import Context
+```
