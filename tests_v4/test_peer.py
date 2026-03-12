@@ -220,9 +220,9 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.code, "protocol_version_mismatch")
 
         await asyncio.wait_for(core.wait_closed(), timeout=1.0)
+        await asyncio.wait_for(plugin.wait_closed(), timeout=1.0)
         self.assertTrue(core._closed)
-
-        await plugin.stop()
+        self.assertTrue(plugin._closed)
 
 
 class CapabilityRouterContractTest(unittest.TestCase):

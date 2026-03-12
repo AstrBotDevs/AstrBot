@@ -102,6 +102,7 @@ class Peer:
             raise AstrBotError.protocol_error("initialize 必须收到 initialize_result")
         if not result.success:
             self._unusable = True
+            await self.stop()
             raise AstrBotError.from_payload(result.error.model_dump() if result.error else {})
         output = InitializeOutput.model_validate(result.output)
         self.remote_peer = output.peer
