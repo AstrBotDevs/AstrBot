@@ -64,20 +64,20 @@ jobs:
           echo "build_date=$build_date" >> $GITHUB_OUTPUT
 
       - name: Set QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
+        uses: docker/setup-qemu-action@v4.0.0
 
       - name: Set Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+        uses: docker/setup-buildx-action@v4.0.0
 
       - name: Log in to DockerHub
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
+        uses: docker/login-action@v4.0.0
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Login to GitHub Container Registry
         if: env.HAS_GHCR_TOKEN == 'true'
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
+        uses: docker/login-action@v4.0.0
         with:
           registry: ghcr.io
           username: ${{ env.GHCR_OWNER }}
@@ -98,7 +98,7 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Build and Push Nightly Image
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
+        uses: docker/build-push-action@v7.0.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -163,27 +163,27 @@ jobs:
           cp -r dashboard/dist data/
 
       - name: Set QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
+        uses: docker/setup-qemu-action@v4.0.0
 
       - name: Set Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+        uses: docker/setup-buildx-action@v4.0.0
 
       - name: Log in to DockerHub
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
+        uses: docker/login-action@v4.0.0
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
 
       - name: Login to GitHub Container Registry
         if: env.HAS_GHCR_TOKEN == 'true'
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2
+        uses: docker/login-action@v4.0.0
         with:
           registry: ghcr.io
           username: ${{ env.GHCR_OWNER }}
           password: ${{ secrets.GHCR_GITHUB_TOKEN }}
 
       - name: Build and Push Release Image
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
+        uses: docker/build-push-action@v7.0.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
