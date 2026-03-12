@@ -181,7 +181,7 @@ class TestLegacyConversationManager:
 
     @pytest.mark.asyncio
     async def test_new_conversation_increments_counter(self):
-        """new_conversation() should increment counter per origin."""
+        """new_conversation() should keep conversation IDs unique within a plugin."""
         stored_data = {}
 
         async def mock_get(key):
@@ -211,7 +211,38 @@ class TestLegacyConversationManager:
 
         assert id1.endswith("-1")
         assert id2.endswith("-2")
-        assert id3.endswith("-1")  # Different session, starts at 1
+        assert id3.endswith("-3")
+        assert len({id1, id2, id3}) == 3
+
+    @pytest.mark.asyncio
+    async def test_new_conversation_skips_persisted_id_collisions(self):
+        """new_conversation() should not reuse IDs that already exist in storage."""
+        stored_data = {
+            "__compat_conversations__": {
+                "my_plugin-conv-1": {"unified_msg_origin": "session-1"},
+            }
+        }
+
+        async def mock_get(key):
+            return stored_data.get(key)
+
+        async def mock_set(key, value):
+            stored_data[key] = value
+
+        mock_ctx = MagicMock()
+        mock_ctx.plugin_id = "my_plugin"
+        mock_ctx.db = MagicMock()
+        mock_ctx.db.get = mock_get
+        mock_ctx.db.set = mock_set
+
+        legacy_ctx = LegacyContext("my_plugin")
+        legacy_ctx._runtime_context = mock_ctx
+
+        conv_id = await legacy_ctx.conversation_manager.new_conversation(
+            unified_msg_origin="session-1"
+        )
+
+        assert conv_id == "my_plugin-conv-2"
 
 
 class TestLegacyContextMethods:
@@ -427,6 +458,8 @@ class TestLegacyContextLLMMethods:
         )
 
         mock_llm.chat_raw.assert_called_once()
+        call_kwargs = mock_llm.chat_raw.call_args[1]
+        assert call_kwargs["provider_id"] == "provider-1"
         assert result is not None
 
     @pytest.mark.asyncio
@@ -449,6 +482,7 @@ class TestLegacyContextLLMMethods:
 
         mock_llm.chat_raw.assert_called_once()
         call_kwargs = mock_llm.chat_raw.call_args[1]
+        assert call_kwargs["provider_id"] == "provider-1"
         assert call_kwargs["max_steps"] == 10
         assert result.text == "response"
 

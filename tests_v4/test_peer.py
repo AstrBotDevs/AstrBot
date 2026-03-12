@@ -130,6 +130,34 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await plugin.stop()
         await core.stop()
 
+    async def test_wait_until_remote_initialized_after_initialize_returns(self) -> None:
+        core = Peer(
+            transport=self.left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=[],
+                    metadata={},
+                ),
+            )
+        )
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+
+        await core.start()
+        await plugin.start()
+        await plugin.initialize([])
+        await plugin.wait_until_remote_initialized(timeout=0.1)
+
+        await plugin.stop()
+        await core.stop()
+
     async def test_stream_false_receiving_event_is_protocol_error(self) -> None:
         plugin = Peer(
             transport=self.right,

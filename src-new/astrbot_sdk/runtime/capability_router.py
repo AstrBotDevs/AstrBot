@@ -85,6 +85,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import inspect
 import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -100,7 +101,6 @@ from ..protocol.descriptors import (
 )
 
 CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
-StreamHandler = Callable[[str, dict[str, Any], object], AsyncIterator[dict[str, Any]]]
 FinalizeHandler = Callable[[list[dict[str, Any]]], dict[str, Any]]
 CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
@@ -109,6 +109,14 @@ CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 class StreamExecution:
     iterator: AsyncIterator[dict[str, Any]]
     finalize: FinalizeHandler
+
+
+StreamHandler = Callable[
+    [str, dict[str, Any], object],
+    AsyncIterator[dict[str, Any]]
+    | StreamExecution
+    | Awaitable[AsyncIterator[dict[str, Any]] | StreamExecution],
+]
 
 
 @dataclass(slots=True)
@@ -181,10 +189,23 @@ class CapabilityRouter:
         if stream:
             if registration.stream_handler is None:
                 raise AstrBotError.invalid_input(f"{capability} 不支持 stream=true")
+            raw_execution = registration.stream_handler(
+                request_id, payload, cancel_token
+            )
+            if inspect.isawaitable(raw_execution):
+                raw_execution = await raw_execution
+            if isinstance(raw_execution, StreamExecution):
+                return self._wrap_stream_execution(
+                    registration.descriptor,
+                    raw_execution,
+                )
             finalize = registration.finalize or (lambda chunks: {"items": chunks})
-            return StreamExecution(
-                iterator=registration.stream_handler(request_id, payload, cancel_token),
-                finalize=finalize,
+            return self._wrap_stream_execution(
+                registration.descriptor,
+                StreamExecution(
+                    iterator=raw_execution,
+                    finalize=finalize,
+                ),
             )
 
         if registration.call_handler is None:
@@ -192,6 +213,21 @@ class CapabilityRouter:
         output = await registration.call_handler(request_id, payload, cancel_token)
         self._validate_schema(registration.descriptor.output_schema, output)
         return output
+
+    def _wrap_stream_execution(
+        self,
+        descriptor: CapabilityDescriptor,
+        execution: StreamExecution,
+    ) -> StreamExecution:
+        def validated_finalize(chunks: list[dict[str, Any]]) -> dict[str, Any]:
+            output = execution.finalize(chunks)
+            self._validate_schema(descriptor.output_schema, output)
+            return output
+
+        return StreamExecution(
+            iterator=execution.iterator,
+            finalize=validated_finalize,
+        )
 
     def _register_builtin_capabilities(self) -> None:
         def resolve_target(

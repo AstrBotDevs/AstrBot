@@ -22,6 +22,7 @@ from astrbot_sdk.protocol.descriptors import (
     HandlerDescriptor,
 )
 from astrbot_sdk.protocol.messages import (
+    EventMessage,
     InitializeMessage,
     InitializeOutput,
     InvokeMessage,
@@ -350,6 +351,54 @@ class TestWorkerSessionMethods:
                 {"text": "hi"},
                 request_id="req-1",
             )
+
+    @pytest.mark.asyncio
+    async def test_register_plugin_stream_capability_preserves_completed_output(self):
+        """SupervisorRuntime should preserve plugin stream capability finalize output."""
+        transport = MemoryTransport()
+
+        async def stream_events():
+            yield EventMessage(id="req-1", phase="delta", data={"chunk": 1})
+            yield EventMessage(id="req-1", phase="delta", data={"chunk": 2})
+            yield EventMessage(
+                id="req-1",
+                phase="completed",
+                output={"count": 2},
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = SupervisorRuntime(
+                transport=transport,
+                plugins_dir=Path(temp_dir),
+            )
+            session = MagicMock()
+            session.invoke_capability_stream = MagicMock(return_value=stream_events())
+            descriptor = CapabilityDescriptor(
+                name="demo.stream",
+                description="Stream text",
+                supports_stream=True,
+                output_schema={
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                    "required": ["count"],
+                },
+            )
+
+            runtime._register_plugin_capability(descriptor, session, "demo_plugin")
+            result = await runtime.capability_router.execute(
+                "demo.stream",
+                {},
+                stream=True,
+                cancel_token=CancelToken(),
+                request_id="req-1",
+            )
+
+            chunks = []
+            async for chunk in result.iterator:
+                chunks.append(chunk)
+
+            assert chunks == [{"chunk": 1}, {"chunk": 2}]
+            assert result.finalize(chunks) == {"count": 2}
 
 
 class TestSupervisorRuntimeInit:

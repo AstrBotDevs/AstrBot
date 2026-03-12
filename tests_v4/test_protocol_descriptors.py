@@ -311,6 +311,16 @@ class TestCapabilityDescriptor:
         with pytest.raises(ValidationError, match="必须同时提供"):
             CapabilityDescriptor(name="llm.chat", description="missing schemas")
 
+    def test_builtin_capability_requires_registry_schema_match(self):
+        """Built-in capabilities should reject schemas that drift from protocol constants."""
+        with pytest.raises(ValidationError, match="协议注册表保持一致"):
+            CapabilityDescriptor(
+                name="llm.chat",
+                description="wrong schema",
+                input_schema={"type": "object", "properties": {}, "required": []},
+                output_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["output"],
+            )
+
     def test_builtin_capability_schema_registry_contains_required_entries(self):
         """Built-in schema registry should cover documented core capabilities."""
         assert "llm.chat" in BUILTIN_CAPABILITY_SCHEMAS

@@ -301,6 +301,7 @@ class Peer:
         self.remote_capabilities = output.capabilities
         self.remote_capability_map = {item.name: item for item in output.capabilities}
         self.remote_metadata = output.metadata
+        self._remote_initialized.set()
         return output
 
     async def invoke(
@@ -348,16 +349,18 @@ class Peer:
         payload: dict[str, Any],
         *,
         request_id: str | None = None,
+        include_completed: bool = False,
     ) -> AsyncIterator[EventMessage]:
         """发起一次流式能力调用并返回事件迭代器。
 
         调用方会收到 `delta` 事件，`started` 会被内部吞掉，
-        `completed` 用于结束迭代，`failed` 会转换为异常抛出。
+        默认情况下 `completed` 用于结束迭代，`failed` 会转换为异常抛出。
 
         Args:
             capability: 远端能力名。
             payload: 调用输入。
             request_id: 可选的请求 ID；未提供时自动生成。
+            include_completed: 是否把 `completed` 事件也返回给调用方。
         """
         self._ensure_usable()
         request_id = request_id or self._next_id()
@@ -386,6 +389,8 @@ class Peer:
                         yield item
                         continue
                     if item.phase == "completed":
+                        if include_completed:
+                            yield item
                         break
                     if item.phase == "failed":
                         raise AstrBotError.from_payload(

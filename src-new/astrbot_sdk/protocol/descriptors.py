@@ -466,11 +466,19 @@ class CapabilityDescriptor(_DescriptorBase):
 
     @model_validator(mode="after")
     def validate_builtin_schema_governance(self) -> "CapabilityDescriptor":
-        if self.name in BUILTIN_CAPABILITY_SCHEMAS and (
-            self.input_schema is None or self.output_schema is None
-        ):
+        builtin_schema = BUILTIN_CAPABILITY_SCHEMAS.get(self.name)
+        if builtin_schema is None:
+            return self
+        if self.input_schema is None or self.output_schema is None:
             raise ValueError(
                 f"内建 capability {self.name} 必须同时提供 input_schema 和 output_schema"
+            )
+        if (
+            self.input_schema != builtin_schema["input"]
+            or self.output_schema != builtin_schema["output"]
+        ):
+            raise ValueError(
+                f"内建 capability {self.name} 的 schema 必须与协议注册表保持一致"
             )
         return self
 

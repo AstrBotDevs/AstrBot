@@ -395,6 +395,92 @@ class TestCapabilityRouterExecute:
         assert isinstance(result, StreamExecution)
 
     @pytest.mark.asyncio
+    async def test_execute_stream_handler_can_return_stream_execution(self):
+        """stream_handler may return StreamExecution to preserve custom finalize output."""
+        router = CapabilityRouter()
+
+        async def stream_handler(_req_id, _payload, _token):
+            async def iterator():
+                yield {"chunk": 1}
+
+            return StreamExecution(
+                iterator=iterator(),
+                finalize=lambda chunks: {"count": len(chunks)},
+            )
+
+        router.register(
+            CapabilityDescriptor(
+                name="test.stream_execution",
+                description="Test",
+                supports_stream=True,
+                output_schema={
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                    "required": ["count"],
+                },
+            ),
+            stream_handler=stream_handler,
+        )
+
+        token = CancelToken()
+        result = await router.execute(
+            "test.stream_execution",
+            {},
+            stream=True,
+            cancel_token=token,
+            request_id="req-stream-execution",
+        )
+
+        chunks = []
+        async for chunk in result.iterator:
+            chunks.append(chunk)
+        assert result.finalize(chunks) == {"count": 1}
+
+    @pytest.mark.asyncio
+    async def test_execute_stream_validates_finalize_output_schema(self):
+        """completed output from a stream execution should still satisfy output_schema."""
+        router = CapabilityRouter()
+
+        async def stream_handler(_req_id, _payload, _token):
+            async def iterator():
+                yield {"chunk": 1}
+
+            return StreamExecution(
+                iterator=iterator(),
+                finalize=lambda _chunks: {},
+            )
+
+        router.register(
+            CapabilityDescriptor(
+                name="test.invalid_stream_output",
+                description="Test",
+                supports_stream=True,
+                output_schema={
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                    "required": ["count"],
+                },
+            ),
+            stream_handler=stream_handler,
+        )
+
+        token = CancelToken()
+        result = await router.execute(
+            "test.invalid_stream_output",
+            {},
+            stream=True,
+            cancel_token=token,
+            request_id="req-invalid-stream-output",
+        )
+
+        chunks = []
+        async for chunk in result.iterator:
+            chunks.append(chunk)
+
+        with pytest.raises(AstrBotError, match="缺少必填字段"):
+            result.finalize(chunks)
+
+    @pytest.mark.asyncio
     async def test_execute_stream_without_handler_raises(self):
         """execute with stream=True and no stream_handler should raise."""
         router = CapabilityRouter()

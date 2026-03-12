@@ -908,6 +908,72 @@ class TestSupervisorRuntimePluginLoading:
                 await runtime.stop()
                 await core.stop()
 
+    @pytest.mark.asyncio
+    async def test_skip_plugin_when_on_start_fails_before_initialize(self):
+        """on_start 失败的插件不应向上游暴露 handlers 或 capabilities。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_dir = Path(temp_dir) / "plugins"
+            plugin_dir = plugins_dir / "broken_plugin"
+            commands_dir = plugin_dir / "commands"
+            commands_dir.mkdir(parents=True)
+
+            (plugin_dir / "plugin.yaml").write_text(
+                yaml.dump(
+                    {
+                        "name": "broken_plugin",
+                        "runtime": {
+                            "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                        },
+                        "components": [
+                            {"class": "commands.broken:BrokenPlugin", "type": "command"}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+            (commands_dir / "__init__.py").write_text("", encoding="utf-8")
+            (commands_dir / "broken.py").write_text(
+                "from astrbot_sdk import Star, on_command, provide_capability\n\n"
+                "class BrokenPlugin(Star):\n"
+                "    async def on_start(self, ctx):\n"
+                '        raise RuntimeError("boom during startup")\n\n'
+                '    @on_command("broken")\n'
+                "    async def broken(self, event):\n"
+                '        await event.reply("should not load")\n\n'
+                '    @provide_capability("broken_plugin.echo", description="broken")\n'
+                "    async def echo(self, payload):\n"
+                '        return {"echo": "broken"}\n',
+                encoding="utf-8",
+            )
+
+            left, right = make_transport_pair()
+            core = await start_test_core_peer(left)
+
+            runtime = SupervisorRuntime(
+                transport=right,
+                plugins_dir=plugins_dir,
+                env_manager=FakeEnvManager(),
+            )
+
+            try:
+                await runtime.start()
+                await core.wait_until_remote_initialized()
+
+                assert "broken_plugin" not in runtime.loaded_plugins
+                assert "broken_plugin" in runtime.skipped_plugins
+                assert "broken_plugin" not in core.remote_metadata["plugins"]
+                assert all(
+                    "broken" not in handler.id for handler in core.remote_handlers
+                )
+                assert all(
+                    descriptor.name != "broken_plugin.echo"
+                    for descriptor in core.remote_provided_capabilities
+                )
+            finally:
+                await runtime.stop()
+                await core.stop()
+
 
 class TestTimeoutHandling:
     """Tests for timeout handling in Peer operations."""

@@ -95,9 +95,14 @@ class LegacyConversationManager:
     ) -> str:
         """创建新会话并返回会话 ID。"""
         ctx = self._ctx()
-        self._counters[unified_msg_origin] += 1
-        conversation_id = f"{ctx.plugin_id}-conv-{self._counters[unified_msg_origin]}"
         stored = await self._get_stored()
+        next_counter = self._counters[unified_msg_origin]
+        while True:
+            next_counter += 1
+            conversation_id = f"{ctx.plugin_id}-conv-{next_counter}"
+            if conversation_id not in stored:
+                break
+        self._counters[unified_msg_origin] = next_counter
         stored[conversation_id] = {
             "unified_msg_origin": unified_msg_origin,
             "platform_id": platform_id,
@@ -395,6 +400,17 @@ class LegacyContext:
         return self._runtime_context
 
     @staticmethod
+    def _merge_llm_kwargs(
+        *,
+        chat_provider_id: str,
+        kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        merged = dict(kwargs)
+        if chat_provider_id:
+            merged.setdefault("provider_id", chat_provider_id)
+        return merged
+
+    @staticmethod
     def _component_names(component: Any) -> list[str]:
         names = [component.__class__.__name__]
         compat_name = getattr(component, "__compat_component_name__", None)
@@ -452,13 +468,17 @@ class LegacyContext:
     ) -> LLMResponse:
         _warn_once("context.llm_generate()", "ctx.llm.chat_raw(...)")
         ctx = self.require_runtime_context()
+        call_kwargs = self._merge_llm_kwargs(
+            chat_provider_id=chat_provider_id,
+            kwargs=kwargs,
+        )
         return await ctx.llm.chat_raw(
             prompt or "",
             system=system_prompt,
             history=contexts or [],
             image_urls=image_urls or [],
             tools=tools,
-            **kwargs,
+            **call_kwargs,
         )
 
     async def tool_loop_agent(
@@ -474,6 +494,10 @@ class LegacyContext:
     ) -> LLMResponse:
         _warn_once("context.tool_loop_agent()", "ctx.llm.chat_raw(...)")
         ctx = self.require_runtime_context()
+        call_kwargs = self._merge_llm_kwargs(
+            chat_provider_id=chat_provider_id,
+            kwargs=kwargs,
+        )
         return await ctx.llm.chat_raw(
             prompt or "",
             system=system_prompt,
@@ -481,7 +505,7 @@ class LegacyContext:
             image_urls=image_urls or [],
             tools=tools,
             max_steps=max_steps,
-            **kwargs,
+            **call_kwargs,
         )
 
     async def send_message(self, session: str, message_chain: Any) -> None:

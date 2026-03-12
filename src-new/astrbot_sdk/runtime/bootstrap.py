@@ -99,8 +99,8 @@ from loguru import logger
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
-from ..protocol.messages import InitializeOutput, PeerInfo
-from .capability_router import CapabilityRouter
+from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
+from .capability_router import CapabilityRouter, StreamExecution
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
     PluginEnvironmentManager,
@@ -174,6 +174,7 @@ class WorkerSession:
         self.peer: Peer | None = None
         self.handlers = []
         self.provided_capabilities: list[CapabilityDescriptor] = []
+        self._connection_watch_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         python_path = self.env_manager.prepare_environment(self.plugin)
@@ -230,24 +231,35 @@ class WorkerSession:
             self.handlers = list(self.peer.remote_handlers)
             self.provided_capabilities = list(self.peer.remote_provided_capabilities)
 
-            # 启动后台任务监听连接关闭
-            if self.on_closed is not None:
-                asyncio.create_task(self._watch_connection())
         except Exception:
             await self.stop()
             raise
 
+    def start_close_watch(self) -> None:
+        if (
+            self.on_closed is None
+            or self.peer is None
+            or self._connection_watch_task is not None
+        ):
+            return
+        self._connection_watch_task = asyncio.create_task(self._watch_connection())
+
     async def _watch_connection(self) -> None:
         """监听 Worker 连接关闭，触发清理回调"""
-        if self.peer is not None:
-            await self.peer.wait_closed()
-        if self.on_closed is not None:
-            try:
-                self.on_closed()
-            except Exception:
-                logger.exception(
-                    "on_closed callback failed for plugin {}", self.plugin.name
-                )
+        try:
+            if self.peer is not None:
+                await self.peer.wait_closed()
+            if self.on_closed is not None:
+                try:
+                    self.on_closed()
+                except Exception:
+                    logger.exception(
+                        "on_closed callback failed for plugin {}", self.plugin.name
+                    )
+        finally:
+            current_task = asyncio.current_task()
+            if self._connection_watch_task is current_task:
+                self._connection_watch_task = None
 
     async def stop(self) -> None:
         if self.peer is not None:
@@ -299,9 +311,10 @@ class WorkerSession:
             capability_name,
             payload,
             request_id=request_id,
+            include_completed=True,
         )
         async for event in event_stream:
-            yield event.data
+            yield event
 
     async def cancel(self, request_id: str) -> None:
         if self.peer is None:
@@ -459,16 +472,33 @@ class SupervisorRuntime:
             payload: dict[str, Any],
             _cancel_token,
         ):
-            self.active_requests[request_id] = session
-            try:
-                async for chunk in session.invoke_capability_stream(
-                    capability_name,
-                    payload,
-                    request_id=request_id,
-                ):
-                    yield chunk
-            finally:
-                self.active_requests.pop(request_id, None)
+            completed_output: dict[str, Any] = {}
+
+            async def iterator():
+                self.active_requests[request_id] = session
+                try:
+                    async for event in session.invoke_capability_stream(
+                        capability_name,
+                        payload,
+                        request_id=request_id,
+                    ):
+                        if not isinstance(event, EventMessage):
+                            raise AstrBotError.protocol_error(
+                                "插件 worker 返回了非法的流式事件"
+                            )
+                        if event.phase == "delta":
+                            yield event.data or {}
+                            continue
+                        if event.phase == "completed":
+                            completed_output.clear()
+                            completed_output.update(event.output or {})
+                finally:
+                    self.active_requests.pop(request_id, None)
+
+            return StreamExecution(
+                iterator=iterator(),
+                finalize=lambda chunks: completed_output or {"items": chunks},
+            )
 
         return stream_handler
 
@@ -496,6 +526,7 @@ class SupervisorRuntime:
                     self._register_handler(handler, session, plugin.name)
                 for descriptor in session.provided_capabilities:
                     self._register_plugin_capability(descriptor, session, plugin.name)
+                session.start_close_watch()
 
             aggregated_handlers = list(self.handler_to_worker.keys())
             logger.info(
@@ -616,17 +647,26 @@ class PluginWorkerRuntime:
 
     async def start(self) -> None:
         await self.peer.start()
-        await self.peer.initialize(
-            [item.descriptor for item in self.loaded_plugin.handlers],
-            provided_capabilities=[
-                item.descriptor for item in self.loaded_plugin.capabilities
-            ],
-            metadata={"plugin_id": self.plugin.name},
-        )
+        lifecycle_started = False
         try:
             await self._run_lifecycle("on_start")
+            lifecycle_started = True
+            await self.peer.initialize(
+                [item.descriptor for item in self.loaded_plugin.handlers],
+                provided_capabilities=[
+                    item.descriptor for item in self.loaded_plugin.capabilities
+                ],
+                metadata={"plugin_id": self.plugin.name},
+            )
         except Exception:
-            # on_start 失败时，通知 Supervisor 并退出
+            if lifecycle_started:
+                try:
+                    await self._run_lifecycle("on_stop")
+                except Exception:
+                    logger.exception(
+                        "插件 {} 在启动失败清理 on_stop 时发生异常",
+                        self.plugin.name,
+                    )
             await self.peer.stop()
             raise
 
