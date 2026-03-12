@@ -22,6 +22,38 @@ from astrbot.core.pipeline.scheduler import PipelineScheduler
 from .platform import AstrMessageEvent
 
 
+class EventDeduplicator:
+    def __init__(self, ttl_seconds: float = 0.5) -> None:
+        self._ttl_seconds = ttl_seconds
+        self._seen: set[tuple[str, str, str, str]] = set()
+        self._queue: deque[tuple[float, tuple[str, str, str, str]]] = deque()
+
+    def _clean_expired(self) -> None:
+        now = time.monotonic()
+        expire_before = now - self._ttl_seconds
+        while self._queue and self._queue[0][0] < expire_before:
+            _, fingerprint = self._queue.popleft()
+            self._seen.discard(fingerprint)
+
+    def _build_fingerprint(self, event: AstrMessageEvent) -> tuple[str, str, str, str]:
+        return (
+            event.get_platform_id() or "",
+            event.unified_msg_origin or "",
+            event.get_sender_id() or "",
+            (event.get_message_str() or "").strip(),
+        )
+
+    def is_duplicate(self, event: AstrMessageEvent) -> bool:
+        self._clean_expired()
+        fingerprint = self._build_fingerprint(event)
+        if fingerprint in self._seen:
+            return True
+        ts = time.monotonic()
+        self._seen.add(fingerprint)
+        self._queue.append((ts, fingerprint))
+        return False
+
+
 class EventBus:
     """用于处理事件的分发和处理"""
 
@@ -35,48 +67,14 @@ class EventBus:
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
-        # 跨平台实例短窗去重（兜底）：处理同一消息在极短时间内重复入队。
-        # 最近事件指纹，短窗去重（0.5s），单消费者线程内使用
-        self._dedup_ttl_seconds = 0.5
-        self._dedup_seen: set[tuple] = set()  # Set[Fingerprint]
-        self._dedup_queue: deque[tuple[float, tuple]] = (
-            deque()
-        )  # deque[(timestamp, Fingerprint)]
-
-    def _clean_expired_event_fingerprints(self) -> None:
-        # Use monotonic clock to avoid issues with system clock changes
-        now = time.monotonic()
-        expire_before = now - self._dedup_ttl_seconds
-        while self._dedup_queue and self._dedup_queue[0][0] < expire_before:
-            _, fingerprint = self._dedup_queue.popleft()
-            self._dedup_seen.discard(fingerprint)
-
-    def _build_event_fingerprint(self, event: AstrMessageEvent) -> tuple:
-        # 简单元组键即可，避免拼接和哈希
-        return (
-            event.get_platform_id() or "",
-            event.unified_msg_origin or "",
-            event.get_sender_id() or "",
-            (event.get_message_str() or "").strip(),
-        )
-
-    def _is_duplicate_event(self, event: AstrMessageEvent) -> bool:
-        # dispatch 是单消费者循环，未加锁是有意为之
-        self._clean_expired_event_fingerprints()
-        fingerprint = self._build_event_fingerprint(event)
-        if fingerprint in self._dedup_seen:
-            return True
-        ts = time.monotonic()
-        self._dedup_seen.add(fingerprint)
-        self._dedup_queue.append((ts, fingerprint))
-        return False
+        self._deduplicator = EventDeduplicator(ttl_seconds=0.5)
 
     async def dispatch(self) -> None:
         # event_queue 由单一消费者处理；去重结构不是线程安全的，按设计仅在此循环中使用。
         while True:
             event: AstrMessageEvent = await self.event_queue.get()
-            if self._is_duplicate_event(event):
-                logger.info(
+            if self._deduplicator.is_duplicate(event):
+                logger.debug(
                     "Skip duplicate event in event_bus, umo=%s, sender=%s",
                     event.unified_msg_origin,
                     event.get_sender_id(),
