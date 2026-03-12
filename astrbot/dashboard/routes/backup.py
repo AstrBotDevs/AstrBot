@@ -986,7 +986,7 @@ class BackupRoute(Route):
                         "require": ["exp"],  # Require expiration claim
                         "verify_signature": True,  # Explicitly verify signature
                         "verify_exp": True,  # Verify expiration
-                    }
+                    },
                 )
             except jwt.ExpiredSignatureError:
                 return Response().error("Token 已过期，请刷新页面后重试").__dict__
