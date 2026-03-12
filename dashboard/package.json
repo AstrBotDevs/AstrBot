@@ -17,17 +17,17 @@
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
     "apexcharts": "3.42.0",
-    "axios": ">=1.6.2 <1.10.0 || >1.10.0 <2.0.0",
+    "axios": "1.13.5",
     "axios-mock-adapter": "^1.22.0",
     "chance": "1.1.11",
     "date-fns": "2.30.0",
-    "dompurify": "^3.3.1",
+    "dompurify": "^3.3.2",
     "event-source-polyfill": "^1.0.31",
     "highlight.js": "^11.11.1",
     "js-md5": "^0.8.3",
     "katex": "^0.16.27",
-    "lodash": "4.17.21",
-    "markdown-it": "^14.1.0",
+    "lodash": "4.17.23",
+    "markdown-it": "^14.1.1",
     "markstream-vue": "^0.0.6",
     "mermaid": "^11.12.2",
     "monaco-editor": "^0.52.2",
@@ -38,7 +38,7 @@
     "stream-markdown": "^0.0.13",
     "stream-monaco": "^0.0.17",
     "vee-validate": "4.11.3",
-    "vite-plugin-vuetify": "1.0.2",
+    "vite-plugin-vuetify": "2.1.3",
     "vue": "3.3.4",
     "vue-i18n": "^11.1.5",
     "vue-router": "4.2.4",
@@ -54,7 +54,7 @@
     "@types/dompurify": "^3.0.5",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.5.7",
-    "@vitejs/plugin-vue": "4.3.3",
+    "@vitejs/plugin-vue": "5.2.4",
     "@vue/eslint-config-prettier": "8.0.0",
     "@vue/eslint-config-typescript": "11.0.3",
     "@vue/tsconfig": "^0.4.0",
@@ -64,9 +64,15 @@
     "sass": "1.66.1",
     "sass-loader": "13.3.2",
     "typescript": "5.1.6",
-    "vite": "4.4.9",
+    "vite": "6.4.1",
     "vue-cli-plugin-vuetify": "2.5.8",
     "vue-tsc": "1.8.8",
     "vuetify-loader": "^2.0.0-alpha.9"
+  },
+  "pnpm": {
+    "overrides": {
+      "immutable": "4.3.8",
+      "lodash-es": "4.17.23"
+    }
   }
 }
