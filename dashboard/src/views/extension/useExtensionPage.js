@@ -1309,6 +1309,7 @@ export const useExtensionPage = () => {
     onLoadingDialogResult(1, resData.message);
     dialog.value = false;
     await getExtensions();
+    checkAlreadyInstalled();
 
     viewReadme({
       name: resData.data.name,
