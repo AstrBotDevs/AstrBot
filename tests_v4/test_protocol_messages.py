@@ -187,10 +187,18 @@ class TestInitializeOutput:
 
     def test_with_capabilities(self):
         """InitializeOutput should accept capabilities."""
-        from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
+        from astrbot_sdk.protocol.descriptors import (
+            BUILTIN_CAPABILITY_SCHEMAS,
+            CapabilityDescriptor,
+        )
 
         peer = PeerInfo(name="core", role="core")
-        cap = CapabilityDescriptor(name="llm.chat", description="Chat capability")
+        cap = CapabilityDescriptor(
+            name="llm.chat",
+            description="Chat capability",
+            input_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["input"],
+            output_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["output"],
+        )
         output = InitializeOutput(peer=peer, capabilities=[cap])
         assert len(output.capabilities) == 1
         assert output.capabilities[0].name == "llm.chat"

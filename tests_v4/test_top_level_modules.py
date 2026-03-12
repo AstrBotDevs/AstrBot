@@ -23,7 +23,7 @@ from astrbot_sdk._legacy_api import (
 from astrbot_sdk.cli import cli, setup_logger
 from astrbot_sdk.context import Context
 from astrbot_sdk.decorators import on_command
-from astrbot_sdk.errors import AstrBotError
+from astrbot_sdk.errors import AstrBotError, ErrorCodes
 from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.star import Star
 
@@ -224,10 +224,23 @@ class TestErrorsModule:
         """from_payload() should fill in the documented fallback values."""
         error = AstrBotError.from_payload({"message": "boom", "retryable": 1})
 
-        assert error.code == "unknown_error"
+        assert error.code == ErrorCodes.UNKNOWN_ERROR
         assert error.message == "boom"
         assert error.hint == ""
         assert error.retryable is True
+
+    def test_error_code_constants_match_factory_outputs(self):
+        """核心工厂方法应复用统一错误码常量。"""
+        assert AstrBotError.cancelled().code == ErrorCodes.CANCELLED
+        assert (
+            AstrBotError.capability_not_found("memory.get").code
+            == ErrorCodes.CAPABILITY_NOT_FOUND
+        )
+        assert AstrBotError.invalid_input("bad").code == ErrorCodes.INVALID_INPUT
+        assert (
+            AstrBotError.protocol_version_mismatch("bad").code
+            == ErrorCodes.PROTOCOL_VERSION_MISMATCH
+        )
 
 
 class TestStarModule:

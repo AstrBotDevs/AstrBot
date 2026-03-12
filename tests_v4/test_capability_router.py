@@ -10,7 +10,10 @@ import pytest
 
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
-from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
+from astrbot_sdk.protocol.descriptors import (
+    BUILTIN_CAPABILITY_SCHEMAS,
+    CapabilityDescriptor,
+)
 from astrbot_sdk.runtime.capability_router import (
     CAPABILITY_NAME_PATTERN,
     RESERVED_CAPABILITY_PREFIXES,
@@ -166,6 +169,17 @@ class TestCapabilityRouterInit:
         assert "platform.send" in capability_names
         assert "platform.send_image" in capability_names
         assert "platform.get_members" in capability_names
+
+    def test_builtin_descriptors_use_protocol_schema_registry(self):
+        """CapabilityRouter should source built-in schemas from protocol constants."""
+        router = CapabilityRouter()
+        descriptors = {
+            descriptor.name: descriptor for descriptor in router.descriptors()
+        }
+
+        for name, schema in BUILTIN_CAPABILITY_SCHEMAS.items():
+            assert descriptors[name].input_schema == schema["input"]
+            assert descriptors[name].output_schema == schema["output"]
 
 
 class TestCapabilityRouterRegister:

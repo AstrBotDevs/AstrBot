@@ -15,6 +15,7 @@
 - 2026-03-13: `load_plugin()` must not blindly `getattr()` every name from `dir(instance)` during handler discovery. Real plugins may expose properties or descriptors with side effects or exceptions; inspect attributes statically first, and only bind names that actually carry handler metadata.
 - 2026-03-13: In `Peer`, “remote initialized” and “transport still alive” are separate states. Waiting for initialization must fail when the connection closes first, and malformed inbound protocol messages should actively fail pending calls instead of leaving futures/streams hanging.
 - 2026-03-13: Several first-layer files under `src-new/astrbot_sdk/*.py` carried stale migration comparison blocks that claimed missing CLI help, missing compat APIs, or other gaps already covered by tests and current implementations. Treat those comments as historical noise; verify behavior against code and tests before "restoring" features from the comments.
+- 2026-03-13: The v4 design already defines built-in capability schema governance and reserved namespaces at the protocol layer. Keeping anonymous schema builders only inside `runtime/capability_router.py` drifts runtime behavior away from the protocol contract; centralize built-in schemas and namespace constants in `protocol/descriptors.py`.
 
 # 开发命令
 

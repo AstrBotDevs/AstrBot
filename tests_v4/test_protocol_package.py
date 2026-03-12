@@ -19,6 +19,7 @@ from astrbot_sdk.protocol import (
     parse_legacy_message,
     parse_message,
 )
+from astrbot_sdk.protocol.descriptors import BUILTIN_CAPABILITY_SCHEMAS
 
 
 class TestProtocolPackageExports:
@@ -41,7 +42,12 @@ class TestProtocolPackageExports:
         assert isinstance(parsed, InitializeMessage)
         assert isinstance(ErrorPayload(code="x", message="y"), ErrorPayload)
         assert isinstance(
-            CapabilityDescriptor(name="llm.chat", description="chat"),
+            CapabilityDescriptor(
+                name="llm.chat",
+                description="chat",
+                input_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["input"],
+                output_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["output"],
+            ),
             CapabilityDescriptor,
         )
         assert isinstance(MessageTrigger(keywords=["hello"]), MessageTrigger)

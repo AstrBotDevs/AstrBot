@@ -8,12 +8,16 @@ import pytest
 from pydantic import ValidationError
 
 from astrbot_sdk.protocol.descriptors import (
+    BUILTIN_CAPABILITY_SCHEMAS,
     CapabilityDescriptor,
     CommandTrigger,
+    DB_LIST_INPUT_SCHEMA,
     EventTrigger,
     HandlerDescriptor,
+    LLM_CHAT_INPUT_SCHEMA,
     MessageTrigger,
     Permissions,
+    RESERVED_CAPABILITY_PREFIXES,
     ScheduleTrigger,
 )
 
@@ -256,13 +260,31 @@ class TestCapabilityDescriptor:
 
     def test_required_name_and_description(self):
         """CapabilityDescriptor requires name and description."""
-        cap = CapabilityDescriptor(name="llm.chat", description="Chat with LLM")
-        assert cap.name == "llm.chat"
+        cap = CapabilityDescriptor(name="custom.chat", description="Chat with LLM")
+        assert cap.name == "custom.chat"
         assert cap.description == "Chat with LLM"
         assert cap.input_schema is None
         assert cap.output_schema is None
         assert cap.supports_stream is False
         assert cap.cancelable is False
+
+    def test_builtin_capability_requires_schemas(self):
+        """Built-in capabilities should enforce schema governance."""
+        with pytest.raises(ValidationError, match="必须同时提供"):
+            CapabilityDescriptor(name="llm.chat", description="missing schemas")
+
+    def test_builtin_capability_schema_registry_contains_required_entries(self):
+        """Built-in schema registry should cover documented core capabilities."""
+        assert "llm.chat" in BUILTIN_CAPABILITY_SCHEMAS
+        assert "db.list" in BUILTIN_CAPABILITY_SCHEMAS
+        assert LLM_CHAT_INPUT_SCHEMA["required"] == ["prompt"]
+        assert (
+            DB_LIST_INPUT_SCHEMA["properties"]["prefix"]["anyOf"][1]["type"] == "null"
+        )
+
+    def test_reserved_capability_prefixes_are_protocol_constants(self):
+        """Reserved namespace prefixes should live in protocol descriptors."""
+        assert RESERVED_CAPABILITY_PREFIXES == ("handler.", "system.", "internal.")
 
     def test_with_schemas(self):
         """CapabilityDescriptor should accept input/output schemas."""

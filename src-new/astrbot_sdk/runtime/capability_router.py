@@ -83,6 +83,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -90,12 +91,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..errors import AstrBotError
-from ..protocol.descriptors import CapabilityDescriptor
+from ..protocol.descriptors import (
+    BUILTIN_CAPABILITY_SCHEMAS,
+    CapabilityDescriptor,
+    RESERVED_CAPABILITY_PREFIXES,
+)
 
 CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
 StreamHandler = Callable[[str, dict[str, Any], object], AsyncIterator[dict[str, Any]]]
 FinalizeHandler = Callable[[list[dict[str, Any]]], dict[str, Any]]
-RESERVED_CAPABILITY_PREFIXES = ("handler.", "system.", "internal.")
 CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
 
@@ -182,12 +186,22 @@ class CapabilityRouter:
         return output
 
     def _register_builtin_capabilities(self) -> None:
-        def obj_schema(required: list[str], **properties: Any) -> dict[str, Any]:
-            return {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-            }
+        def builtin_descriptor(
+            name: str,
+            description: str,
+            *,
+            supports_stream: bool = False,
+            cancelable: bool = False,
+        ) -> CapabilityDescriptor:
+            schema = BUILTIN_CAPABILITY_SCHEMAS[name]
+            return CapabilityDescriptor(
+                name=name,
+                description=description,
+                input_schema=copy.deepcopy(schema["input"]),
+                output_schema=copy.deepcopy(schema["output"]),
+                supports_stream=supports_stream,
+                cancelable=cancelable,
+            )
 
         async def llm_chat(
             _request_id: str, payload: dict[str, Any], _token
@@ -325,29 +339,17 @@ class CapabilityRouter:
             }
 
         self.register(
-            CapabilityDescriptor(
-                name="llm.chat",
-                description="发送对话请求，返回文本",
-                input_schema=obj_schema(["prompt"], prompt={"type": "string"}),
-                output_schema=obj_schema(["text"], text={"type": "string"}),
-            ),
+            builtin_descriptor("llm.chat", "发送对话请求，返回文本"),
             call_handler=llm_chat,
         )
         self.register(
-            CapabilityDescriptor(
-                name="llm.chat_raw",
-                description="发送对话请求，返回完整响应",
-                input_schema=obj_schema(["prompt"], prompt={"type": "string"}),
-                output_schema=obj_schema(["text"], text={"type": "string"}),
-            ),
+            builtin_descriptor("llm.chat_raw", "发送对话请求，返回完整响应"),
             call_handler=llm_chat_raw,
         )
         self.register(
-            CapabilityDescriptor(
-                name="llm.stream_chat",
-                description="流式对话",
-                input_schema=obj_schema(["prompt"], prompt={"type": "string"}),
-                output_schema=obj_schema(["text"], text={"type": "string"}),
+            builtin_descriptor(
+                "llm.stream_chat",
+                "流式对话",
                 supports_stream=True,
                 cancelable=True,
             ),
@@ -357,114 +359,47 @@ class CapabilityRouter:
             },
         )
         self.register(
-            CapabilityDescriptor(
-                name="memory.search",
-                description="搜索记忆",
-                input_schema=obj_schema(["query"], query={"type": "string"}),
-                output_schema=obj_schema(["items"], items={"type": "array"}),
-            ),
+            builtin_descriptor("memory.search", "搜索记忆"),
             call_handler=memory_search,
         )
         self.register(
-            CapabilityDescriptor(
-                name="memory.save",
-                description="保存记忆",
-                input_schema=obj_schema(
-                    ["key", "value"], key={"type": "string"}, value={"type": "object"}
-                ),
-                output_schema=obj_schema([]),
-            ),
+            builtin_descriptor("memory.save", "保存记忆"),
             call_handler=memory_save,
         )
         self.register(
-            CapabilityDescriptor(
-                name="memory.get",
-                description="读取单条记忆",
-                input_schema=obj_schema(["key"], key={"type": "string"}),
-                output_schema=obj_schema([], value={"type": "object"}),
-            ),
+            builtin_descriptor("memory.get", "读取单条记忆"),
             call_handler=memory_get,
         )
         self.register(
-            CapabilityDescriptor(
-                name="memory.delete",
-                description="删除记忆",
-                input_schema=obj_schema(["key"], key={"type": "string"}),
-                output_schema=obj_schema([]),
-            ),
+            builtin_descriptor("memory.delete", "删除记忆"),
             call_handler=memory_delete,
         )
         self.register(
-            CapabilityDescriptor(
-                name="db.get",
-                description="读取 KV",
-                input_schema=obj_schema(["key"], key={"type": "string"}),
-                output_schema=obj_schema([], value={"type": "object"}),
-            ),
+            builtin_descriptor("db.get", "读取 KV"),
             call_handler=db_get,
         )
         self.register(
-            CapabilityDescriptor(
-                name="db.set",
-                description="写入 KV",
-                input_schema=obj_schema(
-                    ["key", "value"], key={"type": "string"}, value={"type": "object"}
-                ),
-                output_schema=obj_schema([]),
-            ),
+            builtin_descriptor("db.set", "写入 KV"),
             call_handler=db_set,
         )
         self.register(
-            CapabilityDescriptor(
-                name="db.delete",
-                description="删除 KV",
-                input_schema=obj_schema(["key"], key={"type": "string"}),
-                output_schema=obj_schema([]),
-            ),
+            builtin_descriptor("db.delete", "删除 KV"),
             call_handler=db_delete,
         )
         self.register(
-            CapabilityDescriptor(
-                name="db.list",
-                description="列出 KV",
-                input_schema=obj_schema([], prefix={"type": "string"}),
-                output_schema=obj_schema(["keys"], keys={"type": "array"}),
-            ),
+            builtin_descriptor("db.list", "列出 KV"),
             call_handler=db_list,
         )
         self.register(
-            CapabilityDescriptor(
-                name="platform.send",
-                description="发送消息",
-                input_schema=obj_schema(
-                    ["session", "text"],
-                    session={"type": "string"},
-                    text={"type": "string"},
-                ),
-                output_schema=obj_schema(["message_id"], message_id={"type": "string"}),
-            ),
+            builtin_descriptor("platform.send", "发送消息"),
             call_handler=platform_send,
         )
         self.register(
-            CapabilityDescriptor(
-                name="platform.send_image",
-                description="发送图片",
-                input_schema=obj_schema(
-                    ["session", "image_url"],
-                    session={"type": "string"},
-                    image_url={"type": "string"},
-                ),
-                output_schema=obj_schema(["message_id"], message_id={"type": "string"}),
-            ),
+            builtin_descriptor("platform.send_image", "发送图片"),
             call_handler=platform_send_image,
         )
         self.register(
-            CapabilityDescriptor(
-                name="platform.get_members",
-                description="获取群成员",
-                input_schema=obj_schema(["session"], session={"type": "string"}),
-                output_schema=obj_schema(["members"], members={"type": "array"}),
-            ),
+            builtin_descriptor("platform.get_members", "获取群成员"),
             call_handler=platform_get_members,
         )
 
@@ -473,10 +408,28 @@ class CapabilityRouter:
         schema: dict[str, Any] | None,
         payload: dict[str, Any],
     ) -> None:
+        def schema_allows_null(field_schema: Any) -> bool:
+            if not isinstance(field_schema, dict):
+                return False
+            if field_schema.get("type") == "null":
+                return True
+            any_of = field_schema.get("anyOf")
+            if not isinstance(any_of, list):
+                return False
+            return any(
+                isinstance(candidate, dict) and candidate.get("type") == "null"
+                for candidate in any_of
+            )
+
         if schema is None:
             return
         if schema.get("type") == "object" and not isinstance(payload, dict):
             raise AstrBotError.invalid_input("输入必须是 object")
+        properties = schema.get("properties", {})
         for field_name in schema.get("required", []):
-            if field_name not in payload or payload[field_name] is None:
+            if field_name not in payload:
+                raise AstrBotError.invalid_input(f"缺少必填字段：{field_name}")
+            if payload[field_name] is None and not schema_allows_null(
+                properties.get(field_name)
+            ):
                 raise AstrBotError.invalid_input(f"缺少必填字段：{field_name}")

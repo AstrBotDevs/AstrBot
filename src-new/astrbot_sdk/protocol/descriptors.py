@@ -11,6 +11,208 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
+JSONSchema = dict[str, Any]
+RESERVED_CAPABILITY_NAMESPACES = ("handler", "system", "internal")
+RESERVED_CAPABILITY_PREFIXES = tuple(
+    f"{namespace}." for namespace in RESERVED_CAPABILITY_NAMESPACES
+)
+
+
+def _object_schema(
+    *,
+    required: tuple[str, ...] = (),
+    **properties: Any,
+) -> JSONSchema:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(required),
+    }
+
+
+def _nullable(schema: JSONSchema) -> JSONSchema:
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
+_OPTIONAL_CHAT_PROPERTIES: dict[str, Any] = {
+    "system": {"type": "string"},
+    "history": {"type": "array", "items": {"type": "object"}},
+    "model": {"type": "string"},
+    "temperature": {"type": "number"},
+    "image_urls": {"type": "array", "items": {"type": "string"}},
+    "tools": {"type": "array"},
+    "max_steps": {"type": "integer"},
+}
+
+LLM_CHAT_INPUT_SCHEMA = _object_schema(
+    required=("prompt",),
+    prompt={"type": "string"},
+    **_OPTIONAL_CHAT_PROPERTIES,
+)
+LLM_CHAT_OUTPUT_SCHEMA = _object_schema(
+    required=("text",),
+    text={"type": "string"},
+)
+LLM_CHAT_RAW_INPUT_SCHEMA = _object_schema(
+    required=("prompt",),
+    prompt={"type": "string"},
+    **_OPTIONAL_CHAT_PROPERTIES,
+)
+LLM_CHAT_RAW_OUTPUT_SCHEMA = _object_schema(
+    required=("text",),
+    text={"type": "string"},
+    usage=_nullable({"type": "object"}),
+    finish_reason=_nullable({"type": "string"}),
+    tool_calls={"type": "array", "items": {"type": "object"}},
+)
+LLM_STREAM_CHAT_INPUT_SCHEMA = _object_schema(
+    required=("prompt",),
+    prompt={"type": "string"},
+    **_OPTIONAL_CHAT_PROPERTIES,
+)
+LLM_STREAM_CHAT_OUTPUT_SCHEMA = _object_schema(
+    required=("text",),
+    text={"type": "string"},
+)
+MEMORY_SEARCH_INPUT_SCHEMA = _object_schema(
+    required=("query",),
+    query={"type": "string"},
+)
+MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
+    required=("items",),
+    items={"type": "array", "items": {"type": "object"}},
+)
+MEMORY_SAVE_INPUT_SCHEMA = _object_schema(
+    required=("key", "value"),
+    key={"type": "string"},
+    value={"type": "object"},
+)
+MEMORY_SAVE_OUTPUT_SCHEMA = _object_schema()
+MEMORY_GET_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+)
+MEMORY_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("value",),
+    value=_nullable({"type": "object"}),
+)
+MEMORY_DELETE_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+)
+MEMORY_DELETE_OUTPUT_SCHEMA = _object_schema()
+DB_GET_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+)
+DB_GET_OUTPUT_SCHEMA = _object_schema(
+    required=("value",),
+    value=_nullable({"type": "object"}),
+)
+DB_SET_INPUT_SCHEMA = _object_schema(
+    required=("key", "value"),
+    key={"type": "string"},
+    value={"type": "object"},
+)
+DB_SET_OUTPUT_SCHEMA = _object_schema()
+DB_DELETE_INPUT_SCHEMA = _object_schema(
+    required=("key",),
+    key={"type": "string"},
+)
+DB_DELETE_OUTPUT_SCHEMA = _object_schema()
+DB_LIST_INPUT_SCHEMA = _object_schema(
+    prefix=_nullable({"type": "string"}),
+)
+DB_LIST_OUTPUT_SCHEMA = _object_schema(
+    required=("keys",),
+    keys={"type": "array", "items": {"type": "string"}},
+)
+PLATFORM_SEND_INPUT_SCHEMA = _object_schema(
+    required=("session", "text"),
+    session={"type": "string"},
+    text={"type": "string"},
+)
+PLATFORM_SEND_OUTPUT_SCHEMA = _object_schema(
+    required=("message_id",),
+    message_id={"type": "string"},
+)
+PLATFORM_SEND_IMAGE_INPUT_SCHEMA = _object_schema(
+    required=("session", "image_url"),
+    session={"type": "string"},
+    image_url={"type": "string"},
+)
+PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA = _object_schema(
+    required=("message_id",),
+    message_id={"type": "string"},
+)
+PLATFORM_GET_MEMBERS_INPUT_SCHEMA = _object_schema(
+    required=("session",),
+    session={"type": "string"},
+)
+PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA = _object_schema(
+    required=("members",),
+    members={"type": "array", "items": {"type": "object"}},
+)
+
+BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
+    "llm.chat": {
+        "input": LLM_CHAT_INPUT_SCHEMA,
+        "output": LLM_CHAT_OUTPUT_SCHEMA,
+    },
+    "llm.chat_raw": {
+        "input": LLM_CHAT_RAW_INPUT_SCHEMA,
+        "output": LLM_CHAT_RAW_OUTPUT_SCHEMA,
+    },
+    "llm.stream_chat": {
+        "input": LLM_STREAM_CHAT_INPUT_SCHEMA,
+        "output": LLM_STREAM_CHAT_OUTPUT_SCHEMA,
+    },
+    "memory.search": {
+        "input": MEMORY_SEARCH_INPUT_SCHEMA,
+        "output": MEMORY_SEARCH_OUTPUT_SCHEMA,
+    },
+    "memory.save": {
+        "input": MEMORY_SAVE_INPUT_SCHEMA,
+        "output": MEMORY_SAVE_OUTPUT_SCHEMA,
+    },
+    "memory.get": {
+        "input": MEMORY_GET_INPUT_SCHEMA,
+        "output": MEMORY_GET_OUTPUT_SCHEMA,
+    },
+    "memory.delete": {
+        "input": MEMORY_DELETE_INPUT_SCHEMA,
+        "output": MEMORY_DELETE_OUTPUT_SCHEMA,
+    },
+    "db.get": {
+        "input": DB_GET_INPUT_SCHEMA,
+        "output": DB_GET_OUTPUT_SCHEMA,
+    },
+    "db.set": {
+        "input": DB_SET_INPUT_SCHEMA,
+        "output": DB_SET_OUTPUT_SCHEMA,
+    },
+    "db.delete": {
+        "input": DB_DELETE_INPUT_SCHEMA,
+        "output": DB_DELETE_OUTPUT_SCHEMA,
+    },
+    "db.list": {
+        "input": DB_LIST_INPUT_SCHEMA,
+        "output": DB_LIST_OUTPUT_SCHEMA,
+    },
+    "platform.send": {
+        "input": PLATFORM_SEND_INPUT_SCHEMA,
+        "output": PLATFORM_SEND_OUTPUT_SCHEMA,
+    },
+    "platform.send_image": {
+        "input": PLATFORM_SEND_IMAGE_INPUT_SCHEMA,
+        "output": PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA,
+    },
+    "platform.get_members": {
+        "input": PLATFORM_GET_MEMBERS_INPUT_SCHEMA,
+        "output": PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA,
+    },
+}
+
 
 class _DescriptorBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -193,19 +395,61 @@ class CapabilityDescriptor(_DescriptorBase):
 
     name: str
     description: str
-    input_schema: dict[str, Any] | None = None
-    output_schema: dict[str, Any] | None = None
+    input_schema: JSONSchema | None = None
+    output_schema: JSONSchema | None = None
     supports_stream: bool = False
     cancelable: bool = False
 
+    @model_validator(mode="after")
+    def validate_builtin_schema_governance(self) -> "CapabilityDescriptor":
+        if self.name in BUILTIN_CAPABILITY_SCHEMAS and (
+            self.input_schema is None or self.output_schema is None
+        ):
+            raise ValueError(
+                f"内建 capability {self.name} 必须同时提供 input_schema 和 output_schema"
+            )
+        return self
+
 
 __all__ = [
+    "BUILTIN_CAPABILITY_SCHEMAS",
     "CapabilityDescriptor",
     "CommandTrigger",
+    "DB_DELETE_INPUT_SCHEMA",
+    "DB_DELETE_OUTPUT_SCHEMA",
+    "DB_GET_INPUT_SCHEMA",
+    "DB_GET_OUTPUT_SCHEMA",
+    "DB_LIST_INPUT_SCHEMA",
+    "DB_LIST_OUTPUT_SCHEMA",
+    "DB_SET_INPUT_SCHEMA",
+    "DB_SET_OUTPUT_SCHEMA",
     "EventTrigger",
     "HandlerDescriptor",
+    "JSONSchema",
+    "LLM_CHAT_INPUT_SCHEMA",
+    "LLM_CHAT_OUTPUT_SCHEMA",
+    "LLM_CHAT_RAW_INPUT_SCHEMA",
+    "LLM_CHAT_RAW_OUTPUT_SCHEMA",
+    "LLM_STREAM_CHAT_INPUT_SCHEMA",
+    "LLM_STREAM_CHAT_OUTPUT_SCHEMA",
+    "MEMORY_DELETE_INPUT_SCHEMA",
+    "MEMORY_DELETE_OUTPUT_SCHEMA",
+    "MEMORY_GET_INPUT_SCHEMA",
+    "MEMORY_GET_OUTPUT_SCHEMA",
+    "MEMORY_SAVE_INPUT_SCHEMA",
+    "MEMORY_SAVE_OUTPUT_SCHEMA",
+    "MEMORY_SEARCH_INPUT_SCHEMA",
+    "MEMORY_SEARCH_OUTPUT_SCHEMA",
     "MessageTrigger",
+    "PLATFORM_GET_MEMBERS_INPUT_SCHEMA",
+    "PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA",
+    "PLATFORM_SEND_IMAGE_INPUT_SCHEMA",
+    "PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA",
+    "PLATFORM_SEND_INPUT_SCHEMA",
+    "PLATFORM_SEND_OUTPUT_SCHEMA",
     "Permissions",
+    "RESERVED_CAPABILITY_NAMESPACES",
+    "RESERVED_CAPABILITY_PREFIXES",
     "ScheduleTrigger",
     "Trigger",
 ]

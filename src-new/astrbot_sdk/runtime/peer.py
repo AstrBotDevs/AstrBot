@@ -23,7 +23,7 @@
         invoke() -> InvokeMessage(stream=False)
         invoke_stream() -> InvokeMessage(stream=True)
         cancel() -> CancelMessage
-    
+
 与旧版对比：
     旧版 JSON-RPC:
         - 分离的 JSONRPCClient 和 JSONRPCServer
