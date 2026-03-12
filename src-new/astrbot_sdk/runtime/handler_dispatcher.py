@@ -97,7 +97,7 @@ class HandlerDispatcher:
             peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token
         )
         event = MessageEvent.from_payload(message.input.get("event", {}))
-        event.bind_reply_handler(lambda text: ctx.platform.send(event.session_id, text))
+        event.bind_reply_handler(self._create_reply_handler(ctx, event))
         if loaded.legacy_context is not None:
             loaded.legacy_context.bind_runtime_context(ctx)
 
@@ -111,6 +111,20 @@ class HandlerDispatcher:
             return {}
         finally:
             self._active.pop(message.id, None)
+
+    def _create_reply_handler(self, ctx: Context, event: MessageEvent):
+        async def reply(text: str) -> None:
+            try:
+                await ctx.platform.send(event.session_id, text)
+            except TypeError:
+                send = getattr(self._peer, "send", None)
+                if not callable(send):
+                    raise
+                result = send(event.session_id, text)
+                if inspect.isawaitable(result):
+                    await result
+
+        return reply
 
     async def cancel(self, request_id: str) -> None:
         active = self._active.get(request_id)

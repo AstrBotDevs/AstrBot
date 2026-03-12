@@ -134,6 +134,13 @@ def _prepare_stdio_transport(
     return transport_stdin, transport_stdout, original_stdout
 
 
+def _sdk_source_dir(repo_root: Path) -> Path:
+    candidate = repo_root.resolve() / "src-new"
+    if (candidate / "astrbot_sdk").exists():
+        return candidate
+    return Path(__file__).resolve().parents[2]
+
+
 async def _wait_for_shutdown(peer: Peer, stop_event: asyncio.Event) -> None:
     stop_waiter = asyncio.create_task(stop_event.wait())
     transport_waiter = asyncio.create_task(peer.wait_closed())
@@ -168,7 +175,7 @@ class WorkerSession:
 
     async def start(self) -> None:
         python_path = self.env_manager.prepare_environment(self.plugin)
-        repo_src_dir = str(self.repo_root / "src-new")
+        repo_src_dir = str(_sdk_source_dir(self.repo_root))
         env = os.environ.copy()
         existing_pythonpath = env.get("PYTHONPATH")
         env["PYTHONPATH"] = (

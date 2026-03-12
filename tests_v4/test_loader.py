@@ -425,7 +425,7 @@ class TestDiscoverPlugins:
             assert "duplicate_name" in result.skipped_plugins
 
     def test_validates_components_list(self):
-        """discover_plugins should validate components is a non-empty list."""
+        """discover_plugins should validate components is a list."""
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_dir = Path(temp_dir)
 
@@ -447,6 +447,30 @@ class TestDiscoverPlugins:
 
             assert "test" in result.skipped_plugins
             assert "components" in result.skipped_plugins["test"]
+
+    def test_allows_empty_components_list(self):
+        """discover_plugins should allow plugins without components."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_dir = Path(temp_dir)
+
+            plugin_dir = plugins_dir / "empty_components"
+            plugin_dir.mkdir()
+            (plugin_dir / "plugin.yaml").write_text(
+                yaml.dump(
+                    {
+                        "name": "empty_components",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+
+            result = discover_plugins(plugins_dir)
+
+            assert [plugin.name for plugin in result.plugins] == ["empty_components"]
+            assert result.skipped_plugins == {}
 
     def test_discovers_valid_plugin(self):
         """discover_plugins should discover valid plugin."""

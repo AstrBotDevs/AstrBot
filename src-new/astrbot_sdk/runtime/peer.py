@@ -63,6 +63,7 @@ TODO:
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
@@ -123,7 +124,7 @@ class Peer:
         self._invoke_handler: InvokeHandler | None = None
         self._cancel_handler: CancelHandler | None = None
         self._counter = 0
-        self._closed = False
+        self._closed = asyncio.Event()
         self._unusable = False
         self._pending_results: dict[str, asyncio.Future[ResultMessage]] = {}
         self._pending_streams: dict[str, asyncio.Queue[Any]] = {}
@@ -146,12 +147,14 @@ class Peer:
 
     async def start(self) -> None:
         """启动传输层并将原始入站消息绑定到当前 `Peer`。"""
+        self._closed.clear()
         self.transport.set_message_handler(self._handle_raw_message)
         await self.transport.start()
 
     async def stop(self) -> None:
         """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。"""
-        self._closed = True
+        if self._closed.is_set():
+            return
         # 终止所有挂起的 RPC，避免调用方永久挂起
         for future in list(self._pending_results.values()):
             if not future.done():
@@ -169,6 +172,7 @@ class Peer:
         self._inbound_tasks.clear()
 
         await self.transport.stop()
+        self._closed.set()
 
     async def wait_closed(self) -> None:
         """等待底层传输彻底关闭。"""
@@ -410,6 +414,8 @@ class Peer:
             if self._invoke_handler is None:
                 raise AstrBotError.capability_not_found(message.capability)
             execution = await self._invoke_handler(message, token)
+            if inspect.isawaitable(execution):
+                execution = await execution
             if message.stream:
                 if not isinstance(execution, StreamExecution):
                     raise AstrBotError.protocol_error(

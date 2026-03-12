@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class _DescriptorBase(BaseModel):
@@ -137,8 +137,15 @@ class ScheduleTrigger(_DescriptorBase):
     """
 
     type: Literal["schedule"] = "schedule"
-    cron: str | None = None
+    cron: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("cron", "schedule"),
+    )
     interval_seconds: int | None = None
+
+    @property
+    def schedule(self) -> str | None:
+        return self.cron
 
     @model_validator(mode="after")
     def validate_schedule(self) -> "ScheduleTrigger":

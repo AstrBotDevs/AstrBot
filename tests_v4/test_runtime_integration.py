@@ -8,9 +8,8 @@ from __future__ import annotations
 import asyncio
 import sys
 import tempfile
-import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -27,26 +26,20 @@ from astrbot_sdk.protocol.descriptors import (
     ScheduleTrigger,
 )
 from astrbot_sdk.protocol.messages import (
-    EventMessage,
-    InitializeMessage,
     InitializeOutput,
     InvokeMessage,
     PeerInfo,
-    ResultMessage,
 )
 from astrbot_sdk.runtime.bootstrap import (
-    PluginWorkerRuntime,
     SupervisorRuntime,
     WorkerSession,
 )
-from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
+from astrbot_sdk.runtime.capability_router import CapabilityRouter
 from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
 from astrbot_sdk.runtime.loader import (
     LoadedHandler,
-    LoadedPlugin,
     PluginEnvironmentManager,
     PluginSpec,
-    load_plugin_spec,
 )
 from astrbot_sdk.runtime.peer import Peer
 
@@ -92,7 +85,9 @@ class TestWorkerSessionSubprocessLifecycle:
                 yaml.dump(
                     {
                         "name": "crash_plugin",
-                        "runtime": {"python": f"{sys.version_info.major}.{sys.version_info.minor}"},
+                        "runtime": {
+                            "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                        },
                         "components": [{"class": "nonexistent:Module"}],  # 不存在的模块
                     }
                 ),
@@ -143,7 +138,9 @@ class TestWorkerSessionSubprocessLifecycle:
                 yaml.dump(
                     {
                         "name": "test_plugin",
-                        "runtime": {"python": f"{sys.version_info.major}.{sys.version_info.minor}"},
+                        "runtime": {
+                            "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                        },
                         "components": [],
                     }
                 ),
@@ -473,7 +470,9 @@ class TestStreamCancelDuringIteration:
         await plugin.start()
         await plugin.initialize([])
 
-        stream = await plugin.invoke_stream("test.stream", {}, request_id="stream-early")
+        stream = await plugin.invoke_stream(
+            "test.stream", {}, request_id="stream-early"
+        )
 
         # 在迭代前取消
         await plugin.cancel("stream-early")
@@ -682,7 +681,9 @@ class TestEnvironmentCacheReuse:
                     with patch("shutil.which", return_value="/usr/bin/uv"):
                         # 模拟指纹计算
                         fingerprint = manager._fingerprint(spec)
-                        manager._write_state(plugin_dir / ".astrbot-worker-state.json", spec, fingerprint)
+                        manager._write_state(
+                            plugin_dir / ".astrbot-worker-state.json", spec, fingerprint
+                        )
 
                 # 重置计数
                 rebuild_called.clear()
@@ -696,7 +697,9 @@ class TestEnvironmentCacheReuse:
                 if state.get("fingerprint") == new_fingerprint:
                     # 模拟 venv 存在
                     with patch.object(Path, "exists", return_value=True):
-                        with patch.object(manager, "_matches_python_version", return_value=True):
+                        with patch.object(
+                            manager, "_matches_python_version", return_value=True
+                        ):
                             # prepare_environment 应该跳过重建
                             # 但由于我们 mock 了 exists，这里只验证逻辑
                             pass
@@ -794,7 +797,9 @@ class TestEnvironmentCacheReuse:
             assert manager._matches_python_version(venv_dir, "3.11") is False
 
             # 不存在的 venv
-            assert manager._matches_python_version(Path("/nonexistent"), "3.12") is False
+            assert (
+                manager._matches_python_version(Path("/nonexistent"), "3.12") is False
+            )
 
 
 class TestSupervisorRuntimePluginLoading:
@@ -818,7 +823,9 @@ class TestSupervisorRuntimePluginLoading:
                     yaml.dump(
                         {
                             "name": f"plugin_{i}",
-                            "runtime": {"python": f"{sys.version_info.major}.{sys.version_info.minor}"},
+                            "runtime": {
+                                "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                            },
                             "components": [],
                         }
                     ),
@@ -862,7 +869,9 @@ class TestSupervisorRuntimePluginLoading:
                 yaml.dump(
                     {
                         "name": "valid_plugin",
-                        "runtime": {"python": f"{sys.version_info.major}.{sys.version_info.minor}"},
+                        "runtime": {
+                            "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                        },
                         "components": [],
                     }
                 ),

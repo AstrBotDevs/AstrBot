@@ -152,6 +152,12 @@ class TestScheduleTrigger:
         assert trigger.interval_seconds == 60
         assert trigger.cron is None
 
+    def test_accepts_schedule_alias(self):
+        """ScheduleTrigger should accept legacy schedule alias for cron."""
+        trigger = ScheduleTrigger(schedule="0 */5 * * * *")
+        assert trigger.cron == "0 */5 * * * *"
+        assert trigger.schedule == "0 */5 * * * *"
+
     def test_requires_exactly_one_strategy(self):
         """ScheduleTrigger must have exactly one of cron or interval_seconds."""
         # Neither provided should raise

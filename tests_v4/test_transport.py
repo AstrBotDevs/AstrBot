@@ -290,7 +290,11 @@ class TestStdioTransportProcessMode:
 
         # 使用 Python 脚本替代 cat，读取 stdin 并输出
         transport = StdioTransport(
-            command=[sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"]
+            command=[
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.write(sys.stdin.read())",
+            ]
         )
 
         await transport.start()
@@ -305,7 +309,11 @@ class TestStdioTransportProcessMode:
         import sys
 
         transport = StdioTransport(
-            command=[sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"]
+            command=[
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.write(sys.stdin.read())",
+            ]
         )
         await transport.start()
 

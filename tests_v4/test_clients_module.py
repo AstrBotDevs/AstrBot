@@ -5,7 +5,6 @@ Tests for clients/__init__.py - Module exports.
 from __future__ import annotations
 
 
-
 class TestClientsModuleExports:
     """Tests for clients module exports."""
 

@@ -222,8 +222,8 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
         if plugin_name in seen_names:
             skipped_plugins[plugin_name] = "duplicate plugin name"
             continue
-        if not isinstance(components, list) or not components:
-            skipped_plugins[plugin_name] = "components must be a non-empty list"
+        if not isinstance(components, list):
+            skipped_plugins[plugin_name] = "components must be a list"
             continue
         if not isinstance(python_version, str) or not python_version:
             skipped_plugins[plugin_name] = "runtime.python is required"

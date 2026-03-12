@@ -370,6 +370,56 @@ class TestHandlerDispatcherInvoke:
         assert received_types == [AstrMessageEvent]
         assert replies == [{"session_id": "session-legacy", "text": "legacy reply"}]
 
+    @pytest.mark.asyncio
+    async def test_invoke_reply_falls_back_to_peer_send_for_sync_mock(self):
+        """invoke should fall back to peer.send when peer.invoke is a sync mock."""
+        peer = MagicMock()
+        peer.remote_capability_map = {}
+        sent_messages = []
+
+        async def track_send(session_id: str, text: str) -> None:
+            sent_messages.append({"session_id": session_id, "text": text})
+
+        peer.send = track_send
+
+        async def handler_func(event: MessageEvent, ctx: Context):
+            await event.reply("fallback")
+
+        descriptor = HandlerDescriptor(
+            id="test.handler",
+            trigger=CommandTrigger(command="hello"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=None,
+        )
+
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_sync_mock",
+            capability="handler.invoke",
+            input={
+                "handler_id": "test.handler",
+                "event": {
+                    "text": "hello",
+                    "session_id": "session-sync",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        await dispatcher.invoke(message, CancelToken())
+
+        assert sent_messages == [{"session_id": "session-sync", "text": "fallback"}]
+
 
 class TestHandlerDispatcherCancel:
     """Tests for HandlerDispatcher.cancel method."""
