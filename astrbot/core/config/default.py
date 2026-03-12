@@ -211,6 +211,7 @@ DEFAULT_CONFIG = {
         },
     },
     "platform": [],
+    "event_bus_dedup_ttl_seconds": 0.5,
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组
         "lark": {
@@ -288,6 +289,9 @@ CONFIG_METADATA_2 = {
                         "secret": "",
                         "enable_group_c2c": True,
                         "enable_guild_direct_message": True,
+                        "dedup_message_id_ttl_seconds": 1800.0,
+                        "dedup_content_key_ttl_seconds": 3.0,
+                        "dedup_cleanup_interval_seconds": 1.0,
                     },
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
@@ -712,6 +716,21 @@ CONFIG_METADATA_2 = {
                         "description": "启用频道私聊",
                         "type": "bool",
                         "hint": "启用后，机器人可以接收到频道的私聊消息。",
+                    },
+                    "dedup_message_id_ttl_seconds": {
+                        "description": "消息 ID 去重窗口（秒）",
+                        "type": "float",
+                        "hint": "QQ 官方适配器中 message_id 去重窗口，默认 1800 秒。",
+                    },
+                    "dedup_content_key_ttl_seconds": {
+                        "description": "内容键去重窗口（秒）",
+                        "type": "float",
+                        "hint": "QQ 官方适配器中 sender+content hash 去重窗口，默认 3 秒。",
+                    },
+                    "dedup_cleanup_interval_seconds": {
+                        "description": "去重缓存清理间隔（秒）",
+                        "type": "float",
+                        "hint": "QQ 官方适配器去重缓存的增量清理间隔，默认 1 秒。",
                     },
                     "ws_reverse_host": {
                         "description": "反向 Websocket 主机",
