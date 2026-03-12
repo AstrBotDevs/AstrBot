@@ -36,6 +36,7 @@ python-telegram-bot>=22.6
 qq-botpy>=1.2.1
 quart>=0.20.0
 readability-lxml>=0.8.4.1
+satori-python-core>=1.3.0
 silk-python>=0.2.6
 slack-sdk>=3.35.0
 sqlalchemy[asyncio]>=2.0.41
