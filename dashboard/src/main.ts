@@ -9,8 +9,11 @@ import '@/scss/style.scss';
 import VueApexCharts from 'vue3-apexcharts';
 
 import print from 'vue3-print-nb';
-import { loader } from '@guolao/vue-monaco-editor'
+import { loader } from '@guolao/vue-monaco-editor';
+import * as monaco from 'monaco-editor';
 import axios from 'axios';
+
+loader.config({ monaco });
 
 // 初始化新的i18n系统，等待完成后再挂载应用
 setupI18n().then(() => {
@@ -108,9 +111,3 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
   }
   return _origFetch(input, { ...init, headers });
 };
-
-loader.config({
-  paths: {
-    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.54.0/min/vs',
-  },
-})
