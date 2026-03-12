@@ -1,6 +1,7 @@
 """插件的重载、启停、安装、卸载等操作。"""
 
 import asyncio
+import contextlib
 import functools
 import inspect
 import json
@@ -75,6 +76,39 @@ class PluginDependencyInstallError(Exception):
         self.error = error
 
 
+@contextlib.contextmanager
+def _temporary_filtered_requirements_file(
+    *,
+    install_lines: tuple[str, ...],
+):
+    filtered_requirements_path: str | None = None
+    temp_dir = get_astrbot_temp_path()
+
+    try:
+        os.makedirs(temp_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix="_plugin_requirements.txt",
+            delete=False,
+            dir=temp_dir,
+            encoding="utf-8",
+        ) as filtered_requirements_file:
+            filtered_requirements_file.write("\n".join(install_lines) + "\n")
+            filtered_requirements_path = filtered_requirements_file.name
+
+        yield filtered_requirements_path
+    finally:
+        if filtered_requirements_path and os.path.exists(filtered_requirements_path):
+            try:
+                os.remove(filtered_requirements_path)
+            except OSError as exc:
+                logger.warning(
+                    "删除临时插件依赖文件失败：%s（路径：%s）",
+                    exc,
+                    filtered_requirements_path,
+                )
+
+
 async def _install_requirements_with_precheck(
     *,
     plugin_label: str,
@@ -110,33 +144,10 @@ async def _install_requirements_with_precheck(
         f"{requirements_path} -> {sorted(install_plan.missing_names)}"
     )
 
-    filtered_requirements_path: str | None = None
-    temp_dir = get_astrbot_temp_path()
-    try:
-        os.makedirs(temp_dir, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix="_plugin_requirements.txt",
-            delete=False,
-            dir=temp_dir,
-            encoding="utf-8",
-        ) as filtered_requirements_file:
-            filtered_requirements_file.write(
-                "\n".join(install_plan.install_lines) + "\n"
-            )
-            filtered_requirements_path = filtered_requirements_file.name
-
+    with _temporary_filtered_requirements_file(
+        install_lines=install_plan.install_lines,
+    ) as filtered_requirements_path:
         await pip_installer.install(requirements_path=filtered_requirements_path)
-    finally:
-        if filtered_requirements_path and os.path.exists(filtered_requirements_path):
-            try:
-                os.remove(filtered_requirements_path)
-            except OSError as exc:
-                logger.warning(
-                    "删除临时插件依赖文件失败：%s（路径：%s）",
-                    exc,
-                    filtered_requirements_path,
-                )
 
 
 class PluginManager:

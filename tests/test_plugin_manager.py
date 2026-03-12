@@ -7,6 +7,7 @@ import yaml
 
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
+from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
 # --- Test Data & Helpers ---
 
@@ -75,25 +76,12 @@ def _build_reload_mock(events):
     return mock_reload
 
 
-def _build_dependency_install_mock(events, fail: bool):
-    async def mock_install_requirements(
-        *,
-        requirements_path: str | None = None,
-        package_name: str | None = None,
-        **kwargs,
-    ):
-        del kwargs
-        if requirements_path:
-            events.append(("deps", str(requirements_path)))
-        if package_name:
-            events.append(("deps_pkg", package_name))
-        if fail:
-            raise Exception("pip failed")
-
-    return mock_install_requirements
-
-
-def _build_dependency_install_content_mock(events, fail: bool):
+def _build_dependency_install_mock(
+    events,
+    fail: bool,
+    *,
+    capture_content: bool = False,
+):
     async def mock_install_requirements(
         *,
         requirements_path: str | None = None,
@@ -103,7 +91,10 @@ def _build_dependency_install_content_mock(events, fail: bool):
         del kwargs
         if requirements_path:
             path = Path(requirements_path)
-            events.append(("deps", str(path), path.read_text(encoding="utf-8")))
+            event = ("deps", str(path))
+            if capture_content:
+                event = (*event, path.read_text(encoding="utf-8"))
+            events.append(event)
         if package_name:
             events.append(("deps_pkg", package_name))
         if fail:
@@ -112,31 +103,23 @@ def _build_dependency_install_content_mock(events, fail: bool):
     return mock_install_requirements
 
 
-def _build_dependency_install_assert_tempdir_mock(events, fail: bool):
-    async def mock_install_requirements(
-        *,
-        requirements_path: str | None = None,
-        package_name: str | None = None,
-        **kwargs,
-    ):
-        del kwargs, package_name
-        assert requirements_path is not None
-        path = Path(requirements_path)
-        events.append(("deps", str(path), path.read_text(encoding="utf-8")))
-        if fail:
-            raise Exception("pip failed")
-
-    return mock_install_requirements
-
-
 def _mock_missing_requirements(monkeypatch, missing: set[str]):
-    from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
+    _mock_missing_requirements_plan(monkeypatch, missing, sorted(missing))
 
+
+def _mock_missing_requirements_plan(
+    monkeypatch,
+    missing_names,
+    install_lines,
+    *,
+    fallback_reason: str | None = None,
+):
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.plan_missing_requirements_install",
         lambda requirements_path: MissingRequirementsPlan(
-            missing_names=frozenset(missing),
-            install_lines=tuple(sorted(missing)),
+            missing_names=frozenset(missing_names),
+            install_lines=tuple(install_lines),
+            fallback_reason=fallback_reason,
         ),
     )
 
@@ -148,38 +131,27 @@ def _mock_precheck_fails(monkeypatch):
     )
 
 
-def _mock_missing_requirements_plan(monkeypatch, missing_names, install_lines):
-    from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
-
-    monkeypatch.setattr(
-        "astrbot.core.star.star_manager.plan_missing_requirements_install",
-        lambda requirements_path: MissingRequirementsPlan(
-            missing_names=frozenset(missing_names),
-            install_lines=tuple(install_lines),
-        ),
-    )
-
-
-def _mock_precheck_plan_failure(monkeypatch):
-    monkeypatch.setattr(
-        "astrbot.core.star.star_manager.plan_missing_requirements_install",
-        lambda requirements_path: None,
-    )
-
-
 def _assert_dependency_install_event_matches(
     event,
     *,
     expected_original_path: Path,
     expected_content: str | None = None,
+    expect_filtered_tempfile: bool | None = None,
 ):
     assert event[0] == "deps"
     used_path = Path(event[1])
-    if expected_content is None:
+    should_be_filtered = expected_content is not None
+    if expect_filtered_tempfile is not None:
+        should_be_filtered = expect_filtered_tempfile
+
+    if not should_be_filtered:
         assert used_path == expected_original_path
     else:
         assert used_path != expected_original_path
         assert used_path.name.endswith("_plugin_requirements.txt")
+    if expected_content is not None:
+        if len(event) >= 3:
+            assert event[2] == expected_content
 
 
 # --- Fixtures ---
@@ -594,7 +566,7 @@ async def test_ensure_plugin_requirements_installs_only_missing_requirement_line
 
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
-        _build_dependency_install_content_mock(events, False),
+        _build_dependency_install_mock(events, False, capture_content=True),
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
@@ -626,7 +598,7 @@ async def test_ensure_plugin_requirements_creates_temp_dir_before_filtered_insta
     )
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.pip_installer.install",
-        _build_dependency_install_assert_tempdir_mock(events, False),
+        _build_dependency_install_mock(events, False, capture_content=True),
     )
 
     await plugin_manager_pm._ensure_plugin_requirements(
@@ -648,10 +620,7 @@ async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_
 
     monkeypatch.setattr(
         "astrbot.core.star.star_manager.plan_missing_requirements_install",
-        lambda path: __import__(
-            "astrbot.core.utils.requirements_utils",
-            fromlist=["MissingRequirementsPlan"],
-        ).MissingRequirementsPlan(
+        lambda path: MissingRequirementsPlan(
             missing_names=frozenset({"botocore"}),
             install_lines=(),
             fallback_reason="unmapped missing requirement names",

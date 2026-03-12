@@ -237,6 +237,7 @@ def test_build_missing_requirements_install_lines_logs_why_option_lines_fall_bac
         "--extra-index-url https://example.com/simple\nboto3\n",
         encoding="utf-8",
     )
+
     info_logs = []
 
     monkeypatch.setattr(
@@ -259,6 +260,7 @@ def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
 ):
     requirements_path = tmp_path / "requirements.txt"
     requirements_path.write_text("git+https://example.com/demo.git\n", encoding="utf-8")
+
     info_logs = []
 
     monkeypatch.setattr(
