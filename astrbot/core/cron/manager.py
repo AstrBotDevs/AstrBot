@@ -380,7 +380,11 @@ class CronJobManager:
                 "The message was likely NOT delivered to the user."
             )
 
-        tools_str = f"tools called: [{', '.join(called_tool_names)}]. " if called_tool_names else "no tools called. "
+        tools_str = (
+            f"tools called: [{', '.join(called_tool_names)}]. "
+            if called_tool_names
+            else "no tools called. "
+        )
         # role == "assistant" 表示 LLM 正常完成，排除 role="err" 的错误响应写入历史
         status = (
             "task completed successfully."
