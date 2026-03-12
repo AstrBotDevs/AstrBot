@@ -9,14 +9,12 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
 
 from astrbot_sdk.protocol.descriptors import CommandTrigger, MessageTrigger
 from astrbot_sdk.runtime.loader import (
-    LoadedPlugin,
     load_plugin,
     load_plugin_spec,
 )
@@ -186,8 +184,9 @@ class TestFilterDecorators:
     def test_event_message_type_decorator(self):
         """测试 event_message_type 装饰器。"""
         from astrbot_sdk.api.event import filter
+        from astrbot_sdk.api.event.filter import EventMessageType
 
-        @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+        @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
         @filter.command("group_cmd")
         async def handler(event):
             pass
@@ -323,11 +322,12 @@ class TestLoadLegacyStylePlugin:
             manifest_path = plugin_dir / "plugin.yaml"
             requirements_path = plugin_dir / "requirements.txt"
 
-            commands_dir = plugin_dir / "commands"
-            commands_dir.mkdir()
-            (commands_dir / "__init__.py").write_text("", encoding="utf-8")
+            # 使用唯一的模块名避免与其他测试冲突
+            handlers_dir = plugin_dir / "chain_handlers"
+            handlers_dir.mkdir()
+            (handlers_dir / "__init__.py").write_text("", encoding="utf-8")
 
-            (commands_dir / "chain.py").write_text(
+            (handlers_dir / "chain_cmd.py").write_text(
                 textwrap.dedent("""
                     from astrbot_sdk.api.components.command import CommandComponent
                     from astrbot_sdk.api.event import AstrMessageEvent, filter
@@ -355,7 +355,7 @@ class TestLoadLegacyStylePlugin:
                         "runtime": {"python": "3.12"},
                         "components": [
                             {
-                                "class": "commands.chain:ChainCommand",
+                                "class": "chain_handlers.chain_cmd:ChainCommand",
                                 "type": "command",
                                 "name": "chain",
                             }
@@ -368,8 +368,10 @@ class TestLoadLegacyStylePlugin:
 
             spec = load_plugin_spec(plugin_dir)
 
+            path_added = False
             if str(plugin_dir) not in sys.path:
                 sys.path.insert(0, str(plugin_dir))
+                path_added = True
 
             try:
                 loaded = load_plugin(spec)
@@ -377,22 +379,30 @@ class TestLoadLegacyStylePlugin:
                 assert len(loaded.instances) == 1
                 assert len(loaded.handlers) >= 1
             finally:
-                if str(plugin_dir) in sys.path:
+                # 清理导入的模块
+                modules_to_remove = [
+                    k for k in list(sys.modules.keys()) if k.startswith("chain_handlers")
+                ]
+                for mod in modules_to_remove:
+                    del sys.modules[mod]
+                if path_added and str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
 
     def test_load_plugin_with_regex_handler(self):
         """测试加载使用正则处理器的插件。"""
+
         with tempfile.TemporaryDirectory() as temp_dir:
             plugin_dir = Path(temp_dir) / "regex_plugin"
             plugin_dir.mkdir()
             manifest_path = plugin_dir / "plugin.yaml"
             requirements_path = plugin_dir / "requirements.txt"
 
-            commands_dir = plugin_dir / "commands"
-            commands_dir.mkdir()
-            (commands_dir / "__init__.py").write_text("", encoding="utf-8")
+            # 使用唯一的模块名避免与其他测试冲突
+            regex_handlers_dir = plugin_dir / "regex_handlers"
+            regex_handlers_dir.mkdir()
+            (regex_handlers_dir / "__init__.py").write_text("", encoding="utf-8")
 
-            (commands_dir / "matchers.py").write_text(
+            (regex_handlers_dir / "matcher.py").write_text(
                 textwrap.dedent("""
                     from astrbot_sdk.api.components.command import CommandComponent
                     from astrbot_sdk.api.event import AstrMessageEvent, filter
@@ -416,7 +426,7 @@ class TestLoadLegacyStylePlugin:
                         "runtime": {"python": "3.12"},
                         "components": [
                             {
-                                "class": "commands.matchers:RegexCommand",
+                                "class": "regex_handlers.matcher:RegexCommand",
                                 "type": "command",
                                 "name": "regex",
                             }
@@ -429,8 +439,10 @@ class TestLoadLegacyStylePlugin:
 
             spec = load_plugin_spec(plugin_dir)
 
+            path_added = False
             if str(plugin_dir) not in sys.path:
                 sys.path.insert(0, str(plugin_dir))
+                path_added = True
 
             try:
                 loaded = load_plugin(spec)
@@ -440,7 +452,13 @@ class TestLoadLegacyStylePlugin:
                 assert isinstance(handler.descriptor.trigger, MessageTrigger)
                 assert handler.descriptor.trigger.regex == r"^ping.*"
             finally:
-                if str(plugin_dir) in sys.path:
+                # 清理导入的模块
+                modules_to_remove = [
+                    k for k in sys.modules if k.startswith("regex_handlers")
+                ]
+                for mod in modules_to_remove:
+                    del sys.modules[mod]
+                if path_added and str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
 
 

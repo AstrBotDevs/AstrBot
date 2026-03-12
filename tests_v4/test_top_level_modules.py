@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import astrbot_sdk
 import astrbot_sdk.compat as compat_module
+import astrbot_sdk.runtime as runtime_module
 import pytest
 from click.testing import CliRunner
 
@@ -25,6 +26,16 @@ from astrbot_sdk.context import Context
 from astrbot_sdk.decorators import on_command
 from astrbot_sdk.errors import AstrBotError, ErrorCodes
 from astrbot_sdk.events import MessageEvent
+from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
+from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
+from astrbot_sdk.runtime.peer import Peer
+from astrbot_sdk.runtime.transport import (
+    MessageHandler,
+    StdioTransport,
+    Transport,
+    WebSocketClientTransport,
+    WebSocketServerTransport,
+)
 from astrbot_sdk.star import Star
 
 TOP_LEVEL_MODULES = [
@@ -36,6 +47,7 @@ TOP_LEVEL_MODULES = [
     "astrbot_sdk.decorators",
     "astrbot_sdk.errors",
     "astrbot_sdk.events",
+    "astrbot_sdk.runtime",
     "astrbot_sdk.star",
 ]
 
@@ -87,6 +99,41 @@ class TestTopLevelImports:
             "Context",
             "LegacyContext",
             "LegacyConversationManager",
+        ]
+
+    def test_runtime_module_reexports_advanced_runtime_primitives(self):
+        """runtime module should expose only the small advanced runtime surface."""
+        assert runtime_module.Peer is Peer
+        assert runtime_module.CapabilityRouter is CapabilityRouter
+        assert runtime_module.HandlerDispatcher is HandlerDispatcher
+        assert runtime_module.Transport is Transport
+        assert runtime_module.MessageHandler is MessageHandler
+        assert runtime_module.StdioTransport is StdioTransport
+        assert runtime_module.WebSocketClientTransport is WebSocketClientTransport
+        assert runtime_module.WebSocketServerTransport is WebSocketServerTransport
+        assert runtime_module.StreamExecution is StreamExecution
+
+    def test_runtime_module_does_not_reexport_loader_or_bootstrap_details(self):
+        """runtime root should not expose loader/bootstrap internals as stable API."""
+        assert not hasattr(runtime_module, "PluginEnvironmentManager")
+        assert not hasattr(runtime_module, "PluginWorkerRuntime")
+        assert not hasattr(runtime_module, "SupervisorRuntime")
+        assert not hasattr(runtime_module, "WorkerSession")
+        assert not hasattr(runtime_module, "LoadedPlugin")
+        assert not hasattr(runtime_module, "run_supervisor")
+
+    def test_runtime_module_all_matches_narrow_public_surface(self):
+        """runtime.__all__ should stay aligned with the narrowed advanced API."""
+        assert runtime_module.__all__ == [
+            "CapabilityRouter",
+            "HandlerDispatcher",
+            "MessageHandler",
+            "Peer",
+            "StdioTransport",
+            "StreamExecution",
+            "Transport",
+            "WebSocketClientTransport",
+            "WebSocketServerTransport",
         ]
 
 

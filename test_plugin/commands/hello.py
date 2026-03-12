@@ -10,6 +10,7 @@
 
 from astrbot_sdk.api.components.command import CommandComponent
 from astrbot_sdk.api.event import AstrMessageEvent, filter
+from astrbot_sdk.api.event.filter import EventMessageType, PlatformAdapterType
 from astrbot_sdk.api.star.context import Context
 from astrbot_sdk.api.message import MessageChain
 from astrbot_sdk.api.message_components import Plain, At, Image
@@ -77,15 +78,16 @@ class HelloCommand(CommandComponent):
         at = At(user_id="123", user_name="test_user")
 
         # 测试 Image
-        img = Image.fromURL("https://example.com/img.png")
+        image = Image.fromURL("https://example.com/img.png")
 
         # 测试 to_dict
         plain_dict = plain.to_dict()
         at_dict = at.to_dict()
+        image_dict = image.to_dict()
 
-        logger.info(f"Plain: {plain_dict}, At: {at_dict}")
+        logger.info(f"Plain: {plain_dict}, At: {at_dict}, Image: {image_dict}")
 
-        yield event.plain_result(f"Components created: Plain, At, Image")
+        yield event.plain_result("Components created: Plain, At, Image")
 
     @filter.regex(r"^ping.*")
     async def ping_regex(self, event: AstrMessageEvent):
@@ -97,12 +99,12 @@ class HelloCommand(CommandComponent):
         """测试权限过滤 (应该被跳过，因为没有 require_admin)。"""
         yield event.plain_result("Admin command executed")
 
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def group_only(self, event: AstrMessageEvent):
         """测试消息类型过滤。"""
         yield event.plain_result("Group message received")
 
-    @filter.platform_adapter_type("aiocqhttp")
+    @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
     async def cqhttp_only(self, event: AstrMessageEvent):
         """测试平台过滤。"""
         yield event.plain_result("CQHttp platform detected")
