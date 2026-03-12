@@ -4,7 +4,7 @@ import os
 import re
 import shlex
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -388,6 +388,13 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
     if not can_precheck or requirement_lines is None:
         return None
 
+    return find_missing_requirements_from_lines(requirement_lines)
+
+
+def find_missing_requirements_from_lines(
+    requirement_lines: Sequence[str],
+) -> set[str] | None:
+
     required = list(iter_requirements(lines=requirement_lines))
     if not required:
         return set()
@@ -410,14 +417,9 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
 
 def build_missing_requirements_install_lines(
     requirements_path: str,
+    requirement_lines: Sequence[str],
     missing_names: set[str] | frozenset[str],
 ) -> tuple[str, ...] | None:
-    can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
-        requirements_path
-    )
-    if not can_precheck or requirement_lines is None:
-        return None
-
     wanted_names = set(missing_names)
     install_lines: list[str] = []
     for line in requirement_lines:
@@ -442,11 +444,21 @@ def build_missing_requirements_install_lines(
 def plan_missing_requirements_install(
     requirements_path: str,
 ) -> MissingRequirementsPlan | None:
-    missing = find_missing_requirements(requirements_path)
+    can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
+        requirements_path
+    )
+    if not can_precheck or requirement_lines is None:
+        return None
+
+    missing = find_missing_requirements_from_lines(requirement_lines)
     if missing is None:
         return None
 
-    install_lines = build_missing_requirements_install_lines(requirements_path, missing)
+    install_lines = build_missing_requirements_install_lines(
+        requirements_path,
+        requirement_lines,
+        missing,
+    )
     if install_lines is None:
         return None
     if missing and not install_lines:
