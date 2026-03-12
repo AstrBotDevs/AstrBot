@@ -1,39 +1,8 @@
-"""描述符模块。
+"""v4 协议描述符模型。
 
-定义处理器和能力的描述符，用于声明式注册和发现。
-
-描述符类型概览：
-    HandlerDescriptor: 处理器描述符，描述一个事件处理函数
-    CapabilityDescriptor: 能力描述符，描述一个可调用的远程能力
-    Permissions: 权限配置，控制处理器的访问权限
-    Trigger: 触发器联合类型，支持多种触发方式
-
-触发器类型：
-    CommandTrigger: 命令触发器，响应特定命令（如 /help）
-    MessageTrigger: 消息触发器，响应匹配正则或关键词的消息
-    EventTrigger: 事件触发器，响应特定类型的事件
-    ScheduleTrigger: 定时触发器，按 cron 或间隔时间执行
-
-与旧版对比：
-    旧版:
-        - 处理器元信息分散在 handshake 响应中
-        - 使用 event_type 整数区分事件类型
-        - 缺少声明式的触发器定义
-        - 配置通过 extras_configs 字典传递
-
-    新版:
-        - 使用 HandlerDescriptor 统一描述处理器
-        - 使用字符串 event_type，更语义化
-        - 支持多种触发器类型，声明式定义
-        - 使用 Pydantic 模型，类型安全
-
-TODO:
-    - HandlerDescriptor 缺少 timeout 超时配置
-    - HandlerDescriptor 缺少 retry 重试配置
-    - CapabilityDescriptor 缺少 rate_limit 限流配置
-    - ScheduleTrigger 缺错时错过执行的处理策略
-    - 缺少 HandlerGroupDescriptor 处理器组描述符
-    - 缺少 DependencyDescriptor 依赖声明
+`protocol` 是 v4 新引入的协议层抽象，不对应旧树中的一个同名目录。这里
+定义的是跨进程握手和调度时使用的声明式元数据，而不是运行时的具体处理器/
+能力实现。
 """
 
 from __future__ import annotations
@@ -85,7 +54,7 @@ class CommandTrigger(_DescriptorBase):
 
 
 class MessageTrigger(_DescriptorBase):
-    """消息触发器，响应匹配正则或关键词的消息。
+    """消息触发器，描述消息类处理器的订阅条件。
 
     与旧版对比：
         旧版: 使用 @regex_handler(r"pattern") 或 @message_handler 装饰器
@@ -96,6 +65,10 @@ class MessageTrigger(_DescriptorBase):
         regex: 正则表达式模式，匹配消息文本
         keywords: 关键词列表，消息包含任一关键词即触发
         platforms: 目标平台列表，为空表示所有平台
+
+    Note:
+        `regex` 和 `keywords` 可以同时为空，此时表示“任意消息均可触发”，
+        仅由平台过滤或上层运行时进一步筛选。
     """
 
     type: Literal["message"] = "message"
@@ -224,3 +197,15 @@ class CapabilityDescriptor(_DescriptorBase):
     output_schema: dict[str, Any] | None = None
     supports_stream: bool = False
     cancelable: bool = False
+
+
+__all__ = [
+    "CapabilityDescriptor",
+    "CommandTrigger",
+    "EventTrigger",
+    "HandlerDescriptor",
+    "MessageTrigger",
+    "Permissions",
+    "ScheduleTrigger",
+    "Trigger",
+]

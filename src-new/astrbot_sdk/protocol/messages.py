@@ -1,47 +1,9 @@
-"""协议消息定义模块。
+"""v4 协议消息模型。
 
-定义 AstrBot SDK 的核心消息类型，所有消息均继承自 Pydantic BaseModel。
-
-消息类型概览：
-    InitializeMessage: 握手初始化消息，包含 Peer 信息和处理器列表
-    ResultMessage: 调用结果消息，包含成功/失败状态和输出数据
-    InvokeMessage: 能力调用消息，指定目标能力和输入参数
-    EventMessage: 流式事件消息，用于流式调用的状态通知
-    CancelMessage: 取消消息，用于取消正在进行的调用
-
-消息生命周期：
-    握手阶段:
-        Plugin -> Core: InitializeMessage (注册处理器)
-        Core -> Plugin: ResultMessage (确认或拒绝)
-
-    调用阶段:
-        Plugin -> Core: InvokeMessage (调用能力)
-        Core -> Plugin: ResultMessage (返回结果)
-        或者 (流式):
-        Core -> Plugin: EventMessage (started -> delta* -> completed/failed)
-
-    取消阶段:
-        Plugin -> Core: CancelMessage (取消调用)
-
-与旧版对比：
-    旧版 JSON-RPC:
-        - 使用 method 字段区分操作类型
-        - 使用 jsonrpc: "2.0" 标识协议版本
-        - 错误码为整数 (如 -32000)
-        - 无专门的取消消息类型
-
-    新版协议:
-        - 使用 type 字段区分消息类型
-        - 使用 protocol_version 字段标识版本
-        - 错误码为字符串 (如 "internal_error")
-        - 有专门的 CancelMessage 取消消息
-
-TODO:
-    - 添加消息过期时间 (expires_at) 支持
-    - 添加消息优先级 (priority) 支持
-    - 添加消息重试计数 (retry_count) 支持
-    - ErrorPayload 缺少 stack_trace 字段（调试用）
-    - InitializeMessage 缺少 authentication 认证字段
+这些模型描述的是 `Peer` 与 `Peer` 之间的线协议。握手阶段通过
+`InitializeMessage` 发起，再由 `ResultMessage(kind="initialize_result")`
+返回 `InitializeOutput`；能力调用阶段则使用 `InvokeMessage` / `ResultMessage`
+或 `EventMessage` 序列。
 """
 
 from __future__ import annotations
@@ -184,6 +146,19 @@ class ResultMessage(_MessageBase):
     output: dict[str, Any] = Field(default_factory=dict)
     error: ErrorPayload | None = None
 
+    @model_validator(mode="after")
+    def validate_result_state(self) -> "ResultMessage":
+        """约束 success / output / error 的组合状态。"""
+        if self.success:
+            if self.error is not None:
+                raise ValueError("success=true 时 error 必须为空")
+            return self
+        if self.error is None:
+            raise ValueError("success=false 时必须提供 error")
+        if self.output:
+            raise ValueError("success=false 时 output 必须为空")
+        return self
+
 
 class InvokeMessage(_MessageBase):
     """调用消息，用于请求执行远程能力。
@@ -309,15 +284,25 @@ ProtocolMessage = (
 )
 """协议消息联合类型，所有有效消息类型的联合。"""
 
+_PROTOCOL_MESSAGE_MODELS = {
+    "initialize": InitializeMessage,
+    "result": ResultMessage,
+    "invoke": InvokeMessage,
+    "event": EventMessage,
+    "cancel": CancelMessage,
+}
 
-def parse_message(payload: str | bytes | dict[str, Any]) -> ProtocolMessage:
+
+def parse_message(
+    payload: ProtocolMessage | str | bytes | dict[str, Any],
+) -> ProtocolMessage:
     """解析协议消息。
 
     从原始载荷（字符串、字节或字典）解析为对应的 ProtocolMessage 类型。
     根据 "type" 字段自动识别消息类型并验证。
 
     Args:
-        payload: 原始消息载荷，支持 JSON 字符串、字节或字典
+        payload: 原始消息载荷，支持已解析模型、JSON 字符串、字节或字典
 
     Returns:
         解析后的协议消息对象
@@ -330,19 +315,39 @@ def parse_message(payload: str | bytes | dict[str, Any]) -> ProtocolMessage:
         >>> isinstance(msg, InvokeMessage)
         True
     """
+    if isinstance(
+        payload,
+        (
+            InitializeMessage,
+            ResultMessage,
+            InvokeMessage,
+            EventMessage,
+            CancelMessage,
+        ),
+    ):
+        return payload
     if isinstance(payload, bytes):
         payload = payload.decode("utf-8")
     if isinstance(payload, str):
         payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        raise ValueError("协议消息必须是 JSON object")
     message_type = payload.get("type")
-    if message_type == "initialize":
-        return InitializeMessage.model_validate(payload)
-    if message_type == "result":
-        return ResultMessage.model_validate(payload)
-    if message_type == "invoke":
-        return InvokeMessage.model_validate(payload)
-    if message_type == "event":
-        return EventMessage.model_validate(payload)
-    if message_type == "cancel":
-        return CancelMessage.model_validate(payload)
+    model = _PROTOCOL_MESSAGE_MODELS.get(str(message_type))
+    if model is not None:
+        return model.model_validate(payload)
     raise ValueError(f"未知消息类型：{message_type}")
+
+
+__all__ = [
+    "CancelMessage",
+    "ErrorPayload",
+    "EventMessage",
+    "InitializeMessage",
+    "InitializeOutput",
+    "InvokeMessage",
+    "PeerInfo",
+    "ProtocolMessage",
+    "ResultMessage",
+    "parse_message",
+]

@@ -1,35 +1,8 @@
-"""旧版协议适配器模块。
+"""legacy JSON-RPC 与 v4 协议之间的适配器。
 
-提供旧版 JSON-RPC 协议与新版协议之间的双向转换。
-支持旧版插件与新版核心的互操作。
-
-主要功能：
-    - 将旧版 JSON-RPC 请求转换为新版 InvokeMessage
-    - 将旧版 JSON-RPC 响应转换为新版 ResultMessage
-    - 将旧版 handshake 转换为新版 InitializeMessage
-    - 将新版消息转换回旧版格式（用于与旧版核心通信）
-
-转换映射表：
-    旧版 method               -> 新版 capability
-    ------------------------------------------------
-    handshake                 -> InitializeMessage
-    call_handler              -> handler.invoke
-    call_context_function     -> internal.legacy.call_context_function
-    handler_stream_start      -> EventMessage(phase="started")
-    handler_stream_update     -> EventMessage(phase="delta")
-    handler_stream_end        -> EventMessage(phase="completed"/"failed")
-    cancel                    -> CancelMessage
-
-注意事项：
-    - 旧版 handshake 的 metadata 信息可能丢失部分字段
-    - 新版触发器的详细信息在转换时可能丢失
-    - 使用 LEGACY_HANDSHAKE_METADATA_KEY 保留原始握手数据
-
-TODO:
-    - 添加旧版消息版本检测和兼容性警告
-    - 添加消息转换日志记录，便于调试
-    - 支持自定义转换规则扩展
-    - 添加转换性能监控
+旧树没有独立的 `protocol` 包；这里做的是“旧 JSON-RPC 运行时语义”到
+“v4 协议模型”的转换。它不是完美双向同构，尤其是 legacy handshake 无法
+保留 v4 触发器的全部细节，因此适配器会保留原始握手载荷供兼容层回退使用。
 """
 
 from __future__ import annotations
@@ -627,6 +600,8 @@ def parse_legacy_message(
         payload = payload.decode("utf-8")
     if isinstance(payload, str):
         payload = json.loads(payload)
+    if not isinstance(payload, dict):
+        raise ValueError("legacy JSON-RPC 消息必须是 JSON object")
     if "method" in payload:
         return LegacyRequest.model_validate(payload)
     if "result" in payload:
@@ -642,7 +617,9 @@ def legacy_message_to_v4(
     return LegacyAdapter().legacy_to_v4(payload)
 
 
-def legacy_request_to_invoke(payload: dict[str, Any]) -> InvokeMessage:
+def legacy_request_to_invoke(
+    payload: str | bytes | dict[str, Any] | LegacyRequest,
+) -> InvokeMessage:
     message = LegacyAdapter().legacy_request_to_message(payload)
     if not isinstance(message, InvokeMessage):
         raise ValueError("legacy request 不能直接映射为 invoke")
@@ -650,7 +627,7 @@ def legacy_request_to_invoke(payload: dict[str, Any]) -> InvokeMessage:
 
 
 def legacy_response_to_message(
-    payload: dict[str, Any],
+    payload: str | bytes | dict[str, Any] | LegacySuccessResponse,
 ) -> InitializeMessage | ResultMessage:
     message = LegacyAdapter().legacy_response_to_message(payload)
     return message
@@ -695,11 +672,14 @@ __all__ = [
     "LEGACY_CONTEXT_CAPABILITY",
     "LEGACY_HANDSHAKE_METADATA_KEY",
     "LEGACY_PLUGIN_KEYS_METADATA_KEY",
+    "LEGACY_JSONRPC_VERSION",
     "LegacyAdapter",
     "LegacyErrorData",
     "LegacyErrorResponse",
+    "LegacyMessage",
     "LegacyRequest",
     "LegacySuccessResponse",
+    "LegacyToV4Message",
     "cancel_to_legacy_request",
     "event_to_legacy_notification",
     "initialize_to_legacy_handshake_response",

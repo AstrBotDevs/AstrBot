@@ -237,6 +237,33 @@ class TestResultMessage:
         msg = ResultMessage(id="msg_004", success=True)
         assert msg.output == {}
 
+    def test_success_result_rejects_error(self):
+        """ResultMessage success=true should not accept error payload."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResultMessage(
+                id="msg_005",
+                success=True,
+                error=ErrorPayload(code="bad", message="bad"),
+            )
+        assert "success=true 时 error 必须为空" in str(exc_info.value)
+
+    def test_failed_result_requires_error(self):
+        """ResultMessage success=false should require error payload."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResultMessage(id="msg_006", success=False)
+        assert "success=false 时必须提供 error" in str(exc_info.value)
+
+    def test_failed_result_rejects_output(self):
+        """ResultMessage success=false should not carry success output."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResultMessage(
+                id="msg_007",
+                success=False,
+                output={"text": "bad"},
+                error=ErrorPayload(code="bad", message="bad"),
+            )
+        assert "success=false 时 output 必须为空" in str(exc_info.value)
+
 
 class TestInvokeMessage:
     """Tests for InvokeMessage model."""
@@ -435,6 +462,16 @@ class TestParseMessage:
         msg = parse_message(json_bytes)
         assert isinstance(msg, ResultMessage)
         assert msg.success is True
+
+    def test_parse_pass_through_model(self):
+        """parse_message should return already-parsed protocol models unchanged."""
+        original = InvokeMessage(id="msg_008", capability="test.cap")
+        assert parse_message(original) is original
+
+    def test_parse_non_mapping_raises(self):
+        """parse_message should reject non-object payloads."""
+        with pytest.raises(ValueError, match="JSON object"):
+            parse_message(["not", "an", "object"])
 
     def test_parse_unknown_type_raises(self):
         """parse_message should raise for unknown type."""

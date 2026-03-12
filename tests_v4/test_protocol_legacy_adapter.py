@@ -158,6 +158,11 @@ class TestParseLegacyMessage:
             parse_legacy_message({"jsonrpc": "2.0", "unknown": "field"})
         assert "未知" in str(exc_info.value)
 
+    def test_parse_non_mapping_raises(self):
+        """parse_legacy_message should reject non-object payloads."""
+        with pytest.raises(ValueError, match="JSON object"):
+            parse_legacy_message(["not", "an", "object"])
+
     def test_pass_through_legacy_message(self):
         """parse_legacy_message should pass through already-parsed messages."""
         req = LegacyRequest(method="test")
