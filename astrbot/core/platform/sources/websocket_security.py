@@ -9,7 +9,7 @@ def _is_local_or_private_host(hostname: str | None) -> bool:
         return False
 
     normalized = hostname.strip("[]").lower()
-    if normalized == "localhost" or "." not in normalized:
+    if normalized == "localhost":
         return True
     if normalized.endswith(_ALLOWED_INSECURE_SUFFIXES):
         return True

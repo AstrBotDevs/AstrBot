@@ -96,7 +96,7 @@ const highlightedCode = computed(() => {
         }));
     } catch (err) {
         console.error('Failed to highlight code:', err);
-        return DOMPurify.sanitize(`<pre><code>${escapeHtml(code.value)}</code></pre>`);
+        return `<pre><code>${escapeHtml(code.value)}</code></pre>`;
     }
 });
 

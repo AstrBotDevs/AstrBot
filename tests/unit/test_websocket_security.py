@@ -31,6 +31,18 @@ def test_require_secure_transport_url_rejects_public_ws() -> None:
         )
 
 
+def test_require_secure_transport_url_rejects_bare_hostname_ws() -> None:
+    with pytest.raises(
+        ValueError,
+        match="must use wss:// or https:// for non-local endpoints",
+    ):
+        require_secure_transport_url(
+            "ws://prod/events",
+            label="Satori WebSocket URL",
+            allowed_schemes={"ws", "wss"},
+        )
+
+
 def test_to_websocket_url_converts_https_to_wss() -> None:
     assert to_websocket_url("https://example.com") == "wss://example.com"
     assert (
