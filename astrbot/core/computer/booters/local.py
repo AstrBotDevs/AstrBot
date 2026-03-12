@@ -112,10 +112,11 @@ class LocalPythonComponent(PythonComponent):
         def _run() -> dict[str, Any]:
             try:
                 result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
+                    [sys.executable, "-c", code],
                     timeout=timeout,
                     capture_output=True,
                     text=True,
+                    shell=False,
                 )
                 stdout = "" if silent else result.stdout
                 stderr = result.stderr if result.returncode != 0 else ""

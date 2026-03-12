@@ -22,11 +22,23 @@ spec:
       subdomain: astrbot-stack
       # 优雅关闭时间，给 NapCat 足够时间保存状态
       terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       
       # 初始化容器：首次生成随机 machine-id，后续复用
       initContainers:
         - name: init-machine-id
-          image: busybox:latest
+          image: busybox:1.37.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - /bin/sh
             - -c
@@ -47,6 +59,11 @@ spec:
         - name: napcat
           image: mlikiowa/napcat-docker:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: NAPCAT_UID
               value: "1000"
@@ -86,6 +103,11 @@ spec:
         - name: astrbot
           image: soulter/astrbot:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: TZ
               value: "Asia/Shanghai"

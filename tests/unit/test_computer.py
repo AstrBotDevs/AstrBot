@@ -244,6 +244,28 @@ class TestLocalPythonComponent:
     """Tests for LocalPythonComponent."""
 
     @pytest.mark.asyncio
+    async def test_exec_uses_fixed_python_executable(self):
+        """Test Python execution ignores dynamic executable overrides."""
+        python = LocalPythonComponent()
+
+        with (
+            patch.dict("os.environ", {"PYTHON": "malicious-python"}),
+            patch("astrbot.core.computer.booters.local.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="hello\n",
+                stderr="",
+            )
+
+            result = await python.exec("print('hello')")
+
+        args, kwargs = mock_run.call_args
+        assert args[0] == [sys.executable, "-c", "print('hello')"]
+        assert kwargs.get("shell") is False
+        assert result["data"]["output"]["text"] == "hello\n"
+
+    @pytest.mark.asyncio
     async def test_exec_simple_code(self):
         """Test executing simple Python code."""
         python = LocalPythonComponent()

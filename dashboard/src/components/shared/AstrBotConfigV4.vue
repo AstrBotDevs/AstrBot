@@ -1,5 +1,6 @@
 <script setup>
 import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { ref, computed } from 'vue'
 import ConfigItemRenderer from './ConfigItemRenderer.vue'
@@ -44,7 +45,7 @@ const translateIfKey = (value) => {
 const renderHint = (value) => {
   const text = translateIfKey(value)
   if (!text) return ''
-  return hintMarkdown.renderInline(text)
+  return DOMPurify.sanitize(hintMarkdown.renderInline(text))
 }
 
 // 处理labels翻译 - labels可以是数组或国际化键

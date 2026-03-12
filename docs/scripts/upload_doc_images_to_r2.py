@@ -220,7 +220,7 @@ def run_rclone_upload(
         else:
             print(f"Uploading to: {target}")
 
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, shell=False)
     finally:
         tmp_path.unlink(missing_ok=True)
 

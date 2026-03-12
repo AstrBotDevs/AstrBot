@@ -23,7 +23,7 @@ jobs:
         run: npm run docs:build
         working-directory: './docs'
       - name: scp
-        uses: appleboy/scp-action@master
+        uses: appleboy/scp-action@7179e72a3fa4d4c33870a471708fda724fae7596
         with:
           host: ${{ secrets.HOST_NEKO }}
           username: ${{ secrets.USERNAME }}
@@ -31,7 +31,7 @@ jobs:
           source: 'docs/.vitepress/dist/*'
           target: '/tmp/'
       - name: script
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@8743aa11bfbda97acb45c151ae7a2e0b203f1914
         with:
           host: ${{ secrets.HOST_NEKO }}
           username: ${{ secrets.USERNAME }}

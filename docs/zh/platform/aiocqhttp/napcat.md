@@ -110,11 +110,11 @@ docker logs napcat
 在新弹出的窗口中：
 
 - 勾选 `启用`。
-- `URL` 填写 `ws://宿主机IP:端口/ws`。如 `ws://localhost:6199/ws` 或 `ws://127.0.0.1:6199/ws`。
+- 本机部署时，`URL` 填写 `ws://宿主机IP:端口/ws`。如 `ws://localhost:6199/ws` 或 `ws://127.0.0.1:6199/ws`。
 
 > [!IMPORTANT]
 > 1. 如果采用 Docker 部署并同时把 AstrBot 和 NapCat 两个容器接入了同一网络，`ws://astrbot:6199/ws`（参考本文档的 Docker 脚本）。
-> 2. 由于 Docker 网络隔离的原因，不在同一个网络时请使用内网 IP 地址或公网 IP 地址 ***（不安全）*** 进行连接，即 `ws://(内网/公网):6199/ws`。
+> 2. 如果是跨主机或公网部署，请不要暴露明文 `ws://`。应通过 HTTPS/TLS 反向代理暴露 AstrBot，并使用 `wss://你的域名/ws` 连接。
 
 - 消息格式：`Array`
 - 心跳间隔: `5000`

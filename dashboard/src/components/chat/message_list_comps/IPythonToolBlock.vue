@@ -25,6 +25,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { createHighlighter } from 'shiki';
+import DOMPurify from 'dompurify';
 
 const props = defineProps({
     toolCall: {
@@ -67,6 +68,13 @@ const code = computed(() => {
 
 const result = computed(() => props.toolCall.result);
 
+const escapeHtml = (value) => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const formattedResult = computed(() => {
     if (!result.value) return '';
     try {
@@ -82,13 +90,13 @@ const highlightedCode = computed(() => {
         return '';
     }
     try {
-        return shikiHighlighter.value.codeToHtml(code.value, {
+        return DOMPurify.sanitize(shikiHighlighter.value.codeToHtml(code.value, {
             lang: 'python',
             theme: props.isDark ? 'min-dark' : 'github-light'
-        });
+        }));
     } catch (err) {
         console.error('Failed to highlight code:', err);
-        return `<pre><code>${code.value}</code></pre>`;
+        return DOMPurify.sanitize(`<pre><code>${escapeHtml(code.value)}</code></pre>`);
     }
 });
 
