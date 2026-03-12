@@ -417,7 +417,21 @@ __all__ = [
 ]
 ```
 
-**设计说明**: loader/bootstrap 等编排细节保留在子模块中，不作为根级稳定契约。
+**设计原则:**
+
+- **精简导出**: 仅暴露相对稳定的运行时构件
+- **高级原语**: `Peer`、`Transport`、`CapabilityRouter`、`HandlerDispatcher`
+- **子模块隔离**: loader/bootstrap 编排细节保留在子模块中，不作为根级稳定契约
+- **插件作者指引**: 大多数插件应使用顶层 `astrbot_sdk` 或 `astrbot_sdk.api`
+
+**不在根级导出的类型:**
+
+| 类型 | 所在子模块 | 原因 |
+|------|-----------|------|
+| `LoadedPlugin`, `LoadedHandler` | `loader` | 加载器内部数据结构 |
+| `PluginSpec`, `PluginDiscoveryResult` | `loader` | 插件发现元数据 |
+| `SupervisorRuntime`, `WorkerSession` | `bootstrap` | 运行时编排细节 |
+| `run_supervisor`, `run_plugin_worker` | `bootstrap` | 启动函数 |
 
 ---
 
@@ -593,6 +607,50 @@ shared_legacy_context: LegacyContext | None = None
 ```
 {plugin_name}:{module}.{ClassName}.{method_name}
 ```
+
+**插件模块隔离 (重要):**
+
+```python
+def import_string(path: str, plugin_dir: Path | None = None) -> Any:
+    """导入模块属性，支持插件目录隔离"""
+    module_name, attr = path.split(":", 1)
+    _prepare_plugin_import(module_name, plugin_dir)
+    module = import_module(module_name)
+    return getattr(module, attr)
+
+def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:
+    """准备插件导入环境，处理模块缓存冲突"""
+    # 1. 将 plugin_dir 加入 sys.path
+    # 2. 检测缓存模块是否属于当前插件
+    # 3. 若缓存模块属于其他插件，清理冲突的根包
+
+def _purge_module_root(root_name: str) -> None:
+    """清理冲突的模块缓存"""
+    for module_name in list(sys.modules):
+        if module_name == root_name or module_name.startswith(f"{root_name}."):
+            sys.modules.pop(module_name, None)
+
+def _module_belongs_to_plugin(module: Any, plugin_dir: Path) -> bool:
+    """检查模块是否属于指定插件目录"""
+    # 通过 __file__ 或 __path__ 判断模块位置
+```
+
+**设计说明**: 当多个插件使用相同的顶层包名（如 `commands.*`）时，`import_string` 会自动清理冲突的缓存模块，确保每个插件加载自己的代码而非其他插件的缓存。
+
+**Legacy Handler 顺序保持:**
+
+```python
+def _iter_discoverable_names(instance: Any) -> list[str]:
+    """返回可发现的名称列表，保持声明顺序"""
+    # 1. 优先返回 __handlers__ 中声明的名称（保持顺序）
+    handler_names = list(dict.fromkeys(_iter_handler_names(instance)))
+    # 2. 然后返回 dir() 中发现的额外名称（按字母排序）
+    known_names = set(handler_names)
+    extra_names = sorted(name for name in dir(instance) if name not in known_names)
+    return [*handler_names, *extra_names]
+```
+
+**设计说明**: 旧版插件期望 handler 按声明顺序注册。使用 `sorted()` 或 `dir()` 遍历会改变顺序，导致命令冲突时错误的 handler 被优先触发。
 
 ---
 
@@ -1461,7 +1519,7 @@ class MyTransport(Transport):
 | **运行时层** | `runtime/` | ✅ 完成 | |
 | | `peer.py` | ✅ | 对称通信端点 + 取消 + 流式 + 远程元数据缓存 |
 | | `transport.py` | ✅ | Stdio + WebSocket Server/Client |
-| | `loader.py` | ✅ | 插件发现 + 环境管理 + 配置规范化 + Capability 支持 |
+| | `loader.py` | ✅ | 插件发现 + 环境管理 + 配置规范化 + 模块隔离 + Handler 顺序保持 |
 | | `handler_dispatcher.py` | ✅ | Handler 分发 + CapabilityDispatcher + 参数注入增强 |
 | | `capability_router.py` | ✅ | 能力路由 + 15 个内置能力 + SessionRef 支持 |
 | | `bootstrap.py` | ✅ | Supervisor + Worker + WebSocket + 连接关闭处理 |
@@ -1513,7 +1571,7 @@ tests_v4/
 ├── test_transport.py             # Transport 测试
 ├── test_capability_router.py     # CapabilityRouter 测试
 ├── test_handler_dispatcher.py    # HandlerDispatcher 测试
-├── test_loader.py                # 加载器测试
+├── test_loader.py                # 加载器测试（含模块隔离、Handler 顺序）
 ├── test_bootstrap.py             # Bootstrap 测试
 ├── test_runtime.py               # 运行时测试
 ├── test_runtime_integration.py   # 运行时集成测试
@@ -1543,13 +1601,21 @@ tests_v4/
 ├── test_script_migrations.py     # 脚本迁移测试
 ├── test_supervisor_migration.py  # Supervisor 迁移测试
 ├── test_legacy_plugin_integration.py # 旧版插件集成测试
-├── test_top_level_modules.py     # 顶层模块测试
+├── test_top_level_modules.py     # 顶层模块测试（含 runtime 导出验证）
 │
 ├── # 入口点测试
 ├── test_entrypoints.py           # 入口点测试
 ├── test_conftest_fixtures.py     # pytest fixtures 测试
 └── __init__.py                   # 包初始化文件
 ```
+
+**测试重点:**
+
+| 测试文件 | 重点测试内容 |
+|---------|-------------|
+| `test_loader.py` | 插件模块隔离（多插件同名包）、Legacy Handler 顺序保持 |
+| `test_top_level_modules.py` | `runtime.__init__` 导出验证、确保不暴露内部数据结构 |
+| `test_legacy_plugin_integration.py` | 旧版插件完整兼容性、LegacyContext 共享 |
 
 ---
 
@@ -1583,4 +1649,40 @@ from astrbot_sdk.context import Context
 # 通过 astrbot_sdk.api 和 astrbot_sdk.compat 访问旧版 API
 from astrbot_sdk.api.star import Context, Star
 from astrbot_sdk.compat import LegacyContext, CommandComponent
+```
+
+---
+
+## 关键设计决策
+
+### 运行时模块导出策略
+
+`runtime/__init__.py` 仅暴露高级运行时原语（`Peer`, `Transport`, `CapabilityRouter`, `HandlerDispatcher`），而将 loader/bootstrap 等编排细节保留在子模块中。
+
+**原因:**
+- loader/bootstrap 数据结构（`LoadedPlugin`, `WorkerSession` 等）属于内部实现细节
+- 避免意外的 API 契约，便于未来重构
+- 插件作者通常不需要直接使用这些低级原语
+
+### 插件模块隔离
+
+当多个插件使用相同的顶层包名时，`import_string()` 会自动清理冲突的缓存模块。
+
+**问题:** 插件 A 定义 `commands.hello`，插件 B 也定义 `commands.world`。若插件 A 先加载，`sys.modules["commands"]` 指向插件 A 的目录，插件 B 会错误地使用插件 A 的代码。
+
+**解决:** `_prepare_plugin_import()` 检测缓存模块是否属于当前插件目录，若不属于则清理冲突的根包。
+
+### Legacy Handler 顺序保持
+
+`_iter_discoverable_names()` 保持 handler 的声明顺序，而非使用 `sorted()` 或 `set()` 遍历。
+
+**原因:** 旧版 `StarManager` 按声明顺序注册 handler。当多个 handler 匹配同一命令时，第一个注册的 handler 被优先触发。改变顺序会导致不同的 handler 被触发。
+
+**实现:**
+```python
+# 保持 __handlers__ 中的顺序
+handler_names = list(dict.fromkeys(_iter_handler_names(instance)))
+# 额外发现的名称按字母排序
+extra_names = sorted(name for name in dir(instance) if name not in known_names)
+return [*handler_names, *extra_names]
 ```
