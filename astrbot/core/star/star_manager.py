@@ -1,12 +1,14 @@
 """插件的重载、启停、安装、卸载等操作。"""
 
 import asyncio
+import contextlib
 import functools
 import inspect
 import json
 import logging
 import os
 import sys
+import tempfile
 import traceback
 from types import ModuleType
 
@@ -29,12 +31,12 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
+    get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.requirements_utils import (
-    RequirementsPrecheckFailed,
-    find_missing_requirements_or_raise,
+    plan_missing_requirements_install,
 )
 
 from . import StarMetadata
@@ -74,30 +76,78 @@ class PluginDependencyInstallError(Exception):
         self.error = error
 
 
+@contextlib.contextmanager
+def _temporary_filtered_requirements_file(
+    *,
+    install_lines: tuple[str, ...],
+):
+    filtered_requirements_path: str | None = None
+    temp_dir = get_astrbot_temp_path()
+
+    try:
+        os.makedirs(temp_dir, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix="_plugin_requirements.txt",
+            delete=False,
+            dir=temp_dir,
+            encoding="utf-8",
+        ) as filtered_requirements_file:
+            filtered_requirements_file.write("\n".join(install_lines) + "\n")
+            filtered_requirements_path = filtered_requirements_file.name
+
+        yield filtered_requirements_path
+    finally:
+        if filtered_requirements_path and os.path.exists(filtered_requirements_path):
+            try:
+                os.remove(filtered_requirements_path)
+            except OSError as exc:
+                logger.warning(
+                    "删除临时插件依赖文件失败：%s（路径：%s）",
+                    exc,
+                    filtered_requirements_path,
+                )
+
+
 async def _install_requirements_with_precheck(
     *,
     plugin_label: str,
     requirements_path: str,
 ) -> None:
-    try:
-        missing = find_missing_requirements_or_raise(requirements_path)
-    except RequirementsPrecheckFailed:
+    install_plan = plan_missing_requirements_install(requirements_path)
+
+    if install_plan is None:
         logger.info(
-            f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
+            f"正在安装插件 {plugin_label} 的依赖库（缺失依赖预检查不可裁剪，回退到完整安装）: "
             f"{requirements_path}"
         )
         await pip_installer.install(requirements_path=requirements_path)
         return
 
-    if not missing:
+    if not install_plan.missing_names:
         logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
+        return
+
+    if not install_plan.install_lines:
+        fallback_reason = install_plan.fallback_reason or "unknown reason"
+        logger.info(
+            "检测到插件 %s 缺失依赖，但无法安全裁剪 requirements，回退到完整安装: %s (%s)",
+            plugin_label,
+            requirements_path,
+            fallback_reason,
+        )
+        await pip_installer.install(requirements_path=requirements_path)
         return
 
     logger.info(
         f"检测到插件 {plugin_label} 缺失依赖，正在按 requirements.txt 安装: "
-        f"{requirements_path} -> {sorted(missing)}"
+        f"{requirements_path} -> {sorted(install_plan.missing_names)}"
     )
-    await pip_installer.install(requirements_path=requirements_path)
+
+    with _temporary_filtered_requirements_file(
+        install_lines=install_plan.install_lines,
+    ) as filtered_requirements_path:
+        await pip_installer.install(requirements_path=filtered_requirements_path)
 
 
 class PluginManager:

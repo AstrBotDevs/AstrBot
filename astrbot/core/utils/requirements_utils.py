@@ -4,7 +4,7 @@ import os
 import re
 import shlex
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
 from packaging.requirements import InvalidRequirement, Requirement
@@ -27,6 +27,13 @@ class RequirementsPrecheckFailed(Exception):
 class ParsedPackageInput:
     specs: tuple[str, ...]
     requirement_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class MissingRequirementsPlan:
+    missing_names: frozenset[str]
+    install_lines: tuple[str, ...]
+    fallback_reason: str | None = None
 
 
 def canonicalize_distribution_name(name: str) -> str:
@@ -364,8 +371,8 @@ def _load_requirement_lines_for_precheck(
         None,
     )
     if fallback_line is not None:
-        logger.warning(
-            "预检查缺失依赖失败，将回退到完整安装: unresolved direct reference in %s: %s",
+        logger.info(
+            "缺失依赖预检查发现无法安全裁剪的 option/direct-reference 行，将回退到完整安装: %s (%s)",
             requirements_path,
             fallback_line,
         )
@@ -380,6 +387,13 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
     )
     if not can_precheck or requirement_lines is None:
         return None
+
+    return find_missing_requirements_from_lines(requirement_lines)
+
+
+def find_missing_requirements_from_lines(
+    requirement_lines: Sequence[str],
+) -> set[str] | None:
 
     required = list(iter_requirements(lines=requirement_lines))
     if not required:
@@ -399,6 +413,70 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
             missing.add(name)
 
     return missing
+
+
+def build_missing_requirements_install_lines(
+    requirements_path: str,
+    requirement_lines: Sequence[str],
+    missing_names: set[str] | frozenset[str],
+) -> tuple[str, ...] | None:
+    wanted_names = set(missing_names)
+    install_lines: list[str] = []
+    for line in requirement_lines:
+        parsed = _parse_requirement_line(line)
+        if parsed is None:
+            if looks_like_direct_reference(line) or line.startswith(("-", "--")):
+                logger.debug(
+                    "缺失依赖行筛选回退到完整安装：requirements 中包含无法安全裁剪的 option/direct-reference 行: %s (%s)",
+                    requirements_path,
+                    line,
+                )
+                return None
+            continue
+
+        name, _specifier = parsed
+        if name in wanted_names:
+            install_lines.append(line)
+
+    return tuple(install_lines)
+
+
+def plan_missing_requirements_install(
+    requirements_path: str,
+) -> MissingRequirementsPlan | None:
+    can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
+        requirements_path
+    )
+    if not can_precheck or requirement_lines is None:
+        return None
+
+    missing = find_missing_requirements_from_lines(requirement_lines)
+    if missing is None:
+        return None
+
+    install_lines = build_missing_requirements_install_lines(
+        requirements_path,
+        requirement_lines,
+        missing,
+    )
+    if install_lines is None:
+        return None
+    if missing and not install_lines:
+        logger.warning(
+            "预检查缺失依赖成功，但无法映射到可安装 requirement 行，将回退到完整安装: %s -> %s",
+            requirements_path,
+            sorted(missing),
+        )
+        return MissingRequirementsPlan(
+            missing_names=frozenset(missing),
+            install_lines=(),
+            fallback_reason="unmapped missing requirement names",
+        )
+
+    return MissingRequirementsPlan(
+        missing_names=frozenset(missing),
+        install_lines=install_lines,
+    )
 
 
 def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:
