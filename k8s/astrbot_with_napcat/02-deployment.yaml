@@ -26,7 +26,7 @@ spec:
       # 初始化容器：首次生成随机 machine-id，后续复用
       initContainers:
         - name: init-machine-id
-          image: busybox:latest
+          image: busybox:1.37.0
           command:
             - /bin/sh
             - -c
