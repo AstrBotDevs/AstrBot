@@ -645,6 +645,46 @@ class TestImportString:
         with pytest.raises(ValueError):
             import_string("no_colon")
 
+    def test_plugin_dir_isolates_same_top_level_package(self):
+        """import_string should evict conflicting cached top-level plugin packages."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first_plugin = root / "plugin_one"
+            second_plugin = root / "plugin_two"
+
+            for plugin_dir, marker in (
+                (first_plugin, "first"),
+                (second_plugin, "second"),
+            ):
+                commands_dir = plugin_dir / "commands"
+                commands_dir.mkdir(parents=True)
+                (commands_dir / "__init__.py").write_text("", encoding="utf-8")
+                (commands_dir / "sample.py").write_text(
+                    f"VALUE = {marker!r}\n",
+                    encoding="utf-8",
+                )
+
+            try:
+                first_module = import_string(
+                    "commands.sample:VALUE",
+                    plugin_dir=first_plugin,
+                )
+                second_module = import_string(
+                    "commands.sample:VALUE",
+                    plugin_dir=second_plugin,
+                )
+            finally:
+                for module_name in list(sys.modules):
+                    if module_name == "commands" or module_name.startswith("commands."):
+                        sys.modules.pop(module_name, None)
+                for plugin_dir in (first_plugin, second_plugin):
+                    plugin_path = str(plugin_dir)
+                    if plugin_path in sys.path:
+                        sys.path.remove(plugin_path)
+
+            assert first_module == "first"
+            assert second_module == "second"
+
 
 class TestLoadPlugin:
     """Tests for load_plugin function."""
@@ -699,6 +739,82 @@ class TestLoadPlugin:
             finally:
                 if str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
+                for module_name in list(sys.modules):
+                    if module_name == "mymodule" or module_name.startswith("mymodule."):
+                        sys.modules.pop(module_name, None)
+
+    def test_preserves_legacy_handler_declaration_order(self):
+        """load_plugin should keep legacy handler order instead of sorting by dir()."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            commands_dir = plugin_dir / "commands"
+            commands_dir.mkdir()
+            (commands_dir / "__init__.py").write_text("", encoding="utf-8")
+            (commands_dir / "component.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from astrbot_sdk.api.components.command import CommandComponent
+                    from astrbot_sdk.api.event import AstrMessageEvent, filter
+                    from astrbot_sdk.api.event.filter import EventMessageType
+                    from astrbot_sdk.api.star.context import Context
+
+
+                    class OrderedCommand(CommandComponent):
+                        def __init__(self, context: Context):
+                            self.context = context
+
+                        @filter.command("hello")
+                        async def hello(self, event: AstrMessageEvent):
+                            yield event.plain_result("hello")
+
+                        @filter.regex(r"^ping.*")
+                        async def ping(self, event: AstrMessageEvent):
+                            yield event.plain_result("ping")
+
+                        @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+                        async def group_only(self, event: AstrMessageEvent):
+                            yield event.plain_result("group")
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "ordered_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "commands.component:OrderedCommand"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            spec = load_plugin_spec(plugin_dir)
+            try:
+                loaded = load_plugin(spec)
+
+                trigger_order = [
+                    getattr(handler.descriptor.trigger, "command", None)
+                    or getattr(handler.descriptor.trigger, "regex", None)
+                    or ",".join(
+                        getattr(handler.descriptor.trigger, "message_types", ())
+                    )
+                    for handler in loaded.handlers
+                ]
+
+                assert trigger_order[:3] == ["hello", r"^ping.*", "group"]
+            finally:
+                plugin_path = str(plugin_dir)
+                if plugin_path in sys.path:
+                    sys.path.remove(plugin_path)
+                for module_name in list(sys.modules):
+                    if module_name == "commands" or module_name.startswith("commands."):
+                        sys.modules.pop(module_name, None)
 
     def test_loads_component_capabilities(self):
         """load_plugin should discover plugin-provided capabilities separately from handlers."""

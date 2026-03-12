@@ -55,35 +55,35 @@ src-new/astrbot_sdk/
 ├── cli.py                   # Click 命令行工具
 ├── star.py                  # Star 基类与 Handler 发现
 ├── context.py               # 运行时 Context 与 CancelToken
-├── decorators.py            # 装饰器 @on_command, @on_message 等
+├── decorators.py            # 装饰器 @on_command, @on_message, @provide_capability 等
 ├── events.py                # MessageEvent 事件定义
-├── errors.py                # AstrBotError 错误模型
-├── compat.py                # 兼容层导出
-├── _legacy_api.py           # Legacy Context 与 CommandComponent
+├── errors.py                # AstrBotError 错误模型与 ErrorCodes 常量
+├── compat.py                # 兼容层导出 (LegacyContext, CommandComponent)
+├── _legacy_api.py           # Legacy Context, CommandComponent, LegacyConversationManager
 │
 ├── protocol/                # 协议层 (已完成)
 │   ├── __init__.py          # 公共入口，导出所有协议类型
 │   ├── descriptors.py       # HandlerDescriptor, CapabilityDescriptor
-│   │                        # 内置能力 JSON Schema 常量
+│   │                        # 内置能力 JSON Schema 常量 (16 个能力)
 │   ├── messages.py          # 五种协议消息类型
 │   └── legacy_adapter.py    # v3 JSON-RPC ↔ v4 协议双向转换
 │
 ├── runtime/                 # 运行时层 (已完成)
-│   ├── __init__.py          # 公共入口
-│   ├── peer.py              # 核心通信端点
+│   ├── __init__.py          # 公共入口，导出高级原语
+│   ├── peer.py              # 核心通信端点，远程元数据缓存
 │   ├── transport.py         # 传输层实现 (Stdio/WebSocket)
-│   ├── loader.py            # 插件加载器与环境管理
-│   ├── handler_dispatcher.py # Handler 分发器
-│   ├── capability_router.py # Capability 路由器
-│   └── bootstrap.py         # Supervisor/Worker 运行时
+│   ├── loader.py            # 插件加载器、环境管理、配置规范化
+│   ├── handler_dispatcher.py # Handler 分发器 + CapabilityDispatcher
+│   ├── capability_router.py # Capability 路由器，15 个内置能力
+│   └── bootstrap.py         # Supervisor/Worker 运行时，WebSocket 服务
 │
 ├── clients/                 # 客户端层 (已完成)
 │   ├── __init__.py          # 导出所有客户端
 │   ├── _proxy.py            # CapabilityProxy 代理
-│   ├── llm.py               # LLM 客户端
-│   ├── db.py                # 数据库客户端
-│   ├── memory.py            # 记忆客户端
-│   └── platform.py          # 平台客户端
+│   ├── llm.py               # LLM 客户端 (chat/chat_raw/stream_chat)
+│   ├── db.py                # 数据库客户端 (get/set/delete/list)
+│   ├── memory.py            # 记忆客户端 (search/get/save/delete)
+│   └── platform.py          # 平台客户端 (支持 SessionRef)
 │
 └── api/                     # API 层 - 兼容层
     ├── __init__.py          # 子模块导出
@@ -104,6 +104,7 @@ src-new/astrbot_sdk/
     ├── message/             # 消息链
     │   ├── chain.py
     │   └── components.py
+    ├── message_components/  # 消息组件兼容导出
     ├── platform/            # 平台元数据
     │   └── platform_metadata.py
     ├── provider/            # Provider 实体
@@ -133,6 +134,7 @@ class Permissions(_DescriptorBase):
     require_admin: bool = False
     level: int = 0
 
+# 会话引用 (新增)
 class SessionRef(_DescriptorBase):
     conversation_id: str
     platform: str | None = None
@@ -144,16 +146,18 @@ class CommandTrigger:
     command: str
     aliases: list[str] = []
     description: str | None = None
+    platforms: list[str] = []
 
 class MessageTrigger:
     type: Literal["message"] = "message"
     regex: str | None = None
     keywords: list[str] = []
     platforms: list[str] = []
+    message_types: list[str] = []
 
 class EventTrigger:
     type: Literal["event"] = "event"
-    event_type: str
+    event_type: str  # 字符串形式，如 "message"
 
 class ScheduleTrigger:
     type: Literal["schedule"] = "schedule"
@@ -171,7 +175,7 @@ class HandlerDescriptor(_DescriptorBase):
     id: str
     trigger: Trigger
     kind: Literal["handler", "hook", "tool", "session"] = "handler"
-    contract: str = "message_event"
+    contract: str | None = None
     priority: int = 0
     permissions: Permissions
 
@@ -185,50 +189,45 @@ class CapabilityDescriptor(_DescriptorBase):
     cancelable: bool = False
 ```
 
-**内置能力 Schema 常量:**
+**内置能力 Schema 常量 (16 个能力):**
 
 ```python
-# LLM 相关
-LLM_CHAT_INPUT_SCHEMA
-LLM_CHAT_OUTPUT_SCHEMA
-LLM_CHAT_RAW_INPUT_SCHEMA
-LLM_CHAT_RAW_OUTPUT_SCHEMA
-LLM_STREAM_CHAT_INPUT_SCHEMA
-LLM_STREAM_CHAT_OUTPUT_SCHEMA
+# LLM 相关 (3 个)
+LLM_CHAT_INPUT_SCHEMA / LLM_CHAT_OUTPUT_SCHEMA
+LLM_CHAT_RAW_INPUT_SCHEMA / LLM_CHAT_RAW_OUTPUT_SCHEMA
+LLM_STREAM_CHAT_INPUT_SCHEMA / LLM_STREAM_CHAT_OUTPUT_SCHEMA
 
-# Memory 相关
-MEMORY_SEARCH_INPUT_SCHEMA
-MEMORY_SEARCH_OUTPUT_SCHEMA
-MEMORY_SAVE_INPUT_SCHEMA
-MEMORY_SAVE_OUTPUT_SCHEMA
-MEMORY_GET_INPUT_SCHEMA
-MEMORY_GET_OUTPUT_SCHEMA
-MEMORY_DELETE_INPUT_SCHEMA
-MEMORY_DELETE_OUTPUT_SCHEMA
+# Memory 相关 (4 个)
+MEMORY_SEARCH_INPUT_SCHEMA / MEMORY_SEARCH_OUTPUT_SCHEMA
+MEMORY_SAVE_INPUT_SCHEMA / MEMORY_SAVE_OUTPUT_SCHEMA
+MEMORY_GET_INPUT_SCHEMA / MEMORY_GET_OUTPUT_SCHEMA
+MEMORY_DELETE_INPUT_SCHEMA / MEMORY_DELETE_OUTPUT_SCHEMA
 
-# DB 相关
-DB_GET_INPUT_SCHEMA
-DB_GET_OUTPUT_SCHEMA
-DB_SET_INPUT_SCHEMA
-DB_SET_OUTPUT_SCHEMA
-DB_DELETE_INPUT_SCHEMA
-DB_DELETE_OUTPUT_SCHEMA
-DB_LIST_INPUT_SCHEMA
-DB_LIST_OUTPUT_SCHEMA
+# DB 相关 (4 个)
+DB_GET_INPUT_SCHEMA / DB_GET_OUTPUT_SCHEMA
+DB_SET_INPUT_SCHEMA / DB_SET_OUTPUT_SCHEMA
+DB_DELETE_INPUT_SCHEMA / DB_DELETE_OUTPUT_SCHEMA
+DB_LIST_INPUT_SCHEMA / DB_LIST_OUTPUT_SCHEMA
 
-# Platform 相关
-PLATFORM_SEND_INPUT_SCHEMA
-PLATFORM_SEND_OUTPUT_SCHEMA
-PLATFORM_SEND_IMAGE_INPUT_SCHEMA
-PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA
-SESSION_REF_SCHEMA                  # 新增: 结构化会话目标
-PLATFORM_SEND_CHAIN_INPUT_SCHEMA      # 新增: 发送消息链
-PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA     # 新增: 发送消息链
-PLATFORM_GET_MEMBERS_INPUT_SCHEMA
-PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA
+# Platform 相关 (4 个)
+PLATFORM_SEND_INPUT_SCHEMA / PLATFORM_SEND_OUTPUT_SCHEMA
+PLATFORM_SEND_IMAGE_INPUT_SCHEMA / PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA
+PLATFORM_SEND_CHAIN_INPUT_SCHEMA / PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA
+PLATFORM_GET_MEMBERS_INPUT_SCHEMA / PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA
+
+# SessionRef Schema (新增)
+SESSION_REF_SCHEMA
 
 # 汇总字典
 BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]]
+```
+
+**命名空间规范:**
+
+```python
+RESERVED_CAPABILITY_NAMESPACES = ("handler", "system", "internal")
+RESERVED_CAPABILITY_PREFIXES = tuple(f"{namespace}." for namespace in RESERVED_CAPABILITY_NAMESPACES)
+CAPABILITY_NAME_PATTERN = r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$"
 ```
 
 ---
@@ -264,6 +263,7 @@ class PeerInfo(_MessageBase):
 class InitializeMessage(_MessageBase):
     type: Literal["initialize"] = "initialize"
     id: str
+    protocol_version: str = "4.0"
     peer: PeerInfo
     handlers: list[HandlerDescriptor] = []
     provided_capabilities: list[CapabilityDescriptor] = []
@@ -339,7 +339,7 @@ LegacyMessage = LegacyRequest | LegacySuccessResponse | LegacyErrorResponse
 LegacyToV4Message = InitializeMessage | InvokeMessage | CancelMessage | None
 ```
 
-**核心函数:**
+**核心方法:**
 
 ```python
 def parse_legacy_message(payload: str | dict) -> LegacyMessage:
@@ -364,6 +364,16 @@ def cancel_to_legacy_request(message: CancelMessage) -> dict:
     """v4 Cancel → Legacy Request"""
 ```
 
+**转换映射表:**
+
+| 旧版 JSON-RPC | v4 协议消息 |
+|---------------|-------------|
+| `handshake` | `InitializeMessage` |
+| `call_handler` | `InvokeMessage(capability="handler.invoke")` |
+| `call_context_function` | `InvokeMessage(capability="internal.legacy.call_context_function")` |
+| `handler_stream_start/delta/end` | `EventMessage(phase="started/delta/completed/failed")` |
+| `cancel` | `CancelMessage` |
+
 **常量:**
 
 ```python
@@ -380,6 +390,37 @@ LEGACY_ADAPTER_MESSAGE_EVENT = 3
 
 运行时层负责把协议、传输、插件加载和生命周期管理拼成一条完整执行链。
 
+#### `__init__.py` - 模块导出
+
+```python
+from .capability_router import CapabilityRouter, StreamExecution
+from .handler_dispatcher import HandlerDispatcher
+from .peer import Peer
+from .transport import (
+    MessageHandler,
+    StdioTransport,
+    Transport,
+    WebSocketClientTransport,
+    WebSocketServerTransport,
+)
+
+__all__ = [
+    "CapabilityRouter",
+    "HandlerDispatcher",
+    "MessageHandler",
+    "Peer",
+    "StdioTransport",
+    "StreamExecution",
+    "Transport",
+    "WebSocketClientTransport",
+    "WebSocketServerTransport",
+]
+```
+
+**设计说明**: loader/bootstrap 等编排细节保留在子模块中，不作为根级稳定契约。
+
+---
+
 #### `peer.py` - 核心通信端点
 
 实现 Plugin ↔ Core 的对称通信模型。
@@ -395,7 +436,7 @@ class Peer:
     async def wait_until_remote_initialized(self, timeout: float = 30.0) -> None: ...
 
     # 初始化
-    async def initialize(self, handlers, metadata) -> InitializeOutput: ...
+    async def initialize(self, handlers, metadata, provided_capabilities) -> InitializeOutput: ...
 
     # Capability 调用
     async def invoke(self, capability, payload, stream=False) -> dict: ...
@@ -410,6 +451,18 @@ class Peer:
     def set_cancel_handler(self, handler: CancelHandler): ...
 ```
 
+**远程元数据缓存 (新增):**
+
+```python
+# 初始化后可用
+remote_peer: PeerInfo                           # 远端身份信息
+remote_handlers: list[HandlerDescriptor]        # 远端声明的处理器
+remote_provided_capabilities: list[CapabilityDescriptor]  # 远端提供的内置能力
+remote_capabilities: list[CapabilityDescriptor] # 远端能力描述符
+remote_capability_map: dict[str, CapabilityDescriptor]  # 能力名到描述符的映射
+remote_metadata: dict[str, Any]                 # 握手元数据
+```
+
 **内部状态:**
 
 ```python
@@ -418,6 +471,16 @@ self._pending_streams: dict[str, asyncio.Queue]                  # 流式调用
 self._inbound_tasks: dict[str, tuple[Task, CancelToken]]         # 入站任务
 self._remote_initialized: asyncio.Event                          # 远端初始化状态
 self._unusable: bool                                             # 连接是否不可用
+```
+
+**错误处理方法:**
+
+```python
+async def _fail_connection(self, error: AstrBotError) -> None:
+    """统一处理连接失败"""
+
+async def _reject_initialize(self, message, error) -> None:
+    """拒绝初始化并标记连接不可用"""
 ```
 
 ---
@@ -451,7 +514,7 @@ Transport (ABC)
 
 #### `loader.py` - 插件加载器
 
-负责插件发现、环境准备和实例化。
+负责插件发现、环境准备、配置规范化和实例化。
 
 **核心类型:**
 
@@ -473,15 +536,18 @@ class LoadedHandler:
     legacy_context: Any | None = None
 
 @dataclass
+class LoadedCapability:  # 新增
+    descriptor: CapabilityDescriptor
+    callable: Any
+    owner: Any
+    stream_handler: Any | None = None
+
+@dataclass
 class LoadedPlugin:
     plugin: PluginSpec
     handlers: list[LoadedHandler]
+    capabilities: list[LoadedCapability]  # 新增
     instances: list[Any]
-
-@dataclass
-class PluginDiscoveryResult:
-    plugins: list[PluginSpec]
-    errors: dict[str, str]
 ```
 
 **核心函数:**
@@ -494,12 +560,32 @@ def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
     """从插件目录加载插件规范"""
 
 def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
-    """加载插件，返回 Handler 列表"""
+    """加载插件，返回 Handler 和 Capability 列表"""
 
 class PluginEnvironmentManager:
     """使用 uv 管理插件虚拟环境"""
     def prepare_environment(self, plugin: PluginSpec) -> Path:
         """准备插件 Python 环境，返回 python 路径"""
+```
+
+**配置规范化 (新增):**
+
+```python
+def _load_plugin_config(plugin: PluginSpec) -> dict[str, Any]:
+    """加载插件配置"""
+
+def _normalize_config_value(value, schema) -> Any:
+    """规范化配置值，严格类型检查"""
+    # 支持 object, list, dict, int, float, bool, string 类型
+    # 排除 bool 伪装成 int 的情况
+```
+
+**Legacy 上下文共享 (重要修复):**
+
+```python
+# 同一插件共享一个 LegacyContext 实例
+shared_legacy_context: LegacyContext | None = None
+# 这与旧版 StarManager 行为一致
 ```
 
 **Handler ID 格式:**
@@ -529,12 +615,39 @@ class HandlerDispatcher:
         """根据签名注入 event 和 ctx 参数"""
 ```
 
+**CapabilityDispatcher (新增):**
+
+```python
+class CapabilityDispatcher:
+    """与 HandlerDispatcher 并行的 capability 分发器"""
+
+    async def dispatch(self, capability, payload, cancel_token, request_id):
+        """分发 capability 调用"""
+
+    # 支持参数注入: Context, CancelToken, payload
+    # 支持流式 capability (async generator 或 StreamExecution)
+    # 支持取消传播
+```
+
 **参数注入规则:**
 
 | 参数名 | 注入值 |
 |--------|--------|
 | `event` | `MessageEvent` 实例 |
 | `ctx` / `context` | `Context` 实例 |
+| 类型注解 `MessageEvent` | `MessageEvent` 实例 |
+| 类型注解 `Context` | `Context` 实例 |
+| 类型注解 `CancelToken` | `CancelToken` 实例 |
+| `legacy_args` | 命令参数、regex 捕获组 |
+
+**结果处理:**
+
+| 返回类型 | 处理方式 |
+|----------|----------|
+| `MessageEventResult` | 调用 `platform.send_chain` |
+| `MessageChain` | 调用 `platform.send_chain` |
+| `PlainTextResult` | 调用 `event.reply` |
+| `dict` 含 "text" 键 | 提取 text 并回复 |
 
 ---
 
@@ -547,6 +660,12 @@ class CapabilityRouter:
     def register(self, descriptor, call_handler=None, stream_handler=None, exposed=True):
         """注册 Capability"""
 
+    def unregister(self, name: str) -> bool:
+        """注销 Capability"""
+
+    def contains(self, name: str) -> bool:
+        """检查能力是否存在"""
+
     async def execute(self, capability, payload, stream, cancel_token, request_id):
         """执行 Capability 调用"""
 
@@ -556,32 +675,32 @@ class StreamExecution:
     finalize: Callable[[list[dict]], dict[str, Any]]
 ```
 
-**内置 Capabilities:**
-
-| Capability | 功能 |
-|------------|------|
-| `llm.chat` | 对话 (返回文本) |
-| `llm.chat_raw` | 对话 (返回完整响应) |
-| `llm.stream_chat` | 流式对话 |
-| `memory.search` | 搜索记忆 |
-| `memory.get` | 获取记忆 |
-| `memory.save` | 保存记忆 |
-| `memory.delete` | 删除记忆 |
-| `db.get` | 读取 KV |
-| `db.set` | 写入 KV |
-| `db.delete` | 删除 KV |
-| `db.list` | 列出 KV |
-| `platform.send` | 发送消息 |
-| `platform.send_image` | 发送图片 |
-| `platform.send_chain` | 发送消息链 |
-| `platform.get_members` | 获取群成员 |
-
-**Capability 命名规则:**
+**SessionRef 目标解析 (新增):**
 
 ```python
-RESERVED_CAPABILITY_NAMESPACES = ("handler", "system", "internal")
-CAPABILITY_NAME_PATTERN = r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$"
+def resolve_target(payload: dict) -> dict[str, Any]:
+    """从 payload.target 解析会话引用，支持 session 字段和 payload 转换"""
 ```
+
+**内置 Capabilities (15 个):**
+
+| Capability | 功能 | 流式 |
+|------------|------|------|
+| `llm.chat` | 对话 (返回文本) | 否 |
+| `llm.chat_raw` | 对话 (返回完整响应) | 否 |
+| `llm.stream_chat` | 流式对话 | 是 |
+| `memory.search` | 搜索记忆 | 否 |
+| `memory.get` | 获取记忆 | 否 |
+| `memory.save` | 保存记忆 | 否 |
+| `memory.delete` | 删除记忆 | 否 |
+| `db.get` | 读取 KV | 否 |
+| `db.set` | 写入 KV | 否 |
+| `db.delete` | 删除 KV | 否 |
+| `db.list` | 列出 KV | 否 |
+| `platform.send` | 发送消息 | 否 |
+| `platform.send_image` | 发送图片 | 否 |
+| `platform.send_chain` | 发送消息链 | 否 |
+| `platform.get_members` | 获取群成员 | 否 |
 
 ---
 
@@ -611,12 +730,36 @@ class SupervisorRuntime:
         # 2. 为每个插件启动 Worker 进程
         # 3. 聚合 Handler 并向 Core 初始化
 
+    def _handle_worker_closed(self, worker_name: str) -> None:
+        """处理 Worker 连接关闭"""
+
 class PluginWorkerRuntime:
     """Worker 运行时"""
     async def start(self) -> None:
         # 1. 加载插件
         # 2. 创建 Dispatcher
         # 3. 向 Supervisor 初始化
+
+    async def _run_lifecycle(self, method_name: str, ctx) -> None:
+        """运行生命周期回调 (on_start/on_stop)"""
+```
+
+**连接关闭处理 (新增):**
+
+```python
+# WorkerSession 新增 on_closed 回调参数
+# 清理逻辑包括：
+# - 从 handler_to_worker 移除对应 handlers
+# - 从 capability_router 注销 capabilities
+# - 从 loaded_plugins 移除
+# - 取消 stale requests
+```
+
+**Handler 冲突检测 (新增):**
+
+```python
+def _register_handler(self, handler_id: str, worker_name: str) -> bool:
+    """检测 handler ID 冲突并输出警告"""
 ```
 
 ---
@@ -634,7 +777,14 @@ class CapabilityProxy:
 
     async def stream(self, name: str, payload: dict) -> AsyncIterator[dict[str, Any]]:
         """流式调用"""
+
+    def _ensure_available(self, name: str, *, stream: bool) -> None:
+        """确保能力可用且支持指定调用模式"""
 ```
+
+**设计要点:**
+- 从 `peer.__dict__` 读取 `remote_capability_map` 和 `remote_peer`，避免 `MagicMock` 误判
+- 支持 `phase="delta"` 事件的流式响应处理
 
 ---
 
@@ -652,15 +802,23 @@ class LLMResponse(BaseModel):
     tool_calls: list[dict[str, Any]] = []
 
 class LLMClient:
-    async def chat(self, prompt, system=None, history=None, model=None, temperature=None) -> str:
+    async def chat(self, prompt, system=None, history=None, model=None, temperature=None, **kwargs) -> str:
         """简单对话，返回文本"""
 
     async def chat_raw(self, prompt, **kwargs) -> LLMResponse:
         """完整对话，返回结构化响应"""
 
-    async def stream_chat(self, prompt, system=None, history=None) -> AsyncGenerator[str, None]:
+    async def stream_chat(self, prompt, system=None, history=None, **kwargs) -> AsyncGenerator[str, None]:
         """流式对话"""
 ```
+
+**支持参数:**
+- `prompt` - 用户输入
+- `system` - 系统提示词
+- `history` - 对话历史 (`ChatMessage` 列表)
+- `model` - 指定模型
+- `temperature` - 采样温度 (0-1)
+- `**kwargs` - 额外透传参数（如 `image_urls`、`tools`）
 
 ---
 
@@ -674,6 +832,10 @@ class DBClient:
     async def list(self, prefix: str | None = None) -> list[str]: ...
 ```
 
+**与旧版对比:**
+- 旧版：`Context.put_kv_data()`, `Context.get_kv_data()`
+- 新版：`ctx.db.set()`, `ctx.db.get()`, `ctx.db.list()`
+
 ---
 
 #### `memory.py` - 记忆客户端
@@ -686,16 +848,27 @@ class MemoryClient:
     async def delete(self, key: str) -> None: ...
 ```
 
+**与 DBClient 区别:**
+- MemoryClient 支持**向量语义搜索**
+- 适用于存储用户偏好、对话摘要、AI 推理缓存
+
 ---
 
 #### `platform.py` - 平台客户端
 
 ```python
 class PlatformClient:
-    async def send(self, session: str, text: str) -> dict[str, Any]: ...
-    async def send_image(self, session: str, image_url: str) -> dict[str, Any]: ...
-    async def send_chain(self, session: str, chain: list[dict]) -> dict[str, Any]: ...
-    async def get_members(self, session: str) -> list[dict[str, Any]]: ...
+    async def send(self, session: str | SessionRef, text: str) -> dict[str, Any]: ...
+    async def send_image(self, session: str | SessionRef, image_url: str) -> dict[str, Any]: ...
+    async def send_chain(self, session: str | SessionRef, chain: list[dict]) -> dict[str, Any]: ...
+    async def get_members(self, session: str | SessionRef) -> list[dict[str, Any]]: ...
+```
+
+**SessionRef 支持 (新增):**
+
+```python
+def _build_target_payload(self, session: str | SessionRef) -> dict:
+    """支持 SessionRef 类型，提取 target 字段"""
 ```
 
 ---
@@ -708,7 +881,7 @@ API 层作为兼容层，通过 thin re-export 方式暴露旧版 API。
 
 ```python
 # api/__init__.py
-from . import basic, components, event, message, platform, provider, star
+from . import basic, components, event, message, message_components, platform, provider, star
 
 # api/star/context.py - Legacy Context 导出
 from ..._legacy_api import LegacyContext as Context
@@ -731,13 +904,25 @@ class MessageChain:
     def at(self, name, qq) -> "MessageChain": ...
     def at_all(self) -> "MessageChain": ...
     def url_image(self, url) -> "MessageChain": ...
+    def file_image(self, path) -> "MessageChain": ...
+    def base64_image(self, base64_str) -> "MessageChain": ...
+    def use_t2i(self, use_t2i) -> "MessageChain": ...
     def to_payload(self) -> list[dict]: ...
+    def get_plain_text(self) -> str: ...
     def is_plain_text_only(self) -> bool: ...
 
 # api/message/components.py - 消息组件
-class Plain, Image, At, AtAll, Reply, Node, Face, File, ...
+class Plain, Image, At, AtAll, Reply, Node, Face, File, Record, Video, ...
 ComponentTypes: dict[str, type[BaseMessageComponent]]
 ```
+
+**不支持的功能 (显式报错):**
+- `custom_filter` - 自定义过滤器
+- `after_message_sent` - 消息发送后钩子
+- `on_astrbot_loaded` / `on_platform_loaded` - 加载钩子
+- `on_decorating_result` - 结果装饰钩子
+- `on_llm_request` / `on_llm_response` - LLM 钩子
+- `command_group` - 命令组
 
 ---
 
@@ -747,7 +932,7 @@ ComponentTypes: dict[str, type[BaseMessageComponent]]
 
 ```python
 from .context import Context
-from .decorators import on_command, on_event, on_message, on_schedule, require_admin
+from .decorators import on_command, on_event, on_message, on_schedule, provide_capability, require_admin
 from .errors import AstrBotError
 from .events import MessageEvent
 from .star import Star
@@ -761,9 +946,14 @@ __all__ = [
     "on_event",
     "on_message",
     "on_schedule",
+    "provide_capability",
     "require_admin",
 ]
 ```
+
+**设计原则**: 旧版兼容能力由 `astrbot_sdk.api` 与 `astrbot_sdk.compat` 承接。
+
+---
 
 #### `star.py` - Star 基类
 
@@ -819,6 +1009,15 @@ def scheduled_handler(): ...
 @on_command("admin")
 @require_admin
 def admin_handler(event): ...
+
+# 声明能力 (新增)
+@provide_capability(
+    name="my.custom_action",
+    description="自定义操作",
+    input_schema={...},
+    output_schema={...},
+)
+async def custom_action(payload, ctx, cancel_token): ...
 ```
 
 ---
@@ -883,6 +1082,10 @@ class MessageEvent:
 
     def plain_result(self, text: str) -> PlainTextResult:
         """创建纯文本结果"""
+
+    @property
+    def session_ref(self) -> SessionRef:
+        """获取 SessionRef 对象 (新增)"""
 ```
 
 ---
@@ -890,6 +1093,24 @@ class MessageEvent:
 #### `errors.py` - 错误模型
 
 ```python
+class ErrorCodes:
+    """错误码常量类"""
+    # 非重试错误
+    LLM_NOT_CONFIGURED = "llm_not_configured"
+    CAPABILITY_NOT_FOUND = "capability_not_found"
+    PERMISSION_DENIED = "permission_denied"
+    LLM_ERROR = "llm_error"
+    INVALID_INPUT = "invalid_input"
+    CANCELLED = "cancelled"
+    PROTOCOL_VERSION_MISMATCH = "protocol_version_mismatch"
+    PROTOCOL_ERROR = "protocol_error"
+    INTERNAL_ERROR = "internal_error"
+
+    # 可重试错误
+    CAPABILITY_TIMEOUT = "capability_timeout"
+    NETWORK_ERROR = "network_error"
+    LLM_TEMPORARY_ERROR = "llm_temporary_error"
+
 @dataclass
 class AstrBotError(Exception):
     code: str
@@ -970,6 +1191,11 @@ def register(name=None, author=None, desc=None, version=None, repo=None):
     """旧版插件元数据装饰器兼容入口"""
 ```
 
+**已废弃方法 (抛出显式迁移错误):**
+- `get_filtered_conversations()`
+- `get_human_readable_context()`
+- `add_llm_tools()`
+
 ---
 
 #### `cli.py` - 命令行接口
@@ -992,7 +1218,9 @@ def worker(plugin_dir: Path):
 
 @cli.command(hidden=True)
 @click.option("--port", default=8765)
-def websocket(port: int):
+@click.option("--host", default="localhost")
+@click.option("--path", default="/ws")
+def websocket(port: int, host: str, path: str):
     """启动 WebSocket 服务 (调试用)"""
 ```
 
@@ -1077,7 +1305,8 @@ async def _reject_initialize(self, message, error):
 └───┬────┘                              └───┬────┘
     │                                       │
     │──── InitializeMessage ───────────────>│
-    │   {id, peer, handlers, metadata}      │
+    │   {id, peer, handlers,                │
+    │    provided_capabilities, metadata}   │
     │                                       │
     │<─── ResultMessage ────────────────────│
     │   {id, kind="initialize_result",      │
@@ -1144,22 +1373,35 @@ async def _reject_initialize(self, message, error):
 
 ### 添加新 Capability
 
-1. 在 `CapabilityRouter._register_builtin_capabilities()` 中注册：
+1. 在 `protocol/descriptors.py` 中定义 Schema 常量：
+
+```python
+MY_CAPABILITY_INPUT_SCHEMA = {"type": "object", "properties": {...}, "required": [...]}
+MY_CAPABILITY_OUTPUT_SCHEMA = {"type": "object", "properties": {...}}
+BUILTIN_CAPABILITY_SCHEMAS["my.custom_action"] = {
+    "input": MY_CAPABILITY_INPUT_SCHEMA,
+    "output": MY_CAPABILITY_OUTPUT_SCHEMA,
+}
+```
+
+2. 在 `CapabilityRouter._register_builtin_capabilities()` 中注册：
 
 ```python
 self.register(
     CapabilityDescriptor(
         name="my.custom_action",
         description="自定义操作",
-        input_schema={"type": "object", "properties": {...}, "required": [...]},
-        output_schema={"type": "object", "properties": {...}},
+        input_schema=MY_CAPABILITY_INPUT_SCHEMA,
+        output_schema=MY_CAPABILITY_OUTPUT_SCHEMA,
         supports_stream=False,
         cancelable=False,
     ),
     call_handler=my_handler,
-    exposed=True,  # 是否暴露给对端
+    exposed=True,
 )
 ```
+
+3. 在 `clients/` 中添加客户端封装（可选）。
 
 ### 添加新 Trigger 类型
 
@@ -1202,6 +1444,8 @@ class MyTransport(Transport):
     async def send(self, payload: str) -> None: ...
 ```
 
+2. 在 `runtime/__init__.py` 中导出。
+
 ---
 
 ## 实现状态
@@ -1211,22 +1455,22 @@ class MyTransport(Transport):
 | 模块 | 文件 | 状态 | 说明 |
 |------|------|------|------|
 | **协议层** | `protocol/` | ✅ 完成 | |
-| | `descriptors.py` | ✅ | Handler/Capability 描述符 + 内置 Schema 常量 |
+| | `descriptors.py` | ✅ | Handler/Capability 描述符 + 16 个内置 Schema 常量 |
 | | `messages.py` | ✅ | 5 种消息类型 + parse_message |
 | | `legacy_adapter.py` | ✅ | JSON-RPC ↔ v4 双向转换 |
 | **运行时层** | `runtime/` | ✅ 完成 | |
-| | `peer.py` | ✅ | 对称通信端点 + 取消 + 流式 |
+| | `peer.py` | ✅ | 对称通信端点 + 取消 + 流式 + 远程元数据缓存 |
 | | `transport.py` | ✅ | Stdio + WebSocket Server/Client |
-| | `loader.py` | ✅ | 插件发现 + 环境管理 + 加载 |
-| | `handler_dispatcher.py` | ✅ | Handler 分发 + 参数注入 |
-| | `capability_router.py` | ✅ | 能力路由 + 内置能力注册 |
-| | `bootstrap.py` | ✅ | Supervisor + Worker + WebSocket |
+| | `loader.py` | ✅ | 插件发现 + 环境管理 + 配置规范化 + Capability 支持 |
+| | `handler_dispatcher.py` | ✅ | Handler 分发 + CapabilityDispatcher + 参数注入增强 |
+| | `capability_router.py` | ✅ | 能力路由 + 15 个内置能力 + SessionRef 支持 |
+| | `bootstrap.py` | ✅ | Supervisor + Worker + WebSocket + 连接关闭处理 |
 | **客户端层** | `clients/` | ✅ 完成 | |
 | | `_proxy.py` | ✅ | CapabilityProxy 代理 |
-| | `llm.py` | ✅ | LLM 客户端 (chat/chat_raw/stream) |
+| | `llm.py` | ✅ | LLM 客户端 (chat/chat_raw/stream_chat) |
 | | `memory.py` | ✅ | Memory 客户端 (search/get/save/delete) |
 | | `db.py` | ✅ | DB 客户端 (get/set/delete/list) |
-| | `platform.py` | ✅ | Platform 客户端 (send/send_image/get_members) |
+| | `platform.py` | ✅ | Platform 客户端 (支持 SessionRef) |
 | **API 层** | `api/` | ✅ 完成 | 兼容层 |
 | | `star/context.py` | ✅ | LegacyContext 导出 |
 | | `components/command.py` | ✅ | CommandComponent 导出 |
@@ -1241,26 +1485,30 @@ class MyTransport(Transport):
 | | `__init__.py` | ✅ | 顶层导出 |
 | | `star.py` | ✅ | Star 基类 + Handler 发现 |
 | | `context.py` | ✅ | Context + CancelToken |
-| | `decorators.py` | ✅ | on_command/on_message/on_event/on_schedule |
-| | `events.py` | ✅ | MessageEvent |
-| | `errors.py` | ✅ | AstrBotError |
+| | `decorators.py` | ✅ | on_command/on_message/on_event/on_schedule/provide_capability |
+| | `events.py` | ✅ | MessageEvent + SessionRef |
+| | `errors.py` | ✅ | AstrBotError + ErrorCodes |
 | | `_legacy_api.py` | ✅ | LegacyContext + LegacyStar + register + LegacyConversationManager |
 | | `cli.py` | ✅ | Click 命令行工具 |
 | | `__main__.py` | ✅ | python -m astrbot_sdk 入口 |
 
 ### 测试覆盖
 
-测试文件位于 `tests_v4/` 目录，共 37 个测试文件：
+测试文件位于 `tests_v4/` 目录，共 **40 个** Python 文件：
 
 ```
 tests_v4/
 ├── conftest.py                   # pytest 配置与共享 fixtures
 ├── helpers.py                    # 测试辅助函数
-├── test_protocol.py              # 协议层基础测试
+│
+├── # 协议层测试
+├── test_protocol_messages.py     # 协议消息模型
 ├── test_protocol_descriptors.py  # 描述符测试
-├── test_protocol_messages.py     # 消息类型测试
-├── test_protocol_legacy_adapter.py # Legacy 适配器测试
 ├── test_protocol_package.py      # 协议包测试
+├── test_protocol_legacy_adapter.py # Legacy 适配器测试
+├── test_legacy_adapter.py        # LegacyAdapter 运行时测试
+│
+├── # 运行时层测试
 ├── test_peer.py                  # Peer 测试
 ├── test_transport.py             # Transport 测试
 ├── test_capability_router.py     # CapabilityRouter 测试
@@ -1269,27 +1517,38 @@ tests_v4/
 ├── test_bootstrap.py             # Bootstrap 测试
 ├── test_runtime.py               # 运行时测试
 ├── test_runtime_integration.py   # 运行时集成测试
+│
+├── # 核心模块测试
 ├── test_context.py               # Context 测试
 ├── test_events.py                # 事件测试
 ├── test_decorators.py            # 装饰器测试
-├── test_clients_module.py        # 客户端模块测试
-├── test_llm_client.py            # LLM 客户端测试
-├── test_memory_client.py         # Memory 客户端测试
-├── test_db_client.py             # DB 客户端测试
-├── test_platform_client.py       # Platform 客户端测试
-├── test_capability_proxy.py      # CapabilityProxy 测试
+│
+├── # API 层测试
 ├── test_api_modules.py           # API 模块测试
 ├── test_api_decorators.py        # API 装饰器测试
 ├── test_api_event_filter.py      # filter 命名空间测试
 ├── test_api_legacy_context.py    # Legacy Context 测试
 ├── test_api_message_components.py # 消息组件测试
 ├── test_api_contract.py          # API 契约测试
-├── test_entrypoints.py           # 入口点测试
-├── test_top_level_modules.py     # 顶层模块测试
-├── test_conftest_fixtures.py     # pytest fixtures 测试
-├── test_legacy_adapter.py        # Legacy 适配器测试
+│
+├── # 客户端层测试
+├── test_clients_module.py        # 客户端模块测试
+├── test_llm_client.py            # LLM 客户端测试
+├── test_memory_client.py         # Memory 客户端测试
+├── test_db_client.py             # DB 客户端测试
+├── test_platform_client.py       # Platform 客户端测试
+├── test_capability_proxy.py      # CapabilityProxy 测试
+│
+├── # 兼容性迁移测试
 ├── test_script_migrations.py     # 脚本迁移测试
-└── test_supervisor_migration.py  # Supervisor 迁移测试
+├── test_supervisor_migration.py  # Supervisor 迁移测试
+├── test_legacy_plugin_integration.py # 旧版插件集成测试
+├── test_top_level_modules.py     # 顶层模块测试
+│
+├── # 入口点测试
+├── test_entrypoints.py           # 入口点测试
+├── test_conftest_fixtures.py     # pytest fixtures 测试
+└── __init__.py                   # 包初始化文件
 ```
 
 ---
@@ -1306,7 +1565,7 @@ tests_v4/
 
 **兼容策略**: `LegacyAdapter` 实现协议转换，`CommandComponent` 继承 `Star` 并标记 `__astrbot_is_new_star__ = False`。
 
-**迁移指南**:
+**迁移指南:**
 
 ```python
 # 旧版 (将在未来版本废弃)
@@ -1316,4 +1575,12 @@ from astrbot_sdk.api.star.context import Context
 # 新版 (推荐)
 from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.context import Context
+```
+
+**兼容层入口:**
+
+```python
+# 通过 astrbot_sdk.api 和 astrbot_sdk.compat 访问旧版 API
+from astrbot_sdk.api.star import Context, Star
+from astrbot_sdk.compat import LegacyContext, CommandComponent
 ```

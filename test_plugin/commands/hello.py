@@ -108,4 +108,3 @@ class HelloCommand(CommandComponent):
     async def cqhttp_only(self, event: AstrMessageEvent):
         """测试平台过滤。"""
         yield event.plain_result("CQHttp platform detected")
-

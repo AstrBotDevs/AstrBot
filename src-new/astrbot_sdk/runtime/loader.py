@@ -85,6 +85,7 @@ legacy 兼容也集中放在这里，尤其是“同一插件共享一个 `Legac
 from __future__ import annotations
 
 import copy
+import importlib
 import importlib.util
 import json
 import inspect
@@ -190,9 +191,10 @@ def _iter_handler_names(instance: Any) -> list[str]:
 
 
 def _iter_discoverable_names(instance: Any) -> list[str]:
-    names = set(_iter_handler_names(instance))
-    names.update(dir(instance))
-    return sorted(names)
+    handler_names = list(dict.fromkeys(_iter_handler_names(instance)))
+    known_names = set(handler_names)
+    extra_names = sorted(name for name in dir(instance) if name not in known_names)
+    return [*handler_names, *extra_names]
 
 
 def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
@@ -404,7 +406,9 @@ def _plugin_component_classes(plugin: PluginSpec) -> list[type[Any]]:
         class_path = component.get("class")
         if not isinstance(class_path, str) or ":" not in class_path:
             continue
-        component_classes.append(import_string(class_path))
+        component_classes.append(
+            import_string(class_path, plugin_dir=plugin.plugin_dir)
+        )
 
     if component_classes:
         return component_classes
@@ -716,7 +720,69 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     )
 
 
-def import_string(path: str) -> Any:
+def _path_within_root(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _plugin_defines_module_root(plugin_dir: Path, root_name: str) -> bool:
+    return (plugin_dir / f"{root_name}.py").exists() or (
+        plugin_dir / root_name
+    ).exists()
+
+
+def _module_belongs_to_plugin(module: Any, plugin_dir: Path) -> bool:
+    file_path = getattr(module, "__file__", None)
+    if isinstance(file_path, str) and _path_within_root(Path(file_path), plugin_dir):
+        return True
+
+    package_paths = getattr(module, "__path__", None)
+    if package_paths is None:
+        return False
+    return any(
+        isinstance(candidate, str) and _path_within_root(Path(candidate), plugin_dir)
+        for candidate in package_paths
+    )
+
+
+def _purge_module_root(root_name: str) -> None:
+    for module_name in list(sys.modules):
+        if module_name == root_name or module_name.startswith(f"{root_name}."):
+            sys.modules.pop(module_name, None)
+
+
+def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:
+    if plugin_dir is None:
+        return
+
+    plugin_root = plugin_dir.resolve()
+    plugin_path = str(plugin_root)
+    if plugin_path not in sys.path:
+        sys.path.insert(0, plugin_path)
+
+    root_name = module_name.split(".", 1)[0]
+    if not _plugin_defines_module_root(plugin_root, root_name):
+        return
+
+    cached_root = sys.modules.get(root_name)
+    cached_module = sys.modules.get(module_name)
+    if cached_root is not None and not _module_belongs_to_plugin(
+        cached_root, plugin_root
+    ):
+        _purge_module_root(root_name)
+    elif cached_module is not None and not _module_belongs_to_plugin(
+        cached_module, plugin_root
+    ):
+        _purge_module_root(root_name)
+
+    importlib.invalidate_caches()
+
+
+def import_string(path: str, plugin_dir: Path | None = None) -> Any:
     module_name, attr = path.split(":", 1)
+    _prepare_plugin_import(module_name, plugin_dir)
     module = import_module(module_name)
     return getattr(module, attr)

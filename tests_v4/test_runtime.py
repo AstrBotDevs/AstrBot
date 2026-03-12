@@ -96,7 +96,11 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
             try:
                 await runtime.start()
                 await self.core.wait_until_remote_initialized()
-                handler_id = self.core.remote_handlers[0].id
+                handler_id = next(
+                    handler.id
+                    for handler in self.core.remote_handlers
+                    if getattr(handler.trigger, "command", None) == "hello"
+                )
 
                 await self.core.invoke(
                     "handler.invoke",
@@ -132,7 +136,11 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
             try:
                 await runtime.start()
                 await self.core.wait_until_remote_initialized()
-                handler_id = self.core.remote_handlers[0].id
+                handler_id = next(
+                    handler.id
+                    for handler in self.core.remote_handlers
+                    if getattr(handler.trigger, "command", None) == "hello"
+                )
 
                 await self.core.invoke(
                     "handler.invoke",
@@ -150,7 +158,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 texts = [
                     item.get("text") for item in runtime.capability_router.sent_messages
                 ]
-                self.assertEqual(len(texts), 4)
+                self.assertEqual(len(texts), 1)
                 self.assertIn("Created conversation ID", texts[0])
             finally:
                 await runtime.stop()

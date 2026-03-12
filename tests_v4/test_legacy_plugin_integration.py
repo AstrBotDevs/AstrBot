@@ -381,7 +381,9 @@ class TestLoadLegacyStylePlugin:
             finally:
                 # 清理导入的模块
                 modules_to_remove = [
-                    k for k in list(sys.modules.keys()) if k.startswith("chain_handlers")
+                    k
+                    for k in list(sys.modules.keys())
+                    if k.startswith("chain_handlers")
                 ]
                 for mod in modules_to_remove:
                     del sys.modules[mod]
