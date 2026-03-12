@@ -10,7 +10,20 @@
     - 能力调用（同步/流式）
     - 取消处理
     - 连接生命周期管理
+消息处理：
+    入站:
+        ResultMessage -> 唤醒等待的 Future
+        EventMessage -> 投递到流式队列
+        InitializeMessage -> 调用 initialize_handler
+        InvokeMessage -> 创建任务调用 invoke_handler
+        CancelMessage -> 取消对应的任务
 
+    出站:
+        initialize() -> InitializeMessage
+        invoke() -> InvokeMessage(stream=False)
+        invoke_stream() -> InvokeMessage(stream=True)
+        cancel() -> CancelMessage
+    
 与旧版对比：
     旧版 JSON-RPC:
         - 分离的 JSONRPCClient 和 JSONRPCServer
@@ -51,13 +64,10 @@
         invoke_stream() -> InvokeMessage(stream=True)
         cancel() -> CancelMessage
 
-TODO:
-    - 添加消息优先级支持
-    - 添加消息过期时间支持
-    - 添加消息重试计数支持
-    - 添加消息追踪 ID (trace_id) 支持
-    - 添加连接状态变更回调
-    - 添加心跳检测机制
+取消机制：
+    - CancelToken 用于检查取消状态
+    - 入站任务在收到 CancelMessage 时被取消
+    - 早到取消：在任务执行前检查 cancel_token，避免竞态条件
 """
 
 from __future__ import annotations

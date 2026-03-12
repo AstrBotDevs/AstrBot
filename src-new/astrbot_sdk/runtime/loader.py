@@ -72,15 +72,6 @@ plugin.yaml 格式：
         python: "3.11"
     components:
         - class: my_plugin.main:MyComponent
-
-TODO:
-    - 添加插件热重载支持
-    - 添加插件依赖解析
-    - 添加插件沙箱隔离
-    - 添加插件签名验证
-    - 添加插件版本约束
-    - 添加插件仓库支持
-    - 添加插件配置 Schema 验证
 """
 
 from __future__ import annotations

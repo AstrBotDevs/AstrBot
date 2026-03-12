@@ -58,13 +58,6 @@
     - PlainTextResult: 调用 event.reply()
     - str: 调用 event.reply()
     - dict with "text": 调用 event.reply(str(item["text"]))
-
-TODO:
-    - 添加处理器超时控制
-    - 添加处理器重试机制
-    - 添加处理器依赖注入容器
-    - 添加处理器中间件支持
-    - 添加处理器调用链追踪
 """
 
 from __future__ import annotations

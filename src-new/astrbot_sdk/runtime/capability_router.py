@@ -5,12 +5,12 @@
 
 核心概念：
     CapabilityDescriptor: 能力描述符，声明能力名称、输入输出 Schema 等
-    CallHandler: 同步调用处理器，返回单次结果
-    StreamHandler: 流式调用处理器，返回异步迭代器
-    FinalizeHandler: 流式结果聚合器
+    CallHandler: 同步调用处理器，签名 (request_id, payload, cancel_token) -> dict
+    StreamHandler: 流式调用处理器，签名 (request_id, payload, cancel_token) -> AsyncIterator
+    FinalizeHandler: 流式结果聚合器，签名 (chunks) -> dict
 
 内置能力：
-    llm.chat: 同步 LLM 聊天
+    llm.chat: 同步 LLM 聊天（内置 echo 实现）
     llm.chat_raw: 同步 LLM 聊天（完整响应）
     llm.stream_chat: 流式 LLM 聊天
     memory.search: 搜索记忆
@@ -78,15 +78,6 @@
     # 执行能力
     result = await router.execute("my_plugin.calculate", {"x": 42}, stream=False, ...)
     stream_result = await router.execute("my_plugin.stream", {}, stream=True, ...)
-
-TODO:
-    - 添加能力版本控制
-    - 添加能力权限控制
-    - 添加能力调用计数/限流
-    - 添加能力调用超时配置
-    - 添加能力健康检查
-    - 添加能力缓存支持
-    - 添加能力熔断机制
 """
 
 from __future__ import annotations

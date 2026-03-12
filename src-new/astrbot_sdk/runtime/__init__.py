@@ -110,33 +110,6 @@
         - 支持流式能力 (stream_handler)
         - 内置能力：llm.chat, memory.*, db.*, platform.*
         - 支持自定义能力注册
-
-TODO: (架构完善):
-    - Transport 缺少 TCP Socket 传输实现
-    - Transport 缺少 Unix Domain Socket 传输实现
-    - Transport 缺少共享内存传输实现（高性能场景）
-    - Peer 缺少消息压缩支持（大数据传输）
-    - Peer 缺少消息签名验证（安全通信）
-    - CapabilityRouter 缺少能力版本控制
-    - CapabilityRouter 缺少能力权限控制
-    - CapabilityRouter 缺少能力调用计数/限流
-    - HandlerDispatcher 缺少处理器超时控制
-    - HandlerDispatcher 缺少处理器重试机制
-    - HandlerDispatcher 缺少处理器依赖注入容器
-    - loader.py 缺少插件热重载支持
-    - loader.py 缺少插件依赖解析
-    - loader.py 缺少插件沙箱隔离
-    - bootstrap.py 缺少优雅关闭的超时机制
-    - bootstrap.py 缺少健康检查端点
-    - 缺少分布式部署支持（多节点 Supervisor）
-    - 缺少插件状态持久化和恢复
-
-TODO: (功能迁移):
-    - 旧版 api/context.py 的功能需要迁移到新版 Context
-    - 旧版 api/conversation_mgr.py 的会话管理需要迁移
-    - 旧版 stars/filter/ 的过滤器需要评估迁移必要性
-    - 旧版 stars/registry/ 的注册表功能已被 loader.py 替代
-    - 旧版 galaxy.py 的虚拟星层管理已被 bootstrap.py 替代
 """
 
 from .bootstrap import (

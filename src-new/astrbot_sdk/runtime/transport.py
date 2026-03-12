@@ -2,12 +2,19 @@
 
 定义 Transport 抽象基类及其实现，负责底层的消息传输。
 传输层只关心"发送字符串"和"接收字符串"，不处理协议细节。
+传输实现：
+    Transport: 抽象基类，定义 start/stop/send/wait_closed 接口
+    StdioTransport: 标准输入输出传输
+        - 进程模式: 通过 command 参数启动子进程
+        - 文件模式: 通过 stdin/stdout 参数指定文件描述符
 
 传输类型：
     Transport: 抽象基类，定义 start/stop/send 接口
     StdioTransport: 标准输入输出传输，支持进程模式和文件模式
     WebSocketServerTransport: WebSocket 服务端传输
-    WebSocketClientTransport: WebSocket 客户端传输
+        - 单连接限制，支持心跳配置
+        - 通过 port 属性获取实际监听端口
+        - 自动重连需要外部实现
 
 与旧版对比：
     旧版传输层:
@@ -53,15 +60,6 @@
     await transport.start()
     await transport.send(json_string)
     await transport.stop()
-
-TODO:
-    - 添加 TCP Socket 传输实现
-    - 添加 Unix Domain Socket 传输实现
-    - 添加共享内存传输实现（高性能场景）
-    - 添加消息压缩支持
-    - 添加断线重连机制（WebSocketClientTransport）
-    - 添加连接状态变更回调
-    - 添加带宽限制支持
 """
 
 from __future__ import annotations
