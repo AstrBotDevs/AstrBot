@@ -24,7 +24,8 @@ class HandlerDispatcher:
             raise LookupError(f"handler not found: {handler_id}")
 
         ctx = Context(peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token)
-        event = MessageEvent.from_payload(message.input.get("event", {}), context=ctx)
+        event = MessageEvent.from_payload(message.input.get("event", {}))
+        event.bind_reply_handler(lambda text: ctx.platform.send(event.session_id, text))
         if loaded.legacy_context is not None:
             loaded.legacy_context.bind_runtime_context(ctx)
 

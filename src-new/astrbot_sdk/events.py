@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -10,6 +11,9 @@ if TYPE_CHECKING:
 @dataclass(slots=True)
 class PlainTextResult:
     text: str
+
+
+ReplyHandler = Callable[[str], Awaitable[None]]
 
 
 class MessageEvent:
@@ -23,6 +27,7 @@ class MessageEvent:
         session_id: str | None = None,
         raw: dict[str, Any] | None = None,
         context: "Context | None" = None,
+        reply_handler: ReplyHandler | None = None,
     ) -> None:
         self.text = text
         self.user_id = user_id
@@ -30,7 +35,9 @@ class MessageEvent:
         self.platform = platform
         self.session_id = session_id or group_id or user_id or ""
         self.raw = raw or {}
-        self._context = context
+        self._reply_handler = reply_handler
+        if self._reply_handler is None and context is not None:
+            self._reply_handler = lambda text: context.platform.send(self.session_id, text)
 
     @classmethod
     def from_payload(
@@ -38,6 +45,7 @@ class MessageEvent:
         payload: dict[str, Any],
         *,
         context: "Context | None" = None,
+        reply_handler: ReplyHandler | None = None,
     ) -> "MessageEvent":
         return cls(
             text=str(payload.get("text", "")),
@@ -47,6 +55,7 @@ class MessageEvent:
             session_id=payload.get("session_id"),
             raw=payload,
             context=context,
+            reply_handler=reply_handler,
         )
 
     def to_payload(self) -> dict[str, Any]:
@@ -59,9 +68,12 @@ class MessageEvent:
         }
 
     async def reply(self, text: str) -> None:
-        if self._context is None:
-            raise RuntimeError("MessageEvent 未绑定 Context，无法 reply")
-        await self._context.platform.send(self.session_id, text)
+        if self._reply_handler is None:
+            raise RuntimeError("MessageEvent 未绑定 reply handler，无法 reply")
+        await self._reply_handler(text)
+
+    def bind_reply_handler(self, reply_handler: ReplyHandler) -> None:
+        self._reply_handler = reply_handler
 
     def plain_result(self, text: str) -> PlainTextResult:
         return PlainTextResult(text=text)

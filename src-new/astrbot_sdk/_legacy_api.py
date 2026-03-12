@@ -7,6 +7,7 @@ from loguru import logger
 
 from .clients.llm import LLMResponse
 from .context import Context as NewContext
+from .star import Star
 
 MIGRATION_DOC_URL = "https://docs.astrbot.app/migration/v3"
 _warned_methods: set[str] = set()
@@ -79,7 +80,7 @@ class LegacyContext:
         contexts: list[dict] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        _warn_once("context.llm_generate()", "ctx.llm.chat(prompt)")
+        _warn_once("context.llm_generate()", "ctx.llm.chat_raw(...)")
         ctx = self.require_runtime_context()
         return await ctx.llm.chat_raw(
             prompt or "",
@@ -138,7 +139,11 @@ class LegacyContext:
         await ctx.db.delete(key)
 
 
-class CommandComponent:
+class CommandComponent(Star):
+    @classmethod
+    def __astrbot_is_new_star__(cls) -> bool:
+        return False
+
     @classmethod
     def _astrbot_create_legacy_context(cls, plugin_id: str) -> LegacyContext:
         # Loader 通过这个工厂拿到旧 Context，避免核心运行时直接依赖 compat 实现。

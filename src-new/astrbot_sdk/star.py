@@ -9,6 +9,21 @@ from .errors import AstrBotError
 
 
 class Star:
+    __handlers__: tuple[str, ...] = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        from .decorators import get_handler_meta
+
+        handlers: dict[str, None] = {}
+        for base in reversed(cls.__mro__):
+            for name, attr in getattr(base, "__dict__", {}).items():
+                func = getattr(attr, "__func__", attr)
+                meta = get_handler_meta(func)
+                if meta is not None and meta.trigger is not None:
+                    handlers[name] = None
+        cls.__handlers__ = tuple(handlers.keys())
+
     async def on_start(self, ctx: Any | None = None) -> None:
         return None
 

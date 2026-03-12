@@ -37,8 +37,8 @@
 │   所有消息统一使用 id 字段关联请求与响应                            │
 │                                                                  │
 │   Peer.initialize(handlers=[...])                                │
-│   Peer.invoke("llm.chat", input, stream=false) → result         │
-│   Peer.invoke("llm.stream_chat", input, stream=true) → event*   │
+│   Peer.invoke("llm.chat", input) → result                        │
+│   Peer.invoke_stream("llm.stream_chat", input) → event*          │
 │   Peer.invoke("handler.invoke", {handler_id, event})            │
 │                                                                  │
 │   Transport: StdioTransport / WebSocketTransport                 │
@@ -104,6 +104,11 @@
 │  Star / 装饰器 / MessageEvent                        │
 │  插件作者只接触这一层                                 │
 │  不知道：RPC、进程、序列化、订阅协议                   │
+│                                                      │
+│  处理器发现机制：                                     │
+│  - 装饰器将元数据附加到函数属性 __astrbot_handler_meta__ │
+│  - Star.__init_subclass__ 自动收集到 __handlers__    │
+│  - loader 扫描时从 __handlers__ 构建 HandlerDescriptor │
 └──────────────────────────┬──────────────────────────┘
                            │
                            ▼
@@ -119,7 +124,8 @@
 ┌─────────────────────────────────────────────────────┐
 │  Layer 3：翻译层                                      │
 │  CapabilityProxy                                    │
-│  API 调用 → Peer.invoke(name, input, stream)         │
+│  API 调用 → Peer.invoke(name, input)                 │
+│           → Peer.invoke_stream(name, input)          │
 │  output dict → 返回类型                              │
 │  无业务逻辑，一一对应                                 │
 └──────────────────────────┬──────────────────────────┘
@@ -134,6 +140,8 @@
 
   ※ compat.py 不是第五层，是用户层和 API 层的旁路入口。
      新代码不 import 它，可整体删除。
+  ※ `invoke_stream()` 是 SDK 侧便利方法，线协议仍然只发送
+     `invoke { stream: true }`。
 ```
 
 ---
@@ -661,21 +669,22 @@ chat() 和 chat_raw() 是唯二入口，不再增加第三种变体。
 ```
 ctx.llm.chat("hi")
   → CapabilityProxy 构造 input
-  → Peer.invoke("llm.chat", {prompt:"hi"}, stream=false)  id="msg_020"
+  → Peer.invoke("llm.chat", {prompt:"hi"})  id="msg_020"
   → 发送 { type:"invoke", id:"msg_020", capability:"llm.chat",
             input:{...}, stream:false }
   ← 收到 { type:"result", id:"msg_020", success:true,
             output:{text:"你好"} }
   → 解包 output.text → 返回 str
 
-※ stream=false 不会收到任何 event 消息
+※ 非流式调用不会收到任何 event 消息
 ```
 
 ### 11.4 流式能力调用
 
 ```
 async for chunk in ctx.llm.stream_chat("hi"):
-  → Peer.invoke("llm.stream_chat", {...}, stream=true)  id="msg_030"
+  → Peer.invoke_stream("llm.stream_chat", {...})
+    （底层仍发送 invoke + stream=true，id="msg_030"）
   ← event { id:"msg_030", phase:"started" }
   ← event { id:"msg_030", phase:"delta",     data:{text:"你"} }  → yield "你"
   ← event { id:"msg_030", phase:"delta",     data:{text:"好"} }  → yield "好"
@@ -805,9 +814,12 @@ legacy_adapter.py 职责边界：
 | Context 扩展规则 | 只放常用能力 Client + 少量运行时信息 | 防止变成圣诞树 |
 | chat() 返回类型 | str；进阶用 chat_raw() | 爱好者不拆包装，进阶有专用入口，两个定死 |
 | 序列化 | 默认 JSON，不用 pickle | 跨语言，安全，可观测 |
+| invoke vs invoke_stream | 分离两个方法而非 stream 参数 | API 更清晰，类型安全，避免运行时分支错误 |
+| 处理器注册机制 | 函数属性 + __init_subclass__ 收集 | 避免装饰器时序问题，支持继承，loader 统一扫描 |
+| MessageEvent.reply() | 依赖注入 reply_handler | Event 保持纯数据结构，reply 逻辑从外部注入 |
 
 ---
 
 *本文档是代码的源头。Python SDK、通信层、主进程三端有分歧时，以本文档为准。*
 
-*v4 修正：补充 event 只用于 stream=true 的硬规则；initialize 失败场景和连接不可用状态；ctx 不经线协议传输的明确说明；CapabilityDescriptor schema 治理规则；保留命名空间集中声明（handler.* / system.* / internal.*）；initialize_result 失败示例。*
+*v4 修正：补充 event 只用于 stream=true 的硬规则；initialize 失败场景和连接不可用状态；ctx 不经线协议传输的明确说明；CapabilityDescriptor schema 治理规则；保留命名空间集中声明（handler.* / system.* / internal.*）；initialize_result 失败示例；invoke_stream() 分离为独立方法；处理器发现机制使用函数属性 + __init_subclass__；MessageEvent.reply() 依赖注入模式。*

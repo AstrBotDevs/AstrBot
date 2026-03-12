@@ -226,6 +226,18 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
 
 class CapabilityRouterContractTest(unittest.TestCase):
+    def test_capability_names_must_match_namespace_method_format(self) -> None:
+        router = CapabilityRouter()
+        for name in ("llm", "llm.chat.extra", "LLM.chat", "llm.Chat"):
+            with self.assertRaises(ValueError) as raised:
+                router.register(
+                    CapabilityDescriptor(
+                        name=name,
+                        description="invalid",
+                    )
+                )
+            self.assertIn(name, str(raised.exception))
+
     def test_reserved_capability_namespaces_are_rejected_for_exposed_registrations(self) -> None:
         router = CapabilityRouter()
         for name in ("handler.demo", "system.health", "internal.trace"):

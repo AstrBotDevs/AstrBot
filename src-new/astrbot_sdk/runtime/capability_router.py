@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -13,6 +14,7 @@ CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
 StreamHandler = Callable[[str, dict[str, Any], object], AsyncIterator[dict[str, Any]]]
 FinalizeHandler = Callable[[list[dict[str, Any]]], dict[str, Any]]
 RESERVED_CAPABILITY_PREFIXES = ("handler.", "system.", "internal.")
+CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 
 
 @dataclass(slots=True)
@@ -54,6 +56,8 @@ class CapabilityRouter:
         finalize: FinalizeHandler | None = None,
         exposed: bool = True,
     ) -> None:
+        if not CAPABILITY_NAME_PATTERN.fullmatch(descriptor.name):
+            raise ValueError(f"capability 名称必须匹配 {{namespace}}.{{method}}：{descriptor.name}")
         if exposed and descriptor.name.startswith(RESERVED_CAPABILITY_PREFIXES):
             raise ValueError(f"保留 capability 命名空间仅供框架内部使用：{descriptor.name}")
         self._registrations[descriptor.name] = _CapabilityRegistration(

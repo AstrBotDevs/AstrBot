@@ -57,6 +57,15 @@ class LoadedPlugin:
     instances: list[Any]
 
 
+def _is_new_star_component(component_cls: Any) -> bool:
+    if not isinstance(component_cls, type) or not issubclass(component_cls, Star):
+        return False
+    marker = getattr(component_cls, "__astrbot_is_new_star__", None)
+    if callable(marker):
+        return bool(marker())
+    return True
+
+
 def _create_legacy_context(component_cls: Any, plugin_name: str) -> Any:
     factory = getattr(component_cls, "_astrbot_create_legacy_context", None)
     if callable(factory):
@@ -64,6 +73,13 @@ def _create_legacy_context(component_cls: Any, plugin_name: str) -> Any:
     from ..api.star.context import Context as LegacyContext
 
     return LegacyContext(plugin_name)
+
+
+def _iter_handler_names(instance: Any) -> list[str]:
+    handler_names = getattr(instance.__class__, "__handlers__", ())
+    if handler_names:
+        return list(handler_names)
+    return list(dir(instance))
 
 
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
@@ -273,7 +289,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
             continue
         component_cls = import_string(class_path)
         legacy_context = None
-        if isinstance(component_cls, type) and issubclass(component_cls, Star):
+        if _is_new_star_component(component_cls):
             instance = component_cls()
         else:
             legacy_context = _create_legacy_context(component_cls, plugin.name)
@@ -284,7 +300,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 if getattr(instance, "context", None) is None:
                     setattr(instance, "context", legacy_context)
         instances.append(instance)
-        for name in dir(instance):
+        for name in _iter_handler_names(instance):
             bound = getattr(instance, name)
             func = getattr(bound, "__func__", bound)
             meta = get_handler_meta(func)

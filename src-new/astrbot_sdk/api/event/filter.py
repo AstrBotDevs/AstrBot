@@ -30,3 +30,5 @@ class _FilterNamespace:
 
 
 filter = _FilterNamespace()
+
+__all__ = ["ADMIN", "command", "regex", "permission", "filter"]
