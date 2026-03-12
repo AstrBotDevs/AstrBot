@@ -189,3 +189,63 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["text"], "Echo: ws")
         await plugin.stop()
         await core.stop()
+
+    async def test_initialize_failure_closes_receiver_connection(self) -> None:
+        core = Peer(
+            transport=self.left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+            protocol_version="1.0",
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=[],
+                    metadata={},
+                ),
+            )
+        )
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+            protocol_version="2.0",
+        )
+
+        await core.start()
+        await plugin.start()
+
+        with self.assertRaises(AstrBotError) as raised:
+            await plugin.initialize([])
+        self.assertEqual(raised.exception.code, "protocol_version_mismatch")
+
+        await asyncio.wait_for(core.wait_closed(), timeout=1.0)
+        self.assertTrue(core._closed)
+
+        await plugin.stop()
+
+
+class CapabilityRouterContractTest(unittest.TestCase):
+    def test_reserved_capability_namespaces_are_rejected_for_exposed_registrations(self) -> None:
+        router = CapabilityRouter()
+        for name in ("handler.demo", "system.health", "internal.trace"):
+            with self.assertRaises(ValueError) as raised:
+                router.register(
+                    CapabilityDescriptor(
+                        name=name,
+                        description="reserved",
+                    )
+                )
+            self.assertIn(name, str(raised.exception))
+
+    def test_reserved_capability_namespaces_remain_available_for_hidden_internal_registrations(self) -> None:
+        router = CapabilityRouter()
+        router.register(
+            CapabilityDescriptor(
+                name="system.health",
+                description="internal only",
+            ),
+            exposed=False,
+        )
+
+        self.assertNotIn("system.health", [item.name for item in router.descriptors()])

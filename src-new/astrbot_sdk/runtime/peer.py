@@ -216,33 +216,19 @@ class Peer:
         self.remote_handlers = message.handlers
         self.remote_metadata = message.metadata
         if self._initialize_handler is None:
-            error = AstrBotError.protocol_error("对端不接受 initialize")
-            await self._send(
-                ResultMessage(
-                    id=message.id,
-                    kind="initialize_result",
-                    success=False,
-                    error=ErrorPayload.model_validate(error.to_payload()),
-                )
+            await self._reject_initialize(
+                message,
+                AstrBotError.protocol_error("对端不接受 initialize"),
             )
-            self._unusable = True
-            self._remote_initialized.set()
             return
 
         if message.protocol_version != self.protocol_version:
-            error = AstrBotError.protocol_version_mismatch(
-                f"服务端支持协议版本 {self.protocol_version}，客户端请求版本 {message.protocol_version}"
+            await self._reject_initialize(
+                message,
+                AstrBotError.protocol_version_mismatch(
+                    f"服务端支持协议版本 {self.protocol_version}，客户端请求版本 {message.protocol_version}"
+                ),
             )
-            await self._send(
-                ResultMessage(
-                    id=message.id,
-                    kind="initialize_result",
-                    success=False,
-                    error=ErrorPayload.model_validate(error.to_payload()),
-                )
-            )
-            self._unusable = True
-            self._remote_initialized.set()
             return
 
         output = await self._initialize_handler(message)
@@ -337,6 +323,19 @@ class Peer:
                 error=ErrorPayload.model_validate(error.to_payload()),
             )
         )
+
+    async def _reject_initialize(self, message: InitializeMessage, error: AstrBotError) -> None:
+        await self._send(
+            ResultMessage(
+                id=message.id,
+                kind="initialize_result",
+                success=False,
+                error=ErrorPayload.model_validate(error.to_payload()),
+            )
+        )
+        self._unusable = True
+        self._remote_initialized.set()
+        await self.stop()
 
     async def _send_cancelled_termination(self, message: InvokeMessage) -> None:
         error = AstrBotError.cancelled()
