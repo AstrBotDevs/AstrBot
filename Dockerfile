@@ -27,14 +27,6 @@ RUN python -m pip install uv \
     && uv pip install -r requirements.txt --no-cache-dir --system \
     && uv pip install socksio uv pilk --no-cache-dir --system
 
-# Keep UID/GID 1000 in sync with the Kubernetes runAsUser/runAsGroup/fsGroup values.
-RUN groupadd --system --gid 1000 astrbot \
-    && useradd --system --uid 1000 --gid astrbot --home-dir /AstrBot --shell /usr/sbin/nologin astrbot \
-    && mkdir -p /AstrBot/data \
-    && chown -R astrbot:astrbot /AstrBot
-
 EXPOSE 6185
-
-USER astrbot
 
 CMD ["python", "main.py"]
