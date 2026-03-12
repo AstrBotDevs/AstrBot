@@ -1,73 +1,15 @@
-"""协议对等端模块。
+"""运行时协议对等端。
 
-定义 Peer 类，封装双向传输通道上的消息收发、初始化握手、能力调用、
-流式事件转发与取消处理。这里的 peer 指"通信对端/本端"这一网络协议概念，
-而不是业务上的用户、群聊或会话对象。
+`Peer` 把 `Transport` 和 v4 协议消息模型接起来，负责：
 
-核心职责：
-    - 消息序列化/反序列化
-    - 初始化握手协议
-    - 能力调用（同步/流式）
-    - 取消处理
-    - 连接生命周期管理
-消息处理：
-    入站:
-        ResultMessage -> 唤醒等待的 Future
-        EventMessage -> 投递到流式队列
-        InitializeMessage -> 调用 initialize_handler
-        InvokeMessage -> 创建任务调用 invoke_handler
-        CancelMessage -> 取消对应的任务
+- 握手与远端元数据缓存
+- 请求 ID 关联
+- 非流式 / 流式调用分发
+- 取消传播
+- 连接异常时的统一收口
 
-    出站:
-        initialize() -> InitializeMessage
-        invoke() -> InvokeMessage(stream=False)
-        invoke_stream() -> InvokeMessage(stream=True)
-        cancel() -> CancelMessage
-    
-与旧版对比：
-    旧版 JSON-RPC:
-        - 分离的 JSONRPCClient 和 JSONRPCServer
-        - 通过 method 字段区分操作类型
-        - 使用 JSONRPCRequest/Response 消息类型
-        - 流式通过独立的 notification 实现
-        - 无统一的取消机制
-
-    新版 Peer:
-        - 统一的 Peer 抽象，既是客户端也是服务端
-        - 通过 type 字段区分消息类型
-        - 使用 InitializeMessage/InvokeMessage/EventMessage 等
-        - 流式通过 EventMessage(phase=delta) 实现
-        - 统一的 CancelMessage 取消机制
-
-使用示例：
-    # 作为客户端发起调用
-    peer = Peer(transport=transport, peer_info=PeerInfo(...))
-    await peer.start()
-    output = await peer.initialize(handlers)
-    result = await peer.invoke("llm.chat", {"prompt": "hello"})
-
-    # 作为服务端处理调用
-    peer.set_invoke_handler(my_handler)
-    await peer.start()
-
-消息处理流程：
-    入站消息:
-        ResultMessage -> 唤醒等待的 Future
-        EventMessage -> 投递到流式队列
-        InitializeMessage -> 调用 _initialize_handler
-        InvokeMessage -> 创建任务调用 _invoke_handler
-        CancelMessage -> 取消对应的任务
-
-    出站消息:
-        initialize() -> InitializeMessage
-        invoke() -> InvokeMessage(stream=False)
-        invoke_stream() -> InvokeMessage(stream=True)
-        cancel() -> CancelMessage
-
-取消机制：
-    - CancelToken 用于检查取消状态
-    - 入站任务在收到 CancelMessage 时被取消
-    - 早到取消：在任务执行前检查 cancel_token，避免竞态条件
+它本身不做业务路由，真正的执行逻辑交给 `CapabilityRouter` 或
+`HandlerDispatcher`。
 """
 
 from __future__ import annotations
@@ -158,6 +100,8 @@ class Peer:
     async def start(self) -> None:
         """启动传输层并将原始入站消息绑定到当前 `Peer`。"""
         self._closed.clear()
+        self._unusable = False
+        self._remote_initialized.clear()
         self.transport.set_message_handler(self._handle_raw_message)
         await self.transport.start()
 
@@ -194,10 +138,27 @@ class Peer:
         Args:
             timeout: 等待秒数。传入 `None` 表示无限等待。
         """
-        if timeout is None:
-            await self._remote_initialized.wait()
-            return
-        await asyncio.wait_for(self._remote_initialized.wait(), timeout=timeout)
+        init_waiter = asyncio.create_task(self._remote_initialized.wait())
+        closed_waiter = asyncio.create_task(self.wait_closed())
+        try:
+            done, pending = await asyncio.wait(
+                {init_waiter, closed_waiter},
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                raise TimeoutError()
+            if init_waiter in done:
+                return
+            raise AstrBotError.protocol_error("连接在初始化完成前关闭")
+        finally:
+            for task in (init_waiter, closed_waiter):
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
 
     async def initialize(
         self,
@@ -354,30 +315,38 @@ class Peer:
 
     async def _handle_raw_message(self, payload: str) -> None:
         """解析原始消息并分发到对应的消息处理分支。"""
-        message = parse_message(payload)
-        if isinstance(message, ResultMessage):
-            await self._handle_result(message)
-            return
-        if isinstance(message, EventMessage):
-            await self._handle_event(message)
-            return
-        if isinstance(message, InitializeMessage):
-            await self._handle_initialize(message)
-            return
-        if isinstance(message, InvokeMessage):
-            token = CancelToken()
-            started = asyncio.Event()
-            task = asyncio.create_task(self._handle_invoke(message, token, started))
-            self._inbound_tasks[message.id] = (task, token, started)
-            task.add_done_callback(
-                lambda _task, request_id=message.id: self._inbound_tasks.pop(
-                    request_id, None
+        try:
+            message = parse_message(payload)
+            if isinstance(message, ResultMessage):
+                await self._handle_result(message)
+                return
+            if isinstance(message, EventMessage):
+                await self._handle_event(message)
+                return
+            if isinstance(message, InitializeMessage):
+                await self._handle_initialize(message)
+                return
+            if isinstance(message, InvokeMessage):
+                token = CancelToken()
+                started = asyncio.Event()
+                task = asyncio.create_task(self._handle_invoke(message, token, started))
+                self._inbound_tasks[message.id] = (task, token, started)
+                task.add_done_callback(
+                    lambda _task, request_id=message.id: self._inbound_tasks.pop(
+                        request_id, None
+                    )
                 )
-            )
-            return
-        if isinstance(message, CancelMessage):
-            await self._handle_cancel(message)
-            return
+                return
+            if isinstance(message, CancelMessage):
+                await self._handle_cancel(message)
+                return
+        except Exception as exc:
+            if isinstance(exc, AstrBotError):
+                error = exc
+            else:
+                error = AstrBotError.protocol_error(f"协议消息处理失败: {exc}")
+            await self._fail_connection(error)
+            raise error from exc
 
     async def _handle_initialize(self, message: InitializeMessage) -> None:
         """处理远端发起的初始化握手并返回握手结果。"""
@@ -542,6 +511,29 @@ class Peer:
         """把本端取消执行转换为标准化的取消错误响应。"""
         error = AstrBotError.cancelled()
         await self._send_error_result(message, error)
+
+    async def _fail_connection(self, error: AstrBotError) -> None:
+        """把连接标记为不可用，并让所有等待中的调用尽快失败。"""
+        if self._unusable:
+            return
+        self._unusable = True
+        self._remote_initialized.set()
+
+        for future in list(self._pending_results.values()):
+            if not future.done():
+                future.set_exception(error)
+        self._pending_results.clear()
+
+        for queue in list(self._pending_streams.values()):
+            await queue.put(error)
+        self._pending_streams.clear()
+
+        for task, token, _started in list(self._inbound_tasks.values()):
+            token.cancel()
+            task.cancel()
+        self._inbound_tasks.clear()
+
+        asyncio.create_task(self.stop())
 
     async def _send(self, message) -> None:
         """序列化协议消息并通过底层传输发送出去。"""

@@ -423,6 +423,34 @@ class TestSupervisorRuntimeMethods:
             assert "test_plugin" not in runtime.loaded_plugins
 
     @pytest.mark.asyncio
+    async def test_handle_worker_closed_removes_active_requests(self):
+        """_handle_worker_closed should drop in-flight requests owned by the worker."""
+        transport = MemoryTransport()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = SupervisorRuntime(
+                transport=transport,
+                plugins_dir=Path(temp_dir),
+            )
+
+            mock_session = MagicMock()
+            mock_session.handlers = [
+                HandlerDescriptor(
+                    id="test.handler", trigger=CommandTrigger(command="test")
+                )
+            ]
+
+            runtime.worker_sessions["test_plugin"] = mock_session
+            runtime.handler_to_worker["test.handler"] = mock_session
+            runtime._handler_sources["test.handler"] = "test_plugin"
+            runtime.loaded_plugins.append("test_plugin")
+            runtime.active_requests["req-1"] = mock_session
+
+            runtime._handle_worker_closed("test_plugin")
+
+            assert "req-1" not in runtime.active_requests
+
+    @pytest.mark.asyncio
     async def test_handle_worker_closed_unknown_plugin(self):
         """_handle_worker_closed should handle unknown plugin."""
         transport = MemoryTransport()

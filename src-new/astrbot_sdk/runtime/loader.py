@@ -1,82 +1,18 @@
-"""插件加载模块。
+"""插件发现、环境准备和组件加载。
 
-定义插件发现、环境管理和加载的核心逻辑。
-支持新旧两种 Star 组件的兼容加载。
+`loader` 是 runtime 与插件代码之间的边界层，负责三件事：
 
-核心概念：
-    PluginSpec: 插件规范，描述插件的基本信息
-    PluginDiscoveryResult: 插件发现结果，包含成功和跳过的插件
-    PluginEnvironmentManager: 插件虚拟环境管理器
-    LoadedHandler: 加载后的处理器，包含描述符和可调用对象
-    LoadedPlugin: 加载后的插件，包含处理器和实例
+- 从 `plugin.yaml` 解析出可运行的 `PluginSpec`
+- 用 `uv` 为插件准备独立环境
+- 把组件实例和 handler 元数据整理成 `LoadedPlugin`
 
-插件发现流程：
-    1. 扫描 plugins_dir 下的子目录
-    2. 检查 plugin.yaml 和 requirements.txt
-    3. 解析 manifest_data 获取插件信息
-    4. 验证必要字段（name, components, runtime.python）
-    5. 返回 PluginDiscoveryResult
-
-环境管理流程：
-    1. 检查 .venv 目录是否存在
-    2. 检查 Python 版本是否匹配
-    3. 检查指纹是否变化（requirements 内容）
-    4. 必要时重建虚拟环境
-    5. 使用 uv 安装依赖
-
-插件加载流程：
-    1. 将插件目录添加到 sys.path
-    2. 遍历 components 列表
-    3. 动态导入组件类
-    4. 判断是否为新版 Star
-    5. 创建实例（新版直接实例化，旧版传入 legacy_context）
-    6. 扫描处理器方法
-    7. 构建 HandlerDescriptor
-
-新旧 Star 组件兼容：
-    新版 Star:
-        - 继承自 Star 基类
-        - __astrbot_is_new_star__ 返回 True
-        - 无参构造函数
-        - 通过 @handler 装饰器注册处理器
-
-    旧版 Star:
-        - 不继承或 __astrbot_is_new_star__ 返回 False
-        - 需要 legacy_context 参数
-        - 通过 @xxx_handler 装饰器注册处理器
-        - 使用 extras_configs 传递配置
-
-与旧版对比：
-    旧版 StarManager:
-        - 通过 plugin.yaml 发现插件
-        - 动态导入组件类并实例化
-        - 注册到 star_handlers_registry
-        - 使用 functools.partial 绑定实例
-        - 无环境管理
-        - 无指纹缓存
-
-    新版 loader.py:
-        - PluginSpec 描述插件规范
-        - PluginEnvironmentManager 管理虚拟环境
-        - load_plugin() 加载并解析组件
-        - LoadedHandler 封装处理器和描述符
-        - 支持新旧 Star 组件兼容
-        - 支持环境指纹缓存
-
-plugin.yaml 格式：
-    name: my_plugin
-    author: author_name
-    desc: Plugin description
-    version: 1.0.0
-    runtime:
-        python: "3.11"
-    components:
-        - class: my_plugin.main:MyComponent
+legacy 兼容也集中放在这里，尤其是“同一插件共享一个 `LegacyContext`”这一旧语义。
 """
 
 from __future__ import annotations
 
 import json
+import inspect
 import os
 import re
 import shutil
@@ -156,6 +92,25 @@ def _iter_handler_names(instance: Any) -> list[str]:
     if handler_names:
         return list(handler_names)
     return list(dir(instance))
+
+
+def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
+    """解析 handler 名称，避免在扫描阶段触发无关 descriptor 副作用。"""
+    try:
+        raw = inspect.getattr_static(instance, name)
+    except AttributeError:
+        return None
+
+    candidates = [raw]
+    wrapped = getattr(raw, "__func__", None)
+    if wrapped is not None:
+        candidates.append(wrapped)
+
+    for candidate in candidates:
+        meta = get_handler_meta(candidate)
+        if meta is not None and meta.trigger is not None:
+            return getattr(instance, name), meta
+    return None
 
 
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
@@ -387,11 +342,10 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     setattr(instance, "context", legacy_context)
         instances.append(instance)
         for name in _iter_handler_names(instance):
-            bound = getattr(instance, name)
-            func = getattr(bound, "__func__", bound)
-            meta = get_handler_meta(func)
-            if meta is None or meta.trigger is None:
+            resolved = _resolve_handler_candidate(instance, name)
+            if resolved is None:
                 continue
+            bound, meta = resolved
             handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
             handlers.append(
                 LoadedHandler(

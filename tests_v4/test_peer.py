@@ -115,6 +115,30 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await plugin.stop()
         await self.left.stop()
 
+    async def test_invalid_inbound_message_fails_pending_calls(self) -> None:
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+        await self.left.start()
+        await plugin.start()
+
+        task = asyncio.create_task(
+            plugin.invoke("llm.chat", {"prompt": "bad"}, request_id="req-invalid")
+        )
+        await asyncio.sleep(0)
+
+        with self.assertRaises(AstrBotError) as raised_send:
+            await self.left.send("[]")
+        self.assertEqual(raised_send.exception.code, "protocol_error")
+
+        with self.assertRaises(AstrBotError) as raised_task:
+            await task
+        self.assertEqual(raised_task.exception.code, "protocol_error")
+
+        await asyncio.wait_for(plugin.wait_closed(), timeout=1.0)
+        await self.left.stop()
+
     async def test_cancel_waits_for_failed_terminal_event(self) -> None:
         descriptor = CapabilityDescriptor(
             name="slow.stream",
@@ -247,6 +271,24 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(plugin.wait_closed(), timeout=1.0)
         self.assertTrue(core._closed)
         self.assertTrue(plugin._closed)
+
+    async def test_wait_until_remote_initialized_raises_if_connection_closes_first(
+        self,
+    ) -> None:
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+
+        await self.left.start()
+        await plugin.start()
+        await plugin.stop()
+
+        with self.assertRaises(AstrBotError) as raised:
+            await plugin.wait_until_remote_initialized(timeout=None)
+        self.assertEqual(raised.exception.code, "protocol_error")
+
+        await self.left.stop()
 
 
 class CapabilityRouterContractTest(unittest.TestCase):

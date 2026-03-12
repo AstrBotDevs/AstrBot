@@ -60,6 +60,15 @@
     await transport.start()
     await transport.send(json_string)
     await transport.stop()
+
+`Transport` 只处理“字符串发出去 / 字符串收进来”这件事，不做协议解析，也不关心
+能力、handler 或 legacy 兼容。当前实现包括：
+
+- `StdioTransport`: 子进程或文件对象上的按行文本传输
+- `WebSocketServerTransport`: 单连接 WebSocket 服务端
+- `WebSocketClientTransport`: WebSocket 客户端
+
+自动重连、消息重放等策略不在这里实现，统一留给更上层编排。
 """
 
 from __future__ import annotations
@@ -83,6 +92,7 @@ class Transport(ABC):
         self._closed = asyncio.Event()
 
     def set_message_handler(self, handler: MessageHandler) -> None:
+        """注册收到原始字符串消息后的回调。"""
         self._handler = handler
 
     @abstractmethod
@@ -98,9 +108,11 @@ class Transport(ABC):
         raise NotImplementedError
 
     async def wait_closed(self) -> None:
+        """等待传输层进入关闭状态。"""
         await self._closed.wait()
 
     async def _dispatch(self, payload: str) -> None:
+        """把收到的原始载荷转交给上层处理器。"""
         if self._handler is not None:
             await self._handler(payload)
 

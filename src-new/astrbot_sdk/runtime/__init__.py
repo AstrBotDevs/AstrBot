@@ -110,6 +110,17 @@
         - 支持流式能力 (stream_handler)
         - 内置能力：llm.chat, memory.*, db.*, platform.*
         - 支持自定义能力注册
+
+`runtime` 负责把协议、传输、插件加载和生命周期管理拼成一条完整执行链：
+
+- `Transport`: 只负责字符串级别收发
+- `Peer`: 负责协议消息、请求关联、流式事件和取消
+- `CapabilityRouter`: 核心侧能力注册与路由
+- `HandlerDispatcher`: 插件侧 handler 调用适配
+- `loader` / `bootstrap`: 插件发现、Worker 启动和 Supervisor 编排
+
+设计上，legacy 兼容只出现在加载与分发边界；`Transport` 和 `Peer` 不直接携带
+旧版业务语义。
 """
 
 from .bootstrap import (

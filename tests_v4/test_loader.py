@@ -678,6 +678,60 @@ class TestLoadPlugin:
                 if str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
 
+    def test_ignores_non_handler_descriptors_without_triggering_properties(self):
+        """load_plugin should not access unrelated properties during handler discovery."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            module_dir = plugin_dir / "mymodule"
+            module_dir.mkdir()
+            (module_dir / "__init__.py").write_text("", encoding="utf-8")
+            (module_dir / "component.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from astrbot_sdk import Star, on_command
+
+
+                    class MyComponent(Star):
+                        @property
+                        def explode(self):
+                            raise RuntimeError("property should not be touched")
+
+                        @on_command("hello")
+                        async def hello_handler(self):
+                            pass
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "safe_loader_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "mymodule.component:MyComponent"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            spec = load_plugin_spec(plugin_dir)
+
+            if str(plugin_dir) not in sys.path:
+                sys.path.insert(0, str(plugin_dir))
+
+            try:
+                loaded = load_plugin(spec)
+                assert len(loaded.instances) == 1
+                assert [handler.descriptor.id for handler in loaded.handlers]
+            finally:
+                if str(plugin_dir) in sys.path:
+                    sys.path.remove(str(plugin_dir))
+
     @pytest.mark.asyncio
     async def test_load_plugin_shares_legacy_context_between_components(self):
         """Legacy components in one plugin should share the same LegacyContext."""

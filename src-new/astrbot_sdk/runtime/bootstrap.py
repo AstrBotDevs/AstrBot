@@ -73,6 +73,14 @@ Supervisor 管理多个 Worker 进程，Worker 运行单个插件。
 信号处理：
     - SIGTERM: 设置 stop_event，触发优雅关闭
     - SIGINT: 设置 stop_event，触发优雅关闭
+
+这层负责把 `loader`、`Peer`、`CapabilityRouter` 和 `HandlerDispatcher` 串起来：
+
+- `SupervisorRuntime`: 启动多个插件 Worker，并把所有 handler 暴露给上游 Core
+- `WorkerSession`: Supervisor 侧对单个 Worker 的会话包装
+- `PluginWorkerRuntime`: Worker 进程内的插件加载与 handler 执行
+
+当前实现会在 Worker 连接关闭时清理对应 handler，但不会自动重启或重连。
 """
 
 from __future__ import annotations
@@ -415,6 +423,13 @@ class SupervisorRuntime:
         # 从 loaded_plugins 中移除
         if plugin_name in self.loaded_plugins:
             self.loaded_plugins.remove(plugin_name)
+        stale_requests = [
+            request_id
+            for request_id, active_session in self.active_requests.items()
+            if active_session is session
+        ]
+        for request_id in stale_requests:
+            self.active_requests.pop(request_id, None)
         logger.warning("插件 {} worker 连接已关闭，已清理相关 handlers", plugin_name)
 
     async def stop(self) -> None:

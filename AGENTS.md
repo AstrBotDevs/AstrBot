@@ -12,6 +12,8 @@
 - 2026-03-13: `MemoryClient.get()` is part of the supported v4 client surface and must stay in sync with `CapabilityRouter` built-ins. The client method existed while the router forgot to register `memory.get`, which caused a real runtime gap hidden by API shape alone.
 - 2026-03-13: When checking whether a peer has finished remote initialization, avoid `getattr(mock, "remote_peer")` style probes in code that may receive `MagicMock` peers. `MagicMock` fabricates truthy child attributes, so `CapabilityProxy` should read explicit state from `peer.__dict__` or another concrete storage location instead of treating arbitrary attribute access as initialization.
 - 2026-03-13: The repository has no legacy `src/astrbot_sdk/protocol` package to migrate file-for-file. `src-new/astrbot_sdk/protocol` is a v4-native protocol layer; compare it against legacy JSON-RPC behavior in `src/astrbot_sdk/runtime/*` and the maintained migration tests, not against a nonexistent old package tree.
+- 2026-03-13: `load_plugin()` must not blindly `getattr()` every name from `dir(instance)` during handler discovery. Real plugins may expose properties or descriptors with side effects or exceptions; inspect attributes statically first, and only bind names that actually carry handler metadata.
+- 2026-03-13: In `Peer`, “remote initialized” and “transport still alive” are separate states. Waiting for initialization must fail when the connection closes first, and malformed inbound protocol messages should actively fail pending calls instead of leaving futures/streams hanging.
 
 # 开发命令
 
