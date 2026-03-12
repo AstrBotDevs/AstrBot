@@ -197,6 +197,7 @@
     "operationFailed": "操作失败",
     "reloadSuccess": "重载成功",
     "reloadFailed": "重载失败",
+    "reinstalling": "正在重新安装",
     "reinstallSuccess": "重新安装成功",
     "reinstallFailed": "重新安装失败",
     "updateSuccess": "更新成功!",

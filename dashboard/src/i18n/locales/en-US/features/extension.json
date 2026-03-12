@@ -197,6 +197,7 @@
     "operationFailed": "Operation failed",
     "reloadSuccess": "Reload successful",
     "reloadFailed": "Reload failed",
+    "reinstalling": "Reinstalling",
     "reinstallSuccess": "Reinstall successful",
     "reinstallFailed": "Reinstall failed",
     "updateSuccess": "Update successful!",

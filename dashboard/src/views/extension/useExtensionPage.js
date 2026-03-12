@@ -151,6 +151,7 @@ export const useExtensionPage = () => {
   const selectedPlugin = ref({});
   const curr_namespace = ref("");
   const updatingAll = ref(false);
+  const reinstallingFailedPluginDirName = ref("");
   
   const readmeDialog = reactive({
     show: false,
@@ -634,8 +635,11 @@ export const useExtensionPage = () => {
     }
   };
 
-  const reinstallFailedPlugin = async (dirName) => {
-    if (!dirName) return;
+  const reinstallFailedPlugin = async (dirName, pluginLabel = dirName) => {
+    if (!dirName || reinstallingFailedPluginDirName.value === dirName) return;
+
+    reinstallingFailedPluginDirName.value = dirName;
+    toast(`${tm("messages.reinstalling")} ${pluginLabel}`, "primary");
 
     try {
       const res = await axios.post("/api/plugin/reinstall-failed", {
@@ -654,6 +658,10 @@ export const useExtensionPage = () => {
       await getExtensions();
     } catch (err) {
       toast(resolveErrorMessage(err, tm("messages.reinstallFailed")), "error");
+    } finally {
+      if (reinstallingFailedPluginDirName.value === dirName) {
+        reinstallingFailedPluginDirName.value = "";
+      }
     }
   };
 
@@ -1603,6 +1611,7 @@ export const useExtensionPage = () => {
     selectedPlugin,
     curr_namespace,
     updatingAll,
+    reinstallingFailedPluginDirName,
     readmeDialog,
     forceUpdateDialog,
     updateAllConfirmDialog,
