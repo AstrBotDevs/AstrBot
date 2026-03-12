@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -29,6 +30,41 @@ def _list_local_skill_dirs(skills_root: Path) -> list[Path]:
         if skill_md.exists():
             skills.append(entry)
     return skills
+
+
+def _compute_local_skills_revision(skills_root: Path) -> str:
+    """Return a stable fingerprint for the current local skills tree.
+
+    Includes all managed skill files so sandbox reuse can detect local skill
+    updates even when the same sandbox session stays alive.
+    """
+    if not skills_root.is_dir():
+        return "missing"
+
+    digest = hashlib.sha256()
+    local_skill_dirs = _list_local_skill_dirs(skills_root)
+    if not local_skill_dirs:
+        digest.update(b"empty")
+        return digest.hexdigest()
+
+    for skill_dir in local_skill_dirs:
+        for path in sorted(skill_dir.rglob("*")):
+            relative = path.relative_to(skills_root).as_posix()
+            digest.update(relative.encode("utf-8"))
+            stat = path.stat()
+            digest.update(str(stat.st_mtime_ns).encode("utf-8"))
+            if path.is_file():
+                digest.update(str(stat.st_size).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _get_booter_skills_revision(booter: ComputerBooter) -> str | None:
+    value = getattr(booter, "_astrbot_skills_revision", None)
+    return value if isinstance(value, str) and value else None
+
+
+def _set_booter_skills_revision(booter: ComputerBooter, revision: str) -> None:
+    setattr(booter, "_astrbot_skills_revision", revision)
 
 
 def _discover_bay_credentials(endpoint: str) -> str:
@@ -374,6 +410,7 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     skills_root = Path(get_astrbot_skills_path())
     if not skills_root.is_dir():
         return
+    local_skills_revision = _compute_local_skills_revision(skills_root)
     local_skill_dirs = _list_local_skill_dirs(skills_root)
 
     temp_dir = Path(get_astrbot_temp_path())
@@ -403,10 +440,12 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
         await _apply_skills_to_sandbox(booter)
         payload = await _scan_sandbox_skills(booter)
         _update_sandbox_skills_cache(payload)
+        _set_booter_skills_revision(booter, local_skills_revision)
         managed = payload.get("managed_skills", []) if isinstance(payload, dict) else []
         logger.info(
-            "[Computer] Sandbox skill sync complete: managed=%d",
+            "[Computer] Sandbox skill sync complete: managed=%d, revision=%s",
             len(managed),
+            local_skills_revision[:12],
         )
     finally:
         if zip_path.exists():
@@ -428,6 +467,9 @@ async def get_booter(
     elif runtime == "none":
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
+    skills_root = Path(get_astrbot_skills_path())
+    current_skills_revision = _compute_local_skills_revision(skills_root)
+
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     booter_type = sandbox_cfg.get("booter", "shipyard_neo")
 
@@ -436,6 +478,19 @@ async def get_booter(
         if not await booter.available():
             # rebuild
             session_booter.pop(session_id, None)
+        elif _get_booter_skills_revision(booter) != current_skills_revision:
+            logger.info(
+                "[Computer] Local skills changed for session=%s, refreshing sandbox before reuse",
+                session_id,
+            )
+            try:
+                await _sync_skills_to_sandbox(booter)
+            except Exception as e:
+                logger.warning(
+                    "Failed to refresh sandbox skills before reusing session %s: %s",
+                    session_id,
+                    e,
+                )
     if session_id not in session_booter:
         uuid_str = uuid.uuid5(uuid.NAMESPACE_DNS, session_id).hex
         logger.info(
