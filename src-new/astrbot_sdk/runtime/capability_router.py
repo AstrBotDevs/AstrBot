@@ -15,6 +15,7 @@
     llm.stream_chat: 流式 LLM 聊天
     memory.search: 搜索记忆
     memory.save: 保存记忆
+    memory.get: 读取单条记忆
     memory.delete: 删除记忆
     db.get: 读取 KV 存储
     db.set: 写入 KV 存储
@@ -250,6 +251,11 @@ class CapabilityRouter:
             self.memory_store[key] = value
             return {}
 
+        async def memory_get(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
+            return {"value": self.memory_store.get(str(payload.get("key", "")))}
+
         async def memory_delete(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
@@ -378,6 +384,15 @@ class CapabilityRouter:
                 output_schema=obj_schema([]),
             ),
             call_handler=memory_save,
+        )
+        self.register(
+            CapabilityDescriptor(
+                name="memory.get",
+                description="读取单条记忆",
+                input_schema=obj_schema(["key"], key={"type": "string"}),
+                output_schema=obj_schema([], value={"type": "object"}),
+            ),
+            call_handler=memory_get,
         )
         self.register(
             CapabilityDescriptor(

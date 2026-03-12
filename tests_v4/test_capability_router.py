@@ -153,6 +153,7 @@ class TestCapabilityRouterInit:
         # Memory capabilities
         assert "memory.search" in capability_names
         assert "memory.save" in capability_names
+        assert "memory.get" in capability_names
         assert "memory.delete" in capability_names
 
         # DB capabilities
@@ -490,8 +491,8 @@ class TestBuiltinMemoryCapabilities:
     """Tests for built-in memory capabilities."""
 
     @pytest.mark.asyncio
-    async def test_memory_save_and_search(self):
-        """memory.save and memory.search should work together."""
+    async def test_memory_save_and_get(self):
+        """memory.save and memory.get should work together."""
         router = CapabilityRouter()
         token = CancelToken()
 
@@ -504,7 +505,31 @@ class TestBuiltinMemoryCapabilities:
             request_id="req-1",
         )
 
-        # Search
+        # Get
+        result = await router.execute(
+            "memory.get",
+            {"key": "test_key"},
+            stream=False,
+            cancel_token=token,
+            request_id="req-2",
+        )
+
+        assert result["value"] == {"data": "test_value"}
+
+    @pytest.mark.asyncio
+    async def test_memory_save_and_search(self):
+        """memory.save and memory.search should work together."""
+        router = CapabilityRouter()
+        token = CancelToken()
+
+        await router.execute(
+            "memory.save",
+            {"key": "test_key", "value": {"data": "test_value"}},
+            stream=False,
+            cancel_token=token,
+            request_id="req-1",
+        )
+
         result = await router.execute(
             "memory.search",
             {"query": "test"},
@@ -515,6 +540,22 @@ class TestBuiltinMemoryCapabilities:
 
         assert len(result["items"]) == 1
         assert result["items"][0]["key"] == "test_key"
+
+    @pytest.mark.asyncio
+    async def test_memory_get_missing_key(self):
+        """memory.get should return None for missing key."""
+        router = CapabilityRouter()
+        token = CancelToken()
+
+        result = await router.execute(
+            "memory.get",
+            {"key": "missing"},
+            stream=False,
+            cancel_token=token,
+            request_id="req-1",
+        )
+
+        assert result["value"] is None
 
     @pytest.mark.asyncio
     async def test_memory_delete(self):

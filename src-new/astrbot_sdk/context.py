@@ -1,4 +1,9 @@
-"""v4 原生运行时上下文。"""
+"""v4 原生运行时上下文。
+
+`Context` 负责组合 v4 原生 capability 客户端。
+旧版 `conversation_manager`、`send_message()` 等兼容入口不在这里实现，
+而由 `_legacy_api.py` 承接。
+"""
 
 from __future__ import annotations
 
@@ -44,6 +49,7 @@ class Context:
         logger: Any | None = None,
     ) -> None:
         proxy = CapabilityProxy(peer)
+        self.peer = peer
         self.llm = LLMClient(proxy)
         self.memory = MemoryClient(proxy)
         self.db = DBClient(proxy)

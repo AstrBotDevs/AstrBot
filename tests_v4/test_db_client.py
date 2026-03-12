@@ -125,6 +125,15 @@ class TestDBClientSet:
             {"key": "nested", "value": {"level1": {"level2": {"level3": "deep"}}}},
         )
 
+    @pytest.mark.asyncio
+    async def test_set_raises_type_error_for_non_dict_value(self):
+        """set() should reject non-dict values before calling proxy."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        client = DBClient(proxy)
+
+        with pytest.raises(TypeError, match="db.set 的 value 必须是 dict"):
+            await client.set("bad", "not a dict")
+
 
 class TestDBClientDelete:
     """Tests for DBClient.delete() method."""
@@ -200,6 +209,17 @@ class TestDBClientList:
         result = await client.list()
 
         assert result == ["123", "456"]
+
+    @pytest.mark.asyncio
+    async def test_list_returns_empty_list_for_malformed_keys(self):
+        """list() should ignore malformed non-list key payloads."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"keys": "not-a-list"})
+
+        client = DBClient(proxy)
+        result = await client.list()
+
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_list_with_none_prefix(self):

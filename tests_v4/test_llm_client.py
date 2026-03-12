@@ -124,6 +124,25 @@ class TestLLMClientChat:
         assert call_args["history"][0] == {"role": "user", "content": "Hello"}
 
     @pytest.mark.asyncio
+    async def test_chat_accepts_dict_history_and_extra_kwargs(self):
+        """chat() should normalize dict history items and pass through extras."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"text": "OK"})
+
+        client = LLMClient(proxy)
+        await client.chat(
+            "How are you?",
+            history=[{"role": "user", "content": "Hello"}],
+            image_urls=["https://example.com/a.png"],
+            tools=[{"name": "search"}],
+        )
+
+        call_args = proxy.call.call_args[0][1]
+        assert call_args["history"] == [{"role": "user", "content": "Hello"}]
+        assert call_args["image_urls"] == ["https://example.com/a.png"]
+        assert call_args["tools"] == [{"name": "search"}]
+
+    @pytest.mark.asyncio
     async def test_chat_with_model_and_temperature(self):
         """chat() should pass model and temperature."""
         proxy = AsyncMock(spec=CapabilityProxy)
@@ -184,6 +203,21 @@ class TestLLMClientChatRaw:
         assert call_args["custom_param"] == "value"
         assert call_args["another"] == 123
 
+    @pytest.mark.asyncio
+    async def test_chat_raw_normalizes_history_items(self):
+        """chat_raw() should serialize ChatMessage history items before proxy call."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"text": "OK"})
+
+        client = LLMClient(proxy)
+        await client.chat_raw(
+            "Test",
+            history=[ChatMessage(role="user", content="Hello")],
+        )
+
+        call_args = proxy.call.call_args[0][1]
+        assert call_args["history"] == [{"role": "user", "content": "Hello"}]
+
 
 class TestLLMClientStreamChat:
     """Tests for LLMClient.stream_chat() method."""
@@ -231,6 +265,33 @@ class TestLLMClientStreamChat:
 
         assert captured_payload["system"] == "Be nice"
         assert len(captured_payload["history"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_chat_passes_extra_kwargs(self):
+        """stream_chat() should pass through advanced kwargs."""
+        proxy = MagicMock(spec=CapabilityProxy)
+
+        captured_payload = None
+
+        async def mock_stream(name, payload):
+            nonlocal captured_payload
+            captured_payload = payload
+            yield {"text": "Done"}
+
+        proxy.stream = mock_stream
+
+        client = LLMClient(proxy)
+        chunks = []
+        async for chunk in client.stream_chat(
+            "Test",
+            image_urls=["https://example.com/a.png"],
+            tools=[{"name": "search"}],
+        ):
+            chunks.append(chunk)
+
+        assert chunks == ["Done"]
+        assert captured_payload["image_urls"] == ["https://example.com/a.png"]
+        assert captured_payload["tools"] == [{"name": "search"}]
 
     @pytest.mark.asyncio
     async def test_stream_chat_yields_empty_string_for_missing_text(self):

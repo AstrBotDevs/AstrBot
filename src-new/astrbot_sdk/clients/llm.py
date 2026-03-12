@@ -1,37 +1,18 @@
 """大语言模型客户端模块。
 
-提供与 LLM 交互的能力，支持普通聊天和流式聊天。
+提供 v4 原生的 LLM 能力调用接口。
 
-与旧版对比：
-    旧版 (src/astrbot_sdk/api/star/context.py):
-        Context.llm_generate(
-            chat_provider_id, prompt, image_urls, tools,
-            system_prompt, contexts, **kwargs
-        )
-        Context.tool_loop_agent(...)  # Agent 循环，自动执行工具调用
-
-    新版:
-        Context.llm.chat(prompt, system, history, model, temperature)
-        Context.llm.chat_raw(prompt, **kwargs)  # 返回完整响应
-        Context.llm.stream_chat(prompt, system, history)  # 流式响应
-
-主要差异：
-    1. 新版移除了 chat_provider_id 参数，由核心自动选择
-    2. 新版简化了参数结构，使用 ChatMessage 模型
-    3. 新版支持流式响应 (stream_chat)
-
-TODO (相比旧版缺失的功能):
-    - 缺少 tool_loop_agent() Agent 循环能力
-    - 缺少 add_llm_tools() 动态工具注册
-    - chat() 缺少 image_urls 多模态图片支持
-    - chat() 缺少 tools 工具集支持
-    - chat() 缺少 contexts 上下文消息列表
-    - 缺少对 OpenAI 兼容的额外参数传递 (**kwargs 支持不完整)
+设计边界：
+    - `chat()` 是便捷文本接口，返回最终文本
+    - `chat_raw()` 返回完整结构化响应
+    - `stream_chat()` 返回文本增量
+    - Agent 循环、动态工具注册等更高层 orchestration 不放在客户端内，
+      由上层运行时或 `_legacy_api.py` 的兼容入口承接
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -58,6 +39,50 @@ class ChatMessage(BaseModel):
 
     role: str
     content: str
+
+
+ChatHistoryItem = ChatMessage | Mapping[str, Any]
+
+
+def _serialize_history(
+    history: Sequence[ChatHistoryItem] | None,
+) -> list[dict[str, Any]]:
+    if history is None:
+        return []
+
+    serialized: list[dict[str, Any]] = []
+    for item in history:
+        if isinstance(item, ChatMessage):
+            serialized.append(item.model_dump())
+            continue
+        if isinstance(item, Mapping):
+            serialized.append(dict(item))
+            continue
+        raise TypeError("history 项必须是 ChatMessage 或 mapping")
+    return serialized
+
+
+def _build_chat_payload(
+    prompt: str,
+    *,
+    system: str | None = None,
+    history: Sequence[ChatHistoryItem] | None = None,
+    model: str | None = None,
+    temperature: float | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"prompt": prompt}
+    if system is not None:
+        payload["system"] = system
+    if history is not None:
+        payload["history"] = _serialize_history(history)
+    if model is not None:
+        payload["model"] = model
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if extra:
+        payload.update(extra)
+    return payload
 
 
 class LLMResponse(BaseModel):
@@ -100,9 +125,10 @@ class LLMClient:
         prompt: str,
         *,
         system: str | None = None,
-        history: list[ChatMessage] | None = None,
+        history: Sequence[ChatHistoryItem] | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        **kwargs: Any,
     ) -> str:
         """发送聊天请求并返回文本响应。
 
@@ -115,6 +141,7 @@ class LLMClient:
             history: 对话历史，用于保持上下文连续性
             model: 指定使用的模型名称（可选，由核心自动选择）
             temperature: 生成温度，控制随机性（0-1）
+            **kwargs: 额外透传参数，如 `image_urls`、`tools`
 
         Returns:
             LLM 生成的文本内容
@@ -132,13 +159,14 @@ class LLMClient:
         """
         output = await self._proxy.call(
             "llm.chat",
-            {
-                "prompt": prompt,
-                "system": system,
-                "history": [item.model_dump() for item in history or []],
-                "model": model,
-                "temperature": temperature,
-            },
+            _build_chat_payload(
+                prompt,
+                system=system,
+                history=history,
+                model=model,
+                temperature=temperature,
+                extra=kwargs,
+            ),
         )
         return str(output.get("text", ""))
 
@@ -164,12 +192,12 @@ class LLMClient:
             print(f"生成文本: {response.text}")
             print(f"Token 使用: {response.usage}")
         """
+        payload = {"prompt": prompt, **kwargs}
+        if "history" in payload:
+            payload["history"] = _serialize_history(payload["history"])
         output = await self._proxy.call(
             "llm.chat_raw",
-            {
-                "prompt": prompt,
-                **kwargs,
-            },
+            payload,
         )
         return LLMResponse.model_validate(output)
 
@@ -178,7 +206,10 @@ class LLMClient:
         prompt: str,
         *,
         system: str | None = None,
-        history: list[ChatMessage] | None = None,
+        history: Sequence[ChatHistoryItem] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        **kwargs: Any,
     ) -> AsyncGenerator[str, None]:
         """流式聊天，逐块返回响应文本。
 
@@ -188,6 +219,9 @@ class LLMClient:
             prompt: 用户输入的提示文本
             system: 系统提示词
             history: 对话历史
+            model: 指定模型
+            temperature: 采样温度
+            **kwargs: 额外透传参数，如 `image_urls`、`tools`
 
         Yields:
             每个生成的文本块
@@ -198,10 +232,13 @@ class LLMClient:
         """
         async for data in self._proxy.stream(
             "llm.stream_chat",
-            {
-                "prompt": prompt,
-                "system": system,
-                "history": [item.model_dump() for item in history or []],
-            },
+            _build_chat_payload(
+                prompt,
+                system=system,
+                history=history,
+                model=model,
+                temperature=temperature,
+                extra=kwargs,
+            ),
         ):
             yield str(data.get("text", ""))

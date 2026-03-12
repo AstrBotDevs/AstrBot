@@ -71,6 +71,17 @@ class TestMemoryClientSearch:
         proxy.call.assert_called_once_with("memory.search", {"query": ""})
         assert result == []
 
+    @pytest.mark.asyncio
+    async def test_search_returns_empty_list_for_malformed_items(self):
+        """search() should ignore malformed non-list item payloads."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"items": "bad"})
+
+        client = MemoryClient(proxy)
+        result = await client.search("test")
+
+        assert result == []
+
 
 class TestMemoryClientSave:
     """Tests for MemoryClient.save() method."""
@@ -158,6 +169,44 @@ class TestMemoryClientSave:
 
         with pytest.raises(TypeError, match="memory.save 的 value 必须是 dict"):
             await client.save("key", [1, 2, 3])
+
+
+class TestMemoryClientGet:
+    """Tests for MemoryClient.get() method."""
+
+    @pytest.mark.asyncio
+    async def test_get_returns_dict_value(self):
+        """get() should return dict value from proxy response."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"value": {"theme": "dark"}})
+
+        client = MemoryClient(proxy)
+        result = await client.get("user_pref")
+
+        proxy.call.assert_called_once_with("memory.get", {"key": "user_pref"})
+        assert result == {"theme": "dark"}
+
+    @pytest.mark.asyncio
+    async def test_get_returns_none_for_missing_value(self):
+        """get() should return None when memory is absent."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"value": None})
+
+        client = MemoryClient(proxy)
+        result = await client.get("missing")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_returns_none_for_non_dict_value(self):
+        """get() should ignore malformed non-dict payloads."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"value": "bad"})
+
+        client = MemoryClient(proxy)
+        result = await client.get("bad")
+
+        assert result is None
 
 
 class TestMemoryClientDelete:

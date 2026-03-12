@@ -26,6 +26,7 @@ class MockPeer:
 
     def __init__(self):
         self.remote_capability_map: dict[str, MockCapabilityDescriptor] = {}
+        self.remote_peer = None
         self.invoke = AsyncMock(return_value={"result": "ok"})
         self.invoke_stream = AsyncMock()
 
@@ -104,10 +105,23 @@ class TestCapabilityProxyEnsureAvailable:
         """_ensure_available should pass (return None) when capability map is empty."""
         peer = MagicMock()
         peer.remote_capability_map = {}
+        peer.remote_peer = None
         proxy = CapabilityProxy(peer)
 
         # Should not raise when map is empty
         proxy._ensure_available("any.cap", stream=False)
+
+    def test_ensure_available_raises_when_remote_initialized_without_capability(self):
+        """空 capability 表在远端已初始化后应视为真实缺失。"""
+        peer = MagicMock()
+        peer.remote_capability_map = {}
+        peer.remote_peer = object()
+        proxy = CapabilityProxy(peer)
+
+        with pytest.raises(AstrBotError) as exc_info:
+            proxy._ensure_available("missing.cap", stream=False)
+
+        assert exc_info.value.code == "capability_not_found"
 
     def test_ensure_available_raises_for_stream_not_supported(self):
         """_ensure_available should raise when stream requested but not supported."""

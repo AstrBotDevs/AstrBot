@@ -29,10 +29,33 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncIterator, Mapping
+from typing import Any, Protocol
 
 from ..errors import AstrBotError
+
+
+class _CapabilityDescriptorLike(Protocol):
+    supports_stream: bool | None
+
+
+class _CapabilityPeerLike(Protocol):
+    remote_capability_map: Mapping[str, _CapabilityDescriptorLike]
+    remote_peer: Any | None
+
+    async def invoke(
+        self,
+        capability: str,
+        payload: dict[str, Any],
+        *,
+        stream: bool = False,
+    ) -> dict[str, Any]: ...
+
+    async def invoke_stream(
+        self,
+        capability: str,
+        payload: dict[str, Any],
+    ) -> AsyncIterator[Any]: ...
 
 
 class CapabilityProxy:
@@ -44,7 +67,7 @@ class CapabilityProxy:
         _peer: 底层 Peer 实例，负责实际的 RPC 通信
     """
 
-    def __init__(self, peer) -> None:
+    def __init__(self, peer: _CapabilityPeerLike) -> None:
         """初始化能力代理。
 
         Args:
@@ -61,7 +84,17 @@ class CapabilityProxy:
         Returns:
             能力描述符，若不存在则返回 None
         """
-        return self._peer.remote_capability_map.get(name)
+        capability_map = getattr(self._peer, "__dict__", {}).get(
+            "remote_capability_map",
+            {},
+        )
+        return capability_map.get(name)
+
+    def _remote_initialized(self) -> bool:
+        peer_state = getattr(self._peer, "__dict__", {})
+        return bool(peer_state.get("remote_peer")) or bool(
+            peer_state.get("remote_capability_map", {})
+        )
 
     def _ensure_available(self, name: str, *, stream: bool) -> None:
         """确保能力可用且支持指定的调用模式。
@@ -75,15 +108,11 @@ class CapabilityProxy:
         """
         descriptor = self._get_descriptor(name)
         if descriptor is None:
-            # 能力不存在，但如果远端尚未初始化则静默返回
-            if self._peer.remote_capability_map:
+            if self._remote_initialized():
                 raise AstrBotError.capability_not_found(name)
             return
         if stream and not descriptor.supports_stream:
             raise AstrBotError.invalid_input(f"{name} 不支持 stream=true")
-        if not stream and descriptor.supports_stream is False:
-            # 仅支持流式的能力也可以用普通调用
-            return
 
     async def call(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         """执行普通能力调用（非流式）。

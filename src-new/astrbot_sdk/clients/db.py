@@ -73,9 +73,14 @@ class DBClient:
             key: 数据键名
             value: 要存储的字典值
 
+        Raises:
+            TypeError: 如果 value 不是 dict
+
         示例:
             await ctx.db.set("user_settings", {"theme": "dark", "lang": "zh"})
         """
+        if not isinstance(value, dict):
+            raise TypeError("db.set 的 value 必须是 dict")
         await self._proxy.call("db.set", {"key": key, "value": value})
 
     async def delete(self, key: str) -> None:
@@ -104,4 +109,7 @@ class DBClient:
             # ["user_settings", "user_profile", "user_history"]
         """
         output = await self._proxy.call("db.list", {"prefix": prefix})
-        return [str(item) for item in output.get("keys", [])]
+        keys = output.get("keys")
+        if not isinstance(keys, (list, tuple)):
+            return []
+        return [str(item) for item in keys]

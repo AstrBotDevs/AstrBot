@@ -112,6 +112,18 @@ class TestContext:
 
         assert ctx.plugin_id == "my_plugin"
 
+    def test_context_keeps_peer_reference(self, transport_pair):
+        """Context should retain the underlying peer for advanced diagnostics."""
+        left, _ = transport_pair
+
+        peer = Peer(
+            transport=left,
+            peer_info=PeerInfo(name="test", role="plugin", version="v4"),
+        )
+        ctx = Context(peer=peer, plugin_id="my_plugin")
+
+        assert ctx.peer is peer
+
     def test_context_has_logger(self, transport_pair):
         """Context should have a logger bound with plugin_id."""
         left, _ = transport_pair

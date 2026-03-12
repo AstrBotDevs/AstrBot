@@ -9,6 +9,8 @@
 - 2026-03-13: `src-new/astrbot_sdk/api` and several top-level module docstrings overstated v4 compatibility gaps by labeling migrated or compat-backed APIs as "missing". Treat `_legacy_api.py`, `astrbot_sdk.api.*` thin re-exports, and top-level `events.py` / `decorators.py` as a split compatibility surface; do not mechanically recreate the old tree from stale TODO comments.
 - 2026-03-13: Legacy components are expected to share one `LegacyContext` per plugin, matching the old `StarManager` behavior. Creating one compat context per component breaks `_register_component()` / `call_context_function()` cross-component registration chains and diverges from legacy semantics.
 - 2026-03-13: `WorkerSession` cannot assume the caller-provided `repo_root` contains `src-new/astrbot_sdk`. Tests and external bootstraps may pass a temporary repo root while still expecting the in-tree SDK package to launch worker subprocesses via `python -m astrbot_sdk`. Resolve the SDK source directory from the real package location when the supplied root does not contain it.
+- 2026-03-13: `MemoryClient.get()` is part of the supported v4 client surface and must stay in sync with `CapabilityRouter` built-ins. The client method existed while the router forgot to register `memory.get`, which caused a real runtime gap hidden by API shape alone.
+- 2026-03-13: When checking whether a peer has finished remote initialization, avoid `getattr(mock, "remote_peer")` style probes in code that may receive `MagicMock` peers. `MagicMock` fabricates truthy child attributes, so `CapabilityProxy` should read explicit state from `peer.__dict__` or another concrete storage location instead of treating arbitrary attribute access as initialization.
 
 # 开发命令
 

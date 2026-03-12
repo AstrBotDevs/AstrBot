@@ -70,7 +70,10 @@ class MemoryClient:
                 print(item["key"], item["content"])
         """
         output = await self._proxy.call("memory.search", {"query": query})
-        return list(output.get("items", []))
+        items = output.get("items")
+        if not isinstance(items, (list, tuple)):
+            return []
+        return list(items)
 
     async def save(
         self,

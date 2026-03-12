@@ -47,7 +47,7 @@ class TestPlatformClientSend:
         proxy.call = AsyncMock(return_value={})
 
         client = PlatformClient(proxy)
-        result = await client.send("session-1", "")
+        await client.send("session-1", "")
 
         call_args = proxy.call.call_args[0][1]
         assert call_args["text"] == ""
@@ -146,13 +146,24 @@ class TestPlatformClientGetMembers:
         assert result == []
 
     @pytest.mark.asyncio
+    async def test_get_members_returns_empty_list_for_malformed_payload(self):
+        """get_members() should ignore malformed non-list payloads."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"members": "bad"})
+
+        client = PlatformClient(proxy)
+        result = await client.get_members("group-1")
+
+        assert result == []
+
+    @pytest.mark.asyncio
     async def test_get_members_with_private_session(self):
         """get_members() should work with private session."""
         proxy = AsyncMock(spec=CapabilityProxy)
         proxy.call = AsyncMock(return_value={"members": [{"id": "single_user"}]})
 
         client = PlatformClient(proxy)
-        result = await client.get_members("private-123")
+        await client.get_members("private-123")
 
         call_args = proxy.call.call_args[0][1]
         assert call_args["session"] == "private-123"

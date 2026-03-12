@@ -1,27 +1,11 @@
 """平台客户端模块。
 
-提供与聊天平台交互的能力，支持发送消息和获取群组信息。
+提供 v4 原生的平台能力调用。
 
-与旧版对比：
-    旧版 (src/astrbot_sdk/api/star/context.py):
-        Context.send_message(session, message_chain)
-        # 使用 MessageChain 构建复杂消息
-
-    新版:
-        Context.platform.send(session, text)
-        Context.platform.send_image(session, image_url)
-        Context.platform.get_members(session)
-
-主要差异：
-    1. 新版拆分为 send() 和 send_image()，简化使用
-    2. 新版移除 MessageChain，直接使用文本字符串
-    3. 新增 get_members() 获取群成员列表
-
-TODO (相比旧版缺失的功能):
-    - 缺少 MessageChain 复杂消息链支持（多段文本、@提及、表情等）
-    - 缺少发送音频、视频、文件等多媒体消息
-    - 缺少消息撤回、编辑等操作
-    - 缺少获取用户详细信息的方法
+设计边界：
+    - `PlatformClient` 只负责直接的平台 capability
+    - 旧版 `send_message(session, MessageChain)` 兼容由 `_legacy_api.py` 承接
+    - 富消息链构建能力位于 `api.message` compat 子模块，而不是此客户端
 """
 
 from __future__ import annotations
@@ -62,7 +46,7 @@ class PlatformClient:
 
         示例:
             # 发送消息到当前会话
-            await ctx.platform.send(event.session, "收到您的消息！")
+            await ctx.platform.send(event.session_id, "收到您的消息！")
         """
         return await self._proxy.call(
             "platform.send",
@@ -83,7 +67,7 @@ class PlatformClient:
 
         示例:
             await ctx.platform.send_image(
-                event.session,
+                event.session_id,
                 "https://example.com/image.png"
             )
         """
@@ -107,9 +91,12 @@ class PlatformClient:
             - role: 角色 (owner, admin, member)
 
         示例:
-            members = await ctx.platform.get_members(event.session)
+            members = await ctx.platform.get_members(event.session_id)
             for member in members:
                 print(f"{member['nickname']} ({member['user_id']})")
         """
         output = await self._proxy.call("platform.get_members", {"session": session})
-        return list(output.get("members", []))
+        members = output.get("members")
+        if not isinstance(members, (list, tuple)):
+            return []
+        return list(members)
