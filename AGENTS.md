@@ -4,6 +4,7 @@
 - 2026-03-12: Legacy `handshake` payloads only contain `event_type` / `handler_full_name` metadata and do not preserve v4 command/message trigger details such as command names, aliases, keywords, or regex. Any legacy-to-v4 handshake translation must approximate handlers as coarse event subscriptions and keep the raw handshake payload in metadata for lossless fallback.
 - 2026-03-12: `src/astrbot_sdk/tests/start_client.py` and `benchmark_8_plugins_resource_usage.py` still reference legacy `astrbot_sdk.runtime.galaxy`, but `src-new/astrbot_sdk/runtime/galaxy.py` no longer exists. Treat `tests_v4/test_script_migrations.py` as the maintained replacement instead of reviving the old Galaxy path.
 - 2026-03-12: Legacy `src/astrbot_sdk/api/event/filter.py` exported a much larger decorator surface than `src-new/astrbot_sdk/api/event/filter.py`. Current compat coverage is enough for `command` / `regex` / `permission` and the exercised migration tests, but it is not a full drop-in replacement for every historical filter helper.
+- 2026-03-13: Transport-pair startup tests for `SupervisorRuntime` must start a real peer on the opposite transport and provide an `initialize` response. Wiring only the supervisor side drops or captures the outgoing initialize message without replying, and `Peer.initialize()` then waits forever.
 
 # 开发命令
 
@@ -19,10 +20,12 @@ ruff check . --fix # 使用 ruff 检查并自动修复问题
 
 ## 测试
 
+如果修改了内容可能影响现有功能，请运行测试以确保没有引入错误：
+如果修改了bug或者更改了功能需要添加新的测试
+
 ```bash
 python run_tests.py            # 运行所有测试
 python run_tests.py -v         # 详细输出
 python run_tests.py -k "test_peer"  # 运行匹配模式的测试
 python run_tests.py --cov      # 运行测试并生成覆盖率报告
 ```
-

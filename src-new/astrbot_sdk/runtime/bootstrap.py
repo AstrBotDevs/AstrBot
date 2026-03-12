@@ -220,6 +220,7 @@ class SupervisorRuntime:
         self.peer.set_cancel_handler(self._handle_upstream_cancel)
         self.worker_sessions: dict[str, WorkerSession] = {}
         self.handler_to_worker: dict[str, WorkerSession] = {}
+        self._handler_sources: dict[str, str] = {}  # handler_id -> plugin_name
         self.active_requests: dict[str, WorkerSession] = {}
         self.loaded_plugins: list[str] = []
         self.skipped_plugins: dict[str, str] = {}
@@ -249,6 +250,28 @@ class SupervisorRuntime:
             exposed=False,
         )
 
+    def _register_handler(
+        self, handler, session: WorkerSession, plugin_name: str
+    ) -> None:
+        """注册 handler，处理冲突时输出警告。
+
+        Args:
+            handler: Handler 描述符
+            session: Worker 会话
+            plugin_name: 插件名称
+        """
+        handler_id = handler.id
+        existing_plugin = self._handler_sources.get(handler_id)
+
+        if existing_plugin is not None:
+            logger.warning(
+                f"Handler ID 冲突：'{handler_id}' 已被插件 '{existing_plugin}' 注册，"
+                f"现在被插件 '{plugin_name}' 覆盖。"
+            )
+
+        self.handler_to_worker[handler_id] = session
+        self._handler_sources[handler_id] = plugin_name
+
     async def start(self) -> None:
         discovery = discover_plugins(self.plugins_dir)
         self.skipped_plugins = dict(discovery.skipped_plugins)
@@ -270,7 +293,7 @@ class SupervisorRuntime:
                 self.worker_sessions[plugin.name] = session
                 self.loaded_plugins.append(plugin.name)
                 for handler in session.handlers:
-                    self.handler_to_worker[handler.id] = session
+                    self._register_handler(handler, session, plugin.name)
 
             aggregated_handlers = list(self.handler_to_worker.keys())
             logger.info(
@@ -299,9 +322,12 @@ class SupervisorRuntime:
         session = self.worker_sessions.pop(plugin_name, None)
         if session is None:
             return
-        # 从 handler_to_worker 中移除该 worker 的所有 handlers
+        # 从 handler_to_worker 中移除该插件注册的 handlers（仅当来源仍为此插件时）
         for handler in session.handlers:
-            self.handler_to_worker.pop(handler.id, None)
+            source_plugin = self._handler_sources.get(handler.id)
+            if source_plugin == plugin_name:
+                self.handler_to_worker.pop(handler.id, None)
+                self._handler_sources.pop(handler.id, None)
         # 从 loaded_plugins 中移除
         if plugin_name in self.loaded_plugins:
             self.loaded_plugins.remove(plugin_name)

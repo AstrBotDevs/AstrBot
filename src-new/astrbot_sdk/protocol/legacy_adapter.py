@@ -13,7 +13,6 @@ from .messages import (
     InitializeMessage,
     InvokeMessage,
     PeerInfo,
-    ProtocolMessage,
     ResultMessage,
 )
 

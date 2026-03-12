@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .descriptors import CapabilityDescriptor, HandlerDescriptor
 
@@ -64,6 +64,36 @@ class EventMessage(_MessageBase):
     data: dict[str, Any] = Field(default_factory=dict)
     output: dict[str, Any] = Field(default_factory=dict)
     error: ErrorPayload | None = None
+
+    @model_validator(mode="after")
+    def validate_phase_constraints(self) -> "EventMessage":
+        """验证各 phase 的字段约束。
+
+        - started: 所有字段必须为空
+        - delta: 必须有 data，output/error 必须为空
+        - completed: 必须有 output，data/error 必须为空
+        - failed: 必须有 error，data/output 必须为空
+        """
+        phase = self.phase
+        if phase == "started":
+            if self.data or self.output or self.error:
+                raise ValueError("started phase 必须所有字段为空")
+        elif phase == "delta":
+            if not self.data:
+                raise ValueError("delta phase 需要 data")
+            if self.output or self.error:
+                raise ValueError("delta phase 的 output/error 必须为空")
+        elif phase == "completed":
+            if not self.output:
+                raise ValueError("completed phase 需要 output")
+            if self.data or self.error:
+                raise ValueError("completed phase 的 data/error 必须为空")
+        elif phase == "failed":
+            if self.error is None:
+                raise ValueError("failed phase 需要 error")
+            if self.data or self.output:
+                raise ValueError("failed phase 的 data/output 必须为空")
+        return self
 
 
 class CancelMessage(_MessageBase):

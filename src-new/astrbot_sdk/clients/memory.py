@@ -26,5 +26,18 @@ class MemoryClient:
             payload.update(extra)
         await self._proxy.call("memory.save", {"key": key, "value": payload})
 
+    async def get(self, key: str) -> dict[str, Any] | None:
+        """精确获取：通过唯一键获取单个记忆项。
+
+        Args:
+            key: 记忆项的唯一键
+
+        Returns:
+            记忆项内容，若不存在则返回 None
+        """
+        output = await self._proxy.call("memory.get", {"key": key})
+        value = output.get("value")
+        return value if isinstance(value, dict) else None
+
     async def delete(self, key: str) -> None:
         await self._proxy.call("memory.delete", {"key": key})
