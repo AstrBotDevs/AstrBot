@@ -654,6 +654,75 @@ class TestLoadPlugin:
                 if str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
 
+    @pytest.mark.asyncio
+    async def test_load_plugin_shares_legacy_context_between_components(self):
+        """Legacy components in one plugin should share the same LegacyContext."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir) / "test_plugin"
+            plugin_dir.mkdir()
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+            module_dir = plugin_dir / "legacy_pkg"
+            module_dir.mkdir()
+            (module_dir / "__init__.py").write_text("", encoding="utf-8")
+            (module_dir / "components.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from astrbot_sdk.api.components.command import CommandComponent
+                    from astrbot_sdk.api.star.context import Context
+
+
+                    class FirstComponent(CommandComponent):
+                        def __init__(self, context: Context):
+                            self.context = context
+                            context._register_component(self)
+
+                        def echo(self, text: str) -> str:
+                            return f"first:{text}"
+
+
+                    class SecondComponent(CommandComponent):
+                        def __init__(self, context: Context):
+                            self.context = context
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [
+                            {"class": "legacy_pkg.components:FirstComponent"},
+                            {"class": "legacy_pkg.components:SecondComponent"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            spec = load_plugin_spec(plugin_dir)
+
+            if str(plugin_dir) not in sys.path:
+                sys.path.insert(0, str(plugin_dir))
+
+            try:
+                loaded = load_plugin(spec)
+
+                assert len(loaded.instances) == 2
+                assert loaded.instances[0].context is loaded.instances[1].context
+                result = await loaded.instances[1].context.call_context_function(
+                    "FirstComponent.echo",
+                    {"text": "hi"},
+                )
+                assert result == {"data": "first:hi"}
+            finally:
+                if str(plugin_dir) in sys.path:
+                    sys.path.remove(str(plugin_dir))
+
 
 class TestStateFileConstant:
     """Tests for STATE_FILE_NAME constant."""

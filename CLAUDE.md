@@ -8,6 +8,7 @@
 - 2026-03-13: `CapabilityRouter.register(..., stream_handler=...)` uses the signature `(request_id, payload, cancel_token)`, not the peer-level `(message, token)`. Reusing the peer handler shape in router tests causes an immediate failed stream event before the test logic runs.
 - 2026-03-13: `Peer` had an early-cancel race for inbound invokes: if `CancelMessage` arrived before the invoke task executed its first line, the task could be cancelled before sending any terminal event, leaving the caller's stream iterator waiting forever. Preserve a per-request start event and pre-check the cancel token at the top of `_handle_invoke`.
 - 2026-03-13: `src-new/astrbot_sdk/api` and several top-level module docstrings overstated v4 compatibility gaps by labeling migrated or compat-backed APIs as "missing". Treat `_legacy_api.py`, `astrbot_sdk.api.*` thin re-exports, and top-level `events.py` / `decorators.py` as a split compatibility surface; do not mechanically recreate the old tree from stale TODO comments.
+- 2026-03-13: Legacy components are expected to share one `LegacyContext` per plugin, matching the old `StarManager` behavior. Creating one compat context per component breaks `_register_component()` / `call_context_function()` cross-component registration chains and diverges from legacy semantics.
 
 # 开发命令
 

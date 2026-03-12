@@ -372,6 +372,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
 
     instances: list[Any] = []
     handlers: list[LoadedHandler] = []
+    shared_legacy_context = None
     for component in plugin.manifest_data.get("components", []):
         class_path = component.get("class")
         if not isinstance(class_path, str) or ":" not in class_path:
@@ -381,7 +382,12 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
         if _is_new_star_component(component_cls):
             instance = component_cls()
         else:
-            legacy_context = _create_legacy_context(component_cls, plugin.name)
+            if shared_legacy_context is None:
+                # 旧版 StarManager 为同一插件复用一个 Context 实例。
+                shared_legacy_context = _create_legacy_context(
+                    component_cls, plugin.name
+                )
+            legacy_context = shared_legacy_context
             try:
                 instance = component_cls(legacy_context)
             except TypeError:

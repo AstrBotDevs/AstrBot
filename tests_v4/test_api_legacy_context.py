@@ -52,6 +52,51 @@ class TestLegacyContext:
         """Context should be an alias for LegacyContext."""
         assert Context is LegacyContext
 
+    def test_auto_registers_conversation_manager_with_legacy_name(self):
+        """LegacyContext should expose ConversationManager.* legacy names."""
+        ctx = LegacyContext("test_plugin")
+
+        assert (
+            ctx._registered_managers["ConversationManager"] is ctx.conversation_manager
+        )
+        assert "ConversationManager.new_conversation" in ctx._registered_functions
+
+    @pytest.mark.asyncio
+    async def test_call_context_function_wraps_registered_result(self):
+        """call_context_function() should preserve the legacy {data: ...} shape."""
+
+        class SyncComponent:
+            def greet(self, name: str) -> str:
+                return f"hello {name}"
+
+        ctx = LegacyContext("test_plugin")
+        ctx._register_component(SyncComponent())
+
+        result = await ctx.call_context_function(
+            "SyncComponent.greet",
+            {"name": "astrbot"},
+        )
+
+        assert result == {"data": "hello astrbot"}
+
+    @pytest.mark.asyncio
+    async def test_execute_registered_function_supports_async_methods(self):
+        """execute_registered_function() should await async component methods."""
+
+        class AsyncComponent:
+            async def double(self, value: int) -> int:
+                return value * 2
+
+        ctx = LegacyContext("test_plugin")
+        ctx._register_component(AsyncComponent())
+
+        result = await ctx.execute_registered_function(
+            "AsyncComponent.double",
+            {"value": 21},
+        )
+
+        assert result == 42
+
 
 class TestLegacyConversationManager:
     """Tests for LegacyConversationManager."""
@@ -327,6 +372,7 @@ class TestLegacyContextLLMMethods:
         mock_llm.chat_raw.assert_called_once()
         call_kwargs = mock_llm.chat_raw.call_args[1]
         assert call_kwargs["max_steps"] == 10
+        assert result.text == "response"
 
     @pytest.mark.asyncio
     async def test_add_llm_tools_raises_not_implemented(self):

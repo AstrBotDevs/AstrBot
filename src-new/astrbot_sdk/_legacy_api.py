@@ -9,6 +9,7 @@
 # 【提供的兼容类型】
 # - LegacyContext: 旧版 Context 兼容实现
 #   - 提供 llm_generate(), tool_loop_agent(), send_message() 等方法
+#   - 提供 _register_component()/call_context_function() 兼容链路
 #   - 内部委托给新版 Context 的客户端
 #
 # - LegacyConversationManager: 旧版会话管理器兼容实现
@@ -30,7 +31,6 @@
 # =============================================================================
 #
 # 1. LegacyContext 方法不完整
-#    - 缺少 _register_component() 方法（旧版有）
 #    - add_llm_tools() 抛出 NotImplementedError（旧版支持）
 #
 # 2. LegacyConversationManager 方法不完整
@@ -51,7 +51,9 @@
 
 from __future__ import annotations
 
+import inspect
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any
 
 from loguru import logger
@@ -84,6 +86,8 @@ class LegacyConversationManager:
 
     注意：此实现不提供持久化保证，会话数据仅在当前运行时有效。
     """
+
+    __compat_component_name__ = "ConversationManager"
 
     def __init__(self, parent: "LegacyContext") -> None:
         self._parent = parent
@@ -399,7 +403,10 @@ class LegacyContext:
     def __init__(self, plugin_id: str) -> None:
         self.plugin_id = plugin_id
         self._runtime_context: NewContext | None = None
+        self._registered_managers: dict[str, Any] = {}
+        self._registered_functions: dict[str, Callable[..., Any]] = {}
         self.conversation_manager = LegacyConversationManager(self)
+        self._register_component(self.conversation_manager)
 
     def bind_runtime_context(self, runtime_context: NewContext) -> None:
         self._runtime_context = runtime_context
@@ -408,6 +415,59 @@ class LegacyContext:
         if self._runtime_context is None:
             raise RuntimeError("LegacyContext 尚未绑定运行时 Context")
         return self._runtime_context
+
+    @staticmethod
+    def _component_names(component: Any) -> list[str]:
+        names = [component.__class__.__name__]
+        compat_name = getattr(component, "__compat_component_name__", None)
+        if isinstance(compat_name, str) and compat_name and compat_name not in names:
+            names.insert(0, compat_name)
+        return names
+
+    def _register_component(self, *components: Any) -> None:
+        """保留旧版按名称暴露组件方法的兼容链路。"""
+        for component in components:
+            for class_name in self._component_names(component):
+                self._registered_managers[class_name] = component
+                for attr_name in dir(component):
+                    if attr_name.startswith("_"):
+                        continue
+                    try:
+                        attr = getattr(component, attr_name)
+                    except Exception:
+                        continue
+                    if callable(attr):
+                        self._registered_functions[f"{class_name}.{attr_name}"] = attr
+
+    async def execute_registered_function(
+        self,
+        func_full_name: str,
+        args: dict[str, Any] | None = None,
+    ) -> Any:
+        if args is None:
+            call_args: dict[str, Any] = {}
+        elif isinstance(args, dict):
+            call_args = args
+        else:
+            raise TypeError("LegacyContext 调用参数必须是 dict")
+
+        func = self._registered_functions.get(func_full_name)
+        if func is None:
+            raise ValueError(f"Function not found: {func_full_name}")
+
+        result = func(**call_args)
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    async def call_context_function(
+        self,
+        func_full_name: str,
+        args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "data": await self.execute_registered_function(func_full_name, args),
+        }
 
     async def llm_generate(
         self,
