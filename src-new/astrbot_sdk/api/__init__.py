@@ -30,13 +30,23 @@
 - 不复制独立运行时逻辑，保持架构清晰
 """
 
-from . import basic, components, event, message, platform, provider, star
+from . import (
+    basic,
+    components,
+    event,
+    message,
+    message_components,
+    platform,
+    provider,
+    star,
+)
 
 __all__ = [
     "basic",
     "components",
     "event",
     "message",
+    "message_components",
     "platform",
     "provider",
     "star",

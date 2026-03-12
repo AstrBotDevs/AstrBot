@@ -4,6 +4,7 @@ Tests for runtime/loader.py - Plugin loading utilities.
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import textwrap
@@ -496,6 +497,26 @@ class TestDiscoverPlugins:
             assert len(result.plugins) == 1
             assert result.plugins[0].name == "valid_plugin"
 
+    def test_discovers_legacy_main_plugin_without_manifest(self):
+        """discover_plugins should accept legacy plugins with main.py."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_dir = Path(temp_dir)
+            plugin_dir = plugins_dir / "legacy_plugin"
+            plugin_dir.mkdir()
+            (plugin_dir / "main.py").write_text(
+                "from astrbot_sdk.api.star import Star\n\nclass LegacyPlugin(Star):\n    pass\n",
+                encoding="utf-8",
+            )
+            (plugin_dir / "metadata.yaml").write_text(
+                yaml.dump({"name": "legacy_plugin", "author": "tester"}),
+                encoding="utf-8",
+            )
+
+            result = discover_plugins(plugins_dir)
+
+            assert [plugin.name for plugin in result.plugins] == ["legacy_plugin"]
+            assert result.skipped_plugins == {}
+
 
 class TestPluginEnvironmentManager:
     """Tests for PluginEnvironmentManager class."""
@@ -800,6 +821,71 @@ class TestLoadPlugin:
             finally:
                 if str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
+
+    def test_load_plugin_supports_legacy_main_and_config_schema(self):
+        """load_plugin should auto-discover main.py legacy stars and inject config."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir) / "legacy_plugin"
+            plugin_dir.mkdir()
+            (plugin_dir / "main.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from astrbot_sdk.api.event import AstrMessageEvent, filter
+                    from astrbot_sdk.api.star import Context, Star
+
+
+                    class LegacyPlugin(Star):
+                        def __init__(self, context: Context, config):
+                            super().__init__(context, config)
+
+                        @filter.command("hello")
+                        async def hello(self, event: AstrMessageEvent):
+                            yield event.plain_result(self.config["token"])
+                    """
+                ),
+                encoding="utf-8",
+            )
+            (plugin_dir / "metadata.yaml").write_text(
+                yaml.dump({"name": "legacy_plugin", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+            (plugin_dir / "_conf_schema.json").write_text(
+                json.dumps(
+                    {
+                        "token": {
+                            "type": "string",
+                            "default": "demo-token",
+                        },
+                        "nested": {
+                            "type": "object",
+                            "items": {
+                                "enabled": {
+                                    "type": "bool",
+                                    "default": True,
+                                }
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            spec = load_plugin_spec(plugin_dir)
+            loaded = load_plugin(spec)
+
+            assert len(loaded.instances) == 1
+            instance = loaded.instances[0]
+            assert instance.context.plugin_id == "legacy_plugin"
+            assert instance.config["token"] == "demo-token"
+            assert instance.config["nested"] == {"enabled": True}
+
+            config_path = plugin_dir / "data" / "config" / "legacy_plugin_config.json"
+            assert config_path.exists()
+
+            instance.config["token"] = "changed"
+            instance.config.save_config()
+            persisted = json.loads(config_path.read_text(encoding="utf-8"))
+            assert persisted["token"] == "changed"
 
 
 class TestStateFileConstant:

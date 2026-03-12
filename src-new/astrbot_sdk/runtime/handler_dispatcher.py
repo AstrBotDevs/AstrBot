@@ -93,7 +93,7 @@ class HandlerDispatcher:
         ctx = Context(
             peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token
         )
-        event = MessageEvent.from_payload(message.input.get("event", {}))
+        event = MessageEvent.from_payload(message.input.get("event", {}), context=ctx)
         event.bind_reply_handler(self._create_reply_handler(ctx, event))
         if loaded.legacy_context is not None:
             loaded.legacy_context.bind_runtime_context(ctx)
@@ -144,12 +144,12 @@ class HandlerDispatcher:
             )
             if inspect.isasyncgen(result):
                 async for item in result:
-                    await self._consume_legacy_result(item, event)
+                    await self._consume_legacy_result(item, event, ctx)
                 return
             if inspect.isawaitable(result):
                 result = await result
             if result is not None:
-                await self._consume_legacy_result(result, event)
+                await self._consume_legacy_result(result, event, ctx)
         except Exception as exc:
             await self._handle_error(loaded.owner, exc, event, ctx)
             raise
@@ -272,10 +272,27 @@ class HandlerDispatcher:
 
         return None
 
-    async def _consume_legacy_result(self, item: Any, event: MessageEvent) -> None:
+    async def _consume_legacy_result(
+        self,
+        item: Any,
+        event: MessageEvent,
+        ctx: Context | None = None,
+    ) -> None:
         from ..api.event.event_result import MessageEventResult
+        from ..api.message.chain import MessageChain
 
         if isinstance(item, MessageEventResult):
+            if item.chain and ctx is not None and not item.is_plain_text_only():
+                await ctx.platform.send_chain(event.session_id, item.to_payload())
+                return
+            plain_text = item.get_plain_text()
+            if plain_text:
+                await event.reply(plain_text)
+            return
+        if isinstance(item, MessageChain):
+            if item.chain and ctx is not None and not item.is_plain_text_only():
+                await ctx.platform.send_chain(event.session_id, item.to_payload())
+                return
             plain_text = item.get_plain_text()
             if plain_text:
                 await event.reply(plain_text)

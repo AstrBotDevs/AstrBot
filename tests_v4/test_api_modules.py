@@ -4,6 +4,8 @@ Tests for API module exports and re-exports.
 
 from __future__ import annotations
 
+import pytest
+
 
 class TestApiStarModule:
     """Tests for api/star module exports."""
@@ -28,6 +30,22 @@ class TestApiStarModule:
         metadata = StarMetadata(name="demo", version="1.0.0")
         assert metadata.name == "demo"
         assert metadata.version == "1.0.0"
+
+    def test_star_module_exports_legacy_star_and_register(self):
+        """api.star should expose legacy Star/register imports."""
+        from astrbot_sdk._legacy_api import LegacyStar
+        from astrbot_sdk.api.star import Star, register
+
+        @register(name="demo", author="tester")
+        class DemoStar(Star):
+            pass
+
+        assert Star is LegacyStar
+        assert callable(register)
+        assert DemoStar.__astrbot_plugin_metadata__ == {
+            "name": "demo",
+            "author": "tester",
+        }
 
 
 class TestApiComponentsModule:
@@ -85,6 +103,50 @@ class TestApiEventModule:
         assert MessageSession is not None
         assert MessageType is not None
 
+    def test_message_chain_serializes_components(self):
+        """MessageChain.to_payload() should preserve compat component fields."""
+        from astrbot_sdk.api.message import Comp, MessageChain
+
+        chain = MessageChain(
+            [
+                Comp.Plain(text="hello"),
+                Comp.Image(file="https://example.com/image.png"),
+            ]
+        )
+
+        assert chain.to_payload() == [
+            {"type": "Plain", "text": "hello"},
+            {"type": "Image", "file": "https://example.com/image.png"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_astr_message_event_send_uses_send_chain_when_context_bound(self):
+        """AstrMessageEvent.send() should use platform.send_chain for rich messages."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from astrbot_sdk.api.event import AstrMessageEvent
+        from astrbot_sdk.api.message import Comp, MessageChain
+
+        runtime_context = MagicMock()
+        runtime_context.platform = AsyncMock()
+        event = AstrMessageEvent(session_id="session-1", context=runtime_context)
+        chain = MessageChain(
+            [
+                Comp.Plain(text="hello"),
+                Comp.Image(file="https://example.com/image.png"),
+            ]
+        )
+
+        await event.send(chain)
+
+        runtime_context.platform.send_chain.assert_called_once_with(
+            "session-1",
+            [
+                {"type": "Plain", "text": "hello"},
+                {"type": "Image", "file": "https://example.com/image.png"},
+            ],
+        )
+
 
 class TestApiModule:
     """Tests for top-level api module."""
@@ -97,9 +159,16 @@ class TestApiModule:
 
     def test_api_subpackages_exist(self):
         """New compat subpackages should be importable."""
-        from astrbot_sdk.api import basic, message, platform, provider
+        from astrbot_sdk.api import (
+            basic,
+            message,
+            message_components,
+            platform,
+            provider,
+        )
 
         assert basic is not None
         assert message is not None
+        assert message_components is not None
         assert platform is not None
         assert provider is not None

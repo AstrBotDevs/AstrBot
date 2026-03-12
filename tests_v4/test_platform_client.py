@@ -108,6 +108,47 @@ class TestPlatformClientSendImage:
         assert call_args["image_url"] == "data:image/png;base64,abc123"
 
 
+class TestPlatformClientSendChain:
+    """Tests for PlatformClient.send_chain() method."""
+
+    @pytest.mark.asyncio
+    async def test_send_chain_returns_response(self):
+        """send_chain() should return response dict."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"message_id": "chain_123"})
+
+        client = PlatformClient(proxy)
+        result = await client.send_chain(
+            "session-1",
+            [{"type": "Plain", "text": "Hello"}],
+        )
+
+        proxy.call.assert_called_once_with(
+            "platform.send_chain",
+            {"session": "session-1", "chain": [{"type": "Plain", "text": "Hello"}]},
+        )
+        assert result["message_id"] == "chain_123"
+
+    @pytest.mark.asyncio
+    async def test_send_chain_with_multiple_components(self):
+        """send_chain() should preserve the original component payloads."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={})
+
+        client = PlatformClient(proxy)
+        await client.send_chain(
+            "session-1",
+            [
+                {"type": "Plain", "text": "Hello"},
+                {"type": "Image", "file": "https://example.com/a.png"},
+            ],
+        )
+
+        call_args = proxy.call.call_args[0][1]
+        assert call_args["chain"][0]["text"] == "Hello"
+        assert call_args["chain"][1]["file"] == "https://example.com/a.png"
+
+
 class TestPlatformClientGetMembers:
     """Tests for PlatformClient.get_members() method."""
 

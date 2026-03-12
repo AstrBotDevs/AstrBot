@@ -485,9 +485,23 @@ class LegacyContext:
         )
 
     async def send_message(self, session: str, message_chain: Any) -> None:
-        _warn_once("context.send_message()", "ctx.platform.send(session, text)")
+        _warn_once(
+            "context.send_message()",
+            "ctx.platform.send(...) / ctx.platform.send_chain(...)",
+        )
         ctx = self.require_runtime_context()
-        # 旧版插件常传 MessageChain 或类似对象，compat 层统一收口到纯文本发送。
+        chain = getattr(message_chain, "chain", None)
+        to_payload = getattr(message_chain, "to_payload", None)
+        is_plain_text_only = getattr(message_chain, "is_plain_text_only", None)
+        if (
+            isinstance(chain, list)
+            and callable(to_payload)
+            and not (callable(is_plain_text_only) and is_plain_text_only())
+        ):
+            await ctx.platform.send_chain(session, to_payload())
+            return
+
+        # 旧版插件也可能传纯文本对象，compat 层保留文本兜底。
         if hasattr(message_chain, "get_plain_text") and callable(
             message_chain.get_plain_text
         ):
@@ -522,7 +536,24 @@ class LegacyContext:
         await ctx.db.delete(key)
 
 
-class CommandComponent(Star):
+class LegacyStar(Star):
+    """旧版 ``astrbot.api.star.Star`` 兼容基类。"""
+
+    def __init__(self, context: LegacyContext | None = None, config: Any | None = None):
+        self.context = context
+        if config is not None:
+            self.config = config
+
+    @classmethod
+    def __astrbot_is_new_star__(cls) -> bool:
+        return False
+
+    @classmethod
+    def _astrbot_create_legacy_context(cls, plugin_id: str) -> LegacyContext:
+        return LegacyContext(plugin_id)
+
+
+class CommandComponent(LegacyStar):
     @classmethod
     def __astrbot_is_new_star__(cls) -> bool:
         return False
@@ -533,6 +564,38 @@ class CommandComponent(Star):
         return LegacyContext(plugin_id)
 
 
+def register(
+    name: str | None = None,
+    author: str | None = None,
+    desc: str | None = None,
+    version: str | None = None,
+    repo: str | None = None,
+):
+    """旧版插件元数据装饰器兼容入口。"""
+
+    metadata = {
+        "name": name,
+        "author": author,
+        "desc": desc,
+        "version": version,
+        "repo": repo,
+    }
+
+    def decorator(cls):
+        existing = getattr(cls, "__astrbot_plugin_metadata__", {})
+        setattr(
+            cls,
+            "__astrbot_plugin_metadata__",
+            {
+                **existing,
+                **{key: value for key, value in metadata.items() if value is not None},
+            },
+        )
+        return cls
+
+    return decorator
+
+
 Context = LegacyContext
 
 __all__ = [
@@ -540,5 +603,7 @@ __all__ = [
     "Context",
     "LegacyContext",
     "LegacyConversationManager",
+    "LegacyStar",
     "MIGRATION_DOC_URL",
+    "register",
 ]

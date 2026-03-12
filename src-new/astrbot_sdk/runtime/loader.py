@@ -84,6 +84,8 @@ legacy 兼容也集中放在这里，尤其是“同一插件共享一个 `Legac
 
 from __future__ import annotations
 
+import copy
+import importlib.util
 import json
 import inspect
 import os
@@ -98,11 +100,22 @@ from typing import Any
 
 import yaml
 
+from ..api.basic import AstrBotConfig
 from ..decorators import get_handler_meta
 from ..protocol.descriptors import HandlerDescriptor
 from ..star import Star
 
 STATE_FILE_NAME = ".astrbot-worker-state.json"
+PLUGIN_MANIFEST_FILE = "plugin.yaml"
+LEGACY_METADATA_FILE = "metadata.yaml"
+LEGACY_MAIN_FILE = "main.py"
+CONFIG_SCHEMA_FILE = "_conf_schema.json"
+LEGACY_MAIN_MANIFEST_KEY = "__legacy_main__"
+PLUGIN_METADATA_ATTR = "__astrbot_plugin_metadata__"
+
+
+def _default_python_version() -> str:
+    return f"{sys.version_info.major}.{sys.version_info.minor}"
 
 
 def _venv_python_path(venv_dir: Path) -> Path:
@@ -186,15 +199,221 @@ def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | No
     return None
 
 
+def _read_yaml(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_requirements_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def _looks_like_legacy_plugin(plugin_dir: Path) -> bool:
+    return (
+        not (plugin_dir / PLUGIN_MANIFEST_FILE).exists()
+        and (plugin_dir / LEGACY_MAIN_FILE).exists()
+    )
+
+
+def _build_legacy_manifest(plugin_dir: Path) -> tuple[Path, dict[str, Any]]:
+    metadata_path = plugin_dir / LEGACY_METADATA_FILE
+    metadata = _read_yaml(metadata_path) if metadata_path.exists() else {}
+    plugin_name = str(metadata.get("name") or plugin_dir.name)
+    manifest_data: dict[str, Any] = {
+        "name": plugin_name,
+        "author": metadata.get("author"),
+        "desc": metadata.get("desc") or metadata.get("description"),
+        "version": metadata.get("version"),
+        "repo": metadata.get("repo"),
+        "display_name": metadata.get("display_name"),
+        "runtime": {"python": _default_python_version()},
+        "components": [],
+        LEGACY_MAIN_MANIFEST_KEY: True,
+    }
+    return (
+        metadata_path if metadata_path.exists() else plugin_dir / LEGACY_MAIN_FILE,
+        manifest_data,
+    )
+
+
+def _plugin_config_dir(plugin_dir: Path) -> Path:
+    if plugin_dir.parent.name == "plugins" and plugin_dir.parent.parent.exists():
+        return plugin_dir.parent.parent / "config"
+    return plugin_dir / "data" / "config"
+
+
+def _plugin_config_path(plugin_dir: Path, plugin_name: str) -> Path:
+    return _plugin_config_dir(plugin_dir) / f"{plugin_name}_config.json"
+
+
+def _schema_default(field_schema: dict[str, Any]) -> Any:
+    if "default" in field_schema:
+        return copy.deepcopy(field_schema["default"])
+
+    field_type = str(field_schema.get("type") or "string")
+    if field_type == "object":
+        items = field_schema.get("items")
+        if isinstance(items, dict):
+            return {
+                key: _normalize_config_value(child_schema, None)
+                for key, child_schema in items.items()
+                if isinstance(child_schema, dict)
+            }
+        return {}
+    if field_type in {"list", "template_list", "file"}:
+        return []
+    if field_type == "dict":
+        return {}
+    if field_type == "int":
+        return 0
+    if field_type == "float":
+        return 0.0
+    if field_type == "bool":
+        return False
+    return ""
+
+
+def _normalize_config_value(field_schema: dict[str, Any], value: Any) -> Any:
+    field_type = str(field_schema.get("type") or "string")
+    default_value = _schema_default(field_schema)
+
+    if field_type == "object":
+        items = field_schema.get("items")
+        if not isinstance(items, dict):
+            return default_value
+        current = value if isinstance(value, dict) else {}
+        return {
+            key: _normalize_config_value(child_schema, current.get(key))
+            for key, child_schema in items.items()
+            if isinstance(child_schema, dict)
+        }
+    if field_type in {"list", "template_list", "file"}:
+        return copy.deepcopy(value) if isinstance(value, list) else default_value
+    if field_type == "dict":
+        return copy.deepcopy(value) if isinstance(value, dict) else default_value
+    if field_type == "int":
+        return value if isinstance(value, int) and not isinstance(value, bool) else default_value
+    if field_type == "float":
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else default_value
+    if field_type == "bool":
+        return value if isinstance(value, bool) else default_value
+    if field_type in {"string", "text"}:
+        return value if isinstance(value, str) else default_value
+    return copy.deepcopy(value) if value is not None else default_value
+
+
+def _load_plugin_config(plugin: PluginSpec) -> AstrBotConfig | None:
+    schema_path = plugin.plugin_dir / CONFIG_SCHEMA_FILE
+    if not schema_path.exists():
+        return None
+
+    try:
+        schema_payload = json.loads(schema_path.read_text(encoding="utf-8"))
+    except Exception:
+        schema_payload = {}
+    schema = schema_payload if isinstance(schema_payload, dict) else {}
+
+    config_path = _plugin_config_path(plugin.plugin_dir, plugin.name)
+    try:
+        existing_payload = (
+            json.loads(config_path.read_text(encoding="utf-8"))
+            if config_path.exists()
+            else {}
+        )
+    except Exception:
+        existing_payload = {}
+    existing = existing_payload if isinstance(existing_payload, dict) else {}
+    normalized = {
+        key: _normalize_config_value(field_schema, existing.get(key))
+        for key, field_schema in schema.items()
+        if isinstance(field_schema, dict)
+    }
+    config = AstrBotConfig(normalized, save_path=config_path)
+    if not config_path.exists() or normalized != existing:
+        config.save_config()
+    return config
+
+
+def _legacy_component_classes(plugin: PluginSpec) -> list[type[Any]]:
+    module_name = f"_astrbot_legacy_{plugin.name}_main"
+    module_path = plugin.plugin_dir / LEGACY_MAIN_FILE
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        return []
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    component_classes: list[type[Any]] = []
+    for _, candidate in inspect.getmembers(module, inspect.isclass):
+        if candidate.__module__ != module.__name__:
+            continue
+        if not issubclass(candidate, Star) or candidate is Star:
+            continue
+        component_classes.append(candidate)
+
+    component_classes.sort(key=lambda cls: cls.__name__)
+    return component_classes
+
+
+def _plugin_component_classes(plugin: PluginSpec) -> list[type[Any]]:
+    component_classes: list[type[Any]] = []
+    for component in plugin.manifest_data.get("components", []):
+        class_path = component.get("class")
+        if not isinstance(class_path, str) or ":" not in class_path:
+            continue
+        component_classes.append(import_string(class_path))
+
+    if component_classes:
+        return component_classes
+    if plugin.manifest_data.get(LEGACY_MAIN_MANIFEST_KEY):
+        return _legacy_component_classes(plugin)
+    return []
+
+
+def _select_legacy_constructor_args(
+    component_cls: type[Any],
+    legacy_context: Any,
+    config: AstrBotConfig | None,
+) -> tuple[Any, ...]:
+    try:
+        signature = inspect.signature(component_cls)
+    except (TypeError, ValueError):
+        return (legacy_context, config) if config is not None else (legacy_context,)
+
+    positional_params = [
+        parameter
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+    ]
+    has_varargs = any(
+        parameter.kind == inspect.Parameter.VAR_POSITIONAL
+        for parameter in signature.parameters.values()
+    )
+    max_args = None if has_varargs else len(positional_params)
+
+    if config is not None and (max_args is None or max_args >= 2):
+        return (legacy_context, config)
+    if max_args is None or max_args >= 1:
+        return (legacy_context,)
+    return ()
+
+
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
     plugin_dir = plugin_dir.resolve()
-    manifest_path = plugin_dir / "plugin.yaml"
+    manifest_path = plugin_dir / PLUGIN_MANIFEST_FILE
     requirements_path = plugin_dir / "requirements.txt"
-    manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    if manifest_path.exists():
+        manifest_data = _read_yaml(manifest_path)
+    else:
+        manifest_path, manifest_data = _build_legacy_manifest(plugin_dir)
     runtime = manifest_data.get("runtime") or {}
-    python_version = (
-        runtime.get("python") or f"{sys.version_info.major}.{sys.version_info.minor}"
-    )
+    python_version = runtime.get("python") or _default_python_version()
     return PluginSpec(
         name=str(manifest_data.get("name") or plugin_dir.name),
         plugin_dir=plugin_dir,
@@ -217,19 +436,20 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     for entry in sorted(plugins_root.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
             continue
-        manifest_path = entry / "plugin.yaml"
+        manifest_path = entry / PLUGIN_MANIFEST_FILE
         requirements_path = entry / "requirements.txt"
-        if not manifest_path.exists():
+        if not manifest_path.exists() and not _looks_like_legacy_plugin(entry):
             continue
-        if not requirements_path.exists():
+        if manifest_path.exists() and not requirements_path.exists():
             skipped_plugins[entry.name] = "missing requirements.txt"
             continue
         try:
-            manifest_data = (
-                yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
-            )
+            if manifest_path.exists():
+                manifest_data = _read_yaml(manifest_path)
+            else:
+                manifest_path, manifest_data = _build_legacy_manifest(entry)
         except Exception as exc:
-            skipped_plugins[entry.name] = f"failed to parse plugin.yaml: {exc}"
+            skipped_plugins[entry.name] = f"failed to parse plugin manifest: {exc}"
             continue
         plugin_name = manifest_data.get("name")
         runtime = manifest_data.get("runtime") or {}
@@ -301,7 +521,7 @@ class PluginEnvironmentManager:
             cwd=self.repo_root,
             command_name=f"create venv for {plugin.name}",
         )
-        requirements_text = plugin.requirements_path.read_text(encoding="utf-8").strip()
+        requirements_text = _read_requirements_text(plugin.requirements_path).strip()
         if not requirements_text:
             return
         self._run_command(
@@ -341,7 +561,7 @@ class PluginEnvironmentManager:
 
     @staticmethod
     def _fingerprint(plugin: PluginSpec) -> str:
-        requirements = plugin.requirements_path.read_text(encoding="utf-8")
+        requirements = _read_requirements_text(plugin.requirements_path)
         payload = {
             "python_version": plugin.python_version,
             "requirements": requirements,
@@ -392,11 +612,8 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     instances: list[Any] = []
     handlers: list[LoadedHandler] = []
     shared_legacy_context = None
-    for component in plugin.manifest_data.get("components", []):
-        class_path = component.get("class")
-        if not isinstance(class_path, str) or ":" not in class_path:
-            continue
-        component_cls = import_string(class_path)
+    plugin_config = _load_plugin_config(plugin)
+    for component_cls in _plugin_component_classes(plugin):
         legacy_context = None
         if _is_new_star_component(component_cls):
             instance = component_cls()
@@ -407,12 +624,14 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     component_cls, plugin.name
                 )
             legacy_context = shared_legacy_context
-            try:
-                instance = component_cls(legacy_context)
-            except TypeError:
-                instance = component_cls()
-                if getattr(instance, "context", None) is None:
-                    setattr(instance, "context", legacy_context)
+            constructor_args = _select_legacy_constructor_args(
+                component_cls, legacy_context, plugin_config
+            )
+            instance = component_cls(*constructor_args)
+            if getattr(instance, "context", None) is None:
+                setattr(instance, "context", legacy_context)
+            if plugin_config is not None and getattr(instance, "config", None) is None:
+                setattr(instance, "config", plugin_config)
         instances.append(instance)
         for name in _iter_handler_names(instance):
             resolved = _resolve_handler_candidate(instance, name)

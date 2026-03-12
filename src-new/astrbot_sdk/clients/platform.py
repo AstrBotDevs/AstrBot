@@ -5,7 +5,8 @@
 设计边界：
     - `PlatformClient` 只负责直接的平台 capability
     - 旧版 `send_message(session, MessageChain)` 兼容由 `_legacy_api.py` 承接
-    - 富消息链构建能力位于 `api.message` compat 子模块，而不是此客户端
+    - 富消息链通过 `platform.send_chain` 发送，链构建能力位于 `api.message`
+      compat 子模块，而不是此客户端
 """
 
 from __future__ import annotations
@@ -74,6 +75,25 @@ class PlatformClient:
         return await self._proxy.call(
             "platform.send_image",
             {"session": session, "image_url": image_url},
+        )
+
+    async def send_chain(
+        self,
+        session: str,
+        chain: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """发送富消息链。
+
+        Args:
+            session: 统一消息来源标识 (UMO)
+            chain: 序列化后的消息组件数组
+
+        Returns:
+            发送结果
+        """
+        return await self._proxy.call(
+            "platform.send_chain",
+            {"session": session, "chain": chain},
         )
 
     async def get_members(self, session: str) -> list[dict[str, Any]]:

@@ -168,6 +168,7 @@ class TestCapabilityRouterInit:
         # Platform capabilities
         assert "platform.send" in capability_names
         assert "platform.send_image" in capability_names
+        assert "platform.send_chain" in capability_names
         assert "platform.get_members" in capability_names
 
     def test_builtin_descriptors_use_protocol_schema_registry(self):
@@ -812,6 +813,34 @@ class TestBuiltinPlatformCapabilities:
         assert "message_id" in result
         assert len(router.sent_messages) == 1
         assert router.sent_messages[0]["image_url"] == "http://example.com/image.png"
+
+    @pytest.mark.asyncio
+    async def test_platform_send_chain(self):
+        """platform.send_chain should store rich message payloads."""
+        router = CapabilityRouter()
+        token = CancelToken()
+
+        result = await router.execute(
+            "platform.send_chain",
+            {
+                "session": "session-1",
+                "chain": [
+                    {"type": "Plain", "text": "Hello"},
+                    {"type": "Image", "file": "http://example.com/image.png"},
+                ],
+            },
+            stream=False,
+            cancel_token=token,
+            request_id="req-1",
+        )
+
+        assert "message_id" in result
+        assert len(router.sent_messages) == 1
+        assert router.sent_messages[0]["chain"][0]["text"] == "Hello"
+        assert (
+            router.sent_messages[0]["chain"][1]["file"]
+            == "http://example.com/image.png"
+        )
 
     @pytest.mark.asyncio
     async def test_platform_get_members(self):

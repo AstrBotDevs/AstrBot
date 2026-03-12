@@ -15,6 +15,7 @@ from astrbot_sdk._legacy_api import (
     LegacyContext,
     LegacyConversationManager,
 )
+from astrbot_sdk.api.message import Comp, MessageChain
 from astrbot_sdk.star import Star
 
 
@@ -301,6 +302,34 @@ class TestLegacyContextSendMessage:
         await legacy_ctx.send_message("session-1", MockMessageChain())
 
         mock_platform.send.assert_called_once_with("session-1", "extracted text")
+
+    @pytest.mark.asyncio
+    async def test_send_message_with_message_chain_uses_send_chain(self):
+        """send_message() should preserve rich chains when MessageChain is available."""
+        mock_platform = AsyncMock()
+
+        mock_ctx = MagicMock()
+        mock_ctx.platform = mock_platform
+
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx._runtime_context = mock_ctx
+
+        chain = MessageChain(
+            [
+                Comp.Plain(text="hello"),
+                Comp.Image(file="https://example.com/image.png"),
+            ]
+        )
+
+        await legacy_ctx.send_message("session-1", chain)
+
+        mock_platform.send_chain.assert_called_once_with(
+            "session-1",
+            [
+                {"type": "Plain", "text": "hello"},
+                {"type": "Image", "file": "https://example.com/image.png"},
+            ],
+        )
 
     @pytest.mark.asyncio
     async def test_send_message_with_to_text_method(self):

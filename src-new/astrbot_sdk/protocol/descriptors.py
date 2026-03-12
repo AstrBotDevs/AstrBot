@@ -145,6 +145,15 @@ PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA = _object_schema(
     required=("message_id",),
     message_id={"type": "string"},
 )
+PLATFORM_SEND_CHAIN_INPUT_SCHEMA = _object_schema(
+    required=("session", "chain"),
+    session={"type": "string"},
+    chain={"type": "array", "items": {"type": "object"}},
+)
+PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA = _object_schema(
+    required=("message_id",),
+    message_id={"type": "string"},
+)
 PLATFORM_GET_MEMBERS_INPUT_SCHEMA = _object_schema(
     required=("session",),
     session={"type": "string"},
@@ -206,6 +215,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "platform.send_image": {
         "input": PLATFORM_SEND_IMAGE_INPUT_SCHEMA,
         "output": PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA,
+    },
+    "platform.send_chain": {
+        "input": PLATFORM_SEND_CHAIN_INPUT_SCHEMA,
+        "output": PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA,
     },
     "platform.get_members": {
         "input": PLATFORM_GET_MEMBERS_INPUT_SCHEMA,
@@ -443,6 +456,8 @@ __all__ = [
     "MessageTrigger",
     "PLATFORM_GET_MEMBERS_INPUT_SCHEMA",
     "PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA",
+    "PLATFORM_SEND_CHAIN_INPUT_SCHEMA",
+    "PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA",
     "PLATFORM_SEND_IMAGE_INPUT_SCHEMA",
     "PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA",
     "PLATFORM_SEND_INPUT_SCHEMA",

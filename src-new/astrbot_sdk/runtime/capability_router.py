@@ -23,6 +23,7 @@
     db.list: 列出 KV 键
     platform.send: 发送消息
     platform.send_image: 发送图片
+    platform.send_chain: 发送消息链
     platform.get_members: 获取群成员
 
 与旧版对比：
@@ -327,6 +328,27 @@ class CapabilityRouter:
             )
             return {"message_id": message_id}
 
+        async def platform_send_chain(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
+            session = str(payload.get("session", ""))
+            chain = payload.get("chain")
+            if not isinstance(chain, list) or not all(
+                isinstance(item, dict) for item in chain
+            ):
+                raise AstrBotError.invalid_input(
+                    "platform.send_chain 的 chain 必须是 object 数组"
+                )
+            message_id = f"chain_{len(self.sent_messages) + 1}"
+            self.sent_messages.append(
+                {
+                    "message_id": message_id,
+                    "session": session,
+                    "chain": [dict(item) for item in chain],
+                }
+            )
+            return {"message_id": message_id}
+
         async def platform_get_members(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
@@ -397,6 +419,10 @@ class CapabilityRouter:
         self.register(
             builtin_descriptor("platform.send_image", "发送图片"),
             call_handler=platform_send_image,
+        )
+        self.register(
+            builtin_descriptor("platform.send_chain", "发送消息链"),
+            call_handler=platform_send_chain,
         )
         self.register(
             builtin_descriptor("platform.get_members", "获取群成员"),

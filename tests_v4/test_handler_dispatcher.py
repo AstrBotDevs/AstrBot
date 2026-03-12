@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from astrbot_sdk.api.event import AstrMessageEvent
+from astrbot_sdk.api.message import Comp, MessageChain
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent, PlainTextResult
 from astrbot_sdk.protocol.descriptors import (
@@ -43,6 +44,14 @@ class MockPeer:
             await self.send(
                 payload.get("session", payload.get("session_id", "")),
                 payload.get("text", ""),
+            )
+            return {}
+        if name == "platform.send_chain":
+            self.sent_messages.append(
+                {
+                    "session_id": payload.get("session", ""),
+                    "chain": payload.get("chain", []),
+                }
             )
             return {}
         return {}
@@ -669,6 +678,37 @@ class TestHandlerDispatcherConsumeResult:
         # Should not raise
         await dispatcher._consume_legacy_result(123, event)
         await dispatcher._consume_legacy_result(None, event)
+
+    @pytest.mark.asyncio
+    async def test_consume_message_chain_uses_platform_send_chain(self):
+        """_consume_legacy_result should preserve rich chains when ctx is available."""
+        peer = MockPeer()
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[],
+        )
+
+        event = create_message_event()
+        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
+        chain = MessageChain(
+            [
+                Comp.Plain(text="hello"),
+                Comp.Image(file="https://example.com/image.png"),
+            ]
+        )
+
+        await dispatcher._consume_legacy_result(chain, event, ctx)
+
+        assert peer.sent_messages == [
+            {
+                "session_id": "session-1",
+                "chain": [
+                    {"type": "Plain", "text": "hello"},
+                    {"type": "Image", "file": "https://example.com/image.png"},
+                ],
+            }
+        ]
 
 
 class TestHandlerDispatcherHandleError:

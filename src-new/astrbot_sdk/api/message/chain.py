@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from . import components as Comp
 
@@ -44,6 +45,38 @@ class MessageChain:
     def use_t2i(self, use_t2i: bool) -> "MessageChain":
         self.use_t2i_ = use_t2i
         return self
+
+    def to_payload(self) -> list[dict[str, Any]]:
+        payload: list[dict[str, Any]] = []
+        for component in self.chain:
+            if isinstance(component, dict):
+                payload.append(dict(component))
+                continue
+            to_dict = getattr(component, "to_dict", None)
+            if callable(to_dict):
+                payload.append(to_dict())
+                continue
+            model_dump = getattr(component, "model_dump", None)
+            if callable(model_dump):
+                payload.append(model_dump())
+                continue
+            payload.append({"type": "Unknown", "text": str(component)})
+        return payload
+
+    def is_plain_text_only(self) -> bool:
+        if not self.chain:
+            return False
+        for component in self.chain:
+            if isinstance(component, Comp.Plain):
+                continue
+            if isinstance(component, dict) and str(component.get("type")) in {
+                "Plain",
+                "plain",
+                "text",
+            }:
+                continue
+            return False
+        return True
 
     def get_plain_text(self) -> str:
         return " ".join(

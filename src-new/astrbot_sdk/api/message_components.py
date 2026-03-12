@@ -1,8 +1,6 @@
-"""旧版 ``astrbot_sdk.api.message`` 的兼容入口。"""
+"""旧版 ``astrbot_sdk.api.message_components`` 的兼容导出。"""
 
-from . import components as Comp
-from .chain import MessageChain
-from .components import (
+from .message.components import (
     At,
     AtAll,
     BaseMessageComponent,
@@ -36,7 +34,6 @@ __all__ = [
     "At",
     "AtAll",
     "BaseMessageComponent",
-    "Comp",
     "ComponentTypes",
     "ComponentType",
     "CompT",
@@ -48,7 +45,6 @@ __all__ = [
     "Image",
     "Json",
     "Location",
-    "MessageChain",
     "Music",
     "Node",
     "Nodes",

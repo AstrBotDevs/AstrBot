@@ -169,6 +169,7 @@ class AstrMessageEvent(MessageEvent):
             platform=event.platform,
             session_id=event.session_id,
             raw=event.raw,
+            context=getattr(event, "_context", None),
             reply_handler=getattr(event, "_reply_handler", None),
         )
 
@@ -321,6 +322,13 @@ class AstrMessageEvent(MessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         self.has_send_oper = True
+        runtime_context = getattr(self, "_context", None)
+        if runtime_context is not None and not message.is_plain_text_only():
+            await runtime_context.platform.send_chain(
+                self.session_id,
+                message.to_payload(),
+            )
+            return
         await self.reply(message.get_plain_text())
 
     async def react(self, emoji: str) -> None:

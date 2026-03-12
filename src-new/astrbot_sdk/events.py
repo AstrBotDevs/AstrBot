@@ -42,6 +42,7 @@ class MessageEvent:
         self.platform = platform
         self.session_id = session_id or group_id or user_id or ""
         self.raw = raw or {}
+        self._context = context
         self._reply_handler = reply_handler
         if self._reply_handler is None and context is not None:
             self._reply_handler = lambda text: context.platform.send(
