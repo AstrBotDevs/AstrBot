@@ -328,13 +328,15 @@ class TestLegacyContextLLMMethods:
         assert call_kwargs["max_steps"] == 10
 
     @pytest.mark.asyncio
-    async def test_add_llm_tools_returns_none(self):
-        """add_llm_tools() should return None (deprecated)."""
+    async def test_add_llm_tools_raises_not_implemented(self):
+        """add_llm_tools() should raise NotImplementedError in v4."""
         legacy_ctx = LegacyContext("test_plugin")
 
-        result = await legacy_ctx.add_llm_tools("tool1", "tool2")
+        with pytest.raises(NotImplementedError) as exc_info:
+            await legacy_ctx.add_llm_tools("tool1", "tool2")
 
-        assert result is None
+        assert "add_llm_tools" in str(exc_info.value)
+        assert MIGRATION_DOC_URL in str(exc_info.value)
 
 
 class TestCommandComponent:

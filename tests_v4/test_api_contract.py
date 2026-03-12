@@ -71,14 +71,15 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_compat_warning_includes_migration_doc_url(self) -> None:
+    async def test_add_llm_tools_raises_not_implemented(self) -> None:
+        """add_llm_tools() should raise NotImplementedError in v4."""
         _warned_methods.clear()
         legacy_context = LegacyContext("compat-plugin")
-        with patch("astrbot_sdk._legacy_api.logger.warning") as warning:
+        with self.assertRaises(NotImplementedError) as context:
             await legacy_context.add_llm_tools()
 
-        warning.assert_called_once()
-        self.assertEqual(warning.call_args.args[-1], MIGRATION_DOC_URL)
+        self.assertIn("add_llm_tools", str(context.exception))
+        self.assertIn(MIGRATION_DOC_URL, str(context.exception))
 
     async def test_compat_llm_generate_warning_matches_chat_raw_mapping(self) -> None:
         class _DummyLLM:
