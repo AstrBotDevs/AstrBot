@@ -1,5 +1,8 @@
 from typing import TYPE_CHECKING
 
+from satori import E, Element
+from satori.const import Api
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
@@ -15,9 +18,6 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from satori import E, Element
-from satori.const import Api
-
 from astrbot.core.message.components import AtAll, Face
 
 if TYPE_CHECKING:
@@ -137,7 +137,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             content = "".join(str(i) for i in content_parts)
             channel_id = self.session_id
-            data = {"channel_id": channel_id, "content": content, "referrer": self.referrer}
+            data = {
+                "channel_id": channel_id,
+                "content": content,
+                "referrer": self.referrer,
+            }
 
             result = await self.adapter.send_http_request(
                 "POST",
@@ -211,7 +215,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             if isinstance(component, At):
                 return E.at(str(component.qq), name=component.name)
-            
+
             if isinstance(component, AtAll):
                 return E.at_all()
 
@@ -224,7 +228,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
 
             if isinstance(component, File):
                 return E.file(url=component.file, name=component.name or "文件")
-            
+
             if isinstance(component, Face):
                 return E.emoji(id=str(component.id))
 

@@ -7,6 +7,11 @@ from typing import cast
 
 import websockets
 from aiohttp import ClientSession, ClientTimeout
+from satori import element
+from satori.const import EventType
+from satori.event import MessageEvent
+from satori.model import Event, Identify, Login, Opcode, Ready
+from satori.utils import decode, encode
 from websockets.asyncio.client import ClientConnection, connect
 
 from astrbot.api import logger
@@ -19,8 +24,8 @@ from astrbot.api.message_components import (
     Image,
     Plain,
     Record,
-    Video,
     Reply,
+    Video,
 )
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -32,14 +37,9 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
-from satori import element
-from satori.const import EventType
-from satori.event import MessageEvent
-from satori.model import Event, Opcode, Identify, Ready, Login
-from satori.parser import parse
-from satori.utils import decode, encode
 
 b64_cap = re.compile(r"^data:([\w/.+-]+);base64,")
+
 
 @register_platform_adapter(
     "satori", "Satori 协议适配器", support_streaming_message=False
@@ -209,7 +209,9 @@ class SatoriPlatformAdapter(Platform):
             identify_payload.sn = self.sequence
 
         try:
-            message_str = encode({"op": Opcode.IDENTIFY, "body": identify_payload.dump()})
+            message_str = encode(
+                {"op": Opcode.IDENTIFY, "body": identify_payload.dump()}
+            )
             await self.ws.send(message_str)
         except websockets.exceptions.ConnectionClosed as e:
             logger.error(f"发送 IDENTIFY 信令时连接关闭: {e}")
@@ -282,7 +284,11 @@ class SatoriPlatformAdapter(Platform):
             if (
                 "self_id" in event_data
                 or ("login" in event_data and "self_id" in event_data["login"])
-                or ("login" in event_data and "user" in event_data["login"] and "self_id" in event_data["login"]["user"])
+                or (
+                    "login" in event_data
+                    and "user" in event_data["login"]
+                    and "self_id" in event_data["login"]["user"]
+                )
             ):
                 logger.error(f"解析事件失败: {e}")
             else:
@@ -295,7 +301,9 @@ class SatoriPlatformAdapter(Platform):
                 if abm := await self.convert_satori_message(cast(MessageEvent, event)):
                     await self.handle_msg(abm)
 
-    async def convert_satori_message(self, event: MessageEvent) -> AstrBotMessage | None:
+    async def convert_satori_message(
+        self, event: MessageEvent
+    ) -> AstrBotMessage | None:
         try:
             abm = AstrBotMessage()
             abm.message_id = event.message.id
@@ -361,7 +369,7 @@ class SatoriPlatformAdapter(Platform):
                         qq=sender_id,
                     )
                     abm.message.append(reply_component)
- 
+
             # 解析消息内容
             content_elements = self.parse_satori_elements(elements)
             abm.message.extend(content_elements)
@@ -376,8 +384,9 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"转换 Satori 消息失败: {e}")
             return None
 
-
-    def _convert_quote_message(self, quote: element.Quote, self_id: str) -> AstrBotMessage | None:
+    def _convert_quote_message(
+        self, quote: element.Quote, self_id: str
+    ) -> AstrBotMessage | None:
         """转换引用消息"""
         try:
             quote_abm = AstrBotMessage()
@@ -427,9 +436,7 @@ class SatoriPlatformAdapter(Platform):
             elif isinstance(item, element.Sharp):
                 parsed_elements.append(Plain(text=f"#{item.id}"))
             elif isinstance(item, element.Link):
-                parsed_elements.extend(
-                    self.parse_satori_elements(item.children)
-                )
+                parsed_elements.extend(self.parse_satori_elements(item.children))
                 if item.href:
                     parsed_elements.append(Plain(text=f" ({item.href})"))
             elif isinstance(item, element.Br):
@@ -441,9 +448,7 @@ class SatoriPlatformAdapter(Platform):
                         prev.text += "\n"
                 else:
                     parsed_elements.append(Plain(text="\n"))
-                parsed_elements.extend(
-                    self.parse_satori_elements(item.children)
-                )
+                parsed_elements.extend(self.parse_satori_elements(item.children))
                 parsed_elements.append(Plain(text="\n"))
             elif isinstance(item, element.At):
                 if item.type:
@@ -454,22 +459,22 @@ class SatoriPlatformAdapter(Platform):
             elif isinstance(item, element.Image):
                 file = item.src
                 if mat := b64_cap.match(item.src):
-                    file = f"base64://{item.src[len(mat[0]):]}"
+                    file = f"base64://{item.src[len(mat[0]) :]}"
                 parsed_elements.append(Image(file=file))
             elif isinstance(item, element.File):
                 file = item.src
                 if mat := b64_cap.match(item.src):
-                    file = f"base64://{item.src[len(mat[0]):]}"
+                    file = f"base64://{item.src[len(mat[0]) :]}"
                 parsed_elements.append(File(name=item.title or "文件", file=file))
             elif isinstance(item, element.Audio):
                 file = item.src
                 if mat := b64_cap.match(item.src):
-                    file = f"base64://{item.src[len(mat[0]):]}"
+                    file = f"base64://{item.src[len(mat[0]) :]}"
                 parsed_elements.append(Record(file=file))
             elif isinstance(item, element.Video):
                 file = item.src
                 if mat := b64_cap.match(item.src):
-                    file = f"base64://{item.src[len(mat[0]):]}"
+                    file = f"base64://{item.src[len(mat[0]) :]}"
                 parsed_elements.append(Video(file=file))
             elif isinstance(item, element.Emoji):
                 if item.name:
@@ -483,7 +488,9 @@ class SatoriPlatformAdapter(Platform):
                         import html
 
                         decoded_data = html.unescape(data)
-                        parsed_elements.append(Plain(text=f"[ARK卡片数据: {decoded_data}]"))
+                        parsed_elements.append(
+                            Plain(text=f"[ARK卡片数据: {decoded_data}]")
+                        )
                     else:
                         parsed_elements.append(Plain(text="[ARK卡片]"))
                 elif item.tag == "json":
@@ -492,17 +499,15 @@ class SatoriPlatformAdapter(Platform):
                         import html
 
                         decoded_data = html.unescape(data)
-                        parsed_elements.append(Plain(text=f"[JSON卡片数据: {decoded_data}]"))
+                        parsed_elements.append(
+                            Plain(text=f"[JSON卡片数据: {decoded_data}]")
+                        )
                     else:
                         parsed_elements.append(Plain(text="[JSON卡片]"))
                 else:
-                    parsed_elements.extend(
-                        self.parse_satori_elements(item.children)
-                    )
+                    parsed_elements.extend(self.parse_satori_elements(item.children))
             else:
-                parsed_elements.extend(
-                    self.parse_satori_elements(item.children)
-                )
+                parsed_elements.extend(self.parse_satori_elements(item.children))
         return parsed_elements
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
@@ -541,7 +546,9 @@ class SatoriPlatformAdapter(Platform):
         elif self.logins:
             current_login = self.logins[0]
             headers["Satori-Platform"] = current_login.platform
-            headers["Satori-User-Id"] = current_login.user.id if current_login.user else ""
+            headers["Satori-User-Id"] = (
+                current_login.user.id if current_login.user else ""
+            )
 
         if not path.startswith("/"):
             path = "/" + path
