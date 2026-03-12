@@ -14,6 +14,7 @@
 - 2026-03-13: Keep `astrbot_sdk.runtime` root exports narrow. `Peer` / `Transport` / `CapabilityRouter` / `HandlerDispatcher` are reasonable advanced runtime primitives, but loader/bootstrap data structures and orchestration helpers (`LoadedPlugin`, `PluginEnvironmentManager`, `WorkerSession`, `run_supervisor`, etc.) should stay in their submodules instead of becoming accidental root-level stable API.
 - 2026-03-13: `runtime.loader` must preserve declared legacy handler order. Falling back to `dir(instance)` or sorting the merged discoverable names reorders compat handlers alphabetically, which changes which legacy command/hook appears first to the supervisor and breaks old-plugin expectations.
 - 2026-03-13: `runtime.loader.import_string()` cannot trust `sys.modules` when plugins reuse generic top-level package names like `commands.*`. Before importing a plugin module, compare the cached root package against the current plugin directory and evict conflicting root/submodules, or later plugins will accidentally reuse an earlier plugin's package tree.
+- 2026-03-13: Keep `astrbot_sdk.protocol` root focused on native v4 protocol models and parsers. Legacy JSON-RPC helpers remain supported, but they should be imported from `astrbot_sdk.protocol.legacy_adapter` explicitly instead of being re-exported from the package root.
 
 # 开发命令
 

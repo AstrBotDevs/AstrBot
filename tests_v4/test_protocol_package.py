@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import astrbot_sdk.protocol as protocol_module
+
 from astrbot_sdk.protocol import (
     CapabilityDescriptor,
     CommandTrigger,
@@ -9,17 +11,19 @@ from astrbot_sdk.protocol import (
     EventMessage,
     HandlerDescriptor,
     InitializeMessage,
-    LegacyAdapter,
-    LegacyRequest,
     MessageTrigger,
     PeerInfo,
     ProtocolMessage,
     ResultMessage,
     ScheduleTrigger,
-    parse_legacy_message,
     parse_message,
 )
 from astrbot_sdk.protocol.descriptors import BUILTIN_CAPABILITY_SCHEMAS
+from astrbot_sdk.protocol.legacy_adapter import (
+    LegacyAdapter,
+    LegacyRequest,
+    parse_legacy_message,
+)
 
 
 class TestProtocolPackageExports:
@@ -55,8 +59,14 @@ class TestProtocolPackageExports:
         assert isinstance(EventMessage(id="evt-1", phase="started"), EventMessage)
         assert isinstance(ResultMessage(id="res-1", success=True), ResultMessage)
 
-    def test_legacy_exports_are_importable(self):
-        """Legacy adapter helpers should also be available from package root."""
+    def test_protocol_root_does_not_reexport_legacy_helpers(self):
+        """protocol root should stay focused on native v4 models."""
+        assert not hasattr(protocol_module, "LegacyAdapter")
+        assert not hasattr(protocol_module, "LegacyRequest")
+        assert not hasattr(protocol_module, "parse_legacy_message")
+
+    def test_legacy_exports_are_available_from_submodule(self):
+        """Legacy adapter helpers remain available from the explicit submodule."""
         legacy = parse_legacy_message({"jsonrpc": "2.0", "method": "handshake"})
 
         assert isinstance(legacy, LegacyRequest)
