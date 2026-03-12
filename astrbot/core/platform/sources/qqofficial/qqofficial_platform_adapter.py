@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import math
 import os
 import time
 from typing import Any, cast
@@ -40,24 +41,40 @@ class MessageDeduplicator:
         self,
         message_id_ttl_seconds: float = 30 * 60,
         content_key_ttl_seconds: float = 3.0,
+        cleanup_interval_seconds: float = 1.0,
     ) -> None:
         self._message_id_timestamps: dict[str, float] = {}
         self._content_key_timestamps: dict[str, float] = {}
         self._message_id_ttl_seconds = message_id_ttl_seconds
         self._content_key_ttl_seconds = content_key_ttl_seconds
+        self._cleanup_interval_seconds = cleanup_interval_seconds
+        self._last_cleanup_at = 0.0
         self._lock = asyncio.Lock()
 
     def _clean_expired(self, now: float) -> None:
-        self._message_id_timestamps = {
-            key: ts
+        if (
+            self._last_cleanup_at > 0
+            and now - self._last_cleanup_at < self._cleanup_interval_seconds
+        ):
+            return
+
+        expired_message_ids = [
+            key
             for key, ts in self._message_id_timestamps.items()
-            if now - ts <= self._message_id_ttl_seconds
-        }
-        self._content_key_timestamps = {
-            key: ts
+            if now - ts > self._message_id_ttl_seconds
+        ]
+        for key in expired_message_ids:
+            self._message_id_timestamps.pop(key, None)
+
+        expired_content_keys = [
+            key
             for key, ts in self._content_key_timestamps.items()
-            if now - ts <= self._content_key_ttl_seconds
-        }
+            if now - ts > self._content_key_ttl_seconds
+        ]
+        for key in expired_content_keys:
+            self._content_key_timestamps.pop(key, None)
+
+        self._last_cleanup_at = now
 
     async def is_duplicate(
         self,
@@ -69,23 +86,32 @@ class MessageDeduplicator:
             current_time = time.monotonic()
             self._clean_expired(current_time)
 
-            if message_id in self._message_id_timestamps:
-                logger.debug(
-                    "[QQOfficial] Duplicate message detected (by ID): %s...",
-                    message_id[:50],
-                )
-                return True
+            existing_message_ts = self._message_id_timestamps.get(message_id)
+            if existing_message_ts is not None:
+                if current_time - existing_message_ts <= self._message_id_ttl_seconds:
+                    logger.debug(
+                        "[QQOfficial] Duplicate message detected (by ID): %s...",
+                        message_id[:50],
+                    )
+                    return True
+                self._message_id_timestamps.pop(message_id, None)
 
             content_key: str | None = None
             if content and sender_id:
                 content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
                 content_key = f"{sender_id}:{content_hash}"
-                if content_key in self._content_key_timestamps:
-                    logger.debug(
-                        "[QQOfficial] Duplicate message detected (by content): %s",
-                        content_key,
-                    )
-                    return True
+                existing_content_ts = self._content_key_timestamps.get(content_key)
+                if existing_content_ts is not None:
+                    if (
+                        current_time - existing_content_ts
+                        <= self._content_key_ttl_seconds
+                    ):
+                        logger.debug(
+                            "[QQOfficial] Duplicate message detected (by content): %s",
+                            content_key,
+                        )
+                        return True
+                    self._content_key_timestamps.pop(content_key, None)
 
             self._message_id_timestamps[message_id] = current_time
             if content_key is not None:
@@ -223,10 +249,40 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
-        self._deduplicator = MessageDeduplicator(
-            message_id_ttl_seconds=30 * 60,
-            content_key_ttl_seconds=3.0,
+        message_id_ttl_seconds = self._safe_float_config(
+            platform_config,
+            "dedup_message_id_ttl_seconds",
+            30 * 60,
         )
+        content_key_ttl_seconds = self._safe_float_config(
+            platform_config,
+            "dedup_content_key_ttl_seconds",
+            3.0,
+        )
+        cleanup_interval_seconds = self._safe_float_config(
+            platform_config,
+            "dedup_cleanup_interval_seconds",
+            1.0,
+        )
+
+        self._deduplicator = MessageDeduplicator(
+            message_id_ttl_seconds=message_id_ttl_seconds,
+            content_key_ttl_seconds=content_key_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+
+    @staticmethod
+    def _safe_float_config(config: dict, key: str, default: float) -> float:
+        value = config.get(key, default)
+        if not isinstance(value, (int, float, str)):
+            return default
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(parsed) or parsed <= 0:
+            return default
+        return parsed
 
     async def _is_duplicate_message(
         self, message_id: str, content: str = "", sender_id: str = ""
