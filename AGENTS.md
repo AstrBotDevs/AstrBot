@@ -31,3 +31,6 @@ python run_tests.py -v         # 详细输出
 python run_tests.py -k "test_peer"  # 运行匹配模式的测试
 python run_tests.py --cov      # 运行测试并生成覆盖率报告
 ```
+
+## 重要
+新实现要兼容旧实现但是还要保证架构良好设计原则和最佳实践
