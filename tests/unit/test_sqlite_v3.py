@@ -69,6 +69,7 @@ class TestSQLiteV3QueryParameterization:
         assert count_params["exclude_id_0"] == "admin%"
         assert count_params["exclude_platform_0"] == "slack:%"
 
+        assert "FROM webchat_conversation WHERE" in data_sql
         assert ":page_size" in data_sql
         assert ":offset" in data_sql
         assert data_params["page_size"] == 10

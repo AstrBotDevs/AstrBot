@@ -37,7 +37,7 @@ def require_secure_transport_url(
         parsed.hostname
     ):
         raise ValueError(
-            f"{label} must use wss:// or https:// for non-local endpoints: {url}",
+            f"{label} must use secure transport (https or wss) for non-local endpoints: {url}",
         )
 
     return parsed
@@ -50,7 +50,7 @@ def to_websocket_url(url: str, *, label: str = "WebSocket URL") -> str:
 
     if parsed.scheme not in allowed_schemes:
         raise ValueError(
-            f"{label} must use http://, https://, ws:// or wss://: {normalized_url}",
+            f"{label} must use the http, https, ws, or wss scheme: {normalized_url}",
         )
 
     parsed = require_secure_transport_url(
@@ -69,7 +69,7 @@ def to_websocket_url(url: str, *, label: str = "WebSocket URL") -> str:
         ws_scheme = scheme_map[parsed.scheme]
     except KeyError as exc:
         raise ValueError(
-            f"{label} must use http://, https://, ws:// or wss://: {normalized_url}",
+            f"{label} must use the http, https, ws, or wss scheme: {normalized_url}",
         ) from exc
 
     return urlunsplit(

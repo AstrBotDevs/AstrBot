@@ -22,7 +22,7 @@ def test_require_secure_transport_url_allows_local_ws() -> None:
 def test_require_secure_transport_url_rejects_public_ws() -> None:
     with pytest.raises(
         ValueError,
-        match="must use wss:// or https:// for non-local endpoints",
+        match=r"must use secure transport \(https or wss\) for non-local endpoints",
     ):
         require_secure_transport_url(
             "ws://example.com/events",
@@ -34,7 +34,7 @@ def test_require_secure_transport_url_rejects_public_ws() -> None:
 def test_require_secure_transport_url_rejects_bare_hostname_ws() -> None:
     with pytest.raises(
         ValueError,
-        match="must use wss:// or https:// for non-local endpoints",
+        match=r"must use secure transport \(https or wss\) for non-local endpoints",
     ):
         require_secure_transport_url(
             "ws://prod/events",
@@ -54,7 +54,7 @@ def test_to_websocket_url_converts_https_to_wss() -> None:
 def test_to_websocket_url_rejects_unsupported_scheme() -> None:
     with pytest.raises(
         ValueError,
-        match="Misskey instance URL must use http://, https://, ws:// or wss://",
+        match="Misskey instance URL must use the http, https, ws, or wss scheme",
     ):
         to_websocket_url("ftp://example.com", label="Misskey instance URL")
 

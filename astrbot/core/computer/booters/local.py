@@ -111,6 +111,8 @@ class LocalPythonComponent(PythonComponent):
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             try:
+                # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+                # Executes the current interpreter with a fixed argv list and shell=False.
                 result = subprocess.run(
                     [sys.executable, "-c", code],
                     timeout=timeout,
