@@ -1,3 +1,37 @@
+"""旧版协议适配器模块。
+
+提供旧版 JSON-RPC 协议与新版协议之间的双向转换。
+支持旧版插件与新版核心的互操作。
+
+主要功能：
+    - 将旧版 JSON-RPC 请求转换为新版 InvokeMessage
+    - 将旧版 JSON-RPC 响应转换为新版 ResultMessage
+    - 将旧版 handshake 转换为新版 InitializeMessage
+    - 将新版消息转换回旧版格式（用于与旧版核心通信）
+
+转换映射表：
+    旧版 method               -> 新版 capability
+    ------------------------------------------------
+    handshake                 -> InitializeMessage
+    call_handler              -> handler.invoke
+    call_context_function     -> internal.legacy.call_context_function
+    handler_stream_start      -> EventMessage(phase="started")
+    handler_stream_update     -> EventMessage(phase="delta")
+    handler_stream_end        -> EventMessage(phase="completed"/"failed")
+    cancel                    -> CancelMessage
+
+注意事项：
+    - 旧版 handshake 的 metadata 信息可能丢失部分字段
+    - 新版触发器的详细信息在转换时可能丢失
+    - 使用 LEGACY_HANDSHAKE_METADATA_KEY 保留原始握手数据
+
+TODO:
+    - 添加旧版消息版本检测和兼容性警告
+    - 添加消息转换日志记录，便于调试
+    - 支持自定义转换规则扩展
+    - 添加转换性能监控
+"""
+
 from __future__ import annotations
 
 import json
@@ -17,10 +51,19 @@ from .messages import (
 )
 
 LEGACY_JSONRPC_VERSION = "2.0"
+"""旧版 JSON-RPC 协议版本。"""
+
 LEGACY_CONTEXT_CAPABILITY = "internal.legacy.call_context_function"
+"""旧版上下文函数调用的能力名称。"""
+
 LEGACY_HANDSHAKE_METADATA_KEY = "legacy_handshake_payload"
+"""在 InitializeMessage.metadata 中存储原始握手数据的键。"""
+
 LEGACY_PLUGIN_KEYS_METADATA_KEY = "legacy_plugin_keys"
+"""在 InitializeMessage.metadata 中存储原始插件键列表的键。"""
+
 LEGACY_ADAPTER_MESSAGE_EVENT = 3
+"""默认的事件类型，用于无法识别的旧版处理器。"""
 
 
 class _LegacyMessageBase(BaseModel):
@@ -28,12 +71,29 @@ class _LegacyMessageBase(BaseModel):
 
 
 class LegacyErrorData(_LegacyMessageBase):
+    """旧版 JSON-RPC 错误数据。
+
+    Attributes:
+        code: 错误码，整数类型（旧版规范）
+        message: 错误消息
+        data: 附加错误数据
+    """
+
     code: int = -32000
     message: str
     data: Any | None = None
 
 
 class LegacyRequest(_LegacyMessageBase):
+    """旧版 JSON-RPC 请求。
+
+    Attributes:
+        jsonrpc: 协议版本，固定为 "2.0"
+        id: 请求 ID，可选
+        method: 方法名称
+        params: 参数字典
+    """
+
     jsonrpc: Literal["2.0"] = LEGACY_JSONRPC_VERSION
     id: str | None = None
     method: str
@@ -46,20 +106,56 @@ class _LegacyResponse(_LegacyMessageBase):
 
 
 class LegacySuccessResponse(_LegacyResponse):
+    """旧版 JSON-RPC 成功响应。
+
+    Attributes:
+        result: 返回结果
+    """
+
     result: Any = Field(default_factory=dict)
 
 
 class LegacyErrorResponse(_LegacyResponse):
+    """旧版 JSON-RPC 错误响应。
+
+    Attributes:
+        error: 错误数据
+    """
+
     error: LegacyErrorData
 
 
 LegacyMessage = LegacyRequest | LegacySuccessResponse | LegacyErrorResponse
+"""旧版 JSON-RPC 消息联合类型。"""
+
 LegacyToV4Message = (
     InitializeMessage | InvokeMessage | ResultMessage | EventMessage | CancelMessage
 )
+"""旧版消息转换后的新版消息类型。"""
 
 
 class LegacyAdapter:
+    """旧版协议适配器，提供新旧协议之间的双向转换。
+
+    使用场景：
+        1. 旧版插件连接新版核心：将旧版 JSON-RPC 转换为新版协议
+        2. 新版插件连接旧版核心：将新版协议转换为旧版 JSON-RPC
+        3. 测试和迁移：验证协议转换的正确性
+
+    转换规则：
+        - handshake <-> InitializeMessage
+        - call_handler <-> InvokeMessage(capability="handler.invoke")
+        - call_context_function <-> InvokeMessage(capability="internal.legacy...")
+        - handler_stream_* <-> EventMessage
+        - cancel <-> CancelMessage
+
+    Attributes:
+        protocol_version: 新版协议版本号
+        legacy_peer_name: 默认的对等节点名称
+        legacy_peer_role: 默认的对等节点角色
+        legacy_peer_version: 默认的对等节点版本
+    """
+
     def __init__(
         self,
         *,
