@@ -69,8 +69,7 @@ def to_websocket_url(url: str, *, label: str = "WebSocket URL") -> str:
         ws_scheme = scheme_map[parsed.scheme]
     except KeyError as exc:
         raise ValueError(
-            f"{label} must use http://, https://, ws:// or wss://: "
-            f"{normalized_url}",
+            f"{label} must use http://, https://, ws:// or wss://: {normalized_url}",
         ) from exc
 
     return urlunsplit(
