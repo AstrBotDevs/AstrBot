@@ -8,6 +8,7 @@ import pytest
 
 # 将 src-new 加入路径 - 这使得测试可以运行，但不算"已安装"
 import sys
+
 SRC_NEW_PATH = str(Path(__file__).parent.parent / "src-new")
 sys.path.insert(0, SRC_NEW_PATH)
 
@@ -15,6 +16,7 @@ sys.path.insert(0, SRC_NEW_PATH)
 # ============================================================
 # Async Configuration
 # ============================================================
+
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
@@ -28,6 +30,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 # ============================================================
 # Transport Fixtures
 # ============================================================
+
 
 class MemoryTransport:
     """In-memory transport for testing peer communication."""
@@ -73,6 +76,7 @@ def transport_pair() -> tuple[MemoryTransport, MemoryTransport]:
 # ============================================================
 # Mock/Fake Fixtures
 # ============================================================
+
 
 class FakeEnvManager:
     """Fake environment manager for testing."""

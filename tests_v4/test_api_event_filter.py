@@ -1,9 +1,9 @@
 """
 Tests for api/event/filter.py - Event filter decorators and utilities.
 """
+
 from __future__ import annotations
 
-import pytest
 
 from astrbot_sdk.api.event.filter import ADMIN, command, filter, permission, regex
 from astrbot_sdk.decorators import get_handler_meta

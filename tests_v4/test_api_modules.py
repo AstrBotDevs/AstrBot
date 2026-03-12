@@ -1,9 +1,9 @@
 """
 Tests for API module exports and re-exports.
 """
+
 from __future__ import annotations
 
-import pytest
 
 
 class TestApiStarModule:

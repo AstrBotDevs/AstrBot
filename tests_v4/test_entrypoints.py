@@ -28,7 +28,7 @@ def _is_astrbot_sdk_installed_in_site_packages() -> bool:
 @pytest.mark.integration
 @pytest.mark.skipif(
     not _is_astrbot_sdk_installed_in_site_packages(),
-    reason="astrbot_sdk not installed in site-packages (run: pip install -e .)"
+    reason="astrbot_sdk not installed in site-packages (run: pip install -e .)",
 )
 class EntryPointTest(unittest.TestCase):
     def test_import_package(self) -> None:

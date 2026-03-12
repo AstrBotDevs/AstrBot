@@ -1,9 +1,9 @@
 """
 Unit tests for Events module.
 """
+
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
