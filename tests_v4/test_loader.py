@@ -151,6 +151,7 @@ class TestLoadedPlugin:
 
         assert loaded.plugin == spec
         assert loaded.handlers == []
+        assert loaded.capabilities == []
         assert loaded.instances == []
 
 
@@ -695,6 +696,69 @@ class TestLoadPlugin:
                 assert loaded.plugin.name == "test_plugin"
                 assert len(loaded.instances) == 1
                 assert len(loaded.handlers) >= 1
+            finally:
+                if str(plugin_dir) in sys.path:
+                    sys.path.remove(str(plugin_dir))
+
+    def test_loads_component_capabilities(self):
+        """load_plugin should discover plugin-provided capabilities separately from handlers."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            module_dir = plugin_dir / "capmodule"
+            module_dir.mkdir()
+            (module_dir / "__init__.py").write_text("", encoding="utf-8")
+            (module_dir / "component.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from astrbot_sdk import Star, provide_capability
+
+
+                    class MyComponent(Star):
+                        @provide_capability(
+                            "demo.echo",
+                            description="Echo text",
+                            input_schema={
+                                "type": "object",
+                                "properties": {"text": {"type": "string"}},
+                            },
+                            output_schema={
+                                "type": "object",
+                                "properties": {"echo": {"type": "string"}},
+                            },
+                        )
+                        async def echo(self, payload):
+                            return {"echo": payload["text"]}
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "cap_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [{"class": "capmodule.component:MyComponent"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            spec = load_plugin_spec(plugin_dir)
+
+            if str(plugin_dir) not in sys.path:
+                sys.path.insert(0, str(plugin_dir))
+
+            try:
+                loaded = load_plugin(spec)
+                assert [item.descriptor.name for item in loaded.capabilities] == [
+                    "demo.echo"
+                ]
+                assert len(loaded.handlers) == 0
             finally:
                 if str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))

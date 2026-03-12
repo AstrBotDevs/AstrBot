@@ -71,6 +71,48 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await plugin.stop()
         await core.stop()
 
+    async def test_initialize_carries_remote_provided_capabilities(self) -> None:
+        provided = CapabilityDescriptor(
+            name="demo.echo",
+            description="Echo text",
+            input_schema={"type": "object", "properties": {"text": {"type": "string"}}},
+            output_schema={
+                "type": "object",
+                "properties": {"echo": {"type": "string"}},
+            },
+        )
+
+        async def init_handler(message):
+            self.assertEqual(
+                [item.name for item in message.provided_capabilities], ["demo.echo"]
+            )
+            return InitializeOutput(
+                peer=PeerInfo(name="core", role="core", version="v4"),
+                capabilities=[],
+                metadata={},
+            )
+
+        core = Peer(
+            transport=self.left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+        )
+        core.set_initialize_handler(init_handler)
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+
+        await core.start()
+        await plugin.start()
+        await plugin.initialize([], provided_capabilities=[provided])
+
+        self.assertEqual(
+            [item.name for item in core.remote_provided_capabilities],
+            ["demo.echo"],
+        )
+        await plugin.stop()
+        await core.stop()
+
     async def test_stream_false_receiving_event_is_protocol_error(self) -> None:
         plugin = Peer(
             transport=self.right,

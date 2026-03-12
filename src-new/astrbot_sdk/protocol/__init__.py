@@ -20,6 +20,7 @@ from .descriptors import (
     MessageTrigger,
     Permissions,
     ScheduleTrigger,
+    SessionRef,
     Trigger,
 )
 from .legacy_adapter import (
@@ -87,6 +88,7 @@ __all__ = [
     "ProtocolMessage",
     "ResultMessage",
     "ScheduleTrigger",
+    "SessionRef",
     "Trigger",
     "cancel_to_legacy_request",
     "event_to_legacy_notification",

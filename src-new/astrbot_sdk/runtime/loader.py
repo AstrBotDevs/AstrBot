@@ -93,7 +93,7 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 from typing import Any
@@ -101,8 +101,8 @@ from typing import Any
 import yaml
 
 from ..api.basic import AstrBotConfig
-from ..decorators import get_handler_meta
-from ..protocol.descriptors import HandlerDescriptor
+from ..decorators import get_capability_meta, get_handler_meta
+from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
 from ..star import Star
 
 STATE_FILE_NAME = ".astrbot-worker-state.json"
@@ -149,10 +149,19 @@ class LoadedHandler:
 
 
 @dataclass(slots=True)
+class LoadedCapability:
+    descriptor: CapabilityDescriptor
+    callable: Any
+    owner: Any
+    legacy_context: Any | None = None
+
+
+@dataclass(slots=True)
 class LoadedPlugin:
     plugin: PluginSpec
     handlers: list[LoadedHandler]
-    instances: list[Any]
+    capabilities: list[LoadedCapability] = field(default_factory=list)
+    instances: list[Any] = field(default_factory=list)
 
 
 def _is_new_star_component(component_cls: Any) -> bool:
@@ -180,6 +189,12 @@ def _iter_handler_names(instance: Any) -> list[str]:
     return list(dir(instance))
 
 
+def _iter_discoverable_names(instance: Any) -> list[str]:
+    names = set(_iter_handler_names(instance))
+    names.update(dir(instance))
+    return sorted(names)
+
+
 def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
     """解析 handler 名称，避免在扫描阶段触发无关 descriptor 副作用。"""
     try:
@@ -195,6 +210,24 @@ def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | No
     for candidate in candidates:
         meta = get_handler_meta(candidate)
         if meta is not None and meta.trigger is not None:
+            return getattr(instance, name), meta
+    return None
+
+
+def _resolve_capability_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
+    try:
+        raw = inspect.getattr_static(instance, name)
+    except AttributeError:
+        return None
+
+    candidates = [raw]
+    wrapped = getattr(raw, "__func__", None)
+    if wrapped is not None:
+        candidates.append(wrapped)
+
+    for candidate in candidates:
+        meta = get_capability_meta(candidate)
+        if meta is not None:
             return getattr(instance, name), meta
     return None
 
@@ -619,6 +652,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
 
     instances: list[Any] = []
     handlers: list[LoadedHandler] = []
+    capabilities: list[LoadedCapability] = []
     shared_legacy_context = None
     plugin_config = _load_plugin_config(plugin)
     for component_cls in _plugin_component_classes(plugin):
@@ -641,9 +675,21 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
             if plugin_config is not None and getattr(instance, "config", None) is None:
                 setattr(instance, "config", plugin_config)
         instances.append(instance)
-        for name in _iter_handler_names(instance):
+        for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)
             if resolved is None:
+                capability = _resolve_capability_candidate(instance, name)
+                if capability is None:
+                    continue
+                bound, meta = capability
+                capabilities.append(
+                    LoadedCapability(
+                        descriptor=meta.descriptor.model_copy(deep=True),
+                        callable=bound,
+                        owner=instance,
+                        legacy_context=legacy_context,
+                    )
+                )
                 continue
             bound, meta = resolved
             handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
@@ -652,6 +698,8 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     descriptor=HandlerDescriptor(
                         id=handler_id,
                         trigger=meta.trigger,
+                        kind=str(meta.kind),
+                        contract=meta.contract,
                         priority=meta.priority,
                         permissions=meta.permissions.model_copy(deep=True),
                     ),
@@ -660,7 +708,12 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     legacy_context=legacy_context,
                 )
             )
-    return LoadedPlugin(plugin=plugin, handlers=handlers, instances=instances)
+    return LoadedPlugin(
+        plugin=plugin,
+        handlers=handlers,
+        capabilities=capabilities,
+        instances=instances,
+    )
 
 
 def import_string(path: str) -> Any:

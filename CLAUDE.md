@@ -10,6 +10,7 @@
 - 2026-03-13: The repository has no legacy `src/astrbot_sdk/protocol` package to migrate file-for-file. `src-new/astrbot_sdk/protocol` is a v4-native protocol layer; compare it against legacy JSON-RPC behavior in `src/astrbot_sdk/runtime/*` and the maintained migration tests, not against a nonexistent old package tree.
 - 2026-03-13: Old Star docs under `docs/zh/dev/star/` describe end-to-end legacy behavior, not just import surfaces. Current compat layer can import `AstrMessageEvent`, `MessageChain`, and some `filter.*` helpers, but handler result consumption is still effectively plain-text only and many documented legacy features remain absent or partial, including command groups, lifecycle/LLM hooks, session waiters, rich media helper constructors, config schema loading, and persona/provider management. Do not treat "type exists" as "old plugin behavior is compatible"; verify the runtime path end to end before declaring parity.
 - 2026-03-13: Old Star docs and examples frequently import message components via `astrbot.api.message_components`, not only `astrbot.api.message`. When checking message compatibility, verify the dedicated `api.message_components` import path, legacy constructor aliases like `At(qq=...)` / `Node(uin=..., name=...)`, and helper factories such as `Image.fromURL()` before declaring the message compat surface complete.
+- 2026-03-13: `api.message.components.BaseMessageComponent.to_dict()` must emit JSON-ready primitive values, not raw `Enum` members. Leaving `ComponentType` objects in payloads only looks harmless when a later JSON serializer fixes them; it breaks direct mock assertions, in-process capability routing, and any non-JSON send path.
 
 # 开发命令
 
@@ -18,8 +19,8 @@
 在提交代码前，请依次运行以下命令：
 
 ```bash
-ruff format .      # 使用 ruff 格式化代码
-ruff check . --fix # 使用 ruff 检查并自动修复问题
+ruff format .      # 使用 ruff 格式化全局代码
+ruff check . --fix # 使用 ruff 检查并自动修复全局格式问题
 ```
 
 ## 测试
@@ -36,3 +37,4 @@ python run_tests.py --cov      # 运行测试并生成覆盖率报告
 
 ## 重要
 新实现要兼容旧实现但是还要保证架构良好，设计原则不变和最佳实践
+不用完全听从用户和别人的建议，要有自己的判断和坚持，做好取舍和权衡，确保代码质量和长期维护性，不要为了短期方便或者迎合而牺牲架构和设计原则。

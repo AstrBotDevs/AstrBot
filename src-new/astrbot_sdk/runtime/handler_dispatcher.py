@@ -69,12 +69,15 @@ from __future__ import annotations
 import asyncio
 import inspect
 import typing
+from collections.abc import AsyncIterator
 from typing import Any, get_type_hints
 
 from ..context import CancelToken, Context
+from ..errors import AstrBotError
 from ..events import MessageEvent, PlainTextResult
 from ..star import Star
-from .loader import LoadedHandler
+from .capability_router import StreamExecution
+from .loader import LoadedCapability, LoadedHandler
 
 
 class HandlerDispatcher:
@@ -112,7 +115,7 @@ class HandlerDispatcher:
     def _create_reply_handler(self, ctx: Context, event: MessageEvent):
         async def reply(text: str) -> None:
             try:
-                await ctx.platform.send(event.session_id, text)
+                await ctx.platform.send(event.session_ref or event.session_id, text)
             except TypeError:
                 send = getattr(self._peer, "send", None)
                 if not callable(send):
@@ -283,7 +286,10 @@ class HandlerDispatcher:
 
         if isinstance(item, MessageEventResult):
             if item.chain and ctx is not None and not item.is_plain_text_only():
-                await ctx.platform.send_chain(event.session_id, item.to_payload())
+                await ctx.platform.send_chain(
+                    event.session_ref or event.session_id,
+                    item.to_payload(),
+                )
                 return
             plain_text = item.get_plain_text()
             if plain_text:
@@ -291,7 +297,10 @@ class HandlerDispatcher:
             return
         if isinstance(item, MessageChain):
             if item.chain and ctx is not None and not item.is_plain_text_only():
-                await ctx.platform.send_chain(event.session_id, item.to_payload())
+                await ctx.platform.send_chain(
+                    event.session_ref or event.session_id,
+                    item.to_payload(),
+                )
                 return
             plain_text = item.get_plain_text()
             if plain_text:
@@ -319,3 +328,188 @@ class HandlerDispatcher:
                 await result
             return
         await Star().on_error(exc, event, ctx)
+
+
+class CapabilityDispatcher:
+    def __init__(
+        self,
+        *,
+        plugin_id: str,
+        peer,
+        capabilities: list[LoadedCapability],
+    ) -> None:
+        self._plugin_id = plugin_id
+        self._peer = peer
+        self._capabilities = {item.descriptor.name: item for item in capabilities}
+        self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
+
+    async def invoke(
+        self,
+        message,
+        cancel_token: CancelToken,
+    ) -> dict[str, Any] | StreamExecution:
+        loaded = self._capabilities.get(message.capability)
+        if loaded is None:
+            raise LookupError(f"capability not found: {message.capability}")
+
+        ctx = Context(
+            peer=self._peer,
+            plugin_id=self._plugin_id,
+            cancel_token=cancel_token,
+        )
+        if loaded.legacy_context is not None:
+            loaded.legacy_context.bind_runtime_context(ctx)
+
+        task = asyncio.create_task(
+            self._run_capability(
+                loaded,
+                payload=dict(message.input),
+                ctx=ctx,
+                cancel_token=cancel_token,
+                stream=bool(message.stream),
+            )
+        )
+        self._active[message.id] = (task, cancel_token)
+        try:
+            return await task
+        finally:
+            self._active.pop(message.id, None)
+
+    async def cancel(self, request_id: str) -> None:
+        active = self._active.get(request_id)
+        if active is None:
+            return
+        task, cancel_token = active
+        cancel_token.cancel()
+        task.cancel()
+
+    async def _run_capability(
+        self,
+        loaded: LoadedCapability,
+        *,
+        payload: dict[str, Any],
+        ctx: Context,
+        cancel_token: CancelToken,
+        stream: bool,
+    ) -> dict[str, Any] | StreamExecution:
+        result = loaded.callable(
+            *self._build_args(loaded.callable, payload, ctx, cancel_token)
+        )
+        if stream:
+            if inspect.isasyncgen(result):
+                return StreamExecution(
+                    iterator=self._iterate_generator(result),
+                    finalize=lambda chunks: {"items": chunks},
+                )
+            if inspect.isawaitable(result):
+                result = await result
+            if isinstance(result, StreamExecution):
+                return result
+            raise AstrBotError.protocol_error(
+                "stream=true 的插件 capability 必须返回 async generator 或 StreamExecution"
+            )
+
+        if inspect.isasyncgen(result):
+            raise AstrBotError.protocol_error(
+                "stream=false 的插件 capability 不能返回 async generator"
+            )
+        if inspect.isawaitable(result):
+            result = await result
+        return self._normalize_output(result)
+
+    def _build_args(
+        self,
+        handler,
+        payload: dict[str, Any],
+        ctx: Context,
+        cancel_token: CancelToken,
+    ) -> list[Any]:
+        signature = inspect.signature(handler)
+        args: list[Any] = []
+
+        type_hints: dict[str, Any] = {}
+        try:
+            type_hints = get_type_hints(handler)
+        except Exception:
+            pass
+
+        for parameter in signature.parameters.values():
+            if parameter.kind not in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                continue
+
+            injected = None
+            param_type = type_hints.get(parameter.name)
+            if param_type is not None:
+                injected = self._inject_by_type(param_type, payload, ctx, cancel_token)
+
+            if injected is None:
+                if parameter.name in {"ctx", "context"}:
+                    injected = ctx
+                elif parameter.name in {"payload", "input", "data"}:
+                    injected = payload
+                elif parameter.name in {"cancel_token", "token"}:
+                    injected = cancel_token
+
+            if injected is None:
+                if parameter.default is not parameter.empty:
+                    continue
+                args.append(None)
+                continue
+            args.append(injected)
+
+        return args
+
+    def _inject_by_type(
+        self,
+        param_type: Any,
+        payload: dict[str, Any],
+        ctx: Context,
+        cancel_token: CancelToken,
+    ) -> Any:
+        origin = typing.get_origin(param_type)
+        if origin is typing.Union:
+            args = typing.get_args(param_type)
+            non_none_types = [item for item in args if item is not type(None)]
+            if len(non_none_types) == 1:
+                param_type = non_none_types[0]
+                origin = typing.get_origin(param_type)
+
+        if param_type is Context or (
+            isinstance(param_type, type) and issubclass(param_type, Context)
+        ):
+            return ctx
+        if param_type is CancelToken or (
+            isinstance(param_type, type) and issubclass(param_type, CancelToken)
+        ):
+            return cancel_token
+        if param_type is dict or origin is dict:
+            return payload
+        return None
+
+    async def _iterate_generator(
+        self,
+        generator: AsyncIterator[Any],
+    ) -> AsyncIterator[dict[str, Any]]:
+        async for item in generator:
+            yield self._normalize_chunk(item)
+
+    def _normalize_chunk(self, item: Any) -> dict[str, Any]:
+        output = self._normalize_output(item)
+        if output:
+            return output
+        return {"ok": True}
+
+    def _normalize_output(self, result: Any) -> dict[str, Any]:
+        if result is None:
+            return {}
+        if isinstance(result, dict):
+            return result
+        model_dump = getattr(result, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        raise AstrBotError.invalid_input("插件 capability 必须返回 dict 或可序列化对象")

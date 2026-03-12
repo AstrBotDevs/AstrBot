@@ -78,6 +78,7 @@ class InitializeMessage(_MessageBase):
                 "protocol_version": "1.0",
                 "peer": {"name": "...", "role": "plugin", "version": "..."},
                 "handlers": [...],
+                "provided_capabilities": [...],
                 "metadata": {...}
             }
 
@@ -87,6 +88,7 @@ class InitializeMessage(_MessageBase):
         protocol_version: 协议版本号
         peer: 发送方节点信息
         handlers: 注册的处理器描述符列表
+        provided_capabilities: 发送方对外暴露的能力描述符列表
         metadata: 扩展元数据，可存储插件配置等信息
     """
 
@@ -95,6 +97,7 @@ class InitializeMessage(_MessageBase):
     protocol_version: str
     peer: PeerInfo
     handlers: list[HandlerDescriptor] = Field(default_factory=list)
+    provided_capabilities: list[CapabilityDescriptor] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

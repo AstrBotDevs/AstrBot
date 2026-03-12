@@ -4,12 +4,18 @@ Tests for protocol/messages.py - Protocol message models.
 
 from __future__ import annotations
 
+import copy
 import json
 
 import pytest
 from pydantic import ValidationError
 
-from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor
+from astrbot_sdk.protocol.descriptors import (
+    BUILTIN_CAPABILITY_SCHEMAS,
+    CapabilityDescriptor,
+    CommandTrigger,
+    HandlerDescriptor,
+)
 from astrbot_sdk.protocol.messages import (
     CancelMessage,
     ErrorPayload,
@@ -152,6 +158,27 @@ class TestInitializeMessage:
         assert msg.metadata["author"] == "test"
         assert msg.metadata["version"] == "1.0.0"
 
+    def test_with_provided_capabilities(self):
+        """InitializeMessage should carry plugin-provided capabilities."""
+        peer = PeerInfo(name="test", role="plugin")
+        capability = CapabilityDescriptor(
+            name="demo.echo",
+            description="Echo capability",
+            input_schema={"type": "object", "properties": {"text": {"type": "string"}}},
+            output_schema={
+                "type": "object",
+                "properties": {"echo": {"type": "string"}},
+            },
+        )
+        msg = InitializeMessage(
+            id="msg_caps",
+            protocol_version="1.0",
+            peer=peer,
+            provided_capabilities=[capability],
+        )
+
+        assert [item.name for item in msg.provided_capabilities] == ["demo.echo"]
+
     def test_model_dump_json(self):
         """InitializeMessage should serialize to JSON correctly."""
         peer = PeerInfo(name="test", role="plugin", version="1.0.0")
@@ -187,17 +214,14 @@ class TestInitializeOutput:
 
     def test_with_capabilities(self):
         """InitializeOutput should accept capabilities."""
-        from astrbot_sdk.protocol.descriptors import (
-            BUILTIN_CAPABILITY_SCHEMAS,
-            CapabilityDescriptor,
-        )
-
         peer = PeerInfo(name="core", role="core")
         cap = CapabilityDescriptor(
             name="llm.chat",
             description="Chat capability",
-            input_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["input"],
-            output_schema=BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["output"],
+            input_schema=copy.deepcopy(BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["input"]),
+            output_schema=copy.deepcopy(
+                BUILTIN_CAPABILITY_SCHEMAS["llm.chat"]["output"]
+            ),
         )
         output = InitializeOutput(peer=peer, capabilities=[cap])
         assert len(output.capabilities) == 1

@@ -4,7 +4,6 @@ Unit tests for Events module.
 
 from __future__ import annotations
 
-
 import pytest
 
 from astrbot_sdk.events import MessageEvent, PlainTextResult
@@ -48,6 +47,21 @@ class TestMessageEvent:
         assert event.raw == payload
         assert event.raw["extra_field"] == "extra_value"
 
+    def test_from_payload_reads_target_shape(self):
+        """from_payload() should derive session/platform from structured target payload."""
+        event = MessageEvent.from_payload(
+            {
+                "text": "hello",
+                "target": {
+                    "conversation_id": "session-1",
+                    "platform": "test-platform",
+                },
+            }
+        )
+
+        assert event.session_id == "session-1"
+        assert event.platform == "test-platform"
+
     @pytest.mark.asyncio
     async def test_bind_reply_handler(self):
         """bind_reply_handler() should enable reply functionality."""
@@ -84,6 +98,7 @@ class TestMessageEvent:
         assert payload["session_id"] == "session-1"
         assert payload["user_id"] == "user-1"
         assert payload["platform"] == "test"
+        assert payload["target"]["conversation_id"] == "session-1"
 
     def test_to_payload_preserves_extra_raw_fields(self):
         """to_payload() should preserve unmodeled raw fields during round-trip."""

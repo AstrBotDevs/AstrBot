@@ -48,7 +48,7 @@
         6. Plugin -> Core: {"method": "handler_stream_end", ...}
 
     新版协议流程:
-        1. Plugin -> Core: {"type": "initialize", "handlers": [...]}
+        1. Plugin -> Core: {"type": "initialize", "handlers": [...], "provided_capabilities": [...]}
         2. Core -> Plugin: {"type": "result", "kind": "initialize_result", ...}
         3. Core -> Plugin: {"type": "invoke", "capability": "handler.invoke", ...}
         4. Plugin -> Core: {"type": "event", "phase": "started"}
@@ -109,7 +109,7 @@
         - JSON Schema 验证输入输出
         - 支持流式能力 (stream_handler)
         - 内置能力：llm.chat, memory.*, db.*, platform.*
-        - 支持自定义能力注册
+        - 支持 Supervisor 聚合并转发插件自定义 capability
 
 `runtime` 负责把协议、传输、插件加载和生命周期管理拼成一条完整执行链：
 
@@ -134,6 +134,7 @@ from .bootstrap import (
 from .capability_router import CapabilityRouter, StreamExecution
 from .handler_dispatcher import HandlerDispatcher
 from .loader import (
+    LoadedCapability,
     LoadedHandler,
     LoadedPlugin,
     PluginDiscoveryResult,
@@ -163,6 +164,7 @@ __all__ = [
     "HandlerDispatcher",
     "InitializeHandler",
     "InvokeHandler",
+    "LoadedCapability",
     "LoadedHandler",
     "LoadedPlugin",
     "MessageHandler",

@@ -126,6 +126,7 @@ class TestApiEventModule:
 
         from astrbot_sdk.api.event import AstrMessageEvent
         from astrbot_sdk.api.message import Comp, MessageChain
+        from astrbot_sdk.protocol.descriptors import SessionRef
 
         runtime_context = MagicMock()
         runtime_context.platform = AsyncMock()
@@ -140,7 +141,7 @@ class TestApiEventModule:
         await event.send(chain)
 
         runtime_context.platform.send_chain.assert_called_once_with(
-            "session-1",
+            SessionRef(conversation_id="session-1"),
             [
                 {"type": "Plain", "text": "hello"},
                 {"type": "Image", "file": "https://example.com/image.png"},

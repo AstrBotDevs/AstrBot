@@ -96,6 +96,7 @@ from ..protocol.descriptors import (
     BUILTIN_CAPABILITY_SCHEMAS,
     CapabilityDescriptor,
     RESERVED_CAPABILITY_PREFIXES,
+    SessionRef,
 )
 
 CallHandler = Callable[[str, dict[str, Any], object], Awaitable[dict[str, Any]]]
@@ -131,6 +132,12 @@ class CapabilityRouter:
         return [
             entry.descriptor for entry in self._registrations.values() if entry.exposed
         ]
+
+    def contains(self, name: str) -> bool:
+        return name in self._registrations
+
+    def unregister(self, name: str) -> None:
+        self._registrations.pop(name, None)
 
     def register(
         self,
@@ -187,6 +194,15 @@ class CapabilityRouter:
         return output
 
     def _register_builtin_capabilities(self) -> None:
+        def resolve_target(
+            payload: dict[str, Any],
+        ) -> tuple[str, dict[str, Any] | None]:
+            target_payload = payload.get("target")
+            if isinstance(target_payload, dict):
+                target = SessionRef.model_validate(target_payload)
+                return target.session, target.to_payload()
+            return str(payload.get("session", "")), None
+
         def builtin_descriptor(
             name: str,
             description: str,
@@ -298,37 +314,35 @@ class CapabilityRouter:
         async def platform_send(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
-            session = str(payload.get("session", ""))
+            session, target = resolve_target(payload)
             text = str(payload.get("text", ""))
             message_id = f"msg_{len(self.sent_messages) + 1}"
-            self.sent_messages.append(
-                {
-                    "message_id": message_id,
-                    "session": session,
-                    "text": text,
-                }
-            )
+            sent = {"message_id": message_id, "session": session, "text": text}
+            if target is not None:
+                sent["target"] = target
+            self.sent_messages.append(sent)
             return {"message_id": message_id}
 
         async def platform_send_image(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
-            session = str(payload.get("session", ""))
+            session, target = resolve_target(payload)
             image_url = str(payload.get("image_url", ""))
             message_id = f"img_{len(self.sent_messages) + 1}"
-            self.sent_messages.append(
-                {
-                    "message_id": message_id,
-                    "session": session,
-                    "image_url": image_url,
-                }
-            )
+            sent = {
+                "message_id": message_id,
+                "session": session,
+                "image_url": image_url,
+            }
+            if target is not None:
+                sent["target"] = target
+            self.sent_messages.append(sent)
             return {"message_id": message_id}
 
         async def platform_send_chain(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
-            session = str(payload.get("session", ""))
+            session, target = resolve_target(payload)
             chain = payload.get("chain")
             if not isinstance(chain, list) or not all(
                 isinstance(item, dict) for item in chain
@@ -337,19 +351,20 @@ class CapabilityRouter:
                     "platform.send_chain 的 chain 必须是 object 数组"
                 )
             message_id = f"chain_{len(self.sent_messages) + 1}"
-            self.sent_messages.append(
-                {
-                    "message_id": message_id,
-                    "session": session,
-                    "chain": [dict(item) for item in chain],
-                }
-            )
+            sent = {
+                "message_id": message_id,
+                "session": session,
+                "chain": [dict(item) for item in chain],
+            }
+            if target is not None:
+                sent["target"] = target
+            self.sent_messages.append(sent)
             return {"message_id": message_id}
 
         async def platform_get_members(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
-            session = str(payload.get("session", ""))
+            session, _target = resolve_target(payload)
             return {
                 "members": [
                     {"user_id": f"{session}:member-1", "nickname": "Member 1"},

@@ -133,6 +133,11 @@ class Permissions(_DescriptorBase):
     require_admin: bool = False
     level: int = 0
 
+class SessionRef(_DescriptorBase):
+    conversation_id: str
+    platform: str | None = None
+    raw: dict[str, Any] | None = None
+
 # 四种 Trigger 类型 (discriminated union)
 class CommandTrigger:
     type: Literal["command"] = "command"
@@ -165,6 +170,8 @@ Trigger = Annotated[
 class HandlerDescriptor(_DescriptorBase):
     id: str
     trigger: Trigger
+    kind: Literal["handler", "hook", "tool", "session"] = "handler"
+    contract: str = "message_event"
     priority: int = 0
     permissions: Permissions
 
@@ -214,6 +221,7 @@ PLATFORM_SEND_INPUT_SCHEMA
 PLATFORM_SEND_OUTPUT_SCHEMA
 PLATFORM_SEND_IMAGE_INPUT_SCHEMA
 PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA
+SESSION_REF_SCHEMA                  # 新增: 结构化会话目标
 PLATFORM_SEND_CHAIN_INPUT_SCHEMA      # 新增: 发送消息链
 PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA     # 新增: 发送消息链
 PLATFORM_GET_MEMBERS_INPUT_SCHEMA
@@ -233,7 +241,7 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]]
 
 | 类型 | 用途 | 关键字段 |
 |------|------|----------|
-| `InitializeMessage` | 初始化握手 | `peer`, `handlers`, `metadata` |
+| `InitializeMessage` | 初始化握手 | `peer`, `handlers`, `provided_capabilities`, `metadata` |
 | `InvokeMessage` | 调用 Capability | `capability`, `input`, `stream` |
 | `ResultMessage` | 返回结果 | `success`, `output`, `error` |
 | `EventMessage` | 流式事件 | `phase` (started/delta/completed/failed) |
@@ -258,6 +266,7 @@ class InitializeMessage(_MessageBase):
     id: str
     peer: PeerInfo
     handlers: list[HandlerDescriptor] = []
+    provided_capabilities: list[CapabilityDescriptor] = []
     metadata: dict[str, Any] = {}
 
 class InitializeOutput(_MessageBase):

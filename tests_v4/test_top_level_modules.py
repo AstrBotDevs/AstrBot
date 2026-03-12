@@ -58,6 +58,7 @@ class TestTopLevelImports:
         assert astrbot_sdk.on_event is not None
         assert astrbot_sdk.on_message is not None
         assert astrbot_sdk.on_schedule is not None
+        assert astrbot_sdk.provide_capability is not None
         assert astrbot_sdk.require_admin is not None
 
     def test_package_all_matches_public_exports(self):
@@ -71,6 +72,7 @@ class TestTopLevelImports:
             "on_event",
             "on_message",
             "on_schedule",
+            "provide_capability",
             "require_admin",
         ]
 

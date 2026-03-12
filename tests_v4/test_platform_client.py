@@ -10,6 +10,7 @@ import pytest
 
 from astrbot_sdk.clients.platform import PlatformClient
 from astrbot_sdk.clients._proxy import CapabilityProxy
+from astrbot_sdk.protocol.descriptors import SessionRef
 
 
 class TestPlatformClientInit:
@@ -63,6 +64,35 @@ class TestPlatformClientSend:
 
         call_args = proxy.call.call_args[0][1]
         assert call_args["text"] == "Hello\nWorld\t! @#$%"
+
+    @pytest.mark.asyncio
+    async def test_send_with_session_ref_adds_target_payload(self):
+        """send() should preserve structured session targets while keeping session string."""
+        proxy = AsyncMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={})
+
+        client = PlatformClient(proxy)
+        await client.send(
+            SessionRef(
+                conversation_id="session-1",
+                platform="test",
+                raw={"trace_id": "trace-1"},
+            ),
+            "Hello",
+        )
+
+        proxy.call.assert_called_once_with(
+            "platform.send",
+            {
+                "session": "session-1",
+                "target": {
+                    "conversation_id": "session-1",
+                    "platform": "test",
+                    "raw": {"trace_id": "trace-1"},
+                },
+                "text": "Hello",
+            },
+        )
 
 
 class TestPlatformClientSendImage:

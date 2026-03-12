@@ -127,9 +127,16 @@ DB_LIST_OUTPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
 )
+SESSION_REF_SCHEMA = _object_schema(
+    required=("conversation_id",),
+    conversation_id={"type": "string"},
+    platform=_nullable({"type": "string"}),
+    raw=_nullable({"type": "object"}),
+)
 PLATFORM_SEND_INPUT_SCHEMA = _object_schema(
     required=("session", "text"),
     session={"type": "string"},
+    target=_nullable(SESSION_REF_SCHEMA),
     text={"type": "string"},
 )
 PLATFORM_SEND_OUTPUT_SCHEMA = _object_schema(
@@ -139,6 +146,7 @@ PLATFORM_SEND_OUTPUT_SCHEMA = _object_schema(
 PLATFORM_SEND_IMAGE_INPUT_SCHEMA = _object_schema(
     required=("session", "image_url"),
     session={"type": "string"},
+    target=_nullable(SESSION_REF_SCHEMA),
     image_url={"type": "string"},
 )
 PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA = _object_schema(
@@ -148,6 +156,7 @@ PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA = _object_schema(
 PLATFORM_SEND_CHAIN_INPUT_SCHEMA = _object_schema(
     required=("session", "chain"),
     session={"type": "string"},
+    target=_nullable(SESSION_REF_SCHEMA),
     chain={"type": "array", "items": {"type": "object"}},
 )
 PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA = _object_schema(
@@ -157,6 +166,7 @@ PLATFORM_SEND_CHAIN_OUTPUT_SCHEMA = _object_schema(
 PLATFORM_GET_MEMBERS_INPUT_SCHEMA = _object_schema(
     required=("session",),
     session={"type": "string"},
+    target=_nullable(SESSION_REF_SCHEMA),
 )
 PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA = _object_schema(
     required=("members",),
@@ -246,6 +256,28 @@ class Permissions(_DescriptorBase):
 
     require_admin: bool = False
     level: int = 0
+
+
+class SessionRef(_DescriptorBase):
+    """结构化会话目标。
+
+    v4 运行时内部仍然保留 legacy `session` 字符串作为最低兼容层，
+    但对外模型允许同时携带平台与原始寻址信息，避免平台发送接口长期
+    只依赖一个不透明字符串。
+    """
+
+    conversation_id: str = Field(
+        validation_alias=AliasChoices("conversation_id", "session"),
+    )
+    platform: str | None = None
+    raw: dict[str, Any] | None = None
+
+    @property
+    def session(self) -> str:
+        return self.conversation_id
+
+    def to_payload(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
 
 
 class CommandTrigger(_DescriptorBase):
@@ -382,14 +414,27 @@ class HandlerDescriptor(_DescriptorBase):
     Attributes:
         id: 处理器唯一标识，通常是 "模块.函数名" 格式
         trigger: 触发器配置，决定何时执行该处理器
+        kind: 处理器类别，默认普通 handler
+        contract: 运行时契约名，描述入参/执行语义
         priority: 优先级，数值越大越先执行
         permissions: 权限配置，控制谁可以触发该处理器
     """
 
     id: str
     trigger: Trigger
+    kind: Literal["handler", "hook", "tool", "session"] = "handler"
+    contract: str | None = None
     priority: int = 0
     permissions: Permissions = Field(default_factory=Permissions)
+
+    @model_validator(mode="after")
+    def validate_contract_defaults(self) -> "HandlerDescriptor":
+        if self.contract is None:
+            if isinstance(self.trigger, ScheduleTrigger):
+                self.contract = "schedule"
+            else:
+                self.contract = "message_event"
+        return self
 
 
 class CapabilityDescriptor(_DescriptorBase):
@@ -472,5 +517,7 @@ __all__ = [
     "RESERVED_CAPABILITY_NAMESPACES",
     "RESERVED_CAPABILITY_PREFIXES",
     "ScheduleTrigger",
+    "SESSION_REF_SCHEMA",
+    "SessionRef",
     "Trigger",
 ]

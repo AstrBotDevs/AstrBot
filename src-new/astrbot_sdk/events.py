@@ -11,6 +11,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from .protocol.descriptors import SessionRef
+
 if TYPE_CHECKING:
     from .context import Context
 
@@ -46,7 +48,8 @@ class MessageEvent:
         self._reply_handler = reply_handler
         if self._reply_handler is None and context is not None:
             self._reply_handler = lambda text: context.platform.send(
-                self.session_id, text
+                self.session_ref or self.session_id,
+                text,
             )
 
     @classmethod
@@ -57,12 +60,19 @@ class MessageEvent:
         context: "Context | None" = None,
         reply_handler: ReplyHandler | None = None,
     ) -> "MessageEvent":
+        target_payload = payload.get("target")
+        session_id = payload.get("session_id")
+        platform = payload.get("platform")
+        if isinstance(target_payload, dict):
+            target = SessionRef.model_validate(target_payload)
+            session_id = session_id or target.session
+            platform = platform or target.platform
         return cls(
             text=str(payload.get("text", "")),
             user_id=payload.get("user_id"),
             group_id=payload.get("group_id"),
-            platform=payload.get("platform"),
-            session_id=payload.get("session_id"),
+            platform=platform,
+            session_id=session_id,
             raw=payload,
             context=context,
             reply_handler=reply_handler,
@@ -79,7 +89,23 @@ class MessageEvent:
                 "session_id": self.session_id,
             }
         )
+        if self.session_ref is not None:
+            payload["target"] = self.session_ref.to_payload()
         return payload
+
+    @property
+    def session_ref(self) -> SessionRef | None:
+        if not self.session_id:
+            return None
+        return SessionRef(
+            conversation_id=self.session_id,
+            platform=self.platform,
+            raw=self.raw or None,
+        )
+
+    @property
+    def target(self) -> SessionRef | None:
+        return self.session_ref
 
     async def reply(self, text: str) -> None:
         if self._reply_handler is None:

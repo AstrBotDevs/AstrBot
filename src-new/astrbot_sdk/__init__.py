@@ -6,7 +6,14 @@
 """
 
 from .context import Context
-from .decorators import on_command, on_event, on_message, on_schedule, require_admin
+from .decorators import (
+    on_command,
+    on_event,
+    on_message,
+    on_schedule,
+    provide_capability,
+    require_admin,
+)
 from .errors import AstrBotError
 from .events import MessageEvent
 from .star import Star
@@ -20,5 +27,6 @@ __all__ = [
     "on_event",
     "on_message",
     "on_schedule",
+    "provide_capability",
     "require_admin",
 ]

@@ -40,7 +40,7 @@ class BaseMessageComponent(BaseModel):
     type: CompT
 
     def to_dict(self) -> dict:
-        return self.model_dump()
+        return self.model_dump(mode="json")
 
 
 class Plain(BaseMessageComponent):

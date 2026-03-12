@@ -325,7 +325,7 @@ class AstrMessageEvent(MessageEvent):
         runtime_context = getattr(self, "_context", None)
         if runtime_context is not None and not message.is_plain_text_only():
             await runtime_context.platform.send_chain(
-                self.session_id,
+                self.session_ref or self.session_id,
                 message.to_payload(),
             )
             return

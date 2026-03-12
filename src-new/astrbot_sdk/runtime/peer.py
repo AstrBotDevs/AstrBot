@@ -137,8 +137,10 @@ class Peer:
         self.protocol_version = protocol_version
         self.remote_peer: PeerInfo | None = None
         self.remote_handlers = []
+        self.remote_provided_capabilities = []
         self.remote_capabilities = []
         self.remote_capability_map: dict[str, Any] = {}
+        self.remote_provided_capability_map: dict[str, Any] = {}
         self.remote_metadata: dict[str, Any] = {}
 
         self._initialize_handler: InitializeHandler | None = None
@@ -233,6 +235,7 @@ class Peer:
         self,
         handlers,
         *,
+        provided_capabilities=None,
         metadata: dict[str, Any] | None = None,
     ) -> InitializeOutput:
         """向远端发送初始化请求并缓存远端声明的能力信息。
@@ -256,6 +259,7 @@ class Peer:
                 protocol_version=self.protocol_version,
                 peer=self.peer_info,
                 handlers=list(handlers),
+                provided_capabilities=list(provided_capabilities or []),
                 metadata=metadata or {},
             )
         )
@@ -421,6 +425,10 @@ class Peer:
         """处理远端发起的初始化握手并返回握手结果。"""
         self.remote_peer = message.peer
         self.remote_handlers = message.handlers
+        self.remote_provided_capabilities = message.provided_capabilities
+        self.remote_provided_capability_map = {
+            item.name: item for item in message.provided_capabilities
+        }
         self.remote_metadata = message.metadata
         if self._initialize_handler is None:
             await self._reject_initialize(

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .protocol.descriptors import (
+    CapabilityDescriptor,
     CommandTrigger,
     EventTrigger,
     MessageTrigger,
@@ -19,6 +20,7 @@ from .protocol.descriptors import (
 
 HandlerCallable = Callable[..., Any]
 HANDLER_META_ATTR = "__astrbot_handler_meta__"
+CAPABILITY_META_ATTR = "__astrbot_capability_meta__"
 
 
 @dataclass(slots=True)
@@ -26,8 +28,15 @@ class HandlerMeta:
     trigger: CommandTrigger | MessageTrigger | EventTrigger | ScheduleTrigger | None = (
         None
     )
+    kind: str = "handler"
+    contract: str | None = None
     priority: int = 0
     permissions: Permissions = field(default_factory=Permissions)
+
+
+@dataclass(slots=True)
+class CapabilityMeta:
+    descriptor: CapabilityDescriptor
 
 
 def _get_or_create_meta(func: HandlerCallable) -> HandlerMeta:
@@ -40,6 +49,10 @@ def _get_or_create_meta(func: HandlerCallable) -> HandlerMeta:
 
 def get_handler_meta(func: HandlerCallable) -> HandlerMeta | None:
     return getattr(func, HANDLER_META_ATTR, None)
+
+
+def get_capability_meta(func: HandlerCallable) -> CapabilityMeta | None:
+    return getattr(func, CAPABILITY_META_ATTR, None)
 
 
 def on_command(
@@ -104,3 +117,29 @@ def require_admin(func: HandlerCallable) -> HandlerCallable:
     meta = _get_or_create_meta(func)
     meta.permissions.require_admin = True
     return func
+
+
+def provide_capability(
+    name: str,
+    *,
+    description: str,
+    input_schema: dict[str, Any] | None = None,
+    output_schema: dict[str, Any] | None = None,
+    supports_stream: bool = False,
+    cancelable: bool = False,
+) -> Callable[[HandlerCallable], HandlerCallable]:
+    """声明插件对外暴露的 capability。"""
+
+    def decorator(func: HandlerCallable) -> HandlerCallable:
+        descriptor = CapabilityDescriptor(
+            name=name,
+            description=description,
+            input_schema=input_schema,
+            output_schema=output_schema,
+            supports_stream=supports_stream,
+            cancelable=cancelable,
+        )
+        setattr(func, CAPABILITY_META_ATTR, CapabilityMeta(descriptor=descriptor))
+        return func
+
+    return decorator

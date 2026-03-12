@@ -18,7 +18,9 @@ from astrbot_sdk.protocol.descriptors import (
     MessageTrigger,
     Permissions,
     RESERVED_CAPABILITY_PREFIXES,
+    SESSION_REF_SCHEMA,
     ScheduleTrigger,
+    SessionRef,
 )
 
 
@@ -258,6 +260,37 @@ class TestHandlerDescriptor:
         trigger = CommandTrigger(command="test")
         with pytest.raises(ValidationError):
             HandlerDescriptor(id="test", trigger=trigger, extra="field")
+
+    def test_defaults_kind_and_contract_from_trigger(self):
+        """HandlerDescriptor should infer contract defaults from trigger shape."""
+        message_handler = HandlerDescriptor(
+            id="msg.handler",
+            trigger=CommandTrigger(command="hello"),
+        )
+        schedule_handler = HandlerDescriptor(
+            id="sched.handler",
+            trigger=ScheduleTrigger(interval_seconds=30),
+        )
+
+        assert message_handler.kind == "handler"
+        assert message_handler.contract == "message_event"
+        assert schedule_handler.contract == "schedule"
+
+
+class TestSessionRef:
+    """Tests for SessionRef model."""
+
+    def test_accepts_legacy_session_alias(self):
+        """SessionRef should accept legacy session field while normalizing storage."""
+        ref = SessionRef.model_validate({"session": "session-1", "platform": "qq"})
+
+        assert ref.conversation_id == "session-1"
+        assert ref.session == "session-1"
+        assert ref.platform == "qq"
+
+    def test_schema_is_exported_for_platform_targets(self):
+        """SessionRef schema should remain a shared protocol constant."""
+        assert SESSION_REF_SCHEMA["required"] == ["conversation_id"]
 
 
 class TestCapabilityDescriptor:

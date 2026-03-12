@@ -9,7 +9,7 @@ import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import yaml
@@ -17,6 +17,7 @@ import yaml
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import (
+    CapabilityDescriptor,
     CommandTrigger,
     HandlerDescriptor,
 )
@@ -309,6 +310,47 @@ class TestWorkerSessionMethods:
 
         assert result["text"] == "Echo: hello"
 
+    @pytest.mark.asyncio
+    async def test_register_plugin_capability_routes_through_worker_session(self):
+        """SupervisorRuntime should expose plugin-provided capabilities via router."""
+        transport = MemoryTransport()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = SupervisorRuntime(
+                transport=transport,
+                plugins_dir=Path(temp_dir),
+            )
+            session = MagicMock()
+            session.invoke_capability = AsyncMock(return_value={"echo": "hi"})
+            descriptor = CapabilityDescriptor(
+                name="demo.echo",
+                description="Echo text",
+                input_schema={
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                },
+                output_schema={
+                    "type": "object",
+                    "properties": {"echo": {"type": "string"}},
+                },
+            )
+
+            runtime._register_plugin_capability(descriptor, session, "demo_plugin")
+            result = await runtime.capability_router.execute(
+                "demo.echo",
+                {"text": "hi"},
+                stream=False,
+                cancel_token=CancelToken(),
+                request_id="req-1",
+            )
+
+            assert result == {"echo": "hi"}
+            session.invoke_capability.assert_awaited_once_with(
+                "demo.echo",
+                {"text": "hi"},
+                request_id="req-1",
+            )
+
 
 class TestSupervisorRuntimeInit:
     """Tests for SupervisorRuntime initialization."""
@@ -326,6 +368,7 @@ class TestSupervisorRuntimeInit:
             assert runtime.transport is transport
             assert runtime.worker_sessions == {}
             assert runtime.handler_to_worker == {}
+            assert runtime.capability_to_worker == {}
             assert runtime.active_requests == {}
             assert runtime.loaded_plugins == []
             assert isinstance(runtime.capability_router, CapabilityRouter)
@@ -532,6 +575,70 @@ class TestPluginWorkerRuntimeMethods:
 
             with pytest.raises(AstrBotError, match="未找到能力"):
                 await runtime._handle_invoke(message, token)
+
+    @pytest.mark.asyncio
+    async def test_handle_invoke_plugin_capability(self):
+        """_handle_invoke should dispatch plugin-provided capabilities."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+            module_dir = plugin_dir / "demo_plugin"
+            module_dir.mkdir()
+            (module_dir / "__init__.py").write_text("", encoding="utf-8")
+            (module_dir / "component.py").write_text(
+                """
+from astrbot_sdk import Star, provide_capability
+
+
+class DemoComponent(Star):
+    @provide_capability(
+        "demo.echo",
+        description="Echo text",
+        input_schema={"type": "object", "properties": {"text": {"type": "string"}}},
+        output_schema={"type": "object", "properties": {"echo": {"type": "string"}}},
+    )
+    async def echo(self, payload):
+        return {"echo": payload["text"]}
+""".strip(),
+                encoding="utf-8",
+            )
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [
+                            {"class": "demo_plugin.component:DemoComponent"}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            if str(plugin_dir) not in sys.path:
+                sys.path.insert(0, str(plugin_dir))
+
+            try:
+                transport = MemoryTransport()
+                runtime = PluginWorkerRuntime(
+                    plugin_dir=plugin_dir,
+                    transport=transport,
+                )
+                message = InvokeMessage(
+                    id="invoke-cap",
+                    capability="demo.echo",
+                    input={"text": "hello"},
+                )
+
+                result = await runtime._handle_invoke(message, CancelToken())
+
+                assert result == {"echo": "hello"}
+            finally:
+                if str(plugin_dir) in sys.path:
+                    sys.path.remove(str(plugin_dir))
 
     @pytest.mark.asyncio
     async def test_run_lifecycle_sync_hook(self):

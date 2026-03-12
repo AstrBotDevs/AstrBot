@@ -101,7 +101,7 @@ from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import InitializeOutput, PeerInfo
 from .capability_router import CapabilityRouter
-from .handler_dispatcher import HandlerDispatcher
+from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
     PluginEnvironmentManager,
     PluginSpec,
@@ -173,6 +173,7 @@ class WorkerSession:
         self.on_closed = on_closed
         self.peer: Peer | None = None
         self.handlers = []
+        self.provided_capabilities: list[CapabilityDescriptor] = []
 
     async def start(self) -> None:
         python_path = self.env_manager.prepare_environment(self.plugin)
@@ -227,6 +228,7 @@ class WorkerSession:
                 )
 
             self.handlers = list(self.peer.remote_handlers)
+            self.provided_capabilities = list(self.peer.remote_provided_capabilities)
 
             # 启动后台任务监听连接关闭
             if self.on_closed is not None:
@@ -268,6 +270,38 @@ class WorkerSession:
             },
             request_id=request_id,
         )
+
+    async def invoke_capability(
+        self,
+        capability_name: str,
+        payload: dict[str, Any],
+        *,
+        request_id: str,
+    ) -> dict[str, Any]:
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
+        return await self.peer.invoke(
+            capability_name,
+            payload,
+            request_id=request_id,
+        )
+
+    async def invoke_capability_stream(
+        self,
+        capability_name: str,
+        payload: dict[str, Any],
+        *,
+        request_id: str,
+    ):
+        if self.peer is None:
+            raise RuntimeError("worker session is not running")
+        event_stream = await self.peer.invoke_stream(
+            capability_name,
+            payload,
+            request_id=request_id,
+        )
+        async for event in event_stream:
+            yield event.data
 
     async def cancel(self, request_id: str) -> None:
         if self.peer is None:
@@ -312,7 +346,9 @@ class SupervisorRuntime:
         self.peer.set_cancel_handler(self._handle_upstream_cancel)
         self.worker_sessions: dict[str, WorkerSession] = {}
         self.handler_to_worker: dict[str, WorkerSession] = {}
+        self.capability_to_worker: dict[str, WorkerSession] = {}
         self._handler_sources: dict[str, str] = {}  # handler_id -> plugin_name
+        self._capability_sources: dict[str, str] = {}  # capability_name -> plugin_name
         self.active_requests: dict[str, WorkerSession] = {}
         self.loaded_plugins: list[str] = []
         self.skipped_plugins: dict[str, str] = {}
@@ -364,6 +400,78 @@ class SupervisorRuntime:
         self.handler_to_worker[handler_id] = session
         self._handler_sources[handler_id] = plugin_name
 
+    def _register_plugin_capability(
+        self,
+        descriptor: CapabilityDescriptor,
+        session: WorkerSession,
+        plugin_name: str,
+    ) -> None:
+        capability_name = descriptor.name
+        if self.capability_router.contains(capability_name):
+            logger.warning(
+                "Capability 名称冲突：'{}' 已存在，跳过插件 '{}' 的注册。",
+                capability_name,
+                plugin_name,
+                # TODO: 更好的解决方案？
+            )
+            return
+        self.capability_router.register(
+            descriptor.model_copy(deep=True),
+            call_handler=self._make_plugin_capability_caller(session, capability_name),
+            stream_handler=(
+                self._make_plugin_capability_streamer(session, capability_name)
+                if descriptor.supports_stream
+                else None
+            ),
+        )
+        self.capability_to_worker[capability_name] = session
+        self._capability_sources[capability_name] = plugin_name
+
+    def _make_plugin_capability_caller(
+        self,
+        session: WorkerSession,
+        capability_name: str,
+    ):
+        async def call_handler(
+            request_id: str,
+            payload: dict[str, Any],
+            _cancel_token,
+        ) -> dict[str, Any]:
+            self.active_requests[request_id] = session
+            try:
+                return await session.invoke_capability(
+                    capability_name,
+                    payload,
+                    request_id=request_id,
+                )
+            finally:
+                self.active_requests.pop(request_id, None)
+
+        return call_handler
+
+    def _make_plugin_capability_streamer(
+        self,
+        session: WorkerSession,
+        capability_name: str,
+    ):
+        async def stream_handler(
+            request_id: str,
+            payload: dict[str, Any],
+            _cancel_token,
+        ):
+            self.active_requests[request_id] = session
+            try:
+                async for chunk in session.invoke_capability_stream(
+                    capability_name,
+                    payload,
+                    request_id=request_id,
+                ):
+                    yield chunk
+            finally:
+                self.active_requests.pop(request_id, None)
+
+        return stream_handler
+
     async def start(self) -> None:
         discovery = discover_plugins(self.plugins_dir)
         self.skipped_plugins = dict(discovery.skipped_plugins)
@@ -386,6 +494,8 @@ class SupervisorRuntime:
                 self.loaded_plugins.append(plugin.name)
                 for handler in session.handlers:
                     self._register_handler(handler, session, plugin.name)
+                for descriptor in session.provided_capabilities:
+                    self._register_plugin_capability(descriptor, session, plugin.name)
 
             aggregated_handlers = list(self.handler_to_worker.keys())
             logger.info(
@@ -399,6 +509,7 @@ class SupervisorRuntime:
                     for session in self.worker_sessions.values()
                     for handler in session.handlers
                 ],
+                provided_capabilities=self.capability_router.descriptors(),
                 metadata={
                     "plugins": sorted(self.loaded_plugins),
                     "skipped_plugins": self.skipped_plugins,
@@ -420,6 +531,12 @@ class SupervisorRuntime:
             if source_plugin == plugin_name:
                 self.handler_to_worker.pop(handler.id, None)
                 self._handler_sources.pop(handler.id, None)
+        for descriptor in session.provided_capabilities:
+            source_plugin = self._capability_sources.get(descriptor.name)
+            if source_plugin == plugin_name:
+                self.capability_to_worker.pop(descriptor.name, None)
+                self._capability_sources.pop(descriptor.name, None)
+                self.capability_router.unregister(descriptor.name)
         # 从 loaded_plugins 中移除
         if plugin_name in self.loaded_plugins:
             self.loaded_plugins.remove(plugin_name)
@@ -486,16 +603,24 @@ class PluginWorkerRuntime:
             peer=self.peer,
             handlers=self.loaded_plugin.handlers,
         )
+        self.capability_dispatcher = CapabilityDispatcher(
+            plugin_id=self.plugin.name,
+            peer=self.peer,
+            capabilities=self.loaded_plugin.capabilities,
+        )
         self._lifecycle_context = RuntimeContext(
             peer=self.peer, plugin_id=self.plugin.name
         )
         self.peer.set_invoke_handler(self._handle_invoke)
-        self.peer.set_cancel_handler(self.dispatcher.cancel)
+        self.peer.set_cancel_handler(self._handle_cancel)
 
     async def start(self) -> None:
         await self.peer.start()
         await self.peer.initialize(
             [item.descriptor for item in self.loaded_plugin.handlers],
+            provided_capabilities=[
+                item.descriptor for item in self.loaded_plugin.capabilities
+            ],
             metadata={"plugin_id": self.plugin.name},
         )
         try:
@@ -512,9 +637,16 @@ class PluginWorkerRuntime:
             await self.peer.stop()
 
     async def _handle_invoke(self, message, cancel_token):
-        if message.capability != "handler.invoke":
-            raise AstrBotError.capability_not_found(message.capability)
-        return await self.dispatcher.invoke(message, cancel_token)
+        if message.capability == "handler.invoke":
+            return await self.dispatcher.invoke(message, cancel_token)
+        try:
+            return await self.capability_dispatcher.invoke(message, cancel_token)
+        except LookupError as exc:
+            raise AstrBotError.capability_not_found(message.capability) from exc
+
+    async def _handle_cancel(self, request_id: str) -> None:
+        await self.dispatcher.cancel(request_id)
+        await self.capability_dispatcher.cancel(request_id)
 
     async def _run_lifecycle(self, method_name: str) -> None:
         for instance in self.loaded_plugin.instances:
