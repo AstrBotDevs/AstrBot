@@ -43,13 +43,14 @@ class TestSQLiteV3QueryParameterization:
 
     def test_get_filtered_conversations_uses_named_parameters(self):
         db, cursor = self._create_db_with_mock_cursor()
+        unsafe_search = "x' OR 1=1 --"
 
         db.get_filtered_conversations(
             page=2,
             page_size=10,
             platforms=["qq"],
             message_types=["group"],
-            search_query="x' OR 1=1 --",
+            search_query=unsafe_search,
             exclude_ids=["admin"],
             exclude_platforms=["slack"],
         )
@@ -62,15 +63,17 @@ class TestSQLiteV3QueryParameterization:
         assert ":search_query" in count_sql
         assert ":exclude_id_0" in count_sql
         assert ":exclude_platform_0" in count_sql
-        assert "x' OR 1=1 --" not in count_sql
+        assert unsafe_search not in count_sql
         assert count_params["platform_0"] == "qq:%"
         assert count_params["message_type_0"] == "%:group:%"
-        assert count_params["search_query"] == "%x' OR 1=1 --%"
+        assert unsafe_search in count_params["search_query"]
         assert count_params["exclude_id_0"] == "admin%"
         assert count_params["exclude_platform_0"] == "slack:%"
 
         assert "FROM webchat_conversation WHERE" in data_sql
+        assert unsafe_search not in data_sql
         assert ":page_size" in data_sql
         assert ":offset" in data_sql
+        assert unsafe_search in data_params["search_query"]
         assert data_params["page_size"] == 10
         assert data_params["offset"] == 10
