@@ -1,3 +1,36 @@
+# =============================================================================
+# 新旧对比 - errors.py
+# =============================================================================
+#
+# 【旧版】
+# 旧版 SDK 没有专门的 errors.py 文件。
+# 只有 runtime/rpc/jsonrpc.py 中定义了 JSONRPCErrorData 用于内部通信。
+#
+# 【新版】
+# 新增 errors.py，定义统一的 AstrBotError 异常类：
+# - 包含 code, message, hint, retryable 字段
+# - 提供工厂方法: cancelled(), capability_not_found(), invalid_input(),
+#                protocol_version_mismatch(), protocol_error(), internal_error()
+# - 支持序列化/反序列化: to_payload(), from_payload()
+#
+# 【设计目的】
+# 新版采用分布式架构，插件与核心通过 RPC 通信。
+# AstrBotError 提供统一的错误表示，便于跨进程传递错误信息。
+#
+# =============================================================================
+# TODO: 功能缺失
+# =============================================================================
+#
+# 1. 缺少旧版异常类兼容
+#    - 如果旧版有其他异常类（如 ChatProviderNotFoundError），需要考虑兼容
+#    - 当前 AstrBotError 可覆盖大部分场景
+#
+# 2. 缺少错误码常量定义
+#    - 建议添加错误码枚举或常量，便于错误匹配
+#    - 例如: ERROR_CODE_CANCELLED = "cancelled"
+#
+# =============================================================================
+
 from __future__ import annotations
 
 from dataclasses import dataclass
