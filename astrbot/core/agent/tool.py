@@ -293,7 +293,17 @@ class ToolSet:
                 if properties:
                     result["properties"] = properties
 
-            if "items" in schema:
+            if target_type == "array":
+                # Gemini rejects array schemas that omit `items`, while JSON Schema
+                # producers in the wild (especially external MCP tools) sometimes
+                # leave element types unspecified. Fall back to a permissive string
+                # item schema so tool calling stays functional instead of failing the
+                # whole request with `items: missing field`.
+                if isinstance(schema.get("items"), dict) and schema["items"]:
+                    result["items"] = convert_schema(schema["items"])
+                else:
+                    result["items"] = {"type": "string"}
+            elif "items" in schema:
                 result["items"] = convert_schema(schema["items"])
 
             return result
