@@ -358,34 +358,48 @@ class CronJobManager:
             logger.warning("Cron job agent got no response")
             return
 
-        # 仅当 agent 实际调用了工具时才写入历史，避免未发送消息的失败执行产生误导性记录
-        tool_was_called = any(msg.role == "tool" for msg in runner.run_context.messages)
-        if tool_was_called:
-            cron_meta = extras.get("cron_job", {}) if extras else {}
-            # role == "assistant" 表示 LLM 正常完成，排除 role="err" 的错误响应写入历史
-            status = (
-                "task completed successfully."
-                if llm_resp.role == "assistant"
-                else f"task ended with error: {llm_resp.completion_text}"
-            )
-            summary_note = (
-                f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
-                f"{cron_meta.get('description', '')} "
-                f"triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-                f"{status}"
-            )
-            await persist_agent_history(
-                self.ctx.conversation_manager,
-                event=cron_event,
-                req=req,
-                summary_note=summary_note,
-            )
-        else:
+        cron_meta = extras.get("cron_job", {}) if extras else {}
+
+        # 选择工具调用的名字作为日志输出，方便后续分析 cron 任务是否正确触达用户，以及用户收到的内容是什么
+        called_tool_names: list[str] = []
+        for msg in runner.run_context.messages:
+            # 只统计 role="assistant" 的消息中的工具调用
+            if msg.role == "assistant" and msg.tool_calls:
+                # 工具调用应该是dict或者ToolCall对象的列表，兼容两者的情况
+                for tc in msg.tool_calls:
+                    if isinstance(tc, dict):
+                        name = tc.get("function", {}).get("name")
+                    else:
+                        name = tc.function.name
+                    if name:
+                        called_tool_names.append(name)
+
+        if not called_tool_names:
             logger.warning(
                 "Cron job agent did not call any tools. "
-                "The message was likely NOT delivered to the user. "
-                "Skipping history persistence to avoid misleading future context."
+                "The message was likely NOT delivered to the user."
             )
+
+        tools_str = f"tools called: [{', '.join(called_tool_names)}]. " if called_tool_names else "no tools called. "
+        # role == "assistant" 表示 LLM 正常完成，排除 role="err" 的错误响应写入历史
+        status = (
+            "task completed successfully."
+            if llm_resp.role == "assistant"
+            else f"task ended with error: {llm_resp.completion_text}"
+        )
+        summary_note = (
+            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
+            f"{cron_meta.get('description', '')} "
+            f"triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
+            f"{tools_str}"
+            f"{status}"
+        )
+        await persist_agent_history(
+            self.ctx.conversation_manager,
+            event=cron_event,
+            req=req,
+            summary_note=summary_note,
+        )
 
 
 __all__ = ["CronJobManager"]

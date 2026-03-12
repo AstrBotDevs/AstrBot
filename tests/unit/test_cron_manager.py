@@ -641,8 +641,8 @@ class TestWokeMainAgentHistoryPersistence:
         assert "task completed successfully" in call_kwargs["summary_note"]
 
     @pytest.mark.asyncio
-    async def test_history_not_persisted_when_no_tool_called(self, cron_manager, mock_context):
-        """agent 未调用任何工具时（finish_reason='stop'），不写入历史，避免污染上下文。"""
+    async def test_history_persisted_even_when_no_tool_called(self, cron_manager, mock_context):
+        """agent 未调用任何工具的时候，历史记录应写入，summary 中包含 'no tools called'。"""
         cron_manager.ctx = mock_context
         persist_mock = AsyncMock()
 
@@ -675,7 +675,9 @@ class TestWokeMainAgentHistoryPersistence:
                 extras={"cron_job": {"id": "j2", "name": "test"}, "cron_payload": {}},
             )
 
-        persist_mock.assert_not_awaited()
+        persist_mock.assert_awaited_once()
+        call_kwargs = persist_mock.call_args.kwargs
+        assert "no tools called" in call_kwargs["summary_note"]
 
     @pytest.mark.asyncio
     async def test_history_not_persisted_when_no_llm_resp(self, cron_manager, mock_context):
