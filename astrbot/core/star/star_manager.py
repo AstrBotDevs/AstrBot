@@ -100,13 +100,14 @@ async def _install_requirements_with_precheck(
     )
 
     filtered_requirements_path: str | None = None
+    temp_dir = get_astrbot_temp_path()
     try:
-        os.makedirs(get_astrbot_temp_path(), exist_ok=True)
+        os.makedirs(temp_dir, exist_ok=True)
         with tempfile.NamedTemporaryFile(
             mode="w",
             suffix="_plugin_requirements.txt",
             delete=False,
-            dir=get_astrbot_temp_path(),
+            dir=temp_dir,
             encoding="utf-8",
         ) as filtered_requirements_file:
             filtered_requirements_file.write(

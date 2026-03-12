@@ -207,6 +207,24 @@ def test_build_missing_requirements_install_lines_skips_inactive_marker_lines(
     assert install_lines == ("boto3",)
 
 
+def test_plan_missing_requirements_install_returns_none_when_missing_names_cannot_map_to_lines(
+    monkeypatch,
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("boto3\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        requirements_utils,
+        "find_missing_requirements",
+        lambda path: {"botocore"},
+    )
+
+    plan = requirements_utils.plan_missing_requirements_install(str(requirements_path))
+
+    assert plan is None
+
+
 def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
     monkeypatch,
     tmp_path,

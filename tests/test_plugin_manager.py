@@ -635,3 +635,28 @@ async def test_ensure_plugin_requirements_creates_temp_dir_before_filtered_insta
 
     assert temp_dir.is_dir()
     assert len(events) == 1
+
+
+@pytest.mark.asyncio
+async def test_ensure_plugin_requirements_falls_back_when_missing_names_have_no_install_lines(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("boto3\n", encoding="utf-8")
+    events = []
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda path: None,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_mock(events, False),
+    )
+
+    await plugin_manager_pm._ensure_plugin_requirements(
+        str(local_updator),
+        TEST_PLUGIN_DIR,
+    )
+
+    assert events == [("deps", str(requirements_path))]

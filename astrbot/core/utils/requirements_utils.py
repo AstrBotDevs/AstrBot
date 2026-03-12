@@ -443,6 +443,13 @@ def plan_missing_requirements_install(
     install_lines = build_missing_requirements_install_lines(requirements_path, missing)
     if install_lines is None:
         return None
+    if missing and not install_lines:
+        logger.warning(
+            "预检查缺失依赖成功，但无法映射到可安装 requirement 行，将回退到完整安装: %s -> %s",
+            requirements_path,
+            sorted(missing),
+        )
+        return None
 
     return MissingRequirementsPlan(
         missing_names=frozenset(missing),
