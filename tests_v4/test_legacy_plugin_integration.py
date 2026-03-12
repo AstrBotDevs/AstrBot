@@ -496,10 +496,35 @@ class TestRealTestPlugin:
             assert loaded.plugin.name == "astrbot_plugin_helloworld"
             assert len(loaded.instances) == 1
             assert len(loaded.handlers) >= 1
+            assert [item.descriptor.name for item in loaded.capabilities] == [
+                "compat.echo"
+            ]
 
-            # 验证处理器
-            handler_ids = [h.descriptor.id for h in loaded.handlers]
-            assert any("hello" in hid for hid in handler_ids)
+            command_names = {
+                handler.descriptor.trigger.command
+                for handler in loaded.handlers
+                if isinstance(handler.descriptor.trigger, CommandTrigger)
+            }
+            assert {
+                "admin",
+                "admin_type",
+                "ai",
+                "chain",
+                "components",
+                "conversation",
+                "db",
+                "echo",
+                "hello",
+                "sendmsg",
+                "state",
+            } <= command_names
+
+            regex_triggers = [
+                handler.descriptor.trigger
+                for handler in loaded.handlers
+                if isinstance(handler.descriptor.trigger, MessageTrigger)
+            ]
+            assert any(trigger.regex == r"^ping.*" for trigger in regex_triggers)
 
             # 验证实例类型
             instance = loaded.instances[0]
