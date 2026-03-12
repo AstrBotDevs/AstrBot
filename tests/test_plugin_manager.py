@@ -76,7 +76,10 @@ def _build_reload_mock(events):
 
 def _build_dependency_install_mock(events, fail: bool):
     async def mock_install_requirements(
-        *, requirements_path: str = None, package_name: str = None, **kwargs
+        *,
+        requirements_path: str | None = None,
+        package_name: str | None = None,
+        **kwargs,
     ):
         del kwargs
         if requirements_path:
@@ -89,23 +92,93 @@ def _build_dependency_install_mock(events, fail: bool):
     return mock_install_requirements
 
 
+def _build_dependency_install_content_mock(events, fail: bool):
+    async def mock_install_requirements(
+        *,
+        requirements_path: str | None = None,
+        package_name: str | None = None,
+        **kwargs,
+    ):
+        del kwargs
+        if requirements_path:
+            path = Path(requirements_path)
+            events.append(("deps", str(path), path.read_text(encoding="utf-8")))
+        if package_name:
+            events.append(("deps_pkg", package_name))
+        if fail:
+            raise Exception("pip failed")
+
+    return mock_install_requirements
+
+
+def _build_dependency_install_assert_tempdir_mock(events, fail: bool):
+    async def mock_install_requirements(
+        *,
+        requirements_path: str | None = None,
+        package_name: str | None = None,
+        **kwargs,
+    ):
+        del kwargs, package_name
+        assert requirements_path is not None
+        path = Path(requirements_path)
+        events.append(("deps", str(path), path.read_text(encoding="utf-8")))
+        if fail:
+            raise Exception("pip failed")
+
+    return mock_install_requirements
+
+
 def _mock_missing_requirements(monkeypatch, missing: set[str]):
+    from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
+
     monkeypatch.setattr(
-        "astrbot.core.star.star_manager.find_missing_requirements_or_raise",
-        lambda requirements_path: missing,
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset(missing),
+            install_lines=tuple(sorted(missing)),
+        ),
     )
 
 
 def _mock_precheck_fails(monkeypatch):
-    from astrbot.core import RequirementsPrecheckFailed
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
 
-    def mock_fail(requirements_path):
-        raise RequirementsPrecheckFailed("mock precheck failure")
+
+def _mock_missing_requirements_plan(monkeypatch, missing_names, install_lines):
+    from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
     monkeypatch.setattr(
-        "astrbot.core.star.star_manager.find_missing_requirements_or_raise",
-        mock_fail,
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: MissingRequirementsPlan(
+            missing_names=frozenset(missing_names),
+            install_lines=tuple(install_lines),
+        ),
     )
+
+
+def _mock_precheck_plan_failure(monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.plan_missing_requirements_install",
+        lambda requirements_path: None,
+    )
+
+
+def _assert_dependency_install_event_matches(
+    event,
+    *,
+    expected_original_path: Path,
+    expected_content: str | None = None,
+):
+    assert event[0] == "deps"
+    used_path = Path(event[1])
+    if expected_content is None:
+        assert used_path == expected_original_path
+    else:
+        assert used_path != expected_original_path
+        assert used_path.name.endswith("_plugin_requirements.txt")
 
 
 # --- Fixtures ---
@@ -188,13 +261,21 @@ async def test_install_plugin_dependency_install_flow(
     if dependency_install_fails:
         with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
-        assert events == [("deps", str(plugin_path / "requirements.txt"))]
+        assert len(events) == 1
+        _assert_dependency_install_event_matches(
+            events[0],
+            expected_original_path=plugin_path / "requirements.txt",
+            expected_content="networkx\n",
+        )
     else:
         await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
-        assert events == [
-            ("deps", str(plugin_path / "requirements.txt")),
-            ("load", TEST_PLUGIN_DIR),
-        ]
+        assert len(events) == 2
+        _assert_dependency_install_event_matches(
+            events[0],
+            expected_original_path=plugin_path / "requirements.txt",
+            expected_content="networkx\n",
+        )
+        assert events[1] == ("load", TEST_PLUGIN_DIR)
 
 
 @pytest.mark.asyncio
@@ -265,13 +346,21 @@ async def test_reload_failed_plugin_dependency_install_flow(
     if dependency_install_fails:
         with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.reload_failed_plugin(TEST_PLUGIN_DIR)
-        assert events == [("deps", str(local_updator / "requirements.txt"))]
+        assert len(events) == 1
+        _assert_dependency_install_event_matches(
+            events[0],
+            expected_original_path=local_updator / "requirements.txt",
+            expected_content="networkx\n",
+        )
     else:
         await plugin_manager_pm.reload_failed_plugin(TEST_PLUGIN_DIR)
-        assert events == [
-            ("deps", str(local_updator / "requirements.txt")),
-            ("load", TEST_PLUGIN_DIR),
-        ]
+        assert len(events) == 2
+        _assert_dependency_install_event_matches(
+            events[0],
+            expected_original_path=local_updator / "requirements.txt",
+            expected_content="networkx\n",
+        )
+        assert events[1] == ("load", TEST_PLUGIN_DIR)
 
 
 @pytest.mark.asyncio
@@ -337,7 +426,9 @@ async def test_ensure_plugin_requirements_wraps_pip_install_error(
         mock_install_requirements,
     )
 
-    with pytest.raises(PluginDependencyInstallError, match="install failed") as exc_info:
+    with pytest.raises(
+        PluginDependencyInstallError, match="install failed"
+    ) as exc_info:
         await plugin_manager_pm._ensure_plugin_requirements(
             str(local_updator),
             TEST_PLUGIN_DIR,
@@ -403,10 +494,20 @@ async def test_update_plugin_dependency_install_flow(
     if dependency_install_fails:
         with pytest.raises(PluginDependencyInstallError, match="pip failed"):
             await plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
-        assert ("deps", str(local_updator / "requirements.txt")) in events
+        dep_event = next(event for event in events if event[0] == "deps")
+        _assert_dependency_install_event_matches(
+            dep_event,
+            expected_original_path=local_updator / "requirements.txt",
+            expected_content="networkx\n",
+        )
     else:
         await plugin_manager_pm.update_plugin(TEST_PLUGIN_NAME)
-        assert ("deps", str(local_updator / "requirements.txt")) in events
+        dep_event = next(event for event in events if event[0] == "deps")
+        _assert_dependency_install_event_matches(
+            dep_event,
+            expected_original_path=local_updator / "requirements.txt",
+            expected_content="networkx\n",
+        )
         assert ("reload", TEST_PLUGIN_DIR) in events
 
 
@@ -468,5 +569,69 @@ async def test_install_plugin_runs_dependency_install_when_precheck_fails(
 
     await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
 
-    assert ("deps", str(plugin_path / "requirements.txt")) in events
+    dep_event = next(event for event in events if event[0] == "deps")
+    _assert_dependency_install_event_matches(
+        dep_event,
+        expected_original_path=plugin_path / "requirements.txt",
+    )
     assert ("load", TEST_PLUGIN_DIR) in events
+
+
+@pytest.mark.asyncio
+async def test_ensure_plugin_requirements_installs_only_missing_requirement_lines(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text(
+        "aiohttp>=3.0\nboto3==1.2\nbotocore\n",
+        encoding="utf-8",
+    )
+    events = []
+    _mock_missing_requirements_plan(
+        monkeypatch, {"boto3", "botocore"}, ["boto3==1.2", "botocore"]
+    )
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_content_mock(events, False),
+    )
+
+    await plugin_manager_pm._ensure_plugin_requirements(
+        str(local_updator),
+        TEST_PLUGIN_DIR,
+    )
+
+    assert len(events) == 1
+    kind, used_path, content = events[0]
+    assert kind == "deps"
+    assert used_path != str(requirements_path)
+    assert content == "boto3==1.2\nbotocore\n"
+    assert not Path(used_path).exists()
+
+
+@pytest.mark.asyncio
+async def test_ensure_plugin_requirements_creates_temp_dir_before_filtered_install(
+    plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch, tmp_path
+):
+    requirements_path = local_updator / "requirements.txt"
+    requirements_path.write_text("boto3\n", encoding="utf-8")
+    temp_dir = tmp_path / "missing-temp-dir"
+    events = []
+    _mock_missing_requirements_plan(monkeypatch, {"boto3"}, ["boto3"])
+
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.star.star_manager.pip_installer.install",
+        _build_dependency_install_assert_tempdir_mock(events, False),
+    )
+
+    await plugin_manager_pm._ensure_plugin_requirements(
+        str(local_updator),
+        TEST_PLUGIN_DIR,
+    )
+
+    assert temp_dir.is_dir()
+    assert len(events) == 1

@@ -29,6 +29,12 @@ class ParsedPackageInput:
     requirement_names: frozenset[str]
 
 
+@dataclass(frozen=True)
+class MissingRequirementsPlan:
+    missing_names: frozenset[str]
+    install_lines: tuple[str, ...]
+
+
 def canonicalize_distribution_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).strip("-").lower()
 
@@ -399,6 +405,49 @@ def find_missing_requirements(requirements_path: str) -> set[str] | None:
             missing.add(name)
 
     return missing
+
+
+def build_missing_requirements_install_lines(
+    requirements_path: str,
+    missing_names: set[str] | frozenset[str],
+) -> tuple[str, ...] | None:
+    can_precheck, requirement_lines = _load_requirement_lines_for_precheck(
+        requirements_path
+    )
+    if not can_precheck or requirement_lines is None:
+        return None
+
+    wanted_names = set(missing_names)
+    install_lines: list[str] = []
+    for line in requirement_lines:
+        parsed = _parse_requirement_line(line)
+        if parsed is None:
+            if looks_like_direct_reference(line) or line.startswith(("-", "--")):
+                return None
+            continue
+
+        name, _specifier = parsed
+        if name in wanted_names:
+            install_lines.append(line)
+
+    return tuple(install_lines)
+
+
+def plan_missing_requirements_install(
+    requirements_path: str,
+) -> MissingRequirementsPlan | None:
+    missing = find_missing_requirements(requirements_path)
+    if missing is None:
+        return None
+
+    install_lines = build_missing_requirements_install_lines(requirements_path, missing)
+    if install_lines is None:
+        return None
+
+    return MissingRequirementsPlan(
+        missing_names=frozenset(missing),
+        install_lines=install_lines,
+    )
 
 
 def find_missing_requirements_or_raise(requirements_path: str) -> set[str]:

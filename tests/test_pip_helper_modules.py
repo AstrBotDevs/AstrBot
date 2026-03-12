@@ -145,6 +145,68 @@ def test_find_missing_requirements_or_raise_uses_requirements_exception(tmp_path
         requirements_utils.find_missing_requirements_or_raise(str(requirements_path))
 
 
+def test_build_missing_requirements_install_lines_keeps_only_missing_lines(tmp_path):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        'aiohttp>=3.0\nboto3==1.2; python_version >= "3.0"\nbotocore\n',
+        encoding="utf-8",
+    )
+
+    install_lines = requirements_utils.build_missing_requirements_install_lines(
+        str(requirements_path), {"boto3", "botocore"}
+    )
+
+    assert install_lines == (
+        'boto3==1.2; python_version >= "3.0"',
+        "botocore",
+    )
+
+
+def test_build_missing_requirements_install_lines_returns_empty_tuple_when_all_satisfied(
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text("aiohttp>=3.0\nboto3\n", encoding="utf-8")
+
+    install_lines = requirements_utils.build_missing_requirements_install_lines(
+        str(requirements_path), set()
+    )
+
+    assert install_lines == ()
+
+
+def test_build_missing_requirements_install_lines_returns_none_for_option_lines(
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        "--extra-index-url https://example.com/simple\nboto3\n",
+        encoding="utf-8",
+    )
+
+    install_lines = requirements_utils.build_missing_requirements_install_lines(
+        str(requirements_path), {"boto3"}
+    )
+
+    assert install_lines is None
+
+
+def test_build_missing_requirements_install_lines_skips_inactive_marker_lines(
+    tmp_path,
+):
+    requirements_path = tmp_path / "requirements.txt"
+    requirements_path.write_text(
+        'boto3\nother-package; sys_platform == "win32"\n',
+        encoding="utf-8",
+    )
+
+    install_lines = requirements_utils.build_missing_requirements_install_lines(
+        str(requirements_path), {"boto3"}
+    )
+
+    assert install_lines == ("boto3",)
+
+
 def test_find_missing_requirements_logs_path_and_reason_on_precheck_fallback(
     monkeypatch,
     tmp_path,

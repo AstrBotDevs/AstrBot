@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import traceback
 from types import ModuleType
 
@@ -29,12 +30,12 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_path,
     get_astrbot_plugin_path,
+    get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import remove_dir
 from astrbot.core.utils.metrics import Metric
 from astrbot.core.utils.requirements_utils import (
-    RequirementsPrecheckFailed,
-    find_missing_requirements_or_raise,
+    plan_missing_requirements_install,
 )
 
 from . import StarMetadata
@@ -79,9 +80,9 @@ async def _install_requirements_with_precheck(
     plugin_label: str,
     requirements_path: str,
 ) -> None:
-    try:
-        missing = find_missing_requirements_or_raise(requirements_path)
-    except RequirementsPrecheckFailed:
+    install_plan = plan_missing_requirements_install(requirements_path)
+
+    if install_plan is None:
         logger.info(
             f"正在安装插件 {plugin_label} 的依赖库（预检查失败，回退到完整安装）: "
             f"{requirements_path}"
@@ -89,15 +90,34 @@ async def _install_requirements_with_precheck(
         await pip_installer.install(requirements_path=requirements_path)
         return
 
-    if not missing:
+    if not install_plan.missing_names:
         logger.info(f"插件 {plugin_label} 的依赖已满足，跳过安装。")
         return
 
     logger.info(
         f"检测到插件 {plugin_label} 缺失依赖，正在按 requirements.txt 安装: "
-        f"{requirements_path} -> {sorted(missing)}"
+        f"{requirements_path} -> {sorted(install_plan.missing_names)}"
     )
-    await pip_installer.install(requirements_path=requirements_path)
+
+    filtered_requirements_path: str | None = None
+    try:
+        os.makedirs(get_astrbot_temp_path(), exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix="_plugin_requirements.txt",
+            delete=False,
+            dir=get_astrbot_temp_path(),
+            encoding="utf-8",
+        ) as filtered_requirements_file:
+            filtered_requirements_file.write(
+                "\n".join(install_plan.install_lines) + "\n"
+            )
+            filtered_requirements_path = filtered_requirements_file.name
+
+        await pip_installer.install(requirements_path=filtered_requirements_path)
+    finally:
+        if filtered_requirements_path and os.path.exists(filtered_requirements_path):
+            os.remove(filtered_requirements_path)
 
 
 class PluginManager:
