@@ -8,11 +8,18 @@ from astrbot_sdk.protocol.legacy_adapter import (
     LEGACY_HANDSHAKE_METADATA_KEY,
     LegacyAdapter,
 )
-from astrbot_sdk.protocol.messages import EventMessage, InitializeMessage, PeerInfo, ResultMessage
+from astrbot_sdk.protocol.messages import (
+    EventMessage,
+    InitializeMessage,
+    PeerInfo,
+    ResultMessage,
+)
 
 
 class LegacyAdapterTest(unittest.TestCase):
-    def test_call_handler_roundtrip_preserves_handler_name_in_stream_notifications(self) -> None:
+    def test_call_handler_roundtrip_preserves_handler_name_in_stream_notifications(
+        self,
+    ) -> None:
         adapter = LegacyAdapter()
 
         invoke = adapter.legacy_to_v4(
@@ -45,7 +52,9 @@ class LegacyAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(started["method"], "handler_stream_start")
-        self.assertEqual(delta["params"]["handler_full_name"], "commands.demo:MyPlugin.handle")
+        self.assertEqual(
+            delta["params"]["handler_full_name"], "commands.demo:MyPlugin.handle"
+        )
         self.assertEqual(delta["params"]["data"], {"text": "hi"})
         self.assertEqual(completed["method"], "handler_stream_end")
         self.assertEqual(response["result"], {"handled_by": "demo"})
@@ -139,7 +148,9 @@ class LegacyAdapterTest(unittest.TestCase):
                 "reserved": False,
                 "activated": True,
                 "config": None,
-                "star_handler_full_names": ["commands.plugin_one:SampleCommand.handle_plugin_one"],
+                "star_handler_full_names": [
+                    "commands.plugin_one:SampleCommand.handle_plugin_one"
+                ],
                 "display_name": "plugin_one",
                 "logo_path": None,
                 "handlers": [
@@ -165,7 +176,10 @@ class LegacyAdapterTest(unittest.TestCase):
 
         self.assertIsInstance(initialize, InitializeMessage)
         self.assertEqual(initialize.peer.name, "plugin_one")
-        self.assertEqual(initialize.handlers[0].id, "commands.plugin_one:SampleCommand.handle_plugin_one")
+        self.assertEqual(
+            initialize.handlers[0].id,
+            "commands.plugin_one:SampleCommand.handle_plugin_one",
+        )
         self.assertEqual(initialize.handlers[0].priority, 7)
         self.assertEqual(
             initialize.metadata[LEGACY_HANDSHAKE_METADATA_KEY],

@@ -25,6 +25,7 @@ from ..filter.platform_adapter_type import (
 from ..filter.regex import RegexFilter
 from ..registry import star_handlers_registry, StarHandlerMetadata, EventType
 
+
 def get_handler_full_name(awaitable: Callable[..., Awaitable[Any]]) -> str:
     """获取 Handler 的全名"""
     return f"{awaitable.__module__}:{awaitable.__qualname__}"

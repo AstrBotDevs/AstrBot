@@ -310,7 +310,9 @@ class WorkerRuntime:
 
         result = response.result
         if not isinstance(result, dict):
-            raise RuntimeError(f"Invalid handshake payload for plugin {self.plugin.name}")
+            raise RuntimeError(
+                f"Invalid handshake payload for plugin {self.plugin.name}"
+            )
 
         self.raw_handshake = result
         self.handlers = self._parse_handlers(result)
@@ -493,7 +495,9 @@ class SupervisorRuntime:
     async def _handle_message(self, message: JSONRPCMessage) -> None:
         if isinstance(message, JSONRPCRequest):
             if message.method == "handshake":
-                await self.server.send_message(self._build_handshake_response(message.id))
+                await self.server.send_message(
+                    self._build_handshake_response(message.id)
+                )
                 return
             if message.method == "call_handler":
                 await self._route_call_handler(message)
@@ -527,7 +531,9 @@ class SupervisorRuntime:
                 JSONRPCErrorResponse(
                     jsonrpc="2.0",
                     id=message.id,
-                    error=JSONRPCErrorData(code=-32602, message=f"Invalid params: {exc}"),
+                    error=JSONRPCErrorData(
+                        code=-32602, message=f"Invalid params: {exc}"
+                    ),
                 )
             )
             return

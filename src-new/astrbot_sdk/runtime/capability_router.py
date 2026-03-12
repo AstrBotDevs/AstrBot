@@ -42,9 +42,7 @@ class CapabilityRouter:
 
     def descriptors(self) -> list[CapabilityDescriptor]:
         return [
-            entry.descriptor
-            for entry in self._registrations.values()
-            if entry.exposed
+            entry.descriptor for entry in self._registrations.values() if entry.exposed
         ]
 
     def register(
@@ -57,9 +55,13 @@ class CapabilityRouter:
         exposed: bool = True,
     ) -> None:
         if not CAPABILITY_NAME_PATTERN.fullmatch(descriptor.name):
-            raise ValueError(f"capability 名称必须匹配 {{namespace}}.{{method}}：{descriptor.name}")
+            raise ValueError(
+                f"capability 名称必须匹配 {{namespace}}.{{method}}：{descriptor.name}"
+            )
         if exposed and descriptor.name.startswith(RESERVED_CAPABILITY_PREFIXES):
-            raise ValueError(f"保留 capability 命名空间仅供框架内部使用：{descriptor.name}")
+            raise ValueError(
+                f"保留 capability 命名空间仅供框架内部使用：{descriptor.name}"
+            )
         self._registrations[descriptor.name] = _CapabilityRegistration(
             descriptor=descriptor,
             call_handler=call_handler,
@@ -105,11 +107,15 @@ class CapabilityRouter:
                 "required": required,
             }
 
-        async def llm_chat(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def llm_chat(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             prompt = str(payload.get("prompt", ""))
             return {"text": f"Echo: {prompt}"}
 
-        async def llm_chat_raw(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def llm_chat_raw(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             prompt = str(payload.get("prompt", ""))
             text = f"Echo: {prompt}"
             return {
@@ -133,7 +139,9 @@ class CapabilityRouter:
                 await asyncio.sleep(0)
                 yield {"text": char}
 
-        async def memory_search(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def memory_search(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             query = str(payload.get("query", ""))
             items = [
                 {"key": key, "value": value}
@@ -142,7 +150,9 @@ class CapabilityRouter:
             ]
             return {"items": items}
 
-        async def memory_save(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def memory_save(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             key = str(payload.get("key", ""))
             value = payload.get("value")
             if not isinstance(value, dict):
@@ -150,14 +160,20 @@ class CapabilityRouter:
             self.memory_store[key] = value
             return {}
 
-        async def memory_delete(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def memory_delete(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             self.memory_store.pop(str(payload.get("key", "")), None)
             return {}
 
-        async def db_get(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_get(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             return {"value": self.db_store.get(str(payload.get("key", "")))}
 
-        async def db_set(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_set(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             key = str(payload.get("key", ""))
             value = payload.get("value")
             if not isinstance(value, dict):
@@ -165,18 +181,24 @@ class CapabilityRouter:
             self.db_store[key] = value
             return {}
 
-        async def db_delete(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_delete(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             self.db_store.pop(str(payload.get("key", "")), None)
             return {}
 
-        async def db_list(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def db_list(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             prefix = payload.get("prefix")
             keys = sorted(self.db_store.keys())
             if isinstance(prefix, str):
                 keys = [item for item in keys if item.startswith(prefix)]
             return {"keys": keys}
 
-        async def platform_send(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def platform_send(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             session = str(payload.get("session", ""))
             text = str(payload.get("text", ""))
             message_id = f"msg_{len(self.sent_messages) + 1}"
@@ -189,7 +211,9 @@ class CapabilityRouter:
             )
             return {"message_id": message_id}
 
-        async def platform_send_image(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def platform_send_image(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             session = str(payload.get("session", ""))
             image_url = str(payload.get("image_url", ""))
             message_id = f"img_{len(self.sent_messages) + 1}"
@@ -202,7 +226,9 @@ class CapabilityRouter:
             )
             return {"message_id": message_id}
 
-        async def platform_get_members(_request_id: str, payload: dict[str, Any], _token) -> dict[str, Any]:
+        async def platform_get_members(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
             session = str(payload.get("session", ""))
             return {
                 "members": [
@@ -239,7 +265,9 @@ class CapabilityRouter:
                 cancelable=True,
             ),
             stream_handler=llm_stream,
-            finalize=lambda chunks: {"text": "".join(item.get("text", "") for item in chunks)},
+            finalize=lambda chunks: {
+                "text": "".join(item.get("text", "") for item in chunks)
+            },
         )
         self.register(
             CapabilityDescriptor(
@@ -254,7 +282,9 @@ class CapabilityRouter:
             CapabilityDescriptor(
                 name="memory.save",
                 description="保存记忆",
-                input_schema=obj_schema(["key", "value"], key={"type": "string"}, value={"type": "object"}),
+                input_schema=obj_schema(
+                    ["key", "value"], key={"type": "string"}, value={"type": "object"}
+                ),
                 output_schema=obj_schema([]),
             ),
             call_handler=memory_save,
@@ -281,7 +311,9 @@ class CapabilityRouter:
             CapabilityDescriptor(
                 name="db.set",
                 description="写入 KV",
-                input_schema=obj_schema(["key", "value"], key={"type": "string"}, value={"type": "object"}),
+                input_schema=obj_schema(
+                    ["key", "value"], key={"type": "string"}, value={"type": "object"}
+                ),
                 output_schema=obj_schema([]),
             ),
             call_handler=db_set,
@@ -308,7 +340,11 @@ class CapabilityRouter:
             CapabilityDescriptor(
                 name="platform.send",
                 description="发送消息",
-                input_schema=obj_schema(["session", "text"], session={"type": "string"}, text={"type": "string"}),
+                input_schema=obj_schema(
+                    ["session", "text"],
+                    session={"type": "string"},
+                    text={"type": "string"},
+                ),
                 output_schema=obj_schema(["message_id"], message_id={"type": "string"}),
             ),
             call_handler=platform_send,
@@ -317,7 +353,11 @@ class CapabilityRouter:
             CapabilityDescriptor(
                 name="platform.send_image",
                 description="发送图片",
-                input_schema=obj_schema(["session", "image_url"], session={"type": "string"}, image_url={"type": "string"}),
+                input_schema=obj_schema(
+                    ["session", "image_url"],
+                    session={"type": "string"},
+                    image_url={"type": "string"},
+                ),
                 output_schema=obj_schema(["message_id"], message_id={"type": "string"}),
             ),
             call_handler=platform_send_image,

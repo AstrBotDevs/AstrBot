@@ -13,7 +13,10 @@ from astrbot_sdk.protocol.messages import InitializeOutput, PeerInfo
 from astrbot_sdk.runtime.bootstrap import PluginWorkerRuntime, SupervisorRuntime
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
 from astrbot_sdk.runtime.peer import Peer
-from astrbot_sdk.runtime.transport import WebSocketClientTransport, WebSocketServerTransport
+from astrbot_sdk.runtime.transport import (
+    WebSocketClientTransport,
+    WebSocketServerTransport,
+)
 
 from tests_v4.helpers import FakeEnvManager, make_transport_pair
 
@@ -108,13 +111,19 @@ def write_benchmark_plugin(plugins_dir: Path, index: int) -> None:
 
 
 class StartClientMigrationTest(unittest.IsolatedAsyncioTestCase):
-    async def test_websocket_plugin_worker_supports_handshake_and_handler_invoke(self) -> None:
+    async def test_websocket_plugin_worker_supports_handshake_and_handler_invoke(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             plugin_root = Path(temp_dir) / "websocket_plugin"
             write_websocket_plugin(plugin_root)
 
-            server_transport = WebSocketServerTransport(host="127.0.0.1", port=0, path="/ws")
-            runtime = PluginWorkerRuntime(plugin_dir=plugin_root, transport=server_transport)
+            server_transport = WebSocketServerTransport(
+                host="127.0.0.1", port=0, path="/ws"
+            )
+            runtime = PluginWorkerRuntime(
+                plugin_dir=plugin_root, transport=server_transport
+            )
             runtime_task = asyncio.create_task(runtime.start())
 
             try:
@@ -126,13 +135,17 @@ class StartClientMigrationTest(unittest.IsolatedAsyncioTestCase):
                 core_router = CapabilityRouter()
                 core_peer = Peer(
                     transport=WebSocketClientTransport(url=server_transport.url),
-                    peer_info=PeerInfo(name="websocket-core", role="core", version="v4"),
+                    peer_info=PeerInfo(
+                        name="websocket-core", role="core", version="v4"
+                    ),
                 )
                 core_peer.set_initialize_handler(
                     lambda _message: asyncio.sleep(
                         0,
                         result=InitializeOutput(
-                            peer=PeerInfo(name="websocket-core", role="core", version="v4"),
+                            peer=PeerInfo(
+                                name="websocket-core", role="core", version="v4"
+                            ),
                             capabilities=core_router.descriptors(),
                             metadata={},
                         ),
@@ -152,8 +165,12 @@ class StartClientMigrationTest(unittest.IsolatedAsyncioTestCase):
                     await asyncio.wait_for(runtime_task, timeout=5)
                     await core_peer.wait_until_remote_initialized()
                     handler_id = core_peer.remote_handlers[0].id
-                    self.assertEqual(core_peer.remote_metadata["plugin_id"], "websocket_plugin")
-                    self.assertEqual(core_peer.remote_handlers[0].trigger.command, "hello")
+                    self.assertEqual(
+                        core_peer.remote_metadata["plugin_id"], "websocket_plugin"
+                    )
+                    self.assertEqual(
+                        core_peer.remote_handlers[0].trigger.command, "hello"
+                    )
 
                     await core_peer.invoke(
                         "handler.invoke",
@@ -205,7 +222,9 @@ class BenchmarkMigrationTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.core.stop()
 
-    async def test_benchmark_style_runtime_report_covers_multi_plugin_workers(self) -> None:
+    async def test_benchmark_style_runtime_report_covers_multi_plugin_workers(
+        self,
+    ) -> None:
         plugin_count = 8
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_dir = Path(temp_dir) / "plugins"
@@ -226,15 +245,24 @@ class BenchmarkMigrationTest(unittest.IsolatedAsyncioTestCase):
                 worker_pids = sorted(
                     process.pid
                     for session in runtime.worker_sessions.values()
-                    if (process := getattr(getattr(session.peer, "transport", None), "_process", None)) is not None
+                    if (
+                        process := getattr(
+                            getattr(session.peer, "transport", None), "_process", None
+                        )
+                    )
+                    is not None
                     and process.returncode is None
                 )
                 report = {
                     "plugin_count": plugin_count,
                     "loaded_plugin_count": len(runtime.loaded_plugins),
                     "loaded_plugins": sorted(runtime.loaded_plugins),
-                    "aggregated_handler_ids": list(self.core.remote_metadata["aggregated_handler_ids"]),
-                    "startup_total_duration_ms": round((measured_at - started_at) * 1000, 2),
+                    "aggregated_handler_ids": list(
+                        self.core.remote_metadata["aggregated_handler_ids"]
+                    ),
+                    "startup_total_duration_ms": round(
+                        (measured_at - started_at) * 1000, 2
+                    ),
                     "worker_pids": worker_pids,
                 }
 
@@ -265,7 +293,10 @@ class BenchmarkMigrationTest(unittest.IsolatedAsyncioTestCase):
                     [f"plugin_{index:03d}" for index in range(plugin_count)],
                 )
                 self.assertGreaterEqual(report["startup_total_duration_ms"], 0)
-                self.assertIn("plugin_002:bench_002", runtime.capability_router.sent_messages[-1]["text"])
+                self.assertIn(
+                    "plugin_002:bench_002",
+                    runtime.capability_router.sent_messages[-1]["text"],
+                )
             finally:
                 await runtime.stop()
 

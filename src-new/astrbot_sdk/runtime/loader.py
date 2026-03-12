@@ -88,7 +88,9 @@ def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
     requirements_path = plugin_dir / "requirements.txt"
     manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     runtime = manifest_data.get("runtime") or {}
-    python_version = runtime.get("python") or f"{sys.version_info.major}.{sys.version_info.minor}"
+    python_version = (
+        runtime.get("python") or f"{sys.version_info.major}.{sys.version_info.minor}"
+    )
     return PluginSpec(
         name=str(manifest_data.get("name") or plugin_dir.name),
         plugin_dir=plugin_dir,
@@ -119,7 +121,9 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
             skipped_plugins[entry.name] = "missing requirements.txt"
             continue
         try:
-            manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+            manifest_data = (
+                yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+            )
         except Exception as exc:
             skipped_plugins[entry.name] = f"failed to parse plugin.yaml: {exc}"
             continue
@@ -306,9 +310,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
             meta = get_handler_meta(func)
             if meta is None or meta.trigger is None:
                 continue
-            handler_id = (
-                f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
-            )
+            handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
             handlers.append(
                 LoadedHandler(
                     descriptor=HandlerDescriptor(

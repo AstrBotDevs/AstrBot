@@ -37,7 +37,9 @@ class MessageEvent:
         self.raw = raw or {}
         self._reply_handler = reply_handler
         if self._reply_handler is None and context is not None:
-            self._reply_handler = lambda text: context.platform.send(self.session_id, text)
+            self._reply_handler = lambda text: context.platform.send(
+                self.session_id, text
+            )
 
     @classmethod
     def from_payload(

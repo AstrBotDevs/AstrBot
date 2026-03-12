@@ -24,18 +24,18 @@ class StarManager:
             root_dir = Path.cwd()
         else:
             root_dir = Path(root_dir).resolve()
-        
+
         path = root_dir / "plugin.yaml"
         if not path.exists():
             logger.warning("No plugin.yaml found in the current directory.")
             return []
-        
+
         # Add the plugin directory to sys.path so we can import its modules
         root_dir_str = str(root_dir)
         if root_dir_str not in sys.path:
             sys.path.insert(0, root_dir_str)
             logger.debug(f"Added {root_dir_str} to sys.path")
-        
+
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 

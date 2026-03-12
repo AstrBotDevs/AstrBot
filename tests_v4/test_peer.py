@@ -6,10 +6,18 @@ import unittest
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
-from astrbot_sdk.protocol.messages import EventMessage, InitializeOutput, PeerInfo, ResultMessage
+from astrbot_sdk.protocol.messages import (
+    EventMessage,
+    InitializeOutput,
+    PeerInfo,
+    ResultMessage,
+)
 from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
 from astrbot_sdk.runtime.peer import Peer
-from astrbot_sdk.runtime.transport import WebSocketClientTransport, WebSocketServerTransport
+from astrbot_sdk.runtime.transport import (
+    WebSocketClientTransport,
+    WebSocketServerTransport,
+)
 
 from tests_v4.helpers import make_transport_pair
 
@@ -25,11 +33,14 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
             peer_info=PeerInfo(name="core", role="core", version="v4"),
         )
         core.set_initialize_handler(
-            lambda _message: asyncio.sleep(0, result=InitializeOutput(
-                peer=PeerInfo(name="core", role="core", version="v4"),
-                capabilities=router.descriptors(),
-                metadata={},
-            ))
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=router.descriptors(),
+                    metadata={},
+                ),
+            )
         )
         core.set_invoke_handler(
             lambda message, token: router.execute(
@@ -72,7 +83,9 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
             plugin.invoke("llm.chat", {"prompt": "bad"}, request_id="req-1")
         )
         await asyncio.sleep(0)
-        await self.left.send(EventMessage(id="req-1", phase="started").model_dump_json())
+        await self.left.send(
+            EventMessage(id="req-1", phase="started").model_dump_json()
+        )
 
         with self.assertRaises(AstrBotError) as raised:
             await task
@@ -88,8 +101,12 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await self.left.start()
         await plugin.start()
 
-        stream = await plugin.invoke_stream("llm.stream_chat", {"prompt": "bad"}, request_id="stream-1")
-        await self.left.send(ResultMessage(id="stream-1", success=True, output={}).model_dump_json())
+        stream = await plugin.invoke_stream(
+            "llm.stream_chat", {"prompt": "bad"}, request_id="stream-1"
+        )
+        await self.left.send(
+            ResultMessage(id="stream-1", success=True, output={}).model_dump_json()
+        )
 
         with self.assertRaises(AstrBotError) as raised:
             async for _ in stream:
@@ -103,7 +120,11 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
             name="slow.stream",
             description="slow stream",
             input_schema={"type": "object", "properties": {}, "required": []},
-            output_schema={"type": "object", "properties": {"count": {"type": "number"}}, "required": ["count"]},
+            output_schema={
+                "type": "object",
+                "properties": {"count": {"type": "number"}},
+                "required": ["count"],
+            },
             supports_stream=True,
             cancelable=True,
         )
@@ -161,11 +182,14 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
             peer_info=PeerInfo(name="core", role="core", version="v4"),
         )
         core.set_initialize_handler(
-            lambda _message: asyncio.sleep(0, result=InitializeOutput(
-                peer=PeerInfo(name="core", role="core", version="v4"),
-                capabilities=router.descriptors(),
-                metadata={},
-            ))
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=router.descriptors(),
+                    metadata={},
+                ),
+            )
         )
         core.set_invoke_handler(
             lambda message, token: router.execute(
@@ -238,7 +262,9 @@ class CapabilityRouterContractTest(unittest.TestCase):
                 )
             self.assertIn(name, str(raised.exception))
 
-    def test_reserved_capability_namespaces_are_rejected_for_exposed_registrations(self) -> None:
+    def test_reserved_capability_namespaces_are_rejected_for_exposed_registrations(
+        self,
+    ) -> None:
         router = CapabilityRouter()
         for name in ("handler.demo", "system.health", "internal.trace"):
             with self.assertRaises(ValueError) as raised:
@@ -250,7 +276,9 @@ class CapabilityRouterContractTest(unittest.TestCase):
                 )
             self.assertIn(name, str(raised.exception))
 
-    def test_reserved_capability_namespaces_remain_available_for_hidden_internal_registrations(self) -> None:
+    def test_reserved_capability_namespaces_remain_available_for_hidden_internal_registrations(
+        self,
+    ) -> None:
         router = CapabilityRouter()
         router.register(
             CapabilityDescriptor(

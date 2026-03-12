@@ -258,9 +258,7 @@ class SupervisorRuntimeTest(unittest.IsolatedAsyncioTestCase):
             ["plugin_one.main", "plugin_two.main"],
         )
 
-        handler_full_name = (
-            "commands.plugin_two:SampleCommand.handle_plugin_two"
-        )
+        handler_full_name = "commands.plugin_two:SampleCommand.handle_plugin_two"
         await self.server.handler(
             CallHandlerRequest(
                 jsonrpc="2.0",
@@ -294,7 +292,9 @@ class SupervisorRuntimeTest(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(self.server.sent_messages[-1].result, {"handled_by": "plugin_two"})
+        self.assertEqual(
+            self.server.sent_messages[-1].result, {"handled_by": "plugin_two"}
+        )
         await runtime.stop()
 
     async def test_routes_context_response_back_to_matching_worker(self) -> None:

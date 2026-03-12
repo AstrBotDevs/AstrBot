@@ -55,7 +55,9 @@ class LegacyErrorResponse(_LegacyResponse):
 
 
 LegacyMessage = LegacyRequest | LegacySuccessResponse | LegacyErrorResponse
-LegacyToV4Message = InitializeMessage | InvokeMessage | ResultMessage | EventMessage | CancelMessage
+LegacyToV4Message = (
+    InitializeMessage | InvokeMessage | ResultMessage | EventMessage | CancelMessage
+)
 
 
 class LegacyAdapter:
@@ -93,7 +95,11 @@ class LegacyAdapter:
         self,
         payload: LegacyRequest | dict[str, Any],
     ) -> InitializeMessage | InvokeMessage | EventMessage | CancelMessage:
-        message = payload if isinstance(payload, LegacyRequest) else LegacyRequest.model_validate(payload)
+        message = (
+            payload
+            if isinstance(payload, LegacyRequest)
+            else LegacyRequest.model_validate(payload)
+        )
         params = message.params or {}
         method = message.method
 
@@ -164,7 +170,9 @@ class LegacyAdapter:
                 return EventMessage(
                     id=request_id,
                     phase="failed",
-                    error=ErrorPayload.model_validate(self._coerce_error_payload(error)),
+                    error=ErrorPayload.model_validate(
+                        self._coerce_error_payload(error)
+                    ),
                 )
             return EventMessage(id=request_id, phase="completed")
 
@@ -185,13 +193,22 @@ class LegacyAdapter:
         self,
         payload: LegacySuccessResponse | dict[str, Any],
     ) -> InitializeMessage | ResultMessage:
-        message = payload if isinstance(payload, LegacySuccessResponse) else LegacySuccessResponse.model_validate(payload)
+        message = (
+            payload
+            if isinstance(payload, LegacySuccessResponse)
+            else LegacySuccessResponse.model_validate(payload)
+        )
         request_id = self._request_id(message.id, "legacy-result")
 
-        if request_id in self._pending_handshake_ids or self._looks_like_handshake_payload(message.result):
+        if (
+            request_id in self._pending_handshake_ids
+            or self._looks_like_handshake_payload(message.result)
+        ):
             self._pending_handshake_ids.discard(request_id)
             payload_dict = self._as_dict(message.result, field_name="data")
-            peer_name, peer_version = self._legacy_peer_from_handshake_payload(payload_dict)
+            peer_name, peer_version = self._legacy_peer_from_handshake_payload(
+                payload_dict
+            )
             return InitializeMessage(
                 id=request_id,
                 protocol_version=self.protocol_version,
@@ -217,7 +234,11 @@ class LegacyAdapter:
         self,
         payload: LegacyErrorResponse | dict[str, Any],
     ) -> ResultMessage:
-        message = payload if isinstance(payload, LegacyErrorResponse) else LegacyErrorResponse.model_validate(payload)
+        message = (
+            payload
+            if isinstance(payload, LegacyErrorResponse)
+            else LegacyErrorResponse.model_validate(payload)
+        )
         request_id = self._request_id(message.id, "legacy-error")
         kind = None
         if request_id in self._pending_handshake_ids:
@@ -227,7 +248,9 @@ class LegacyAdapter:
             id=request_id,
             kind=kind,
             success=False,
-            error=ErrorPayload.model_validate(self._legacy_error_to_payload(message.error)),
+            error=ErrorPayload.model_validate(
+                self._legacy_error_to_payload(message.error)
+            ),
         )
 
     def build_legacy_handshake_request(self, request_id: str) -> dict[str, Any]:
@@ -263,8 +286,12 @@ class LegacyAdapter:
                 "method": "call_handler",
                 "params": {
                     "handler_full_name": handler_full_name,
-                    "event": self._as_dict(message.input.get("event"), field_name="data"),
-                    "args": self._as_dict(message.input.get("args"), field_name="value"),
+                    "event": self._as_dict(
+                        message.input.get("event"), field_name="data"
+                    ),
+                    "args": self._as_dict(
+                        message.input.get("args"), field_name="value"
+                    ),
                 },
             }
 
@@ -275,7 +302,9 @@ class LegacyAdapter:
                 "method": "call_context_function",
                 "params": {
                     "name": str(message.input.get("name", "")),
-                    "args": self._as_dict(message.input.get("args"), field_name="value"),
+                    "args": self._as_dict(
+                        message.input.get("args"), field_name="value"
+                    ),
                 },
             }
 
@@ -350,7 +379,9 @@ class LegacyAdapter:
     def _looks_like_handshake_payload(value: Any) -> bool:
         if not isinstance(value, dict) or not value:
             return False
-        return all(isinstance(item, dict) and "handlers" in item for item in value.values())
+        return all(
+            isinstance(item, dict) and "handlers" in item for item in value.values()
+        )
 
     @staticmethod
     def _coerce_error_payload(value: dict[str, Any]) -> dict[str, Any]:
@@ -394,7 +425,9 @@ class LegacyAdapter:
         return handlers
 
     @staticmethod
-    def _legacy_handler_to_descriptor(handler_data: dict[str, Any]) -> HandlerDescriptor:
+    def _legacy_handler_to_descriptor(
+        handler_data: dict[str, Any],
+    ) -> HandlerDescriptor:
         extras_configs = handler_data.get("extras_configs")
         extras = extras_configs if isinstance(extras_configs, dict) else {}
         handler_id = str(
@@ -425,7 +458,9 @@ class LegacyAdapter:
         display_name = str(message.metadata.get("display_name") or plugin_name)
         module_path = str(message.metadata.get("module_path") or f"{plugin_name}.main")
         root_dir_name = str(message.metadata.get("root_dir_name") or plugin_name)
-        handlers = [self._descriptor_to_legacy_handler(item) for item in message.handlers]
+        handlers = [
+            self._descriptor_to_legacy_handler(item) for item in message.handlers
+        ]
         return {
             module_path: {
                 "name": plugin_name,
@@ -438,7 +473,9 @@ class LegacyAdapter:
                 "reserved": bool(message.metadata.get("reserved", False)),
                 "activated": bool(message.metadata.get("activated", True)),
                 "config": message.metadata.get("config"),
-                "star_handler_full_names": [item["handler_full_name"] for item in handlers],
+                "star_handler_full_names": [
+                    item["handler_full_name"] for item in handlers
+                ],
                 "display_name": display_name,
                 "logo_path": message.metadata.get("logo_path"),
                 "handlers": handlers,

@@ -1,4 +1,9 @@
-from ._legacy_api import CommandComponent, Context, LegacyContext, LegacyConversationManager
+from ._legacy_api import (
+    CommandComponent,
+    Context,
+    LegacyContext,
+    LegacyConversationManager,
+)
 
 __all__ = [
     "CommandComponent",

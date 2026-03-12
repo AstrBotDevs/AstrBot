@@ -44,7 +44,7 @@ def write_plugin(
         manifest_lines.extend(
             [
                 "runtime:",
-                f"  python: \"{python_version}\"",
+                f'  python: "{python_version}"',
             ]
         )
     manifest_lines.extend(
@@ -56,7 +56,9 @@ def write_plugin(
             "    description: hello",
         ]
     )
-    (plugin_dir / "plugin.yaml").write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
+    (plugin_dir / "plugin.yaml").write_text(
+        "\n".join(manifest_lines) + "\n", encoding="utf-8"
+    )
     if include_requirements:
         (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
 
@@ -125,7 +127,9 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         await self.core.stop()
 
-    async def test_supervisor_aggregates_handlers_and_routes_target_plugin(self) -> None:
+    async def test_supervisor_aggregates_handlers_and_routes_target_plugin(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_dir = Path(temp_dir) / "plugins"
             write_plugin(
@@ -150,8 +154,12 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
                 await runtime.start()
                 await self.core.wait_until_remote_initialized()
 
-                self.assertEqual(sorted(runtime.loaded_plugins), ["plugin_one", "plugin_two"])
-                self.assertEqual(self.core.remote_metadata["plugins"], ["plugin_one", "plugin_two"])
+                self.assertEqual(
+                    sorted(runtime.loaded_plugins), ["plugin_one", "plugin_two"]
+                )
+                self.assertEqual(
+                    self.core.remote_metadata["plugins"], ["plugin_one", "plugin_two"]
+                )
                 self.assertEqual(len(self.core.remote_handlers), 2)
 
                 handler_id = next(
@@ -173,7 +181,9 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
                     request_id="call-route",
                 )
 
-                texts = [item.get("text") for item in runtime.capability_router.sent_messages]
+                texts = [
+                    item.get("text") for item in runtime.capability_router.sent_messages
+                ]
                 self.assertEqual(texts, ["plugin_two handled"])
             finally:
                 await runtime.stop()

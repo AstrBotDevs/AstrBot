@@ -20,7 +20,9 @@ from ..protocol.messages import (
 from .capability_router import StreamExecution
 
 InitializeHandler = Callable[[InitializeMessage], Awaitable[InitializeOutput]]
-InvokeHandler = Callable[[InvokeMessage, CancelToken], Awaitable[dict[str, Any] | StreamExecution]]
+InvokeHandler = Callable[
+    [InvokeMessage, CancelToken], Awaitable[dict[str, Any] | StreamExecution]
+]
 CancelHandler = Callable[[str], Awaitable[None]]
 
 
@@ -102,7 +104,9 @@ class Peer:
     ) -> InitializeOutput:
         self._ensure_usable()
         request_id = self._next_id()
-        future: asyncio.Future[ResultMessage] = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[ResultMessage] = (
+            asyncio.get_running_loop().create_future()
+        )
         self._pending_results[request_id] = future
         await self._send(
             InitializeMessage(
@@ -119,7 +123,9 @@ class Peer:
         if not result.success:
             self._unusable = True
             await self.stop()
-            raise AstrBotError.from_payload(result.error.model_dump() if result.error else {})
+            raise AstrBotError.from_payload(
+                result.error.model_dump() if result.error else {}
+            )
         output = InitializeOutput.model_validate(result.output)
         self.remote_peer = output.peer
         self.remote_capabilities = output.capabilities
@@ -139,7 +145,9 @@ class Peer:
         if stream:
             raise ValueError("stream=True 请使用 invoke_stream()")
         request_id = request_id or self._next_id()
-        future: asyncio.Future[ResultMessage] = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[ResultMessage] = (
+            asyncio.get_running_loop().create_future()
+        )
         self._pending_results[request_id] = future
         await self._send(
             InvokeMessage(
@@ -151,7 +159,9 @@ class Peer:
         )
         result = await future
         if not result.success:
-            raise AstrBotError.from_payload(result.error.model_dump() if result.error else {})
+            raise AstrBotError.from_payload(
+                result.error.model_dump() if result.error else {}
+            )
         return result.output
 
     async def invoke_stream(
@@ -190,7 +200,9 @@ class Peer:
                     if item.phase == "completed":
                         break
                     if item.phase == "failed":
-                        raise AstrBotError.from_payload(item.error.model_dump() if item.error else {})
+                        raise AstrBotError.from_payload(
+                            item.error.model_dump() if item.error else {}
+                        )
             finally:
                 self._pending_streams.pop(request_id, None)
 
@@ -222,7 +234,11 @@ class Peer:
             task = asyncio.create_task(self._handle_invoke(message))
             token = CancelToken()
             self._inbound_tasks[message.id] = (task, token)
-            task.add_done_callback(lambda _task, request_id=message.id: self._inbound_tasks.pop(request_id, None))
+            task.add_done_callback(
+                lambda _task, request_id=message.id: self._inbound_tasks.pop(
+                    request_id, None
+                )
+            )
             return
         if isinstance(message, CancelMessage):
             await self._handle_cancel(message)
@@ -268,12 +284,16 @@ class Peer:
             execution = await self._invoke_handler(message, token)
             if message.stream:
                 if not isinstance(execution, StreamExecution):
-                    raise AstrBotError.protocol_error("stream=true 必须返回 StreamExecution")
+                    raise AstrBotError.protocol_error(
+                        "stream=true 必须返回 StreamExecution"
+                    )
                 await self._send(EventMessage(id=message.id, phase="started"))
                 chunks: list[dict[str, Any]] = []
                 async for chunk in execution.iterator:
                     chunks.append(chunk)
-                    await self._send(EventMessage(id=message.id, phase="delta", data=chunk))
+                    await self._send(
+                        EventMessage(id=message.id, phase="delta", data=chunk)
+                    )
                 await self._send(
                     EventMessage(
                         id=message.id,
@@ -284,7 +304,9 @@ class Peer:
                 return
             if isinstance(execution, StreamExecution):
                 raise AstrBotError.protocol_error("stream=false 不能返回流式执行对象")
-            await self._send(ResultMessage(id=message.id, success=True, output=execution))
+            await self._send(
+                ResultMessage(id=message.id, success=True, output=execution)
+            )
         except asyncio.CancelledError:
             await self._send_cancelled_termination(message)
         except LookupError as exc:
@@ -293,7 +315,9 @@ class Peer:
         except AstrBotError as exc:
             await self._send_error_result(message, exc)
         except Exception as exc:
-            await self._send_error_result(message, AstrBotError.internal_error(str(exc)))
+            await self._send_error_result(
+                message, AstrBotError.internal_error(str(exc))
+            )
 
     async def _handle_cancel(self, message: CancelMessage) -> None:
         inbound = self._inbound_tasks.get(message.id)
@@ -310,7 +334,9 @@ class Peer:
         if future is None:
             queue = self._pending_streams.get(message.id)
             if queue is not None:
-                await queue.put(AstrBotError.protocol_error("stream=true 调用不应收到 result"))
+                await queue.put(
+                    AstrBotError.protocol_error("stream=true 调用不应收到 result")
+                )
             return
         # 检查 future 是否已完成（可能被调用方取消）
         if not future.done():
@@ -321,11 +347,15 @@ class Peer:
         if queue is None:
             future = self._pending_results.get(message.id)
             if future is not None and not future.done():
-                future.set_exception(AstrBotError.protocol_error("stream=false 调用不应收到 event"))
+                future.set_exception(
+                    AstrBotError.protocol_error("stream=false 调用不应收到 event")
+                )
             return
         await queue.put(message)
 
-    async def _send_error_result(self, message: InvokeMessage, error: AstrBotError) -> None:
+    async def _send_error_result(
+        self, message: InvokeMessage, error: AstrBotError
+    ) -> None:
         if message.stream:
             await self._send(
                 EventMessage(
@@ -343,7 +373,9 @@ class Peer:
             )
         )
 
-    async def _reject_initialize(self, message: InitializeMessage, error: AstrBotError) -> None:
+    async def _reject_initialize(
+        self, message: InitializeMessage, error: AstrBotError
+    ) -> None:
         await self._send(
             ResultMessage(
                 id=message.id,

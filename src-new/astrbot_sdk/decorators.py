@@ -17,7 +17,9 @@ HANDLER_META_ATTR = "__astrbot_handler_meta__"
 
 @dataclass(slots=True)
 class HandlerMeta:
-    trigger: CommandTrigger | MessageTrigger | EventTrigger | ScheduleTrigger | None = None
+    trigger: CommandTrigger | MessageTrigger | EventTrigger | ScheduleTrigger | None = (
+        None
+    )
     priority: int = 0
     permissions: Permissions = field(default_factory=Permissions)
 

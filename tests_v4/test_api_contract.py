@@ -4,7 +4,12 @@ import unittest
 from unittest.mock import patch
 
 from astrbot_sdk import MessageEvent, Star, on_command
-from astrbot_sdk._legacy_api import CommandComponent, MIGRATION_DOC_URL, LegacyContext, _warned_methods
+from astrbot_sdk._legacy_api import (
+    CommandComponent,
+    MIGRATION_DOC_URL,
+    LegacyContext,
+    _warned_methods,
+)
 from astrbot_sdk.clients._proxy import CapabilityProxy
 from astrbot_sdk.clients.memory import MemoryClient
 

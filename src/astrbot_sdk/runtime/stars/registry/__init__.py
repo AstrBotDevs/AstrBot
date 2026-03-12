@@ -76,6 +76,7 @@ class StarHandlerMetadata:
         p.pop("event_filters")
         return p
 
+
 class StarHandlerRegistry(Generic[T]):
     def __init__(self):
         self.star_handlers_map: dict[str, StarHandlerMetadata] = {}

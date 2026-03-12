@@ -114,7 +114,9 @@ class WorkerSession:
         try:
             await self.peer.start()
             # 同时监听初始化完成和连接关闭，避免 worker 崩溃时等满超时
-            init_task = asyncio.create_task(self.peer.wait_until_remote_initialized(timeout=None))
+            init_task = asyncio.create_task(
+                self.peer.wait_until_remote_initialized(timeout=None)
+            )
             closed_task = asyncio.create_task(self.peer.wait_closed())
             done, pending = await asyncio.wait(
                 {init_task, closed_task},
@@ -128,7 +130,9 @@ class WorkerSession:
                     pass
 
             if closed_task in done:
-                raise RuntimeError(f"插件 {self.plugin.name} worker 进程在初始化阶段退出")
+                raise RuntimeError(
+                    f"插件 {self.plugin.name} worker 进程在初始化阶段退出"
+                )
 
             self.handlers = list(self.peer.remote_handlers)
 
@@ -147,7 +151,9 @@ class WorkerSession:
             try:
                 self.on_closed()
             except Exception:
-                logger.exception("on_closed callback failed for plugin {}", self.plugin.name)
+                logger.exception(
+                    "on_closed callback failed for plugin {}", self.plugin.name
+                )
 
     async def stop(self) -> None:
         if self.peer is not None:
@@ -267,11 +273,17 @@ class SupervisorRuntime:
                     self.handler_to_worker[handler.id] = session
 
             aggregated_handlers = list(self.handler_to_worker.keys())
-            logger.info("Loaded plugins: {}", ", ".join(sorted(self.loaded_plugins)) or "none")
+            logger.info(
+                "Loaded plugins: {}", ", ".join(sorted(self.loaded_plugins)) or "none"
+            )
 
             await self.peer.start()
             await self.peer.initialize(
-                [handler for session in self.worker_sessions.values() for handler in session.handlers],
+                [
+                    handler
+                    for session in self.worker_sessions.values()
+                    for handler in session.handlers
+                ],
                 metadata={
                     "plugins": sorted(self.loaded_plugins),
                     "skipped_plugins": self.skipped_plugins,
@@ -349,7 +361,9 @@ class PluginWorkerRuntime:
             peer=self.peer,
             handlers=self.loaded_plugin.handlers,
         )
-        self._lifecycle_context = RuntimeContext(peer=self.peer, plugin_id=self.plugin.name)
+        self._lifecycle_context = RuntimeContext(
+            peer=self.peer, plugin_id=self.plugin.name
+        )
         self.peer.set_invoke_handler(self._handle_invoke)
         self.peer.set_cancel_handler(self.dispatcher.cancel)
 
@@ -391,7 +405,8 @@ class PluginWorkerRuntime:
                 positional_params = [
                     parameter
                     for parameter in signature.parameters.values()
-                    if parameter.kind in (
+                    if parameter.kind
+                    in (
                         inspect.Parameter.POSITIONAL_ONLY,
                         inspect.Parameter.POSITIONAL_OR_KEYWORD,
                     )

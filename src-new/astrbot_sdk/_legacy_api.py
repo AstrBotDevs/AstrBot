@@ -119,7 +119,9 @@ class LegacyContext:
         ctx = self.require_runtime_context()
         # 正确序列化 MessageChain 对象
         # 优先使用 get_plain_text() 方法（旧版 MessageChain）
-        if hasattr(message_chain, "get_plain_text") and callable(message_chain.get_plain_text):
+        if hasattr(message_chain, "get_plain_text") and callable(
+            message_chain.get_plain_text
+        ):
             text = message_chain.get_plain_text()
         elif hasattr(message_chain, "to_text") and callable(message_chain.to_text):
             text = message_chain.to_text()

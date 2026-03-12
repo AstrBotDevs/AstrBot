@@ -255,9 +255,7 @@ async def run_benchmark(plugins_dir: Path, python_executable: str) -> dict[str, 
         handshake_error = f"{exc.__class__.__name__}: {exc}"
 
     measured_at = time.perf_counter()
-    metrics = (
-        collect_process_tree_metrics(client_process.pid) if client_process else {}
-    )
+    metrics = collect_process_tree_metrics(client_process.pid) if client_process else {}
     loaded_plugins = sorted(
         metadata_item.name
         for metadata_item in metadata.values()

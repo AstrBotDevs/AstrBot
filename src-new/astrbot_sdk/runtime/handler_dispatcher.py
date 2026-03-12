@@ -23,7 +23,9 @@ class HandlerDispatcher:
         if loaded is None:
             raise LookupError(f"handler not found: {handler_id}")
 
-        ctx = Context(peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token)
+        ctx = Context(
+            peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token
+        )
         event = MessageEvent.from_payload(message.input.get("event", {}))
         event.bind_reply_handler(lambda text: ctx.platform.send(event.session_id, text))
         if loaded.legacy_context is not None:
@@ -56,7 +58,9 @@ class HandlerDispatcher:
         legacy_args: dict[str, Any] | None = None,
     ) -> None:
         try:
-            result = loaded.callable(*self._build_args(loaded.callable, event, ctx, legacy_args))
+            result = loaded.callable(
+                *self._build_args(loaded.callable, event, ctx, legacy_args)
+            )
             if inspect.isasyncgen(result):
                 async for item in result:
                     await self._consume_legacy_result(item, event)

@@ -68,11 +68,14 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
             peer_info=PeerInfo(name="outer-core", role="core", version="v4"),
         )
         self.core.set_initialize_handler(
-            lambda _message: asyncio.sleep(0, result=InitializeOutput(
-                peer=PeerInfo(name="outer-core", role="core", version="v4"),
-                capabilities=[],
-                metadata={},
-            ))
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="outer-core", role="core", version="v4"),
+                    capabilities=[],
+                    metadata={},
+                ),
+            )
         )
         await self.core.start()
 
@@ -108,7 +111,9 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     },
                     request_id="call-v4",
                 )
-                texts = [item.get("text") for item in runtime.capability_router.sent_messages]
+                texts = [
+                    item.get("text") for item in runtime.capability_router.sent_messages
+                ]
                 self.assertEqual(texts, ["Echo: hello", "Echo: stream"])
             finally:
                 await runtime.stop()
@@ -142,7 +147,9 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     },
                     request_id="call-compat",
                 )
-                texts = [item.get("text") for item in runtime.capability_router.sent_messages]
+                texts = [
+                    item.get("text") for item in runtime.capability_router.sent_messages
+                ]
                 self.assertEqual(len(texts), 4)
                 self.assertIn("Created conversation ID", texts[0])
             finally:
