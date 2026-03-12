@@ -363,7 +363,11 @@ class CronJobManager:
         if tool_was_called:
             cron_meta = extras.get("cron_job", {}) if extras else {}
             # role == "assistant" 表示 LLM 正常完成，排除 role="err" 的错误响应写入历史
-            status = "task completed successfully." if llm_resp.role == "assistant" else f"task ended with error: {llm_resp.completion_text}"
+            status = (
+                "task completed successfully."
+                if llm_resp.role == "assistant"
+                else f"task ended with error: {llm_resp.completion_text}"
+            )
             summary_note = (
                 f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
                 f"{cron_meta.get('description', '')} "
