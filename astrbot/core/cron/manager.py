@@ -354,11 +354,12 @@ class CronJobManager:
             # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
-        if not llm_resp:
-            logger.warning("Cron job agent got no response")
-            return
 
         cron_meta = extras.get("cron_job", {}) if extras else {}
+        cron_job_label = cron_meta.get("name") or cron_meta.get("id", "unknown")
+
+        if not llm_resp:
+            logger.warning("Cron job [%s] agent got no response", cron_job_label)
 
         # 选择工具调用的名字作为日志输出，方便后续分析 cron 任务是否正确触达用户，以及用户收到的内容是什么
         called_tool_names: list[str] = []
@@ -376,8 +377,9 @@ class CronJobManager:
 
         if not called_tool_names:
             logger.warning(
-                "Cron job agent did not call any tools. "
-                "The message was likely NOT delivered to the user."
+                "Cron job [%s] agent did not call any tools. "
+                "The message was likely NOT delivered to the user.",
+                cron_job_label,
             )
 
         tools_str = (
@@ -385,12 +387,13 @@ class CronJobManager:
             if called_tool_names
             else "no tools called. "
         )
-        # role == "assistant" 表示 LLM 正常完成，排除 role="err" 的错误响应写入历史
-        status = (
-            "task completed successfully."
-            if llm_resp.role == "assistant"
-            else f"task ended with error: {llm_resp.completion_text}"
-        )
+        # 根据 llm_resp 判断状态：无响应、正常完成、错误终止
+        if not llm_resp:
+            status = "task ended with no LLM response."
+        elif llm_resp.role == "assistant":
+            status = "task completed successfully."
+        else:
+            status = f"task ended with error: {llm_resp.completion_text}"
         summary_note = (
             f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: "
             f"{cron_meta.get('description', '')} "
