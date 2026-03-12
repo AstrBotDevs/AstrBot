@@ -1,0 +1,13 @@
+_schema_version: 2
+name: astrbot_plugin_v4demo
+display_name: V4 Demo 插件
+desc: 一个覆盖 v4 原生命令、消息处理和 capability 的示例插件
+author: Soulter
+version: 0.1.0
+runtime:
+  python: "3.12"
+components:
+  - class: commands.hello:HelloPlugin
+    type: command
+    name: hello
+    description: 发送问候消息

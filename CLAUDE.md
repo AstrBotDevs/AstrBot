@@ -17,6 +17,7 @@
 - 2026-03-13: Keep `astrbot_sdk.protocol` root focused on native v4 protocol models and parsers. Legacy JSON-RPC helpers remain supported, but they should be imported from `astrbot_sdk.protocol.legacy_adapter` explicitly instead of being re-exported from the package root.
 - 2026-03-13: `Peer` must treat transport EOF/connection loss as a first-class failure path, not only explicit protocol parse errors. If the transport closes unexpectedly and `Peer` does not proactively fail `_pending_results` / `_pending_streams`, supervisor-side calls into workers can hang forever even though the worker session already noticed the disconnect.
 - 2026-03-13: The repository root `test_plugin/` is no longer a single runnable plugin fixture. The maintained compat sample now lives under `test_plugin/old/`; tests or scripts that still copy/load `test_plugin/` directly will mis-detect it as an incomplete legacy plugin and fail.
+- 2026-03-13: The maintained sample plugins now live under `test_plugin/old/` and `test_plugin/new/`. Runtime/integration tests should copy those real fixture directories instead of inlining synthetic plugin writers, otherwise the sample plugin tree and the exercised test path drift apart.
 
 # 开发命令
 

@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-import sys
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 
@@ -15,49 +13,8 @@ from astrbot_sdk.runtime.peer import Peer
 from tests_v4.helpers import FakeEnvManager, make_transport_pair
 
 
-def write_new_plugin(plugin_root: Path) -> None:
-    (plugin_root / "commands").mkdir(parents=True, exist_ok=True)
-    (plugin_root / "commands" / "__init__.py").write_text("", encoding="utf-8")
-    (plugin_root / "requirements.txt").write_text("", encoding="utf-8")
-    (plugin_root / "plugin.yaml").write_text(
-        textwrap.dedent(
-            f"""\
-            _schema_version: 2
-            name: v4_plugin
-            display_name: V4 Plugin
-            desc: test
-            author: tester
-            version: 0.1.0
-            runtime:
-              python: "{sys.version_info.major}.{sys.version_info.minor}"
-            components:
-              - class: commands.sample:MyPlugin
-                type: command
-                name: hello
-                description: hello
-            """
-        ),
-        encoding="utf-8",
-    )
-    (plugin_root / "commands" / "sample.py").write_text(
-        textwrap.dedent(
-            """\
-            from astrbot_sdk import Context, MessageEvent, Star, on_command
-
-
-            class MyPlugin(Star):
-                @on_command("hello")
-                async def hello(self, event: MessageEvent, ctx: Context):
-                    reply = await ctx.llm.chat(event.text)
-                    await event.reply(reply)
-                    chunks = []
-                    async for chunk in ctx.llm.stream_chat("stream"):
-                        chunks.append(chunk)
-                    await event.reply("".join(chunks))
-            """
-        ),
-        encoding="utf-8",
-    )
+def sample_plugin_dir(name: str) -> Path:
+    return Path(__file__).resolve().parents[1] / "test_plugin" / name
 
 
 class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
@@ -86,7 +43,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            write_new_plugin(plugin_root)
+            shutil.copytree(sample_plugin_dir("new"), plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -119,6 +76,89 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     item.get("text") for item in runtime.capability_router.sent_messages
                 ]
                 self.assertEqual(texts, ["Echo: hello", "Echo: stream"])
+            finally:
+                await runtime.stop()
+
+    async def test_supervisor_exposes_real_v4_plugin_capability(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_root = Path(temp_dir) / "plugins"
+            plugin_root = plugins_root / "v4_plugin"
+            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+
+            runtime = SupervisorRuntime(
+                transport=self.right,
+                plugins_dir=plugins_root,
+                env_manager=FakeEnvManager(),
+            )
+            try:
+                await runtime.start()
+                await self.core.wait_until_remote_initialized()
+
+                capability_names = {
+                    descriptor.name
+                    for descriptor in self.core.remote_provided_capabilities
+                }
+                self.assertIn("demo.echo", capability_names)
+
+                result = await self.core.invoke(
+                    "demo.echo",
+                    {"text": "capability"},
+                    request_id="call-v4-capability",
+                )
+                self.assertEqual(
+                    result,
+                    {
+                        "echo": "capability",
+                        "plugin_id": "astrbot_plugin_v4demo",
+                    },
+                )
+            finally:
+                await runtime.stop()
+
+    async def test_supervisor_runs_v4_plugin_chain_send(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_root = Path(temp_dir) / "plugins"
+            plugin_root = plugins_root / "v4_plugin"
+            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+
+            runtime = SupervisorRuntime(
+                transport=self.right,
+                plugins_dir=plugins_root,
+                env_manager=FakeEnvManager(),
+            )
+            try:
+                await runtime.start()
+                await self.core.wait_until_remote_initialized()
+                handler_id = next(
+                    handler.id
+                    for handler in self.core.remote_handlers
+                    if getattr(handler.trigger, "command", None) == "announce"
+                )
+
+                await self.core.invoke(
+                    "handler.invoke",
+                    {
+                        "handler_id": handler_id,
+                        "event": {
+                            "text": "announce",
+                            "session_id": "session-chain",
+                            "user_id": "user-1",
+                            "platform": "test",
+                        },
+                    },
+                    request_id="call-v4-chain",
+                )
+                chain_message = runtime.capability_router.sent_messages[-1]
+                self.assertEqual(chain_message["session"], "session-chain")
+                self.assertEqual(
+                    chain_message["target"]["conversation_id"],
+                    "session-chain",
+                )
+                self.assertEqual(chain_message["chain"][0]["text"], "Demo ")
+                self.assertEqual(
+                    chain_message["chain"][1]["file"],
+                    "https://example.com/demo.png",
+                )
             finally:
                 await runtime.stop()
 
