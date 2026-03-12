@@ -1,0 +1,195 @@
+﻿{
+    "title": "Инструменты и функции",
+    "subtitle": "Управление MCP-серверами и доступными функциями",
+    "tooltip": {
+        "info": "Что такое Function Calling и MCP?",
+        "marketplace": "Обзор и установка MCP-серверов от сообщества",
+        "serverConfig": "Конфигурация MCP-серверов (stdio) поддерживает следующие поля:\ncommand: имя команды (например, python или uv)\nargs: массив аргументов (например, [\"run\", \"server.py\"])\nenv: объект переменных окружения (например, {\"api_key\": \"abc\"})\ncwd: рабочий каталог (например, /path/to/server)\nencoding: кодировка вывода (по умолчанию utf-8)\nПодробности см. в документации MCP.\n⚠️ Если вы используете Docker, устанавливайте сервера в смонтированную директорию data."
+    },
+    "tabs": {
+        "local": "Локальные сервера",
+        "marketplace": "Магазин MCP"
+    },
+    "mcpServers": {
+        "title": "MCP Сервера",
+        "buttons": {
+            "refresh": "Обновить",
+            "add": "Добавить сервер",
+            "useTemplateStdio": "Шаблон Stdio",
+            "useTemplateStreamableHttp": "Шаблон Streamable HTTP",
+            "useTemplateSse": "Шаблон SSE",
+            "sync": "Синхронизировать"
+        },
+        "empty": "MCP-сервера не найдены. Нажмите «Добавить сервер».",
+        "status": {
+            "noTools": "Нет доступных инструментов",
+            "availableTools": "Доступные инструменты",
+            "configSummary": "Конфигурация: {keys}",
+            "noConfig": "Конфигурация не задана"
+        }
+    },
+    "functionTools": {
+        "title": "Функции (Tools)",
+        "buttons": {
+            "view": "Показать инструменты"
+        },
+        "search": "Поиск по функциям",
+        "empty": "Доступные инструменты не найдены",
+        "description": "Описание функции",
+        "parameters": "Параметры",
+        "noParameters": "У этого инструмента нет параметров",
+        "table": {
+            "paramName": "Параметр",
+            "type": "Тип",
+            "description": "Описание",
+            "required": "Обяз.",
+            "origin": "Источник",
+            "originName": "Имя источника",
+            "actions": "Действия"
+        }
+    },
+    "marketplace": {
+        "title": "Магазин MCP-серверов",
+        "search": "Поиск по магазину",
+        "buttons": {
+            "refresh": "Обновить",
+            "detail": "Инфо",
+            "import": "Импорт"
+        },
+        "loading": "Загрузка списка серверов...",
+        "empty": "Доступных MCP-серверов не найдено",
+        "status": {
+            "availableTools": "Инструментов: {count}",
+            "noToolsInfo": "Нет данных об инструментах"
+        }
+    },
+    "dialogs": {
+        "addServer": {
+            "title": "Добавление MCP-сервера",
+            "editTitle": "Редактирование MCP-сервера",
+            "fields": {
+                "name": "Название сервера",
+                "nameRequired": "Название обязательно",
+                "enable": "Включить сервер",
+                "config": "Конфигурация сервера"
+            },
+            "errors": {
+                "configEmpty": "Конфигурация не может быть пустой",
+                "jsonFormat": "Ошибка формата JSON: {error}",
+                "jsonParse": "Ошибка разбора JSON: {error}"
+            },
+            "buttons": {
+                "cancel": "Отмена",
+                "save": "Сохранить",
+                "testConnection": "Тест связи",
+                "sync": "Синхронизировать"
+            },
+            "tips": {
+                "timeoutConfig": "Тайм-аут вызова инструментов настраивается отдельно на странице конфигурации"
+            }
+        },
+        "serverDetail": {
+            "title": "Детали сервера",
+            "installConfig": "Конфигурация установки",
+            "availableTools": "Список инструментов",
+            "buttons": {
+                "close": "Закрыть",
+                "importConfig": "Импортировать конфиг"
+            }
+        },
+        "confirmDelete": "Вы уверены, что хотите удалить сервер «{name}»?",
+        "syncProvider": {
+            "title": "Синхронизация MCP",
+            "subtitle": "Загрузка конфигурации MCP-серверов от провайдера",
+            "steps": {
+                "selectProvider": "Шаг 1: Провайдер",
+                "configureAuth": "Шаг 2: Авторизация",
+                "syncServers": "Шаг 3: Синхронизация"
+            },
+            "providers": {
+                "modelscope": "ModelScope",
+                "description": "ModelScope — это сообщество моделей с открытым исходным кодом, предоставляющее различные MCP-сервера для AI-сервисов"
+            },
+            "fields": {
+                "provider": "Выберите провайдера",
+                "accessToken": "Токен доступа",
+                "tokenRequired": "Токен обязателен",
+                "tokenHint": "Введите ваш токен доступа ModelScope"
+            },
+            "buttons": {
+                "cancel": "Отмена",
+                "previous": "Назад",
+                "next": "Далее",
+                "sync": "Начать",
+                "getToken": "Получить токен"
+            },
+            "status": {
+                "selectProvider": "Пожалуйста, выберите провайдера MCP-серверов",
+                "enterToken": "Введите токен для продолжения",
+                "readyToSync": "Готов к синхронизации"
+            },
+            "messages": {
+                "syncSuccess": "MCP-сервера успешно синхронизированы!",
+                "syncError": "Ошибка синхронизации: {error}",
+                "tokenHelp": "Как получить токен ModelScope? Нажмите кнопку справа для инструкции"
+            }
+        }
+    },
+    "messages": {
+        "getServersError": "Ошибка получения списка серверов: {error}",
+        "getToolsError": "Ошибка получения списка инструментов: {error}",
+        "saveSuccess": "Настройки сохранены!",
+        "saveError": "Ошибка сохранения: {error}",
+        "deleteSuccess": "Сервер удален успешно!",
+        "deleteError": "Ошибка удаления: {error}",
+        "updateSuccess": "Обновлено успешно!",
+        "updateError": "Ошибка обновления: {error}",
+        "getMarketError": "Не удалось загрузить магазин MCP: {error}",
+        "importError": {
+            "noConfig": "У этого сервера нет доступной конфигурации",
+            "invalidFormat": "Неверный формат конфигурации",
+            "failed": "Импорт не удался: {error}"
+        },
+        "configParseError": "Ошибка разбора конфигурации: {error}",
+        "noAvailableConfig": "Конфигурация отсутствует",
+        "toggleToolSuccess": "Статус инструмента изменен!",
+        "toggleToolError": "Не удалось изменить статус: {error}",
+        "testError": "Ошибка теста связи: {error}"
+    },
+    "syncProvider": {
+        "title": "Синхронизация серверов MCP",
+        "subtitle": "Синхронизировать конфигурации серверов MCP от провайдеров с локальными",
+        "steps": {
+            "selectProvider": "Шаг 1: Выберите провайдер",
+            "configureAuth": "Шаг 2: Настройте аутентификацию",
+            "syncServers": "Шаг 3: Синхронизируйте серверы"
+        },
+        "providers": {
+            "modelscope": "ModelScope",
+            "description": "ModelScope — это сообщество открытых моделей, предоставляющее серверы MCP для различных сервисов машинного обучения и ИИ"
+        },
+        "fields": {
+            "provider": "Выберите провайдер",
+            "accessToken": "Токен доступа",
+            "tokenRequired": "Требуется токен доступа",
+            "tokenHint": "Введите ваш токен доступа ModelScope"
+        },
+        "buttons": {
+            "cancel": "Отмена",
+            "previous": "Назад",
+            "next": "Далее",
+            "sync": "Начать синхронизацию",
+            "getToken": "Получить токен"
+        },
+        "status": {
+            "selectProvider": "Пожалуйста, выберите провайдер сервера MCP",
+            "enterToken": "Введите токен доступа для продолжения",
+            "readyToSync": "Готово к синхронизации конфигураций серверов"
+        },
+        "messages": {
+            "syncSuccess": "Серверы MCP успешно синхронизированы!",
+            "syncError": "Ошибка синхронизации: {error}",
+            "tokenHelp": "Как получить токен доступа ModelScope? Нажмите кнопку справа для получения инструкций"
+        }
+    }
+}
