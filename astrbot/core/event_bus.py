@@ -11,12 +11,15 @@ class:
 """
 
 import asyncio
+import hashlib
+import math
 import time
 from asyncio import Queue
 from collections import deque
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.message.components import File, Image
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 
 from .platform import AstrMessageEvent
@@ -25,8 +28,8 @@ from .platform import AstrMessageEvent
 class EventDeduplicator:
     def __init__(self, ttl_seconds: float = 0.5) -> None:
         self._ttl_seconds = ttl_seconds
-        self._seen: set[tuple[str, str, str, str]] = set()
-        self._queue: deque[tuple[float, tuple[str, str, str, str]]] = deque()
+        self._seen: set[tuple[str, ...]] = set()
+        self._queue: deque[tuple[float, tuple[str, ...]]] = deque()
 
     def _clean_expired(self) -> None:
         now = time.monotonic()
@@ -35,22 +38,64 @@ class EventDeduplicator:
             _, fingerprint = self._queue.popleft()
             self._seen.discard(fingerprint)
 
-    def _build_fingerprint(self, event: AstrMessageEvent) -> tuple[str, str, str, str]:
+    def _build_attachment_signature(self, event: AstrMessageEvent) -> str:
+        signatures: list[str] = []
+        for component in event.get_messages():
+            if isinstance(component, Image):
+                image_ref = component.url or component.file or component.file_unique or ""
+                if image_ref:
+                    signatures.append(f"img:{image_ref}")
+            elif isinstance(component, File):
+                file_ref = component.url or component.file_ or component.name or ""
+                if file_ref:
+                    signatures.append(f"file:{file_ref}")
+
+        if not signatures:
+            return ""
+
+        payload = "|".join(signatures)
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+
+    def _build_content_fingerprint(
+        self,
+        event: AstrMessageEvent,
+    ) -> tuple[str, ...]:
+        attachment_signature = self._build_attachment_signature(event)
         return (
+            "content",
             event.get_platform_id() or "",
             event.unified_msg_origin or "",
             event.get_sender_id() or "",
             (event.get_message_str() or "").strip(),
+            attachment_signature,
+        )
+
+    def _build_message_id_fingerprint(self, event: AstrMessageEvent) -> tuple[str, ...] | None:
+        message_id = str(getattr(event.message_obj, "message_id", "") or "")
+        if not message_id:
+            return None
+        return (
+            "message_id",
+            event.get_platform_id() or "",
+            event.unified_msg_origin or "",
+            message_id,
         )
 
     def is_duplicate(self, event: AstrMessageEvent) -> bool:
         self._clean_expired()
-        fingerprint = self._build_fingerprint(event)
-        if fingerprint in self._seen:
-            return True
+        fingerprints = [self._build_content_fingerprint(event)]
+        message_id_fingerprint = self._build_message_id_fingerprint(event)
+        if message_id_fingerprint is not None:
+            fingerprints.append(message_id_fingerprint)
+
+        for fingerprint in fingerprints:
+            if fingerprint in self._seen:
+                return True
+
         ts = time.monotonic()
-        self._seen.add(fingerprint)
-        self._queue.append((ts, fingerprint))
+        for fingerprint in fingerprints:
+            self._seen.add(fingerprint)
+            self._queue.append((ts, fingerprint))
         return False
 
 
@@ -67,7 +112,27 @@ class EventBus:
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
-        self._deduplicator = EventDeduplicator(ttl_seconds=0.5)
+        dedup_ttl_seconds = self._safe_float(
+            self.astrbot_config_mgr.g(
+                None,
+                "event_bus_dedup_ttl_seconds",
+                0.5,
+            ),
+            default=0.5,
+        )
+        self._deduplicator = EventDeduplicator(ttl_seconds=dedup_ttl_seconds)
+
+    @staticmethod
+    def _safe_float(value: int | float | str | None, default: float) -> float:
+        if value is None:
+            return default
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(parsed) or parsed <= 0:
+            return default
+        return parsed
 
     async def dispatch(self) -> None:
         # event_queue 由单一消费者处理；去重结构不是线程安全的，按设计仅在此循环中使用。
