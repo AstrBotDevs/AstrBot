@@ -1,6 +1,5 @@
 # CLAUDE Notes
 
-- 2026-03-12: `refactor.md` on disk was empty, while the active collaboration context contained the full v4 refactor design. Treat the conversation-approved v4 design as source of truth unless a newer committed document replaces it.
 - 2026-03-12: Legacy `handshake` payloads only contain `event_type` / `handler_full_name` metadata and do not preserve v4 command/message trigger details such as command names, aliases, keywords, or regex. Any legacy-to-v4 handshake translation must approximate handlers as coarse event subscriptions and keep the raw handshake payload in metadata for lossless fallback.
 - 2026-03-12: `src/astrbot_sdk/tests/start_client.py` and `benchmark_8_plugins_resource_usage.py` still reference legacy `astrbot_sdk.runtime.galaxy`, but `src-new/astrbot_sdk/runtime/galaxy.py` no longer exists. Treat `tests_v4/test_script_migrations.py` as the maintained replacement instead of reviving the old Galaxy path.
 - 2026-03-12: Legacy `src/astrbot_sdk/api/event/filter.py` exported a much larger decorator surface than `src-new/astrbot_sdk/api/event/filter.py`. Current compat coverage is enough for `command` / `regex` / `permission` and the exercised migration tests, but it is not a full drop-in replacement for every historical filter helper.
@@ -9,6 +8,7 @@
 - 2026-03-13: `Peer` had an early-cancel race for inbound invokes: if `CancelMessage` arrived before the invoke task executed its first line, the task could be cancelled before sending any terminal event, leaving the caller's stream iterator waiting forever. Preserve a per-request start event and pre-check the cancel token at the top of `_handle_invoke`.
 - 2026-03-13: `src-new/astrbot_sdk/api` and several top-level module docstrings overstated v4 compatibility gaps by labeling migrated or compat-backed APIs as "missing". Treat `_legacy_api.py`, `astrbot_sdk.api.*` thin re-exports, and top-level `events.py` / `decorators.py` as a split compatibility surface; do not mechanically recreate the old tree from stale TODO comments.
 - 2026-03-13: Legacy components are expected to share one `LegacyContext` per plugin, matching the old `StarManager` behavior. Creating one compat context per component breaks `_register_component()` / `call_context_function()` cross-component registration chains and diverges from legacy semantics.
+- 2026-03-13: `WorkerSession` cannot assume the caller-provided `repo_root` contains `src-new/astrbot_sdk`. Tests and external bootstraps may pass a temporary repo root while still expecting the in-tree SDK package to launch worker subprocesses via `python -m astrbot_sdk`. Resolve the SDK source directory from the real package location when the supplied root does not contain it.
 
 # 开发命令
 
