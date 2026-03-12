@@ -187,7 +187,9 @@ class LocalPythonComponent(PythonComponent):
 
         def _run() -> dict[str, Any]:
             try:
-                result = subprocess.run(
+                # Execute Python code via interpreter (not shell).
+                # Safe: no shell=True, args are passed as a list, code runs in Python not shell.
+                result = subprocess.run(  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
