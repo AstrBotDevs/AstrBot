@@ -173,7 +173,8 @@ class LegacyAdapter:
                         self._coerce_error_payload(error)
                     ),
                 )
-            return EventMessage(id=request_id, phase="completed")
+            # completed phase 需要 output 字段，提供空字典作为默认值
+            return EventMessage(id=request_id, phase="completed", output={"done": True})
 
         if method == "cancel":
             return CancelMessage(

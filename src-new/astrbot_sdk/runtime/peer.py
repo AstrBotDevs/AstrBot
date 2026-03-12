@@ -65,7 +65,9 @@ class Peer:
         self._unusable = False
         self._pending_results: dict[str, asyncio.Future[ResultMessage]] = {}
         self._pending_streams: dict[str, asyncio.Queue[Any]] = {}
-        self._inbound_tasks: dict[str, tuple[asyncio.Task[None], CancelToken]] = {}
+        self._inbound_tasks: dict[
+            str, tuple[asyncio.Task[None], CancelToken, asyncio.Event]
+        ] = {}
         self._remote_initialized = asyncio.Event()
 
     def set_initialize_handler(self, handler: InitializeHandler) -> None:
@@ -99,7 +101,7 @@ class Peer:
         self._pending_streams.clear()
 
         # 取消所有入站任务
-        for task, token in list(self._inbound_tasks.values()):
+        for task, token, _started in list(self._inbound_tasks.values()):
             token.cancel()
             task.cancel()
         self._inbound_tasks.clear()
@@ -287,9 +289,10 @@ class Peer:
             await self._handle_initialize(message)
             return
         if isinstance(message, InvokeMessage):
-            task = asyncio.create_task(self._handle_invoke(message))
             token = CancelToken()
-            self._inbound_tasks[message.id] = (task, token)
+            started = asyncio.Event()
+            task = asyncio.create_task(self._handle_invoke(message, token, started))
+            self._inbound_tasks[message.id] = (task, token, started)
             task.add_done_callback(
                 lambda _task, request_id=message.id: self._inbound_tasks.pop(
                     request_id, None
@@ -332,11 +335,16 @@ class Peer:
         )
         self._remote_initialized.set()
 
-    async def _handle_invoke(self, message: InvokeMessage) -> None:
+    async def _handle_invoke(
+        self,
+        message: InvokeMessage,
+        token: CancelToken,
+        started: asyncio.Event,
+    ) -> None:
         """处理远端发起的能力调用，并按流式或非流式协议返回结果。"""
-        active = self._inbound_tasks.get(message.id)
-        token = active[1] if active is not None else CancelToken()
         try:
+            started.set()
+            token.raise_if_cancelled()
             if self._invoke_handler is None:
                 raise AstrBotError.capability_not_found(message.capability)
             execution = await self._invoke_handler(message, token)
@@ -382,11 +390,12 @@ class Peer:
         inbound = self._inbound_tasks.get(message.id)
         if inbound is None:
             return
-        task, token = inbound
+        task, token, started = inbound
         token.cancel()
         if self._cancel_handler is not None:
             await self._cancel_handler(message.id)
-        task.cancel()
+        if started.is_set():
+            task.cancel()
 
     async def _handle_result(self, message: ResultMessage) -> None:
         """处理非流式结果消息并唤醒等待中的调用方。"""

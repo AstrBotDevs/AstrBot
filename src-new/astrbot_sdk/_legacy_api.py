@@ -305,9 +305,7 @@ class LegacyConversationManager:
         Deprecated:
             请使用 update_conversation() 的 title 参数。
         """
-        await self.update_conversation(
-            unified_msg_origin, conversation_id, title=title
-        )
+        await self.update_conversation(unified_msg_origin, conversation_id, title=title)
 
     async def update_conversation_persona_id(
         self,
