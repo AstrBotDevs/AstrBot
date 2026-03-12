@@ -1,53 +1,9 @@
-# =============================================================================
-# 新旧对比 - _legacy_api.py
-# =============================================================================
-#
-# 【说明】
-# _legacy_api.py 是新版新增的兼容层，提供旧版 API 的兼容实现。
-# 旧版没有这个文件，相关功能分散在 api/star/ 目录下。
-#
-# 【提供的兼容类型】
-# - LegacyContext: 旧版 Context 兼容实现
-#   - 提供 llm_generate(), tool_loop_agent(), send_message() 等方法
-#   - 提供 _register_component()/call_context_function() 兼容链路
-#   - 内部委托给新版 Context 的客户端
-#
-# - LegacyConversationManager: 旧版会话管理器兼容实现
-#   - 提供 new_conversation(), switch_conversation(), delete_conversation() 等方法
-#   - 使用 db 客户端存储会话数据
-#
-# - CommandComponent: 旧版命令组件基类
-#   - 继承自 Star，标记为旧版 (__astrbot_is_new_star__ = False)
-#
-# - Context: 别名指向 LegacyContext
-#
-# 【旧版对应位置】
-# - Context: src/astrbot_sdk/api/star/context.py
-# - BaseConversationManager: src/astrbot_sdk/api/basic/conversation_mgr.py
-# - CommandComponent: 旧版可能是 Star 的别名或独立类
-#
-# =============================================================================
-# TODO: 功能缺失
-# =============================================================================
-#
-# 1. LegacyContext 方法不完整
-#    - add_llm_tools() 抛出 NotImplementedError（旧版支持）
-#
-# 2. LegacyConversationManager 方法不完整
-#    - get_filtered_conversations(): 抛出 NotImplementedError
-#    - get_human_readable_context(): 抛出 NotImplementedError
-#    - 这些方法在旧版存在但新版不支持
-#
-# 3. 缺少旧版依赖类型的兼容
-#    - ToolSet, FunctionTool: 旧版从 astr_agent_sdk 导入
-#    - Message: 旧版从 astr_agent_sdk 导入
-#    - MessageChain: 旧版从 api/message/chain.py 导入
-#    - 新版需要考虑是否提供兼容导入路径
-#
-# 4. 迁移文档链接
-#    - MIGRATION_DOC_URL 需要更新为实际迁移文档地址
-#
-# =============================================================================
+"""旧版 API 的兼容实现。
+
+这个模块承接旧 ``Context`` / ``CommandComponent`` 的运行时行为，
+把仍然可映射到 v4 的能力落到 ``Context`` 客户端上，
+无法等价支持的旧接口则显式给出迁移错误，而不是静默降级。
+"""
 
 from __future__ import annotations
 
@@ -64,6 +20,7 @@ from .star import Star
 
 # TODO-迁移文档要写，我好烦烦烦你烦烦烦你
 MIGRATION_DOC_URL = "https://docs.astrbot.app/migration/v3"
+COMPAT_CONVERSATIONS_KEY = "__compat_conversations__"
 _warned_methods: set[str] = set()
 
 
@@ -79,12 +36,31 @@ def _warn_once(old_name: str, replacement: str) -> None:
     )
 
 
+def _iter_registered_component_methods(
+    component: Any,
+) -> list[tuple[str, Callable[..., Any]]]:
+    methods: list[tuple[str, Callable[..., Any]]] = []
+    for attr_name, static_attr in inspect.getmembers_static(component):
+        if attr_name.startswith("_") or isinstance(static_attr, property):
+            continue
+        if not callable(static_attr) and not isinstance(
+            static_attr, (staticmethod, classmethod)
+        ):
+            continue
+        try:
+            bound_attr = getattr(component, attr_name)
+        except Exception:
+            continue
+        if callable(bound_attr):
+            methods.append((attr_name, bound_attr))
+    return methods
+
+
 class LegacyConversationManager:
     """旧版会话管理器的兼容实现。
 
-    使用 db 存储会话数据，key 为 `__compat_conversations__`。
-
-    注意：此实现不提供持久化保证，会话数据仅在当前运行时有效。
+    会话数据通过 ``ctx.db`` 存在统一 key 下。
+    数据是否持久化取决于当前 db capability 的后端实现，而不是 compat 层本身。
     """
 
     __compat_component_name__ = "ConversationManager"
@@ -101,13 +77,13 @@ class LegacyConversationManager:
     async def _get_stored(self) -> dict[str, dict[str, Any]]:
         """获取存储的所有会话数据。"""
         ctx = self._ctx()
-        stored = await ctx.db.get("__compat_conversations__")
+        stored = await ctx.db.get(COMPAT_CONVERSATIONS_KEY)
         return stored if isinstance(stored, dict) else {}
 
     async def _set_stored(self, stored: dict[str, dict[str, Any]]) -> None:
         """保存会话数据。"""
         ctx = self._ctx()
-        await ctx.db.set("__compat_conversations__", stored)
+        await ctx.db.set(COMPAT_CONVERSATIONS_KEY, stored)
 
     async def new_conversation(
         self,
@@ -400,6 +376,8 @@ class LegacyConversationManager:
 
 
 class LegacyContext:
+    """旧版 ``Context`` 的兼容外观。"""
+
     def __init__(self, plugin_id: str) -> None:
         self.plugin_id = plugin_id
         self._runtime_context: NewContext | None = None
@@ -429,15 +407,8 @@ class LegacyContext:
         for component in components:
             for class_name in self._component_names(component):
                 self._registered_managers[class_name] = component
-                for attr_name in dir(component):
-                    if attr_name.startswith("_"):
-                        continue
-                    try:
-                        attr = getattr(component, attr_name)
-                    except Exception:
-                        continue
-                    if callable(attr):
-                        self._registered_functions[f"{class_name}.{attr_name}"] = attr
+                for attr_name, attr in _iter_registered_component_methods(component):
+                    self._registered_functions[f"{class_name}.{attr_name}"] = attr
 
     async def execute_registered_function(
         self,
@@ -516,8 +487,7 @@ class LegacyContext:
     async def send_message(self, session: str, message_chain: Any) -> None:
         _warn_once("context.send_message()", "ctx.platform.send(session, text)")
         ctx = self.require_runtime_context()
-        # 正确序列化 MessageChain 对象
-        # 优先使用 get_plain_text() 方法（旧版 MessageChain）
+        # 旧版插件常传 MessageChain 或类似对象，compat 层统一收口到纯文本发送。
         if hasattr(message_chain, "get_plain_text") and callable(
             message_chain.get_plain_text
         ):
@@ -528,8 +498,8 @@ class LegacyContext:
             text = str(message_chain)
         await ctx.platform.send(session, text)
 
-    # TODO:迁移文档中说明已废弃 add_llm_tools()，但仍保留接口以避免核心依赖问题。后续版本将移除此接口。
     async def add_llm_tools(self, *tools: Any) -> None:
+        # 保留旧签名，让旧插件尽快得到显式迁移提示，而不是悄悄失效。
         raise NotImplementedError(
             "context.add_llm_tools() 在 v4 中不再支持。\n"
             "请使用 ctx.llm.chat_raw(..., tools=[...]) 直接传递工具。\n"

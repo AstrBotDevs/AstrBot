@@ -85,6 +85,22 @@ class TestMessageEvent:
         assert payload["user_id"] == "user-1"
         assert payload["platform"] == "test"
 
+    def test_to_payload_preserves_extra_raw_fields(self):
+        """to_payload() should preserve unmodeled raw fields during round-trip."""
+        event = MessageEvent.from_payload(
+            {
+                "text": "hello",
+                "session_id": "session-1",
+                "trace_id": "trace-123",
+            }
+        )
+        event.text = "updated"
+
+        payload = event.to_payload()
+
+        assert payload["trace_id"] == "trace-123"
+        assert payload["text"] == "updated"
+
     def test_plain_result_createsPlainTextResult(self):
         """plain_result() should create PlainTextResult."""
         event = MessageEvent(text="hello", session_id="s1")

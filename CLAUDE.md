@@ -14,6 +14,7 @@
 - 2026-03-13: The repository has no legacy `src/astrbot_sdk/protocol` package to migrate file-for-file. `src-new/astrbot_sdk/protocol` is a v4-native protocol layer; compare it against legacy JSON-RPC behavior in `src/astrbot_sdk/runtime/*` and the maintained migration tests, not against a nonexistent old package tree.
 - 2026-03-13: `load_plugin()` must not blindly `getattr()` every name from `dir(instance)` during handler discovery. Real plugins may expose properties or descriptors with side effects or exceptions; inspect attributes statically first, and only bind names that actually carry handler metadata.
 - 2026-03-13: In `Peer`, “remote initialized” and “transport still alive” are separate states. Waiting for initialization must fail when the connection closes first, and malformed inbound protocol messages should actively fail pending calls instead of leaving futures/streams hanging.
+- 2026-03-13: Several first-layer files under `src-new/astrbot_sdk/*.py` carried stale migration comparison blocks that claimed missing CLI help, missing compat APIs, or other gaps already covered by tests and current implementations. Treat those comments as historical noise; verify behavior against code and tests before "restoring" features from the comments.
 
 # 开发命令
 

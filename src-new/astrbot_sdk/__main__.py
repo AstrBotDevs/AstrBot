@@ -1,26 +1,11 @@
-# =============================================================================
-# 新旧对比 - __main__.py
-# =============================================================================
-#
-# 【旧版 src/astrbot_sdk/__main__.py】
-# from .cli.main import cli
-# if __name__ == "__main__":
-#     cli()
-#
-# 【新版 src-new/astrbot_sdk/__main__.py】
-# from .cli import cli
-# if __name__ == "__main__":
-#     cli()
-#
-# 【差异】
-# - 旧版导入路径: .cli.main (cli/ 文件夹结构)
-# - 新版导入路径: .cli (cli.py 单文件)
-# - 功能等效，仅模块结构变化
-#
-# =============================================================================
+"""`python -m astrbot_sdk` 的 CLI 入口。"""
 
 from .cli import cli
 
 
-if __name__ == "__main__":
+def main() -> None:
     cli()
+
+
+if __name__ == "__main__":
+    main()

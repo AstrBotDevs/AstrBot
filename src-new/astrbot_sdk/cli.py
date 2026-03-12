@@ -1,49 +1,12 @@
-# =============================================================================
-# 新旧对比 - cli.py
-# =============================================================================
-#
-# 【旧版 src/astrbot_sdk/cli/main.py】
-# - 位于 cli/ 文件夹中
-# - 有 setup_logger() 函数带 docstring
-# - run 命令有 @click.pass_context 装饰器
-# - plugins-dir 参数类型为 str
-# - run 命令有 logger.info 输出
-# - websocket 命令有 help 参数和 logger.info 输出
-#
-# 【新版 src-new/astrbot_sdk/cli.py】
-# - 位于第一层，单文件
-# - setup_logger() 无 docstring
-# - run 命令无 @click.pass_context
-# - plugins-dir 参数类型为 Path
-# - 无日志输出
-#
-# =============================================================================
-# TODO: 功能缺失
-# =============================================================================
-#
-# 1. CLI 命令缺少 docstring
-#    - 旧版 cli() 有 """AstrBot SDK CLI""" docstring
-#    - 旧版 run() 有 """Start the plugin supervisor over stdio.""" docstring
-#    - 旧版 worker() 有 """Internal command used by the supervisor to start a worker.""" docstring
-#    - 旧版 websocket() 有 """Legacy websocket runtime entrypoint.""" docstring
-#    - 新版所有命令都缺少 docstring
-#
-# 2. 缺少日志输出
-#    - 旧版 run() 有 logger.info(f"Starting plugin supervisor with plugins dir: {plugins_dir}")
-#    - 旧版 websocket() 有 logger.info(f"Starting WebSocket server on port {port}...")
-#    - 新版无对应日志输出
-#
-# 3. websocket 命令缺少 help 参数
-#    - 旧版: @click.option("--port", default=8765, help="WebSocket server port", type=int)
-#    - 新版: @click.option("--port", default=8765, type=int)
-#
-# =============================================================================
+"""AstrBot SDK 的命令行入口。"""
 
 from __future__ import annotations
 
 import asyncio
 import sys
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 
 import click
 from loguru import logger
@@ -52,6 +15,7 @@ from .runtime.bootstrap import run_plugin_worker, run_supervisor, run_websocket_
 
 
 def setup_logger(verbose: bool = False) -> None:
+    """初始化 CLI 使用的日志配置。"""
     logger.remove()
     logger.add(
         sys.stderr,
@@ -61,10 +25,22 @@ def setup_logger(verbose: bool = False) -> None:
     )
 
 
+def _run_async_entrypoint(
+    entrypoint: Coroutine[Any, Any, object],
+    *,
+    log_message: str,
+    log_level: str = "info",
+) -> None:
+    log_method = getattr(logger, log_level)
+    log_method(log_message)
+    asyncio.run(entrypoint)
+
+
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
 @click.pass_context
 def cli(ctx, verbose: bool) -> None:
+    """AstrBot SDK CLI。"""
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     setup_logger(verbose)
@@ -78,7 +54,11 @@ def cli(ctx, verbose: bool) -> None:
     help="Directory containing plugin folders",
 )
 def run(plugins_dir: Path) -> None:
-    asyncio.run(run_supervisor(plugins_dir=plugins_dir))
+    """Start the plugin supervisor over stdio."""
+    _run_async_entrypoint(
+        run_supervisor(plugins_dir=plugins_dir),
+        log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
+    )
 
 
 @cli.command(hidden=True)
@@ -88,10 +68,19 @@ def run(plugins_dir: Path) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
 )
 def worker(plugin_dir: Path) -> None:
-    asyncio.run(run_plugin_worker(plugin_dir=plugin_dir))
+    """Internal command used by the supervisor to start a worker."""
+    _run_async_entrypoint(
+        run_plugin_worker(plugin_dir=plugin_dir),
+        log_message=f"启动插件工作进程：{plugin_dir}",
+        log_level="debug",
+    )
 
 
 @cli.command(hidden=True)
-@click.option("--port", default=8765, type=int)
+@click.option("--port", default=8765, type=int, help="WebSocket server port")
 def websocket(port: int) -> None:
-    asyncio.run(run_websocket_server(port=port))
+    """Legacy websocket runtime entrypoint."""
+    _run_async_entrypoint(
+        run_websocket_server(port=port),
+        log_message=f"启动 WebSocket 服务器，端口：{port}",
+    )

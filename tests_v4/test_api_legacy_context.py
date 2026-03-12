@@ -61,6 +61,23 @@ class TestLegacyContext:
         )
         assert "ConversationManager.new_conversation" in ctx._registered_functions
 
+    def test_register_component_skips_property_side_effects(self):
+        """_register_component() should not touch unrelated properties."""
+
+        class ComponentWithProperty:
+            @property
+            def explode(self):
+                raise RuntimeError("property should not be touched")
+
+            def greet(self) -> str:
+                return "hello"
+
+        ctx = LegacyContext("test_plugin")
+
+        ctx._register_component(ComponentWithProperty())
+
+        assert "ComponentWithProperty.greet" in ctx._registered_functions
+
     @pytest.mark.asyncio
     async def test_call_context_function_wraps_registered_result(self):
         """call_context_function() should preserve the legacy {data: ...} shape."""

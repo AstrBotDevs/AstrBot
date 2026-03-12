@@ -68,13 +68,17 @@ class MessageEvent:
         )
 
     def to_payload(self) -> dict[str, Any]:
-        return {
-            "text": self.text,
-            "user_id": self.user_id,
-            "group_id": self.group_id,
-            "platform": self.platform,
-            "session_id": self.session_id,
-        }
+        payload = dict(self.raw)
+        payload.update(
+            {
+                "text": self.text,
+                "user_id": self.user_id,
+                "group_id": self.group_id,
+                "platform": self.platform,
+                "session_id": self.session_id,
+            }
+        )
+        return payload
 
     async def reply(self, text: str) -> None:
         if self._reply_handler is None:
