@@ -12,31 +12,31 @@ class:
 
 import asyncio
 import hashlib
-import math
 import time
 from asyncio import Queue
-from collections import deque
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.message.components import File, Image
 from astrbot.core.pipeline.scheduler import PipelineScheduler
+from astrbot.core.utils.number_utils import safe_positive_float
 
 from .platform import AstrMessageEvent
 
 
 class EventDeduplicator:
+    _MAX_RAW_TEXT_FINGERPRINT_LEN = 256
+
     def __init__(self, ttl_seconds: float = 0.5) -> None:
         self._ttl_seconds = ttl_seconds
-        self._seen: set[tuple[str, ...]] = set()
-        self._queue: deque[tuple[float, tuple[str, ...]]] = deque()
+        self._seen: dict[tuple[str, ...], float] = {}
 
     def _clean_expired(self) -> None:
         now = time.monotonic()
         expire_before = now - self._ttl_seconds
-        while self._queue and self._queue[0][0] < expire_before:
-            _, fingerprint = self._queue.popleft()
-            self._seen.discard(fingerprint)
+        for fingerprint, timestamp in list(self._seen.items()):
+            if timestamp < expire_before:
+                del self._seen[fingerprint]
 
     def _build_attachment_signature(self, event: AstrMessageEvent) -> str:
         signatures: list[str] = []
@@ -60,13 +60,20 @@ class EventDeduplicator:
         self,
         event: AstrMessageEvent,
     ) -> tuple[str, ...]:
+        message_text = (event.get_message_str() or "").strip()
+        if len(message_text) <= self._MAX_RAW_TEXT_FINGERPRINT_LEN:
+            message_signature = message_text
+        else:
+            message_hash = hashlib.sha1(message_text.encode("utf-8")).hexdigest()[:16]
+            message_signature = f"h:{len(message_text)}:{message_hash}"
+
         attachment_signature = self._build_attachment_signature(event)
         return (
             "content",
             event.get_platform_id() or "",
             event.unified_msg_origin or "",
             event.get_sender_id() or "",
-            (event.get_message_str() or "").strip(),
+            message_signature,
             attachment_signature,
         )
 
@@ -94,8 +101,7 @@ class EventDeduplicator:
 
         ts = time.monotonic()
         for fingerprint in fingerprints:
-            self._seen.add(fingerprint)
-            self._queue.append((ts, fingerprint))
+            self._seen[fingerprint] = ts
         return False
 
 
@@ -112,7 +118,7 @@ class EventBus:
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
-        dedup_ttl_seconds = self._safe_float(
+        dedup_ttl_seconds = safe_positive_float(
             self.astrbot_config_mgr.g(
                 None,
                 "event_bus_dedup_ttl_seconds",
@@ -121,18 +127,6 @@ class EventBus:
             default=0.5,
         )
         self._deduplicator = EventDeduplicator(ttl_seconds=dedup_ttl_seconds)
-
-    @staticmethod
-    def _safe_float(value: int | float | str | None, default: float) -> float:
-        if value is None:
-            return default
-        try:
-            parsed = float(value)
-        except (TypeError, ValueError):
-            return default
-        if not math.isfinite(parsed) or parsed <= 0:
-            return default
-        return parsed
 
     async def dispatch(self) -> None:
         # event_queue 由单一消费者处理；去重结构不是线程安全的，按设计仅在此循环中使用。
