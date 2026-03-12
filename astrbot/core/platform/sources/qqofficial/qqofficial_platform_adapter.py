@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import math
 import os
 import time
 from typing import Any, cast
@@ -24,6 +23,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.number_utils import safe_positive_float
 
 from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
@@ -76,6 +76,40 @@ class MessageDeduplicator:
 
         self._last_cleanup_at = now
 
+    def _check_and_register_id(self, message_id: str, now: float) -> bool:
+        existing_ts = self._message_id_timestamps.get(message_id)
+        if existing_ts is not None:
+            if now - existing_ts <= self._message_id_ttl_seconds:
+                logger.debug(
+                    "[QQOfficial] Duplicate message detected (by ID): %s...",
+                    message_id[:50],
+                )
+                return True
+            self._message_id_timestamps.pop(message_id, None)
+
+        self._message_id_timestamps[message_id] = now
+        return False
+
+    def _build_content_key(self, content: str, sender_id: str) -> str | None:
+        if not (content and sender_id):
+            return None
+        content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
+        return f"{sender_id}:{content_hash}"
+
+    def _check_and_register_content_key(self, content_key: str, now: float) -> bool:
+        existing_ts = self._content_key_timestamps.get(content_key)
+        if existing_ts is not None:
+            if now - existing_ts <= self._content_key_ttl_seconds:
+                logger.debug(
+                    "[QQOfficial] Duplicate message detected (by content): %s",
+                    content_key,
+                )
+                return True
+            self._content_key_timestamps.pop(content_key, None)
+
+        self._content_key_timestamps[content_key] = now
+        return False
+
     async def is_duplicate(
         self,
         message_id: str,
@@ -86,36 +120,17 @@ class MessageDeduplicator:
             current_time = time.monotonic()
             self._clean_expired(current_time)
 
-            existing_message_ts = self._message_id_timestamps.get(message_id)
-            if existing_message_ts is not None:
-                if current_time - existing_message_ts <= self._message_id_ttl_seconds:
-                    logger.debug(
-                        "[QQOfficial] Duplicate message detected (by ID): %s...",
-                        message_id[:50],
-                    )
-                    return True
+            if self._check_and_register_id(message_id, current_time):
+                return True
+
+            content_key = self._build_content_key(content, sender_id)
+            if (
+                content_key is not None
+                and self._check_and_register_content_key(content_key, current_time)
+            ):
+                # Keep behavior unchanged: content duplicate should not register new message_id.
                 self._message_id_timestamps.pop(message_id, None)
-
-            content_key: str | None = None
-            if content and sender_id:
-                content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
-                content_key = f"{sender_id}:{content_hash}"
-                existing_content_ts = self._content_key_timestamps.get(content_key)
-                if existing_content_ts is not None:
-                    if (
-                        current_time - existing_content_ts
-                        <= self._content_key_ttl_seconds
-                    ):
-                        logger.debug(
-                            "[QQOfficial] Duplicate message detected (by content): %s",
-                            content_key,
-                        )
-                        return True
-                    self._content_key_timestamps.pop(content_key, None)
-
-            self._message_id_timestamps[message_id] = current_time
-            if content_key is not None:
-                self._content_key_timestamps[content_key] = current_time
+                return True
 
             logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
             return False
@@ -249,19 +264,16 @@ class QQOfficialPlatformAdapter(Platform):
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
 
-        message_id_ttl_seconds = self._safe_float_config(
-            platform_config,
-            "dedup_message_id_ttl_seconds",
+        message_id_ttl_seconds = safe_positive_float(
+            platform_config.get("dedup_message_id_ttl_seconds"),
             30 * 60,
         )
-        content_key_ttl_seconds = self._safe_float_config(
-            platform_config,
-            "dedup_content_key_ttl_seconds",
+        content_key_ttl_seconds = safe_positive_float(
+            platform_config.get("dedup_content_key_ttl_seconds"),
             3.0,
         )
-        cleanup_interval_seconds = self._safe_float_config(
-            platform_config,
-            "dedup_cleanup_interval_seconds",
+        cleanup_interval_seconds = safe_positive_float(
+            platform_config.get("dedup_cleanup_interval_seconds"),
             1.0,
         )
 
@@ -270,19 +282,6 @@ class QQOfficialPlatformAdapter(Platform):
             content_key_ttl_seconds=content_key_ttl_seconds,
             cleanup_interval_seconds=cleanup_interval_seconds,
         )
-
-    @staticmethod
-    def _safe_float_config(config: dict, key: str, default: float) -> float:
-        value = config.get(key, default)
-        if not isinstance(value, (int, float, str)):
-            return default
-        try:
-            parsed = float(value)
-        except (TypeError, ValueError):
-            return default
-        if not math.isfinite(parsed) or parsed <= 0:
-            return default
-        return parsed
 
     async def _is_duplicate_message(
         self, message_id: str, content: str = "", sender_id: str = ""
