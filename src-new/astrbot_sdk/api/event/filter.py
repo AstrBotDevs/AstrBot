@@ -15,6 +15,55 @@
         ...
 
 新版建议直接使用 astrbot_sdk.decorators 模块中的装饰器。
+
+# TODO: 相比旧版 filter.py，新版缺少以下装饰器和类型：
+
+## 缺失的装饰器：
+1. custom_filter: 自定义过滤器装饰器
+2. event_message_type: 事件消息类型过滤器
+3. platform_adapter_type: 平台适配器类型过滤器
+4. after_message_sent: 消息发送后钩子
+5. on_astrbot_loaded: AstrBot 加载完成钩子
+6. on_platform_loaded: 平台加载完成钩子
+7. on_decorating_result: 结果装饰钩子
+8. on_llm_request: LLM 请求钩子
+9. on_llm_response: LLM 响应钩子
+10. command_group: 命令组装饰器
+11. llm_tool: LLM 工具注册 (旧版已注释)
+
+## 缺失的类型导出：
+1. CustomFilter: 自定义过滤器基类
+2. EventMessageType: 事件消息类型枚举
+3. EventMessageTypeFilter: 事件消息类型过滤器类
+4. PermissionType: 权限类型枚举
+5. PermissionTypeFilter: 权限类型过滤器类
+6. PlatformAdapterType: 平台适配器类型枚举
+7. PlatformAdapterTypeFilter: 平台适配器类型过滤器类
+
+## 旧版导出列表 (参考):
+__all__ = [
+    "CustomFilter",
+    "EventMessageType",
+    "EventMessageTypeFilter",
+    "PermissionType",
+    "PermissionTypeFilter",
+    "PlatformAdapterType",
+    "PlatformAdapterTypeFilter",
+    "after_message_sent",
+    "command",
+    "command_group",
+    "custom_filter",
+    "event_message_type",
+    # "llm_tool",
+    "on_astrbot_loaded",
+    "on_decorating_result",
+    "on_llm_request",
+    "on_llm_response",
+    "on_platform_loaded",
+    "permission_type",
+    "platform_adapter_type",
+    "regex",
+]
 """
 
 from __future__ import annotations

@@ -19,6 +19,22 @@ Context 是插件运行时的核心接口，提供：
 - ctx.db.set()/get()/delete(): 数据存储
 
 注意：使用旧版 API 会触发弃用警告。
+
+# TODO: 相比旧版 star 模块，新版缺少以下内容：
+
+## 缺失的文件：
+1. star.py:
+   - StarMetadata: 插件元数据类
+     - name, author, desc, version, repo: 基础信息
+     - module_path, root_dir_name: 模块路径信息
+     - reserved, activated: 状态标志
+     - config: AstrBotConfig 插件配置
+     - star_handler_full_names: Handler 全名列表
+     - display_name, logo_path: 展示信息
+
+## 缺失的导入（旧版 star/__init__.py 为空）：
+旧版 star 模块主要通过 context.py 提供 Context 类，
+新版通过兼容层导入，但缺少 StarMetadata 的公开导出。
 """
 
 from ..._legacy_api import Context

@@ -20,6 +20,17 @@ CommandComponent 是插件命令处理器的基类。
         @on_command("hello")
         async def handle_hello(self, ctx: Context):
             ...
+
+# TODO: 新旧版 components 模块对比：
+
+## 旧版 components 模块结构：
+- command.py: CommandComponent 基类（已有兼容层）
+
+## 新版与旧版基本一致：
+旧版 components 模块仅包含 command.py，新版已提供兼容层。
+
+## 无缺失内容
+此模块功能完整，与旧版保持兼容。
 """
 
 from ..._legacy_api import CommandComponent
