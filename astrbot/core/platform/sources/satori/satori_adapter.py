@@ -86,6 +86,7 @@ class SatoriPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
+        referrer: dict | None = None,
     ) -> None:
         from .satori_event import SatoriPlatformEvent
 
@@ -93,6 +94,7 @@ class SatoriPlatformAdapter(Platform):
             self,
             message_chain,
             session.session_id,
+            referrer=referrer,
         )
         await super().send_by_session(session, message_chain)
 
@@ -299,11 +301,14 @@ class SatoriPlatformAdapter(Platform):
             abm.message_id = event.message.id
             abm.timestamp = int(event.timestamp.timestamp())
             abm.raw_message = {
+                "type": event._type,
+                "data": event._data,
                 "message": event.message.dump(),
                 "user": event.user.dump(),
                 "channel": event.channel.dump(),
                 "guild": event.guild.dump() if event.guild else None,
                 "login": event.login.dump(),
+                "referrer": event.referrer,
             }
             channel_id = event.channel.id
             if channel_id.startswith("private:"):
