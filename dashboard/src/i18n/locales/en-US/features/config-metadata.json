@@ -78,6 +78,7 @@
     },
     "persona": {
       "description": "Persona",
+      "hint": "Set the default persona for AI conversations. Personas can be managed in the Persona tab.",
       "provider_settings": {
         "default_personality": {
           "description": "Default Persona"

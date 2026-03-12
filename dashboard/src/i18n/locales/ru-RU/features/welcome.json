@@ -1,0 +1,37 @@
+﻿{
+    "greeting": {
+        "morning": "Доброе утро, добро пожаловать в AstrBot",
+        "afternoon": "Добрый день, добро пожаловать в AstrBot",
+        "evening": "Добрый вечер, добро пожаловать в AstrBot",
+        "newYear": "С Новым Годом!"
+    },
+    "subtitle": "Сначала пройдите базовое руководство. Настройку платформ и провайдеров моделей можно завершить позже.",
+    "announcement": {
+        "title": "Объявление"
+    },
+    "onboard": {
+        "title": "Быстрый старт",
+        "subtitle": "Вы можете выполнить первичную настройку прямо здесь.",
+        "step1Title": "Настройка платформ",
+        "step1Desc": "Подключите AstrBot к QQ, Lark, WeChat, Telegram и другим мессенджерам.",
+        "step2Title": "Настройка AI моделей",
+        "step2Desc": "Выберите и настройте AI провайдеров для AstrBot.",
+        "configure": "Настроить",
+        "skip": "Пропустить",
+        "pending": "Ожидает",
+        "completed": "Готово",
+        "skipped": "Пропущено",
+        "platformLoadFailed": "Ошибка загрузки конфигурации платформ",
+        "providerLoadFailed": "Ошибка загрузки конфигурации провайдеров",
+        "providerUpdateFailed": "Ошибка обновления провайдера по умолчанию в файле default",
+        "providerDefaultUpdated": "Провайдер {id} установлен по умолчанию в файле default"
+    },
+    "resources": {
+        "title": "Ресурсы",
+        "githubDesc": "Поставьте нам звезду на GitHub!",
+        "docsTitle": "Документация",
+        "docsDesc": "Официальная документация AstrBot.",
+        "afdianTitle": "Afdian",
+        "afdianDesc": "Поддержите команду AstrBot через Afdian."
+    }
+}
