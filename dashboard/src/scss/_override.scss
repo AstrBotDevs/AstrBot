@@ -17,6 +17,11 @@ html {
   flex: unset;
 }
 
+.v-overlay.v-snackbar {
+  --v-layout-left: 0px !important;
+  --v-layout-right: 0px !important;
+}
+
 .customizer-btn .icon {
   animation: progress-circular-rotate 1.4s linear infinite;
   transform-origin: center center;

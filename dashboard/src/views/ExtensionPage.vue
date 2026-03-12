@@ -397,7 +397,6 @@ const {
     :color="snack_success"
     v-model="snack_show"
     location="bottom center"
-    :style="{ '--v-layout-left': '0px', '--v-layout-right': '0px' }"
   >
     {{ snack_message }}
   </v-snackbar>
