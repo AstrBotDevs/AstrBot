@@ -9,6 +9,7 @@ import aiohttp
 import certifi
 
 from astrbot.core import logger
+from astrbot.core.utils.github_token import get_github_api_auth_header
 from astrbot.core.utils.io import download_file, on_error
 from astrbot.core.utils.version_comparator import VersionComparator
 
@@ -52,6 +53,7 @@ class RepoZipUpdator:
                 aiohttp.ClientSession(
                     trust_env=True,
                     connector=connector,
+                    headers=get_github_api_auth_header(),
                 ) as session,
                 session.get(url) as response,
             ):

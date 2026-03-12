@@ -1017,6 +1017,10 @@
       },
       "no_proxy": {
         "description": "Direct Connection Address List"
+      },
+      "github_api_token": {
+        "description": "GitHub API Token, for update check and plugin installation.",
+        "hint": "Can be created at https://github.com/settings/personal-access-tokens/new"
       }
     }
   },
