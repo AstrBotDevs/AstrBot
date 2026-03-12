@@ -804,6 +804,28 @@ class TestPluginToolFix:
 
         assert "mcp_tool" in req.func_tool.names()
 
+    def test_plugin_tool_fix_preserves_tools_without_plugin_origin(self, mock_event):
+        """Tools without handler_module_path should not be filtered out."""
+        module = ama
+        handoff_tool = FunctionTool(
+            name="transfer_to_demo_agent",
+            description="Delegate to demo agent",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+
+        tool_set = ToolSet()
+        tool_set.add_tool(handoff_tool)
+
+        req = ProviderRequest(func_tool=tool_set)
+        mock_event.plugins_name = ["other_plugin"]
+
+        with patch("astrbot.core.astr_main_agent.star_map"):
+            module._plugin_tool_fix(mock_event, req)
+
+        assert "transfer_to_demo_agent" in req.func_tool.names()
+
 
 class TestBuildMainAgent:
     """Tests for build_main_agent function."""
