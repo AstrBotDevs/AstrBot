@@ -4,8 +4,10 @@ Tests for decorators.py - Handler decorator infrastructure.
 
 from __future__ import annotations
 
+import pytest
 
 from astrbot_sdk.decorators import (
+    get_capability_meta,
     HANDLER_META_ATTR,
     HandlerMeta,
     get_handler_meta,
@@ -13,6 +15,7 @@ from astrbot_sdk.decorators import (
     on_event,
     on_message,
     on_schedule,
+    provide_capability,
     require_admin,
 )
 from astrbot_sdk.protocol.descriptors import (
@@ -259,6 +262,38 @@ class TestRequireAdminDecorator:
 
         meta = get_handler_meta(handler)
         assert meta.permissions.require_admin is True
+
+
+class TestProvideCapabilityDecorator:
+    """Tests for @provide_capability decorator."""
+
+    def test_sets_capability_meta(self):
+        """@provide_capability should attach capability descriptor metadata."""
+
+        @provide_capability(
+            "demo.echo",
+            description="Echo text",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        )
+        async def echo(payload):
+            return payload
+
+        meta = get_capability_meta(echo)
+        assert meta is not None
+        assert meta.descriptor.name == "demo.echo"
+
+    def test_rejects_reserved_namespaces(self):
+        """@provide_capability should reject framework-reserved prefixes."""
+        for name in ("handler.echo", "system.echo", "internal.echo"):
+            with pytest.raises(ValueError, match=name):
+
+                @provide_capability(
+                    name,
+                    description="reserved",
+                )
+                async def reserved(payload):
+                    return payload
 
     def test_can_combine_with_other_decorators(self):
         """@require_admin can be combined with other decorators."""

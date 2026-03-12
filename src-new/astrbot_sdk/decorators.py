@@ -15,6 +15,7 @@ from .protocol.descriptors import (
     EventTrigger,
     MessageTrigger,
     Permissions,
+    RESERVED_CAPABILITY_PREFIXES,
     ScheduleTrigger,
 )
 
@@ -131,6 +132,8 @@ def provide_capability(
     """声明插件对外暴露的 capability。"""
 
     def decorator(func: HandlerCallable) -> HandlerCallable:
+        if name.startswith(RESERVED_CAPABILITY_PREFIXES):
+            raise ValueError(f"保留 capability 命名空间不能用于插件导出：{name}")
         descriptor = CapabilityDescriptor(
             name=name,
             description=description,

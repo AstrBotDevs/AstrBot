@@ -126,7 +126,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            shutil.copytree(Path.cwd() / "test_plugin", plugin_root)
+            shutil.copytree(Path.cwd() / "test_plugin" / "old", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,

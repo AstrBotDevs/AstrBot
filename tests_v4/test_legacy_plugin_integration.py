@@ -470,7 +470,7 @@ class TestRealTestPlugin:
     def test_load_test_plugin(self):
         """测试加载项目中的 test_plugin。"""
         project_root = Path(__file__).parent.parent
-        test_plugin_dir = project_root / "test_plugin"
+        test_plugin_dir = project_root / "test_plugin" / "old"
 
         if not test_plugin_dir.exists():
             pytest.skip("test_plugin directory not found")

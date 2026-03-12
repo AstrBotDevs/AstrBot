@@ -19,7 +19,24 @@ from astrbot_sdk.runtime.transport import (
     WebSocketServerTransport,
 )
 
-from tests_v4.helpers import make_transport_pair
+from tests_v4.helpers import MemoryTransport, make_transport_pair
+
+
+class LinkedMemoryTransport(MemoryTransport):
+    async def stop(self) -> None:
+        if self._closed.is_set():
+            return
+        self._closed.set()
+        if self.partner is not None and not self.partner._closed.is_set():
+            self.partner._closed.set()
+
+
+def make_linked_transport_pair() -> tuple[LinkedMemoryTransport, LinkedMemoryTransport]:
+    left = LinkedMemoryTransport()
+    right = LinkedMemoryTransport()
+    left.partner = right
+    right.partner = left
+    return left, right
 
 
 class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
@@ -331,6 +348,52 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.code, "protocol_error")
 
         await self.left.stop()
+
+    async def test_unexpected_transport_close_fails_pending_invoke(self) -> None:
+        left, right = make_linked_transport_pair()
+        started = asyncio.Event()
+
+        async def hanging_invoke(_message, _token):
+            started.set()
+            await asyncio.Future()
+
+        core = Peer(
+            transport=left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=[],
+                    metadata={},
+                ),
+            )
+        )
+        core.set_invoke_handler(hanging_invoke)
+        plugin = Peer(
+            transport=right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+
+        await core.start()
+        await plugin.start()
+        await plugin.initialize([])
+
+        task = asyncio.create_task(
+            plugin.invoke("llm.chat", {"prompt": "close-me"}, request_id="req-close")
+        )
+        await started.wait()
+        await left.stop()
+
+        with self.assertRaises(AstrBotError) as raised:
+            await task
+        self.assertEqual(raised.exception.code, "network_error")
+        self.assertTrue(raised.exception.retryable)
+
+        await asyncio.wait_for(plugin.wait_closed(), timeout=1.0)
+        await asyncio.wait_for(core.wait_closed(), timeout=1.0)
 
 
 class CapabilityRouterContractTest(unittest.TestCase):
