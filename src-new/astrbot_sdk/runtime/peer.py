@@ -89,7 +89,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from ..context import CancelToken
-from ..errors import AstrBotError
+from ..errors import AstrBotError, ErrorCodes
 from ..protocol.messages import (
     CancelMessage,
     ErrorPayload,
@@ -149,12 +149,14 @@ class Peer:
         self._counter = 0
         self._closed = asyncio.Event()
         self._unusable = False
+        self._stopping = False
         self._pending_results: dict[str, asyncio.Future[ResultMessage]] = {}
         self._pending_streams: dict[str, asyncio.Queue[Any]] = {}
         self._inbound_tasks: dict[
             str, tuple[asyncio.Task[None], CancelToken, asyncio.Event]
         ] = {}
         self._remote_initialized = asyncio.Event()
+        self._transport_watch_task: asyncio.Task[None] | None = None
 
     def set_initialize_handler(self, handler: InitializeHandler) -> None:
         """注册处理远端 `initialize` 请求的握手处理器。"""
@@ -172,14 +174,17 @@ class Peer:
         """启动传输层并将原始入站消息绑定到当前 `Peer`。"""
         self._closed.clear()
         self._unusable = False
+        self._stopping = False
         self._remote_initialized.clear()
         self.transport.set_message_handler(self._handle_raw_message)
         await self.transport.start()
+        self._transport_watch_task = asyncio.create_task(self._watch_transport_closed())
 
     async def stop(self) -> None:
         """关闭 `Peer` 并清理所有挂起中的请求、流和入站任务。"""
         if self._closed.is_set():
             return
+        self._stopping = True
         # 终止所有挂起的 RPC，避免调用方永久挂起
         for future in list(self._pending_results.values()):
             if not future.done():
@@ -202,6 +207,25 @@ class Peer:
     async def wait_closed(self) -> None:
         """等待底层传输彻底关闭。"""
         await self.transport.wait_closed()
+
+    async def _watch_transport_closed(self) -> None:
+        """监视底层传输的意外关闭，并主动失败挂起调用。"""
+        try:
+            await self.transport.wait_closed()
+            if self._closed.is_set() or self._stopping:
+                return
+            await self._fail_connection(
+                AstrBotError(
+                    code=ErrorCodes.NETWORK_ERROR,
+                    message="连接已关闭",
+                    hint="请检查对端进程或传输连接",
+                    retryable=True,
+                )
+            )
+        finally:
+            current_task = asyncio.current_task()
+            if self._transport_watch_task is current_task:
+                self._transport_watch_task = None
 
     async def wait_until_remote_initialized(self, timeout: float | None = 30.0) -> None:
         """等待远端完成初始化握手。
