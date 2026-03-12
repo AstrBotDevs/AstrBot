@@ -45,12 +45,10 @@ class AstrMessageEvent(abc.ABC):
         """消息对象, AstrBotMessage。带有完整的消息结构。"""
         self.platform_meta = platform_meta
         """消息平台的信息, 其中 name 是平台的类型，如 aiocqhttp"""
-        sender = getattr(message_obj, "sender", None)
-        sender_role = getattr(sender, "role", None)
-        if sender_role in {"admin", "owner", "member"}:
-            self.role = sender_role
-        else:
-            self.role = "member"
+        sender_role = getattr(getattr(message_obj, "sender", None), "role", None)
+        self.role = (
+            sender_role if sender_role in {"admin", "owner", "member"} else "member"
+        )
         """User role within the current context (e.g. group chat)."""
         self.is_wake = False
         """是否唤醒(是否通过 WakingStage)"""
