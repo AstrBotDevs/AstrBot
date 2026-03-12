@@ -16,7 +16,7 @@ from .booters.base import ComputerBooter
 from .booters.local import LocalBooter
 
 session_booter: dict[str, ComputerBooter] = {}
-local_booter: ComputerBooter | None = None
+_local_booters: dict[str, ComputerBooter] = {}
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 
 
@@ -512,8 +512,16 @@ async def sync_skills_to_active_sandboxes() -> None:
             )
 
 
-def get_local_booter() -> ComputerBooter:
-    global local_booter
-    if local_booter is None:
-        local_booter = LocalBooter()
-    return local_booter
+def get_local_booter(work_dir: str = "") -> ComputerBooter:
+    """Get or create a LocalBooter instance for the given working directory.
+
+    Args:
+        work_dir: The working directory for local execution. Empty string means default.
+
+    Returns:
+        A LocalBooter instance configured with the specified working directory.
+    """
+    key = work_dir or "__default__"
+    if key not in _local_booters:
+        _local_booters[key] = LocalBooter(work_dir=work_dir)
+    return _local_booters[key]

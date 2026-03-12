@@ -130,6 +130,8 @@ class MainAgentBuildConfig:
     safety_mode_strategy: str = "system_prompt"
     computer_use_runtime: str = "local"
     """The runtime for agent computer use: none, local, or sandbox."""
+    local_working_dir: str = ""
+    """The working directory for local shell/python execution. Empty means use AstrBot root."""
     sandbox_cfg: dict = field(default_factory=dict)
     add_cron_tools: bool = True
     """This will add cron job management tools to the main agent for proactive cron job execution."""
@@ -275,15 +277,21 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _apply_local_env_tools(req: ProviderRequest) -> None:
+def _apply_local_env_tools(
+    req: ProviderRequest, event: AstrMessageEvent, work_dir: str = ""
+) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     req.func_tool.add_tool(LOCAL_EXECUTE_SHELL_TOOL)
     req.func_tool.add_tool(LOCAL_PYTHON_TOOL)
-    req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
+    req.system_prompt = (
+        f"{req.system_prompt or ''}\n{_build_local_mode_prompt(work_dir)}\n"
+    )
+    # Store work_dir in event extra for tools to access
+    event.set_extra("local_working_dir", work_dir)
 
 
-def _build_local_mode_prompt() -> str:
+def _build_local_mode_prompt(work_dir: str = "") -> str:
     system_name = platform.system() or "Unknown"
     shell_hint = (
         "The runtime shell is Windows Command Prompt (cmd.exe). "
@@ -291,9 +299,10 @@ def _build_local_mode_prompt() -> str:
         if system_name.lower() == "windows"
         else "The runtime shell is Unix-like. Use POSIX-compatible shell commands."
     )
+    work_dir_hint = f" Working directory: {work_dir}." if work_dir else ""
     return (
         "You have access to the host local environment and can execute shell commands and Python code. "
-        f"Current operating system: {system_name}. "
+        f"Current operating system: {system_name}.{work_dir_hint} "
         f"{shell_hint}"
     )
 
@@ -1152,7 +1161,7 @@ async def build_main_agent(
     if config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
-        _apply_local_env_tools(req)
+        _apply_local_env_tools(req, event, config.local_working_dir)
 
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(

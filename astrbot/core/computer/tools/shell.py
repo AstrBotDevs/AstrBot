@@ -51,7 +51,8 @@ class ExecuteShellTool(FunctionTool):
             return permission_error
 
         if self.is_local:
-            sb = get_local_booter()
+            work_dir = context.context.event.get_extra("local_working_dir", "")
+            sb = get_local_booter(work_dir=work_dir)
         else:
             sb = await get_booter(
                 context.context.context,

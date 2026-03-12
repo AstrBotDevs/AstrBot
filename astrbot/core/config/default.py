@@ -131,6 +131,7 @@ DEFAULT_CONFIG = {
         },
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
+        "local_working_dir": "",
         "sandbox": {
             "booter": "shipyard_neo",
             "shipyard_endpoint": "",
@@ -2996,6 +2997,14 @@ CONFIG_METADATA_3 = {
                         "description": "需要 AstrBot 管理员权限",
                         "type": "bool",
                         "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
+                    },
+                    "provider_settings.local_working_dir": {
+                        "description": "本地执行工作目录",
+                        "type": "string",
+                        "hint": "留空则使用 AstrBot 根目录。配置后 Shell/Python 命令将在此目录下执行。仅在「本地」模式下生效。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "local",
+                        },
                     },
                     "provider_settings.sandbox.booter": {
                         "description": "沙箱环境驱动器",
