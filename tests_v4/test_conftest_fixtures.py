@@ -3,15 +3,19 @@ Pytest-based tests for transport and peer communication.
 
 These tests demonstrate the pytest fixtures defined in conftest.py.
 """
+
 from __future__ import annotations
 
 import pytest
 
-from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
-from astrbot_sdk.protocol.messages import EventMessage, InitializeOutput, PeerInfo, ResultMessage
-from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
+from astrbot_sdk.protocol.messages import (
+    EventMessage,
+    PeerInfo,
+    ResultMessage,
+)
+from astrbot_sdk.runtime.capability_router import CapabilityRouter
 from astrbot_sdk.runtime.peer import Peer
 
 
@@ -98,7 +102,6 @@ class TestProtocolErrors:
 
     async def test_stream_true_receiving_result_is_error(self, transport_pair):
         """stream=true receiving result should raise protocol error."""
-        import asyncio
 
         left, right = transport_pair
 
@@ -113,7 +116,9 @@ class TestProtocolErrors:
         stream = await plugin.invoke_stream(
             "llm.stream_chat", {"prompt": "bad"}, request_id="stream-1"
         )
-        await left.send(ResultMessage(id="stream-1", success=True, output={}).model_dump_json())
+        await left.send(
+            ResultMessage(id="stream-1", success=True, output={}).model_dump_json()
+        )
 
         with pytest.raises(AstrBotError) as exc_info:
             async for _ in stream:
@@ -134,9 +139,7 @@ class TestCapabilityRouter:
         invalid_names = ["llm", "llm.chat.extra", "LLM.chat", "llm.Chat"]
         for name in invalid_names:
             with pytest.raises(ValueError) as exc_info:
-                router.register(
-                    CapabilityDescriptor(name=name, description="invalid")
-                )
+                router.register(CapabilityDescriptor(name=name, description="invalid"))
             assert name in str(exc_info.value)
 
     def test_reserved_namespaces_rejected_for_exposed(self):
@@ -146,9 +149,7 @@ class TestCapabilityRouter:
         reserved_names = ["handler.demo", "system.health", "internal.trace"]
         for name in reserved_names:
             with pytest.raises(ValueError) as exc_info:
-                router.register(
-                    CapabilityDescriptor(name=name, description="reserved")
-                )
+                router.register(CapabilityDescriptor(name=name, description="reserved"))
             assert name in str(exc_info.value)
 
     def test_reserved_namespaces_allowed_for_hidden(self):

@@ -9,6 +9,7 @@ Usage:
     python run_tests.py --cov              # Run with coverage
     python run_tests.py -m "not slow"      # Skip slow tests
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -30,11 +31,13 @@ def main() -> int:
     # Handle --cov flag
     if "--cov" in args:
         args.remove("--cov")
-        cmd.extend([
-            "--cov=src-new/astrbot_sdk",
-            "--cov-report=term-missing",
-            "--cov-report=html:.htmlcov",
-        ])
+        cmd.extend(
+            [
+                "--cov=src-new/astrbot_sdk",
+                "--cov-report=term-missing",
+                "--cov-report=html:.htmlcov",
+            ]
+        )
 
     # Default flags if no specific args
     if not args:

@@ -1,6 +1,7 @@
 """
 Unit tests for API decorators and Star class.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -167,6 +168,7 @@ class TestStarClass:
 
     def test_star_is_new_star_by_default(self):
         """Star subclasses should be recognized as new-style."""
+
         class MyPlugin(Star):
             pass
 
@@ -174,6 +176,7 @@ class TestStarClass:
 
     def test_star_collects_handler_names_from_decorators(self):
         """Star should collect decorated method names in __handlers__."""
+
         class MyPlugin(Star):
             @on_command("hello")
             async def hello(self, event: MessageEvent, ctx: Context):

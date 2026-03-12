@@ -1,9 +1,9 @@
 """
 Tests for decorators.py - Handler decorator infrastructure.
 """
+
 from __future__ import annotations
 
-import pytest
 
 from astrbot_sdk.decorators import (
     HANDLER_META_ATTR,
@@ -57,6 +57,7 @@ class TestGetHandlerMeta:
 
     def test_returns_none_for_undecorated_function(self):
         """get_handler_meta should return None for undecorated functions."""
+
         async def plain_function():
             pass
 
@@ -212,6 +213,7 @@ class TestOnEventDecorator:
         event_types = ["message_received", "user_joined", "custom_event"]
 
         for event_type in event_types:
+
             @on_event(event_type)
             async def handler():
                 pass
