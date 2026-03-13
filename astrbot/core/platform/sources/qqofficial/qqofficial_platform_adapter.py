@@ -605,6 +605,7 @@ class QQOfficialPlatformAdapter(Platform):
             sender_user_id = cast(
                 str,
                 getattr(message.author, "user_openid", None)
+                or getattr(message.author, "member_openid", None)
                 or getattr(message.author, "id", ""),
             )
             abm.sender = MessageMember(

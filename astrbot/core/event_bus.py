@@ -12,97 +12,89 @@ class:
 
 import asyncio
 import hashlib
-import time
 from asyncio import Queue
 
 from astrbot.core import logger
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
-from astrbot.core.message.components import File, Image
+from astrbot.core.message.utils import build_component_dedup_signature
 from astrbot.core.pipeline.scheduler import PipelineScheduler
 from astrbot.core.utils.number_utils import safe_positive_float
+from astrbot.core.utils.ttl_registry import TTLKeyRegistry
 
 from .platform import AstrMessageEvent
 
 
 class EventDeduplicator:
+    """Event deduplicator using TTL-based registry.
+
+    This class handles deduplication of events based on content fingerprint
+    and message ID, with configurable TTL window.
+    """
+
     _MAX_RAW_TEXT_FINGERPRINT_LEN = 256
 
     def __init__(self, ttl_seconds: float = 0.5) -> None:
-        self._ttl_seconds = ttl_seconds
-        self._seen: dict[tuple[str, ...], float] = {}
-
-    def _clean_expired(self) -> None:
-        now = time.monotonic()
-        expire_before = now - self._ttl_seconds
-        for fingerprint, timestamp in list(self._seen.items()):
-            if timestamp < expire_before:
-                del self._seen[fingerprint]
+        self._registry = TTLKeyRegistry(ttl_seconds)
 
     def _build_attachment_signature(self, event: AstrMessageEvent) -> str:
-        signatures: list[str] = []
-        for component in event.get_messages():
-            if isinstance(component, Image):
-                image_ref = component.url or component.file or component.file_unique or ""
-                if image_ref:
-                    signatures.append(f"img:{image_ref}")
-            elif isinstance(component, File):
-                file_ref = component.url or component.file_ or component.name or ""
-                if file_ref:
-                    signatures.append(f"file:{file_ref}")
+        """Build attachment signature for deduplication."""
+        return build_component_dedup_signature(event.get_messages())
 
-        if not signatures:
-            return ""
-
-        payload = "|".join(signatures)
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-
-    def _build_content_fingerprint(
-        self,
-        event: AstrMessageEvent,
-    ) -> tuple[str, ...]:
-        message_text = (event.get_message_str() or "").strip()
-        if len(message_text) <= self._MAX_RAW_TEXT_FINGERPRINT_LEN:
-            message_signature = message_text
+    def _build_content_key(self, event: AstrMessageEvent) -> str:
+        """Build content-based deduplication key."""
+        msg_text = (event.get_message_str() or "").strip()
+        if len(msg_text) <= self._MAX_RAW_TEXT_FINGERPRINT_LEN:
+            msg_sig = msg_text
         else:
-            message_hash = hashlib.sha1(message_text.encode("utf-8")).hexdigest()[:16]
-            message_signature = f"h:{len(message_text)}:{message_hash}"
+            msg_hash = hashlib.sha1(msg_text.encode("utf-8")).hexdigest()[:16]
+            msg_sig = f"h:{len(msg_text)}:{msg_hash}"
 
-        attachment_signature = self._build_attachment_signature(event)
-        return (
+        attach_sig = self._build_attachment_signature(event)
+        return "|".join([
             "content",
             event.get_platform_id() or "",
             event.unified_msg_origin or "",
             event.get_sender_id() or "",
-            message_signature,
-            attachment_signature,
-        )
+            msg_sig,
+            attach_sig,
+        ])
 
-    def _build_message_id_fingerprint(self, event: AstrMessageEvent) -> tuple[str, ...] | None:
+    def _build_message_id_key(self, event: AstrMessageEvent) -> str | None:
+        """Build message ID-based deduplication key.
+
+        Falls back to message_obj.id if message_id is not available.
+        """
+        # Try message_id first
         message_id = str(getattr(event.message_obj, "message_id", "") or "")
+        # Fallback to id if message_id is not available
+        if not message_id:
+            message_id = str(getattr(event.message_obj, "id", "") or "")
         if not message_id:
             return None
-        return (
+        return "|".join([
             "message_id",
             event.get_platform_id() or "",
             event.unified_msg_origin or "",
             message_id,
-        )
+        ])
+
+    def _keys_for_event(self, event: AstrMessageEvent) -> list[str]:
+        """Build all deduplication keys for an event."""
+        keys = [self._build_content_key(event)]
+        message_id_key = self._build_message_id_key(event)
+        if message_id_key is not None:
+            keys.append(message_id_key)
+        return keys
 
     def is_duplicate(self, event: AstrMessageEvent) -> bool:
-        self._clean_expired()
-        fingerprints = [self._build_content_fingerprint(event)]
-        message_id_fingerprint = self._build_message_id_fingerprint(event)
-        if message_id_fingerprint is not None:
-            fingerprints.append(message_id_fingerprint)
+        """Check if the event is a duplicate.
 
-        for fingerprint in fingerprints:
-            if fingerprint in self._seen:
-                return True
-
-        ts = time.monotonic()
-        for fingerprint in fingerprints:
-            self._seen[fingerprint] = ts
-        return False
+        Returns False immediately if TTL is 0 (deduplication disabled).
+        """
+        # TTL of 0 means deduplication is disabled
+        if self._registry.ttl_seconds == 0:
+            return False
+        return self._registry.seen_many(self._keys_for_event(event))
 
 
 class EventBus:
