@@ -100,6 +100,9 @@ from typing import Any
 
 import yaml
 
+from ..api.event.filter import (
+    get_compat_custom_filters,
+)
 from ..api.basic import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
@@ -151,6 +154,7 @@ class LoadedHandler:
     callable: Any
     owner: Any
     legacy_context: Any | None = None
+    compat_filters: list[Any] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -696,6 +700,11 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 and getattr(instance, "config", None) is None
             ):
                 setattr(instance, "config", component_config)
+            register_compat_component = getattr(
+                legacy_context, "_register_compat_component", None
+            )
+            if callable(register_compat_component):
+                register_compat_component(instance)
         instances.append(instance)
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)
@@ -728,6 +737,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     callable=bound,
                     owner=instance,
                     legacy_context=legacy_context,
+                    compat_filters=list(get_compat_custom_filters(bound)),
                 )
             )
     return LoadedPlugin(

@@ -80,6 +80,14 @@ class LLMResponse:
             return
         self._completion_text = value
 
+    @property
+    def text(self) -> str:
+        return self.completion_text
+
+    @text.setter
+    def text(self, value: str) -> None:
+        self.completion_text = value
+
     def to_openai_tool_calls(self) -> list[dict[str, Any]]:
         ret: list[dict[str, Any]] = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):

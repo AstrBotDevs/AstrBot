@@ -4,17 +4,21 @@
 
 - ``command(name, alias=..., priority=...)`` -> ``CommandTrigger``
 - ``regex(pattern, priority=...)`` -> ``MessageTrigger``
+- ``custom_filter(...)`` -> 记录旧自定义过滤器，运行时在分发前执行
 - ``event_message_type(...)`` -> 记录消息类型约束
 - ``platform_adapter_type(...)`` -> 记录平台约束
 - ``permission(ADMIN)`` / ``permission_type(PermissionType.ADMIN)``
   -> ``require_admin``
+- ``after_message_sent`` / ``on_llm_request`` / ``llm_tool`` 等旧 hook
+  -> 记录 compat 元数据，由 legacy 运行时在可映射链路中执行
 
-其余旧版高级过滤器和生命周期钩子在 v4 运行时中没有等价执行链路，
-兼容层保留名称用于导入兼容，但会在调用时显式报错，避免静默失效。
+其余没有等价执行链路的旧 helper 仍然显式报错，避免静默失效。
 """
 
 from __future__ import annotations
 
+import inspect
+from dataclasses import dataclass
 import enum
 from abc import ABCMeta, abstractmethod
 from typing import Any
@@ -26,6 +30,22 @@ from .astr_message_event import AstrMessageEvent
 from .message_type import MessageType
 
 ADMIN = "admin"
+COMPAT_HOOKS_ATTR = "__astrbot_compat_hooks__"
+COMPAT_LLM_TOOL_ATTR = "__astrbot_compat_llm_tool__"
+COMPAT_CUSTOM_FILTERS_ATTR = "__astrbot_compat_custom_filters__"
+
+
+@dataclass(slots=True)
+class CompatHookMeta:
+    name: str
+    priority: int = 0
+
+
+@dataclass(slots=True)
+class CompatLLMToolMeta:
+    name: str
+    description: str
+    parameters: list[dict[str, Any]]
 
 
 class PermissionType(enum.Flag):
@@ -191,6 +211,131 @@ EVENT_MESSAGE_TYPE_NAMES = {
     EventMessageType.PRIVATE_MESSAGE: "private",
     EventMessageType.OTHER_MESSAGE: "other",
 }
+
+_LLM_TOOL_PARAM_TYPES: dict[type[Any], str] = {
+    str: "string",
+    int: "number",
+    float: "number",
+    bool: "boolean",
+    dict: "object",
+    list: "array",
+}
+
+
+def _append_compat_hook(func, name: str, *, priority: int | None = None):
+    hooks = list(getattr(func, COMPAT_HOOKS_ATTR, ()))
+    hooks.append(CompatHookMeta(name=name, priority=priority or 0))
+    setattr(func, COMPAT_HOOKS_ATTR, hooks)
+    return func
+
+
+def get_compat_hook_metas(func) -> list[CompatHookMeta]:
+    return list(getattr(func, COMPAT_HOOKS_ATTR, ()))
+
+
+def _append_custom_filter(func, filter_obj: Any):
+    filters = list(getattr(func, COMPAT_CUSTOM_FILTERS_ATTR, ()))
+    filters.append(filter_obj)
+    setattr(func, COMPAT_CUSTOM_FILTERS_ATTR, filters)
+    return func
+
+
+def get_compat_custom_filters(func) -> list[Any]:
+    return list(getattr(func, COMPAT_CUSTOM_FILTERS_ATTR, ()))
+
+
+def _doc_description(func) -> str:
+    doc = inspect.getdoc(func) or ""
+    if not doc:
+        return ""
+    return doc.split("\n\n", 1)[0].strip()
+
+
+def _parameter_description(func, parameter_name: str) -> str:
+    doc = inspect.getdoc(func) or ""
+    if not doc:
+        return ""
+    in_args = False
+    for raw_line in doc.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if stripped in {"Args:", "Arguments:"}:
+            in_args = True
+            continue
+        if in_args and stripped and not raw_line.startswith((" ", "\t")):
+            break
+        if not in_args:
+            continue
+        if stripped.startswith(f"{parameter_name}(") or stripped.startswith(
+            f"{parameter_name}:"
+        ):
+            _, _, tail = stripped.partition(":")
+            return tail.strip()
+    return ""
+
+
+def _resolve_json_schema(
+    func,
+    parameter: inspect.Parameter,
+    annotations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    annotation = (
+        annotations.get(parameter.name, parameter.annotation)
+        if annotations is not None
+        else parameter.annotation
+    )
+    origin = getattr(annotation, "__origin__", None)
+    args = getattr(annotation, "__args__", ())
+    item_type = None
+    if annotation in _LLM_TOOL_PARAM_TYPES:
+        type_name = _LLM_TOOL_PARAM_TYPES[annotation]
+    elif origin in {list, tuple}:
+        type_name = "array"
+        if args:
+            item_type = _LLM_TOOL_PARAM_TYPES.get(args[0], "string")
+    elif origin is dict:
+        type_name = "object"
+    else:
+        type_name = "string"
+    schema = {
+        "type": type_name,
+        "name": parameter.name,
+        "description": _parameter_description(func, parameter.name),
+    }
+    if item_type is not None:
+        schema["items"] = {"type": item_type}
+    return schema
+
+
+def _build_llm_tool_meta(func, tool_name: str | None) -> CompatLLMToolMeta:
+    signature = inspect.signature(func)
+    annotations = inspect.get_annotations(func, eval_str=True)
+    parameters: list[dict[str, Any]] = []
+    for parameter in signature.parameters.values():
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            continue
+        if parameter.name in {
+            "self",
+            "event",
+            "ctx",
+            "context",
+            "cancel_token",
+            "token",
+        }:
+            continue
+        parameters.append(_resolve_json_schema(func, parameter, annotations))
+    return CompatLLMToolMeta(
+        name=tool_name or func.__name__,
+        description=_doc_description(func),
+        parameters=parameters,
+    )
+
+
+def get_compat_llm_tool_meta(func) -> CompatLLMToolMeta | None:
+    return getattr(func, COMPAT_LLM_TOOL_ATTR, None)
 
 
 def _merge_unique(existing: list[str], additions: list[str]) -> list[str]:
@@ -374,20 +519,59 @@ def _unsupported_factory(name: str, replacement: str | None = None):
     return factory
 
 
-custom_filter = _unsupported_factory("custom_filter")
-after_message_sent = _unsupported_factory("after_message_sent")
-on_astrbot_loaded = _unsupported_factory("on_astrbot_loaded")
-on_platform_loaded = _unsupported_factory("on_platform_loaded")
-on_decorating_result = _unsupported_factory("on_decorating_result")
-on_llm_request = _unsupported_factory("on_llm_request")
-on_llm_response = _unsupported_factory("on_llm_response")
-llm_tool = _unsupported_factory("llm_tool")
-on_waiting_llm_request = _unsupported_factory("on_waiting_llm_request")
-on_using_llm_tool = _unsupported_factory("on_using_llm_tool")
-on_llm_tool_respond = _unsupported_factory("on_llm_tool_respond")
-on_plugin_error = _unsupported_factory("on_plugin_error")
-on_plugin_loaded = _unsupported_factory("on_plugin_loaded")
-on_plugin_unloaded = _unsupported_factory("on_plugin_unloaded")
+def custom_filter(custom_type_filter, raise_error: bool = True, **kwargs):
+    """旧版自定义过滤器兼容入口。
+
+    当前 compat 层支持最常见的函数级 `@custom_filter(MyFilter)` 用法。
+    指令组级自定义过滤链路仍然依赖旧 command_group 树，不在 v4 主链里复刻。
+    """
+
+    def decorator(func):
+        if isinstance(custom_type_filter, (CustomFilterAnd, CustomFilterOr)):
+            filter_obj = custom_type_filter
+        elif isinstance(custom_type_filter, type) and issubclass(
+            custom_type_filter, CustomFilter
+        ):
+            filter_obj = custom_type_filter(raise_error=raise_error, **kwargs)
+        elif isinstance(custom_type_filter, CustomFilter):
+            filter_obj = custom_type_filter
+        else:
+            raise TypeError("custom_filter 只支持 CustomFilter 子类或实例")
+        return _append_custom_filter(func, filter_obj)
+
+    return decorator
+
+
+def _compat_hook(name: str):
+    def factory(*, priority: int | None = None, **_kwargs):
+        def decorator(func):
+            return _append_compat_hook(func, name, priority=priority)
+
+        return decorator
+
+    return factory
+
+
+after_message_sent = _compat_hook("after_message_sent")
+on_astrbot_loaded = _compat_hook("on_astrbot_loaded")
+on_platform_loaded = _compat_hook("on_platform_loaded")
+on_decorating_result = _compat_hook("on_decorating_result")
+on_llm_request = _compat_hook("on_llm_request")
+on_llm_response = _compat_hook("on_llm_response")
+on_waiting_llm_request = _compat_hook("on_waiting_llm_request")
+on_using_llm_tool = _compat_hook("on_using_llm_tool")
+on_llm_tool_respond = _compat_hook("on_llm_tool_respond")
+on_plugin_error = _compat_hook("on_plugin_error")
+on_plugin_loaded = _compat_hook("on_plugin_loaded")
+on_plugin_unloaded = _compat_hook("on_plugin_unloaded")
+
+
+def llm_tool(name: str | None = None, **_kwargs):
+    def decorator(func):
+        setattr(func, COMPAT_LLM_TOOL_ATTR, _build_llm_tool_meta(func, name))
+        return func
+
+    return decorator
 
 
 def command_group(

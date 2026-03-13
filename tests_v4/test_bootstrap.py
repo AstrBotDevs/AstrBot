@@ -39,7 +39,7 @@ from astrbot_sdk.runtime.bootstrap import (
     _wait_for_shutdown,
 )
 from astrbot_sdk.runtime.capability_router import CapabilityRouter
-from astrbot_sdk.runtime.loader import PluginSpec
+from astrbot_sdk.runtime.loader import LoadedHandler, PluginSpec
 from astrbot_sdk.runtime.peer import Peer
 
 from tests_v4.helpers import FakeEnvManager, MemoryTransport, make_transport_pair
@@ -806,6 +806,92 @@ class DemoComponent(Star):
             finally:
                 if str(plugin_dir) in sys.path:
                     sys.path.remove(str(plugin_dir))
+
+    @pytest.mark.asyncio
+    async def test_start_and_stop_run_compat_context_lifecycle_hooks(self):
+        """PluginWorkerRuntime should execute compat lifecycle hooks around peer startup/shutdown."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            transport = MemoryTransport()
+            runtime = PluginWorkerRuntime(plugin_dir=plugin_dir, transport=transport)
+
+            seen_hooks = []
+            legacy_context = LegacyContext("test_plugin")
+
+            class CompatHooks:
+                async def on_astrbot_loaded(self, context):
+                    seen_hooks.append(("astrbot", context.plugin_id))
+
+                async def on_platform_loaded(self, context):
+                    seen_hooks.append(("platform", context.plugin_id))
+
+                async def on_plugin_loaded(self, metadata):
+                    seen_hooks.append(("loaded", metadata["name"]))
+
+                async def on_plugin_unloaded(self, metadata):
+                    seen_hooks.append(("unloaded", metadata["name"]))
+
+            from astrbot_sdk.api.event.filter import (
+                on_astrbot_loaded,
+                on_platform_loaded,
+                on_plugin_loaded,
+                on_plugin_unloaded,
+            )
+
+            CompatHooks.on_astrbot_loaded = on_astrbot_loaded()(
+                CompatHooks.on_astrbot_loaded
+            )
+            CompatHooks.on_platform_loaded = on_platform_loaded()(
+                CompatHooks.on_platform_loaded
+            )
+            CompatHooks.on_plugin_loaded = on_plugin_loaded()(
+                CompatHooks.on_plugin_loaded
+            )
+            CompatHooks.on_plugin_unloaded = on_plugin_unloaded()(
+                CompatHooks.on_plugin_unloaded
+            )
+            legacy_context._register_component(CompatHooks())
+            legacy_context.bind_runtime_context(runtime._lifecycle_context)
+
+            runtime.loaded_plugin.handlers.append(
+                LoadedHandler(
+                    descriptor=HandlerDescriptor(
+                        id="legacy.compat",
+                        trigger=CommandTrigger(command="compat"),
+                    ),
+                    callable=AsyncMock(),
+                    owner=MagicMock(),
+                    legacy_context=legacy_context,
+                )
+            )
+            runtime.peer.start = AsyncMock()
+            runtime.peer.initialize = AsyncMock()
+            runtime.peer.stop = AsyncMock()
+
+            await runtime.start()
+            await runtime.stop()
+
+            assert seen_hooks == [
+                ("astrbot", "test_plugin"),
+                ("platform", "test_plugin"),
+                ("loaded", "test_plugin"),
+                ("unloaded", "test_plugin"),
+            ]
 
     @pytest.mark.asyncio
     async def test_run_lifecycle_sync_hook(self):

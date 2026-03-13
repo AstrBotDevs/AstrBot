@@ -662,6 +662,12 @@ class PluginWorkerRuntime:
                 ],
                 metadata={"plugin_id": self.plugin.name},
             )
+            await self._run_compat_context_hook("on_astrbot_loaded")
+            await self._run_compat_context_hook("on_platform_loaded")
+            await self._run_compat_context_hook(
+                "on_plugin_loaded",
+                metadata=dict(self.plugin.manifest_data),
+            )
         except Exception:
             if lifecycle_started:
                 try:
@@ -676,6 +682,10 @@ class PluginWorkerRuntime:
 
     async def stop(self) -> None:
         try:
+            await self._run_compat_context_hook(
+                "on_plugin_unloaded",
+                metadata=dict(self.plugin.manifest_data),
+            )
             await self._run_lifecycle("on_stop")
         finally:
             await self.peer.stop()
@@ -734,6 +744,25 @@ class PluginWorkerRuntime:
             bind_runtime_context = getattr(legacy_context, "bind_runtime_context", None)
             if callable(bind_runtime_context):
                 bind_runtime_context(runtime_context)
+
+    async def _run_compat_context_hook(self, hook_name: str, **kwargs: Any) -> None:
+        seen: set[int] = set()
+        for loaded in [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities]:
+            legacy_context = getattr(loaded, "legacy_context", None)
+            if legacy_context is None:
+                continue
+            marker = id(legacy_context)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            run_hook = getattr(legacy_context, "_run_compat_hook", None)
+            if callable(run_hook):
+                await run_hook(
+                    hook_name,
+                    context=self._lifecycle_context,
+                    legacy_context=legacy_context,
+                    **kwargs,
+                )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

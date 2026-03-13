@@ -6,7 +6,6 @@ from unittest.mock import patch
 from astrbot_sdk import MessageEvent, Star, on_command
 from astrbot_sdk._legacy_api import (
     CommandComponent,
-    MIGRATION_DOC_URL,
     LegacyContext,
     _warned_methods,
 )
@@ -71,15 +70,14 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_add_llm_tools_raises_not_implemented(self) -> None:
-        """add_llm_tools() should raise NotImplementedError in v4."""
+    async def test_add_llm_tools_accepts_empty_registration(self) -> None:
+        """add_llm_tools() should keep the legacy entry point available."""
         _warned_methods.clear()
         legacy_context = LegacyContext("compat-plugin")
-        with self.assertRaises(NotImplementedError) as context:
-            await legacy_context.add_llm_tools()
 
-        self.assertIn("add_llm_tools", str(context.exception))
-        self.assertIn(MIGRATION_DOC_URL, str(context.exception))
+        await legacy_context.add_llm_tools()
+
+        self.assertEqual(legacy_context.get_llm_tool_manager().func_list, [])
 
     async def test_compat_llm_generate_warning_matches_chat_raw_mapping(self) -> None:
         class _DummyLLM:

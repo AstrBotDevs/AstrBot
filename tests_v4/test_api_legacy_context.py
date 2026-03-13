@@ -16,7 +16,15 @@ from astrbot_sdk._legacy_api import (
     LegacyConversationManager,
     LegacyStar,
 )
+from astrbot_sdk.api.event.filter import (
+    llm_tool,
+    on_llm_request,
+    on_llm_response,
+    on_llm_tool_respond,
+    on_using_llm_tool,
+)
 from astrbot_sdk.api.message import Comp, MessageChain
+from astrbot_sdk.api.provider.entities import LLMResponse
 from astrbot_sdk.star import Star
 
 
@@ -261,6 +269,75 @@ class TestLegacyConversationManager:
 
         assert conv_id == "my_plugin-conv-2"
 
+    @pytest.mark.asyncio
+    async def test_get_filtered_conversations_filters_by_keyword(self):
+        """get_filtered_conversations() should search over stored conversation payloads."""
+        stored_data = {
+            "__compat_conversations__": {
+                "conv-1": {
+                    "unified_msg_origin": "session-1",
+                    "platform_id": "qq",
+                    "content": [{"role": "user", "content": "hello astrbot"}],
+                },
+                "conv-2": {
+                    "unified_msg_origin": "session-1",
+                    "platform_id": "qq",
+                    "content": [{"role": "user", "content": "other topic"}],
+                },
+            }
+        }
+
+        async def mock_get(key):
+            return stored_data.get(key)
+
+        mock_ctx = MagicMock()
+        mock_ctx.plugin_id = "my_plugin"
+        mock_ctx.db = MagicMock()
+        mock_ctx.db.get = mock_get
+
+        legacy_ctx = LegacyContext("my_plugin")
+        legacy_ctx._runtime_context = mock_ctx
+
+        result = await legacy_ctx.conversation_manager.get_filtered_conversations(
+            unified_msg_origin="session-1",
+            keyword="astrbot",
+        )
+
+        assert [item["conversation_id"] for item in result] == ["conv-1"]
+
+    @pytest.mark.asyncio
+    async def test_get_human_readable_context_renders_conversation_content(self):
+        """get_human_readable_context() should render stored message pairs as readable text."""
+        stored_data = {
+            "__compat_conversations__": {
+                "conv-1": {
+                    "unified_msg_origin": "session-1",
+                    "content": [
+                        {"role": "user", "content": "hello"},
+                        {"role": "assistant", "content": "world"},
+                    ],
+                }
+            }
+        }
+
+        async def mock_get(key):
+            return stored_data.get(key)
+
+        mock_ctx = MagicMock()
+        mock_ctx.plugin_id = "my_plugin"
+        mock_ctx.db = MagicMock()
+        mock_ctx.db.get = mock_get
+
+        legacy_ctx = LegacyContext("my_plugin")
+        legacy_ctx._runtime_context = mock_ctx
+        legacy_ctx.conversation_manager._current_conversations["session-1"] = "conv-1"
+
+        result = await legacy_ctx.conversation_manager.get_human_readable_context(
+            unified_msg_origin="session-1"
+        )
+
+        assert result == "user: hello\nassistant: world"
+
 
 class TestLegacyContextMethods:
     """Tests for LegacyContext methods that delegate to NewContext."""
@@ -456,16 +533,31 @@ class TestLegacyContextLLMMethods:
     """Tests for LegacyContext LLM methods."""
 
     @pytest.mark.asyncio
-    async def test_llm_generate_delegates_to_chat_raw(self):
-        """llm_generate() should delegate to ctx.llm.chat_raw()."""
+    async def test_llm_generate_returns_compat_response_and_applies_hook_mutation(self):
+        """llm_generate() should return legacy LLMResponse and honor hook-mutated request data."""
         mock_llm = AsyncMock()
-        mock_llm.chat_raw = AsyncMock(return_value=MagicMock(text="response"))
+        mock_llm.chat_raw = AsyncMock(
+            return_value={"role": "assistant", "text": "response"}
+        )
 
         mock_ctx = MagicMock()
         mock_ctx.llm = mock_llm
 
         legacy_ctx = LegacyContext("test_plugin")
         legacy_ctx._runtime_context = mock_ctx
+
+        seen_completion_texts = []
+
+        class CompatHooks:
+            @on_llm_request()
+            async def mutate_request(self, request):
+                request.model = "hook-model"
+
+            @on_llm_response()
+            async def capture_response(self, response: LLMResponse):
+                seen_completion_texts.append(response.completion_text)
+
+        legacy_ctx._register_component(CompatHooks())
 
         result = await legacy_ctx.llm_generate(
             chat_provider_id="provider-1",
@@ -477,13 +569,37 @@ class TestLegacyContextLLMMethods:
         mock_llm.chat_raw.assert_called_once()
         call_kwargs = mock_llm.chat_raw.call_args[1]
         assert call_kwargs["provider_id"] == "provider-1"
-        assert result is not None
+        assert call_kwargs["model"] == "hook-model"
+        assert isinstance(result, LLMResponse)
+        assert result.completion_text == "response"
+        assert result.text == "response"
+        assert seen_completion_texts == ["response"]
 
     @pytest.mark.asyncio
-    async def test_tool_loop_agent_delegates_to_chat_raw(self):
-        """tool_loop_agent() should delegate to ctx.llm.chat_raw()."""
+    async def test_tool_loop_agent_runs_registered_compat_tools(self):
+        """tool_loop_agent() should execute registered compat llm tools and continue the loop."""
         mock_llm = AsyncMock()
-        mock_llm.chat_raw = AsyncMock(return_value=MagicMock(text="response"))
+        mock_llm.chat_raw = AsyncMock(
+            side_effect=[
+                {
+                    "role": "assistant",
+                    "text": "",
+                    "tool_calls": [
+                        {
+                            "id": "call-1",
+                            "function": {
+                                "name": "math.add",
+                                "arguments": '{"a": 1, "b": 2}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "text": "result ready",
+                },
+            ]
+        )
 
         mock_ctx = MagicMock()
         mock_ctx.llm = mock_llm
@@ -491,28 +607,73 @@ class TestLegacyContextLLMMethods:
         legacy_ctx = LegacyContext("test_plugin")
         legacy_ctx._runtime_context = mock_ctx
 
+        seen_tool_events = []
+
+        class CompatToolComponent:
+            @llm_tool(name="math.add")
+            async def add(self, a: int, b: int):
+                return str(a + b)
+
+            @on_using_llm_tool()
+            async def before_tool(self, tool_args):
+                seen_tool_events.append(("before", dict(tool_args)))
+
+            @on_llm_tool_respond()
+            async def after_tool(self, tool_result):
+                seen_tool_events.append(("after", tool_result))
+
+        legacy_ctx._register_component(CompatToolComponent())
+
         result = await legacy_ctx.tool_loop_agent(
             chat_provider_id="provider-1",
             prompt="hello",
             max_steps=10,
         )
 
-        mock_llm.chat_raw.assert_called_once()
-        call_kwargs = mock_llm.chat_raw.call_args[1]
-        assert call_kwargs["provider_id"] == "provider-1"
-        assert call_kwargs["max_steps"] == 10
-        assert result.text == "response"
+        assert mock_llm.chat_raw.await_count == 2
+        first_call = mock_llm.chat_raw.await_args_list[0]
+        second_call = mock_llm.chat_raw.await_args_list[1]
+        assert first_call.kwargs["provider_id"] == "provider-1"
+        assert first_call.kwargs["max_steps"] == 10
+        assert second_call.kwargs["history"][-1] == {
+            "role": "tool",
+            "tool_call_id": "call-1",
+            "name": "math.add",
+            "content": "3",
+        }
+        assert isinstance(result, LLMResponse)
+        assert result.completion_text == "result ready"
+        assert result.text == "result ready"
+        assert seen_tool_events == [
+            ("before", {"a": 1, "b": 2}),
+            ("after", "3"),
+        ]
 
     @pytest.mark.asyncio
-    async def test_add_llm_tools_raises_not_implemented(self):
-        """add_llm_tools() should raise NotImplementedError in v4."""
+    async def test_add_llm_tools_registers_compat_tool_object(self):
+        """add_llm_tools() should accept legacy tool objects and expose them via the tool manager."""
         legacy_ctx = LegacyContext("test_plugin")
 
-        with pytest.raises(NotImplementedError) as exc_info:
-            await legacy_ctx.add_llm_tools("tool1", "tool2")
+        class ToolObject:
+            name = "demo.echo"
+            description = "Echo input"
+            parameters = {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            }
 
-        assert "add_llm_tools" in str(exc_info.value)
-        assert MIGRATION_DOC_URL in str(exc_info.value)
+            async def handler(self, text: str) -> str:
+                return text
+
+        await legacy_ctx.add_llm_tools(ToolObject())
+
+        manager = legacy_ctx.get_llm_tool_manager()
+        tool = manager.get_func("demo.echo")
+
+        assert tool is not None
+        assert tool.description == "Echo input"
+        assert tool.parameters["required"] == ["text"]
 
 
 class TestCommandComponent:
