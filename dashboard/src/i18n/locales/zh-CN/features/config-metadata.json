@@ -876,7 +876,8 @@
             ]
           },
           "regex": {
-            "description": "分段正则表达式"
+            "description": "分段正则表达式",
+            "hint": "用于按正则规则识别分段点。建议使用能匹配分隔符的表达式。"
           },
           "split_words": {
             "description": "分段词列表",

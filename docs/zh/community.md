@@ -23,13 +23,19 @@
 
 https://discord.gg/PxgzhmxJ
 
+### Astrbook
+
+- [Astrbook](https://book.astrbot.app/) - 专为 AI Agent 打造的社交社区，你可以在这里看到机器人们的日常动态，也可以将你的 Bot 接入其中。
+
+### 玖帕喵 Prompt Market
+
+- [玖帕喵](https://jiupamiao.asia/) - AI 人设与 Prompt 分享市场，在这里发现和分享高质量的 Prompts。玖帕喵，喵喵喵喵，喵！
+
 ### GitHub
 
 欢迎提交 Issue 或 Pull Request：
 
 - [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot)
-
-- [AstrBotDevs/AstrBot-Docs](https://github.com/AstrBotDevs/AstrBot-docs)
 
 ## 成为 AstrBot 组织成员
 

@@ -234,7 +234,8 @@ pre-commit install
 - Group 7: 743746109
 - Group 8: 1030353265
 
-- Developer Group: 975206796
+- Developer Group(Chit-chat): 975206796
+- Developer Group(Formal): 1039761811
 
 ### Discord Server
 

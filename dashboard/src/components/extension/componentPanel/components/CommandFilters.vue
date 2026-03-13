@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
+import { normalizeTextInput } from '@/utils/inputValue';
 
 const { tm } = useModuleI18n('features/command');
 
@@ -52,6 +53,7 @@ const statusItems = [
   { title: tm('filters.disabled'), value: 'disabled' },
   { title: tm('filters.conflict'), value: 'conflict' }
 ];
+
 </script>
 
 <template>
@@ -108,10 +110,11 @@ const statusItems = [
     <div style="min-width: 200px; max-width: 350px; flex: 1; border: 1px solid #B9B9B9; border-radius: 16px;">
       <v-text-field
         :model-value="searchQuery"
-        @update:model-value="emit('update:searchQuery', $event)"
+        @update:model-value="emit('update:searchQuery', normalizeTextInput($event))"
         density="compact"
         :label="tm('search.placeholder')"
         prepend-inner-icon="mdi-magnify"
+        clearable
         variant="solo-filled"
         flat
         hide-details

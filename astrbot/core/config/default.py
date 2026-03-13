@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.19.5"
+VERSION = "4.20.0"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 
 WEBHOOK_SUPPORTED_PLATFORMS = [
@@ -232,6 +232,9 @@ DEFAULT_CONFIG = {
         },
         "telegram": {
             "pre_ack_emoji": {"enable": False, "emojis": ["✍️"]},
+        },
+        "discord": {
+            "pre_ack_emoji": {"enable": False, "emojis": ["🤔"]},
         },
     },
     "wake_prefix": ["/"],
