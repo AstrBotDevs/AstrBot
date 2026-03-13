@@ -342,6 +342,9 @@ class ChatRoute(Route):
 
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
+                        # 每次循环重置，防止异常分支未赋值导致 UnboundLocalError
+                        # Reset each iteration to avoid UnboundLocalError in exception branches
+                        result = None 
                         try:
                             result = await asyncio.wait_for(back_queue.get(), timeout=1)
                         except asyncio.TimeoutError:
