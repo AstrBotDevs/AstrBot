@@ -96,7 +96,11 @@ from typing import IO, Any
 
 from loguru import logger
 
-from .._legacy_runtime import iter_unique_legacy_runtime_adapters
+from .._legacy_runtime import (
+    bind_legacy_runtime_contexts,
+    run_legacy_worker_shutdown_hooks,
+    run_legacy_worker_startup_hooks,
+)
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
@@ -663,10 +667,7 @@ class PluginWorkerRuntime:
                 ],
                 metadata={"plugin_id": self.plugin.name},
             )
-            await self._run_compat_context_hook("on_astrbot_loaded")
-            await self._run_compat_context_hook("on_platform_loaded")
-            await self._run_compat_context_hook(
-                "on_plugin_loaded",
+            await self._run_legacy_worker_startup_hooks(
                 metadata=dict(self.plugin.manifest_data),
             )
         except Exception:
@@ -683,8 +684,7 @@ class PluginWorkerRuntime:
 
     async def stop(self) -> None:
         try:
-            await self._run_compat_context_hook(
-                "on_plugin_unloaded",
+            await self._run_legacy_worker_shutdown_hooks(
                 metadata=dict(self.plugin.manifest_data),
             )
             await self._run_lifecycle("on_stop")
@@ -730,20 +730,28 @@ class PluginWorkerRuntime:
                 await result
 
     def _bind_legacy_runtime_contexts(self, runtime_context: RuntimeContext) -> None:
-        for adapter in iter_unique_legacy_runtime_adapters(
-            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities]
-        ):
-            adapter.bind_runtime_context(runtime_context)
+        bind_legacy_runtime_contexts(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+            runtime_context,
+        )
 
-    async def _run_compat_context_hook(self, hook_name: str, **kwargs: Any) -> None:
-        for adapter in iter_unique_legacy_runtime_adapters(
-            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities]
-        ):
-            await adapter.run_hook(
-                hook_name,
-                context=self._lifecycle_context,
-                **kwargs,
-            )
+    async def _run_legacy_worker_startup_hooks(self, *, metadata: dict[str, Any]) -> None:
+        await run_legacy_worker_startup_hooks(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+            context=self._lifecycle_context,
+            metadata=metadata,
+        )
+
+    async def _run_legacy_worker_shutdown_hooks(
+        self,
+        *,
+        metadata: dict[str, Any],
+    ) -> None:
+        await run_legacy_worker_shutdown_hooks(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+            context=self._lifecycle_context,
+            metadata=metadata,
+        )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

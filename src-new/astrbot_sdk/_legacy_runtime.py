@@ -44,6 +44,10 @@ class LegacyRuntimeAdapter:
             filters=list(get_compat_custom_filters(handler)),
         )
 
+    @classmethod
+    def from_capability(cls, legacy_context: Any) -> "LegacyRuntimeAdapter":
+        return cls(legacy_context=legacy_context)
+
     def bind_runtime_context(self, runtime_context: Context) -> None:
         binder = getattr(self.legacy_context, "bind_runtime_context", None)
         if callable(binder):
@@ -137,6 +141,46 @@ class LegacyRuntimeAdapter:
             traceback_text=traceback_text,
         )
 
+    async def run_worker_startup_hooks(
+        self,
+        *,
+        context: Context,
+        metadata: dict[str, Any],
+    ) -> None:
+        await self.run_hook("on_astrbot_loaded", context=context)
+        await self.run_hook("on_platform_loaded", context=context)
+        await self.run_hook("on_plugin_loaded", context=context, metadata=metadata)
+
+    async def run_worker_shutdown_hooks(
+        self,
+        *,
+        context: Context,
+        metadata: dict[str, Any],
+    ) -> None:
+        await self.run_hook("on_plugin_unloaded", context=context, metadata=metadata)
+
+
+def build_handler_legacy_runtime(
+    legacy_context: Any,
+    handler: Any,
+    *,
+    compat_filters: list[Any] | None = None,
+) -> LegacyRuntimeAdapter:
+    if compat_filters is None:
+        return LegacyRuntimeAdapter.from_handler(legacy_context, handler)
+    return LegacyRuntimeAdapter(
+        legacy_context=legacy_context,
+        filters=list(compat_filters),
+    )
+
+
+def build_capability_legacy_runtime(legacy_context: Any) -> LegacyRuntimeAdapter:
+    return LegacyRuntimeAdapter.from_capability(legacy_context)
+
+
+def register_legacy_component(legacy_context: Any, component: Any) -> None:
+    LegacyRuntimeAdapter.from_capability(legacy_context).register_component(component)
+
 
 def get_legacy_runtime_adapter(loaded: Any) -> LegacyRuntimeAdapter | None:
     adapter = getattr(loaded, "legacy_runtime", None)
@@ -146,7 +190,14 @@ def get_legacy_runtime_adapter(loaded: Any) -> LegacyRuntimeAdapter | None:
     if legacy_context is None:
         return None
     filters = list(getattr(loaded, "compat_filters", ()))
-    adapter = LegacyRuntimeAdapter(legacy_context=legacy_context, filters=filters)
+    if hasattr(loaded, "compat_filters"):
+        adapter = build_handler_legacy_runtime(
+            legacy_context,
+            getattr(loaded, "callable", None),
+            compat_filters=filters,
+        )
+    else:
+        adapter = build_capability_legacy_runtime(legacy_context)
     try:
         setattr(loaded, "legacy_runtime", adapter)
     except AttributeError:
@@ -169,3 +220,37 @@ def iter_unique_legacy_runtime_adapters(
         seen_contexts.add(marker)
         adapters.append(adapter)
     return adapters
+
+
+def bind_legacy_runtime_contexts(
+    loaded_items: Iterable[Any],
+    runtime_context: Context,
+) -> None:
+    for adapter in iter_unique_legacy_runtime_adapters(loaded_items):
+        adapter.bind_runtime_context(runtime_context)
+
+
+async def run_legacy_worker_startup_hooks(
+    loaded_items: Iterable[Any],
+    *,
+    context: Context,
+    metadata: dict[str, Any],
+) -> None:
+    for adapter in iter_unique_legacy_runtime_adapters(loaded_items):
+        await adapter.run_worker_startup_hooks(
+            context=context,
+            metadata=metadata,
+        )
+
+
+async def run_legacy_worker_shutdown_hooks(
+    loaded_items: Iterable[Any],
+    *,
+    context: Context,
+    metadata: dict[str, Any],
+) -> None:
+    for adapter in iter_unique_legacy_runtime_adapters(loaded_items):
+        await adapter.run_worker_shutdown_hooks(
+            context=context,
+            metadata=metadata,
+        )

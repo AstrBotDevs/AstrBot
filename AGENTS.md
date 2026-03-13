@@ -33,6 +33,7 @@
 - 2026-03-13: Legacy result hooks must reuse the same `AstrMessageEvent` instance across `on_decorating_result` and `after_message_sent`. Re-wrapping the original v4 `MessageEvent` for the second hook drops decorated `event.set_result(...)` mutations and makes post-send hooks observe an empty result.
 - 2026-03-13: `src-new/astrbot_sdk/_legacy_runtime.py` already exists as the intended compat execution boundary. When cleaning runtime architecture, wire `loader` / `handler_dispatcher` / `bootstrap` through that adapter instead of adding new direct `legacy_context` branches in runtime files, or the compat logic will spread again.
 - 2026-03-13: Real legacy plugins may still load through deep `astrbot.core.*` imports even when their public entrypoint only looks like `astrbot.api.*`. `astrbot_plugin_self_learning` hits `astrbot.core.utils.astrbot_path`, `astrbot.core.provider.*`, `astrbot.core.agent.message`, and `astrbot.core.db.po` during load; keep those deep-path shims minimal and whitelist-driven, but do not assume the `api` facade alone is enough.
+- 2026-03-13: `ARCHITECTURE.md` and `refactor.md` are no longer a full source of truth for the current runtime/compat surface. The shipped code also includes `runtime.environment_groups`, `_session_waiter`, the controlled `src-new/astrbot` alias facade, compat hook execution, and extra DB capabilities such as `db.get_many` / `db.set_many` / `db.watch`. Verify architectural claims against code and tests before declaring drift or completeness.
 
 # 开发命令
 

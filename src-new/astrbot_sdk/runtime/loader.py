@@ -100,7 +100,12 @@ from typing import Any
 
 import yaml
 
-from .._legacy_runtime import LegacyRuntimeAdapter
+from .._legacy_runtime import (
+    LegacyRuntimeAdapter,
+    build_capability_legacy_runtime,
+    build_handler_legacy_runtime,
+    register_legacy_component,
+)
 from ..api.basic import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
@@ -160,14 +165,12 @@ class LoadedHandler:
     def __post_init__(self) -> None:
         if self.legacy_context is None:
             return
-        if not self.compat_filters:
-            from ..api.event.filter import get_compat_custom_filters
-
-            self.compat_filters = list(get_compat_custom_filters(self.callable))
-        self.legacy_runtime = LegacyRuntimeAdapter(
-            legacy_context=self.legacy_context,
-            filters=list(self.compat_filters),
+        self.legacy_runtime = build_handler_legacy_runtime(
+            self.legacy_context,
+            self.callable,
+            compat_filters=self.compat_filters or None,
         )
+        self.compat_filters = list(self.legacy_runtime.filters)
 
 
 @dataclass(slots=True)
@@ -183,9 +186,7 @@ class LoadedCapability:
     def __post_init__(self) -> None:
         if self.legacy_context is None:
             return
-        self.legacy_runtime = LegacyRuntimeAdapter(
-            legacy_context=self.legacy_context,
-        )
+        self.legacy_runtime = build_capability_legacy_runtime(self.legacy_context)
 
 
 @dataclass(slots=True)
@@ -723,9 +724,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 and getattr(instance, "config", None) is None
             ):
                 setattr(instance, "config", component_config)
-            LegacyRuntimeAdapter(legacy_context=legacy_context).register_component(
-                instance
-            )
+            register_legacy_component(legacy_context, instance)
         instances.append(instance)
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)

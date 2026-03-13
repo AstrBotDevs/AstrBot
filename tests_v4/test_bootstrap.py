@@ -895,6 +895,82 @@ class DemoComponent(Star):
             ]
 
     @pytest.mark.asyncio
+    async def test_start_uses_legacy_runtime_boundary_for_startup_hooks(self):
+        """PluginWorkerRuntime startup should delegate compat lifecycle work to the adapter boundary."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            manifest_data = {
+                "name": "test_plugin",
+                "runtime": {"python": "3.12"},
+                "components": [],
+            }
+            manifest_path.write_text(
+                yaml.dump(manifest_data),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            runtime = PluginWorkerRuntime(
+                plugin_dir=plugin_dir,
+                transport=MemoryTransport(),
+            )
+            runtime.peer.start = AsyncMock()
+            runtime.peer.initialize = AsyncMock()
+            runtime.peer.stop = AsyncMock()
+
+            with patch(
+                "astrbot_sdk.runtime.bootstrap.run_legacy_worker_startup_hooks",
+                new=AsyncMock(),
+            ) as startup_hooks:
+                await runtime.start()
+
+            startup_hooks.assert_awaited_once()
+            args, kwargs = startup_hooks.await_args
+            assert args == ([],)
+            assert kwargs["context"] is runtime._lifecycle_context
+            assert kwargs["metadata"] == manifest_data
+
+    @pytest.mark.asyncio
+    async def test_stop_uses_legacy_runtime_boundary_for_shutdown_hooks(self):
+        """PluginWorkerRuntime shutdown should delegate compat unload hooks to the adapter boundary."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            manifest_data = {
+                "name": "test_plugin",
+                "runtime": {"python": "3.12"},
+                "components": [],
+            }
+            manifest_path.write_text(
+                yaml.dump(manifest_data),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            runtime = PluginWorkerRuntime(
+                plugin_dir=plugin_dir,
+                transport=MemoryTransport(),
+            )
+            runtime.peer.stop = AsyncMock()
+
+            with patch(
+                "astrbot_sdk.runtime.bootstrap.run_legacy_worker_shutdown_hooks",
+                new=AsyncMock(),
+            ) as shutdown_hooks:
+                await runtime.stop()
+
+            shutdown_hooks.assert_awaited_once()
+            args, kwargs = shutdown_hooks.await_args
+            assert args == ([],)
+            assert kwargs["context"] is runtime._lifecycle_context
+            assert kwargs["metadata"] == manifest_data
+
+    @pytest.mark.asyncio
     async def test_run_lifecycle_sync_hook(self):
         """_run_lifecycle should call sync hooks."""
         with tempfile.TemporaryDirectory() as temp_dir:
