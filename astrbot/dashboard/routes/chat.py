@@ -645,31 +645,35 @@ class ChatRoute(Route):
         post_data = await request.json
         if post_data is None:
             return Response().error("Missing JSON body").__dict__
+        if not isinstance(post_data, dict):
+            return Response().error("Invalid JSON body: expected object").__dict__
 
         session_ids = post_data.get("session_ids")
         if not session_ids or not isinstance(session_ids, list):
             return Response().error("Missing or invalid key: session_ids").__dict__
 
         username = g.get("username", "guest")
+        sessions = await self.db.get_platform_sessions_by_ids(session_ids)
+        sessions_by_id = {session.session_id: session for session in sessions}
         deleted_count = 0
         failed_items = []
 
         for sid in session_ids:
+            session = sessions_by_id.get(sid)
+            if not session:
+                failed_items.append({"session_id": sid, "reason": "not found"})
+                continue
+            if session.creator != username:
+                failed_items.append({"session_id": sid, "reason": "permission denied"})
+                continue
+
             try:
-                session = await self.db.get_platform_session_by_id(sid)
-                if not session:
-                    failed_items.append({"session_id": sid, "reason": "not found"})
-                    continue
-                if session.creator != username:
-                    failed_items.append(
-                        {"session_id": sid, "reason": "permission denied"}
-                    )
-                    continue
                 await self._delete_session_internal(session, username)
                 deleted_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to delete session {sid}: {e}")
-                failed_items.append({"session_id": sid, "reason": str(e)})
+                sessions_by_id.pop(sid, None)
+            except Exception:
+                logger.warning("Failed to delete session %s", sid)
+                failed_items.append({"session_id": sid, "reason": "internal_error"})
 
         return (
             Response()
