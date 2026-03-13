@@ -37,6 +37,7 @@ from astrbot_sdk.runtime.transport import (
     WebSocketServerTransport,
 )
 from astrbot_sdk.star import Star
+from astrbot_sdk.testing import _PluginLoadError
 
 TOP_LEVEL_MODULES = [
     "astrbot_sdk",
@@ -49,6 +50,7 @@ TOP_LEVEL_MODULES = [
     "astrbot_sdk.events",
     "astrbot_sdk.runtime",
     "astrbot_sdk.star",
+    "astrbot_sdk.testing",
 ]
 
 
@@ -213,6 +215,85 @@ class TestCliModule:
         assert result.exit_code == 0
         entrypoint_mock.assert_called_once_with(**kwargs)
         asyncio_run_mock.assert_called_once_with(sentinel)
+
+    def test_dev_command_delegates_to_local_runtime(self):
+        """dev --local should delegate to the local harness entrypoint."""
+        runner = CliRunner()
+        sentinel = object()
+
+        with (
+            patch(
+                "astrbot_sdk.cli._run_local_dev",
+                new=Mock(return_value=sentinel),
+            ) as dev_mock,
+            patch("astrbot_sdk.cli.asyncio.run") as asyncio_run_mock,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "dev",
+                    "--plugin-dir",
+                    "test_plugin/new",
+                    "--local",
+                    "--event-text",
+                    "hello",
+                ],
+            )
+
+        assert result.exit_code == 0
+        dev_mock.assert_called_once_with(
+            plugin_dir=Path("test_plugin/new"),
+            event_text="hello",
+            interactive=False,
+            session_id="local-session",
+            user_id="local-user",
+            platform="test",
+            group_id=None,
+            event_type="message",
+        )
+        asyncio_run_mock.assert_called_once_with(sentinel)
+
+    def test_dev_command_requires_local_mode(self):
+        """dev should reject invocations that do not opt into local mode."""
+        runner = CliRunner()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dev",
+                "--plugin-dir",
+                "test_plugin/new",
+                "--event-text",
+                "hello",
+            ],
+        )
+
+        assert result.exit_code == 2
+        assert "--local/--standalone" in result.output
+
+    def test_dev_command_maps_plugin_load_errors_to_exit_code_3(self):
+        """Known plugin load failures should render a friendly error and exit code 3."""
+        runner = CliRunner()
+
+        async def fail(*args, **kwargs):
+            raise _PluginLoadError("missing plugin")
+
+        with patch("astrbot_sdk.cli._run_local_dev", new=fail):
+            result = runner.invoke(
+                cli,
+                [
+                    "dev",
+                    "--plugin-dir",
+                    "missing-plugin",
+                    "--local",
+                    "--event-text",
+                    "hello",
+                ],
+            )
+
+        assert result.exit_code == 3
+        assert "Error[plugin_load_error]" in result.output
+        assert "Suggestion:" in result.output
 
     def test_main_module_invokes_cli_entrypoint(self):
         """Running astrbot_sdk.__main__ as a script should call cli()."""

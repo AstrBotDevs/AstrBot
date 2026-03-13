@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 astr = "astrbot_sdk.cli:cli"
+astrbot-sdk = "astrbot_sdk.cli:cli"
 
 [tool.setuptools]
 package-dir = {"" = "src-new"}

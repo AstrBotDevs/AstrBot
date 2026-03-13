@@ -58,6 +58,8 @@ src-new/
 │   ├── events.py                    # MessageEvent / PlainTextResult
 │   ├── errors.py                    # AstrBotError / ErrorCodes
 │   ├── star.py                      # Star 基类与 handler 收集
+│   ├── cli.py                       # astr / astrbot-sdk CLI 入口
+│   ├── testing.py                   # 本地开发与测试 harness
 │   ├── compat.py                    # 旧顶层兼容重导出
 │   ├── _legacy_api.py               # LegacyContext / LegacyStar / CommandComponent
 │   ├── _legacy_llm.py               # legacy LLM/tool 兼容辅助
@@ -273,7 +275,32 @@ from astrbot.core.utils.session_waiter import session_waiter
 
 只有在需要兼容现有旧插件时才应继续使用这些路径；新插件应直接使用 v4 顶层入口。
 
-## 9. 测试与维护约定
+## 9. 本地开发与测试
+
+当前仓库已经提供一条受控的本地开发路径：
+
+- CLI：`astr dev --local` 与 `astrbot-sdk dev --local`
+- 稳定测试入口：`astrbot_sdk.testing`
+
+`astrbot_sdk.testing` 当前公开的稳定面包括：
+
+- `PluginHarness`
+- `LocalRuntimeConfig`
+- `MockPeer`
+- `MockCapabilityRouter`
+- `InMemoryDB`
+- `InMemoryMemory`
+- `StdoutPlatformSink`
+- `RecordedSend`
+
+设计约束：
+
+- 本地 harness 复用真实的 `load_plugin()`、`HandlerDispatcher`、`CapabilityDispatcher`、`_legacy_runtime.py` 与 `_session_waiter.py`
+- `dev --local` 使用进程内 mock core，而不是重新发明一套并行 runtime
+- 同一次 `interactive` 会话会复用同一个 dispatcher / waiter manager / in-memory db / in-memory memory
+- `astrbot_sdk.testing` 是插件测试依赖的公开 API，minor 版本内保持兼容稳定
+
+## 10. 测试与维护约定
 
 - 当前主测试目录是 `tests_v4/`，覆盖 protocol、runtime、clients、compat facade、legacy plugin integration、top-level imports 与 integration flows。
 - 文档维护规则：
@@ -281,7 +308,7 @@ from astrbot.core.utils.session_waiter import session_waiter
   - compat 支持级别变化时，同时更新本文档、`CLAUDE.md` / `AGENTS.md` 备注以及相关契约测试。
   - `refactor.md` 不再承载现状；出现冲突时，一律以本文档和代码/测试为准。
 
-## 10. 当前建议的后续演进方向
+## 11. 当前建议的后续演进方向
 
 1. 继续把 runtime 对 compat 的认知收口到 `_legacy_runtime.py`。
 2. 继续拆薄 `_legacy_api.py`，让 `LegacyContext` 更偏向 facade 和 orchestration。

@@ -57,6 +57,9 @@ class SessionWaiterManager:
         self._waiters[key] = state
         return key
 
+    def has_waiter(self, event: Any) -> bool:
+        return self.session_key(event) in self._waiters
+
     def unregister(self, key: str, state: _SessionWaitState) -> None:
         if self._waiters.get(key) is state:
             self._waiters.pop(key, None)
