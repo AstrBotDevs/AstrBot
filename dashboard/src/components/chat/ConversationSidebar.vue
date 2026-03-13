@@ -124,17 +124,20 @@
                     </template>
                     <v-list-item-title>{{ tm('transport.title') }}</v-list-item-title>
                     <template v-slot:append>
-                        <v-select
-                            :model-value="transportMode"
-                            :items="transportOptions"
-                            item-title="label"
-                            item-value="value"
-                            density="compact"
-                            variant="underlined"
-                            hide-details
-                            class="transport-mode-select"
-                            @update:model-value="handleTransportModeChange"
-                        />
+                        <div class="transport-mode-select-wrap">
+                            <v-select
+                                :model-value="transportMode"
+                                :items="transportOptions"
+                                item-title="label"
+                                item-value="value"
+                                :menu-props="{ contentClass: 'transport-mode-select-menu' }"
+                                density="compact"
+                                variant="underlined"
+                                hide-details
+                                class="transport-mode-select"
+                                @update:model-value="handleTransportModeChange"
+                            />
+                        </div>
                     </template>
                 </v-list-item>
 
@@ -402,7 +405,36 @@ function handleTransportModeChange(mode: string | null) {
     justify-content: center;
 }
 
+.transport-mode-select-wrap {
+    margin-inline-start: 12px;
+    min-width: 132px;
+}
+
 .transport-mode-select {
-    min-width: 120px;
+    min-width: 132px;
+}
+
+:deep(.transport-mode-select .v-field) {
+    font-size: 14px;
+}
+
+:deep(.transport-mode-select .v-field__input) {
+    min-height: 30px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+}
+
+:deep(.transport-mode-select .v-select__selection-text) {
+    font-size: 14px;
+    font-weight: 400;
+}
+
+:deep(.transport-mode-select-menu .v-list-item) {
+    min-height: 34px;
+}
+
+:deep(.transport-mode-select-menu .v-list-item-title) {
+    font-size: 14px;
+    font-weight: 400;
 }
 </style>
