@@ -3872,7 +3872,7 @@ CONFIG_METADATA_3_SYSTEM = {
                     },
                     "github_api_token": {
                         "description": "GitHub API 令牌。用于检查更新、安装插件。",
-                        "type": "string",
+                        "type": "password",
                         "hint": "可以在 https://github.com/settings/personal-access-tokens/new 创建。",
                     },
                 },

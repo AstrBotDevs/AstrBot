@@ -138,6 +138,17 @@
       hide-details
     ></v-text-field>
 
+    <v-text-field
+      v-else-if="itemMeta?.type === 'password'"
+      :model-value="modelValue"
+      @update:model-value="emitUpdate"
+      density="compact"
+      variant="outlined"
+      class="config-field"
+      type="password"
+      hide-details
+    ></v-text-field>
+
     <div
       v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
       class="d-flex align-center gap-3"
