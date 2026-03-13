@@ -1445,7 +1445,6 @@ export const useExtensionPage = () => {
     const plugin_name = Array.isArray(route.query.open_config)
       ? route.query.open_config[0]
       : route.query.open_config;
-    console.log("URL Parameters:", JSON.stringify(route.query));
     if (plugin_name) {
       console.log(`Opening config for plugin: ${plugin_name}`);
       openExtensionConfig(plugin_name);

@@ -20,10 +20,11 @@ test('getValidHashTab rejects empty and unknown hashes', () => {
 });
 
 test('createTabRouteLocation preserves the current path and query', () => {
+  const query = { open_config: 'sample-plugin', page: '2' };
   const location = createTabRouteLocation(
     {
       path: '/extension',
-      query: { open_config: 'sample-plugin', page: '2' },
+      query,
     },
     'market',
   );
@@ -33,6 +34,7 @@ test('createTabRouteLocation preserves the current path and query', () => {
     query: { open_config: 'sample-plugin', page: '2' },
     hash: '#market',
   });
+  assert.notEqual(location.query, query);
 });
 
 test('createTabRouteLocation falls back to the extension route name', () => {

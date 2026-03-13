@@ -6,17 +6,19 @@ export function getValidHashTab(routeHash, validTabs) {
 }
 
 export function createTabRouteLocation(route, tab, fallbackRouteName = EXTENSION_ROUTE_NAME) {
+  const query = route?.query ? { ...route.query } : {};
+
   if (route?.path) {
     return {
       path: route.path,
-      query: route?.query || {},
+      query,
       hash: `#${tab}`,
     };
   }
 
   return {
     name: route?.name || fallbackRouteName,
-    query: route?.query || {},
+    query,
     hash: `#${tab}`,
   };
 }
