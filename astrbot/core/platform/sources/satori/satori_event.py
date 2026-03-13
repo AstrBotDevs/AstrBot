@@ -1,7 +1,10 @@
-from typing import TYPE_CHECKING
+from base64 import b64decode
+from collections.abc import Callable
+from pathlib import Path
+from typing import TYPE_CHECKING, TypeVar
 
-from satori import E, Element
 from satori.const import Api
+from satori.element import E, Element, Resource
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -19,9 +22,41 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.message.components import AtAll, Face
+from astrbot.core.utils.io import download_image_by_url
 
 if TYPE_CHECKING:
     from .satori_adapter import SatoriPlatformAdapter
+
+
+TR = TypeVar("TR", bound=Resource)
+
+
+async def _components_to_element(
+    comp: Image | Record | Video | File, func: Callable[..., TR]
+) -> TR:
+    if hasattr(comp, "url") and comp.url:
+        return func(url=comp.url)
+    if not hasattr(comp, "file") or not comp.file:
+        raise ValueError("No valid file or URL provided")
+
+    if comp.file.startswith("file://"):
+        path = Path(comp.file[7:])
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        raw_data = path.read_bytes()
+        return func(raw=raw_data)
+    if comp.file.startswith("http"):
+        image_file_path = await download_image_by_url(comp.file)
+        raw_data = Path(image_file_path).read_bytes()
+        return func(raw=raw_data)
+    if comp.file.startswith("base64://"):
+        bs64_data = comp.file[9:]
+        return func(raw=b64decode(bs64_data))
+    if Path(comp.file).exists():
+        raw_data = Path(comp.file).read_bytes()
+        return func(raw=raw_data)
+    else:
+        raise Exception(f"not a valid file: {comp.file}")
 
 
 class SatoriPlatformEvent(AstrMessageEvent):
@@ -34,11 +69,12 @@ class SatoriPlatformEvent(AstrMessageEvent):
         adapter: "SatoriPlatformAdapter",
     ) -> None:
         # 更新平台元数据
-        current_login = adapter.logins[0]
-        platform_name = current_login.platform or "satori"
-        user_id = current_login.user.id if current_login.user else None
-        if not platform_meta.id and user_id:
-            platform_meta.id = f"{platform_name}({user_id})"
+        if adapter.logins:
+            current_login = adapter.logins[0]
+            platform_name = current_login.platform or "satori"
+            user_id = current_login.user.id if current_login.user else None
+            if not platform_meta.id and user_id:
+                platform_meta.id = f"{platform_name}({user_id})"
 
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.adapter = adapter
@@ -181,18 +217,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                 await self.send(temp_chain)
                                 content_parts = []
                             try:
-                                image_base64 = await component.convert_to_base64()
-                                if image_base64:
-                                    img_chain = MessageChain(
-                                        [
-                                            Plain(
-                                                text=f'<img src="data:image/jpeg;base64,{image_base64}"/>',
-                                            ),
-                                        ],
-                                    )
-                                    await self.send(img_chain)
+                                img = await _components_to_element(component, E.image)
+                                img_chain = MessageChain([Plain(text=str(img))])
+                                await self.send(img_chain)
                             except Exception as e:
-                                logger.error(f"图片转换为base64失败: {e}")
+                                logger.error(f"图片转换失败: {e}")
                         else:
                             content_parts.append(str(component))
 
@@ -214,40 +243,51 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 return E.text(component.text)
 
             if isinstance(component, At):
-                return E.at(str(component.qq), name=component.name)
+                qq = (
+                    component.qq
+                    if isinstance(component.qq, str)
+                    else str(component.qq)
+                    if isinstance(component.qq, int)
+                    else None
+                )
+                if qq:
+                    return E.at(id=qq, name=component.name)
+                return E.at(name=component.name)
 
             if isinstance(component, AtAll):
                 return E.at_all()
 
-            if isinstance(component, Image):
-                try:
-                    image_base64 = await component.convert_to_base64()
-                    return E.image(url=f"data:image/jpeg;base64,{image_base64}")
-                except Exception as e:
-                    logger.error(f"图片转换为base64失败: {e}")
-
-            if isinstance(component, File):
-                return E.file(url=component.file, name=component.name or "文件")
-
             if isinstance(component, Face):
                 return E.emoji(id=str(component.id))
 
-            if isinstance(component, Record):
+            if isinstance(component, Image):
                 try:
-                    record_base64 = await component.convert_to_base64()
-                    return E.audio(url=f"data:audio/wav;base64,{record_base64}")
+                    return await _components_to_element(component, E.image)
                 except Exception as e:
-                    logger.error(f"语音转换为base64失败: {e}")
+                    logger.error(f"图片转换失败: {e}")
 
-            if isinstance(component, Reply):
-                return E.quote(id=str(component.id))
+            if isinstance(component, File):
+                try:
+                    elem = await _components_to_element(component, E.file)
+                    elem.title = component.name or "文件"
+                    return elem
+                except Exception as e:
+                    logger.error(f"文件转换失败: {e}")
 
             if isinstance(component, Video):
                 try:
-                    video_path_url = await component.convert_to_file_path()
-                    return E.video(url=video_path_url)
+                    return await _components_to_element(component, E.video)
                 except Exception as e:
-                    logger.error(f"视频文件转换失败: {e}")
+                    logger.error(f"视频转换失败: {e}")
+
+            if isinstance(component, Record):
+                try:
+                    return await _components_to_element(component, E.audio)
+                except Exception as e:
+                    logger.error(f"语音转换失败: {e}")
+
+            if isinstance(component, Reply):
+                return E.quote(id=str(component.id))
 
             if isinstance(component, Forward):
                 return E.message(id=str(component.id), forward=True)

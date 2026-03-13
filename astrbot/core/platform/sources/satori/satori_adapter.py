@@ -220,6 +220,35 @@ class SatoriPlatformAdapter(Platform):
             logger.error(f"发送 IDENTIFY 信令失败: {e}")
             raise
 
+        try:
+            response_str = await self.ws.recv()
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.error(f"接收 READY 消息时连接关闭: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"接收 READY 消息失败: {e}")
+            raise
+        payload = decode(response_str)
+        op = payload.get("op")
+        if op != Opcode.READY:
+            logger.error(f"预期收到 READY 消息，但收到的消息 op 是 {op}")
+            raise Exception(f"预期收到 READY 消息，但收到的消息 op 是 {op}")
+        body = payload.get("body", {})
+        resp = Ready.parse(body)
+        self.logins = resp.logins
+
+        # 输出连接成功的bot信息
+        for i, login in enumerate(self.logins):
+            logger.info(
+                f"Satori 连接成功 - Bot {i + 1}: "
+                f"platform={login.platform}, "
+                f"user_id={login.user.id if login.user else ''}, "
+                f"user_name={login.user.name if login.user else ''}",
+            )
+        if self.logins:
+            self.ready_received = True
+            logger.info("Satori 适配器已准备就绪")
+
     async def heartbeat_loop(self) -> None:
         try:
             while self.running and self.ws:
@@ -248,21 +277,7 @@ class SatoriPlatformAdapter(Platform):
 
             op = data.get("op")
             body = data.get("body", {})
-
-            if op == Opcode.READY:
-                resp = Ready.parse(body)
-                self.logins = resp.logins
-                self.ready_received = True
-
-                # 输出连接成功的bot信息
-                for i, login in enumerate(self.logins):
-                    logger.info(
-                        f"Satori 连接成功 - Bot {i + 1}: "
-                        f"platform={login.platform}, "
-                        f"user_id={login.user.id if login.user else ''}, "
-                        f"user_name={login.user.name if login.user else ''}",
-                    )
-            elif op == Opcode.PONG:
+            if op == Opcode.PONG:
                 pass
 
             elif op == Opcode.EVENT:  # EVENT
@@ -271,6 +286,8 @@ class SatoriPlatformAdapter(Platform):
             elif op == Opcode.META:
                 # TODO: META 消息会携带 satori-server 支持的 proxy_urls, 用于资源链接的下载
                 pass
+            else:
+                logger.warning(f"收到未知的 WebSocket 消息: {data}")
 
         except json.JSONDecodeError as e:
             logger.error(f"解析 WebSocket 消息失败: {e}, 消息内容: {message}")
@@ -294,7 +311,8 @@ class SatoriPlatformAdapter(Platform):
             else:
                 logger.debug(f"解析事件失败: {e}")
         else:
-            self.sequence = event.sn
+            if event.sn is not None:
+                self.sequence = event.sn
             if event.type == EventType.MESSAGE_CREATED:
                 if event.user and event.user.id == event.login.user.id:
                     return
