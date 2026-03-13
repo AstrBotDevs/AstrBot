@@ -72,6 +72,7 @@ import typing
 from collections.abc import AsyncIterator
 from typing import Any, get_type_hints
 
+from .._session_waiter import SessionWaiterManager
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
 from ..events import MessageEvent, PlainTextResult
@@ -86,6 +87,7 @@ class HandlerDispatcher:
         self._peer = peer
         self._handlers = {item.descriptor.id: item for item in handlers}
         self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
+        self._session_waiters = SessionWaiterManager()
 
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
@@ -96,8 +98,11 @@ class HandlerDispatcher:
         ctx = Context(
             peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token
         )
+        ctx._session_waiter_manager = self._session_waiters
         event = MessageEvent.from_payload(message.input.get("event", {}), context=ctx)
         event.bind_reply_handler(self._create_reply_handler(ctx, event))
+        if await self._session_waiters.dispatch(event):
+            return {}
         if loaded.legacy_context is not None:
             loaded.legacy_context.bind_runtime_context(ctx)
 

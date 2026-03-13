@@ -645,6 +645,7 @@ class PluginWorkerRuntime:
         self._lifecycle_context = RuntimeContext(
             peer=self.peer, plugin_id=self.plugin.name
         )
+        self._bind_legacy_runtime_contexts(self._lifecycle_context)
         self.peer.set_invoke_handler(self._handle_invoke)
         self.peer.set_cancel_handler(self._handle_cancel)
 
@@ -716,6 +717,23 @@ class PluginWorkerRuntime:
             result = hook(*args)
             if inspect.isawaitable(result):
                 await result
+
+    def _bind_legacy_runtime_contexts(self, runtime_context: RuntimeContext) -> None:
+        seen: set[int] = set()
+        for loaded in [
+            *self.loaded_plugin.handlers,
+            *self.loaded_plugin.capabilities,
+        ]:
+            legacy_context = getattr(loaded, "legacy_context", None)
+            if legacy_context is None:
+                continue
+            marker = id(legacy_context)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            bind_runtime_context = getattr(legacy_context, "bind_runtime_context", None)
+            if callable(bind_runtime_context):
+                bind_runtime_context(runtime_context)
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

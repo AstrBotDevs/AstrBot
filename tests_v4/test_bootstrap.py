@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yaml
 
+from astrbot_sdk._legacy_api import LegacyContext
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import (
@@ -952,6 +953,42 @@ class DemoComponent(Star):
             await runtime._run_lifecycle("on_stop")
 
             assert called == ["initialize", "terminate"]
+
+    def test_bind_legacy_runtime_contexts_reuses_shared_context(self):
+        """legacy lifecycle helpers should see the worker runtime context."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            runtime = PluginWorkerRuntime(
+                plugin_dir=plugin_dir, transport=MemoryTransport()
+            )
+            legacy_context = LegacyContext("test_plugin")
+            runtime.loaded_plugin.handlers.append(
+                SimpleNamespace(legacy_context=legacy_context)
+            )
+            runtime.loaded_plugin.capabilities.append(
+                SimpleNamespace(legacy_context=legacy_context)
+            )
+
+            runtime._bind_legacy_runtime_contexts(runtime._lifecycle_context)
+
+            assert (
+                legacy_context.require_runtime_context() is runtime._lifecycle_context
+            )
 
 
 class TestIntegrationWithTransportPair:

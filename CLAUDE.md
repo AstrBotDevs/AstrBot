@@ -22,6 +22,9 @@
 - 2026-03-13: The maintained sample plugins now live under `test_plugin/old/` and `test_plugin/new/`. Runtime/integration tests should copy those real fixture directories instead of inlining synthetic plugin writers, otherwise the sample plugin tree and the exercised test path drift apart.
 - 2026-03-13: Real legacy plugins in the wild may still import `astrbot.api.*` instead of `astrbot_sdk.api.*`. Keeping only the `astrbot_sdk.api` compat surface is not enough for no-touch migration tests; preserve the `astrbot.api` alias package while old-plugin support remains a goal.
 - 2026-03-13: Real legacy `main.py` plugins may rely on package-relative imports like `from .src.tool import ...`. Loading legacy `main.py` as a bare file module breaks those imports; the loader must execute it under a synthetic package module so relative imports resolve.
+- 2026-03-13: Real legacy plugins may also import `astrbot.core.utils.session_waiter` and use it as a first-class interactive flow primitive. A pure import stub is not enough; compat needs per-session follow-up message routing so awaited waiters can actually receive later messages.
+- 2026-03-13: Real legacy `Star` plugins may call compat context helpers on `self` or `self.context` during `__init__()` and `initialize()`, including `self.put_kv_data(...)`, `self.get_kv_data(...)`, and `self.context.get_config()`. Keep proxy methods on `LegacyStar`, expose a safe `LegacyContext.get_config()`, and bind the shared legacy context before lifecycle hooks run.
+- 2026-03-13: On Windows, `.gitignore` matching is case-insensitive. A broad entry like `astrBot/` will also ignore `src-new/astrbot/...`, which can silently hide real compat alias packages from `git status`. Keep that ignore anchored as `/astrBot/` if it is only meant for a root-level scratch checkout.
 
 # 开发命令
 

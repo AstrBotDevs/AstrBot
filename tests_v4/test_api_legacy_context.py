@@ -14,6 +14,7 @@ from astrbot_sdk._legacy_api import (
     Context,
     LegacyContext,
     LegacyConversationManager,
+    LegacyStar,
 )
 from astrbot_sdk.api.message import Comp, MessageChain
 from astrbot_sdk.star import Star
@@ -48,6 +49,22 @@ class TestLegacyContext:
         legacy_ctx.bind_runtime_context(mock_ctx)
 
         assert legacy_ctx.require_runtime_context() is mock_ctx
+
+    def test_get_config_returns_empty_dict_without_runtime_context(self):
+        """get_config() should gracefully degrade before runtime binding."""
+        legacy_ctx = LegacyContext("test_plugin")
+
+        assert legacy_ctx.get_config() == {}
+
+    def test_get_config_reads_runtime_context_config_dict(self):
+        """get_config() should expose the bound runtime config mapping."""
+        mock_ctx = MagicMock()
+        mock_ctx._astrbot_config = {"admins_id": ["1001"]}
+
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx.bind_runtime_context(mock_ctx)
+
+        assert legacy_ctx.get_config() == {"admins_id": ["1001"]}
 
     def test_context_alias_is_legacy_context(self):
         """Context should be an alias for LegacyContext."""
@@ -514,6 +531,38 @@ class TestCommandComponent:
         ctx = CommandComponent._astrbot_create_legacy_context("my_plugin")
         assert isinstance(ctx, LegacyContext)
         assert ctx.plugin_id == "my_plugin"
+
+
+class TestLegacyStarDelegation:
+    """Tests for LegacyStar methods that proxy to LegacyContext."""
+
+    @pytest.mark.asyncio
+    async def test_put_kv_data_delegates_to_context(self):
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx.put_kv_data = AsyncMock()
+        star = LegacyStar(legacy_ctx)
+
+        await star.put_kv_data("key", 1)
+
+        legacy_ctx.put_kv_data.assert_awaited_once_with("key", 1)
+
+    @pytest.mark.asyncio
+    async def test_get_kv_data_delegates_to_context(self):
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx.get_kv_data = AsyncMock(return_value=True)
+        star = LegacyStar(legacy_ctx)
+
+        result = await star.get_kv_data("key", False)
+
+        legacy_ctx.get_kv_data.assert_awaited_once_with("key", False)
+        assert result is True
+
+    def test_get_config_delegates_to_context(self):
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx.get_config = MagicMock(return_value={"admins_id": ["42"]})
+        star = LegacyStar(legacy_ctx)
+
+        assert star.get_config() == {"admins_id": ["42"]}
 
 
 class TestMigrationDocUrl:

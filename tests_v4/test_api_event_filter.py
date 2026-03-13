@@ -198,6 +198,12 @@ class TestFilterNamespace:
         meta = get_handler_meta(admin_handler)
         assert meta.permissions.require_admin is True
 
+    def test_filter_namespace_exposes_legacy_enum_constants(self):
+        """filter namespace should carry the old enum/constant attributes."""
+        assert filter.ADMIN == ADMIN
+        assert filter.PermissionType is PermissionType
+        assert filter.EventMessageType is EventMessageType
+
 
 class TestCompatFilterComposition:
     """Tests for legacy filter composition helpers."""

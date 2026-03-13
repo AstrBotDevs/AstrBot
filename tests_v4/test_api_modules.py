@@ -105,7 +105,9 @@ class TestApiEventModule:
         assert MessageSession is not None
         assert MessageType is not None
 
-    def test_astr_message_event_preserves_legacy_message_str_and_private_group_none(self):
+    def test_astr_message_event_preserves_legacy_message_str_and_private_group_none(
+        self,
+    ):
         """AstrMessageEvent should expose message_str and return None for missing group."""
         from astrbot_sdk.api.event import AstrMessageEvent
 
@@ -217,3 +219,13 @@ class TestAstrbotImportAlias:
         assert Star is not None
         assert callable(StarTools.get_data_dir)
         assert callable(register)
+
+    def test_legacy_astrbot_core_session_waiter_exports(self):
+        """astrbot.core.utils.session_waiter should expose the compat waiter helpers."""
+        from astrbot.core.utils.session_waiter import (
+            SessionController,
+            session_waiter,
+        )
+
+        assert SessionController is not None
+        assert callable(session_waiter)

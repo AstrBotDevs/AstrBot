@@ -39,9 +39,11 @@ plugins/.venv/
 
 # Tool caches
 .uv-cache/
+.astrbot/
 
 # IDE files
 .idea/
 .vscode/
 *.iml
 uv.lock
+/astrBot/

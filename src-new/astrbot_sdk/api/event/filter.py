@@ -452,6 +452,10 @@ def platform_adapter_type(
 
 
 class _FilterNamespace:
+    ADMIN = ADMIN
+    PermissionType = PermissionType
+    EventMessageType = EventMessageType
+    PlatformAdapterType = PlatformAdapterType
     command = staticmethod(command)
     regex = staticmethod(regex)
     permission = staticmethod(permission)

@@ -400,6 +400,13 @@ class LegacyContext:
             raise RuntimeError("LegacyContext 尚未绑定运行时 Context")
         return self._runtime_context
 
+    def get_config(self) -> dict[str, Any]:
+        runtime_context = self._runtime_context
+        if runtime_context is None:
+            return {}
+        config = getattr(runtime_context, "_astrbot_config", None)
+        return dict(config) if isinstance(config, dict) else {}
+
     @staticmethod
     def _merge_llm_kwargs(
         *,
@@ -591,6 +598,53 @@ class LegacyStar(Star):
         self.context = context
         if config is not None:
             self.config = config
+
+    def _require_legacy_context(self) -> LegacyContext:
+        if self.context is None:
+            raise RuntimeError("LegacyStar 尚未绑定 compat Context")
+        return self.context
+
+    async def put_kv_data(self, key: str, value: Any) -> None:
+        await self._require_legacy_context().put_kv_data(key, value)
+
+    async def get_kv_data(self, key: str, default: Any = None) -> Any:
+        return await self._require_legacy_context().get_kv_data(key, default)
+
+    async def delete_kv_data(self, key: str) -> None:
+        await self._require_legacy_context().delete_kv_data(key)
+
+    async def send_message(self, session: str, message_chain: Any) -> None:
+        await self._require_legacy_context().send_message(session, message_chain)
+
+    async def llm_generate(
+        self,
+        chat_provider_id: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        return await self._require_legacy_context().llm_generate(
+            chat_provider_id,
+            *args,
+            **kwargs,
+        )
+
+    async def tool_loop_agent(
+        self,
+        chat_provider_id: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        return await self._require_legacy_context().tool_loop_agent(
+            chat_provider_id,
+            *args,
+            **kwargs,
+        )
+
+    async def add_llm_tools(self, *tools: Any) -> None:
+        await self._require_legacy_context().add_llm_tools(*tools)
+
+    def get_config(self) -> dict[str, Any]:
+        return self._require_legacy_context().get_config()
 
     @classmethod
     def __astrbot_is_new_star__(cls) -> bool:

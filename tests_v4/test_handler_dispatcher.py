@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.utils.session_waiter import SessionController, session_waiter
+from astrbot_sdk._legacy_api import LegacyContext
 from astrbot_sdk.api.event import AstrMessageEvent
 from astrbot_sdk.api.message import Comp, MessageChain
 from astrbot_sdk.context import CancelToken, Context
@@ -428,6 +430,81 @@ class TestHandlerDispatcherInvoke:
         await dispatcher.invoke(message, CancelToken())
 
         assert sent_messages == [{"session_id": "session-sync", "text": "fallback"}]
+
+    @pytest.mark.asyncio
+    async def test_invoke_routes_followup_message_to_session_waiter(self):
+        """compat session_waiter should capture the next message from the same session."""
+        peer = MockPeer()
+        legacy_context = LegacyContext("test_plugin")
+        captured_replies = []
+
+        async def handler_func(event: AstrMessageEvent):
+            await event.send(MessageChain().message("请输入确认内容"))
+
+            @session_waiter(timeout=0.2, record_history_chains=False)
+            async def waiter(controller: SessionController, ev: AstrMessageEvent):
+                captured_replies.append(ev.message_str)
+                await ev.send(MessageChain().message(f"收到:{ev.message_str}"))
+                controller.stop()
+
+            await waiter(event)
+
+        descriptor = HandlerDescriptor(
+            id="legacy.waiter",
+            trigger=CommandTrigger(command="ask"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+        )
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        first_message = InvokeMessage(
+            id="msg_waiter_1",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.waiter",
+                "event": {
+                    "text": "ask",
+                    "session_id": "session-waiter",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+        followup_message = InvokeMessage(
+            id="msg_waiter_2",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.waiter",
+                "event": {
+                    "text": "确认",
+                    "session_id": "session-waiter",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        waiting_task = asyncio.create_task(
+            dispatcher.invoke(first_message, CancelToken())
+        )
+        await asyncio.sleep(0.05)
+        result = await dispatcher.invoke(followup_message, CancelToken())
+        await waiting_task
+
+        assert result == {}
+        assert captured_replies == ["确认"]
+        assert peer.sent_messages == [
+            {"session_id": "session-waiter", "text": "请输入确认内容"},
+            {"session_id": "session-waiter", "text": "收到:确认"},
+        ]
 
 
 class TestHandlerDispatcherCancel:
