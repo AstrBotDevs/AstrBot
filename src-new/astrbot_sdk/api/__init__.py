@@ -1,4 +1,4 @@
-"""**兼容层** - 旧版 ``astrbot_sdk.api`` 导入路径的向后兼容入口。
+"""旧版 ``astrbot_sdk.api`` 导入路径的向后兼容入口。
 
 .. warning::
    本目录是 ** 旧版本兼容层**，仅供旧版插件使用。
@@ -26,8 +26,9 @@
     from astrbot_sdk.context import Context
 
 设计说明：
-- 兼容层通过 thin re-export 方式暴露旧版 API
-- 不复制独立运行时逻辑，保持架构清晰
+- ``astrbot_sdk.api`` 是历史导入路径兼容面，不是 v4 原生 API 的推荐入口
+- 这里既包含薄重导出，也包含少量仍需保留行为的 compat 模块
+- 新增运行时逻辑应优先放在 v4 主路径，由 compat 层按需转发或包装
 """
 
 from loguru import logger
