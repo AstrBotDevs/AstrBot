@@ -1,6 +1,6 @@
 <template>
 
-    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
+    <div class="settings-container">
 
         <v-list lines="two">
             <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
@@ -27,7 +27,7 @@
                             hide-details
                             variant="outlined"
                             density="compact"
-                            style="max-width: 220px;"
+                            class="color-field"
                         />
                     </v-col>
                     <v-col cols="4" sm="2   ">
@@ -38,7 +38,7 @@
                             hide-details
                             variant="outlined"
                             density="compact"
-                            style="max-width: 220px;"
+                            class="color-field"
                         />
                     </v-col>
                     <v-col cols="12">
@@ -53,14 +53,14 @@
             <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
 
             <v-list-item :subtitle="tm('system.backup.subtitle')" :title="tm('system.backup.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="openBackupDialog">
+                <v-btn class="mt-4" color="primary" @click="openBackupDialog">
                     <v-icon class="mr-2">mdi-backup-restore</v-icon>
                     {{ tm('system.backup.button') }}
                 </v-btn>
             </v-list-item>
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
-                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
+                <v-btn class="mt-4" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
             </v-list-item>
 
             <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
@@ -144,7 +144,7 @@
                                     <v-icon class="mr-1">mdi-content-copy</v-icon>{{ tm('apiKey.copy') }}
                                 </v-btn>
                             </div>
-                            <code style="word-break: break-all;">{{ createdApiKeyPlaintext }}</code>
+                            <code class="api-key-code">{{ createdApiKeyPlaintext }}</code>
                         </v-alert>
                     </v-col>
 
@@ -211,7 +211,7 @@
         </v-list>
 
             <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button') }}</v-btn>
+                <v-btn class="mt-4" color="primary" @click="startMigration">{{ tm('system.migration.button') }}</v-btn>
             </v-list-item>
 
     </div>
@@ -486,3 +486,21 @@ onMounted(() => {
     loadApiKeys();
 });
 </script>
+
+<style scoped>
+.settings-container {
+    background-color: var(--v-theme-surface, #fff);
+    padding: 8px;
+    padding-left: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.color-field {
+    max-width: 220px;
+}
+
+.api-key-code {
+    word-break: break-all;
+}
+</style>

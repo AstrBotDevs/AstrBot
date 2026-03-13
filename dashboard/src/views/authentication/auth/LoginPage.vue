@@ -6,21 +6,14 @@ import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
+import { useThemeToggle } from '@/composables/useThemeToggle';
 
 const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
 const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
-const theme = useTheme();
-
-// 主题切换函数
-function toggleTheme() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
-}
+const { toggleTheme } = useThemeToggle();
 
 onMounted(() => {
   // 检查用户是否已登录，如果已登录则重定向

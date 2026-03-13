@@ -7,9 +7,12 @@ import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
 import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 
+import { useThemeToggle } from '@/composables/useThemeToggle';
+
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
+const { toggleTheme: toggleDarkMode } = useThemeToggle();
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -297,6 +300,11 @@ function openChangelogDialog() {
         <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
           {{ t('core.navigation.settings') }}
         </v-btn>
+        <v-btn class="sidebar-footer-btn" size="small" variant="text" 
+          :prepend-icon="customizer.uiTheme === 'PurpleThemeDark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny'"
+          @click="toggleDarkMode">
+          {{ customizer.uiTheme === 'PurpleThemeDark' ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
+        </v-btn>
         <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
           @click="openChangelogDialog">
           {{ t('core.navigation.changelog') }}
@@ -316,8 +324,7 @@ function openChangelogDialog() {
             v-if="starCount"
             size="x-small"
             variant="outlined"
-            class="ml-2"
-            style="font-weight: normal;"
+            class="ml-2 star-count-chip"
           >{{ formatNumber(starCount) }}</v-chip>
         </v-btn>
       </div>
@@ -339,16 +346,16 @@ function openChangelogDialog() {
   >
 
     <div :style="dragHeaderStyle" @mousedown="onMouseDown" @touchstart="onTouchStart">
-      <div style="display: flex; align-items: center;">
+      <div class="drag-header-title">
         <v-icon icon="mdi-cursor-move" />
-        <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
+        <span class="drag-header-text">{{ t('core.navigation.drag') }}</span>
       </div>
-      <div style="display: flex; gap: 8px;">
+      <div class="drag-header-actions">
         <v-btn
           icon
           @click.stop="openIframeLink('https://astrbot.app')"
           @mousedown.stop
-          style="border-radius: 8px; border: 1px solid #ccc;"
+          class="drag-header-btn"
         >
           <v-icon icon="mdi-open-in-new" />
         </v-btn>
@@ -356,7 +363,7 @@ function openChangelogDialog() {
           icon
           @click.stop="toggleIframe"
           @mousedown.stop
-          style="border-radius: 8px; border: 1px solid #ccc;"
+          class="drag-header-btn"
         >
           <v-icon icon="mdi-close" />
         </v-btn>
@@ -364,7 +371,7 @@ function openChangelogDialog() {
     </div>
     <iframe
       src="https://astrbot.app"
-      style="width: 100%; height: calc(100% - 66px); border: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;"
+      class="iframe-content"
       ></iframe>
   </div>
 
@@ -373,6 +380,37 @@ function openChangelogDialog() {
 </template>
 
 <style scoped>
+.star-count-chip {
+  font-weight: normal;
+}
+
+.drag-header-title {
+  display: flex;
+  align-items: center;
+}
+
+.drag-header-text {
+  margin-left: 8px;
+}
+
+.drag-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.drag-header-btn {
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-border-color), 0.2);
+}
+
+.iframe-content {
+  width: 100%;
+  height: calc(100% - 66px);
+  border: none;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
 .sidebar-resize-handle {
   position: absolute;
   top: 0;

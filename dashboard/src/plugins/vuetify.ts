@@ -17,12 +17,38 @@ export default createVuetify({
     }
   },
   defaults: {
-    VBtn: {},
+    VBtn: {
+      elevation: 0,
+      variant: 'flat',
+      rounded: 'md'
+    },
     VCard: {
-      rounded: 'lg'
+      elevation: 0,
+      rounded: 'lg',
+      variant: 'flat'
     },
     VTextField: {
-      rounded: 'lg'
+      rounded: 'lg',
+      variant: 'outlined',
+      density: 'comfortable'
+    },
+    VSelect: {
+      rounded: 'lg',
+      variant: 'outlined',
+      density: 'comfortable'
+    },
+    VTextarea: {
+      rounded: 'lg',
+      variant: 'outlined',
+      density: 'comfortable'
+    },
+    VChip: {
+      elevation: 0,
+      rounded: 'md',
+      variant: 'tonal'
+    },
+    VDialog: {
+      maxWidth: '600px'
     },
     VTooltip: {
       // set v-tooltip default location to top

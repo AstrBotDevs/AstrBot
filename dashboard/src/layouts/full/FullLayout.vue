@@ -106,25 +106,22 @@ onMounted(() => {
         height="2"
         fixed
         top
-        style="z-index: 9999; position: absolute; opacity: 0.3; "
+        class="router-loading-bar"
       />
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
-      <v-main :style="{
-        height: showChatPage ? 'calc(100vh - 55px)' : undefined,
-        overflow: showChatPage ? 'hidden' : undefined
-      }">
+      <v-main :class="{ 'chat-mode-main': showChatPage }">
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': showChatPage }"
-          :style="{
-            height: showChatPage ? '100%' : 'calc(100% - 8px)',
-            padding: (isChatPage || showChatPage) ? '0' : undefined,
-            minHeight: showChatPage ? 'unset' : undefined
-          }">
-          <div :style="{ height: '100%', width: '100%', overflow: showChatPage ? 'hidden' : undefined }">
-            <div v-if="showChatPage" style="height: 100%; width: 100%; overflow: hidden;">
+          :class="{ 
+            'chat-mode-container': showChatPage,
+            'bot-mode-container': !showChatPage,
+            'pa-0': isChatPage || showChatPage
+          }"
+        >
+          <div class="h-100 w-100" :class="{ 'overflow-hidden': showChatPage }">
+            <div v-if="showChatPage" class="h-100 w-100 overflow-hidden">
               <Chat />
             </div>
             <RouterView v-else />
@@ -143,9 +140,24 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.router-loading-bar {
+  z-index: 9999;
+  position: absolute;
+  opacity: 0.3;
+}
+
+.chat-mode-main {
+  height: calc(100vh - 55px);
+  overflow: hidden;
+}
+
 .chat-mode-container {
   min-height: unset !important;
   height: 100% !important;
   overflow: hidden !important;
+}
+
+.bot-mode-container {
+  height: calc(100% - 8px);
 }
 </style>
