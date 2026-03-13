@@ -78,7 +78,7 @@ Pour les utilisateurs qui veulent découvrir AstrBot rapidement, qui sont famili
 ```bash
 uv tool install astrbot
 astrbot init # Exécutez cette commande uniquement la première fois pour initialiser l'environnement
-astrbot
+astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) doit être installé.
