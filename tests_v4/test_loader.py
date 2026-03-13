@@ -1439,7 +1439,7 @@ class TestLoadPlugin:
 
             assert len(loaded.instances) == 1
             instance = loaded.instances[0]
-            assert Path(instance.data_dir) == plugin_dir / "data"
+            assert Path(instance.data_dir).resolve() == (plugin_dir / "data").resolve()
 
             commands = [
                 handler.descriptor.trigger.command

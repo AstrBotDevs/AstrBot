@@ -933,7 +933,9 @@ class TestSupervisorRuntimePluginLoading:
                     == manager._plan_result.plugin_to_group["plugin_b"].id
                 )
                 assert shared_group.id != isolated_group.id
-                assert prepared_groups.count(shared_group.id) == 2
+                assert len(runtime.worker_sessions) == 2
+                assert core.remote_metadata["worker_group_count"] == 2
+                assert prepared_groups.count(shared_group.id) == 1
                 assert prepared_groups.count(isolated_group.id) == 1
 
                 shared_venv_path = shared_group.venv_path

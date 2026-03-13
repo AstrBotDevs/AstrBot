@@ -302,6 +302,13 @@ class EnvironmentPlanner:
                     "group_id": group_id,
                     "python_version": python_version,
                     "plugins": [plugin.name for plugin in plugins],
+                    "plugin_entries": [
+                        {
+                            "name": plugin.name,
+                            "plugin_dir": str(plugin.plugin_dir),
+                        }
+                        for plugin in plugins
+                    ],
                     "source_path": str(source_path),
                     "lockfile_path": str(lockfile_path),
                     "venv_path": str(venv_path),

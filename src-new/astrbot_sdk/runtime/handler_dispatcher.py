@@ -89,7 +89,7 @@ class HandlerDispatcher:
         self._peer = peer
         self._handlers = {item.descriptor.id: item for item in handlers}
         self._active: dict[str, tuple[asyncio.Task[Any], CancelToken]] = {}
-        self._session_waiters = SessionWaiterManager()
+        self._session_waiters: dict[str, SessionWaiterManager] = {}
 
     async def invoke(self, message, cancel_token: CancelToken) -> dict[str, Any]:
         handler_id = str(message.input.get("handler_id", ""))
@@ -97,13 +97,15 @@ class HandlerDispatcher:
         if loaded is None:
             raise LookupError(f"handler not found: {handler_id}")
 
-        ctx = Context(
-            peer=self._peer, plugin_id=self._plugin_id, cancel_token=cancel_token
+        plugin_id = self._resolve_plugin_id(loaded)
+        ctx = Context(peer=self._peer, plugin_id=plugin_id, cancel_token=cancel_token)
+        session_waiters = self._session_waiters.setdefault(
+            plugin_id, SessionWaiterManager()
         )
-        ctx._session_waiter_manager = self._session_waiters
+        ctx._session_waiter_manager = session_waiters
         event = MessageEvent.from_payload(message.input.get("event", {}), context=ctx)
         event.bind_reply_handler(self._create_reply_handler(ctx, event))
-        if await self._session_waiters.dispatch(event):
+        if await session_waiters.dispatch(event):
             return {}
         legacy_runtime = get_legacy_runtime_adapter(loaded)
         if legacy_runtime is not None:
@@ -121,6 +123,14 @@ class HandlerDispatcher:
             return {}
         finally:
             self._active.pop(message.id, None)
+
+    def _resolve_plugin_id(self, loaded: LoadedHandler) -> str:
+        if loaded.plugin_id:
+            return loaded.plugin_id
+        handler_id = getattr(loaded.descriptor, "id", "")
+        if isinstance(handler_id, str) and ":" in handler_id:
+            return handler_id.split(":", 1)[0]
+        return self._plugin_id
 
     def _create_reply_handler(self, ctx: Context, event: MessageEvent):
         async def reply(text: str) -> None:
@@ -182,6 +192,7 @@ class HandlerDispatcher:
                 ctx,
                 legacy_runtime=legacy_runtime,
                 handler_name=loaded.callable.__name__,
+                plugin_id=self._resolve_plugin_id(loaded),
             )
             raise
 
@@ -376,10 +387,11 @@ class HandlerDispatcher:
         *,
         legacy_runtime=None,
         handler_name: str = "",
+        plugin_id: str | None = None,
     ) -> None:
         if legacy_runtime is not None:
             await legacy_runtime.handle_error(
-                plugin_id=self._plugin_id,
+                plugin_id=plugin_id or self._plugin_id,
                 handler_name=handler_name,
                 exc=exc,
                 event=event,
@@ -418,9 +430,10 @@ class CapabilityDispatcher:
         if loaded is None:
             raise LookupError(f"capability not found: {message.capability}")
 
+        plugin_id = self._resolve_plugin_id(loaded)
         ctx = Context(
             peer=self._peer,
-            plugin_id=self._plugin_id,
+            plugin_id=plugin_id,
             cancel_token=cancel_token,
         )
         legacy_runtime = get_legacy_runtime_adapter(loaded)
@@ -441,6 +454,11 @@ class CapabilityDispatcher:
             return await task
         finally:
             self._active.pop(message.id, None)
+
+    def _resolve_plugin_id(self, loaded: LoadedCapability) -> str:
+        if loaded.plugin_id:
+            return loaded.plugin_id
+        return self._plugin_id
 
     async def cancel(self, request_id: str) -> None:
         active = self._active.get(request_id)
