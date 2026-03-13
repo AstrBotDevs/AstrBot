@@ -1,6 +1,7 @@
 from __future__ import annotations  # 启用延迟类型注解求值，避免循环引用
 
 import asyncio
+import shutil
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -106,3 +107,16 @@ async def drain_loop() -> None:
     睡眠时间(0.05秒)足够短不会明显减慢测试，又足够长让事件循环有机会处理任务。
     """
     await asyncio.sleep(0.05)  # 暂停当前协程50毫秒，让出控制权给事件循环
+
+
+def sample_plugin_dir(name: str) -> Path:
+    return Path(__file__).resolve().parents[1] / "test_plugin" / name
+
+
+def copy_sample_plugin(name: str, destination: Path) -> Path:
+    shutil.copytree(
+        sample_plugin_dir(name),
+        destination,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    return destination

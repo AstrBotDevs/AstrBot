@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,11 +9,11 @@ from astrbot_sdk.protocol.messages import InitializeOutput, PeerInfo
 from astrbot_sdk.runtime.bootstrap import SupervisorRuntime
 from astrbot_sdk.runtime.peer import Peer
 
-from tests_v4.helpers import FakeEnvManager, make_transport_pair
-
-
-def sample_plugin_dir(name: str) -> Path:
-    return Path(__file__).resolve().parents[1] / "test_plugin" / name
+from tests_v4.helpers import (
+    FakeEnvManager,
+    copy_sample_plugin,
+    make_transport_pair,
+)
 
 
 class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
@@ -50,7 +49,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+            copy_sample_plugin("new", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -86,7 +85,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+            copy_sample_plugin("new", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -157,7 +156,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+            copy_sample_plugin("new", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -194,7 +193,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+            copy_sample_plugin("new", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -237,7 +236,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            shutil.copytree(sample_plugin_dir("new"), plugin_root)
+            copy_sample_plugin("new", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -262,7 +261,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            shutil.copytree(Path.cwd() / "test_plugin" / "old", plugin_root)
+            copy_sample_plugin("old", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -299,7 +298,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            shutil.copytree(Path.cwd() / "test_plugin" / "old", plugin_root)
+            copy_sample_plugin("old", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -382,7 +381,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            shutil.copytree(Path.cwd() / "test_plugin" / "old", plugin_root)
+            copy_sample_plugin("old", plugin_root, ascii_only=True)
 
             runtime = SupervisorRuntime(
                 transport=self.right,

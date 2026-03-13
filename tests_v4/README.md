@@ -8,8 +8,7 @@ This test suite uses **pytest** with `pytest-asyncio` for testing the AstrBot SD
 
 ```
 tests_v4/
-├── conftest.py              # Shared fixtures and configuration
-├── pytest.ini               # Pytest configuration
+├── conftest.py              # Shared fixtures and path bootstrap
 ├── test_api_contract.py     # API contract tests
 ├── test_api_decorators.py   # Decorator and Star class tests
 ├── test_context.py          # Context and CancelToken tests
