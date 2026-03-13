@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import typing
+import zipfile
 from collections.abc import Coroutine
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import click
@@ -14,6 +17,7 @@ from loguru import logger
 
 from .errors import AstrBotError
 from .runtime.bootstrap import run_plugin_worker, run_supervisor, run_websocket_server
+from .runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec
 from .testing import (
     LocalRuntimeConfig,
     PluginHarness,
@@ -28,6 +32,23 @@ EXIT_USAGE = 2
 EXIT_PLUGIN_LOAD = 3
 EXIT_RUNTIME = 4
 EXIT_PLUGIN_EXECUTION = 5
+BUILD_EXCLUDED_DIRS = {
+    ".git",
+    ".idea",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "dist",
+}
+BUILD_EXCLUDED_FILES = {
+    ".astrbot-worker-state.json",
+}
+
+
+class _CliPluginValidationError(RuntimeError):
+    """CLI 侧的插件结构或打包校验失败。"""
 
 
 def setup_logger(verbose: bool = False) -> None:
@@ -65,6 +86,30 @@ def _run_async_entrypoint(
         raise SystemExit(exit_code) from exc
 
 
+def _run_sync_entrypoint(
+    entrypoint: typing.Callable[[], object],
+    *,
+    log_message: str,
+    log_level: str = "info",
+    context: dict[str, Any] | None = None,
+) -> None:
+    log_method = getattr(logger, log_level)
+    log_method(log_message)
+    try:
+        entrypoint()
+    except Exception as exc:
+        exit_code, error_code, hint = _classify_cli_exception(exc)
+        _render_cli_error(
+            error_code=error_code,
+            message=str(exc),
+            hint=hint,
+            context=context,
+        )
+        if exit_code == EXIT_UNEXPECTED:
+            logger.exception("CLI 异常退出")
+        raise SystemExit(exit_code) from exc
+
+
 def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
     if isinstance(exc, AstrBotError):
         return (
@@ -74,7 +119,13 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
         )
     if isinstance(
         exc,
-        (_PluginLoadError, FileNotFoundError, ImportError, ModuleNotFoundError),
+        (
+            _CliPluginValidationError,
+            _PluginLoadError,
+            FileNotFoundError,
+            ImportError,
+            ModuleNotFoundError,
+        ),
     ):
         return (
             EXIT_PLUGIN_LOAD,
@@ -212,6 +263,201 @@ def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:
     return False
 
 
+def _slugify_plugin_name(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", value).strip("_").lower()
+    return slug or "my_plugin"
+
+
+def _class_name_for_plugin(value: str) -> str:
+    parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
+    if not parts:
+        return "MyPlugin"
+    return "".join(part[:1].upper() + part[1:] for part in parts)
+
+
+def _sanitize_build_part(value: str) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]+", "_", value).strip("._-")
+    return sanitized or "artifact"
+
+
+def _render_init_plugin_yaml(*, plugin_name: str, display_name: str) -> str:
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    class_name = _class_name_for_plugin(plugin_name)
+    return dedent(
+        f"""\
+        name: {plugin_name}
+        display_name: {display_name}
+        desc: 使用 AstrBot SDK 创建的插件
+        author: your-name
+        version: 0.1.0
+        runtime:
+          python: "{python_version}"
+        components:
+          - class: main:{class_name}
+        """
+    )
+
+
+def _render_init_main_py(*, plugin_name: str) -> str:
+    class_name = _class_name_for_plugin(plugin_name)
+    return dedent(
+        f"""\
+        from astrbot_sdk import Context, MessageEvent, Star, on_command
+
+
+        class {class_name}(Star):
+            @on_command("hello")
+            async def hello(self, event: MessageEvent, ctx: Context) -> None:
+                await event.reply("Hello, World!")
+        """
+    )
+
+
+def _render_init_test_py(*, plugin_name: str) -> str:
+    class_name = _class_name_for_plugin(plugin_name)
+    return dedent(
+        f'''\
+        import pytest
+
+        from astrbot_sdk.testing import MockContext, MockMessageEvent
+        from main import {class_name}
+
+
+        @pytest.mark.asyncio
+        async def test_hello_handler():
+            plugin = {class_name}()
+            ctx = MockContext(plugin_id="{plugin_name}")
+            event = MockMessageEvent(text="/hello", context=ctx)
+
+            await plugin.hello(event, ctx)
+
+            assert event.replies == ["Hello, World!"]
+            ctx.platform.assert_sent("Hello, World!")
+        '''
+    )
+
+
+def _ensure_plugin_dir_exists(plugin_dir: Path) -> Path:
+    resolved = plugin_dir.resolve()
+    if not resolved.exists() or not resolved.is_dir():
+        raise _CliPluginValidationError(f"插件目录不存在：{plugin_dir}")
+    return resolved
+
+
+def _load_validated_plugin(plugin_dir: Path) -> tuple[Any, Any]:
+    resolved_dir = _ensure_plugin_dir_exists(plugin_dir)
+    plugin = load_plugin_spec(resolved_dir)
+    try:
+        validate_plugin_spec(plugin)
+    except ValueError as exc:
+        raise _CliPluginValidationError(str(exc)) from exc
+
+    loaded = load_plugin(plugin)
+    if not loaded.instances:
+        raise _CliPluginValidationError(
+            "未找到可加载的组件，请检查 plugin.yaml 中的 components"
+        )
+    return plugin, loaded
+
+
+def _build_kind(plugin: Any) -> str:
+    return (
+        "legacy-main"
+        if bool(plugin.manifest_data.get("__legacy_main__"))
+        else "plugin-yaml"
+    )
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in sorted(plugin_dir.rglob("*")):
+        if path.is_dir():
+            continue
+        if _path_is_within(path, output_dir):
+            continue
+        relative = path.relative_to(plugin_dir)
+        if any(part in BUILD_EXCLUDED_DIRS for part in relative.parts[:-1]):
+            continue
+        if relative.name in BUILD_EXCLUDED_FILES:
+            continue
+        if path.suffix in {".pyc", ".pyo"}:
+            continue
+        files.append(path)
+    return files
+
+
+def _init_plugin(name: str) -> None:
+    target_dir = Path(name)
+    if target_dir.exists():
+        raise _CliPluginValidationError(f"目标目录已存在：{target_dir}")
+
+    plugin_name = _slugify_plugin_name(target_dir.name)
+    display_name = target_dir.name
+    target_dir.mkdir(parents=True, exist_ok=False)
+    (target_dir / "tests").mkdir()
+    (target_dir / "plugin.yaml").write_text(
+        _render_init_plugin_yaml(
+            plugin_name=plugin_name,
+            display_name=display_name,
+        ),
+        encoding="utf-8",
+    )
+    (target_dir / "requirements.txt").write_text("", encoding="utf-8")
+    (target_dir / "main.py").write_text(
+        _render_init_main_py(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    (target_dir / "tests" / "test_plugin.py").write_text(
+        _render_init_test_py(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    click.echo(f"已创建插件骨架：{target_dir}")
+    click.echo("后续命令：")
+    click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
+    click.echo(
+        f"  astrbot-sdk dev --local --plugin-dir {target_dir} --event-text hello"
+    )
+
+
+def _validate_plugin(plugin_dir: Path) -> None:
+    plugin, loaded = _load_validated_plugin(plugin_dir)
+    click.echo(f"校验通过：{plugin.name}")
+    click.echo(f"kind: {_build_kind(plugin)}")
+    click.echo(f"plugin_dir: {plugin.plugin_dir}")
+    click.echo(f"handlers: {len(loaded.handlers)}")
+    click.echo(f"capabilities: {len(loaded.capabilities)}")
+    click.echo(f"instances: {len(loaded.instances)}")
+
+
+def _build_plugin(plugin_dir: Path, output_dir: Path | None) -> None:
+    plugin, _ = _load_validated_plugin(plugin_dir)
+    build_dir = (output_dir or (plugin.plugin_dir / "dist")).resolve()
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    version = _sanitize_build_part(str(plugin.manifest_data.get("version") or "0.0.0"))
+    archive_name = f"{_sanitize_build_part(plugin.name)}-{version}.zip"
+    archive_path = build_dir / archive_name
+
+    with zipfile.ZipFile(
+        archive_path,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as archive:
+        for path in _iter_build_files(plugin.plugin_dir, build_dir):
+            archive.write(path, arcname=path.relative_to(plugin.plugin_dir))
+
+    click.echo(f"构建完成：{archive_path}")
+    click.echo(f"artifact: {archive_path}")
+
+
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
 @click.pass_context
@@ -235,6 +481,57 @@ def run(plugins_dir: Path) -> None:
         run_supervisor(plugins_dir=plugins_dir),
         log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
         context={"plugins_dir": plugins_dir},
+    )
+
+
+@cli.command()
+@click.argument("name", type=str)
+def init(name: str) -> None:
+    """Create a new plugin skeleton in the target directory."""
+    _run_sync_entrypoint(
+        lambda: _init_plugin(name),
+        log_message=f"创建插件骨架：{name}",
+        context={"target": Path(name)},
+    )
+
+
+@cli.command()
+@click.option(
+    "--plugin-dir",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    help="Plugin directory to validate",
+)
+def validate(plugin_dir: Path) -> None:
+    """Validate plugin manifest, imports and handler discovery."""
+    _run_sync_entrypoint(
+        lambda: _validate_plugin(plugin_dir),
+        log_message=f"校验插件目录：{plugin_dir}",
+        context={"plugin_dir": plugin_dir},
+    )
+
+
+@cli.command()
+@click.option(
+    "--plugin-dir",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    help="Plugin directory to package",
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    help="Directory for the build artifact, defaults to <plugin-dir>/dist",
+)
+def build(plugin_dir: Path, output_dir: Path | None) -> None:
+    """Validate and package a plugin into a zip artifact."""
+    _run_sync_entrypoint(
+        lambda: _build_plugin(plugin_dir, output_dir),
+        log_message=f"构建插件包：{plugin_dir}",
+        context={"plugin_dir": plugin_dir, "output_dir": output_dir},
     )
 
 

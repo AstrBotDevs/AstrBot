@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib
 import runpy
 import sys
+import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -39,6 +40,7 @@ from astrbot_sdk.runtime.transport import (
 from astrbot_sdk.star import Star
 from astrbot_sdk.testing import _PluginLoadError
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TOP_LEVEL_MODULES = [
     "astrbot_sdk",
     "astrbot_sdk._legacy_api",
@@ -294,6 +296,105 @@ class TestCliModule:
         assert result.exit_code == 3
         assert "Error[plugin_load_error]" in result.output
         assert "Suggestion:" in result.output
+
+    def test_init_command_creates_plugin_skeleton(self):
+        """init should generate a loader-compatible plugin skeleton."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            result = runner.invoke(cli, ["init", "demo-plugin"])
+
+            plugin_dir = Path("demo-plugin")
+            manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            main_file = (plugin_dir / "main.py").read_text(encoding="utf-8")
+            test_file = (plugin_dir / "tests" / "test_plugin.py").read_text(
+                encoding="utf-8"
+            )
+
+        assert result.exit_code == 0
+        assert "已创建插件骨架" in result.output
+        assert "name: demo_plugin" in manifest
+        assert (
+            f'python: "{sys.version_info.major}.{sys.version_info.minor}"' in manifest
+        )
+        assert "class DemoPlugin(Star):" in main_file
+        assert "MockContext" in test_file
+        assert "MockMessageEvent" in test_file
+
+    def test_validate_command_checks_real_plugin_fixture(self):
+        """validate should reuse loader-based discovery against a real v4 fixture."""
+        runner = CliRunner()
+
+        result = runner.invoke(
+            cli,
+            [
+                "validate",
+                "--plugin-dir",
+                str(REPO_ROOT / "test_plugin" / "new"),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "校验通过：astrbot_plugin_v4demo" in result.output
+        assert "handlers:" in result.output
+        assert "capabilities:" in result.output
+
+    def test_validate_command_maps_invalid_component_to_exit_code_3(self):
+        """validate should fail with a friendly plugin-load error on broken manifests."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            plugin_dir = Path("broken-plugin")
+            plugin_dir.mkdir()
+            (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+            (plugin_dir / "plugin.yaml").write_text(
+                "\n".join(
+                    [
+                        "name: broken_plugin",
+                        "runtime:",
+                        '  python: "3.12"',
+                        "components:",
+                        "  - class: broken",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = runner.invoke(cli, ["validate", "--plugin-dir", str(plugin_dir)])
+
+        assert result.exit_code == 3
+        assert "Error[plugin_load_error]" in result.output
+        assert "components[0].class" in result.output
+
+    def test_build_command_creates_zip_artifact(self):
+        """build should validate first and then package the plugin directory into a zip."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            init_result = runner.invoke(cli, ["init", "buildable-plugin"])
+            assert init_result.exit_code == 0
+
+            result = runner.invoke(
+                cli,
+                [
+                    "build",
+                    "--plugin-dir",
+                    "buildable-plugin",
+                ],
+            )
+
+            artifact_dir = Path("buildable-plugin") / "dist"
+            artifacts = sorted(artifact_dir.glob("*.zip"))
+            assert len(artifacts) == 1
+            with zipfile.ZipFile(artifacts[0]) as archive:
+                names = set(archive.namelist())
+
+        assert result.exit_code == 0
+        assert "构建完成：" in result.output
+        assert "plugin.yaml" in names
+        assert "main.py" in names
+        assert "requirements.txt" in names
+        assert "tests/test_plugin.py" in names
 
     def test_main_module_invokes_cli_entrypoint(self):
         """Running astrbot_sdk.__main__ as a script should call cli()."""

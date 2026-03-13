@@ -279,13 +279,21 @@ from astrbot.core.utils.session_waiter import session_waiter
 
 当前仓库已经提供一条受控的本地开发路径：
 
-- CLI：`astr dev --local` 与 `astrbot-sdk dev --local`
+- CLI：
+  - `astr dev --local` / `astrbot-sdk dev --local`
+  - `astrbot-sdk init`
+  - `astrbot-sdk validate`
+  - `astrbot-sdk build`
 - 稳定测试入口：`astrbot_sdk.testing`
 
 `astrbot_sdk.testing` 当前公开的稳定面包括：
 
 - `PluginHarness`
 - `LocalRuntimeConfig`
+- `MockContext`
+- `MockMessageEvent`
+- `MockLLMClient`
+- `MockPlatformClient`
 - `MockPeer`
 - `MockCapabilityRouter`
 - `InMemoryDB`

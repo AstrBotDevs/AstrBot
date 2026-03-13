@@ -188,14 +188,82 @@ class InMemoryMemory:
         return results
 
 
+class MockLLMClient:
+    """在真实 LLMClient 之上补一层测试控制能力。"""
+
+    def __init__(self, client: Any, router: "MockCapabilityRouter") -> None:
+        self._client = client
+        self._router = router
+
+    def mock_response(self, text: str) -> None:
+        self._router.enqueue_llm_response(text)
+
+    def mock_stream_response(self, text: str) -> None:
+        self._router.enqueue_llm_stream_response(text)
+
+    def clear_mock_responses(self) -> None:
+        self._router.clear_llm_responses()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._client, name)
+
+
+class MockPlatformClient:
+    """在真实 PlatformClient 之上补一层断言入口。"""
+
+    def __init__(self, client: Any, sink: StdoutPlatformSink) -> None:
+        self._client = client
+        self._sink = sink
+
+    @property
+    def records(self) -> list[RecordedSend]:
+        return list(self._sink.records)
+
+    def assert_sent(
+        self,
+        expected_text: str | None = None,
+        *,
+        kind: str = "text",
+        count: int | None = None,
+    ) -> None:
+        matched = [item for item in self._sink.records if item.kind == kind]
+        if expected_text is not None:
+            matched = [item for item in matched if item.text == expected_text]
+        if count is not None:
+            if len(matched) != count:
+                raise AssertionError(
+                    f"expected {count} sent records, got {len(matched)}: {matched}"
+                )
+            return
+        if not matched:
+            raise AssertionError(
+                f"expected sent record kind={kind!r} text={expected_text!r}, got {self._sink.records}"
+            )
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._client, name)
+
+
 class MockCapabilityRouter(CapabilityRouter):
     """本地 mock core，直接复用已有的内建 capability 实现。"""
 
     def __init__(self, *, platform_sink: StdoutPlatformSink | None = None) -> None:
         self.platform_sink = platform_sink or StdoutPlatformSink()
+        self._llm_responses: list[str] = []
+        self._llm_stream_responses: list[str] = []
         super().__init__()
         self.db = InMemoryDB(self.db_store)
         self.memory = InMemoryMemory(self.memory_store)
+
+    def enqueue_llm_response(self, text: str) -> None:
+        self._llm_responses.append(text)
+
+    def enqueue_llm_stream_response(self, text: str) -> None:
+        self._llm_stream_responses.append(text)
+
+    def clear_llm_responses(self) -> None:
+        self._llm_responses.clear()
+        self._llm_stream_responses.clear()
 
     async def execute(
         self,
@@ -206,6 +274,34 @@ class MockCapabilityRouter(CapabilityRouter):
         cancel_token,
         request_id: str,
     ) -> dict[str, Any] | StreamExecution:
+        if capability == "llm.chat":
+            return {"text": self._take_llm_response(str(payload.get("prompt", "")))}
+        if capability == "llm.chat_raw":
+            text = self._take_llm_response(str(payload.get("prompt", "")))
+            return {
+                "text": text,
+                "usage": {
+                    "input_tokens": len(str(payload.get("prompt", ""))),
+                    "output_tokens": len(text),
+                },
+                "finish_reason": "stop",
+                "tool_calls": [],
+            }
+        if capability == "llm.stream_chat":
+            text = self._take_llm_stream_response(str(payload.get("prompt", "")))
+
+            async def iterator() -> typing.AsyncIterator[dict[str, Any]]:
+                for char in text:
+                    cancel_token.raise_if_cancelled()
+                    await asyncio.sleep(0)
+                    yield {"text": char}
+
+            return StreamExecution(
+                iterator=iterator(),
+                finalize=lambda chunks: {
+                    "text": "".join(item.get("text", "") for item in chunks)
+                },
+            )
         before = len(self.sent_messages)
         result = await super().execute(
             capability,
@@ -220,6 +316,18 @@ class MockCapabilityRouter(CapabilityRouter):
     def _flush_platform_records(self, start_index: int) -> None:
         for payload in self.sent_messages[start_index:]:
             self.platform_sink.record(RecordedSend.from_payload(payload))
+
+    def _take_llm_response(self, prompt: str) -> str:
+        if self._llm_responses:
+            return self._llm_responses.pop(0)
+        return f"Echo: {prompt}"
+
+    def _take_llm_stream_response(self, prompt: str) -> str:
+        if self._llm_stream_responses:
+            return self._llm_stream_responses.pop(0)
+        if self._llm_responses:
+            return self._llm_responses.pop(0)
+        return f"Echo: {prompt}"
 
 
 class MockPeer:
@@ -298,6 +406,80 @@ class MockPeer:
     def _next_id(self) -> str:
         self._counter += 1
         return f"local_{self._counter:04d}"
+
+
+class MockContext(RuntimeContext):
+    """直接用于 handler 单元测试的轻量运行时上下文。"""
+
+    def __init__(
+        self,
+        *,
+        plugin_id: str = "test-plugin",
+        logger: Any | None = None,
+        cancel_token: CancelToken | None = None,
+        platform_sink: StdoutPlatformSink | None = None,
+    ) -> None:
+        self.platform_sink = platform_sink or StdoutPlatformSink()
+        self.router = MockCapabilityRouter(platform_sink=self.platform_sink)
+        self.mock_peer = MockPeer(self.router)
+        super().__init__(
+            peer=self.mock_peer,
+            plugin_id=plugin_id,
+            cancel_token=cancel_token,
+            logger=logger,
+        )
+        self.llm = MockLLMClient(self.llm, self.router)
+        self.platform = MockPlatformClient(self.platform, self.platform_sink)
+
+    @property
+    def sent_messages(self) -> list[RecordedSend]:
+        return list(self.platform_sink.records)
+
+
+class MockMessageEvent(MessageEvent):
+    """直接用于 handler 单元测试的轻量消息事件。"""
+
+    def __init__(
+        self,
+        *,
+        text: str = "",
+        user_id: str | None = "test-user",
+        group_id: str | None = None,
+        platform: str | None = "test",
+        session_id: str | None = "test-session",
+        raw: dict[str, Any] | None = None,
+        context: MockContext | None = None,
+    ) -> None:
+        self.replies: list[str] = []
+        super().__init__(
+            text=text,
+            user_id=user_id,
+            group_id=group_id,
+            platform=platform,
+            session_id=session_id,
+            raw=raw,
+            context=context,
+        )
+        if context is not None:
+            self.bind_runtime_reply(context)
+        elif self._reply_handler is None:
+            self.bind_reply_handler(self._capture_reply)
+
+    @property
+    def is_private(self) -> bool:
+        return self.group_id is None
+
+    def bind_runtime_reply(self, context: MockContext) -> None:
+        self._context = context
+
+        async def reply(text: str) -> None:
+            self.replies.append(text)
+            await context.platform.send(self.session_ref or self.session_id, text)
+
+        self.bind_reply_handler(reply)
+
+    async def _capture_reply(self, text: str) -> None:
+        self.replies.append(text)
 
 
 @dataclass(slots=True)
@@ -848,7 +1030,11 @@ __all__ = [
     "InMemoryMemory",
     "LocalRuntimeConfig",
     "MockCapabilityRouter",
+    "MockContext",
+    "MockLLMClient",
+    "MockMessageEvent",
     "MockPeer",
+    "MockPlatformClient",
     "PluginHarness",
     "RecordedSend",
     "StdoutPlatformSink",

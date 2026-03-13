@@ -525,6 +525,38 @@ def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
     )
 
 
+def validate_plugin_spec(plugin: PluginSpec) -> None:
+    """校验单个插件规范，供 CLI 和发现流程复用。"""
+    manifest_data = plugin.manifest_data
+    is_legacy_main = bool(manifest_data.get(LEGACY_MAIN_MANIFEST_KEY))
+
+    if not is_legacy_main and not plugin.requirements_path.exists():
+        raise ValueError("missing requirements.txt")
+
+    raw_name = manifest_data.get("name")
+    if not is_legacy_main and (not isinstance(raw_name, str) or not raw_name):
+        raise ValueError("plugin name is required")
+
+    raw_runtime = manifest_data.get("runtime") or {}
+    raw_python = raw_runtime.get("python")
+    if not is_legacy_main and (not isinstance(raw_python, str) or not raw_python):
+        raise ValueError("runtime.python is required")
+
+    components = manifest_data.get("components")
+    if not isinstance(components, list):
+        raise ValueError("components must be a list")
+
+    if is_legacy_main:
+        return
+
+    for index, component in enumerate(components):
+        if not isinstance(component, dict):
+            raise ValueError(f"components[{index}] must be an object")
+        class_path = component.get("class")
+        if not isinstance(class_path, str) or ":" not in class_path:
+            raise ValueError(f"components[{index}].class must be '<module>:<Class>'")
+
+
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
     plugins_root = plugins_dir.resolve()
     skipped_plugins: dict[str, str] = {}
@@ -538,47 +570,33 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
         if not entry.is_dir() or entry.name.startswith("."):
             continue
         manifest_path = entry / PLUGIN_MANIFEST_FILE
-        requirements_path = entry / "requirements.txt"
         if not manifest_path.exists() and not _looks_like_legacy_plugin(entry):
             continue
-        if manifest_path.exists() and not requirements_path.exists():
-            skipped_plugins[entry.name] = "missing requirements.txt"
-            continue
+        plugin: PluginSpec | None = None
         try:
-            if manifest_path.exists():
-                manifest_data = _read_yaml(manifest_path)
-            else:
-                manifest_path, manifest_data = _build_legacy_manifest(entry)
+            plugin = load_plugin_spec(entry)
+            validate_plugin_spec(plugin)
         except Exception as exc:
-            skipped_plugins[entry.name] = f"failed to parse plugin manifest: {exc}"
+            skip_key = entry.name
+            if plugin is not None:
+                raw_name = plugin.manifest_data.get("name")
+                if (
+                    isinstance(raw_name, str)
+                    and raw_name
+                    and str(exc) != "missing requirements.txt"
+                ):
+                    skip_key = raw_name
+            skipped_plugins[skip_key] = f"failed to parse plugin manifest: {exc}"
             continue
-        plugin_name = manifest_data.get("name")
-        runtime = manifest_data.get("runtime") or {}
-        python_version = runtime.get("python")
-        components = manifest_data.get("components")
+        plugin_name = plugin.name
         if not isinstance(plugin_name, str) or not plugin_name:
             skipped_plugins[entry.name] = "plugin name is required"
             continue
         if plugin_name in seen_names:
             skipped_plugins[plugin_name] = "duplicate plugin name"
             continue
-        if not isinstance(components, list):
-            skipped_plugins[plugin_name] = "components must be a list"
-            continue
-        if not isinstance(python_version, str) or not python_version:
-            skipped_plugins[plugin_name] = "runtime.python is required"
-            continue
         seen_names.add(plugin_name)
-        plugins.append(
-            PluginSpec(
-                name=plugin_name,
-                plugin_dir=entry.resolve(),
-                manifest_path=manifest_path.resolve(),
-                requirements_path=requirements_path.resolve(),
-                python_version=python_version,
-                manifest_data=manifest_data,
-            )
-        )
+        plugins.append(plugin)
     return PluginDiscoveryResult(plugins=plugins, skipped_plugins=skipped_plugins)
 
 

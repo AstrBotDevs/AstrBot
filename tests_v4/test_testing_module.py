@@ -11,6 +11,8 @@ import astrbot_sdk.testing as testing_module
 from astrbot_sdk.testing import (
     LocalRuntimeConfig,
     MockCapabilityRouter,
+    MockContext,
+    MockMessageEvent,
     MockPeer,
     PluginHarness,
 )
@@ -26,7 +28,11 @@ class TestTestingModule:
             "InMemoryMemory",
             "LocalRuntimeConfig",
             "MockCapabilityRouter",
+            "MockContext",
+            "MockLLMClient",
+            "MockMessageEvent",
             "MockPeer",
+            "MockPlatformClient",
             "PluginHarness",
             "RecordedSend",
             "StdoutPlatformSink",
@@ -83,6 +89,24 @@ class TestTestingModule:
             "echo": "abc",
             "plugin_id": "astrbot_plugin_v4demo",
         }
+
+    @pytest.mark.asyncio
+    async def test_mock_context_and_event_support_direct_handler_unit_tests(self):
+        """MockContext/MockMessageEvent should support direct handler tests without a full harness."""
+        ctx = MockContext(plugin_id="demo-test")
+        event = MockMessageEvent(text="hello", context=ctx)
+        ctx.llm.mock_response("你好！")
+
+        async def handler(mock_event, mock_ctx):
+            reply = await mock_ctx.llm.chat("hello")
+            await mock_event.reply(reply)
+            return mock_event.plain_result("done")
+
+        result = await handler(event, ctx)
+
+        assert result.text == "done"
+        assert event.replies == ["你好！"]
+        ctx.platform.assert_sent("你好！")
 
     @pytest.mark.asyncio
     async def test_plugin_harness_reuses_session_waiter_across_followups(
