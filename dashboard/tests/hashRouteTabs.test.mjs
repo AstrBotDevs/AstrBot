@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  createTabRouteLocation,
-  getValidHashTab,
-} from '../src/utils/hashRouteTabs.mjs';
+import * as hashRouteTabs from '../src/utils/hashRouteTabs.mjs';
+
+const { createTabRouteLocation, getValidHashTab } = hashRouteTabs;
 
 test('getValidHashTab returns the tab name for a valid route hash', () => {
   const validTabs = ['installed', 'market', 'mcp'];
@@ -17,6 +16,12 @@ test('getValidHashTab rejects empty and unknown hashes', () => {
 
   assert.equal(getValidHashTab('', validTabs), null);
   assert.equal(getValidHashTab('#unknown', validTabs), null);
+});
+
+test('getValidHashTab uses the last hash segment when multiple hashes are present', () => {
+  const validTabs = ['installed', 'market', 'mcp'];
+
+  assert.equal(getValidHashTab('#/extension#foo#installed', validTabs), 'installed');
 });
 
 test('createTabRouteLocation preserves the current path and query', () => {
@@ -85,4 +90,34 @@ test('createTabRouteLocation preserves params for path-based routes', () => {
     hash: '#installed',
   });
   assert.notEqual(location.params, params);
+});
+
+test('replaceTabRoute catches rejected router updates', async () => {
+  assert.equal(typeof hashRouteTabs.replaceTabRoute, 'function');
+
+  const error = new Error('blocked');
+  let logged;
+  const router = {
+    replace: async () => {
+      throw error;
+    },
+  };
+  const logger = {
+    debug: (message, cause) => {
+      logged = { message, cause };
+    },
+  };
+
+  const result = await hashRouteTabs.replaceTabRoute(
+    router,
+    { name: 'Extensions', query: { page: '1' } },
+    'installed',
+    logger,
+  );
+
+  assert.equal(result, false);
+  assert.deepEqual(logged, {
+    message: 'Failed to update extension tab route:',
+    cause: error,
+  });
 });

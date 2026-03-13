@@ -13,6 +13,7 @@ import {
 import {
   createTabRouteLocation,
   getValidHashTab,
+  replaceTabRoute,
 } from "@/utils/hashRouteTabs.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1525,10 +1526,10 @@ export const useExtensionPage = () => {
     },
   );
   
-  watch(activeTab, async (newTab) => {
+  watch(activeTab, (newTab) => {
     if (!isValidTab(newTab)) return;
     if (route.hash === `#${newTab}`) return;
-    await router.replace(createTabRouteLocation(route, newTab));
+    void replaceTabRoute(router, route, newTab);
   });
 
   return {
