@@ -182,6 +182,33 @@ class PluginManager:
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
 
+    def _remove_registered_unified_webhooks(
+        self,
+        plugin_name: str,
+        plugin_module_path: str,
+    ) -> None:
+        """移除指定插件注册的统一 Webhook 回调。"""
+        module_prefix = ".".join(plugin_module_path.split(".")[:-1])
+        to_remove: list[str] = []
+
+        for webhook_uuid, callback in self.context.registered_unified_webhooks.items():
+            handler_module = getattr(callback.handler, "__module__", "")
+            if not handler_module and hasattr(callback.handler, "func"):
+                handler_module = getattr(callback.handler.func, "__module__", "")
+
+            if handler_module == plugin_module_path or (
+                module_prefix and handler_module.startswith(f"{module_prefix}.")
+            ):
+                to_remove.append(webhook_uuid)
+
+        for webhook_uuid in to_remove:
+            self.context.registered_unified_webhooks.pop(webhook_uuid, None)
+
+        if to_remove:
+            logger.info(
+                f"移除了插件 {plugin_name} 注册的统一 Webhook: {', '.join(to_remove)}",
+            )
+
     async def _watch_plugins_changes(self) -> None:
         """监视插件文件变化"""
         try:
@@ -1419,6 +1446,11 @@ class PluginManager:
         for func_tool in to_remove:
             llm_tools.func_list.remove(func_tool)
 
+        self._remove_registered_unified_webhooks(
+            plugin_name=plugin_name,
+            plugin_module_path=plugin_module_path,
+        )
+
         # Unregister platform adapters registered by this plugin
         # module_path is like "data.plugins.my_plugin.main", extract prefix like "data.plugins.my_plugin"
         module_prefix = ".".join(plugin_module_path.split(".")[:-1])
@@ -1469,6 +1501,12 @@ class PluginManager:
 
             # 调用插件的终止方法
             await self._terminate_plugin(plugin)
+
+            if plugin.module_path:
+                self._remove_registered_unified_webhooks(
+                    plugin_name=plugin_name,
+                    plugin_module_path=plugin.module_path,
+                )
 
             # 加入到 shared_preferences 中
             inactivated_plugins: list = await sp.global_get("inactivated_plugins", [])

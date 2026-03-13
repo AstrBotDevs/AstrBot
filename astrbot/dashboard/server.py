@@ -145,6 +145,11 @@ class AstrBotDashboard:
             view_func=self.srv_plug_route,
             methods=["GET", "POST"],
         )
+        self.app.add_url_rule(
+            "/api/plug/webhook/<webhook_uuid>",
+            view_func=self.srv_plug_webhook_route,
+            methods=["GET", "POST"],
+        )
 
         self.shutdown_event = shutdown_event
 
@@ -158,6 +163,20 @@ class AstrBotDashboard:
             if route == f"/{subpath}" and request.method in methods:
                 return await view_handler(*args, **kwargs)
         return jsonify(Response().error("未找到该路由").__dict__)
+
+    async def srv_plug_webhook_route(self, webhook_uuid, *args, **kwargs):
+        """插件统一 Webhook 路由"""
+        registered_unified_webhooks = (
+            self.core_lifecycle.star_context.registered_unified_webhooks
+        )
+        callback = registered_unified_webhooks.get(webhook_uuid)
+        if not callback:
+            return jsonify(Response().error("未找到对应 webhook").__dict__), 404
+
+        if request.method.upper() not in callback.methods:
+            return jsonify(Response().error("请求方法不被允许").__dict__), 405
+
+        return await callback.handler(*args, **kwargs)
 
     async def auth_middleware(self):
         if not request.path.startswith("/api"):
@@ -199,6 +218,7 @@ class AstrBotDashboard:
         allowed_endpoints = [
             "/api/auth/login",
             "/api/file",
+            "/api/plug/webhook",
             "/api/platform/webhook",
             "/api/stat/start-time",
             "/api/backup/download",  # 备份下载使用 URL 参数传递 token
