@@ -247,6 +247,9 @@ class ProviderOpenAIOfficial(Provider):
     def _openai_native_tools_enabled(self) -> bool:
         return bool(self._get_openai_native_tools())
 
+    def native_tools_enabled(self) -> bool:
+        return self._openai_native_tools_enabled()
+
     def _should_use_responses_api(self) -> bool:
         return self.use_responses_api or self._openai_native_tools_enabled()
 

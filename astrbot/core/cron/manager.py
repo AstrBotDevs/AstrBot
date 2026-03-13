@@ -271,11 +271,12 @@ class CronJobManager:
         from astrbot.core.astr_main_agent import (
             MainAgentBuildConfig,
             _get_session_conv,
+            _select_provider,
             build_main_agent,
         )
         from astrbot.core.astr_main_agent_resources import (
-            PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
             SEND_MESSAGE_TO_USER_TOOL,
+            build_proactive_agent_cron_woke_system_prompt,
         )
 
         try:
@@ -312,6 +313,10 @@ class CronJobManager:
             llm_safety_mode=False,
             streaming_response=False,
         )
+        provider = _select_provider(cron_event, self.ctx)
+        allow_send_message_tool = not (
+            provider is not None and provider.native_tools_enabled()
+        )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
@@ -328,8 +333,9 @@ class CronJobManager:
                 f"---\n"
             )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
-        req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+        req.system_prompt += build_proactive_agent_cron_woke_system_prompt(
+            cron_job_str,
+            allow_send_message_tool=allow_send_message_tool,
         )
         req.prompt = (
             "You are now responding to a scheduled task"
@@ -337,9 +343,10 @@ class CronJobManager:
             "Output using same language as previous conversation."
             "After completing your task, summarize and output your actions and results."
         )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        if allow_send_message_tool:
+            if not req.func_tool:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
         result = await build_main_agent(
             event=cron_event, plugin_context=self.ctx, config=config, req=req

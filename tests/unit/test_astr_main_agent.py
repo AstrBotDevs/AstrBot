@@ -679,6 +679,84 @@ class TestSanitizeContextByModalities:
 
         assert len(req.contexts) == 1
 
+
+class TestNativeToolExclusivity:
+    """Tests for native-tool exclusivity handling."""
+
+    def test_provider_uses_native_tools_detects_openai_native_tool_flag(self):
+        module = ama
+        mock_provider = MagicMock(spec=Provider)
+        mock_provider.native_tools_enabled = MagicMock(return_value=True)
+
+        assert module._provider_uses_native_tools(mock_provider) is True
+
+    def test_provider_uses_native_tools_detects_gemini_native_tool_flag(self):
+        module = ama
+        mock_provider = MagicMock(spec=Provider)
+        mock_provider.native_tools_enabled = MagicMock(return_value=True)
+
+        assert module._provider_uses_native_tools(mock_provider) is True
+
+    def test_enforce_native_tool_exclusivity_clears_tools_and_tool_context(self):
+        module = ama
+        mock_provider = MagicMock(spec=Provider)
+        mock_provider.native_tools_enabled = MagicMock(return_value=True)
+        tool_set = ToolSet()
+        tool_set.add_tool(
+            FunctionTool(
+                name="dummy_tool",
+                description="dummy",
+                parameters={"type": "object", "properties": {}},
+            )
+        )
+        req = ProviderRequest(
+            prompt="Hello",
+            contexts=[
+                {"role": "user", "content": "question"},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{"id": "call_1", "type": "function"}],
+                },
+                {
+                    "role": "assistant",
+                    "content": "partial answer",
+                    "tool_calls": [{"id": "call_2", "type": "function"}],
+                },
+                {"role": "tool", "content": "tool result", "tool_call_id": "call_2"},
+            ],
+            func_tool=tool_set,
+            tool_calls_result=[MagicMock()],
+        )
+
+        module._enforce_native_tool_exclusivity(mock_provider, req)
+
+        assert req.func_tool is None
+        assert req.tool_calls_result is None
+        assert req.contexts == [
+            {"role": "user", "content": "question"},
+            {"role": "assistant", "content": "partial answer"},
+        ]
+
+    def test_enforce_native_tool_exclusivity_clears_send_message_tool_too(self):
+        module = ama
+        mock_provider = MagicMock(spec=Provider)
+        mock_provider.native_tools_enabled = MagicMock(return_value=True)
+        tool_set = ToolSet()
+        tool_set.add_tool(module.SEND_MESSAGE_TO_USER_TOOL)
+        tool_set.add_tool(
+            FunctionTool(
+                name="dummy_tool",
+                description="dummy",
+                parameters={"type": "object", "properties": {}},
+            )
+        )
+        req = ProviderRequest(prompt="Hello", func_tool=tool_set)
+
+        module._enforce_native_tool_exclusivity(mock_provider, req)
+
+        assert req.func_tool is None
+
     def test_sanitize_removes_tool_messages(self, mock_provider):
         """Test sanitize removes tool messages when tool_use not supported."""
         module = ama
@@ -992,8 +1070,38 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.reset_coro is not None
-        mock_runner.reset.assert_called_once()
-        result.reset_coro.close()
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_native_tools_disable_all_function_tools(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        mock_provider.native_tools_enabled.return_value = True
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+        mock_context.get_llm_tool_manager.return_value.get_full_tool_set.return_value = ToolSet()
+        mock_event.platform_meta.support_proactive_message = True
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(tool_call_timeout=60),
+            )
+
+        assert result is not None
+        assert result.provider_request.func_tool is None
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_existing_request(

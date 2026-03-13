@@ -92,6 +92,10 @@ class Provider(AbstractProvider):
         """获得支持的模型列表"""
         raise NotImplementedError
 
+    def native_tools_enabled(self) -> bool:
+        """Whether the provider is currently configured to use provider-native tools."""
+        return False
+
     @abc.abstractmethod
     async def text_chat(
         self,

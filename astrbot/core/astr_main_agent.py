@@ -685,6 +685,65 @@ def _modalities_fix(provider: Provider, req: ProviderRequest) -> None:
             req.func_tool = None
 
 
+def _provider_uses_native_tools(provider: Provider) -> bool:
+    try:
+        return bool(provider.native_tools_enabled())
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to inspect provider native tool state.", exc_info=True)
+        return False
+
+
+def _strip_tool_use_from_context(messages: list[dict] | None) -> list[dict]:
+    if not messages:
+        return []
+
+    sanitized_messages: list[dict] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+
+        role = message.get("role")
+        if role == "tool":
+            continue
+
+        sanitized_message = dict(message)
+        if role == "assistant" and "tool_calls" in sanitized_message:
+            sanitized_message.pop("tool_calls", None)
+            sanitized_message.pop("tool_call_id", None)
+
+            content = sanitized_message.get("content")
+            if content is None:
+                continue
+            if isinstance(content, str) and not content.strip():
+                continue
+            if isinstance(content, list) and not content:
+                continue
+
+        sanitized_messages.append(sanitized_message)
+
+    return sanitized_messages
+
+
+def _enforce_native_tool_exclusivity(provider: Provider, req: ProviderRequest) -> None:
+    if not _provider_uses_native_tools(provider):
+        return
+
+    if req.func_tool:
+        logger.warning(
+            "Detected provider native tools; disabling AstrBot function tools for this request."
+        )
+        req.func_tool = None
+
+    if req.tool_calls_result:
+        logger.warning(
+            "Detected provider native tools; dropping pending AstrBot tool call results for this request."
+        )
+        req.tool_calls_result = None
+
+    if isinstance(req.contexts, list):
+        req.contexts = _strip_tool_use_from_context(req.contexts)
+
+
 def _sanitize_context_by_modalities(
     config: MainAgentBuildConfig,
     provider: Provider,
@@ -1145,11 +1204,16 @@ async def build_main_agent(
     _modalities_fix(provider, req)
     _plugin_tool_fix(event, req)
     _sanitize_context_by_modalities(config, provider, req)
+    _enforce_native_tool_exclusivity(provider, req)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
-    if config.computer_use_runtime == "sandbox":
+    if _provider_uses_native_tools(provider):
+        logger.info(
+            "Provider native tools are enabled; skipping AstrBot computer-use tool injection."
+        )
+    elif config.computer_use_runtime == "sandbox":
         _apply_sandbox_tools(config, req, req.session_id)
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req)
@@ -1160,13 +1224,18 @@ async def build_main_agent(
         event=event,
     )
 
-    if config.add_cron_tools:
+    native_tools_enabled = _provider_uses_native_tools(provider)
+
+    if config.add_cron_tools and not native_tools_enabled:
         _proactive_cron_job_tools(req)
 
-    if event.platform_meta.support_proactive_message:
+    if event.platform_meta.support_proactive_message and not native_tools_enabled:
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+
+    if req.func_tool is not None and req.func_tool.empty():
+        req.func_tool = None
 
     if provider.provider_config.get("max_context_tokens", 0) <= 0:
         model = provider.get_model()

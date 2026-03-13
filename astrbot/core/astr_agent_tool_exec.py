@@ -18,7 +18,6 @@ from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
-    BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
     EXECUTE_SHELL_TOOL,
     FILE_DOWNLOAD_TOOL,
     FILE_UPLOAD_TOOL,
@@ -26,6 +25,8 @@ from astrbot.core.astr_main_agent_resources import (
     LOCAL_PYTHON_TOOL,
     PYTHON_TOOL,
     SEND_MESSAGE_TO_USER_TOOL,
+    build_background_task_result_user_prompt,
+    build_background_task_result_woke_system_prompt,
 )
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -455,6 +456,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         from astrbot.core.astr_main_agent import (
             MainAgentBuildConfig,
             _get_session_conv,
+            _select_provider,
             build_main_agent,
         )
 
@@ -486,6 +488,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             .get("provider_settings", {})
             .get("stream", False),
         )
+        provider = _select_provider(cron_event, ctx)
+        allow_send_message_tool = not (
+            provider is not None and provider.native_tools_enabled()
+        )
 
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
@@ -501,20 +507,17 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             )
 
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
+        req.system_prompt += build_background_task_result_woke_system_prompt(
+            bg,
+            allow_send_message_tool=allow_send_message_tool,
         )
-        req.prompt = (
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "If you need to deliver the result to the user immediately, "
-            "you MUST use `send_message_to_user` tool to send the message directly to the user, "
-            "otherwise the user will not see the result. "
-            "After completing your task, summarize and output your actions and results. "
+        req.prompt = build_background_task_result_user_prompt(
+            allow_send_message_tool=allow_send_message_tool
         )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
+        if allow_send_message_tool:
+            if not req.func_tool:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
 
         result = await build_main_agent(
             event=cron_event, plugin_context=ctx, config=config, req=req

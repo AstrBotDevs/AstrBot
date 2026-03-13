@@ -109,42 +109,98 @@ LIVE_MODE_SYSTEM_PROMPT = (
     "Sound like a real conversation, not a Q&A system."
 )
 
-PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
-    "You are an autonomous proactive agent.\n\n"
-    "You are awakened by a scheduled cron job, not by a user message.\n"
-    "You are given:"
-    "1. A cron job description explaining why you are activated.\n"
-    "2. Historical conversation context between you and the user.\n"
-    "3. Your available tools and skills.\n"
-    "# IMPORTANT RULES\n"
-    "1. This is NOT a chat turn. Do NOT greet the user. Do NOT ask the user questions unless strictly necessary.\n"
-    "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context.\n"
-    "3. If messaging the user: Explain WHY you are contacting them; Reference the cron task implicitly (not technical details).\n"
-    "4. You can use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
-    "# CRON JOB CONTEXT\n"
-    "The following object describes the scheduled task that triggered you:\n"
-    "{cron_job}"
-)
 
-BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT = (
-    "You are an autonomous proactive agent.\n\n"
-    "You are awakened by the completion of a background task you initiated earlier.\n"
-    "You are given:"
-    "1. A description of the background task you initiated.\n"
-    "2. The result of the background task.\n"
-    "3. Historical conversation context between you and the user.\n"
-    "4. Your available tools and skills.\n"
-    "# IMPORTANT RULES\n"
-    "1. This is NOT a chat turn. Do NOT greet the user. Do NOT ask the user questions unless strictly necessary. Do NOT respond if no meaningful action is required."
-    "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context."
-    "3. If messaging the user: Explain WHY you are contacting them; Reference the background task implicitly (not technical details)."
-    "4. You can use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
-    "# BACKGROUND TASK CONTEXT\n"
-    "The following object describes the background task that completed:\n"
-    "{background_task_result}"
-)
+def build_proactive_agent_cron_woke_system_prompt(
+    cron_job: str,
+    *,
+    allow_send_message_tool: bool,
+) -> str:
+    prompt = (
+        "You are an autonomous proactive agent.\n\n"
+        "You are awakened by a scheduled cron job, not by a user message.\n"
+        "You are given:"
+        "1. A cron job description explaining why you are activated.\n"
+        "2. Historical conversation context between you and the user.\n"
+        "3. Your available tools and skills.\n"
+        "# IMPORTANT RULES\n"
+        "1. This is NOT a chat turn. Do NOT greet the user. Do NOT ask the user questions unless strictly necessary.\n"
+        "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context.\n"
+        "3. If messaging the user: Explain WHY you are contacting them; Reference the cron task implicitly (not technical details).\n"
+        "4. You can use your available tools and skills to finish the task if needed.\n"
+    )
+    if allow_send_message_tool:
+        prompt += (
+            "5. Use `send_message_to_user` tool to send message to user if needed."
+        )
+    else:
+        prompt += (
+            "5. Proactive delivery tools are unavailable in this run. If needed, "
+            "summarize the intended message in your final response instead of calling a tool."
+        )
+    prompt += (
+        "# CRON JOB CONTEXT\n"
+        "The following object describes the scheduled task that triggered you:\n"
+        f"{cron_job}"
+    )
+    return prompt
+
+
+def build_background_task_result_woke_system_prompt(
+    background_task_result: str,
+    *,
+    allow_send_message_tool: bool,
+) -> str:
+    prompt = (
+        "You are an autonomous proactive agent.\n\n"
+        "You are awakened by the completion of a background task you initiated earlier.\n"
+        "You are given:"
+        "1. A description of the background task you initiated.\n"
+        "2. The result of the background task.\n"
+        "3. Historical conversation context between you and the user.\n"
+        "4. Your available tools and skills.\n"
+        "# IMPORTANT RULES\n"
+        "1. This is NOT a chat turn. Do NOT greet the user. Do NOT ask the user questions unless strictly necessary. Do NOT respond if no meaningful action is required."
+        "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context."
+        "3. If messaging the user: Explain WHY you are contacting them; Reference the background task implicitly (not technical details)."
+        "4. You can use your available tools and skills to finish the task if needed.\n"
+    )
+    if allow_send_message_tool:
+        prompt += (
+            "5. Use `send_message_to_user` tool to send message to user if needed."
+        )
+    else:
+        prompt += (
+            "5. Proactive delivery tools are unavailable in this run. If needed, "
+            "summarize the intended message in your final response instead of calling a tool."
+        )
+    prompt += (
+        "# BACKGROUND TASK CONTEXT\n"
+        "The following object describes the background task that completed:\n"
+        f"{background_task_result}"
+    )
+    return prompt
+
+
+def build_background_task_result_user_prompt(*, allow_send_message_tool: bool) -> str:
+    prompt = (
+        "Proceed according to your system instructions. "
+        "Output using same language as previous conversation. "
+    )
+    if allow_send_message_tool:
+        prompt += (
+            "If you need to deliver the result to the user immediately, "
+            "you MUST use `send_message_to_user` tool to send the message directly to the user, "
+            "otherwise the user will not see the result. "
+        )
+    else:
+        prompt += (
+            "Proactive delivery tools are unavailable in this run. "
+            "If user-facing delivery would be needed, describe the intended message in your final response instead. "
+        )
+    prompt += (
+        "After completing your task, summarize and output your actions and results. "
+    )
+    return prompt
 
 
 @dataclass
