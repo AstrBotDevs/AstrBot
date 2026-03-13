@@ -37,6 +37,7 @@ services:
       - DEFAULT_SHIP_MEMORY=512m
     volumes:
       - ${PWD}/data/shipyard/bay_data:/app/data
+      - ${PWD}/data/temp:/AstrBot/data/temp           # Bind the local temp directory to the sandbox so that the uploaded file can be access in the sandbox
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - astrbot_network
