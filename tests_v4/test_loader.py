@@ -779,6 +779,77 @@ class TestPluginEnvironmentManager:
                 != plan.plugin_to_group["plugin_two"].id
             )
 
+    def test_three_plugins_share_and_isolate_group_envs_then_cleanup(self):
+        """Two plugins should share one env while a conflicting third gets its own."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plugins_dir = Path(temp_dir) / "plugins"
+            spec_a = write_test_plugin(
+                plugins_dir,
+                "plugin_a",
+                requirements="alpha==1.0.0\n",
+            )
+            spec_b = write_test_plugin(
+                plugins_dir,
+                "plugin_b",
+                requirements="beta==1.0.0\n",
+            )
+            spec_c = write_test_plugin(
+                plugins_dir,
+                "plugin_c",
+                requirements="alpha==2.0.0\n",
+            )
+
+            def fake_compile(
+                *, source_path: Path, output_path: Path, python_version: str
+            ):
+                content = source_path.read_text(encoding="utf-8")
+                if "alpha==1.0.0" in content and "alpha==2.0.0" in content:
+                    raise RuntimeError(
+                        "compile lockfile failed with exit code 1: conflict"
+                    )
+                output_path.write_text(
+                    f"# python={python_version}\n{content}",
+                    encoding="utf-8",
+                )
+
+            def fake_prepare(group: EnvironmentGroup) -> Path:
+                group.python_path.parent.mkdir(parents=True, exist_ok=True)
+                group.python_path.write_text(
+                    f"group={group.id}\n",
+                    encoding="utf-8",
+                )
+                return group.python_path
+
+            manager._planner._compile_lockfile = fake_compile
+            manager._group_manager.prepare = fake_prepare
+
+            plan = manager.plan([spec_a, spec_b, spec_c])
+            shared_group = plan.plugin_to_group["plugin_a"]
+            isolated_group = plan.plugin_to_group["plugin_c"]
+
+            assert len(plan.groups) == 2
+            assert shared_group.id == plan.plugin_to_group["plugin_b"].id
+            assert shared_group.id != isolated_group.id
+
+            path_a = manager.prepare_environment(spec_a)
+            path_b = manager.prepare_environment(spec_b)
+            path_c = manager.prepare_environment(spec_c)
+
+            assert path_a == path_b
+            assert path_a != path_c
+            assert len({path_a, path_b, path_c}) == 2
+            assert shared_group.venv_path.exists()
+            assert isolated_group.venv_path.exists()
+
+            manager._planner.cleanup_artifacts([])
+
+            assert not shared_group.venv_path.exists()
+            assert not isolated_group.venv_path.exists()
+            assert spec_a.plugin_dir.exists()
+            assert spec_b.plugin_dir.exists()
+            assert spec_c.plugin_dir.exists()
+
     def test_plan_skips_only_plugin_with_invalid_lockfile(self):
         """A plugin whose lockfile cannot be compiled should be skipped alone."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1368,7 +1439,7 @@ class TestLoadPlugin:
 
             assert len(loaded.instances) == 1
             instance = loaded.instances[0]
-            assert Path(instance.data_dir) == plugin_dir / "data"
+            assert Path(instance.data_dir).resolve() == (plugin_dir / "data").resolve()
 
             commands = [
                 handler.descriptor.trigger.command

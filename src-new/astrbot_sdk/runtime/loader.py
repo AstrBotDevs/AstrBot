@@ -118,6 +118,7 @@ from ..api.basic.astrbot_config import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
 from .environment_groups import (
+    EnvironmentGroup,
     EnvironmentPlanResult,
     EnvironmentPlanner,
     GroupEnvironmentManager,
@@ -163,6 +164,7 @@ class LoadedHandler:
     descriptor: HandlerDescriptor
     callable: Any
     owner: Any
+    plugin_id: str = ""
     legacy_context: Any | None = None
     compat_filters: list[Any] = field(default_factory=list)
     legacy_runtime: LegacyRuntimeAdapter | None = field(
@@ -185,6 +187,7 @@ class LoadedCapability:
     descriptor: CapabilityDescriptor
     callable: Any
     owner: Any
+    plugin_id: str = ""
     legacy_context: Any | None = None
     legacy_runtime: LegacyRuntimeAdapter | None = field(
         init=False, default=None, repr=False
@@ -533,6 +536,12 @@ class PluginEnvironmentManager:
         self._plan_result = plan_result
         return plan_result
 
+    def prepare_group_environment(self, group: EnvironmentGroup) -> Path:
+        """返回指定分组的解释器路径。"""
+        if self._plan_result is None:
+            self._plan_result = EnvironmentPlanResult(groups=[group])
+        return self._group_manager.prepare(group)
+
     def prepare_environment(self, plugin: PluginSpec) -> Path:
         """返回该插件所属分组环境的解释器路径。
 
@@ -558,7 +567,7 @@ class PluginEnvironmentManager:
                 raise RuntimeError(reason)
             raise RuntimeError(f"environment plan missing plugin: {plugin.name}")
 
-        return self._group_manager.prepare(group)
+        return self.prepare_group_environment(group)
 
     @staticmethod
     def _fingerprint(plugin: PluginSpec) -> str:
@@ -654,6 +663,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                         descriptor=meta.descriptor.model_copy(deep=True),
                         callable=bound,
                         owner=instance,
+                        plugin_id=plugin.name,
                         legacy_context=legacy_context,
                     )
                 )
@@ -672,6 +682,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     ),
                     callable=bound,
                     owner=instance,
+                    plugin_id=plugin.name,
                     legacy_context=legacy_context,
                 )
             )

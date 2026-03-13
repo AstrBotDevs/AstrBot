@@ -880,7 +880,16 @@ class PluginHarness:
             event_payload,
             context=self.lifecycle_context,
         )
-        return self.dispatcher._session_waiters.has_waiter(probe_event)
+        session_waiters = self.dispatcher._session_waiters
+        if hasattr(session_waiters, "has_waiter"):
+            return session_waiters.has_waiter(probe_event)
+        if isinstance(session_waiters, dict):
+            return any(
+                manager.has_waiter(probe_event)
+                for manager in session_waiters.values()
+                if hasattr(manager, "has_waiter")
+            )
+        return False
 
     @staticmethod
     def _message_type_name(event_payload: dict[str, Any]) -> str:

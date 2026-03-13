@@ -599,14 +599,31 @@ def dev(
 @cli.command(hidden=True)
 @click.option(
     "--plugin-dir",
-    required=True,
+    required=False,
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
 )
-def worker(plugin_dir: Path) -> None:
+@click.option(
+    "--group-metadata",
+    required=False,
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+)
+def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
     """Internal command used by the supervisor to start a worker."""
+    if plugin_dir is None and group_metadata is None:
+        raise click.UsageError("Either --plugin-dir or --group-metadata is required")
+    if plugin_dir is not None and group_metadata is not None:
+        raise click.UsageError(
+            "--plugin-dir and --group-metadata are mutually exclusive"
+        )
+
+    target = str(group_metadata or plugin_dir)
+    if group_metadata is not None:
+        entrypoint = run_plugin_worker(group_metadata=group_metadata)
+    else:
+        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
     _run_async_entrypoint(
-        run_plugin_worker(plugin_dir=plugin_dir),
-        log_message=f"启动插件工作进程：{plugin_dir}",
+        entrypoint,
+        log_message=f"启动插件工作进程：{target}",
         log_level="debug",
         context={"plugin_dir": plugin_dir},
     )
