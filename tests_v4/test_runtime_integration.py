@@ -6,6 +6,8 @@ concurrency, and real-world scenarios.
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -44,6 +46,30 @@ from astrbot_sdk.runtime.loader import (
 from astrbot_sdk.runtime.peer import Peer
 
 from tests_v4.helpers import FakeEnvManager, MemoryTransport, make_transport_pair
+
+
+def write_runtime_env_plugin(
+    plugins_dir: Path,
+    name: str,
+    *,
+    requirements: str = "",
+) -> Path:
+    plugin_dir = plugins_dir / name
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        yaml.dump(
+            {
+                "name": name,
+                "runtime": {
+                    "python": f"{sys.version_info.major}.{sys.version_info.minor}"
+                },
+                "components": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "requirements.txt").write_text(requirements, encoding="utf-8")
+    return plugin_dir
 
 
 async def start_test_core_peer(transport: MemoryTransport) -> Peer:
@@ -824,6 +850,105 @@ class TestSupervisorRuntimePluginLoading:
             finally:
                 await runtime.stop()
                 await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_loads_three_plugins_with_shared_and_isolated_group_envs(self):
+        """SupervisorRuntime should reuse one env for two plugins and isolate the third."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_dir = Path(temp_dir) / "plugins"
+            write_runtime_env_plugin(
+                plugins_dir,
+                "plugin_a",
+                requirements="alpha==1.0.0\n",
+            )
+            write_runtime_env_plugin(
+                plugins_dir,
+                "plugin_b",
+                requirements="beta==1.0.0\n",
+            )
+            write_runtime_env_plugin(
+                plugins_dir,
+                "plugin_c",
+                requirements="alpha==2.0.0\n",
+            )
+
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            prepared_groups: list[str] = []
+
+            def fake_compile(
+                *, source_path: Path, output_path: Path, python_version: str
+            ):
+                content = source_path.read_text(encoding="utf-8")
+                if "alpha==1.0.0" in content and "alpha==2.0.0" in content:
+                    raise RuntimeError(
+                        "compile lockfile failed with exit code 1: conflict"
+                    )
+                output_path.write_text(
+                    f"# python={python_version}\n{content}",
+                    encoding="utf-8",
+                )
+
+            def fake_prepare(group) -> Path:
+                prepared_groups.append(group.id)
+                group.python_path.parent.mkdir(parents=True, exist_ok=True)
+                if group.python_path.exists():
+                    return group.python_path
+                target = Path(sys.executable).resolve()
+                if os.name == "nt":
+                    shutil.copy2(target, group.python_path)
+                else:
+                    os.symlink(target, group.python_path)
+                return group.python_path
+
+            manager._planner._compile_lockfile = fake_compile
+            manager._group_manager.prepare = fake_prepare
+
+            left, right = make_transport_pair()
+            core = await start_test_core_peer(left)
+            runtime = SupervisorRuntime(
+                transport=right,
+                plugins_dir=plugins_dir,
+                env_manager=manager,
+            )
+            shared_venv_path = None
+            isolated_venv_path = None
+
+            try:
+                await runtime.start()
+                await core.wait_until_remote_initialized()
+
+                assert sorted(runtime.loaded_plugins) == [
+                    "plugin_a",
+                    "plugin_b",
+                    "plugin_c",
+                ]
+                assert manager._plan_result is not None
+                assert len(manager._plan_result.groups) == 2
+
+                shared_group = manager._plan_result.plugin_to_group["plugin_a"]
+                isolated_group = manager._plan_result.plugin_to_group["plugin_c"]
+
+                assert (
+                    shared_group.id
+                    == manager._plan_result.plugin_to_group["plugin_b"].id
+                )
+                assert shared_group.id != isolated_group.id
+                assert prepared_groups.count(shared_group.id) == 2
+                assert prepared_groups.count(isolated_group.id) == 1
+
+                shared_venv_path = shared_group.venv_path
+                isolated_venv_path = isolated_group.venv_path
+                assert shared_venv_path.exists()
+                assert isolated_venv_path.exists()
+            finally:
+                await runtime.stop()
+                await core.stop()
+                manager._planner.cleanup_artifacts([])
+
+            assert shared_venv_path is not None
+            assert isolated_venv_path is not None
+            assert not shared_venv_path.exists()
+            assert not isolated_venv_path.exists()
 
     @pytest.mark.asyncio
     async def test_skip_invalid_plugins(self):
