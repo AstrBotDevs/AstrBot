@@ -254,6 +254,39 @@ class TestAstrbotImportAlias:
         assert Node(uin="1", content=[]).sender_id == "1"
         assert Nodes(nodes=[]).nodes == []
 
+    def test_legacy_astrbot_core_config_imports(self):
+        """astrbot.core.config old import paths should remain available."""
+        from astrbot.core.config import AstrBotConfig
+        from astrbot.core.config.astrbot_config import AstrBotConfig as ConfigModel
+
+        assert AstrBotConfig is ConfigModel
+
+    def test_legacy_astrbot_core_platform_imports(self):
+        """astrbot.core.platform old import paths should remain available."""
+        from astrbot.core.platform import (
+            AstrBotMessage,
+            AstrMessageEvent,
+            MessageType,
+            Platform,
+            PlatformMetadata,
+        )
+        from astrbot.core.platform.astr_message_event import MessageSession
+        from astrbot.core.platform.message_type import MessageType as MessageTypeModule
+        from astrbot.core.platform.platform_metadata import (
+            PlatformMetadata as MetaModule,
+        )
+        from astrbot.core.platform.register import register_platform_adapter
+        from astrbot.core.platform.sources.aiocqhttp import AiocqhttpMessageEvent
+
+        assert AstrBotMessage is not None
+        assert AstrMessageEvent is AiocqhttpMessageEvent
+        assert MessageSession is not None
+        assert MessageType is MessageTypeModule
+        assert PlatformMetadata is MetaModule
+        assert Platform is not None
+        with pytest.raises(NotImplementedError, match="register_platform_adapter"):
+            register_platform_adapter()
+
     def test_legacy_astrbot_event_filter_module_exports(self):
         """astrbot.api.event.filter should be importable from the old module path."""
         from astrbot.api.event.filter import EventMessageType, command, llm_tool

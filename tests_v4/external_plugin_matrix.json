@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "name": "hapi_connector",
+      "repo": "https://github.com/LiJinHao999/astrbot_plugin_hapi_connector.git",
+      "command": "hapi",
+      "event_text": "hapi",
+      "expected_text": "HAPI",
+      "known_unsupported": []
+    },
+    {
+      "name": "endfield",
+      "repo": "https://github.com/Entropy-Increase-Team/astrbot_plugin_endfield.git",
+      "command": "zmd",
+      "event_text": "zmd",
+      "expected_text": "终末地协议终端",
+      "known_unsupported": [
+        "依赖 playwright 时会退回纯文本帮助输出"
+      ]
+    }
+  ]
+}

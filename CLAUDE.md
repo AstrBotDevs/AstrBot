@@ -27,6 +27,7 @@
 - 2026-03-13: On Windows, `.gitignore` matching is case-insensitive. A broad entry like `astrBot/` will also ignore `src-new/astrbot/...`, which can silently hide real compat alias packages from `git status`. Keep that ignore anchored as `/astrBot/` if it is only meant for a root-level scratch checkout.
 - 2026-03-13: The reference checkout under `astrBot/astrbot/api` exposes a broader old plugin-facing package surface than the current `src-new/astrbot` alias package. When improving package-name compatibility, compare against those public `api/*` modules as a set instead of only patching the one import path hit by the latest migrated plugin.
 - 2026-03-13: Some real legacy plugins call `asyncio.create_task()` during object construction. Calling `load_plugin()` outside a running event loop can therefore produce false-negative compat failures even though the real worker path is fine. External compat smoke tests should load plugins under an active loop, and "real compatibility" claims should preferably exercise `SupervisorRuntime` + worker + a real handler invocation instead of import-only checks.
+- 2026-03-13: Treat `src-new/astrbot` as a controlled legacy facade, not as a mirror of the old `astrBot/` tree. The compat contract is the checked-in public import matrix plus the external plugin matrix in `tests_v4/external_plugin_matrix.json`; when a new deep-path shim is proposed, require both an import assertion and a real supervisor/worker plugin case before growing the facade.
 
 # 开发命令
 

@@ -1,4 +1,4 @@
-"""旧版 ``astrbot.api.platform`` 导入路径兼容入口。"""
+"""旧版 ``astrbot.core.platform`` 导入路径兼容入口。"""
 
 from astrbot.core.message.components import *  # noqa: F403
 from astrbot_sdk.api.event import (
@@ -15,12 +15,6 @@ class Platform:
     """旧版平台适配器基类占位。"""
 
 
-def register_platform_adapter(*args, **kwargs):
-    raise NotImplementedError(
-        "astrbot.api.platform.register_platform_adapter() 尚未在 v4 兼容层实现。"
-    )
-
-
 __all__ = [
     "AstrBotMessage",
     "AstrMessageEvent",
@@ -29,5 +23,4 @@ __all__ = [
     "MessageType",
     "Platform",
     "PlatformMetadata",
-    "register_platform_adapter",
 ]
