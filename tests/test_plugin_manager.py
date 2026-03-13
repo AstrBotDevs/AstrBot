@@ -446,6 +446,22 @@ async def test_reinstall_failed_plugin_keeps_new_failed_record_from_install_flow
 
 
 @pytest.mark.asyncio
+async def test_reload_failed_plugin_returns_error_when_plugin_dir_missing(
+    plugin_manager_pm: PluginManager,
+):
+    plugin_manager_pm.failed_plugin_dict[TEST_PLUGIN_DIR] = {
+        "error": "network down",
+        "repo": TEST_PLUGIN_REPO,
+    }
+
+    success, error = await plugin_manager_pm.reload_failed_plugin(TEST_PLUGIN_DIR)
+
+    assert success is False
+    assert error == "插件目录不存在，无法重载，请重新安装。"
+    assert TEST_PLUGIN_DIR in plugin_manager_pm.failed_plugin_dict
+
+
+@pytest.mark.asyncio
 async def test_ensure_plugin_requirements_reraises_cancelled_error(
     plugin_manager_pm: PluginManager, local_updator: Path, monkeypatch
 ):

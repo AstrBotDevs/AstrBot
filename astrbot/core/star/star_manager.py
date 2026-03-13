@@ -621,6 +621,8 @@ class PluginManager:
             self._cleanup_plugin_state(dir_name)
 
             plugin_path = os.path.join(self.plugin_store_path, dir_name)
+            if not os.path.isdir(plugin_path):
+                return False, "插件目录不存在，无法重载，请重新安装。"
             await self._ensure_plugin_requirements(plugin_path, dir_name)
 
             success, error = await self.load(specified_dir_name=dir_name)
