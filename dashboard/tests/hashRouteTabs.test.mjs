@@ -34,3 +34,13 @@ test('createTabRouteLocation preserves the current path and query', () => {
     hash: '#market',
   });
 });
+
+test('createTabRouteLocation falls back to the extension route name', () => {
+  const location = createTabRouteLocation(undefined, 'installed');
+
+  assert.deepEqual(location, {
+    name: 'Extensions',
+    query: {},
+    hash: '#installed',
+  });
+});

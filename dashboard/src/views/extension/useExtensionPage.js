@@ -108,9 +108,9 @@ export const useExtensionPage = () => {
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
   const isValidTab = (tab) => validTabs.includes(tab);
   const getLocationHash = () => route.hash || "";
-  const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs) || "";
+  const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs);
   const syncTabFromHash = (hash) => {
-    const tab = getValidHashTab(hash, validTabs);
+    const tab = extractTabFromHash(hash);
     if (tab) {
       activeTab.value = tab;
       return true;
@@ -1519,7 +1519,7 @@ export const useExtensionPage = () => {
   watch(
     () => route.hash,
     (newHash) => {
-      const tab = getValidHashTab(newHash, validTabs);
+      const tab = extractTabFromHash(newHash);
       if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
       }
