@@ -16,6 +16,7 @@ from astrbot.core.utils.session_waiter import (
     session_waiter,
 )
 from astrbot_sdk._legacy_api import LegacyContext
+from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
 from astrbot_sdk.api.event import AstrMessageEvent
 from astrbot_sdk.api.event.filter import (
     CustomFilter,
@@ -579,6 +580,60 @@ class TestHandlerDispatcherInvoke:
 
 class TestHandlerDispatcherLegacyCompat:
     """Tests for legacy compat hooks and filters during dispatch."""
+
+    @pytest.mark.asyncio
+    async def test_prebuilt_legacy_runtime_adapter_can_drive_filtering(self):
+        """Dispatcher should prefer the adapter boundary instead of reading raw legacy fields."""
+        peer = MockPeer()
+        legacy_context = LegacyContext("test_plugin")
+        called = []
+
+        class RejectAll(CustomFilter):
+            def filter(self, event: AstrMessageEvent, cfg) -> bool:
+                return False
+
+        async def handler_func(event: AstrMessageEvent):
+            called.append(event.message_str)
+
+        descriptor = HandlerDescriptor(
+            id="legacy.adapter.filtered",
+            trigger=CommandTrigger(command="ask"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=None,
+        )
+        handler.legacy_runtime = LegacyRuntimeAdapter(
+            legacy_context=legacy_context,
+            filters=[RejectAll()],
+        )
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_filtered_adapter",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.adapter.filtered",
+                "event": {
+                    "text": "ask",
+                    "session_id": "session-filtered",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        result = await dispatcher.invoke(message, CancelToken())
+
+        assert result == {}
+        assert called == []
+        assert peer.sent_messages == []
 
     @pytest.mark.asyncio
     async def test_custom_filter_can_skip_legacy_handler_invocation(self):

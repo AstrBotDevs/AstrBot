@@ -16,6 +16,7 @@ import pytest
 import yaml
 
 from astrbot_sdk._legacy_api import LegacyContext
+from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import (
@@ -1064,10 +1065,14 @@ class DemoComponent(Star):
             )
             legacy_context = LegacyContext("test_plugin")
             runtime.loaded_plugin.handlers.append(
-                SimpleNamespace(legacy_context=legacy_context)
+                SimpleNamespace(
+                    legacy_runtime=LegacyRuntimeAdapter(legacy_context=legacy_context)
+                )
             )
             runtime.loaded_plugin.capabilities.append(
-                SimpleNamespace(legacy_context=legacy_context)
+                SimpleNamespace(
+                    legacy_runtime=LegacyRuntimeAdapter(legacy_context=legacy_context)
+                )
             )
 
             runtime._bind_legacy_runtime_contexts(runtime._lifecycle_context)

@@ -96,6 +96,7 @@ from typing import IO, Any
 
 from loguru import logger
 
+from .._legacy_runtime import iter_unique_legacy_runtime_adapters
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
@@ -729,40 +730,20 @@ class PluginWorkerRuntime:
                 await result
 
     def _bind_legacy_runtime_contexts(self, runtime_context: RuntimeContext) -> None:
-        seen: set[int] = set()
-        for loaded in [
-            *self.loaded_plugin.handlers,
-            *self.loaded_plugin.capabilities,
-        ]:
-            legacy_context = getattr(loaded, "legacy_context", None)
-            if legacy_context is None:
-                continue
-            marker = id(legacy_context)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            bind_runtime_context = getattr(legacy_context, "bind_runtime_context", None)
-            if callable(bind_runtime_context):
-                bind_runtime_context(runtime_context)
+        for adapter in iter_unique_legacy_runtime_adapters(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities]
+        ):
+            adapter.bind_runtime_context(runtime_context)
 
     async def _run_compat_context_hook(self, hook_name: str, **kwargs: Any) -> None:
-        seen: set[int] = set()
-        for loaded in [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities]:
-            legacy_context = getattr(loaded, "legacy_context", None)
-            if legacy_context is None:
-                continue
-            marker = id(legacy_context)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            run_hook = getattr(legacy_context, "_run_compat_hook", None)
-            if callable(run_hook):
-                await run_hook(
-                    hook_name,
-                    context=self._lifecycle_context,
-                    legacy_context=legacy_context,
-                    **kwargs,
-                )
+        for adapter in iter_unique_legacy_runtime_adapters(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities]
+        ):
+            await adapter.run_hook(
+                hook_name,
+                context=self._lifecycle_context,
+                **kwargs,
+            )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

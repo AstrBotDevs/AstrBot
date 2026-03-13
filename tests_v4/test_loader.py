@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from astrbot_sdk._legacy_api import LegacyContext
+from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
 from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor
 from astrbot_sdk.runtime.environment_groups import (
     GROUP_STATE_FILE_NAME,
@@ -159,6 +161,28 @@ class TestLoadedHandler:
         assert loaded.callable == handler_func
         assert loaded.owner == owner
         assert loaded.legacy_context is None
+        assert loaded.legacy_runtime is None
+
+    def test_init_builds_legacy_runtime_adapter(self):
+        """LoadedHandler should prebuild the legacy runtime adapter for runtime use."""
+        descriptor = HandlerDescriptor(
+            id="test.handler",
+            trigger=CommandTrigger(command="hello"),
+        )
+        legacy_context = LegacyContext("test_plugin")
+
+        def handler_func():
+            pass
+
+        loaded = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+        )
+
+        assert isinstance(loaded.legacy_runtime, LegacyRuntimeAdapter)
+        assert loaded.legacy_runtime.legacy_context is legacy_context
 
 
 class TestLoadedPlugin:

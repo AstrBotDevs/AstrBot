@@ -73,6 +73,7 @@ import typing
 from collections.abc import AsyncIterator
 from typing import Any, get_type_hints
 
+from .._legacy_runtime import get_legacy_runtime_adapter
 from .._session_waiter import SessionWaiterManager
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
@@ -104,9 +105,10 @@ class HandlerDispatcher:
         event.bind_reply_handler(self._create_reply_handler(ctx, event))
         if await self._session_waiters.dispatch(event):
             return {}
-        if loaded.legacy_context is not None:
-            loaded.legacy_context.bind_runtime_context(ctx)
-            if not await self._passes_compat_filters(loaded, event):
+        legacy_runtime = get_legacy_runtime_adapter(loaded)
+        if legacy_runtime is not None:
+            legacy_runtime.bind_runtime_context(ctx)
+            if not await legacy_runtime.passes_filters(event):
                 return {}
 
         # 提取 legacy args 用于兼容旧版 handler 签名
@@ -149,6 +151,7 @@ class HandlerDispatcher:
         ctx: Context,
         legacy_args: dict[str, Any] | None = None,
     ) -> None:
+        legacy_runtime = get_legacy_runtime_adapter(loaded)
         try:
             result = loaded.callable(
                 *self._build_args(loaded.callable, event, ctx, legacy_args)
@@ -159,7 +162,7 @@ class HandlerDispatcher:
                         item,
                         event,
                         ctx,
-                        legacy_context=loaded.legacy_context,
+                        legacy_runtime=legacy_runtime,
                     )
                 return
             if inspect.isawaitable(result):
@@ -169,7 +172,7 @@ class HandlerDispatcher:
                     result,
                     event,
                     ctx,
-                    legacy_context=loaded.legacy_context,
+                    legacy_runtime=legacy_runtime,
                 )
         except Exception as exc:
             await self._handle_error(
@@ -177,7 +180,7 @@ class HandlerDispatcher:
                 exc,
                 event,
                 ctx,
-                legacy_context=loaded.legacy_context,
+                legacy_runtime=legacy_runtime,
                 handler_name=loaded.callable.__name__,
             )
             raise
@@ -306,27 +309,18 @@ class HandlerDispatcher:
         event: MessageEvent,
         ctx: Context | None = None,
         *,
-        legacy_context=None,
+        legacy_runtime=None,
     ) -> None:
         from ..api.event.event_result import MessageEventResult
-        from ..api.event import AstrMessageEvent
         from ..api.message.chain import MessageChain
 
         compat_event = None
-        if legacy_context is not None:
-            compat_event = AstrMessageEvent.from_message_event(event)
-            if isinstance(item, (MessageEventResult, MessageChain, str)):
-                compat_event.set_result(item)
-                await legacy_context._run_compat_hook(
-                    "on_decorating_result",
-                    event=compat_event,
-                    context=ctx,
-                    legacy_context=legacy_context,
-                    result=compat_event.get_result(),
-                )
-                if compat_event.is_stopped():
-                    return
-                item = compat_event.get_result() or item
+        if legacy_runtime is not None:
+            prepared = await legacy_runtime.prepare_result(item, event, ctx)
+            compat_event = prepared.compat_event
+            if prepared.stopped:
+                return
+            item = prepared.item
 
         if isinstance(item, MessageEventResult):
             if item.chain and ctx is not None and not item.is_plain_text_only():
@@ -334,24 +328,14 @@ class HandlerDispatcher:
                     event.session_ref or event.session_id,
                     item.to_payload(),
                 )
-                if legacy_context is not None:
-                    await legacy_context._run_compat_hook(
-                        "after_message_sent",
-                        event=compat_event,
-                        context=ctx,
-                        legacy_context=legacy_context,
-                    )
+                if legacy_runtime is not None:
+                    await legacy_runtime.after_send(compat_event, ctx)
                 return
             plain_text = item.get_plain_text()
             if plain_text:
                 await event.reply(plain_text)
-                if legacy_context is not None:
-                    await legacy_context._run_compat_hook(
-                        "after_message_sent",
-                        event=compat_event,
-                        context=ctx,
-                        legacy_context=legacy_context,
-                    )
+                if legacy_runtime is not None:
+                    await legacy_runtime.after_send(compat_event, ctx)
             return
         if isinstance(item, MessageChain):
             if item.chain and ctx is not None and not item.is_plain_text_only():
@@ -359,70 +343,29 @@ class HandlerDispatcher:
                     event.session_ref or event.session_id,
                     item.to_payload(),
                 )
-                if legacy_context is not None:
-                    await legacy_context._run_compat_hook(
-                        "after_message_sent",
-                        event=compat_event,
-                        context=ctx,
-                        legacy_context=legacy_context,
-                    )
+                if legacy_runtime is not None:
+                    await legacy_runtime.after_send(compat_event, ctx)
                 return
             plain_text = item.get_plain_text()
             if plain_text:
                 await event.reply(plain_text)
-                if legacy_context is not None:
-                    await legacy_context._run_compat_hook(
-                        "after_message_sent",
-                        event=compat_event,
-                        context=ctx,
-                        legacy_context=legacy_context,
-                    )
+                if legacy_runtime is not None:
+                    await legacy_runtime.after_send(compat_event, ctx)
             return
         if isinstance(item, PlainTextResult):
             await event.reply(item.text)
-            if legacy_context is not None:
-                await legacy_context._run_compat_hook(
-                    "after_message_sent",
-                    event=compat_event or AstrMessageEvent.from_message_event(event),
-                    context=ctx,
-                    legacy_context=legacy_context,
-                )
+            if legacy_runtime is not None:
+                await legacy_runtime.after_send(compat_event, ctx)
             return
         if isinstance(item, str):
             await event.reply(item)
-            if legacy_context is not None:
-                await legacy_context._run_compat_hook(
-                    "after_message_sent",
-                    event=compat_event or AstrMessageEvent.from_message_event(event),
-                    context=ctx,
-                    legacy_context=legacy_context,
-                )
+            if legacy_runtime is not None:
+                await legacy_runtime.after_send(compat_event, ctx)
             return
         if isinstance(item, dict) and "text" in item:
             await event.reply(str(item["text"]))
-            if legacy_context is not None:
-                await legacy_context._run_compat_hook(
-                    "after_message_sent",
-                    event=compat_event or AstrMessageEvent.from_message_event(event),
-                    context=ctx,
-                    legacy_context=legacy_context,
-                )
-
-    async def _passes_compat_filters(
-        self,
-        loaded: LoadedHandler,
-        event: MessageEvent,
-    ) -> bool:
-        if not loaded.compat_filters or loaded.legacy_context is None:
-            return True
-        from ..api.event import AstrMessageEvent
-
-        compat_event = AstrMessageEvent.from_message_event(event)
-        cfg = loaded.legacy_context._runtime_config()
-        for filter_obj in loaded.compat_filters:
-            if not filter_obj.filter(compat_event, cfg):
-                return False
-        return True
+            if legacy_runtime is not None:
+                await legacy_runtime.after_send(compat_event, ctx)
 
     async def _handle_error(
         self,
@@ -431,20 +374,16 @@ class HandlerDispatcher:
         event: MessageEvent,
         ctx: Context,
         *,
-        legacy_context=None,
+        legacy_runtime=None,
         handler_name: str = "",
     ) -> None:
-        if legacy_context is not None:
-            from ..api.event import AstrMessageEvent
-
-            await legacy_context._run_compat_hook(
-                "on_plugin_error",
-                event=AstrMessageEvent.from_message_event(event),
-                context=ctx,
-                legacy_context=legacy_context,
-                plugin_name=self._plugin_id,
+        if legacy_runtime is not None:
+            await legacy_runtime.handle_error(
+                plugin_id=self._plugin_id,
                 handler_name=handler_name,
-                error=exc,
+                exc=exc,
+                event=event,
+                ctx=ctx,
                 traceback_text="".join(
                     traceback.TracebackException.from_exception(exc).format()
                 ),
@@ -484,8 +423,9 @@ class CapabilityDispatcher:
             plugin_id=self._plugin_id,
             cancel_token=cancel_token,
         )
-        if loaded.legacy_context is not None:
-            loaded.legacy_context.bind_runtime_context(ctx)
+        legacy_runtime = get_legacy_runtime_adapter(loaded)
+        if legacy_runtime is not None:
+            legacy_runtime.bind_runtime_context(ctx)
 
         task = asyncio.create_task(
             self._run_capability(
