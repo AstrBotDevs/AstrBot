@@ -289,8 +289,8 @@ class TelegramPlatformAdapter(Platform):
         else:
             message.type = MessageType.GROUP_MESSAGE
             message.group_id = str(update.message.chat.id)
-            if update.message.message_thread_id:
-                # Topic Group
+            if update.message.is_topic_message and update.message.message_thread_id:
+                # Telegram Topic Group: include thread id to isolate per-topic sessions.
                 message.group_id += "#" + str(update.message.message_thread_id)
                 message.session_id = message.group_id
         message.message_id = str(update.message.message_id)
