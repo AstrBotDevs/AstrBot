@@ -103,7 +103,7 @@ test('replaceTabRoute catches rejected router updates', async () => {
     },
   };
   const logger = {
-    debug: (message, cause) => {
+    warn: (message, cause) => {
       logged = { message, cause };
     },
   };

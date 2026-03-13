@@ -41,7 +41,7 @@ export async function replaceTabRoute(router, route, tab, logger = console) {
     await router.replace(createTabRouteLocation(route, tab));
     return true;
   } catch (error) {
-    logger.debug?.('Failed to update extension tab route:', error);
+    logger.warn?.('Failed to update extension tab route:', error);
     return false;
   }
 }
