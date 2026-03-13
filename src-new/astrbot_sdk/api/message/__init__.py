@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.message`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.message`` compat facade。"""
 
 from . import components as Comp
 from .chain import MessageChain

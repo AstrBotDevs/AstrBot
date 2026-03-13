@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.components`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.components`` compat facade。"""
 
 from .command import CommandComponent
 

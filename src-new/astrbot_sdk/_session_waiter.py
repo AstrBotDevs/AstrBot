@@ -77,7 +77,7 @@ class SessionWaiterManager:
 
     @staticmethod
     def _coerce_event(event: Any) -> Any:
-        from .api.event import AstrMessageEvent
+        from .api.event.astr_message_event import AstrMessageEvent
 
         if isinstance(event, AstrMessageEvent):
             return event

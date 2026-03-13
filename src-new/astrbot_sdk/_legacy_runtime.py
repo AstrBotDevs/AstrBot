@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .api.event import AstrMessageEvent
+from .api.event.astr_message_event import AstrMessageEvent
 from .api.event.event_result import MessageEventResult
 from .api.message.chain import MessageChain
 from .context import Context
@@ -362,7 +362,7 @@ def create_legacy_component_context(component_cls: Any, plugin_name: str) -> Any
     factory = getattr(component_cls, "_astrbot_create_legacy_context", None)
     if callable(factory):
         return factory(plugin_name)
-    from .api.star.context import Context as LegacyContext
+    from ._legacy_api import Context as LegacyContext
 
     return LegacyContext(plugin_name)
 

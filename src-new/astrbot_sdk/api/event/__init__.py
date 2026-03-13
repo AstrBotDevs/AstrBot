@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.event`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.event`` compat facade。"""
 
 from ..message.chain import MessageChain
 from .astr_message_event import AstrMessageEvent, AstrMessageEventModel

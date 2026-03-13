@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.provider`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.provider`` compat facade。"""
 
 from .entities import LLMResponse
 

@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.message_components`` 的兼容导出。"""
+"""过渡期 ``astrbot_sdk.api.message_components`` compat facade。"""
 
 from .message.components import (
     At,

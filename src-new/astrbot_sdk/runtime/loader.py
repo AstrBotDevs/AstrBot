@@ -114,7 +114,7 @@ from .._legacy_runtime import (
     is_new_star_component,
     plan_legacy_component_construction,
 )
-from ..api.basic import AstrBotConfig
+from ..api.basic.astrbot_config import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
 from .environment_groups import (

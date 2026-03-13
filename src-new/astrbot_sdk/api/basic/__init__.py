@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.basic`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.basic`` compat facade。"""
 
 from .astrbot_config import AstrBotConfig
 from .conversation_mgr import BaseConversationManager

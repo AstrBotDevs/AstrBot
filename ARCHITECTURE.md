@@ -10,7 +10,7 @@ AstrBot SDK v4 当前同时承担两件事：
 1. 提供一套原生 v4 插件模型：`Star`、`Context`、`MessageEvent`、capability clients、v4 protocol。
 2. 维持旧插件兼容：`astrbot_sdk.api.*`、`astrbot_sdk.compat`、`astrbot.api.*` 以及选定的 `astrbot.core.*` facade 继续可用。
 
-因此，compat 现在不是可忽略的旁路，而是一个受控的长期子系统。当前架构目标是：
+因此，compat 现在不是可忽略的旁路，而是一个受控的过渡子系统。当前架构目标是：
 
 - v4 原生 API 仍保持清晰、窄导出、协议优先。
 - legacy 兼容逻辑尽量收口到私有边界，而不是扩散到 runtime 主干。
@@ -45,6 +45,7 @@ AstrBot SDK v4 当前同时承担两件事：
 - `astrbot_sdk.runtime.__init__` 只导出高级运行时原语，不把 loader/bootstrap 等编排细节提升为根级稳定 API。
 - `astrbot_sdk.protocol.__init__` 只导出 v4 原生协议模型；legacy JSON-RPC 适配器留在 `protocol.legacy_adapter` 子模块。
 - compat 私有实现保留在既有顶层 private 模块中，避免再维护一套并行目录。
+- `astrbot_sdk.api.*` 与 `astrbot.*` 仅作为迁移期 facade 保留，不再扩张为长期稳定主入口。
 - runtime 主干通过 `_legacy_runtime.py` / `_legacy_loader.py` 等私有边界执行 compat filters / hooks / 生命周期桥接，不直接展开更多 legacy 细节。
 
 ## 3. 目录结构

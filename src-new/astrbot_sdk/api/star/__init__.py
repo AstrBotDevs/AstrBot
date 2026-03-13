@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.star`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.star`` compat facade。"""
 
 from ..._legacy_api import LegacyStar as Star, StarTools, register
 from .context import Context

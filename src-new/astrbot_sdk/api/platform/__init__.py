@@ -1,4 +1,4 @@
-"""旧版 ``astrbot_sdk.api.platform`` 的兼容入口。"""
+"""过渡期 ``astrbot_sdk.api.platform`` compat facade。"""
 
 from .platform_metadata import PlatformMetadata
 

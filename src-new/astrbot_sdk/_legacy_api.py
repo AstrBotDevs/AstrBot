@@ -559,7 +559,7 @@ class LegacyContext:
     def _legacy_event(event: Any | None):
         if event is None:
             return None
-        from .api.event import AstrMessageEvent
+        from .api.event.astr_message_event import AstrMessageEvent
 
         if isinstance(event, AstrMessageEvent):
             return event
@@ -570,7 +570,7 @@ class LegacyContext:
         annotation: Any,
         available: dict[str, Any],
     ) -> Any:
-        from .api.event import AstrMessageEvent
+        from .api.event.astr_message_event import AstrMessageEvent
         from .api.provider.entities import LLMResponse
         from .context import Context as RuntimeContext
 
