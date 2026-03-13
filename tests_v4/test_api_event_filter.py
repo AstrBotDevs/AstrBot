@@ -9,13 +9,18 @@ import pytest
 
 from astrbot_sdk.api.event.filter import (
     ADMIN,
+    CustomFilter,
     EventMessageType,
     PermissionType,
     PlatformAdapterType,
     command,
     command_group,
+    custom_filter,
     event_message_type,
     filter,
+    get_compat_custom_filters,
+    get_compat_hook_metas,
+    get_compat_llm_tool_meta,
     llm_tool,
     on_llm_tool_respond,
     on_plugin_error,
@@ -334,19 +339,27 @@ class TestCommandGroupCompat:
         assert meta.trigger.command == "math calc add"
 
 
-class TestUnsupportedCompatFilters:
-    """Tests for explicitly unsupported legacy helpers."""
+class TestCompatHookMetadata:
+    """Tests for legacy hook metadata capture."""
 
-    def test_other_unsupported_filter_still_raises_explicitly(self):
-        """Unsupported helpers should fail loudly instead of silently no-oping."""
-        with pytest.raises(NotImplementedError, match="on_llm_request"):
-            filter.on_llm_request()
+    def test_hook_decorators_store_prioritized_metadata(self):
+        """Legacy hook decorators should record runtime metadata instead of raising."""
+
+        @filter.on_llm_request(priority=5)
+        @on_waiting_llm_request(priority=1)
+        async def hook():
+            pass
+
+        metas = get_compat_hook_metas(hook)
+
+        assert [(item.name, item.priority) for item in metas] == [
+            ("on_waiting_llm_request", 1),
+            ("on_llm_request", 5),
+        ]
 
     @pytest.mark.parametrize(
         ("factory", "name"),
         [
-            (llm_tool, "llm_tool"),
-            (on_waiting_llm_request, "on_waiting_llm_request"),
             (on_using_llm_tool, "on_using_llm_tool"),
             (on_llm_tool_respond, "on_llm_tool_respond"),
             (on_plugin_error, "on_plugin_error"),
@@ -354,7 +367,52 @@ class TestUnsupportedCompatFilters:
             (on_plugin_unloaded, "on_plugin_unloaded"),
         ],
     )
-    def test_newly_exposed_legacy_helpers_fail_loudly(self, factory, name):
-        """Newly-exposed legacy import names should still fail explicitly when unsupported."""
-        with pytest.raises(NotImplementedError, match=name):
-            factory()
+    def test_hook_factories_attach_named_hook_metadata(self, factory, name):
+        """Compat hook helpers should attach the expected hook name."""
+
+        @factory()
+        async def hook():
+            pass
+
+        metas = get_compat_hook_metas(hook)
+
+        assert [item.name for item in metas] == [name]
+
+    def test_llm_tool_builds_compat_tool_metadata(self):
+        """llm_tool() should expose legacy tool metadata for runtime registration."""
+
+        @llm_tool(name="math.add")
+        async def add_tool(a: int, b: int, event=None):
+            """Add two integers.
+
+            Args:
+                a: first addend
+                b: second addend
+            """
+            return a + b
+
+        tool_meta = get_compat_llm_tool_meta(add_tool)
+
+        assert tool_meta is not None
+        assert tool_meta.name == "math.add"
+        assert tool_meta.description == "Add two integers."
+        assert tool_meta.parameters == [
+            {"type": "number", "name": "a", "description": "first addend"},
+            {"type": "number", "name": "b", "description": "second addend"},
+        ]
+
+    def test_custom_filter_records_filter_instance_on_handler(self):
+        """custom_filter() should keep legacy filter objects for dispatcher evaluation."""
+
+        class AllowAll(CustomFilter):
+            def filter(self, event, cfg) -> bool:
+                return True
+
+        @custom_filter(AllowAll)
+        async def handler():
+            pass
+
+        filters = get_compat_custom_filters(handler)
+
+        assert len(filters) == 1
+        assert isinstance(filters[0], AllowAll)

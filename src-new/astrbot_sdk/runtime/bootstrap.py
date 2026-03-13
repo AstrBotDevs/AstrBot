@@ -96,6 +96,11 @@ from typing import IO, Any
 
 from loguru import logger
 
+from .._legacy_runtime import (
+    bind_legacy_runtime_contexts,
+    run_legacy_worker_shutdown_hooks,
+    run_legacy_worker_startup_hooks,
+)
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
@@ -662,6 +667,9 @@ class PluginWorkerRuntime:
                 ],
                 metadata={"plugin_id": self.plugin.name},
             )
+            await self._run_legacy_worker_startup_hooks(
+                metadata=dict(self.plugin.manifest_data),
+            )
         except Exception:
             if lifecycle_started:
                 try:
@@ -676,6 +684,9 @@ class PluginWorkerRuntime:
 
     async def stop(self) -> None:
         try:
+            await self._run_legacy_worker_shutdown_hooks(
+                metadata=dict(self.plugin.manifest_data),
+            )
             await self._run_lifecycle("on_stop")
         finally:
             await self.peer.stop()
@@ -719,21 +730,30 @@ class PluginWorkerRuntime:
                 await result
 
     def _bind_legacy_runtime_contexts(self, runtime_context: RuntimeContext) -> None:
-        seen: set[int] = set()
-        for loaded in [
-            *self.loaded_plugin.handlers,
-            *self.loaded_plugin.capabilities,
-        ]:
-            legacy_context = getattr(loaded, "legacy_context", None)
-            if legacy_context is None:
-                continue
-            marker = id(legacy_context)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            bind_runtime_context = getattr(legacy_context, "bind_runtime_context", None)
-            if callable(bind_runtime_context):
-                bind_runtime_context(runtime_context)
+        bind_legacy_runtime_contexts(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+            runtime_context,
+        )
+
+    async def _run_legacy_worker_startup_hooks(
+        self, *, metadata: dict[str, Any]
+    ) -> None:
+        await run_legacy_worker_startup_hooks(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+            context=self._lifecycle_context,
+            metadata=metadata,
+        )
+
+    async def _run_legacy_worker_shutdown_hooks(
+        self,
+        *,
+        metadata: dict[str, Any],
+    ) -> None:
+        await run_legacy_worker_shutdown_hooks(
+            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+            context=self._lifecycle_context,
+            metadata=metadata,
+        )
 
     @staticmethod
     def _resolve_lifecycle_hook(instance: Any, method_name: str):

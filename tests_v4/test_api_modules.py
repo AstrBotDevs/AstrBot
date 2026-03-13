@@ -287,6 +287,39 @@ class TestAstrbotImportAlias:
         with pytest.raises(NotImplementedError, match="register_platform_adapter"):
             register_platform_adapter()
 
+    def test_legacy_astrbot_core_utils_astrbot_path_imports(self):
+        """astrbot.core.utils.astrbot_path should expose legacy path helpers."""
+        from astrbot.core.utils.astrbot_path import (
+            get_astrbot_data_path,
+            get_astrbot_temp_path,
+        )
+
+        assert callable(get_astrbot_data_path)
+        assert callable(get_astrbot_temp_path)
+
+    def test_legacy_astrbot_core_provider_imports(self):
+        """astrbot.core.provider old import paths should remain available."""
+        from astrbot.core.provider.entities import ProviderType, RerankResult
+        from astrbot.core.provider.provider import (
+            EmbeddingProvider,
+            Provider,
+            RerankProvider,
+        )
+
+        assert Provider is not None
+        assert EmbeddingProvider is not None
+        assert RerankProvider is not None
+        assert ProviderType.CHAT_COMPLETION.value == "chat_completion"
+        assert RerankResult(index=1, relevance_score=0.5).index == 1
+
+    def test_legacy_astrbot_core_agent_and_db_imports(self):
+        """astrbot.core.agent/db old import paths should remain available."""
+        from astrbot.core.agent.message import TextPart
+        from astrbot.core.db.po import Personality
+
+        assert TextPart(text="hi").text == "hi"
+        assert Personality is not None
+
     def test_legacy_astrbot_event_filter_module_exports(self):
         """astrbot.api.event.filter should be importable from the old module path."""
         from astrbot.api.event.filter import EventMessageType, command, llm_tool

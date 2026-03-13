@@ -16,7 +16,13 @@ from astrbot.core.utils.session_waiter import (
     session_waiter,
 )
 from astrbot_sdk._legacy_api import LegacyContext
+from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
 from astrbot_sdk.api.event import AstrMessageEvent
+from astrbot_sdk.api.event.filter import (
+    CustomFilter,
+    after_message_sent,
+    on_decorating_result,
+)
 from astrbot_sdk.api.message import Comp, MessageChain
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent, PlainTextResult
@@ -570,6 +576,174 @@ class TestHandlerDispatcherInvoke:
         await dispatcher.invoke(message, CancelToken())
 
         assert captured_replies == ["显式触发"]
+
+
+class TestHandlerDispatcherLegacyCompat:
+    """Tests for legacy compat hooks and filters during dispatch."""
+
+    @pytest.mark.asyncio
+    async def test_prebuilt_legacy_runtime_adapter_can_drive_filtering(self):
+        """Dispatcher should prefer the adapter boundary instead of reading raw legacy fields."""
+        peer = MockPeer()
+        legacy_context = LegacyContext("test_plugin")
+        called = []
+
+        class RejectAll(CustomFilter):
+            def filter(self, event: AstrMessageEvent, cfg) -> bool:
+                return False
+
+        async def handler_func(event: AstrMessageEvent):
+            called.append(event.message_str)
+
+        descriptor = HandlerDescriptor(
+            id="legacy.adapter.filtered",
+            trigger=CommandTrigger(command="ask"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=None,
+        )
+        handler.legacy_runtime = LegacyRuntimeAdapter(
+            legacy_context=legacy_context,
+            filters=[RejectAll()],
+        )
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_filtered_adapter",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.adapter.filtered",
+                "event": {
+                    "text": "ask",
+                    "session_id": "session-filtered",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        result = await dispatcher.invoke(message, CancelToken())
+
+        assert result == {}
+        assert called == []
+        assert peer.sent_messages == []
+
+    @pytest.mark.asyncio
+    async def test_custom_filter_can_skip_legacy_handler_invocation(self):
+        """Legacy custom filters should prevent handler execution when they reject the event."""
+        peer = MockPeer()
+        legacy_context = LegacyContext("test_plugin")
+        called = []
+
+        class RejectAll(CustomFilter):
+            def filter(self, event: AstrMessageEvent, cfg) -> bool:
+                return False
+
+        async def handler_func(event: AstrMessageEvent):
+            called.append(event.message_str)
+
+        descriptor = HandlerDescriptor(
+            id="legacy.filtered",
+            trigger=CommandTrigger(command="ask"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+            compat_filters=[RejectAll()],
+        )
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_filtered",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.filtered",
+                "event": {
+                    "text": "ask",
+                    "session_id": "session-filtered",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        result = await dispatcher.invoke(message, CancelToken())
+
+        assert result == {}
+        assert called == []
+        assert peer.sent_messages == []
+
+    @pytest.mark.asyncio
+    async def test_decorating_and_after_send_hooks_run_for_legacy_results(self):
+        """Legacy decorating/send hooks should be applied around compat result sending."""
+        peer = MockPeer()
+        legacy_context = LegacyContext("test_plugin")
+        observed_results = []
+
+        class CompatHooks:
+            @on_decorating_result()
+            async def decorate(self, event: AstrMessageEvent):
+                event.set_result("decorated result")
+
+            @after_message_sent()
+            async def after_send(self, event: AstrMessageEvent):
+                result = event.get_result()
+                observed_results.append(result.get_plain_text() if result else "")
+
+        legacy_context._register_component(CompatHooks())
+
+        async def handler_func(event: AstrMessageEvent):
+            return "raw result"
+
+        descriptor = HandlerDescriptor(
+            id="legacy.decorated",
+            trigger=CommandTrigger(command="decorate"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+        )
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_decorated",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.decorated",
+                "event": {
+                    "text": "decorate",
+                    "session_id": "session-decorated",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        await dispatcher.invoke(message, CancelToken())
+
+        assert peer.sent_messages == [
+            {"session_id": "session-decorated", "text": "decorated result"}
+        ]
+        assert observed_results == ["decorated result"]
 
 
 class TestHandlerDispatcherCancel:

@@ -18,11 +18,11 @@
     5. 返回 PluginDiscoveryResult
 
 环境管理流程：
-    1. 检查 .venv 目录是否存在
-    2. 检查 Python 版本是否匹配
-    3. 检查指纹是否变化（requirements 内容）
-    4. 必要时重建虚拟环境
-    5. 使用 uv 安装依赖
+    1. 对插件集合做共享环境规划
+    2. 按 Python 版本和依赖兼容性构建环境分组
+    3. 为每个分组生成 lock/source/metadata 工件
+    4. 必要时重建或同步分组虚拟环境
+    5. 将单个插件映射到所属分组环境
 
 插件加载流程：
     1. 将插件目录添加到 sys.path
@@ -57,7 +57,7 @@
 
     新版 loader.py:
         - PluginSpec 描述插件规范
-        - PluginEnvironmentManager 管理虚拟环境
+        - PluginEnvironmentManager 管理分组共享环境
         - load_plugin() 加载并解析组件
         - LoadedHandler 封装处理器和描述符
         - 支持新旧 Star 组件兼容
@@ -100,6 +100,12 @@ from typing import Any
 
 import yaml
 
+from .._legacy_runtime import (
+    LegacyRuntimeAdapter,
+    build_capability_legacy_runtime,
+    build_handler_legacy_runtime,
+    register_legacy_component,
+)
 from ..api.basic import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
@@ -151,6 +157,20 @@ class LoadedHandler:
     callable: Any
     owner: Any
     legacy_context: Any | None = None
+    compat_filters: list[Any] = field(default_factory=list)
+    legacy_runtime: LegacyRuntimeAdapter | None = field(
+        init=False, default=None, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        if self.legacy_context is None:
+            return
+        self.legacy_runtime = build_handler_legacy_runtime(
+            self.legacy_context,
+            self.callable,
+            compat_filters=self.compat_filters or None,
+        )
+        self.compat_filters = list(self.legacy_runtime.filters)
 
 
 @dataclass(slots=True)
@@ -159,6 +179,14 @@ class LoadedCapability:
     callable: Any
     owner: Any
     legacy_context: Any | None = None
+    legacy_runtime: LegacyRuntimeAdapter | None = field(
+        init=False, default=None, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        if self.legacy_context is None:
+            return
+        self.legacy_runtime = build_capability_legacy_runtime(self.legacy_context)
 
 
 @dataclass(slots=True)
@@ -696,6 +724,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                 and getattr(instance, "config", None) is None
             ):
                 setattr(instance, "config", component_config)
+            register_legacy_component(legacy_context, instance)
         instances.append(instance)
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)

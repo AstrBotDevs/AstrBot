@@ -12,12 +12,17 @@
         Context.db.set(key, value)
         Context.db.get(key)
         Context.db.delete(key)
-        Context.db.list(prefix)  # 新增：列出键
+        Context.db.list(prefix)      # 列出键
+        Context.db.get_many(keys)    # 批量读取
+        Context.db.set_many(items)   # 批量写入
+        Context.db.watch(prefix)     # 订阅变更流
 
 功能说明：
     - 数据永久存储，除非用户显式删除
     - 值类型支持任意 JSON 数据
     - 支持前缀查询键列表
+    - 支持批量读写
+    - 支持订阅变更事件
 """
 
 from __future__ import annotations

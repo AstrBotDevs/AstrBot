@@ -14,6 +14,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from astrbot_sdk._legacy_api import LegacyContext
+from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
+from astrbot_sdk.api.event.filter import CustomFilter, custom_filter
 from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor
 from astrbot_sdk.runtime.environment_groups import (
     GROUP_STATE_FILE_NAME,
@@ -159,6 +162,57 @@ class TestLoadedHandler:
         assert loaded.callable == handler_func
         assert loaded.owner == owner
         assert loaded.legacy_context is None
+        assert loaded.legacy_runtime is None
+
+    def test_init_builds_legacy_runtime_adapter(self):
+        """LoadedHandler should prebuild the legacy runtime adapter for runtime use."""
+        descriptor = HandlerDescriptor(
+            id="test.handler",
+            trigger=CommandTrigger(command="hello"),
+        )
+        legacy_context = LegacyContext("test_plugin")
+
+        def handler_func():
+            pass
+
+        loaded = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+        )
+
+        assert isinstance(loaded.legacy_runtime, LegacyRuntimeAdapter)
+        assert loaded.legacy_runtime.legacy_context is legacy_context
+
+    def test_init_collects_compat_filters_through_adapter_boundary(self):
+        """LoadedHandler should preserve compat filters when prebuilding the adapter."""
+        descriptor = HandlerDescriptor(
+            id="test.handler",
+            trigger=CommandTrigger(command="hello"),
+        )
+        legacy_context = LegacyContext("test_plugin")
+
+        class RejectAll(CustomFilter):
+            def filter(self, event, cfg) -> bool:
+                return False
+
+        @custom_filter(RejectAll)
+        def handler_func():
+            pass
+
+        loaded = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+        )
+
+        assert len(loaded.compat_filters) == 1
+        assert isinstance(loaded.compat_filters[0], RejectAll)
+        assert loaded.legacy_runtime is not None
+        assert len(loaded.legacy_runtime.filters) == 1
+        assert isinstance(loaded.legacy_runtime.filters[0], RejectAll)
 
 
 class TestLoadedPlugin:

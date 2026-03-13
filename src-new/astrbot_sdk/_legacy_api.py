@@ -8,14 +8,23 @@
 from __future__ import annotations
 
 import inspect
+import json
 from collections import defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-from .clients.llm import LLMResponse
+from ._legacy_llm import (
+    CompatLLMToolManager,
+    _CompatProviderRequest,
+    _legacy_llm_response,
+    _tool_parameters_from_legacy_args,
+)
+from .api.basic.astrbot_config import AstrBotConfig
+from .api.provider.entities import LLMResponse
 from .context import Context as NewContext
 from .star import Star
 
@@ -55,6 +64,13 @@ def _iter_registered_component_methods(
         if callable(bound_attr):
             methods.append((attr_name, bound_attr))
     return methods
+
+
+@dataclass(slots=True)
+class _CompatHookEntry:
+    name: str
+    priority: int
+    handler: Callable[..., Any]
 
 
 class LegacyConversationManager:
@@ -365,20 +381,50 @@ class LegacyConversationManager:
         )
 
     async def get_filtered_conversations(self, *args: Any, **kwargs: Any) -> Any:
-        """已弃用：v4 不支持此方法。"""
-        raise NotImplementedError(
-            "get_filtered_conversations() 在 v4 中不再支持。\n"
-            f"请使用 ctx.db.query(...) 自行实现过滤逻辑。\n"
-            f"迁移文档：{MIGRATION_DOC_URL}"
+        """兼容旧版会话过滤接口。"""
+        unified_msg_origin = kwargs.get("unified_msg_origin")
+        platform_id = kwargs.get("platform_id")
+        keyword = kwargs.get("keyword") or kwargs.get("query")
+        conversations = await self.get_conversations(
+            unified_msg_origin=unified_msg_origin,
+            platform_id=platform_id,
         )
+        if not isinstance(keyword, str) or not keyword:
+            return conversations
+        filtered: list[dict[str, Any]] = []
+        for conversation in conversations:
+            haystack = json.dumps(conversation, ensure_ascii=False)
+            if keyword in haystack:
+                filtered.append(conversation)
+        return filtered
 
     async def get_human_readable_context(self, *args: Any, **kwargs: Any) -> Any:
-        """已弃用：v4 不支持此方法。"""
-        raise NotImplementedError(
-            "get_human_readable_context() 在 v4 中不再支持。\n"
-            f"请自行遍历会话 content 字段格式化输出。\n"
-            f"迁移文档：{MIGRATION_DOC_URL}"
+        """把兼容会话内容格式化为可读文本。"""
+        unified_msg_origin = kwargs.get("unified_msg_origin")
+        conversation_id = kwargs.get("conversation_id")
+        if conversation_id is None and isinstance(unified_msg_origin, str):
+            conversation_id = await self.get_curr_conversation_id(unified_msg_origin)
+        if not isinstance(conversation_id, str) or not conversation_id:
+            return ""
+        conversation = await self.get_conversation(
+            unified_msg_origin or "",
+            conversation_id,
+            create_if_not_exists=False,
         )
+        if not isinstance(conversation, dict):
+            return ""
+        lines: list[str] = []
+        for item in conversation.get("content", []):
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "unknown")
+            content = item.get("content")
+            if isinstance(content, list):
+                rendered = json.dumps(content, ensure_ascii=False)
+            else:
+                rendered = str(content or "")
+            lines.append(f"{role}: {rendered}".rstrip())
+        return "\n".join(lines)
 
 
 class LegacyContext:
@@ -389,6 +435,8 @@ class LegacyContext:
         self._runtime_context: NewContext | None = None
         self._registered_managers: dict[str, Any] = {}
         self._registered_functions: dict[str, Callable[..., Any]] = {}
+        self._compat_hooks: defaultdict[str, list[_CompatHookEntry]] = defaultdict(list)
+        self._llm_tools = CompatLLMToolManager()
         self.conversation_manager = LegacyConversationManager(self)
         self._register_component(self.conversation_manager)
 
@@ -400,12 +448,46 @@ class LegacyContext:
             raise RuntimeError("LegacyContext 尚未绑定运行时 Context")
         return self._runtime_context
 
+    def get_llm_tool_manager(self) -> CompatLLMToolManager:
+        return self._llm_tools
+
+    def activate_llm_tool(self, name: str) -> bool:
+        return self._llm_tools.activate_llm_tool(name)
+
+    def deactivate_llm_tool(self, name: str) -> bool:
+        return self._llm_tools.deactivate_llm_tool(name)
+
+    def register_llm_tool(
+        self,
+        name: str,
+        func_args: list[dict[str, Any]],
+        desc: str,
+        func_obj: Callable[..., Any],
+    ) -> None:
+        self._llm_tools.add_func(name, func_args, desc, func_obj)
+
+    def unregister_llm_tool(self, name: str) -> None:
+        self._llm_tools.remove_func(name)
+
     def get_config(self) -> dict[str, Any]:
         runtime_context = self._runtime_context
         if runtime_context is None:
             return {}
         config = getattr(runtime_context, "_astrbot_config", None)
         return dict(config) if isinstance(config, dict) else {}
+
+    def _runtime_config(self) -> Any:
+        runtime_context = self._runtime_context
+        config = (
+            getattr(runtime_context, "_astrbot_config", None)
+            if runtime_context
+            else None
+        )
+        if isinstance(config, AstrBotConfig):
+            return config
+        if isinstance(config, dict):
+            return AstrBotConfig(dict(config))
+        return AstrBotConfig({})
 
     @staticmethod
     def _merge_llm_kwargs(
@@ -419,12 +501,232 @@ class LegacyContext:
         return merged
 
     @staticmethod
+    def _apply_request_overrides(
+        call_kwargs: dict[str, Any],
+        request: _CompatProviderRequest,
+    ) -> dict[str, Any]:
+        updated = dict(call_kwargs)
+        if request.model:
+            updated["model"] = request.model
+        return updated
+
+    @staticmethod
     def _component_names(component: Any) -> list[str]:
         names = [component.__class__.__name__]
         compat_name = getattr(component, "__compat_component_name__", None)
         if isinstance(compat_name, str) and compat_name and compat_name not in names:
             names.insert(0, compat_name)
         return names
+
+    def _register_hook(
+        self,
+        name: str,
+        handler: Callable[..., Any],
+        *,
+        priority: int = 0,
+    ) -> None:
+        self._compat_hooks[name].append(
+            _CompatHookEntry(name=name, priority=priority, handler=handler)
+        )
+        self._compat_hooks[name].sort(key=lambda item: item.priority, reverse=True)
+
+    def _register_compat_component(self, component: Any) -> None:
+        from .api.event.filter import (
+            get_compat_hook_metas,
+            get_compat_llm_tool_meta,
+        )
+
+        for _attr_name, attr in _iter_registered_component_methods(component):
+            tool_meta = get_compat_llm_tool_meta(attr)
+            if tool_meta is not None:
+                self._llm_tools.add_tool(
+                    name=tool_meta.name,
+                    description=tool_meta.description,
+                    parameters=_tool_parameters_from_legacy_args(tool_meta.parameters),
+                    handler=attr,
+                )
+            for hook_meta in get_compat_hook_metas(attr):
+                self._register_hook(
+                    hook_meta.name,
+                    attr,
+                    priority=hook_meta.priority,
+                )
+
+    @staticmethod
+    def _legacy_event(event: Any | None):
+        if event is None:
+            return None
+        from .api.event import AstrMessageEvent
+
+        if isinstance(event, AstrMessageEvent):
+            return event
+        return AstrMessageEvent.from_message_event(event)
+
+    @staticmethod
+    def _hook_type_injection(
+        annotation: Any,
+        available: dict[str, Any],
+    ) -> Any:
+        from .api.event import AstrMessageEvent
+        from .context import Context as RuntimeContext
+
+        if annotation is Any or annotation is inspect.Signature.empty:
+            return None
+        if annotation is AstrMessageEvent:
+            return available.get("event")
+        if annotation is RuntimeContext or annotation is NewContext:
+            return available.get("context")
+        if annotation is LegacyContext:
+            return available.get("legacy_context")
+        if annotation is LLMResponse:
+            return available.get("response")
+        return None
+
+    async def _call_with_available(
+        self,
+        handler: Callable[..., Any],
+        available: dict[str, Any],
+    ) -> Any:
+        signature = inspect.signature(handler)
+        args: list[Any] = []
+        kwargs: dict[str, Any] = {}
+        for parameter in signature.parameters.values():
+            injected = None
+            if parameter.name in available:
+                injected = available[parameter.name]
+            else:
+                injected = self._hook_type_injection(parameter.annotation, available)
+            if injected is None:
+                if parameter.default is not parameter.empty:
+                    continue
+                continue
+            if parameter.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                args.append(injected)
+            elif parameter.kind == inspect.Parameter.KEYWORD_ONLY:
+                kwargs[parameter.name] = injected
+        result = handler(*args, **kwargs)
+        if inspect.isasyncgen(result):
+            final_value = None
+            async for item in result:
+                final_value = item
+                await self._consume_tool_result(
+                    available.get("event"),
+                    available.get("context"),
+                    item,
+                )
+            return final_value
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    async def _run_compat_hook(
+        self,
+        name: str,
+        **available: Any,
+    ) -> list[Any]:
+        hook_results: list[Any] = []
+        for entry in self._compat_hooks.get(name, []):
+            hook_results.append(
+                await self._call_with_available(entry.handler, available)
+            )
+        return hook_results
+
+    async def _consume_tool_result(
+        self,
+        event: Any | None,
+        runtime_context: NewContext | None,
+        item: Any,
+    ) -> None:
+        if event is None:
+            return
+        from .api.event.event_result import MessageEventResult
+        from .api.message.chain import MessageChain
+
+        legacy_event = self._legacy_event(event)
+        if legacy_event is None:
+            return
+        if isinstance(item, MessageEventResult):
+            if (
+                item.chain
+                and runtime_context is not None
+                and not item.is_plain_text_only()
+            ):
+                await runtime_context.platform.send_chain(
+                    legacy_event.session_ref or legacy_event.session_id,
+                    item.to_payload(),
+                )
+                return
+            plain_text = item.get_plain_text()
+            if plain_text:
+                await legacy_event.reply(plain_text)
+            return
+        if isinstance(item, MessageChain):
+            if (
+                item.chain
+                and runtime_context is not None
+                and not item.is_plain_text_only()
+            ):
+                await runtime_context.platform.send_chain(
+                    legacy_event.session_ref or legacy_event.session_id,
+                    item.to_payload(),
+                )
+                return
+            plain_text = item.get_plain_text()
+            if plain_text:
+                await legacy_event.reply(plain_text)
+            return
+        if isinstance(item, str):
+            await legacy_event.reply(item)
+
+    async def _invoke_llm_tool(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, Any],
+        event: Any | None,
+    ) -> str:
+        tool = self._llm_tools.get_func(tool_name)
+        if tool is None or not tool.active:
+            return f"tool '{tool_name}' not found"
+        legacy_event = self._legacy_event(event)
+        runtime_context = self.require_runtime_context()
+        await self._run_compat_hook(
+            "on_using_llm_tool",
+            event=legacy_event,
+            context=runtime_context,
+            legacy_context=self,
+            tool=tool,
+            tool_args=tool_args,
+        )
+        tool_result = await self._call_with_available(
+            tool.handler,
+            {
+                **tool_args,
+                "event": legacy_event,
+                "context": runtime_context,
+                "ctx": runtime_context,
+                "legacy_context": self,
+            },
+        )
+        if isinstance(tool_result, str):
+            normalized = tool_result
+        elif tool_result is None:
+            normalized = ""
+        else:
+            normalized = str(tool_result)
+        await self._run_compat_hook(
+            "on_llm_tool_respond",
+            event=legacy_event,
+            context=runtime_context,
+            legacy_context=self,
+            tool=tool,
+            tool_args=tool_args,
+            tool_result=normalized,
+        )
+        return normalized
 
     def _register_component(self, *components: Any) -> None:
         """保留旧版按名称暴露组件方法的兼容链路。"""
@@ -433,6 +735,7 @@ class LegacyContext:
                 self._registered_managers[class_name] = component
                 for attr_name, attr in _iter_registered_component_methods(component):
                     self._registered_functions[f"{class_name}.{attr_name}"] = attr
+            self._register_compat_component(component)
 
     async def execute_registered_function(
         self,
@@ -472,6 +775,7 @@ class LegacyContext:
         tools: Any | None = None,
         system_prompt: str | None = None,
         contexts: list[dict] | None = None,
+        event: Any | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         _warn_once("context.llm_generate()", "ctx.llm.chat_raw(...)")
@@ -480,14 +784,46 @@ class LegacyContext:
             chat_provider_id=chat_provider_id,
             kwargs=kwargs,
         )
-        return await ctx.llm.chat_raw(
-            prompt or "",
-            system=system_prompt,
-            history=contexts or [],
-            image_urls=image_urls or [],
+        legacy_event = self._legacy_event(event)
+        request = _CompatProviderRequest(
+            prompt=prompt or "",
+            session_id=legacy_event.session_id if legacy_event is not None else "",
+            image_urls=list(image_urls or []),
+            contexts=list(contexts or []),
+            system_prompt=system_prompt or "",
+            model=call_kwargs.get("model"),
+        )
+        await self._run_compat_hook(
+            "on_waiting_llm_request",
+            event=legacy_event,
+            context=ctx,
+            legacy_context=self,
+        )
+        await self._run_compat_hook(
+            "on_llm_request",
+            event=legacy_event,
+            context=ctx,
+            legacy_context=self,
+            request=request,
+        )
+        call_kwargs = self._apply_request_overrides(call_kwargs, request)
+        response = await ctx.llm.chat_raw(
+            request.prompt or "",
+            system=request.system_prompt or None,
+            history=request.contexts or [],
+            image_urls=request.image_urls or [],
             tools=tools,
             **call_kwargs,
         )
+        legacy_response = _legacy_llm_response(response)
+        await self._run_compat_hook(
+            "on_llm_response",
+            event=legacy_event,
+            context=ctx,
+            legacy_context=self,
+            response=legacy_response,
+        )
+        return legacy_response
 
     async def tool_loop_agent(
         self,
@@ -498,23 +834,103 @@ class LegacyContext:
         system_prompt: str | None = None,
         contexts: list[dict] | None = None,
         max_steps: int = 30,
+        event: Any | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        _warn_once("context.tool_loop_agent()", "ctx.llm.chat_raw(...)")
+        _warn_once("context.tool_loop_agent()", "compat local tool loop")
         ctx = self.require_runtime_context()
         call_kwargs = self._merge_llm_kwargs(
             chat_provider_id=chat_provider_id,
             kwargs=kwargs,
         )
-        return await ctx.llm.chat_raw(
-            prompt or "",
-            system=system_prompt,
-            history=contexts or [],
-            image_urls=image_urls or [],
-            tools=tools,
-            max_steps=max_steps,
-            **call_kwargs,
-        )
+        legacy_event = self._legacy_event(event)
+        history = list(contexts or [])
+        request_prompt = prompt or ""
+        combined_tools = list(self._llm_tools.get_func_desc_openai_style())
+        if isinstance(tools, list):
+            combined_tools.extend(item for item in tools if isinstance(item, dict))
+        elif tools is not None:
+            openai_schema = getattr(tools, "openai_schema", None)
+            if callable(openai_schema):
+                extra_tools = openai_schema()
+                if isinstance(extra_tools, list):
+                    combined_tools.extend(
+                        item for item in extra_tools if isinstance(item, dict)
+                    )
+
+        final_response = LLMResponse(role="assistant")
+        for _step in range(max_steps):
+            request = _CompatProviderRequest(
+                prompt=request_prompt,
+                session_id=legacy_event.session_id if legacy_event is not None else "",
+                image_urls=list(image_urls or []),
+                contexts=list(history),
+                system_prompt=system_prompt or "",
+                model=call_kwargs.get("model"),
+            )
+            await self._run_compat_hook(
+                "on_waiting_llm_request",
+                event=legacy_event,
+                context=ctx,
+                legacy_context=self,
+            )
+            await self._run_compat_hook(
+                "on_llm_request",
+                event=legacy_event,
+                context=ctx,
+                legacy_context=self,
+                request=request,
+            )
+            call_kwargs = self._apply_request_overrides(call_kwargs, request)
+            response = await ctx.llm.chat_raw(
+                request.prompt or "",
+                system=request.system_prompt or None,
+                history=request.contexts or [],
+                image_urls=request.image_urls or [],
+                tools=combined_tools or None,
+                max_steps=max_steps,
+                **call_kwargs,
+            )
+            final_response = _legacy_llm_response(response)
+            await self._run_compat_hook(
+                "on_llm_response",
+                event=legacy_event,
+                context=ctx,
+                legacy_context=self,
+                response=final_response,
+            )
+            if not final_response.tools_call_name:
+                return final_response
+
+            history.append(
+                {
+                    "role": "assistant",
+                    "content": final_response.completion_text,
+                    "tool_calls": final_response.to_openai_tool_calls(),
+                }
+            )
+            for tool_name, tool_args, tool_call_id in zip(
+                final_response.tools_call_name,
+                final_response.tools_call_args,
+                final_response.tools_call_ids,
+                strict=False,
+            ):
+                tool_result = await self._invoke_llm_tool(
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    event=legacy_event,
+                )
+                history.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "name": tool_name,
+                        "content": tool_result,
+                    }
+                )
+            request_prompt = ""
+
+        return final_response
 
     async def send_message(self, session: str, message_chain: Any) -> None:
         _warn_once(
@@ -545,12 +961,27 @@ class LegacyContext:
         await ctx.platform.send(session, text)
 
     async def add_llm_tools(self, *tools: Any) -> None:
-        # 保留旧签名，让旧插件尽快得到显式迁移提示，而不是悄悄失效。
-        raise NotImplementedError(
-            "context.add_llm_tools() 在 v4 中不再支持。\n"
-            "请使用 ctx.llm.chat_raw(..., tools=[...]) 直接传递工具。\n"
-            f"迁移文档：{MIGRATION_DOC_URL}"
-        )
+        for tool in tools:
+            name = getattr(tool, "name", None)
+            if not isinstance(name, str) or not name:
+                raise TypeError("add_llm_tools() 需要带 name 的工具对象")
+            handler = getattr(tool, "handler", None)
+            if not callable(handler):
+                raise TypeError("add_llm_tools() 需要工具对象提供可调用的 handler")
+            parameters = getattr(tool, "parameters", None)
+            if not isinstance(parameters, dict):
+                func_args = getattr(tool, "func_args", None)
+                if isinstance(func_args, list):
+                    parameters = _tool_parameters_from_legacy_args(func_args)
+                else:
+                    parameters = {"type": "object", "properties": {}, "required": []}
+            description = str(getattr(tool, "description", "") or "")
+            self._llm_tools.add_tool(
+                name=name,
+                description=description,
+                parameters=parameters,
+                handler=handler,
+            )
 
     async def put_kv_data(self, key: str, value: Any) -> None:
         _warn_once("context.put_kv_data()", "ctx.db.set(key, value)")
@@ -642,6 +1073,32 @@ class LegacyStar(Star):
 
     async def add_llm_tools(self, *tools: Any) -> None:
         await self._require_legacy_context().add_llm_tools(*tools)
+
+    def get_llm_tool_manager(self) -> CompatLLMToolManager:
+        return self._require_legacy_context().get_llm_tool_manager()
+
+    def activate_llm_tool(self, name: str) -> bool:
+        return self._require_legacy_context().activate_llm_tool(name)
+
+    def deactivate_llm_tool(self, name: str) -> bool:
+        return self._require_legacy_context().deactivate_llm_tool(name)
+
+    def register_llm_tool(
+        self,
+        name: str,
+        func_args: list[dict[str, Any]],
+        desc: str,
+        func_obj: Callable[..., Any],
+    ) -> None:
+        self._require_legacy_context().register_llm_tool(
+            name,
+            func_args,
+            desc,
+            func_obj,
+        )
+
+    def unregister_llm_tool(self, name: str) -> None:
+        self._require_legacy_context().unregister_llm_tool(name)
 
     def get_config(self) -> dict[str, Any]:
         return self._require_legacy_context().get_config()
