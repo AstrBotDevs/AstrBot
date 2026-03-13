@@ -22,7 +22,6 @@ export function createTabRouteLocation(route, tab, fallbackRouteName = EXTENSION
   if (route?.path) {
     return {
       path: route.path,
-      ...(params ? { params } : {}),
       query,
       hash: `#${tab}`,
     };

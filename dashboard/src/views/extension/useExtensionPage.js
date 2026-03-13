@@ -11,7 +11,6 @@ import {
   toPinyinText,
 } from "@/utils/pluginSearch";
 import {
-  createTabRouteLocation,
   getValidHashTab,
   replaceTabRoute,
 } from "@/utils/hashRouteTabs.mjs";
@@ -1435,7 +1434,7 @@ export const useExtensionPage = () => {
   // 生命周期
   onMounted(async () => {
     if (!syncTabFromHash(getLocationHash())) {
-      await router.replace(createTabRouteLocation(route, activeTab.value));
+      await replaceTabRoute(router, route, activeTab.value);
     }
     await getExtensions();
   

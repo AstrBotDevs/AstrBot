@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as hashRouteTabs from '../src/utils/hashRouteTabs.mjs';
+import { EXTENSION_ROUTE_NAME } from '../src/router/routeConstants.mjs';
 
 const { createTabRouteLocation, getValidHashTab } = hashRouteTabs;
 
@@ -46,7 +47,7 @@ test('createTabRouteLocation falls back to the extension route name', () => {
   const location = createTabRouteLocation(undefined, 'installed');
 
   assert.deepEqual(location, {
-    name: 'Extensions',
+    name: EXTENSION_ROUTE_NAME,
     query: {},
     hash: '#installed',
   });
@@ -73,7 +74,7 @@ test('createTabRouteLocation prefers route name and preserves params', () => {
   assert.notEqual(location.params, params);
 });
 
-test('createTabRouteLocation preserves params for path-based routes', () => {
+test('createTabRouteLocation omits params for path-based routes', () => {
   const params = { pluginId: 'demo-plugin' };
   const location = createTabRouteLocation(
     {
@@ -85,11 +86,10 @@ test('createTabRouteLocation preserves params for path-based routes', () => {
 
   assert.deepEqual(location, {
     path: '/extension/demo-plugin',
-    params: { pluginId: 'demo-plugin' },
     query: {},
     hash: '#installed',
   });
-  assert.notEqual(location.params, params);
+  assert.equal(location.params, undefined);
 });
 
 test('replaceTabRoute catches rejected router updates', async () => {
@@ -110,7 +110,7 @@ test('replaceTabRoute catches rejected router updates', async () => {
 
   const result = await hashRouteTabs.replaceTabRoute(
     router,
-    { name: 'Extensions', query: { page: '1' } },
+    { name: EXTENSION_ROUTE_NAME, query: { page: '1' } },
     'installed',
     logger,
   );
