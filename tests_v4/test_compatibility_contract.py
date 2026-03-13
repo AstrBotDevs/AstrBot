@@ -9,6 +9,8 @@ import pytest
 LEVEL_ONE_MODULES = [
     "astrbot.api",
     "astrbot.api.all",
+    "astrbot.api.components",
+    "astrbot.api.components.command",
     "astrbot.api.message_components",
     "astrbot.api.event",
     "astrbot.api.event.filter",
@@ -25,6 +27,10 @@ LEVEL_TWO_MODULES = [
     "astrbot.core.message",
     "astrbot.core.message.components",
     "astrbot.core.message.message_event_result",
+    "astrbot.core.agent",
+    "astrbot.core.agent.message",
+    "astrbot.core.db",
+    "astrbot.core.db.po",
     "astrbot.core.platform",
     "astrbot.core.platform.astr_message_event",
     "astrbot.core.platform.astrbot_message",
@@ -32,7 +38,11 @@ LEVEL_TWO_MODULES = [
     "astrbot.core.platform.platform_metadata",
     "astrbot.core.platform.register",
     "astrbot.core.platform.sources.aiocqhttp",
+    "astrbot.core.provider",
+    "astrbot.core.provider.entities",
+    "astrbot.core.provider.provider",
     "astrbot.core.utils",
+    "astrbot.core.utils.astrbot_path",
     "astrbot.core.utils.session_waiter",
 ]
 

@@ -140,10 +140,24 @@ async def test_plugin_directory():
     assert any(item.text for item in records)
 ```
 
-## 7. 当前边界
+## 7. 更多文档
+
+- [API 参考](api-reference.md) - 完整的 API 文档
+- [LLM 客户端](clients/llm.md) - 大语言模型调用
+- [数据库客户端](clients/db.md) - 数据持久化存储
+- [平台客户端](clients/platform.md) - 消息发送与群管理
+- [记忆客户端](clients/memory.md) - 语义搜索存储
+
+### 示例插件
+
+- [LLM 对话插件](examples/llm-chat/) - AI 对话功能演示
+- [数据库插件](examples/database/) - 数据存储功能演示
+
+## 8. 当前边界
 
 当前 quickstart 对应的是已经存在的能力，不包含这些后续项：
 
+TODO: 这些功能正在开发中：
 - `ctx.http` / `ctx.cache` / `ctx.storage` / `ctx.i18n`
 - 完整宿主调度下的 schedule 执行器
 
