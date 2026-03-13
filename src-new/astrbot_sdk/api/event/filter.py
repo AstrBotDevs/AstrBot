@@ -381,6 +381,13 @@ on_platform_loaded = _unsupported_factory("on_platform_loaded")
 on_decorating_result = _unsupported_factory("on_decorating_result")
 on_llm_request = _unsupported_factory("on_llm_request")
 on_llm_response = _unsupported_factory("on_llm_response")
+llm_tool = _unsupported_factory("llm_tool")
+on_waiting_llm_request = _unsupported_factory("on_waiting_llm_request")
+on_using_llm_tool = _unsupported_factory("on_using_llm_tool")
+on_llm_tool_respond = _unsupported_factory("on_llm_tool_respond")
+on_plugin_error = _unsupported_factory("on_plugin_error")
+on_plugin_loaded = _unsupported_factory("on_plugin_loaded")
+on_plugin_unloaded = _unsupported_factory("on_plugin_unloaded")
 
 
 def command_group(
@@ -469,6 +476,13 @@ class _FilterNamespace:
     on_decorating_result = staticmethod(on_decorating_result)
     on_llm_request = staticmethod(on_llm_request)
     on_llm_response = staticmethod(on_llm_response)
+    llm_tool = staticmethod(llm_tool)
+    on_waiting_llm_request = staticmethod(on_waiting_llm_request)
+    on_using_llm_tool = staticmethod(on_using_llm_tool)
+    on_llm_tool_respond = staticmethod(on_llm_tool_respond)
+    on_plugin_error = staticmethod(on_plugin_error)
+    on_plugin_loaded = staticmethod(on_plugin_loaded)
+    on_plugin_unloaded = staticmethod(on_plugin_unloaded)
     command_group = staticmethod(command_group)
 
 
@@ -489,11 +503,18 @@ __all__ = [
     "custom_filter",
     "event_message_type",
     "filter",
+    "llm_tool",
     "on_astrbot_loaded",
     "on_decorating_result",
+    "on_llm_tool_respond",
     "on_llm_request",
     "on_llm_response",
     "on_platform_loaded",
+    "on_plugin_error",
+    "on_plugin_loaded",
+    "on_plugin_unloaded",
+    "on_using_llm_tool",
+    "on_waiting_llm_request",
     "permission",
     "permission_type",
     "platform_adapter_type",

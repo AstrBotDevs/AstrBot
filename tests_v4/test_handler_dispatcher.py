@@ -10,7 +10,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.utils.session_waiter import SessionController, session_waiter
+from astrbot.core.utils.session_waiter import (
+    SessionController,
+    SessionWaiter,
+    session_waiter,
+)
 from astrbot_sdk._legacy_api import LegacyContext
 from astrbot_sdk.api.event import AstrMessageEvent
 from astrbot_sdk.api.message import Comp, MessageChain
@@ -505,6 +509,67 @@ class TestHandlerDispatcherInvoke:
             {"session_id": "session-waiter", "text": "请输入确认内容"},
             {"session_id": "session-waiter", "text": "收到:确认"},
         ]
+
+    @pytest.mark.asyncio
+    async def test_session_waiter_trigger_routes_by_explicit_session_id(self):
+        """SessionWaiter.trigger() should forward a message to the active waiter by key."""
+        peer = MockPeer()
+        legacy_context = LegacyContext("test_plugin")
+        captured_replies = []
+
+        async def handler_func(event: AstrMessageEvent):
+            @session_waiter(timeout=0.2)
+            async def waiter(controller: SessionController, ev: AstrMessageEvent):
+                captured_replies.append(ev.message_str)
+                controller.stop()
+
+            waiting_task = asyncio.create_task(waiter(event))
+            await asyncio.sleep(0)
+            await SessionWaiter.trigger(
+                event.unified_msg_origin,
+                AstrMessageEvent(
+                    text="显式触发",
+                    session_id=event.get_session_id(),
+                    user_id=event.get_sender_id(),
+                    platform=event.get_platform_name(),
+                    context=event._context,
+                ),
+            )
+            await waiting_task
+
+        descriptor = HandlerDescriptor(
+            id="legacy.waiter.trigger",
+            trigger=CommandTrigger(command="ask"),
+        )
+        handler = LoadedHandler(
+            descriptor=descriptor,
+            callable=handler_func,
+            owner=MagicMock(),
+            legacy_context=legacy_context,
+        )
+        dispatcher = HandlerDispatcher(
+            plugin_id="test_plugin",
+            peer=peer,
+            handlers=[handler],
+        )
+
+        message = InvokeMessage(
+            id="msg_waiter_trigger",
+            capability="handler.invoke",
+            input={
+                "handler_id": "legacy.waiter.trigger",
+                "event": {
+                    "text": "ask",
+                    "session_id": "session-trigger",
+                    "user_id": "user-1",
+                    "platform": "test",
+                },
+            },
+        )
+
+        await dispatcher.invoke(message, CancelToken())
+
+        assert captured_replies == ["显式触发"]
 
 
 class TestHandlerDispatcherCancel:

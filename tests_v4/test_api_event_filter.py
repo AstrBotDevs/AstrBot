@@ -16,6 +16,13 @@ from astrbot_sdk.api.event.filter import (
     command_group,
     event_message_type,
     filter,
+    llm_tool,
+    on_llm_tool_respond,
+    on_plugin_error,
+    on_plugin_loaded,
+    on_plugin_unloaded,
+    on_using_llm_tool,
+    on_waiting_llm_request,
     permission,
     permission_type,
     platform_adapter_type,
@@ -293,6 +300,9 @@ class TestModuleExports:
         assert "regex" in __all__
         assert "permission" in __all__
         assert "filter" in __all__
+        assert "llm_tool" in __all__
+        assert "on_waiting_llm_request" in __all__
+        assert "on_using_llm_tool" in __all__
 
 
 class TestCommandGroupCompat:
@@ -331,3 +341,20 @@ class TestUnsupportedCompatFilters:
         """Unsupported helpers should fail loudly instead of silently no-oping."""
         with pytest.raises(NotImplementedError, match="on_llm_request"):
             filter.on_llm_request()
+
+    @pytest.mark.parametrize(
+        ("factory", "name"),
+        [
+            (llm_tool, "llm_tool"),
+            (on_waiting_llm_request, "on_waiting_llm_request"),
+            (on_using_llm_tool, "on_using_llm_tool"),
+            (on_llm_tool_respond, "on_llm_tool_respond"),
+            (on_plugin_error, "on_plugin_error"),
+            (on_plugin_loaded, "on_plugin_loaded"),
+            (on_plugin_unloaded, "on_plugin_unloaded"),
+        ],
+    )
+    def test_newly_exposed_legacy_helpers_fail_loudly(self, factory, name):
+        """Newly-exposed legacy import names should still fail explicitly when unsupported."""
+        with pytest.raises(NotImplementedError, match=name):
+            factory()

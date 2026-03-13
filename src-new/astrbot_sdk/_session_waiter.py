@@ -63,6 +63,9 @@ class SessionWaiterManager:
 
     async def dispatch(self, event: Any) -> bool:
         key = self.session_key(event)
+        return await self.dispatch_to_key(key, event)
+
+    async def dispatch_to_key(self, key: str, event: Any) -> bool:
         state = self._waiters.get(key)
         if state is None:
             return False
@@ -76,6 +79,18 @@ class SessionWaiterManager:
         if isinstance(event, AstrMessageEvent):
             return event
         return AstrMessageEvent.from_message_event(event)
+
+
+class SessionWaiter:
+    """旧版 ``SessionWaiter`` 的轻量兼容入口。"""
+
+    @staticmethod
+    async def trigger(session_id: str, event: Any) -> None:
+        context = getattr(event, "_context", None)
+        manager = getattr(context, "_session_waiter_manager", None)
+        if manager is None:
+            return
+        await manager.dispatch_to_key(str(session_id), event)
 
 
 def session_waiter(
@@ -127,4 +142,9 @@ def session_waiter(
     return decorator
 
 
-__all__ = ["SessionController", "SessionWaiterManager", "session_waiter"]
+__all__ = [
+    "SessionController",
+    "SessionWaiter",
+    "SessionWaiterManager",
+    "session_waiter",
+]

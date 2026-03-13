@@ -196,12 +196,20 @@ class TestApiModule:
 class TestAstrbotImportAlias:
     """Tests for the legacy ``astrbot`` package-name alias."""
 
+    def test_legacy_astrbot_root_exports_logger(self):
+        """astrbot root package should expose logger like the old package did."""
+        from astrbot import logger
+
+        assert logger is not None
+
     def test_legacy_astrbot_api_exports(self):
         """astrbot.api should expose the old logger/config entrance."""
-        from astrbot.api import AstrBotConfig, logger
+        from astrbot.api import AstrBotConfig, llm_tool, logger, sp
 
         assert AstrBotConfig is not None
         assert logger is not None
+        assert sp is not None
+        assert callable(llm_tool)
 
     def test_legacy_astrbot_event_exports(self):
         """astrbot.api.event should expose MessageChain from the legacy location."""
@@ -224,8 +232,102 @@ class TestAstrbotImportAlias:
         """astrbot.core.utils.session_waiter should expose the compat waiter helpers."""
         from astrbot.core.utils.session_waiter import (
             SessionController,
+            SessionWaiter,
             session_waiter,
         )
 
         assert SessionController is not None
+        assert callable(SessionWaiter.trigger)
         assert callable(session_waiter)
+
+    def test_legacy_astrbot_event_filter_module_exports(self):
+        """astrbot.api.event.filter should be importable from the old module path."""
+        from astrbot.api.event.filter import EventMessageType, command, llm_tool
+
+        assert EventMessageType is not None
+        assert callable(command)
+        assert callable(llm_tool)
+
+    def test_legacy_astrbot_platform_exports(self):
+        """astrbot.api.platform should expose the common legacy platform types."""
+        from astrbot.api.platform import (
+            AstrBotMessage,
+            AstrMessageEvent,
+            MessageType,
+            Platform,
+            PlatformMetadata,
+            register_platform_adapter,
+        )
+
+        assert AstrBotMessage is not None
+        assert AstrMessageEvent is not None
+        assert MessageType is not None
+        assert Platform is not None
+        assert PlatformMetadata is not None
+        with pytest.raises(NotImplementedError, match="register_platform_adapter"):
+            register_platform_adapter()
+
+    def test_legacy_astrbot_provider_exports(self):
+        """astrbot.api.provider should expose the common legacy provider types."""
+        from astrbot.api.provider import (
+            LLMResponse,
+            Provider,
+            ProviderMetaData,
+            ProviderRequest,
+            ProviderType,
+            STTProvider,
+        )
+
+        meta = ProviderMetaData(id="demo")
+        req = ProviderRequest(prompt="hello")
+
+        assert LLMResponse is not None
+        assert Provider is not None
+        assert STTProvider is not None
+        assert meta.id == "demo"
+        assert req.prompt == "hello"
+        assert ProviderType.CHAT_COMPLETION.value == "chat_completion"
+
+    def test_legacy_astrbot_api_all_exports(self):
+        """astrbot.api.all should remain importable from the old umbrella module."""
+        from astrbot.api.all import (
+            AstrMessageEvent,
+            Context,
+            LLMResponse,
+            MessageChain,
+            command,
+            llm_tool,
+            register,
+            sp,
+        )
+
+        assert AstrMessageEvent is not None
+        assert Context is not None
+        assert LLMResponse is not None
+        assert MessageChain is not None
+        assert callable(command)
+        assert callable(llm_tool)
+        assert callable(register)
+        assert sp is not None
+
+    def test_legacy_astrbot_util_exports(self):
+        """astrbot.api.util should expose the waiter helpers from the old path."""
+        from astrbot.api.util import SessionController, SessionWaiter, session_waiter
+
+        assert SessionController is not None
+        assert callable(SessionWaiter.trigger)
+        assert callable(session_waiter)
+
+    @pytest.mark.asyncio
+    async def test_legacy_astrbot_sp_roundtrip(self):
+        """astrbot.api.sp should provide a usable in-memory compat store."""
+        from astrbot.api import sp
+
+        await sp.global_put("feature_flag", True)
+        assert await sp.global_get("feature_flag", False) is True
+
+        await sp.session_put("umo:test", "counter", 3)
+        assert await sp.session_get("umo:test", "counter", 0) == 3
+
+        await sp.session_remove("umo:test", "counter")
+        assert await sp.session_get("umo:test", "counter", 0) == 0
