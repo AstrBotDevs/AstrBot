@@ -1,43 +1,41 @@
-# 数据迁移.备份.导入和系统重启
+# Data Migration, Backup, Import, and System Restart
 
 
 
-## 数据备份内容
+## Data Backup Contents
+
+Before performing an import operation, please make sure to **back up your data** to prevent accidental data loss.  
+The import process will **overwrite and destroy existing data** prior to the import.
+
+Backup and import options are located in **Settings**.
+
+Or access it directly via `http://<your-address>:6185/#/settings`
 
 
-在进行导入操作前，请务必备份数据，以防意外丢失，导入将会销毁导入前的数据。
+### User Information
+- Username and MD5-encrypted password
+- Persona settings
+- Model configurations and platform tokens
 
-备分.导入位于设置 中。
+### Chat Data and Plugins
+- Chat history
+- Plugins and related plugin settings
 
-或直接访问 `http://<網址>:6185/#/settings`
-
-
-### 用户信息
-- 用户名和经 MD5 加密的密码
-- 人格设置
-- 模型及各平台 Token
-
-### 聊天数据与插件
-- 聊天记录
-- 插件及插件相关设置
-
-### 系统数据
-- 主数据库（对话记录、配置等）
-- 知识库数据
-- 配置文件
+### System Data
+- Main database (conversation records, configurations, etc.)
+- Knowledge base data
+- Configuration files
 
 
 
+## System Restart
 
-## 系统重启
+After clicking the **System Restart** button, the system will immediately perform a restart.
 
-点击 **系统重启** 按钮后，系统将会立即执行重启操作。
+This action **does not require secondary confirmation**.  
+Once the button is clicked, the system will restart directly.
 
-该操作 **不会进行二次确认**，点击按钮后会直接重启系统。  
-请在确认当前操作已经完成，并且相关数据已经保存或备份后再执行重启。
+Please ensure that all current operations are completed and all relevant data has been **saved or backed up** before performing the restart.
 
 
 ![](https://truth.bahamut.com.tw/s01/202603/forum/24451/634cc203d297b29712b0950f619cc697.JPG)
-
-
-
