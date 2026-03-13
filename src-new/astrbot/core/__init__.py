@@ -3,7 +3,8 @@
 from loguru import logger
 
 from astrbot_sdk._shared_preferences import sp
+from astrbot_sdk.api.basic import AstrBotConfig
 
 from . import utils
 
-__all__ = ["logger", "sp", "utils"]
+__all__ = ["AstrBotConfig", "logger", "sp", "utils"]

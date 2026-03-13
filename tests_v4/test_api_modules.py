@@ -240,6 +240,20 @@ class TestAstrbotImportAlias:
         assert callable(SessionWaiter.trigger)
         assert callable(session_waiter)
 
+    def test_legacy_astrbot_core_root_exports(self):
+        """astrbot.core root should expose common legacy root names."""
+        from astrbot.core import AstrBotConfig, logger, sp
+        from astrbot.core.message.components import At, Image, Node, Nodes, Plain
+
+        assert AstrBotConfig is not None
+        assert logger is not None
+        assert sp is not None
+        assert Plain(text="ok").text == "ok"
+        assert Image(file="https://example.com/test.png").file
+        assert At(qq="1").user_id == "1"
+        assert Node(uin="1", content=[]).sender_id == "1"
+        assert Nodes(nodes=[]).nodes == []
+
     def test_legacy_astrbot_event_filter_module_exports(self):
         """astrbot.api.event.filter should be importable from the old module path."""
         from astrbot.api.event.filter import EventMessageType, command, llm_tool

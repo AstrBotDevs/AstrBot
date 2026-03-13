@@ -26,6 +26,7 @@
 - 2026-03-13: Real legacy `Star` plugins may call compat context helpers on `self` or `self.context` during `__init__()` and `initialize()`, including `self.put_kv_data(...)`, `self.get_kv_data(...)`, and `self.context.get_config()`. Keep proxy methods on `LegacyStar`, expose a safe `LegacyContext.get_config()`, and bind the shared legacy context before lifecycle hooks run.
 - 2026-03-13: On Windows, `.gitignore` matching is case-insensitive. A broad entry like `astrBot/` will also ignore `src-new/astrbot/...`, which can silently hide real compat alias packages from `git status`. Keep that ignore anchored as `/astrBot/` if it is only meant for a root-level scratch checkout.
 - 2026-03-13: The reference checkout under `astrBot/astrbot/api` exposes a broader old plugin-facing package surface than the current `src-new/astrbot` alias package. When improving package-name compatibility, compare against those public `api/*` modules as a set instead of only patching the one import path hit by the latest migrated plugin.
+- 2026-03-13: Some real legacy plugins call `asyncio.create_task()` during object construction. Calling `load_plugin()` outside a running event loop can therefore produce false-negative compat failures even though the real worker path is fine. External compat smoke tests should load plugins under an active loop, and "real compatibility" claims should preferably exercise `SupervisorRuntime` + worker + a real handler invocation instead of import-only checks.
 
 # 开发命令
 
