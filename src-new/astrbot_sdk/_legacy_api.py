@@ -28,8 +28,6 @@ from .star import Star
 
 if TYPE_CHECKING:
     from .api.provider.entities import LLMResponse
-
-# TODO-迁移文档要写，我好烦烦烦你烦烦烦你
 MIGRATION_DOC_URL = "https://docs.astrbot.app/migration/v3"
 COMPAT_CONVERSATIONS_KEY = "__compat_conversations__"
 _warned_methods: set[str] = set()

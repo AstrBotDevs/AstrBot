@@ -68,3 +68,4 @@ python run_tests.py --cov      # 运行测试并生成覆盖率报告
 old文件夹是兼容旧插件的测试，旧插件全部放进old文件夹
 
 - 2026-03-13: 不要再维护第二套 `_legacy/` 并行目录。private compat 以顶层 `_legacy_api.py`、`_legacy_runtime.py`、`_legacy_loader.py`、`_session_waiter.py`、`_shared_preferences.py` 为唯一实现位置，同时保留公开兼容面 `astrbot_sdk.api`、`astrbot_sdk.compat` 和 `src-new/astrbot` facade。
+- 2026-03-14: `test_plugin/old/` 和 `test_plugin/new/` 里可能带着已生成的 `__pycache__` / `*.pyc`。测试夹具复制示例插件时必须显式忽略这些缓存文件，否则临时插件目录、断言结果和 `git status` 都可能被污染。

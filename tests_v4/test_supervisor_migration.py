@@ -1,82 +1,52 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
+
+import yaml
 
 from astrbot_sdk.protocol.messages import InitializeOutput, PeerInfo
 from astrbot_sdk.runtime.bootstrap import SupervisorRuntime
 from astrbot_sdk.runtime.loader import discover_plugins
 from astrbot_sdk.runtime.peer import Peer
 
-from tests_v4.helpers import FakeEnvManager, make_transport_pair
+from tests_v4.helpers import FakeEnvManager, copy_sample_plugin, make_transport_pair
 
 
-def write_plugin(
+def prepare_sample_plugin(
     root: Path,
     folder_name: str,
     *,
+    sample_name: str = "new",
     plugin_name: str | None = None,
     python_version: str | None = None,
     include_requirements: bool = True,
-    reply_text: str | None = None,
 ) -> Path:
-    plugin_dir = root / folder_name
-    commands_dir = plugin_dir / "commands"
-    commands_dir.mkdir(parents=True, exist_ok=True)
-    (commands_dir / "__init__.py").write_text("", encoding="utf-8")
-
-    if python_version is None:
-        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-
-    manifest_lines = [
-        "_schema_version: 2",
-        f"name: {plugin_name or folder_name}",
-        f"display_name: {folder_name}",
-        "desc: test plugin",
-        "author: tester",
-        "version: 0.1.0",
-    ]
-    if python_version != "__missing__":
-        manifest_lines.extend(
-            [
-                "runtime:",
-                f'  python: "{python_version}"',
-            ]
-        )
-    manifest_lines.extend(
-        [
-            "components:",
-            "  - class: commands.sample:SamplePlugin",
-            "    type: command",
-            "    name: hello",
-            "    description: hello",
-        ]
-    )
-    (plugin_dir / "plugin.yaml").write_text(
-        "\n".join(manifest_lines) + "\n", encoding="utf-8"
-    )
-    if include_requirements:
-        (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
-
-    text = reply_text or f"{plugin_name or folder_name} handled"
-    (commands_dir / "sample.py").write_text(
-        textwrap.dedent(
-            f"""\
-            from astrbot_sdk import Context, MessageEvent, Star, on_command
-
-
-            class SamplePlugin(Star):
-                @on_command("hello")
-                async def hello(self, event: MessageEvent, ctx: Context):
-                    await event.reply({text!r})
-            """
-        ),
+    plugin_dir = copy_sample_plugin(sample_name, root / folder_name)
+    manifest_path = plugin_dir / "plugin.yaml"
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    manifest["name"] = plugin_name or folder_name
+    manifest["display_name"] = folder_name
+    if python_version == "__missing__":
+        manifest.pop("runtime", None)
+    elif python_version is not None:
+        manifest["runtime"] = {"python": python_version}
+    manifest_path.write_text(
+        yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+    requirements_path = plugin_dir / "requirements.txt"
+    if include_requirements:
+        requirements_path.write_text(
+            requirements_path.read_text(encoding="utf-8")
+            if requirements_path.exists()
+            else "",
+            encoding="utf-8",
+        )
+    elif requirements_path.exists():
+        requirements_path.unlink()
     return plugin_dir
 
 
@@ -84,14 +54,14 @@ class PluginDiscoveryMigrationTest(unittest.TestCase):
     def test_discover_plugins_keeps_old_supervisor_filtering_rules(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            write_plugin(root, "plugin_one", plugin_name="plugin_one")
-            write_plugin(
+            prepare_sample_plugin(root, "plugin_one", plugin_name="plugin_one")
+            prepare_sample_plugin(
                 root,
                 "plugin_two",
                 plugin_name="plugin_two",
                 python_version="__missing__",
             )
-            write_plugin(
+            prepare_sample_plugin(
                 root,
                 "plugin_three",
                 plugin_name="plugin_three",
@@ -132,17 +102,15 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_dir = Path(temp_dir) / "plugins"
-            write_plugin(
+            prepare_sample_plugin(
                 plugins_dir,
                 "plugin_one",
                 plugin_name="plugin_one",
-                reply_text="plugin_one handled",
             )
-            write_plugin(
+            prepare_sample_plugin(
                 plugins_dir,
                 "plugin_two",
                 plugin_name="plugin_two",
-                reply_text="plugin_two handled",
             )
 
             runtime = SupervisorRuntime(
@@ -160,12 +128,23 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     self.core.remote_metadata["plugins"], ["plugin_one", "plugin_two"]
                 )
-                self.assertEqual(len(self.core.remote_handlers), 2)
+                plugin_one_handlers = [
+                    item.id
+                    for item in self.core.remote_handlers
+                    if item.id.startswith("plugin_one:")
+                ]
+                plugin_two_handlers = [
+                    item.id
+                    for item in self.core.remote_handlers
+                    if item.id.startswith("plugin_two:")
+                ]
+                self.assertTrue(plugin_one_handlers)
+                self.assertTrue(plugin_two_handlers)
 
                 handler_id = next(
                     item.id
                     for item in self.core.remote_handlers
-                    if item.id.startswith("plugin_two:")
+                    if item.id.startswith("plugin_two:") and item.id.endswith(".hello")
                 )
                 await self.core.invoke(
                     "handler.invoke",
@@ -184,7 +163,7 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
                 texts = [
                     item.get("text") for item in runtime.capability_router.sent_messages
                 ]
-                self.assertEqual(texts, ["plugin_two handled"])
+                self.assertEqual(texts, ["Echo: /hello", "Echo: stream"])
             finally:
                 await runtime.stop()
 

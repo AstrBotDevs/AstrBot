@@ -13,8 +13,9 @@
 维护约束：
 
 - ``astrbot_sdk.api.*`` 保持为受控兼容面，后续会随迁移推进逐步移除
-- 包内模块优先作为 facade / 重导出层存在
+- 包内模块优先作为 facade / 重导出层存在，但允许少量必须保留行为的 compat 模块
 - compat 真实行为应尽量收口到顶层 private compat 模块
+- 新增运行时逻辑应优先放在 v4 主路径，由 compat 层按需转发或包装
 """
 
 from loguru import logger

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 import unittest
 
 import pytest
@@ -23,6 +24,24 @@ def _is_astrbot_sdk_installed_in_site_packages() -> bool:
         return "site-packages" in location or "dist-packages" in location
     except Exception:
         return False
+
+
+def _astr_console_script() -> str | None:
+    executable_dir = Path(sys.executable).resolve().parent
+    search_dirs = [executable_dir]
+    if executable_dir.name.lower() != "scripts":
+        search_dirs.append(executable_dir / "Scripts")
+
+    for scripts_dir in search_dirs:
+        candidates = [
+            scripts_dir / "astr",
+            scripts_dir / "astr.exe",
+            scripts_dir / "astr.cmd",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
+    return None
 
 
 @pytest.mark.integration
@@ -60,3 +79,17 @@ class EntryPointTest(unittest.TestCase):
         )
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertIn("--plugins-dir", process.stdout)
+
+    def test_console_script_help(self) -> None:
+        console_script = _astr_console_script()
+        if console_script is None:
+            self.fail("astr console script not found")
+
+        process = subprocess.run(
+            [console_script, "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertIn("Usage", process.stdout)
