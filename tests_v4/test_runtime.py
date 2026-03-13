@@ -49,7 +49,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            copy_sample_plugin("new", plugin_root, ascii_only=True)
+            copy_sample_plugin("new", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -85,7 +85,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            copy_sample_plugin("new", plugin_root, ascii_only=True)
+            copy_sample_plugin("new", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -156,7 +156,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            copy_sample_plugin("new", plugin_root, ascii_only=True)
+            copy_sample_plugin("new", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -193,7 +193,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            copy_sample_plugin("new", plugin_root, ascii_only=True)
+            copy_sample_plugin("new", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -236,7 +236,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "v4_plugin"
-            copy_sample_plugin("new", plugin_root, ascii_only=True)
+            copy_sample_plugin("new", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -261,7 +261,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            copy_sample_plugin("old", plugin_root, ascii_only=True)
+            copy_sample_plugin("old", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -298,7 +298,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            copy_sample_plugin("old", plugin_root, ascii_only=True)
+            copy_sample_plugin("old", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,
@@ -381,7 +381,7 @@ class RuntimeIntegrationTest(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             plugins_root = Path(temp_dir) / "plugins"
             plugin_root = plugins_root / "compat_plugin"
-            copy_sample_plugin("old", plugin_root, ascii_only=True)
+            copy_sample_plugin("old", plugin_root)
 
             runtime = SupervisorRuntime(
                 transport=self.right,

@@ -27,15 +27,20 @@ def _is_astrbot_sdk_installed_in_site_packages() -> bool:
 
 
 def _astr_console_script() -> str | None:
-    scripts_dir = Path(sys.executable).resolve().parent
-    candidates = [
-        scripts_dir / "astr",
-        scripts_dir / "astr.exe",
-        scripts_dir / "astr.cmd",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
+    executable_dir = Path(sys.executable).resolve().parent
+    search_dirs = [executable_dir]
+    if executable_dir.name.lower() != "scripts":
+        search_dirs.append(executable_dir / "Scripts")
+
+    for scripts_dir in search_dirs:
+        candidates = [
+            scripts_dir / "astr",
+            scripts_dir / "astr.exe",
+            scripts_dir / "astr.cmd",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
     return None
 
 

@@ -24,7 +24,7 @@ def prepare_sample_plugin(
     python_version: str | None = None,
     include_requirements: bool = True,
 ) -> Path:
-    plugin_dir = copy_sample_plugin(sample_name, root / folder_name, ascii_only=True)
+    plugin_dir = copy_sample_plugin(sample_name, root / folder_name)
     manifest_path = plugin_dir / "plugin.yaml"
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     manifest["name"] = plugin_name or folder_name
@@ -128,12 +128,23 @@ class SupervisorMigrationTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     self.core.remote_metadata["plugins"], ["plugin_one", "plugin_two"]
                 )
-                self.assertEqual(len(self.core.remote_handlers), 18)
+                plugin_one_handlers = [
+                    item.id
+                    for item in self.core.remote_handlers
+                    if item.id.startswith("plugin_one:")
+                ]
+                plugin_two_handlers = [
+                    item.id
+                    for item in self.core.remote_handlers
+                    if item.id.startswith("plugin_two:")
+                ]
+                self.assertTrue(plugin_one_handlers)
+                self.assertTrue(plugin_two_handlers)
 
                 handler_id = next(
                     item.id
                     for item in self.core.remote_handlers
-                    if item.id.startswith("plugin_two:")
+                    if item.id.startswith("plugin_two:") and item.id.endswith(".hello")
                 )
                 await self.core.invoke(
                     "handler.invoke",

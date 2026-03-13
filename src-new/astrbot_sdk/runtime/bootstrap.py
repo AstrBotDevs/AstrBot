@@ -187,6 +187,8 @@ class WorkerSession:
             if existing_pythonpath
             else repo_src_dir
         )
+        env.setdefault("PYTHONIOENCODING", "utf-8")
+        env.setdefault("PYTHONUTF8", "1")
 
         transport = StdioTransport(
             command=[
