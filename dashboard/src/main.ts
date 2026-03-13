@@ -13,17 +13,18 @@ import { loader } from '@guolao/vue-monaco-editor'
 import axios from 'axios';
 
 // 初始化新的i18n系统，等待完成后再挂载应用
-setupI18n().then(() => {
+setupI18n().then(async () => {
   console.log('🌍 新i18n系统初始化完成');
   
   const app = createApp(App);
-  app.use(router);
   const pinia = createPinia();
   app.use(pinia);
+  app.use(router);
   app.use(print);
   app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
+  await router.isReady();
   app.mount('#app');
   
   // 挂载后同步 Vuetify 主题
@@ -44,18 +45,19 @@ setupI18n().then(() => {
       });
     }
   });
-}).catch(error => {
+}).catch(async error => {
   console.error('❌ 新i18n系统初始化失败:', error);
   
   // 即使i18n初始化失败，也要挂载应用（使用回退机制）
   const app = createApp(App);
-  app.use(router);
   const pinia = createPinia();
   app.use(pinia);
+  app.use(router);
   app.use(print);
   app.use(VueApexCharts);
   app.use(vuetify);
   app.use(confirmPlugin);
+  await router.isReady();
   app.mount('#app');
   
   // 挂载后同步 Vuetify 主题

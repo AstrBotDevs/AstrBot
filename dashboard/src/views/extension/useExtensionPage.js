@@ -10,6 +10,10 @@ import {
   toInitials,
   toPinyinText,
 } from "@/utils/pluginSearch";
+import {
+  createTabRouteLocation,
+  getValidHashTab,
+} from "@/utils/hashRouteTabs.mjs";
 import { ref, computed, onMounted, onUnmounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
@@ -103,16 +107,11 @@ export const useExtensionPage = () => {
   const activeTab = ref("installed");
   const validTabs = ["installed", "market", "mcp", "skills", "components"];
   const isValidTab = (tab) => validTabs.includes(tab);
-  const getLocationHash = () =>
-    typeof window !== "undefined" ? window.location.hash : "";
-  const extractTabFromHash = (hash) => {
-    const lastHashIndex = (hash || "").lastIndexOf("#");
-    if (lastHashIndex === -1) return "";
-    return hash.slice(lastHashIndex + 1);
-  };
+  const getLocationHash = () => route.hash || "";
+  const extractTabFromHash = (hash) => getValidHashTab(hash, validTabs) || "";
   const syncTabFromHash = (hash) => {
-    const tab = extractTabFromHash(hash);
-    if (isValidTab(tab)) {
+    const tab = getValidHashTab(hash, validTabs);
+    if (tab) {
       activeTab.value = tab;
       return true;
     }
@@ -1435,9 +1434,7 @@ export const useExtensionPage = () => {
   // 生命周期
   onMounted(async () => {
     if (!syncTabFromHash(getLocationHash())) {
-      if (typeof window !== "undefined") {
-        window.location.hash = `#${activeTab.value}`;
-      }
+      await router.replace(createTabRouteLocation(route, activeTab.value));
     }
     await getExtensions();
   
@@ -1445,17 +1442,10 @@ export const useExtensionPage = () => {
     loadCustomSources();
   
     // 检查是否有 open_config 参数
-    let urlParams;
-    if (window.location.hash) {
-      // For hash mode (#/path?param=value)
-      const hashQuery = window.location.hash.split("?")[1] || "";
-      urlParams = new URLSearchParams(hashQuery);
-    } else {
-      // For history mode (/path?param=value)
-      urlParams = new URLSearchParams(window.location.search);
-    }
-    console.log("URL Parameters:", urlParams.toString());
-    const plugin_name = urlParams.get("open_config");
+    const plugin_name = Array.isArray(route.query.open_config)
+      ? route.query.open_config[0]
+      : route.query.open_config;
+    console.log("URL Parameters:", JSON.stringify(route.query));
     if (plugin_name) {
       console.log(`Opening config for plugin: ${plugin_name}`);
       openExtensionConfig(plugin_name);
@@ -1527,26 +1517,19 @@ export const useExtensionPage = () => {
   );
   
   watch(
-    () => route.fullPath,
-    () => {
-      const tab = extractTabFromHash(getLocationHash());
-      if (isValidTab(tab) && tab !== activeTab.value) {
+    () => route.hash,
+    (newHash) => {
+      const tab = getValidHashTab(newHash, validTabs);
+      if (tab && tab !== activeTab.value) {
         activeTab.value = tab;
       }
     },
   );
   
-  watch(activeTab, (newTab) => {
+  watch(activeTab, async (newTab) => {
     if (!isValidTab(newTab)) return;
-    const currentTab = extractTabFromHash(getLocationHash());
-    if (currentTab === newTab) return;
-    const hash = getLocationHash();
-    const lastHashIndex = hash.lastIndexOf("#");
-    const nextHash =
-      lastHashIndex > 0 ? `${hash.slice(0, lastHashIndex)}#${newTab}` : `#${newTab}`;
-    if (typeof window !== "undefined") {
-      window.location.hash = nextHash;
-    }
+    if (route.hash === `#${newTab}`) return;
+    await router.replace(createTabRouteLocation(route, newTab));
   });
 
   return {
