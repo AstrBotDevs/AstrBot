@@ -9,6 +9,7 @@ import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -61,6 +62,57 @@ async def start_test_core_peer(transport: MemoryTransport) -> Peer:
     )
     await core.start()
     return core
+
+
+def write_bootstrap_plugin(
+    plugins_dir: Path,
+    name: str,
+    *,
+    python_version: str | None = None,
+) -> Path:
+    plugin_dir = plugins_dir / name
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        yaml.dump(
+            {
+                "name": name,
+                "runtime": {
+                    "python": python_version
+                    or f"{sys.version_info.major}.{sys.version_info.minor}"
+                },
+                "components": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+    return plugin_dir
+
+
+class PlanningFakeEnvManager(FakeEnvManager):
+    def __init__(self, *, skipped_plugins: dict[str, str] | None = None) -> None:
+        self.skipped_plugins = dict(skipped_plugins or {})
+        self.events: list[tuple[str, object]] = []
+        self.prepared_paths: dict[str, Path] = {}
+
+    def plan(self, plugins):
+        plugin_names = [plugin.name for plugin in plugins]
+        self.events.append(("plan", plugin_names))
+        planned_plugins = [
+            plugin for plugin in plugins if plugin.name not in self.skipped_plugins
+        ]
+        return SimpleNamespace(
+            groups=[],
+            plugins=planned_plugins,
+            plugin_to_group={},
+            skipped_plugins=dict(self.skipped_plugins),
+        )
+
+    def prepare_environment(self, plugin) -> Path:
+        self.events.append(("prepare", plugin.name))
+        path = Path(sys.executable)
+        self.prepared_paths[plugin.name] = path
+        return path
 
 
 class TestInstallSignalHandlers:
@@ -460,6 +512,71 @@ class TestSupervisorRuntimeMethods:
                 await core.wait_until_remote_initialized()
                 assert runtime.loaded_plugins == []
                 assert runtime.skipped_plugins == {}
+            finally:
+                await runtime.stop()
+                await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_calls_plan_before_prepare_and_reuses_python_path(self):
+        """SupervisorRuntime should plan plugins before starting worker sessions."""
+        left, right = make_transport_pair()
+        core = await start_test_core_peer(left)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_dir = Path(temp_dir) / "plugins"
+            write_bootstrap_plugin(plugins_dir, "plugin_one")
+            write_bootstrap_plugin(plugins_dir, "plugin_two")
+            env_manager = PlanningFakeEnvManager()
+            runtime = SupervisorRuntime(
+                transport=right,
+                plugins_dir=plugins_dir,
+                env_manager=env_manager,
+            )
+
+            try:
+                await runtime.start()
+                await core.wait_until_remote_initialized()
+
+                assert env_manager.events[0] == ("plan", ["plugin_one", "plugin_two"])
+                assert ("prepare", "plugin_one") in env_manager.events
+                assert ("prepare", "plugin_two") in env_manager.events
+                assert env_manager.prepared_paths["plugin_one"] == Path(sys.executable)
+                assert env_manager.prepared_paths["plugin_two"] == Path(sys.executable)
+                assert runtime.loaded_plugins == ["plugin_one", "plugin_two"]
+            finally:
+                await runtime.stop()
+                await core.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_merges_planning_skips_into_runtime_metadata(self):
+        """SupervisorRuntime should expose planning-stage skipped plugins."""
+        left, right = make_transport_pair()
+        core = await start_test_core_peer(left)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugins_dir = Path(temp_dir) / "plugins"
+            write_bootstrap_plugin(plugins_dir, "plugin_one")
+            write_bootstrap_plugin(plugins_dir, "plugin_two")
+            env_manager = PlanningFakeEnvManager(
+                skipped_plugins={"plugin_two": "compile lockfile failed"}
+            )
+            runtime = SupervisorRuntime(
+                transport=right,
+                plugins_dir=plugins_dir,
+                env_manager=env_manager,
+            )
+
+            try:
+                await runtime.start()
+                await core.wait_until_remote_initialized()
+
+                assert runtime.loaded_plugins == ["plugin_one"]
+                assert (
+                    runtime.skipped_plugins["plugin_two"] == "compile lockfile failed"
+                )
+                assert core.remote_metadata["skipped_plugins"]["plugin_two"] == (
+                    "compile lockfile failed"
+                )
             finally:
                 await runtime.stop()
                 await core.stop()

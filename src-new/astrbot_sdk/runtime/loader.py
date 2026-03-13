@@ -91,8 +91,6 @@ import json
 import inspect
 import os
 import re
-import shutil
-import subprocess
 import sys
 import types
 from dataclasses import dataclass, field
@@ -106,6 +104,11 @@ from ..api.basic import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
 from ..star import Star
+from .environment_groups import (
+    EnvironmentPlanResult,
+    EnvironmentPlanner,
+    GroupEnvironmentManager,
+)
 
 STATE_FILE_NAME = ".astrbot-worker-state.json"
 PLUGIN_MANIFEST_FILE = "plugin.yaml"
@@ -552,82 +555,58 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
 
 
 class PluginEnvironmentManager:
+    """运行时访问分组环境管理的门面层。
+
+    运行时仍然保留历史上的 `prepare_environment(plugin)` 调用入口，但底层
+    实现已经变成两阶段模型：
+
+    1. `plan()` 负责解析跨插件分组和共享工件
+    2. `prepare_environment()` 负责把单个插件映射到它所属的分组环境
+    """
+
     def __init__(self, repo_root: Path, uv_binary: str | None = None) -> None:
         self.repo_root = repo_root.resolve()
-        self.uv_binary = uv_binary or shutil.which("uv")
+        self.uv_binary = uv_binary
         self.cache_dir = self.repo_root / ".uv-cache"
+        self._planner = EnvironmentPlanner(self.repo_root, uv_binary=uv_binary)
+        self._group_manager = GroupEnvironmentManager(
+            self.repo_root, uv_binary=uv_binary
+        )
+        self.uv_binary = self._planner.uv_binary
+        self._plan_result: EnvironmentPlanResult | None = None
+
+    def plan(self, plugins: list[PluginSpec]) -> EnvironmentPlanResult:
+        """为当前插件集合生成共享环境规划。"""
+        plan_result = self._planner.plan(plugins)
+        self._plan_result = plan_result
+        return plan_result
 
     def prepare_environment(self, plugin: PluginSpec) -> Path:
-        if not self.uv_binary:
-            raise RuntimeError("uv executable not found")
-        state_path = plugin.plugin_dir / STATE_FILE_NAME
-        venv_dir = plugin.plugin_dir / ".venv"
-        python_path = _venv_python_path(venv_dir)
-        fingerprint = self._fingerprint(plugin)
-        state = self._load_state(state_path)
+        """返回该插件所属分组环境的解释器路径。
+
+        如果调用方还没有先对整批插件做规划，这里会自动创建一个至少包含当
+        前插件的最小规划，以保证旧的“单插件直接调用”模式仍然可用。
+        """
         if (
-            not python_path.exists()
-            or not self._matches_python_version(venv_dir, plugin.python_version)
-            or state.get("fingerprint") != fingerprint
+            self._plan_result is None
+            or plugin.name not in self._plan_result.plugin_to_group
         ):
-            self._rebuild(plugin, venv_dir, python_path)
-            self._write_state(state_path, plugin, fingerprint)
-        return python_path
-
-    def _rebuild(self, plugin: PluginSpec, venv_dir: Path, python_path: Path) -> None:
-        if venv_dir.exists():
-            shutil.rmtree(venv_dir)
-        self._run_command(
-            [
-                self.uv_binary,
-                "venv",
-                "--python",
-                plugin.python_version,
-                "--system-site-packages",
-                "--no-python-downloads",
-                "--no-managed-python",
-                str(venv_dir),
-            ],
-            cwd=self.repo_root,
-            command_name=f"create venv for {plugin.name}",
-        )
-        requirements_text = _read_requirements_text(plugin.requirements_path).strip()
-        if not requirements_text:
-            return
-        self._run_command(
-            [
-                self.uv_binary,
-                "pip",
-                "install",
-                "--python",
-                str(python_path),
-                "-r",
-                str(plugin.requirements_path),
-            ],
-            cwd=plugin.plugin_dir,
-            command_name=f"install requirements for {plugin.name}",
-        )
-
-    def _run_command(
-        self,
-        command: list[str],
-        *,
-        cwd: Path,
-        command_name: str,
-    ) -> None:
-        process = subprocess.run(
-            command,
-            cwd=str(cwd),
-            env={**os.environ, "UV_CACHE_DIR": str(self.cache_dir)},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if process.returncode != 0:
-            raise RuntimeError(
-                f"{command_name} failed with exit code {process.returncode}: "
-                f"{process.stderr.strip() or process.stdout.strip()}"
+            planned_plugins = (
+                list(self._plan_result.plugins) if self._plan_result else []
             )
+            if plugin.name not in {item.name for item in planned_plugins}:
+                planned_plugins.append(plugin)
+            self.plan(planned_plugins)
+
+        assert self._plan_result is not None
+        group = self._plan_result.plugin_to_group.get(plugin.name)
+        if group is None:
+            reason = self._plan_result.skipped_plugins.get(plugin.name)
+            if reason is not None:
+                raise RuntimeError(reason)
+            raise RuntimeError(f"environment plan missing plugin: {plugin.name}")
+
+        return self._group_manager.prepare(group)
 
     @staticmethod
     def _fingerprint(plugin: PluginSpec) -> str:
@@ -669,7 +648,10 @@ class PluginEnvironmentManager:
         pyvenv_cfg = venv_dir / "pyvenv.cfg"
         if not pyvenv_cfg.exists():
             return False
-        content = pyvenv_cfg.read_text(encoding="utf-8")
+        try:
+            content = pyvenv_cfg.read_text(encoding="utf-8")
+        except OSError:
+            return False
         match = re.search(r"version\s*=\s*(\d+\.\d+)\.\d+", content, re.IGNORECASE)
         return match is not None and match.group(1) == version
 

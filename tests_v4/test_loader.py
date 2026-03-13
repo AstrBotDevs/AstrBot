@@ -15,6 +15,11 @@ import pytest
 import yaml
 
 from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor
+from astrbot_sdk.runtime.environment_groups import (
+    GROUP_STATE_FILE_NAME,
+    EnvironmentGroup,
+    GroupEnvironmentManager,
+)
 from astrbot_sdk.runtime.loader import (
     LoadedHandler,
     LoadedPlugin,
@@ -31,6 +36,29 @@ from astrbot_sdk.runtime.loader import (
     load_plugin,
     load_plugin_spec,
 )
+
+
+def write_test_plugin(
+    plugins_dir: Path,
+    name: str,
+    *,
+    python_version: str = "3.12",
+    requirements: str = "",
+) -> PluginSpec:
+    plugin_dir = plugins_dir / name
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        yaml.dump(
+            {
+                "name": name,
+                "runtime": {"python": python_version},
+                "components": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "requirements.txt").write_text(requirements, encoding="utf-8")
+    return load_plugin_spec(plugin_dir)
 
 
 class TestVenvPythonPath:
@@ -543,8 +571,11 @@ class TestPluginEnvironmentManager:
             requirements_path = Path(temp_dir) / "requirements.txt"
             requirements_path.write_text("", encoding="utf-8")
 
-            # Mock shutil.which 在 loader 模块中返回 None，确保 uv_binary 为 None
-            with patch("astrbot_sdk.runtime.loader.shutil.which", return_value=None):
+            # Mock shutil.which 在环境规划模块中返回 None，确保 uv_binary 为 None
+            with patch(
+                "astrbot_sdk.runtime.environment_groups.shutil.which",
+                return_value=None,
+            ):
                 manager = PluginEnvironmentManager(Path(temp_dir), uv_binary=None)
                 assert manager.uv_binary is None
 
@@ -585,9 +616,7 @@ class TestPluginEnvironmentManager:
     def test_load_state_missing_file(self):
         """_load_state should return empty dict for missing file."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            state = PluginEnvironmentManager._load_state(
-                Path(temp_dir) / "missing.json"
-            )
+            state = GroupEnvironmentManager._load_state(Path(temp_dir) / "missing.json")
             assert state == {}
 
     def test_load_state_invalid_json(self):
@@ -596,11 +625,11 @@ class TestPluginEnvironmentManager:
             state_path = Path(temp_dir) / "state.json"
             state_path.write_text("not valid json", encoding="utf-8")
 
-            state = PluginEnvironmentManager._load_state(state_path)
+            state = GroupEnvironmentManager._load_state(state_path)
             assert state == {}
 
     def test_write_state(self):
-        """_write_state should write state file."""
+        """group state should be written under the shared environment."""
         with tempfile.TemporaryDirectory() as temp_dir:
             state_path = Path(temp_dir) / "state.json"
             spec = PluginSpec(
@@ -611,15 +640,179 @@ class TestPluginEnvironmentManager:
                 python_version="3.12",
                 manifest_data={},
             )
+            group = EnvironmentGroup(
+                id="group-1",
+                python_version="3.12",
+                plugins=[spec],
+                source_path=Path(temp_dir) / ".astrbot" / "groups" / "group-1.in",
+                lockfile_path=Path(temp_dir) / ".astrbot" / "locks" / "group-1.txt",
+                metadata_path=Path(temp_dir) / ".astrbot" / "groups" / "group-1.json",
+                venv_path=Path(temp_dir) / ".astrbot" / "envs" / "group-1",
+                python_path=Path(temp_dir)
+                / ".astrbot"
+                / "envs"
+                / "group-1"
+                / "bin"
+                / "python",
+                environment_fingerprint="test_fingerprint",
+            )
 
-            PluginEnvironmentManager._write_state(state_path, spec, "test_fingerprint")
-
-            import json
+            GroupEnvironmentManager._write_state(state_path, group)
 
             state = json.loads(state_path.read_text(encoding="utf-8"))
 
-            assert state["plugin"] == "test"
-            assert state["fingerprint"] == "test_fingerprint"
+            assert state["group_id"] == "group-1"
+            assert state["environment_fingerprint"] == "test_fingerprint"
+            assert state["plugins"] == ["test"]
+
+    def test_plan_groups_same_python_with_empty_requirements(self):
+        """Plugins with the same Python and no requirements should share one group."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plugins_dir = Path(temp_dir) / "plugins"
+            spec_one = write_test_plugin(plugins_dir, "plugin_one")
+            spec_two = write_test_plugin(plugins_dir, "plugin_two")
+
+            plan = manager.plan([spec_one, spec_two])
+
+            assert len(plan.groups) == 1
+            assert [plugin.name for plugin in plan.plugins] == [
+                "plugin_one",
+                "plugin_two",
+            ]
+            assert (
+                plan.plugin_to_group["plugin_one"].id
+                == plan.plugin_to_group["plugin_two"].id
+            )
+
+    def test_plan_splits_conflicting_requirements(self):
+        """Conflicting dependency pins should be split into dedicated groups."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plugins_dir = Path(temp_dir) / "plugins"
+            spec_one = write_test_plugin(
+                plugins_dir,
+                "plugin_one",
+                requirements="demo==1.0.0\n",
+            )
+            spec_two = write_test_plugin(
+                plugins_dir,
+                "plugin_two",
+                requirements="demo==2.0.0\n",
+            )
+
+            def fake_compile(
+                *, source_path: Path, output_path: Path, python_version: str
+            ):
+                content = source_path.read_text(encoding="utf-8")
+                if "demo==1.0.0" in content and "demo==2.0.0" in content:
+                    raise RuntimeError(
+                        "compile lockfile failed with exit code 1: conflict"
+                    )
+                output_path.write_text(
+                    f"# python={python_version}\n{content}",
+                    encoding="utf-8",
+                )
+
+            manager._planner._compile_lockfile = fake_compile
+
+            plan = manager.plan([spec_one, spec_two])
+
+            assert len(plan.groups) == 2
+            assert plan.skipped_plugins == {}
+            assert (
+                plan.plugin_to_group["plugin_one"].id
+                != plan.plugin_to_group["plugin_two"].id
+            )
+
+    def test_plan_skips_only_plugin_with_invalid_lockfile(self):
+        """A plugin whose lockfile cannot be compiled should be skipped alone."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plugins_dir = Path(temp_dir) / "plugins"
+            bad_spec = write_test_plugin(
+                plugins_dir,
+                "broken_plugin",
+                requirements="broken>=1\n",
+            )
+            good_spec = write_test_plugin(plugins_dir, "good_plugin")
+
+            def fake_compile(
+                *, source_path: Path, output_path: Path, python_version: str
+            ):
+                content = source_path.read_text(encoding="utf-8")
+                if "broken>=1" in content:
+                    raise RuntimeError(
+                        "compile lockfile failed with exit code 1: invalid requirement"
+                    )
+                output_path.write_text(
+                    f"# python={python_version}\n{content}",
+                    encoding="utf-8",
+                )
+
+            manager._planner._compile_lockfile = fake_compile
+
+            plan = manager.plan([bad_spec, good_spec])
+
+            assert [plugin.name for plugin in plan.plugins] == ["good_plugin"]
+            assert "broken_plugin" in plan.skipped_plugins
+            assert "invalid requirement" in plan.skipped_plugins["broken_plugin"]
+
+    def test_prepare_environment_reuses_python_path_for_same_group(self):
+        """prepare_environment should reuse the same interpreter for one group."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plugins_dir = Path(temp_dir) / "plugins"
+            spec_one = write_test_plugin(plugins_dir, "plugin_one")
+            spec_two = write_test_plugin(plugins_dir, "plugin_two")
+
+            plan = manager.plan([spec_one, spec_two])
+            prepared_groups: list[str] = []
+
+            def fake_prepare(group: EnvironmentGroup) -> Path:
+                prepared_groups.append(group.id)
+                return group.python_path
+
+            manager._group_manager.prepare = fake_prepare
+
+            path_one = manager.prepare_environment(spec_one)
+            path_two = manager.prepare_environment(spec_two)
+
+            assert path_one == path_two
+            assert prepared_groups == [plan.groups[0].id, plan.groups[0].id]
+
+    def test_cleanup_artifacts_keeps_plugin_local_venv(self):
+        """Shared artifact cleanup should not delete plugin-local legacy venvs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plugins_dir = Path(temp_dir) / "plugins"
+            spec = write_test_plugin(plugins_dir, "plugin_one")
+            plan = manager.plan([spec])
+
+            stale_root = Path(temp_dir) / ".astrbot"
+            stale_group_dir = stale_root / "groups"
+            stale_lock_dir = stale_root / "locks"
+            stale_env_dir = stale_root / "envs" / "stalegroup"
+            stale_group_dir.mkdir(parents=True, exist_ok=True)
+            stale_lock_dir.mkdir(parents=True, exist_ok=True)
+            stale_env_dir.mkdir(parents=True, exist_ok=True)
+            (stale_group_dir / "stalegroup.in").write_text("", encoding="utf-8")
+            (stale_group_dir / "stalegroup.json").write_text("{}", encoding="utf-8")
+            (stale_lock_dir / "stalegroup.txt").write_text("", encoding="utf-8")
+
+            legacy_venv = spec.plugin_dir / ".venv"
+            legacy_venv.mkdir(parents=True, exist_ok=True)
+
+            manager._planner.cleanup_artifacts(plan.groups)
+
+            assert legacy_venv.exists()
+            assert plan.groups[0].source_path.exists()
+            assert plan.groups[0].lockfile_path.exists()
+            assert plan.groups[0].metadata_path.exists()
+            assert not (stale_group_dir / "stalegroup.in").exists()
+            assert not (stale_group_dir / "stalegroup.json").exists()
+            assert not (stale_lock_dir / "stalegroup.txt").exists()
+            assert not stale_env_dir.exists()
 
 
 class TestImportString:
@@ -1137,3 +1330,11 @@ class TestStateFileConstant:
     def test_value(self):
         """STATE_FILE_NAME should be correct."""
         assert STATE_FILE_NAME == ".astrbot-worker-state.json"
+
+
+class TestGroupStateFileConstant:
+    """Tests for the shared environment state file constant."""
+
+    def test_value(self):
+        """GROUP_STATE_FILE_NAME should be correct."""
+        assert GROUP_STATE_FILE_NAME == ".group-venv-state.json"

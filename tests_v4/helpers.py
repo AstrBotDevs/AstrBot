@@ -1,6 +1,7 @@
 from __future__ import annotations  # 启用延迟类型注解求值，避免循环引用
 
 import asyncio
+from types import SimpleNamespace
 from pathlib import Path
 
 from astrbot_sdk.runtime.transport import Transport
@@ -16,7 +17,9 @@ class MemoryTransport(Transport):
     def __init__(self) -> None:
         """初始化内存传输实例。"""
         super().__init__()  # 调用父类初始化方法
-        self.partner: "MemoryTransport | None" = None  # 通信伙伴，可以是对等的另一个MemoryTransport实例
+        self.partner: "MemoryTransport | None" = (
+            None  # 通信伙伴，可以是对等的另一个MemoryTransport实例
+        )
 
     async def start(self) -> None:
         """启动传输。
@@ -70,6 +73,14 @@ class FakeEnvManager:
     模拟真实环境管理器的行为，但不执行实际的环境准备操作，
     主要用于需要环境管理器但又不希望产生副作用的测试场景。
     """
+
+    def plan(self, plugins):
+        return SimpleNamespace(
+            groups=[],
+            plugins=list(plugins),
+            plugin_to_group={},
+            skipped_plugins={},
+        )
 
     def prepare_environment(self, _plugin) -> Path:
         """模拟准备插件环境的方法。

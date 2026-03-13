@@ -9,6 +9,7 @@ import tempfile
 import textwrap
 from collections.abc import Generator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -132,6 +133,14 @@ class FakeEnvManager:
     模拟真实的环境管理器行为，但不执行实际的环境准备操作。
     """
 
+    def plan(self, plugins: list[Any]):
+        return SimpleNamespace(
+            groups=[],
+            plugins=list(plugins),
+            plugin_to_group={},
+            skipped_plugins={},
+        )
+
     def prepare_environment(self, _plugin: Any) -> Path:
         """模拟准备插件环境。
 
@@ -189,9 +198,9 @@ async def core_peer(transport_pair: tuple[MemoryTransport, MemoryTransport]) -> 
     async def invoke_handler(message, token):
         return await router.execute(
             message.capability,  # 要执行的能力
-            message.input,       # 输入参数
+            message.input,  # 输入参数
             stream=message.stream,  # 是否流式输出
-            cancel_token=token,     # 取消令牌
+            cancel_token=token,  # 取消令牌
             request_id=message.id,  # 请求ID
         )
 

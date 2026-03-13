@@ -637,14 +637,14 @@ class TestMultipleTriggerTypes:
 class TestEnvironmentCacheReuse:
     """Tests for PluginEnvironmentManager caching behavior."""
 
-    def test_fingerprint_matches_skips_rebuild(self):
-        """当指纹匹配时应该跳过环境重建。"""
+    def test_prepare_environment_reuses_existing_plan(self):
+        """prepare_environment should reuse an existing plan for the same plugin."""
         with tempfile.TemporaryDirectory() as temp_dir:
             plugin_dir = Path(temp_dir) / "test_plugin"
             plugin_dir.mkdir()
 
             requirements_path = plugin_dir / "requirements.txt"
-            requirements_path.write_text("astrbot-sdk\n", encoding="utf-8")
+            requirements_path.write_text("", encoding="utf-8")
 
             spec = PluginSpec(
                 name="test_plugin",
@@ -655,51 +655,23 @@ class TestEnvironmentCacheReuse:
                 manifest_data={},
             )
 
-            # 创建 mock uv
-            with patch("shutil.which", return_value="/usr/bin/uv"):
-                manager = PluginEnvironmentManager(Path(temp_dir))
-                manager.uv_binary = "/usr/bin/uv"
+            manager = PluginEnvironmentManager(Path(temp_dir), uv_binary="/usr/bin/uv")
+            plan_calls: list[list[str]] = []
+            original_plan = manager.plan
 
-                # 记录 _rebuild 调用
-                rebuild_called = []
+            def tracked_plan(plugins: list[PluginSpec]):
+                plan_calls.append([plugin.name for plugin in plugins])
+                return original_plan(plugins)
 
-                def tracked_rebuild(*args, **kwargs):
-                    rebuild_called.append(True)
-                    # 不实际执行重建，只是模拟
-                    venv_dir = args[1]
-                    venv_dir.mkdir(exist_ok=True)
-                    # 创建假的 python 可执行文件标记
-                    (venv_dir / "python").touch()
+            manager.plan = tracked_plan
+            manager._group_manager.prepare = lambda group: group.python_path
 
-                manager._rebuild = tracked_rebuild
+            manager.plan([spec])
+            first_path = manager.prepare_environment(spec)
+            second_path = manager.prepare_environment(spec)
 
-                # 第一次调用应该触发重建
-                with patch.object(Path, "exists", return_value=False):
-                    with patch("shutil.which", return_value="/usr/bin/uv"):
-                        # 模拟指纹计算
-                        fingerprint = manager._fingerprint(spec)
-                        manager._write_state(
-                            plugin_dir / ".astrbot-worker-state.json", spec, fingerprint
-                        )
-
-                # 重置计数
-                rebuild_called.clear()
-
-                # 第二次调用（指纹匹配）不应该触发重建
-                # 我们需要模拟 venv 存在且状态匹配
-                state = manager._load_state(plugin_dir / ".astrbot-worker-state.json")
-                new_fingerprint = manager._fingerprint(spec)
-
-                # 如果指纹匹配，条件应该为 False
-                if state.get("fingerprint") == new_fingerprint:
-                    # 模拟 venv 存在
-                    with patch.object(Path, "exists", return_value=True):
-                        with patch.object(
-                            manager, "_matches_python_version", return_value=True
-                        ):
-                            # prepare_environment 应该跳过重建
-                            # 但由于我们 mock 了 exists，这里只验证逻辑
-                            pass
+            assert first_path == second_path
+            assert plan_calls == [["test_plugin"]]
 
     def test_fingerprint_changes_triggers_rebuild(self):
         """当指纹变化时应该触发环境重建。"""
