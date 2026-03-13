@@ -237,3 +237,103 @@ class TestDBClientList:
 
         proxy.call.assert_called_once_with("db.list", {"prefix": None})
         assert result == []
+
+
+class TestDBClientGetMany:
+    """Tests for DBClient.get_many() method."""
+
+    @pytest.mark.asyncio
+    async def test_get_many_returns_mapping(self):
+        proxy = MagicMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(
+            return_value={
+                "items": [
+                    {"key": "a", "value": 1},
+                    {"key": "b", "value": None},
+                ]
+            }
+        )
+        client = DBClient(proxy)
+
+        result = await client.get_many(["a", "b"])
+
+        proxy.call.assert_called_once_with("db.get_many", {"keys": ["a", "b"]})
+        assert result == {"a": 1, "b": None}
+
+    @pytest.mark.asyncio
+    async def test_get_many_returns_empty_dict_for_malformed_items(self):
+        proxy = MagicMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={"items": "not-a-list"})
+        client = DBClient(proxy)
+
+        result = await client.get_many(["a"])
+
+        assert result == {}
+
+
+class TestDBClientSetMany:
+    """Tests for DBClient.set_many() method."""
+
+    @pytest.mark.asyncio
+    async def test_set_many_accepts_mapping(self):
+        proxy = MagicMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={})
+        client = DBClient(proxy)
+
+        await client.set_many({"a": 1, "b": 2})
+
+        proxy.call.assert_called_once_with(
+            "db.set_many",
+            {"items": [{"key": "a", "value": 1}, {"key": "b", "value": 2}]},
+        )
+
+    @pytest.mark.asyncio
+    async def test_set_many_accepts_sequence_pairs(self):
+        proxy = MagicMock(spec=CapabilityProxy)
+        proxy.call = AsyncMock(return_value={})
+        client = DBClient(proxy)
+
+        await client.set_many([("a", True), ("b", {"x": 1})])
+
+        proxy.call.assert_called_once_with(
+            "db.set_many",
+            {"items": [{"key": "a", "value": True}, {"key": "b", "value": {"x": 1}}]},
+        )
+
+
+class TestDBClientWatch:
+    """Tests for DBClient.watch() method."""
+
+    @pytest.mark.asyncio
+    async def test_watch_calls_proxy_stream_and_yields_events(self):
+        async def gen():
+            yield {"op": "set", "key": "a", "value": 1}
+            yield {"op": "delete", "key": "a", "value": None}
+
+        proxy = MagicMock(spec=CapabilityProxy)
+        proxy.stream = MagicMock(return_value=gen())
+        client = DBClient(proxy)
+
+        iterator = client.watch()
+
+        proxy.stream.assert_called_once_with("db.watch", {"prefix": None})
+        events = [event async for event in iterator]
+        assert events == [
+            {"op": "set", "key": "a", "value": 1},
+            {"op": "delete", "key": "a", "value": None},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_watch_with_prefix(self):
+        async def gen():
+            yield {"op": "set", "key": "user:1", "value": {"ok": True}}
+
+        proxy = MagicMock(spec=CapabilityProxy)
+        proxy.stream = MagicMock(return_value=gen())
+        client = DBClient(proxy)
+
+        iterator = client.watch(prefix="user:")
+
+        proxy.stream.assert_called_once_with("db.watch", {"prefix": "user:"})
+        events = [event async for event in iterator]
+        assert events == [{"op": "set", "key": "user:1", "value": {"ok": True}}]
