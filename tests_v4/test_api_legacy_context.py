@@ -725,6 +725,19 @@ class TestLegacyStarDelegation:
 
         assert star.get_config() == {"admins_id": ["42"]}
 
+    def test_get_config_works_when_subclass_does_not_call_super_init(self):
+        """LegacyStar proxy should stay lazy for old plugins that skip super().__init__()."""
+        legacy_ctx = LegacyContext("test_plugin")
+        legacy_ctx.get_config = MagicMock(return_value={"admins_id": ["7"]})
+
+        class LegacySubclass(LegacyStar):
+            def __init__(self, context):
+                self.context = context
+
+        star = LegacySubclass(legacy_ctx)
+
+        assert star.get_config() == {"admins_id": ["7"]}
+
 
 class TestMigrationDocUrl:
     """Tests for migration documentation URL."""

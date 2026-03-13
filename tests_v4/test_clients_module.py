@@ -54,6 +54,27 @@ class TestClientsModuleExports:
         assert "ChatMessage" in __all__
         assert "MemoryClient" in __all__
         assert "PlatformClient" in __all__
+        assert "HTTPClient" in __all__
+        assert "MetadataClient" in __all__
+        assert "PluginMetadata" in __all__
+
+    def test_exports_http_client(self):
+        """clients module should export HTTPClient."""
+        from astrbot_sdk.clients import HTTPClient
+
+        assert HTTPClient is not None
+
+    def test_exports_metadata_client(self):
+        """clients module should export MetadataClient."""
+        from astrbot_sdk.clients import MetadataClient
+
+        assert MetadataClient is not None
+
+    def test_exports_plugin_metadata(self):
+        """clients module should export PluginMetadata."""
+        from astrbot_sdk.clients import PluginMetadata
+
+        assert PluginMetadata is not None
 
     def test_does_not_export_capability_proxy(self):
         """CapabilityProxy should not be in public exports."""

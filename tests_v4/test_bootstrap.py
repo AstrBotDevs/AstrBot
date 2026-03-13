@@ -920,16 +920,14 @@ class DemoComponent(Star):
             runtime.peer.start = AsyncMock()
             runtime.peer.initialize = AsyncMock()
             runtime.peer.stop = AsyncMock()
+            runtime._legacy_worker_runtime = MagicMock()
+            runtime._legacy_worker_runtime.run_startup_hooks = AsyncMock()
 
-            with patch(
-                "astrbot_sdk.runtime.bootstrap.run_legacy_worker_startup_hooks",
-                new=AsyncMock(),
-            ) as startup_hooks:
-                await runtime.start()
+            await runtime.start()
 
+            startup_hooks = runtime._legacy_worker_runtime.run_startup_hooks
             startup_hooks.assert_awaited_once()
-            args, kwargs = startup_hooks.await_args
-            assert args == ([],)
+            _, kwargs = startup_hooks.await_args
             assert kwargs["context"] is runtime._lifecycle_context
             assert kwargs["metadata"] == manifest_data
 
@@ -957,16 +955,14 @@ class DemoComponent(Star):
                 transport=MemoryTransport(),
             )
             runtime.peer.stop = AsyncMock()
+            runtime._legacy_worker_runtime = MagicMock()
+            runtime._legacy_worker_runtime.run_shutdown_hooks = AsyncMock()
 
-            with patch(
-                "astrbot_sdk.runtime.bootstrap.run_legacy_worker_shutdown_hooks",
-                new=AsyncMock(),
-            ) as shutdown_hooks:
-                await runtime.stop()
+            await runtime.stop()
 
+            shutdown_hooks = runtime._legacy_worker_runtime.run_shutdown_hooks
             shutdown_hooks.assert_awaited_once()
-            args, kwargs = shutdown_hooks.await_args
-            assert args == ([],)
+            _, kwargs = shutdown_hooks.await_args
             assert kwargs["context"] is runtime._lifecycle_context
             assert kwargs["metadata"] == manifest_data
 

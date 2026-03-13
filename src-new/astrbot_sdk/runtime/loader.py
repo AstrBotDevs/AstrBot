@@ -86,13 +86,11 @@ from __future__ import annotations
 
 import copy
 import importlib
-import importlib.util
-import json
 import inspect
+import json
 import os
 import re
 import sys
-import types
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
@@ -100,16 +98,25 @@ from typing import Any
 
 import yaml
 
+from .._legacy_loader import (
+    build_legacy_manifest,
+    load_legacy_main_component_classes,
+    load_plugin_manifest_payload,
+    looks_like_legacy_plugin,
+    resolve_plugin_component_classes,
+)
 from .._legacy_runtime import (
     LegacyRuntimeAdapter,
     build_capability_legacy_runtime,
     build_handler_legacy_runtime,
-    register_legacy_component,
+    create_legacy_component_context,
+    finalize_legacy_component_instance,
+    is_new_star_component,
+    plan_legacy_component_construction,
 )
 from ..api.basic import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
-from ..star import Star
 from .environment_groups import (
     EnvironmentPlanResult,
     EnvironmentPlanner,
@@ -198,21 +205,11 @@ class LoadedPlugin:
 
 
 def _is_new_star_component(component_cls: Any) -> bool:
-    if not isinstance(component_cls, type) or not issubclass(component_cls, Star):
-        return False
-    marker = getattr(component_cls, "__astrbot_is_new_star__", None)
-    if callable(marker):
-        return bool(marker())
-    return True
+    return is_new_star_component(component_cls)
 
 
 def _create_legacy_context(component_cls: Any, plugin_name: str) -> Any:
-    factory = getattr(component_cls, "_astrbot_create_legacy_context", None)
-    if callable(factory):
-        return factory(plugin_name)
-    from ..api.star.context import Context as LegacyContext
-
-    return LegacyContext(plugin_name)
+    return create_legacy_component_context(component_cls, plugin_name)
 
 
 def _iter_handler_names(instance: Any) -> list[str]:
@@ -278,30 +275,15 @@ def _read_requirements_text(path: Path) -> str:
 
 
 def _looks_like_legacy_plugin(plugin_dir: Path) -> bool:
-    return (
-        not (plugin_dir / PLUGIN_MANIFEST_FILE).exists()
-        and (plugin_dir / LEGACY_MAIN_FILE).exists()
-    )
+    return looks_like_legacy_plugin(plugin_dir)
 
 
 def _build_legacy_manifest(plugin_dir: Path) -> tuple[Path, dict[str, Any]]:
-    metadata_path = plugin_dir / LEGACY_METADATA_FILE
-    metadata = _read_yaml(metadata_path) if metadata_path.exists() else {}
-    plugin_name = str(metadata.get("name") or plugin_dir.name)
-    manifest_data: dict[str, Any] = {
-        "name": plugin_name,
-        "author": metadata.get("author"),
-        "desc": metadata.get("desc") or metadata.get("description"),
-        "version": metadata.get("version"),
-        "repo": metadata.get("repo"),
-        "display_name": metadata.get("display_name"),
-        "runtime": {"python": _default_python_version()},
-        "components": [],
-        LEGACY_MAIN_MANIFEST_KEY: True,
-    }
-    return (
-        metadata_path if metadata_path.exists() else plugin_dir / LEGACY_MAIN_FILE,
-        manifest_data,
+    return build_legacy_manifest(
+        plugin_dir,
+        read_yaml=_read_yaml,
+        default_python_version=_default_python_version(),
+        manifest_flag_key=LEGACY_MAIN_MANIFEST_KEY,
     )
 
 
@@ -412,107 +394,31 @@ def _load_plugin_config(plugin: PluginSpec) -> AstrBotConfig | None:
 
 
 def _legacy_component_classes(plugin: PluginSpec) -> list[type[Any]]:
-    package_name = _legacy_package_name(plugin)
-    module_name = f"{package_name}.main"
-    module_path = plugin.plugin_dir / LEGACY_MAIN_FILE
-    _prepare_legacy_package(package_name, plugin.plugin_dir)
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        return []
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    component_classes: list[type[Any]] = []
-    for _, candidate in inspect.getmembers(module, inspect.isclass):
-        if candidate.__module__ != module.__name__:
-            continue
-        if not issubclass(candidate, Star) or candidate is Star:
-            continue
-        component_classes.append(candidate)
-
-    component_classes.sort(key=lambda cls: cls.__name__)
-    return component_classes
+    return load_legacy_main_component_classes(
+        plugin_name=plugin.name,
+        plugin_dir=plugin.plugin_dir,
+    )
 
 
 def _plugin_component_classes(plugin: PluginSpec) -> list[type[Any]]:
-    component_classes: list[type[Any]] = []
-    for component in plugin.manifest_data.get("components", []):
-        class_path = component.get("class")
-        if not isinstance(class_path, str) or ":" not in class_path:
-            continue
-        component_classes.append(
-            import_string(class_path, plugin_dir=plugin.plugin_dir)
-        )
-
-    if component_classes:
-        return component_classes
-    if plugin.manifest_data.get(LEGACY_MAIN_MANIFEST_KEY):
-        return _legacy_component_classes(plugin)
-    return []
-
-
-def _select_legacy_constructor_args(
-    component_cls: type[Any],
-    legacy_context: Any,
-    config: AstrBotConfig | None,
-) -> tuple[Any, ...]:
-    try:
-        signature = inspect.signature(component_cls)
-    except (TypeError, ValueError):
-        return (legacy_context, config) if config is not None else (legacy_context,)
-
-    positional_params = [
-        parameter
-        for parameter in signature.parameters.values()
-        if parameter.kind
-        in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        )
-    ]
-    has_varargs = any(
-        parameter.kind == inspect.Parameter.VAR_POSITIONAL
-        for parameter in signature.parameters.values()
+    return resolve_plugin_component_classes(
+        plugin_name=plugin.name,
+        plugin_dir=plugin.plugin_dir,
+        manifest_data=plugin.manifest_data,
+        manifest_flag_key=LEGACY_MAIN_MANIFEST_KEY,
+        import_string=import_string,
     )
-    max_args = None if has_varargs else len(positional_params)
-
-    if config is not None and (max_args is None or max_args >= 2):
-        return (legacy_context, config)
-    if max_args is None or max_args >= 1:
-        return (legacy_context,)
-    return ()
-
-
-def _legacy_constructor_accepts_config(component_cls: type[Any]) -> bool:
-    try:
-        signature = inspect.signature(component_cls)
-    except (TypeError, ValueError):
-        return True
-
-    positional_params = [
-        parameter
-        for parameter in signature.parameters.values()
-        if parameter.kind
-        in (
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        )
-    ]
-    has_varargs = any(
-        parameter.kind == inspect.Parameter.VAR_POSITIONAL
-        for parameter in signature.parameters.values()
-    )
-    return has_varargs or len(positional_params) >= 2
 
 
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
     plugin_dir = plugin_dir.resolve()
-    manifest_path = plugin_dir / PLUGIN_MANIFEST_FILE
     requirements_path = plugin_dir / "requirements.txt"
-    if manifest_path.exists():
-        manifest_data = _read_yaml(manifest_path)
-    else:
-        manifest_path, manifest_data = _build_legacy_manifest(plugin_dir)
+    manifest_path, manifest_data = load_plugin_manifest_payload(
+        plugin_dir,
+        read_yaml=_read_yaml,
+        default_python_version=_default_python_version(),
+        manifest_flag_key=LEGACY_MAIN_MANIFEST_KEY,
+    )
     runtime = manifest_data.get("runtime") or {}
     python_version = runtime.get("python") or _default_python_version()
     return PluginSpec(
@@ -717,32 +623,24 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
         if _is_new_star_component(component_cls):
             instance = component_cls()
         else:
-            if shared_legacy_context is None:
-                # 旧版 StarManager 为同一插件复用一个 Context 实例。
-                shared_legacy_context = _create_legacy_context(
-                    component_cls, plugin.name
-                )
-            legacy_context = shared_legacy_context
-            component_config = plugin_config
-            if component_config is None and _legacy_constructor_accepts_config(
-                component_cls
-            ):
-                component_config = AstrBotConfig(
+            construction = plan_legacy_component_construction(
+                component_cls,
+                plugin_name=plugin.name,
+                shared_legacy_context=shared_legacy_context,
+                plugin_config=plugin_config,
+                default_config_factory=lambda: AstrBotConfig(
                     {},
                     save_path=_plugin_config_path(plugin.plugin_dir, plugin.name),
-                )
-            constructor_args = _select_legacy_constructor_args(
-                component_cls, legacy_context, component_config
+                ),
             )
-            instance = component_cls(*constructor_args)
-            if getattr(instance, "context", None) is None:
-                setattr(instance, "context", legacy_context)
-            if (
-                component_config is not None
-                and getattr(instance, "config", None) is None
-            ):
-                setattr(instance, "config", component_config)
-            register_legacy_component(legacy_context, instance)
+            shared_legacy_context = construction.shared_legacy_context
+            legacy_context = construction.legacy_context
+            instance = component_cls(*construction.constructor_args)
+            finalize_legacy_component_instance(
+                instance,
+                legacy_context=legacy_context,
+                component_config=construction.component_config,
+            )
         instances.append(instance)
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)
@@ -817,21 +715,6 @@ def _purge_module_root(root_name: str) -> None:
     for module_name in list(sys.modules):
         if module_name == root_name or module_name.startswith(f"{root_name}."):
             sys.modules.pop(module_name, None)
-
-
-def _legacy_package_name(plugin: PluginSpec) -> str:
-    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", plugin.name)
-    return f"_astrbot_legacy_pkg_{sanitized}"
-
-
-def _prepare_legacy_package(package_name: str, plugin_dir: Path) -> None:
-    _purge_module_root(package_name)
-    package = types.ModuleType(package_name)
-    package.__file__ = str(plugin_dir / "__init__.py")
-    package.__package__ = package_name
-    package.__path__ = [str(plugin_dir)]
-    sys.modules[package_name] = package
-    importlib.invalidate_caches()
 
 
 def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:

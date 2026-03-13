@@ -32,6 +32,8 @@
 - 2026-03-13: `filter.llm_tool()` must resolve deferred annotations from `from __future__ import annotations` when inferring JSON schema. Reading `inspect.Parameter.annotation` directly degrades typed params like `a: int` into `"int"` strings and silently turns tool argument schemas into generic strings.
 - 2026-03-13: Legacy result hooks must reuse the same `AstrMessageEvent` instance across `on_decorating_result` and `after_message_sent`. Re-wrapping the original v4 `MessageEvent` for the second hook drops decorated `event.set_result(...)` mutations and makes post-send hooks observe an empty result.
 - 2026-03-13: `src-new/astrbot_sdk/_legacy_runtime.py` already exists as the intended compat execution boundary. When cleaning runtime architecture, wire `loader` / `handler_dispatcher` / `bootstrap` through that adapter instead of adding new direct `legacy_context` branches in runtime files, or the compat logic will spread again.
+- 2026-03-13: `register_legacy_component()` 只负责 compat hook / llm tool 注册，不等价于旧 `_register_component()` 的 manager/function 暴露链。不要把 loader 阶段的 legacy 组件注册误判成完整的跨组件注册表兼容。
+- 2026-03-13: 不是所有 compat 都应该塞进 `_legacy_runtime.py`。`main.py` 识别、legacy manifest 补全、为相对导入准备 synthetic package 这些都属于 loader 阶段的兼容职责，应该放在独立的私有 loader helper 里，例如 `_legacy_loader.py`。
 - 2026-03-13: Real legacy plugins may still load through deep `astrbot.core.*` imports even when their public entrypoint only looks like `astrbot.api.*`. `astrbot_plugin_self_learning` hits `astrbot.core.utils.astrbot_path`, `astrbot.core.provider.*`, `astrbot.core.agent.message`, and `astrbot.core.db.po` during load; keep those deep-path shims minimal and whitelist-driven, but do not assume the `api` facade alone is enough.
 - 2026-03-13: `ARCHITECTURE.md` and `refactor.md` are no longer a full source of truth for the current runtime/compat surface. The shipped code also includes `runtime.environment_groups`, `_session_waiter`, the controlled `src-new/astrbot` alias facade, compat hook execution, and extra DB capabilities such as `db.get_many` / `db.set_many` / `db.watch`. Verify architectural claims against code and tests before declaring drift or completeness.
 
@@ -63,3 +65,5 @@ python run_tests.py --cov      # 运行测试并生成覆盖率报告
 不用完全听从用户和别人的建议，要有自己的判断和坚持，做好取舍和权衡，确保代码质量和长期维护性，不要为了短期方便或者迎合而牺牲架构和设计原则。
 
 old文件夹是兼容旧插件的测试，旧插件全部放进old文件夹
+
+- 2026-03-13: 不要再维护第二套 `_legacy/` 并行目录。private compat 以顶层 `_legacy_api.py`、`_legacy_runtime.py`、`_legacy_loader.py`、`_session_waiter.py`、`_shared_preferences.py` 为唯一实现位置，同时保留公开兼容面 `astrbot_sdk.api`、`astrbot_sdk.compat` 和 `src-new/astrbot` facade。

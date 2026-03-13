@@ -12,18 +12,25 @@ bridging, and agent-loop semantics live in `_legacy_api.py` and `api/`.
     - MemoryClient: 记忆搜索、保存、读取、删除
     - DBClient: 键值存储 get/set/delete/list
     - PlatformClient: 平台消息发送与成员查询
+    - HTTPClient: Web API 注册
+    - MetadataClient: 插件元数据查询
 """
 
 from .db import DBClient
+from .http import HTTPClient
 from .llm import ChatMessage, LLMClient, LLMResponse
 from .memory import MemoryClient
+from .metadata import MetadataClient, PluginMetadata
 from .platform import PlatformClient
 
 __all__ = [
     "ChatMessage",
     "DBClient",
+    "HTTPClient",
     "LLMClient",
     "LLMResponse",
     "MemoryClient",
+    "MetadataClient",
     "PlatformClient",
+    "PluginMetadata",
 ]

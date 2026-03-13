@@ -30,9 +30,8 @@ AstrBot SDK v4 当前同时承担两件事：
 
 执行边界
   ├─ runtime 主干: loader / bootstrap / handler_dispatcher / capability_router / peer
-  ├─ compat 执行边界: _legacy_runtime.py
-  ├─ legacy 行为承接: _legacy_api.py
-  └─ 会话等待器: _session_waiter.py
+  ├─ compat 私有实现: _legacy_api.py / _legacy_runtime.py / _legacy_loader.py
+  └─ 运行时交互辅助: _session_waiter.py / _shared_preferences.py
 
 协议与传输
   ├─ protocol.messages / protocol.descriptors
@@ -45,7 +44,8 @@ AstrBot SDK v4 当前同时承担两件事：
 - `astrbot_sdk.__init__` 只导出推荐的 v4 入口。
 - `astrbot_sdk.runtime.__init__` 只导出高级运行时原语，不把 loader/bootstrap 等编排细节提升为根级稳定 API。
 - `astrbot_sdk.protocol.__init__` 只导出 v4 原生协议模型；legacy JSON-RPC 适配器留在 `protocol.legacy_adapter` 子模块。
-- runtime 主干通过 `_legacy_runtime.py` 执行 compat filters / hooks / 生命周期桥接，不直接展开更多 legacy 细节。
+- compat 私有实现保留在既有顶层 private 模块中，避免再维护一套并行目录。
+- runtime 主干通过 `_legacy_runtime.py` / `_legacy_loader.py` 等私有边界执行 compat filters / hooks / 生命周期桥接，不直接展开更多 legacy 细节。
 
 ## 3. 目录结构
 
@@ -63,6 +63,7 @@ src-new/
 │   ├── compat.py                    # 旧顶层兼容重导出
 │   ├── _legacy_api.py               # LegacyContext / LegacyStar / CommandComponent
 │   ├── _legacy_llm.py               # legacy LLM/tool 兼容辅助
+│   ├── _legacy_loader.py            # legacy 插件发现与 main.py 包装
 │   ├── _legacy_runtime.py           # compat 执行边界
 │   ├── _session_waiter.py           # legacy session_waiter 兼容执行
 │   ├── _shared_preferences.py       # 共享偏好兼容辅助
@@ -112,15 +113,15 @@ src-new/
 2. `PluginEnvironmentManager.plan()` 基于 `runtime.python` 和 `requirements.txt` 规划共享环境分组。
 3. `GroupEnvironmentManager` 负责准备分组环境；worker 仍然保持“一插件一进程”，只是可共享同一个 Python 环境。
 4. `load_plugin()` 加载组件，v4 `Star` 直接实例化，legacy 组件复用同一 `LegacyContext`。
-5. legacy component 注册通过 `_legacy_runtime` 把 compat hooks / LLM tools / context functions 绑定到共享 `LegacyContext`。
+5. legacy component 注册通过 `_legacy_runtime.py` 把 compat hooks / LLM tools / context functions 绑定到共享 `LegacyContext`。
 6. `PluginWorkerRuntime` 创建 `Peer`、`HandlerDispatcher`、`CapabilityDispatcher`，初始化后向 supervisor 发送 `initialize`。
-7. worker 启动/停止时的 compat lifecycle hooks 统一由 `_legacy_runtime` 执行。
+7. worker 启动/停止时的 compat lifecycle hooks 统一由 `_legacy_runtime.py` 执行。
 
 ### 4.2 handler.invoke 调用链
 
 1. 上游通过 capability `"handler.invoke"` 调 worker。
-2. `HandlerDispatcher` 构造本地 `Context` 和 `MessageEvent`，先尝试把消息路由给 `_session_waiter`。
-3. 若命中 legacy compat handler，则由 `_legacy_runtime` 应用 custom filters、结果装饰、发送后 hook、错误 hook。
+2. `HandlerDispatcher` 构造本地 `Context` 和 `MessageEvent`，先尝试把消息路由给 `_session_waiter.py`。
+3. 若命中 legacy compat handler，则由 `_legacy_runtime.py` 应用 custom filters、结果装饰、发送后 hook、错误 hook。
 4. handler 返回值支持：
    - `MessageEventResult`
    - `MessageChain`
@@ -318,7 +319,7 @@ from astrbot.core.utils.session_waiter import session_waiter
 
 ## 11. 当前建议的后续演进方向
 
-1. 继续把 runtime 对 compat 的认知收口到 `_legacy_runtime.py`。
+1. 继续把 runtime 对 compat 的认知收口到 `_legacy_runtime.py` 与 `_legacy_loader.py`。
 2. 继续拆薄 `_legacy_api.py`，让 `LegacyContext` 更偏向 facade 和 orchestration。
 3. 保持 `src-new/astrbot` 为受控 facade，不要把旧应用整棵树重新复制进来。
 4. 用契约测试保护 capability 注册表、compat hook 执行和 facade 导入矩阵，避免文档再次漂移。

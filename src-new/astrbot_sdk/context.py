@@ -13,7 +13,14 @@ from typing import Any
 
 from loguru import logger as base_logger
 
-from .clients import DBClient, LLMClient, MemoryClient, PlatformClient
+from .clients import (
+    DBClient,
+    HTTPClient,
+    LLMClient,
+    MemoryClient,
+    MetadataClient,
+    PlatformClient,
+)
 from .clients._proxy import CapabilityProxy
 
 
@@ -54,6 +61,8 @@ class Context:
         self.memory = MemoryClient(proxy)
         self.db = DBClient(proxy)
         self.platform = PlatformClient(proxy)
+        self.http = HTTPClient(proxy)
+        self.metadata = MetadataClient(proxy, plugin_id)
         self.plugin_id = plugin_id
         self.logger = logger or base_logger.bind(plugin_id=plugin_id)
         self.cancel_token = cancel_token or CancelToken()

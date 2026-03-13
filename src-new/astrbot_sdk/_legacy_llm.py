@@ -15,9 +15,10 @@ import ast
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .api.provider.entities import LLMResponse
+if TYPE_CHECKING:
+    from .api.provider.entities import LLMResponse
 
 
 @dataclass(slots=True)
@@ -171,6 +172,8 @@ def _legacy_tool_calls(
 
 
 def _legacy_llm_response(response: Any) -> LLMResponse:
+    from .api.provider.entities import LLMResponse
+
     if isinstance(response, LLMResponse):
         return response
 

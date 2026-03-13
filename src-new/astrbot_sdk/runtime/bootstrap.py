@@ -97,15 +97,14 @@ from typing import IO, Any
 from loguru import logger
 
 from .._legacy_runtime import (
-    bind_legacy_runtime_contexts,
-    run_legacy_worker_shutdown_hooks,
-    run_legacy_worker_startup_hooks,
+    LegacyWorkerRuntimeBridge,
+    build_legacy_worker_runtime_bridge,
+    resolve_plugin_lifecycle_hook,
 )
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
-from ..star import Star
 from .capability_router import CapabilityRouter, StreamExecution
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
@@ -650,6 +649,14 @@ class PluginWorkerRuntime:
         self._lifecycle_context = RuntimeContext(
             peer=self.peer, plugin_id=self.plugin.name
         )
+        self._legacy_worker_runtime: LegacyWorkerRuntimeBridge = (
+            build_legacy_worker_runtime_bridge(
+                lambda: [
+                    *self.loaded_plugin.handlers,
+                    *self.loaded_plugin.capabilities,
+                ]
+            )
+        )
         self._bind_legacy_runtime_contexts(self._lifecycle_context)
         self.peer.set_invoke_handler(self._handle_invoke)
         self.peer.set_cancel_handler(self._handle_cancel)
@@ -705,7 +712,7 @@ class PluginWorkerRuntime:
 
     async def _run_lifecycle(self, method_name: str) -> None:
         for instance in self.loaded_plugin.instances:
-            hook = self._resolve_lifecycle_hook(instance, method_name)
+            hook = resolve_plugin_lifecycle_hook(instance, method_name)
             if hook is None:
                 continue
             args = []
@@ -730,16 +737,12 @@ class PluginWorkerRuntime:
                 await result
 
     def _bind_legacy_runtime_contexts(self, runtime_context: RuntimeContext) -> None:
-        bind_legacy_runtime_contexts(
-            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
-            runtime_context,
-        )
+        self._legacy_worker_runtime.bind_runtime_contexts(runtime_context)
 
     async def _run_legacy_worker_startup_hooks(
         self, *, metadata: dict[str, Any]
     ) -> None:
-        await run_legacy_worker_startup_hooks(
-            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+        await self._legacy_worker_runtime.run_startup_hooks(
             context=self._lifecycle_context,
             metadata=metadata,
         )
@@ -749,39 +752,10 @@ class PluginWorkerRuntime:
         *,
         metadata: dict[str, Any],
     ) -> None:
-        await run_legacy_worker_shutdown_hooks(
-            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
+        await self._legacy_worker_runtime.run_shutdown_hooks(
             context=self._lifecycle_context,
             metadata=metadata,
         )
-
-    @staticmethod
-    def _resolve_lifecycle_hook(instance: Any, method_name: str):
-        hook = getattr(instance, method_name, None)
-        marker = getattr(instance.__class__, "__astrbot_is_new_star__", None)
-        is_new_star = True
-        if callable(marker):
-            is_new_star = bool(marker())
-
-        if hook is not None and callable(hook):
-            bound_func = getattr(hook, "__func__", hook)
-            star_default = getattr(Star, method_name, None)
-            if star_default is None or bound_func is not star_default:
-                return hook
-
-        if not is_new_star:
-            alias = {
-                "on_start": "initialize",
-                "on_stop": "terminate",
-            }.get(method_name)
-            if alias is not None:
-                legacy_hook = getattr(instance, alias, None)
-                if legacy_hook is not None and callable(legacy_hook):
-                    return legacy_hook
-
-        if hook is not None and callable(hook):
-            return hook
-        return None
 
 
 async def run_supervisor(

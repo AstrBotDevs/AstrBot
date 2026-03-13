@@ -73,7 +73,11 @@ import typing
 from collections.abc import AsyncIterator
 from typing import Any, get_type_hints
 
-from .._legacy_runtime import get_legacy_runtime_adapter
+from .._legacy_runtime import (
+    bind_loaded_legacy_runtime,
+    get_legacy_runtime_adapter,
+    prepare_legacy_handler_runtime,
+)
 from .._session_waiter import SessionWaiterManager
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
@@ -105,11 +109,13 @@ class HandlerDispatcher:
         event.bind_reply_handler(self._create_reply_handler(ctx, event))
         if await self._session_waiters.dispatch(event):
             return {}
-        legacy_runtime = get_legacy_runtime_adapter(loaded)
-        if legacy_runtime is not None:
-            legacy_runtime.bind_runtime_context(ctx)
-            if not await legacy_runtime.passes_filters(event):
-                return {}
+        legacy_preparation = await prepare_legacy_handler_runtime(
+            loaded,
+            runtime_context=ctx,
+            event=event,
+        )
+        if not legacy_preparation.should_run:
+            return {}
 
         # 提取 legacy args 用于兼容旧版 handler 签名
         legacy_args = message.input.get("args") or {}
@@ -311,16 +317,28 @@ class HandlerDispatcher:
         *,
         legacy_runtime=None,
     ) -> None:
+        if legacy_runtime is not None:
+            await legacy_runtime.dispatch_result(
+                item,
+                event,
+                ctx,
+                sender=lambda prepared_item: self._send_normalized_result(
+                    prepared_item,
+                    event,
+                    ctx,
+                ),
+            )
+            return
+        await self._send_normalized_result(item, event, ctx)
+
+    async def _send_normalized_result(
+        self,
+        item: Any,
+        event: MessageEvent,
+        ctx: Context | None = None,
+    ) -> bool:
         from ..api.event.event_result import MessageEventResult
         from ..api.message.chain import MessageChain
-
-        compat_event = None
-        if legacy_runtime is not None:
-            prepared = await legacy_runtime.prepare_result(item, event, ctx)
-            compat_event = prepared.compat_event
-            if prepared.stopped:
-                return
-            item = prepared.item
 
         if isinstance(item, MessageEventResult):
             if item.chain and ctx is not None and not item.is_plain_text_only():
@@ -328,44 +346,34 @@ class HandlerDispatcher:
                     event.session_ref or event.session_id,
                     item.to_payload(),
                 )
-                if legacy_runtime is not None:
-                    await legacy_runtime.after_send(compat_event, ctx)
-                return
+                return True
             plain_text = item.get_plain_text()
             if plain_text:
                 await event.reply(plain_text)
-                if legacy_runtime is not None:
-                    await legacy_runtime.after_send(compat_event, ctx)
-            return
+                return True
+            return False
         if isinstance(item, MessageChain):
             if item.chain and ctx is not None and not item.is_plain_text_only():
                 await ctx.platform.send_chain(
                     event.session_ref or event.session_id,
                     item.to_payload(),
                 )
-                if legacy_runtime is not None:
-                    await legacy_runtime.after_send(compat_event, ctx)
-                return
+                return True
             plain_text = item.get_plain_text()
             if plain_text:
                 await event.reply(plain_text)
-                if legacy_runtime is not None:
-                    await legacy_runtime.after_send(compat_event, ctx)
-            return
+                return True
+            return False
         if isinstance(item, PlainTextResult):
             await event.reply(item.text)
-            if legacy_runtime is not None:
-                await legacy_runtime.after_send(compat_event, ctx)
-            return
+            return True
         if isinstance(item, str):
             await event.reply(item)
-            if legacy_runtime is not None:
-                await legacy_runtime.after_send(compat_event, ctx)
-            return
+            return True
         if isinstance(item, dict) and "text" in item:
             await event.reply(str(item["text"]))
-            if legacy_runtime is not None:
-                await legacy_runtime.after_send(compat_event, ctx)
+            return True
+        return False
 
     async def _handle_error(
         self,
@@ -423,9 +431,7 @@ class CapabilityDispatcher:
             plugin_id=self._plugin_id,
             cancel_token=cancel_token,
         )
-        legacy_runtime = get_legacy_runtime_adapter(loaded)
-        if legacy_runtime is not None:
-            legacy_runtime.bind_runtime_context(ctx)
+        bind_loaded_legacy_runtime(loaded, ctx)
 
         task = asyncio.create_task(
             self._run_capability(

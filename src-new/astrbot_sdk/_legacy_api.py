@@ -13,7 +13,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -23,10 +23,11 @@ from ._legacy_llm import (
     _legacy_llm_response,
     _tool_parameters_from_legacy_args,
 )
-from .api.basic.astrbot_config import AstrBotConfig
-from .api.provider.entities import LLMResponse
 from .context import Context as NewContext
 from .star import Star
+
+if TYPE_CHECKING:
+    from .api.provider.entities import LLMResponse
 
 # TODO-迁移文档要写，我好烦烦烦你烦烦烦你
 MIGRATION_DOC_URL = "https://docs.astrbot.app/migration/v3"
@@ -477,6 +478,8 @@ class LegacyContext:
         return dict(config) if isinstance(config, dict) else {}
 
     def _runtime_config(self) -> Any:
+        from .api.basic.astrbot_config import AstrBotConfig
+
         runtime_context = self._runtime_context
         config = (
             getattr(runtime_context, "_astrbot_config", None)
@@ -568,6 +571,7 @@ class LegacyContext:
         available: dict[str, Any],
     ) -> Any:
         from .api.event import AstrMessageEvent
+        from .api.provider.entities import LLMResponse
         from .context import Context as RuntimeContext
 
         if annotation is Any or annotation is inspect.Signature.empty:
@@ -837,6 +841,8 @@ class LegacyContext:
         event: Any | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
+        from .api.provider.entities import LLMResponse
+
         _warn_once("context.tool_loop_agent()", "compat local tool loop")
         ctx = self.require_runtime_context()
         call_kwargs = self._merge_llm_kwargs(
@@ -998,6 +1004,14 @@ class LegacyContext:
         _warn_once("context.delete_kv_data()", "ctx.db.delete(key)")
         ctx = self.require_runtime_context()
         await ctx.db.delete(key)
+
+    async def get_registered_star(self, star_name: str) -> Any:
+        ctx = self.require_runtime_context()
+        return await ctx.metadata.get_plugin(star_name)
+
+    async def get_all_stars(self) -> list[Any]:
+        ctx = self.require_runtime_context()
+        return await ctx.metadata.list_plugins()
 
 
 class StarTools:
