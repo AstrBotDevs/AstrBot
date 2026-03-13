@@ -164,11 +164,12 @@ class TraceSpan:
 
             # Async SQLite persistence (fire-and-forget)
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self._persist_to_db(trace_dict))
-            except Exception:
-                pass
+                asyncio.get_running_loop()
+                asyncio.create_task(self._persist_to_db(trace_dict))
+            except RuntimeError:
+                pass  # No running event loop; skip async persistence
+            except Exception as e:
+                logger.debug(f"[trace] Failed to schedule DB persistence: {e}")
 
         except Exception as e:
             logger.debug(f"[trace] Failed to publish root trace: {e}")
@@ -290,15 +291,15 @@ async def trace_span(span: TraceSpan) -> AsyncGenerator[TraceSpan, None]:
             try:
                 span.set_output(error=str(e))
                 span.finish(status="error")
-            except Exception:
-                pass
+            except Exception as inner:
+                logger.debug(f"[trace] Failed to finish span on error: {inner}")
         raise
     else:
         if span.finished_at is None:
             try:
                 span.finish()
-            except Exception:
-                pass
+            except Exception as inner:
+                logger.debug(f"[trace] Failed to finish span: {inner}")
 
 
 # ---------------------------------------------------------------------------
@@ -354,14 +355,14 @@ async def span_context(
         if span.finished_at is None:
             try:
                 span.finish(status="ok")
-            except Exception:
-                pass
+            except Exception as inner:
+                logger.debug(f"[trace] Failed to finish span: {inner}")
     except Exception as e:
         if span.finished_at is None:
             try:
                 span.finish(status="error", error=str(e))
-            except Exception:
-                pass
+            except Exception as inner:
+                logger.debug(f"[trace] Failed to finish span on error: {inner}")
         raise
     finally:
         _current_span.reset(token)
@@ -413,8 +414,8 @@ def span_record(
                     ):
                         try:
                             s.set_output(result=str(result)[:2000])
-                        except Exception:
-                            pass
+                        except Exception as inner:
+                            logger.debug(f"[trace] Failed to record output: {inner}")
                     return result
 
             return async_wrapper
@@ -451,20 +452,22 @@ def span_record(
                     if record_output and result is not None:
                         try:
                             span.set_output(result=str(result)[:2000])
-                        except Exception:
-                            pass
+                        except Exception as inner:
+                            logger.debug(f"[trace] Failed to record output: {inner}")
                     if span.finished_at is None:
                         try:
                             span.finish(status="ok")
-                        except Exception:
-                            pass
+                        except Exception as inner:
+                            logger.debug(f"[trace] Failed to finish span: {inner}")
                     return result
                 except Exception as e:
                     if span.finished_at is None:
                         try:
                             span.finish(status="error", error=str(e))
-                        except Exception:
-                            pass
+                        except Exception as inner:
+                            logger.debug(
+                                f"[trace] Failed to finish span on error: {inner}"
+                            )
                     raise
                 finally:
                     _current_span.reset(token)

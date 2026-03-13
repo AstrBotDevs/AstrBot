@@ -37,6 +37,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.utils.trace import TraceSpan
 from astrbot.core.utils.trace import _current_span as _trace_current_span
 
 from ..exceptions import ProviderNotFoundError
@@ -251,7 +252,7 @@ class Context:
         if _trace_on and _trace_parent is not None:
             _step_count = 0
             _step_span = None
-            _tool_spans: dict[str, object] = {}
+            _tool_spans: dict[str, TraceSpan] = {}
 
             def _get_chain_tool_info(chain):
                 try:
@@ -282,8 +283,10 @@ class Context:
                                 tid = str(ti.get("id", ""))
                                 if tid:
                                     _tool_spans[tid] = ts
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(
+                                f"[trace] Failed to record tool_call span: {e}"
+                            )
                     elif resp.type == "tool_call_result":
                         try:
                             chain = resp.data.get("chain")
@@ -297,8 +300,10 @@ class Context:
                                     )
                                     ts.set_output(result=result[:4000])
                                     ts.finish()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(
+                                f"[trace] Failed to record tool_call_result span: {e}"
+                            )
                     elif resp.type == "llm_result":
                         try:
                             resp_chain = resp.data.get("chain")
@@ -318,8 +323,10 @@ class Context:
                                         input_tokens=agent_runner.stats.token_usage.input,
                                         output_tokens=agent_runner.stats.token_usage.output,
                                     )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(
+                                f"[trace] Failed to record llm_result span: {e}"
+                            )
                         finally:
                             if (
                                 _step_span is not None

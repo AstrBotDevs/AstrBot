@@ -19,7 +19,7 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
-from astrbot.core.utils.trace import get_current_span
+from astrbot.core.utils.trace import TraceSpan, get_current_span
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -108,7 +108,7 @@ async def run_agent(
     )
     # Per-step span and per-tool-call spans
     _step_span = None
-    _tool_spans: dict[str, object] = {}  # call_id -> TraceSpan
+    _tool_spans: dict[str, TraceSpan] = {}  # call_id -> TraceSpan
 
     while step_idx < max_step + 1:
         step_idx += 1
@@ -376,7 +376,8 @@ def _resolve_tool_plugin_meta(agent_runner: AgentRunner, tool_name: str) -> dict
             "plugin": md.name,
             "plugin_type": "builtin" if md.reserved else "third_party",
         }
-    except Exception:
+    except Exception as e:
+        logger.debug(f"[trace] Failed to resolve tool plugin meta: {e}")
         return None
 
 
