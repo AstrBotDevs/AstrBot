@@ -1,4 +1,0 @@
-html2image
-aiohttp
-pypinyin
-numpy
