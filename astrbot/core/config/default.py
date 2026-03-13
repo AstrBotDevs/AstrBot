@@ -245,7 +245,7 @@ DEFAULT_CONFIG = {
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
     "kb_agentic_mode": False,
     "disable_builtin_commands": False,
-    "github_api_token": ""
+    "github_api_token": "",
 }
 
 
@@ -3874,7 +3874,7 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "GitHub API 令牌。用于检查更新、安装插件。",
                         "type": "string",
                         "hint": "可以在 https://github.com/settings/personal-access-tokens/new 创建。",
-                    }
+                    },
                 },
             },
         },
