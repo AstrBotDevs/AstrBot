@@ -92,6 +92,9 @@ importers:
       vue-i18n:
         specifier: ^11.1.5
         version: 11.2.8(vue@3.3.4)
+      vue-json-pretty:
+        specifier: ^2.6.0
+        version: 2.6.0(vue@3.3.4)
       vue-router:
         specifier: 4.2.4
         version: 4.2.4(vue@3.3.4)
@@ -2659,6 +2662,12 @@ packages:
     engines: {node: '>= 16'}
     peerDependencies:
       vue: ^3.0.0
+
+  vue-json-pretty@2.6.0:
+    resolution: {integrity: sha512-glz1aBVS35EO8+S9agIl3WOQaW2cJZW192UVKTuGmryx01ZvOVWc4pR3t+5UcyY4jdOfBUgVHjcpRpcnjRhCAg==}
+    engines: {node: '>= 10.0.0', npm: '>= 5.0.0'}
+    peerDependencies:
+      vue: '>=3.0.0'
 
   vue-router@4.2.4:
     resolution: {integrity: sha512-9PISkmaCO02OzPVOMq2w82ilty6+xJmQrarYZDkjZBfl4RvYAlt4PKnEX21oW4KTtWfa9OuO/b3qk1Od3AEdCQ==}
@@ -5369,6 +5378,10 @@ snapshots:
       '@intlify/core-base': 11.2.8
       '@intlify/shared': 11.2.8
       '@vue/devtools-api': 6.6.4
+      vue: 3.3.4
+
+  vue-json-pretty@2.6.0(vue@3.3.4):
+    dependencies:
       vue: 3.3.4
 
   vue-router@4.2.4(vue@3.3.4):

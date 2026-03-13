@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
+from astrbot.core import astrbot_config
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
@@ -36,6 +37,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.utils.trace import _current_span as _trace_current_span
 
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
@@ -239,8 +241,134 @@ class Context:
             streaming=streaming,
             **other_kwargs,
         )
-        async for _ in agent_runner.step_until_done(max_steps):
-            pass
+        # ── Traced step loop ──────────────────────────────────────────────
+        # When tracing is enabled the ContextVar will point to the subagent's
+        # llm_agent span (set by _execute_handoff before calling us). We drive
+        # steps manually so we can attach per-step llm_call and tool_call spans.
+        _trace_on = astrbot_config.get("trace_enable", False)
+        _trace_parent = _trace_current_span.get() if _trace_on else None
+
+        if _trace_on and _trace_parent is not None:
+            _step_count = 0
+            _step_span = None
+            _tool_spans: dict[str, object] = {}
+
+            def _get_chain_tool_info(chain):
+                try:
+                    first = chain.chain[0] if chain and chain.chain else None
+                    data = getattr(first, "data", None)
+                    return data if isinstance(data, dict) else None
+                except Exception:
+                    return None
+
+            async def _run_one_step():
+                nonlocal _step_span, _tool_spans
+                async for resp in agent_runner.step():
+                    if resp.type == "tool_call":
+                        try:
+                            ti = _get_chain_tool_info(resp.data.get("chain"))
+                            if ti and _step_span is not None:
+                                ts = _step_span.child(
+                                    ti.get("name", "tool"), span_type="tool_call"
+                                )
+                                args = ti.get("arguments", {})
+                                ts.set_input(
+                                    **(
+                                        args
+                                        if isinstance(args, dict)
+                                        else {"args": args}
+                                    )
+                                )
+                                tid = str(ti.get("id", ""))
+                                if tid:
+                                    _tool_spans[tid] = ts
+                        except Exception:
+                            pass
+                    elif resp.type == "tool_call_result":
+                        try:
+                            chain = resp.data.get("chain")
+                            rd = _get_chain_tool_info(chain)
+                            if rd:
+                                tid = str(rd.get("id", ""))
+                                ts = _tool_spans.pop(tid, None)
+                                if ts is not None and ts.finished_at is None:
+                                    result = chain.get_plain_text(
+                                        with_other_comps_mark=True
+                                    )
+                                    ts.set_output(result=result[:4000])
+                                    ts.finish()
+                        except Exception:
+                            pass
+                    elif resp.type == "llm_result":
+                        try:
+                            resp_chain = resp.data.get("chain")
+                            if _step_span is not None:
+                                _step_span.set_output(
+                                    completion=(
+                                        resp_chain.get_plain_text()[:2000]
+                                        if resp_chain
+                                        else ""
+                                    )
+                                )
+                                if (
+                                    agent_runner.stats
+                                    and agent_runner.stats.token_usage
+                                ):
+                                    _step_span.set_meta(
+                                        input_tokens=agent_runner.stats.token_usage.input,
+                                        output_tokens=agent_runner.stats.token_usage.output,
+                                    )
+                        except Exception:
+                            pass
+                        finally:
+                            if (
+                                _step_span is not None
+                                and _step_span.finished_at is None
+                            ):
+                                _step_span.finish()
+                            _step_span = None
+
+            while not agent_runner.done() and _step_count < max_steps:
+                _step_count += 1
+                _step_span = _trace_parent.child(
+                    f"llm_step_{_step_count}",
+                    span_type="llm_call",
+                    model=agent_runner.provider.get_model()
+                    if agent_runner.provider
+                    else "",
+                )
+                _tool_spans = {}
+                await _run_one_step()
+                if _step_span is not None and _step_span.finished_at is None:
+                    _step_span.finish()
+                    _step_span = None
+
+            if not agent_runner.done():
+                # Max steps reached — strip tools and force a final response
+                if agent_runner.req:
+                    agent_runner.req.func_tool = None
+                agent_runner.run_context.messages.append(
+                    Message(
+                        role="user",
+                        content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
+                    )
+                )
+                _step_span = _trace_parent.child(
+                    f"llm_step_{_step_count + 1}",
+                    span_type="llm_call",
+                    model=agent_runner.provider.get_model()
+                    if agent_runner.provider
+                    else "",
+                )
+                _tool_spans = {}
+                await _run_one_step()
+                if _step_span is not None and _step_span.finished_at is None:
+                    _step_span.finish()
+        else:
+            async for _ in agent_runner.step_until_done(max_steps):
+                pass
+        # ─────────────────────────────────────────────────────────────────────
+
         llm_resp = agent_runner.get_final_llm_resp()
         if not llm_resp:
             raise Exception("Agent did not produce a final LLM response")

@@ -4,11 +4,12 @@ import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, logger
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.utils.trace import _current_span
 
 from ...context import PipelineContext, call_event_hook, call_handler
 from ..stage import Stage
@@ -33,6 +34,8 @@ class StarRequestSubStage(Stage):
         if not handlers_parsed_params:
             handlers_parsed_params = {}
 
+        _trace_on = astrbot_config.get("trace_enable", False)
+
         for handler in activated_handlers:
             params = handlers_parsed_params.get(handler.handler_full_name, {})
             md = star_map.get(handler.handler_module_path)
@@ -42,15 +45,42 @@ class StarRequestSubStage(Stage):
                 )
                 continue
             logger.debug(f"plugin -> {md.name} - {handler.handler_name}")
+
+            plugin_span = (
+                (_current_span.get() or event.trace).child(
+                    handler.handler_name, span_type="plugin_handler"
+                )
+                if _trace_on
+                else None
+            )
+            if plugin_span is not None:
+                plugin_span.set_meta(
+                    plugin=md.name,
+                    plugin_type="builtin" if md.reserved else "third_party",
+                )
+                plugin_span.set_input(command=handler.handler_full_name)
+
+            # Set plugin_span as the current ContextVar span so that any
+            # span_context / span_record calls inside the handler automatically
+            # attach as children of this plugin_handler span.
+            _plugin_span_token = (
+                _current_span.set(plugin_span) if plugin_span is not None else None
+            )
+
             try:
                 wrapper = call_handler(event, handler.handler, **params)
                 async for ret in wrapper:
                     yield ret
                 event.clear_result()  # 清除上一个 handler 的结果
+                if plugin_span is not None and plugin_span.finished_at is None:
+                    plugin_span.set_output(has_result=event.get_result() is not None)
+                    plugin_span.finish()
             except Exception as e:
                 traceback_text = traceback.format_exc()
                 logger.error(traceback_text)
                 logger.error(f"Star {handler.handler_full_name} handle error: {e}")
+                if plugin_span is not None and plugin_span.finished_at is None:
+                    plugin_span.finish(status="error", error=str(e))
 
                 await call_event_hook(
                     event,
@@ -68,3 +98,7 @@ class StarRequestSubStage(Stage):
                     event.clear_result()
 
                 event.stop_event()
+            finally:
+                # Reset ContextVar to the span active before this handler
+                if _plugin_span_token is not None:
+                    _current_span.reset(_plugin_span_token)

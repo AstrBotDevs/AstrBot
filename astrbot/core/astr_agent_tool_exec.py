@@ -10,6 +10,7 @@ from collections.abc import Set as AbstractSet
 import mcp
 
 from astrbot import logger
+from astrbot.core import astrbot_config as _astrbot_config
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
@@ -41,6 +42,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.trace import _current_span as _trace_current_span
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -294,17 +296,50 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
-        llm_resp = await ctx.tool_loop_agent(
-            event=event,
-            chat_provider_id=prov_id,
-            prompt=input_,
-            image_urls=image_urls,
-            system_prompt=tool.agent.instructions,
-            tools=toolset,
-            contexts=contexts,
-            max_steps=agent_max_step,
-            stream=stream,
-        )
+        # ── Trace: create a dedicated llm_agent span for this subagent ──────
+        _subagent_span = None
+        _subagent_token = None
+        if _astrbot_config.get("trace_enable", False):
+            _span_parent = _trace_current_span.get()
+            if _span_parent is not None:
+                _subagent_span = _span_parent.child(
+                    f"LLMAgent [{tool.agent.name}]",
+                    span_type="llm_agent",
+                )
+                _subagent_span.set_input(
+                    subagent=tool.agent.name,
+                    prompt=(input_ or "")[:500],
+                    system_prompt=(tool.agent.instructions or "")[:300],
+                )
+                _subagent_token = _trace_current_span.set(_subagent_span)
+        # ─────────────────────────────────────────────────────────────────────
+        try:
+            llm_resp = await ctx.tool_loop_agent(
+                event=event,
+                chat_provider_id=prov_id,
+                prompt=input_,
+                image_urls=image_urls,
+                system_prompt=tool.agent.instructions,
+                tools=toolset,
+                contexts=contexts,
+                max_steps=agent_max_step,
+                stream=stream,
+            )
+            if _subagent_span is not None and _subagent_span.finished_at is None:
+                _subagent_span.set_output(
+                    response=(llm_resp.completion_text or "")[:2000]
+                    if llm_resp
+                    else "",
+                )
+                _subagent_span.finish()
+        except Exception:
+            if _subagent_span is not None and _subagent_span.finished_at is None:
+                _subagent_span.finish(status="error")
+            raise
+        finally:
+            if _subagent_token is not None:
+                _trace_current_span.reset(_subagent_token)
+        # ─────────────────────────────────────────────────────────────────────
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
         )

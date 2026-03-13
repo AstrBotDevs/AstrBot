@@ -25,6 +25,7 @@ from astrbot.core.db.po import (
     Preference,
     SessionProjectRelation,
     SQLModel,
+    TraceEntry,
 )
 from astrbot.core.db.po import (
     Platform as DeprecatedPlatformStat,
@@ -59,6 +60,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
+            await self._ensure_traces_table(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -1851,3 +1853,125 @@ class SQLiteDatabase(BaseDatabase):
             query = query.order_by(desc(CronJob.created_at))
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    # ====
+    # Trace Management
+    # ====
+
+    async def _ensure_traces_table(self, conn) -> None:
+        """Forward-compatibility migration for the traces table.
+
+        The table itself is created by SQLModel.metadata.create_all above.
+        This method is a no-op placeholder for future column migrations.
+        """
+
+    async def insert_trace(self, trace_data: dict) -> None:
+        """Persist a completed trace to the database."""
+        async with self.get_db() as session:
+            async with session.begin():
+                entry = TraceEntry(
+                    trace_id=trace_data["trace_id"],
+                    umo=trace_data.get("umo"),
+                    sender_name=trace_data.get("sender_name"),
+                    message_outline=trace_data.get("message_outline"),
+                    started_at=trace_data.get("started_at", 0.0),
+                    finished_at=trace_data.get("finished_at"),
+                    duration_ms=trace_data.get("duration_ms"),
+                    status=trace_data.get("status", "ok"),
+                    spans=trace_data.get("spans", {}),
+                    input_text=trace_data.get("input_text", ""),
+                    output_text=trace_data.get("output_text", ""),
+                    total_input_tokens=trace_data.get("total_input_tokens", 0),
+                    total_output_tokens=trace_data.get("total_output_tokens", 0),
+                )
+                session.add(entry)
+
+    async def get_traces(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        umo: str | None = None,
+        search: str | None = None,
+    ) -> tuple[list[TraceEntry], int]:
+        """Return a paginated list of trace records (spans field excluded)."""
+        async with self.get_db() as session:
+            base_query = select(
+                TraceEntry.id,
+                TraceEntry.trace_id,
+                TraceEntry.umo,
+                TraceEntry.sender_name,
+                TraceEntry.message_outline,
+                TraceEntry.started_at,
+                TraceEntry.finished_at,
+                TraceEntry.duration_ms,
+                TraceEntry.status,
+                TraceEntry.input_text,
+                TraceEntry.output_text,
+                TraceEntry.total_input_tokens,
+                TraceEntry.total_output_tokens,
+                TraceEntry.created_at,
+            )
+            count_query = select(func.count(col(TraceEntry.id))).select_from(TraceEntry)
+
+            if umo:
+                base_query = base_query.where(col(TraceEntry.umo) == umo)
+                count_query = count_query.where(col(TraceEntry.umo) == umo)
+            if search:
+                cond = or_(
+                    col(TraceEntry.sender_name).contains(search),
+                    col(TraceEntry.message_outline).contains(search),
+                    col(TraceEntry.input_text).contains(search),
+                )
+                base_query = base_query.where(cond)
+                count_query = count_query.where(cond)
+
+            total_result = await session.execute(count_query)
+            total = total_result.scalar_one_or_none() or 0
+
+            offset = (page - 1) * page_size
+            base_query = (
+                base_query.order_by(desc(TraceEntry.started_at))
+                .offset(offset)
+                .limit(page_size)
+            )
+            result = await session.execute(base_query)
+            rows = result.fetchall()
+            # Build lightweight dicts (no spans blob) for the list view
+            entries = [
+                TraceEntry(
+                    id=row.id,
+                    trace_id=row.trace_id,
+                    umo=row.umo,
+                    sender_name=row.sender_name,
+                    message_outline=row.message_outline,
+                    started_at=row.started_at,
+                    finished_at=row.finished_at,
+                    duration_ms=row.duration_ms,
+                    status=row.status,
+                    spans={},
+                    input_text=row.input_text,
+                    output_text=row.output_text,
+                    total_input_tokens=row.total_input_tokens,
+                    total_output_tokens=row.total_output_tokens,
+                    created_at=row.created_at,
+                )
+                for row in rows
+            ]
+            return entries, total
+
+    async def get_trace_detail(self, trace_id: str) -> TraceEntry | None:
+        """Return the full trace record including the span tree."""
+        async with self.get_db() as session:
+            result = await session.execute(
+                select(TraceEntry).where(col(TraceEntry.trace_id) == trace_id)
+            )
+            return result.scalar_one_or_none()
+
+    async def delete_traces_before(self, before_ts: float) -> int:
+        """Delete trace records older than the given Unix timestamp."""
+        async with self.get_db() as session:
+            async with session.begin():
+                result = await session.execute(
+                    delete(TraceEntry).where(col(TraceEntry.started_at) < before_ts)
+                )
+                return result.rowcount or 0

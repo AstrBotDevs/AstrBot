@@ -41,6 +41,7 @@
     "vite-plugin-vuetify": "1.0.2",
     "vue": "3.3.4",
     "vue-i18n": "^11.1.5",
+    "vue-json-pretty": "^2.6.0",
     "vue-router": "4.2.4",
     "vue3-apexcharts": "1.4.4",
     "vue3-print-nb": "0.1.4",

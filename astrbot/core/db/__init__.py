@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
     Preference,
     SessionProjectRelation,
     Stats,
+    TraceEntry,
 )
 
 
@@ -766,4 +767,37 @@ class BaseDatabase(abc.ABC):
         self, session_id: str, creator: str
     ) -> ChatUIProject | None:
         """Get the project that a session belongs to."""
+        ...
+
+    # ====
+    # Trace Management
+    # ====
+
+    @abc.abstractmethod
+    async def insert_trace(self, trace_data: dict) -> None:
+        """Persist a completed trace (full span tree) to the database."""
+        ...
+
+    @abc.abstractmethod
+    async def get_traces(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        umo: str | None = None,
+        search: str | None = None,
+    ) -> tuple[list[TraceEntry], int]:
+        """Return a paginated list of trace records, optionally filtered."""
+        ...
+
+    @abc.abstractmethod
+    async def get_trace_detail(self, trace_id: str) -> TraceEntry | None:
+        """Return the full trace record (including span tree) for a given trace_id."""
+        ...
+
+    @abc.abstractmethod
+    async def delete_traces_before(self, before_ts: float) -> int:
+        """Delete all trace records whose started_at is earlier than before_ts.
+
+        Returns the number of deleted rows.
+        """
         ...
