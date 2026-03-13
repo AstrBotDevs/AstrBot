@@ -1067,6 +1067,69 @@ class TestLoadPlugin:
             persisted = json.loads(config_path.read_text(encoding="utf-8"))
             assert persisted["token"] == "changed"
 
+    def test_load_plugin_supports_legacy_astrbot_imports_relative_modules_and_groups(
+        self,
+    ):
+        """load_plugin should support real legacy package imports and command groups."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir) / "legacy_plugin"
+            plugin_dir.mkdir()
+            (plugin_dir / "src").mkdir()
+            (plugin_dir / "src" / "helper.py").write_text(
+                'HELP_TEXT = "legacy-ok"\n',
+                encoding="utf-8",
+            )
+            (plugin_dir / "main.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from astrbot.api.event import MessageChain, AstrMessageEvent, filter
+                    from astrbot.api.star import Context, Star, StarTools, register
+                    from astrbot.api import AstrBotConfig, logger
+
+                    from .src.helper import HELP_TEXT
+
+
+                    @register("legacy_alias_demo", "tester", "demo", "1.0.0")
+                    class LegacyPlugin(Star):
+                        def __init__(self, context: Context, config: AstrBotConfig):
+                            super().__init__(context, config)
+                            self.data_dir = str(StarTools.get_data_dir())
+                            logger.info(HELP_TEXT)
+
+                        @filter.command("hello")
+                        async def hello(self, event: AstrMessageEvent):
+                            yield event.plain_result(HELP_TEXT)
+
+                        @filter.command_group("ccl")
+                        def ccl(self):
+                            pass
+
+                        @ccl.command("子命令")
+                        async def sub(self, event: AstrMessageEvent):
+                            yield MessageChain().message("sub")
+                    """
+                ),
+                encoding="utf-8",
+            )
+            (plugin_dir / "metadata.yaml").write_text(
+                yaml.dump({"name": "legacy_alias_demo", "version": "1.0.0"}),
+                encoding="utf-8",
+            )
+
+            spec = load_plugin_spec(plugin_dir)
+            loaded = load_plugin(spec)
+
+            assert len(loaded.instances) == 1
+            instance = loaded.instances[0]
+            assert Path(instance.data_dir) == plugin_dir / "data"
+
+            commands = [
+                handler.descriptor.trigger.command
+                for handler in loaded.handlers
+                if isinstance(handler.descriptor.trigger, CommandTrigger)
+            ]
+            assert commands == ["hello", "ccl 子命令"]
+
 
 class TestStateFileConstant:
     """Tests for STATE_FILE_NAME constant."""

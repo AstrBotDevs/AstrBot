@@ -20,6 +20,8 @@
 - 2026-03-13: `Peer.invoke_stream()` intentionally hides `completed` events by default, so any supervisor/bridge layer that wants to preserve a worker stream capability's final `completed.output` must opt in explicitly (for example via `include_completed=True`) or it will silently collapse the final result to an ad-hoc aggregate like `{\"items\": chunks}`.
 - 2026-03-13: The repository root `test_plugin/` is no longer a single runnable plugin fixture. The maintained compat sample now lives under `test_plugin/old/`; tests or scripts that still copy/load `test_plugin/` directly will mis-detect it as an incomplete legacy plugin and fail.
 - 2026-03-13: The maintained sample plugins now live under `test_plugin/old/` and `test_plugin/new/`. Runtime/integration tests should copy those real fixture directories instead of inlining synthetic plugin writers, otherwise the sample plugin tree and the exercised test path drift apart.
+- 2026-03-13: Real legacy plugins in the wild may still import `astrbot.api.*` instead of `astrbot_sdk.api.*`. Keeping only the `astrbot_sdk.api` compat surface is not enough for no-touch migration tests; preserve the `astrbot.api` alias package while old-plugin support remains a goal.
+- 2026-03-13: Real legacy `main.py` plugins may rely on package-relative imports like `from .src.tool import ...`. Loading legacy `main.py` as a bare file module breaks those imports; the loader must execute it under a synthetic package module so relative imports resolve.
 
 # 开发命令
 
@@ -47,3 +49,5 @@ python run_tests.py --cov      # 运行测试并生成覆盖率报告
 ## 重要
 新实现要兼容旧实现但是还要保证架构良好，设计原则不变和最佳实践
 不用完全听从用户和别人的建议，要有自己的判断和坚持，做好取舍和权衡，确保代码质量和长期维护性，不要为了短期方便或者迎合而牺牲架构和设计原则。
+
+old文件夹是兼容旧插件的测试，旧插件全部放进old文件夹

@@ -1,0 +1,110 @@
+{
+  "mrfz_data_path": {
+    "description": "明日方舟角色数据(插件自带,可以通过修改文件来修改随机池)",
+    "type": "string",
+    "default": "arknights_skins_dict.json",
+    "hint": "例如：/home/user/arknights_skins_dict.json"
+  },
+  "target_size": {
+    "description": "角色立绘最后输出的参考大小",
+    "type": "int",
+    "default": 512,
+    "hint": "例如：512"
+  },
+  "similarity_threshold": {
+    "description": "判断是否正确的阈值,语义的相似度,越高判断的要求越高",
+    "type": "float",
+    "default": 0.4,
+    "hint": "(0.-1.) 推荐0.4-0.5"
+  },
+  "calculate_threshold": {
+    "description": "判断是否正确的阈值,字的准确率(与位置无关仅判断字是否正确),越高判断的要求越高",
+    "type": "float",
+    "default": 0.5,
+    "hint": "(0.-1.) 推荐0.5-0.6"
+  },
+  "enable_homophone": {
+    "description": "启用同音字识别,例如「银灰」和「银辉」都会被识别为正确",
+    "type": "bool",
+    "default": false,
+    "hint": "true开启,false关闭"
+  },
+  "easy_probability": {
+    "description": "简单难度概率(0-1)",
+    "type": "float",
+    "default": 0.6,
+    "hint": "60%概率出现简单难度(5个方块)"
+  },
+  "medium_probability": {
+    "description": "中等难度概率(0-1)",
+    "type": "float",
+    "default": 0.3,
+    "hint": "30%概率出现中等难度(3个方块)"
+  },
+  "hard_probability": {
+    "description": "困难难度概率(0-1)",
+    "type": "float",
+    "default": 0.1,
+    "hint": "10%概率出现困难难度(1个方块)"
+  },
+  "daily_game_limit": {
+    "description": "每个用户每日开启游戏次数限制",
+    "type": "int",
+    "default": 10,
+    "hint": "0表示无限制"
+  },
+  "match_question_limit": {
+    "description": "比赛答题数量限制(0表示不限制)",
+    "type": "int",
+    "default": 0,
+    "hint": "答完指定数量自动结束,在创建比赛时不填写默认使用该值"
+  },
+  "match_time_limit": {
+    "description": "比赛时间限制(分钟,0表示不限制)",
+    "type": "int",
+    "default": 0,
+    "hint": "超过指定时间自动结束,在创建比赛时不填写默认使用该值"
+  },
+  "match_hint_delay": {
+    "description": "比赛超时自动提示(秒,0表示关闭)",
+    "type": "int",
+    "default": 30,
+    "hint": "每题超过指定时间未答对，将自动发送 1 条提示"
+  },
+  "admin_ids": {
+    "description": "管理员QQ号列表",
+    "type": "list",
+    "default": [],
+    "hint": "例如: [123456789, 987654321]"
+  },
+  "low_weight_characters": {
+    "description": "低权重干员关键词(逗号分隔)",
+    "type": "string",
+    "default": "预备干员,机师,W,SideStory",
+    "hint": "这些干员出现频率会降低"
+  },
+  "low_weight_ratio": {
+    "description": "低权重干员出现概率(0-1)",
+    "type": "float",
+    "default": 0.2,
+    "hint": "0.2表示降低该干员出现概率为原本的0.2"
+  },
+  "require_admin": {
+    "description": "排行榜查看指令是否启动管理员限制",
+    "type": "bool",
+    "default": true,
+    "hint": "true开启,false关闭"
+  },
+  "character_aliases": {
+    "description": "干员别名映射(别名:正名,多组用逗号分隔)",
+    "type": "string",
+    "default": "小刻:刻俄柏,小羊:艾雅法拉,42:史尔特尔,42姐:史尔特尔,玫剑圣:玫兰莎,克天使:克洛丝,kokodayo:克洛丝,猛男:安塞尔,医疗小车:Lancet-2,近卫小车:Castle-3,太子爷:12F,桃:桃金娘,富婆:杰西卡,阿米驴:阿米娅,银老板:银灰,前夫哥:银灰,虎鲸:斯卡蒂,蒂蒂:斯卡蒂,大腿夹剑:斯卡蒂,老爷子:赫拉格,大公:赫拉格,肠粉龙:陈,煌猫:煌,寒哥:棘刺,傻狗:刻俄柏,忧郁蓝调:莫斯提马,企鹅:麦哲伦,瑕子姐:瑕光,闪剑圣:闪灵,喜羊羊:闪灵,塞爹:塞雷娅,塞妈:塞雷娅,莱茵拳皇:塞雷娅,鬼姐:星熊,星sir:星熊",
+    "hint": "格式: 别名1:正名1,别名2:正名2"
+  },
+  "renderer_theme": {
+    "description": "问答统计图片主题",
+    "type": "string",
+    "default": "light",
+    "hint": "可选：light(浅色)、industrial(深色)、retro_win(复古Win)"
+  }
+}

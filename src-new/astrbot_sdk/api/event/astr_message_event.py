@@ -231,6 +231,10 @@ class AstrMessageEvent(MessageEvent):
     def get_message_str(self) -> str:
         return self.text
 
+    @property
+    def message_str(self) -> str:
+        return self.text
+
     def get_messages(self) -> list[BaseMessageComponent]:
         return list(self.message_obj.message)
 
@@ -240,8 +244,10 @@ class AstrMessageEvent(MessageEvent):
     def get_session_id(self) -> str:
         return self.session_id
 
-    def get_group_id(self) -> str:
-        return self.message_obj.group_id
+    def get_group_id(self) -> str | None:
+        if self.message_obj.group is None:
+            return None
+        return self.message_obj.group.group_id
 
     def get_self_id(self) -> str:
         return self.message_obj.self_id

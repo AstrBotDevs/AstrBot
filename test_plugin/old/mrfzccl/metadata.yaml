@@ -1,0 +1,8 @@
+name: astrbot_plugin_mrfzccl # 插件唯一识别名，以 astrbot_plugin_ 前缀开头
+display_name: 明日方舟猜猜乐 # 用于展示的名字，可以是方便人类阅读的名字（需要版本 >= v4.5.0，低版本不会报错，请放心填写）
+desc: 明日方舟干员立绘猜猜乐，支持排行榜/名片/比赛模式 # 插件简短描述
+version: v1.1.9 # 插件版本号。格式：v1.1.1 或者 v1.1
+author: lishining # 作者
+repo: https://github.com/Li-shi-ling/astrbot_plugin_mrfzccl # 插件的仓库地址
+support_platforms:
+  - aiocqhttp

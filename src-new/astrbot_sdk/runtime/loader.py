@@ -94,6 +94,7 @@ import re
 import shutil
 import subprocess
 import sys
+import types
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
@@ -380,8 +381,10 @@ def _load_plugin_config(plugin: PluginSpec) -> AstrBotConfig | None:
 
 
 def _legacy_component_classes(plugin: PluginSpec) -> list[type[Any]]:
-    module_name = f"_astrbot_legacy_{plugin.name}_main"
+    package_name = _legacy_package_name(plugin)
+    module_name = f"{package_name}.main"
     module_path = plugin.plugin_dir / LEGACY_MAIN_FILE
+    _prepare_legacy_package(package_name, plugin.plugin_dir)
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
         return []
@@ -447,6 +450,28 @@ def _select_legacy_constructor_args(
     if max_args is None or max_args >= 1:
         return (legacy_context,)
     return ()
+
+
+def _legacy_constructor_accepts_config(component_cls: type[Any]) -> bool:
+    try:
+        signature = inspect.signature(component_cls)
+    except (TypeError, ValueError):
+        return True
+
+    positional_params = [
+        parameter
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+    ]
+    has_varargs = any(
+        parameter.kind == inspect.Parameter.VAR_POSITIONAL
+        for parameter in signature.parameters.values()
+    )
+    return has_varargs or len(positional_params) >= 2
 
 
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
@@ -670,14 +695,25 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     component_cls, plugin.name
                 )
             legacy_context = shared_legacy_context
+            component_config = plugin_config
+            if component_config is None and _legacy_constructor_accepts_config(
+                component_cls
+            ):
+                component_config = AstrBotConfig(
+                    {},
+                    save_path=_plugin_config_path(plugin.plugin_dir, plugin.name),
+                )
             constructor_args = _select_legacy_constructor_args(
-                component_cls, legacy_context, plugin_config
+                component_cls, legacy_context, component_config
             )
             instance = component_cls(*constructor_args)
             if getattr(instance, "context", None) is None:
                 setattr(instance, "context", legacy_context)
-            if plugin_config is not None and getattr(instance, "config", None) is None:
-                setattr(instance, "config", plugin_config)
+            if (
+                component_config is not None
+                and getattr(instance, "config", None) is None
+            ):
+                setattr(instance, "config", component_config)
         instances.append(instance)
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)
@@ -752,6 +788,21 @@ def _purge_module_root(root_name: str) -> None:
     for module_name in list(sys.modules):
         if module_name == root_name or module_name.startswith(f"{root_name}."):
             sys.modules.pop(module_name, None)
+
+
+def _legacy_package_name(plugin: PluginSpec) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", plugin.name)
+    return f"_astrbot_legacy_pkg_{sanitized}"
+
+
+def _prepare_legacy_package(package_name: str, plugin_dir: Path) -> None:
+    _purge_module_root(package_name)
+    package = types.ModuleType(package_name)
+    package.__file__ = str(plugin_dir / "__init__.py")
+    package.__package__ = package_name
+    package.__path__ = [str(plugin_dir)]
+    sys.modules[package_name] = package
+    importlib.invalidate_caches()
 
 
 def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:

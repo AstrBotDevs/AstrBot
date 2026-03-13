@@ -35,6 +35,12 @@ class TestLegacyMessageComponentAliases:
 class TestLegacyMessageComponentFactories:
     """Tests for legacy media helper factories."""
 
+    def test_image_from_bytes(self):
+        """Image.fromBytes() should encode bytes into a base64 payload string."""
+        component = Comp.Image.fromBytes(b"demo-image")
+
+        assert component.file.startswith("base64://")
+
     def test_image_from_url(self):
         """Image.fromURL() should create a component with file payload."""
         component = Comp.Image.fromURL("https://example.com/image.png")

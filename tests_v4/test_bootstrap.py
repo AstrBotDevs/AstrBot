@@ -793,6 +793,49 @@ class DemoComponent(Star):
             # Should not raise
             await runtime._run_lifecycle("on_start")
 
+    @pytest.mark.asyncio
+    async def test_run_lifecycle_legacy_initialize_and_terminate_aliases(self):
+        """_run_lifecycle should map legacy initialize/terminate for old stars."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            plugin_dir = Path(temp_dir)
+            manifest_path = plugin_dir / "plugin.yaml"
+            requirements_path = plugin_dir / "requirements.txt"
+
+            manifest_path.write_text(
+                yaml.dump(
+                    {
+                        "name": "test_plugin",
+                        "runtime": {"python": "3.12"},
+                        "components": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requirements_path.write_text("", encoding="utf-8")
+
+            transport = MemoryTransport()
+            runtime = PluginWorkerRuntime(plugin_dir=plugin_dir, transport=transport)
+
+            called = []
+
+            class MockLegacyInstance:
+                @classmethod
+                def __astrbot_is_new_star__(cls):
+                    return False
+
+                async def initialize(self):
+                    called.append("initialize")
+
+                async def terminate(self):
+                    called.append("terminate")
+
+            runtime.loaded_plugin.instances.append(MockLegacyInstance())
+
+            await runtime._run_lifecycle("on_start")
+            await runtime._run_lifecycle("on_stop")
+
+            assert called == ["initialize", "terminate"]
+
 
 class TestIntegrationWithTransportPair:
     """Integration tests using transport pairs."""

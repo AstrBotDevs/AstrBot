@@ -289,10 +289,39 @@ class TestModuleExports:
         assert "filter" in __all__
 
 
+class TestCommandGroupCompat:
+    """Tests for legacy command group flattening."""
+
+    def test_command_group_flattens_subcommand_to_command_trigger(self):
+        """command_group().command() should flatten to a space-joined command."""
+        group = command_group("ccl")
+
+        @group.command("排行榜")
+        async def leaderboard():
+            pass
+
+        meta = get_handler_meta(leaderboard)
+        assert isinstance(meta.trigger, CommandTrigger)
+        assert meta.trigger.command == "ccl 排行榜"
+
+    def test_nested_command_group_flattens_recursively(self):
+        """command_group().group().command() should preserve the full path."""
+        root = command_group("math")
+        calc = root.group("calc")
+
+        @calc.command("add")
+        async def add():
+            pass
+
+        meta = get_handler_meta(add)
+        assert isinstance(meta.trigger, CommandTrigger)
+        assert meta.trigger.command == "math calc add"
+
+
 class TestUnsupportedCompatFilters:
     """Tests for explicitly unsupported legacy helpers."""
 
-    def test_unsupported_filter_raises_explicitly(self):
+    def test_other_unsupported_filter_still_raises_explicitly(self):
         """Unsupported helpers should fail loudly instead of silently no-oping."""
-        with pytest.raises(NotImplementedError, match="command_group"):
-            command_group("group_name")
+        with pytest.raises(NotImplementedError, match="on_llm_request"):
+            filter.on_llm_request()

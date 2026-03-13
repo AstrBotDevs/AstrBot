@@ -1,5 +1,6 @@
 """旧版 ``astrbot_sdk.api.event`` 的兼容入口。"""
 
+from ..message.chain import MessageChain
 from .astr_message_event import AstrMessageEvent, AstrMessageEventModel
 from .astrbot_message import AstrBotMessage, Group, MessageMember
 from .event_result import EventResultType, MessageEventResult, ResultContentType
@@ -16,6 +17,7 @@ __all__ = [
     "EventResultType",
     "EventType",
     "Group",
+    "MessageChain",
     "MessageEventResult",
     "MessageMember",
     "MessageSesion",

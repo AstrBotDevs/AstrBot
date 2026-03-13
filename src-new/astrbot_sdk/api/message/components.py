@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from enum import Enum
 from typing import Literal
 
@@ -51,6 +52,11 @@ class Plain(BaseMessageComponent):
 class Image(BaseMessageComponent):
     type: Literal[CompT.Image] = CompT.Image
     file: str = Field(validation_alias=AliasChoices("file", "url", "path"))
+
+    @classmethod
+    def fromBytes(cls, data: bytes) -> "Image":
+        encoded = base64.b64encode(data).decode("ascii")
+        return cls(file=f"base64://{encoded}")
 
     @classmethod
     def fromURL(cls, url: str) -> "Image":

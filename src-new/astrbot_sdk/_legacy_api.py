@@ -10,6 +10,7 @@ from __future__ import annotations
 import inspect
 from collections import defaultdict
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -561,6 +562,28 @@ class LegacyContext:
         await ctx.db.delete(key)
 
 
+class StarTools:
+    """旧版 ``StarTools`` 的最小兼容实现。"""
+
+    @staticmethod
+    def get_data_dir() -> Path:
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        try:
+            while caller is not None:
+                caller_file = caller.f_globals.get("__file__")
+                if isinstance(caller_file, str) and caller_file:
+                    data_dir = Path(caller_file).resolve().parent / "data"
+                    data_dir.mkdir(parents=True, exist_ok=True)
+                    return data_dir
+                caller = caller.f_back
+        finally:
+            del frame
+        data_dir = Path.cwd() / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir
+
+
 class LegacyStar(Star):
     """旧版 ``astrbot.api.star.Star`` 兼容基类。"""
 
@@ -630,5 +653,6 @@ __all__ = [
     "LegacyConversationManager",
     "LegacyStar",
     "MIGRATION_DOC_URL",
+    "StarTools",
     "register",
 ]

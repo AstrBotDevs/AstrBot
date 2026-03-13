@@ -309,6 +309,58 @@ def permission_type(level: PermissionType, raise_error: bool = True):
     return permission(level)
 
 
+class LegacyCommandGroup:
+    """旧版命令组兼容对象。
+
+    当前运行时还没有旧版树状帮助与多层命令组执行链，所以 compat 层先把
+    `group sub` 展平为普通命令名，确保真实旧插件至少能无感加载与分发。
+    """
+
+    def __init__(
+        self,
+        *parts: str,
+        priority: int | None = None,
+        desc: str | None = None,
+    ) -> None:
+        self._parts = tuple(str(part) for part in parts if str(part))
+        self._priority = priority
+        self._desc = desc
+
+    def __call__(self, func):
+        return self
+
+    def command(
+        self,
+        name: str,
+        alias: set[str] | list[str] | tuple[str, ...] | str | None = None,
+        *,
+        aliases: set[str] | list[str] | tuple[str, ...] | str | None = None,
+        priority: int | None = None,
+        desc: str | None = None,
+    ):
+        return command(
+            " ".join((*self._parts, name)),
+            alias=alias,
+            aliases=aliases,
+            priority=self._priority if priority is None else priority,
+            desc=desc,
+        )
+
+    def group(
+        self,
+        name: str,
+        *,
+        priority: int | None = None,
+        desc: str | None = None,
+    ) -> "LegacyCommandGroup":
+        return LegacyCommandGroup(
+            *self._parts,
+            name,
+            priority=self._priority if priority is None else priority,
+            desc=desc,
+        )
+
+
 def _unsupported_factory(name: str, replacement: str | None = None):
     suggestion = f"请改用 {replacement}" if replacement else "当前没有直接替代实现"
     message = (
@@ -329,7 +381,18 @@ on_platform_loaded = _unsupported_factory("on_platform_loaded")
 on_decorating_result = _unsupported_factory("on_decorating_result")
 on_llm_request = _unsupported_factory("on_llm_request")
 on_llm_response = _unsupported_factory("on_llm_response")
-command_group = _unsupported_factory("command_group")
+
+
+def command_group(
+    name: str,
+    alias: set[str] | list[str] | tuple[str, ...] | str | None = None,
+    *,
+    aliases: set[str] | list[str] | tuple[str, ...] | str | None = None,
+    priority: int | None = None,
+    desc: str | None = None,
+) -> LegacyCommandGroup:
+    del alias, aliases
+    return LegacyCommandGroup(name, priority=priority, desc=desc)
 
 
 def event_message_type(

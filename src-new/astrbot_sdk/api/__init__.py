@@ -30,6 +30,8 @@
 - 不复制独立运行时逻辑，保持架构清晰
 """
 
+from loguru import logger
+
 from . import (
     basic,
     components,
@@ -40,11 +42,14 @@ from . import (
     provider,
     star,
 )
+from .basic import AstrBotConfig
 
 __all__ = [
+    "AstrBotConfig",
     "basic",
     "components",
     "event",
+    "logger",
     "message",
     "message_components",
     "platform",

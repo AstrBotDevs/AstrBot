@@ -100,6 +100,7 @@ from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
+from ..star import Star
 from .capability_router import CapabilityRouter, StreamExecution
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
@@ -690,8 +691,8 @@ class PluginWorkerRuntime:
 
     async def _run_lifecycle(self, method_name: str) -> None:
         for instance in self.loaded_plugin.instances:
-            hook = getattr(instance, method_name, None)
-            if hook is None or not callable(hook):
+            hook = self._resolve_lifecycle_hook(instance, method_name)
+            if hook is None:
                 continue
             args = []
             try:
@@ -713,6 +714,34 @@ class PluginWorkerRuntime:
             result = hook(*args)
             if inspect.isawaitable(result):
                 await result
+
+    @staticmethod
+    def _resolve_lifecycle_hook(instance: Any, method_name: str):
+        hook = getattr(instance, method_name, None)
+        marker = getattr(instance.__class__, "__astrbot_is_new_star__", None)
+        is_new_star = True
+        if callable(marker):
+            is_new_star = bool(marker())
+
+        if hook is not None and callable(hook):
+            bound_func = getattr(hook, "__func__", hook)
+            star_default = getattr(Star, method_name, None)
+            if star_default is None or bound_func is not star_default:
+                return hook
+
+        if not is_new_star:
+            alias = {
+                "on_start": "initialize",
+                "on_stop": "terminate",
+            }.get(method_name)
+            if alias is not None:
+                legacy_hook = getattr(instance, alias, None)
+                if legacy_hook is not None and callable(legacy_hook):
+                    return legacy_hook
+
+        if hook is not None and callable(hook):
+            return hook
+        return None
 
 
 async def run_supervisor(

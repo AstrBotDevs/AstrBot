@@ -34,13 +34,14 @@ class TestApiStarModule:
     def test_star_module_exports_legacy_star_and_register(self):
         """api.star should expose legacy Star/register imports."""
         from astrbot_sdk._legacy_api import LegacyStar
-        from astrbot_sdk.api.star import Star, register
+        from astrbot_sdk.api.star import Star, StarTools, register
 
         @register(name="demo", author="tester")
         class DemoStar(Star):
             pass
 
         assert Star is LegacyStar
+        assert callable(StarTools.get_data_dir)
         assert callable(register)
         assert DemoStar.__astrbot_plugin_metadata__ == {
             "name": "demo",
@@ -70,11 +71,12 @@ class TestApiEventModule:
 
     def test_event_module_exports(self):
         """api.event should export expected names."""
-        from astrbot_sdk.api.event import ADMIN, AstrMessageEvent, filter
+        from astrbot_sdk.api.event import ADMIN, AstrMessageEvent, MessageChain, filter
 
         assert ADMIN == "admin"
         assert filter is not None
         assert AstrMessageEvent is not None
+        assert MessageChain is not None
 
     def test_astr_message_event_is_message_event_subclass(self):
         """AstrMessageEvent should be a MessageEvent-compatible subclass."""
@@ -102,6 +104,15 @@ class TestApiEventModule:
         assert MessageEventResult is not None
         assert MessageSession is not None
         assert MessageType is not None
+
+    def test_astr_message_event_preserves_legacy_message_str_and_private_group_none(self):
+        """AstrMessageEvent should expose message_str and return None for missing group."""
+        from astrbot_sdk.api.event import AstrMessageEvent
+
+        event = AstrMessageEvent(text="hello", user_id="user-1")
+
+        assert event.message_str == "hello"
+        assert event.get_group_id() is None
 
     def test_message_chain_serializes_components(self):
         """MessageChain.to_payload() should preserve compat component fields."""
@@ -160,7 +171,10 @@ class TestApiModule:
 
     def test_api_subpackages_exist(self):
         """New compat subpackages should be importable."""
+        from loguru import logger
+
         from astrbot_sdk.api import (
+            AstrBotConfig,
             basic,
             message,
             message_components,
@@ -168,8 +182,38 @@ class TestApiModule:
             provider,
         )
 
+        assert AstrBotConfig is not None
         assert basic is not None
+        assert logger is not None
         assert message is not None
         assert message_components is not None
         assert platform is not None
         assert provider is not None
+
+
+class TestAstrbotImportAlias:
+    """Tests for the legacy ``astrbot`` package-name alias."""
+
+    def test_legacy_astrbot_api_exports(self):
+        """astrbot.api should expose the old logger/config entrance."""
+        from astrbot.api import AstrBotConfig, logger
+
+        assert AstrBotConfig is not None
+        assert logger is not None
+
+    def test_legacy_astrbot_event_exports(self):
+        """astrbot.api.event should expose MessageChain from the legacy location."""
+        from astrbot.api.event import AstrMessageEvent, MessageChain, filter
+
+        assert AstrMessageEvent is not None
+        assert MessageChain is not None
+        assert filter is not None
+
+    def test_legacy_astrbot_star_exports(self):
+        """astrbot.api.star should expose Context/Star/register/StarTools."""
+        from astrbot.api.star import Context, Star, StarTools, register
+
+        assert Context is not None
+        assert Star is not None
+        assert callable(StarTools.get_data_dir)
+        assert callable(register)

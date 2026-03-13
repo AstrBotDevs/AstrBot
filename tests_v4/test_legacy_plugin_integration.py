@@ -8,6 +8,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import textwrap
+import types
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,34 @@ from astrbot_sdk.runtime.loader import (
     load_plugin,
     load_plugin_spec,
 )
+
+
+def _install_mrfzccl_optional_dependency_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """为真实旧插件夹具补齐仓库测试环境里缺失的可选依赖。"""
+    pypinyin = types.ModuleType("pypinyin")
+
+    class _Style:
+        NORMAL = "normal"
+
+    def _lazy_pinyin(text, style=None):
+        return list(str(text or ""))
+
+    pypinyin.Style = _Style
+    pypinyin.lazy_pinyin = _lazy_pinyin
+    monkeypatch.setitem(sys.modules, "pypinyin", pypinyin)
+
+    html2image = types.ModuleType("html2image")
+
+    class _Html2Image:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+        def screenshot(self, *args, **kwargs):
+            return []
+
+    html2image.Html2Image = _Html2Image
+    monkeypatch.setitem(sys.modules, "html2image", html2image)
 
 
 class TestLegacyPluginImports:
@@ -532,6 +561,68 @@ class TestRealTestPlugin:
             assert instance.context.plugin_id == "astrbot_plugin_helloworld"
 
         finally:
+            for p in paths_to_add:
+                if p in sys.path:
+                    sys.path.remove(p)
+
+    def test_load_real_external_legacy_plugin_fixture(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """测试仓库中的真实外部旧插件夹具。"""
+        project_root = Path(__file__).parent.parent
+        plugin_dir = project_root / "test_plugin" / "old" / "mrfzccl"
+
+        if not plugin_dir.exists():
+            pytest.skip("external legacy plugin fixture not found")
+
+        _install_mrfzccl_optional_dependency_stubs(monkeypatch)
+        spec = load_plugin_spec(plugin_dir)
+
+        paths_to_add = []
+        if str(plugin_dir) not in sys.path:
+            sys.path.insert(0, str(plugin_dir))
+            paths_to_add.append(str(plugin_dir))
+
+        src_new = project_root / "src-new"
+        if str(src_new) not in sys.path:
+            sys.path.insert(0, str(src_new))
+            paths_to_add.append(str(src_new))
+
+        try:
+            loaded = load_plugin(spec)
+
+            assert loaded.plugin.name == "astrbot_plugin_mrfzccl"
+            assert len(loaded.instances) == 1
+            assert len(loaded.handlers) >= 10
+
+            command_names = {
+                handler.descriptor.trigger.command
+                for handler in loaded.handlers
+                if isinstance(handler.descriptor.trigger, CommandTrigger)
+            }
+            assert {
+                "fc",
+                "fcc",
+                "fce",
+                "fct",
+                "fcw",
+                "ccl 排行榜",
+                "ccl 错误排行榜",
+                "ccl 提示排行榜",
+            } <= command_names
+
+            instance = loaded.instances[0]
+            assert Path(instance.storage_dir) == plugin_dir / "data"
+            assert instance.db_path == str((plugin_dir / "data" / "mrfzccl.db"))
+            assert instance.renderer.theme == "light"
+        finally:
+            synthetic_modules = [
+                name
+                for name in list(sys.modules)
+                if name.startswith("_astrbot_legacy_pkg_mrfzccl")
+            ]
+            for module_name in synthetic_modules:
+                sys.modules.pop(module_name, None)
             for p in paths_to_add:
                 if p in sys.path:
                     sys.path.remove(p)
