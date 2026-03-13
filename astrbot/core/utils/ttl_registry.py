@@ -51,6 +51,10 @@ class TTLKeyRegistry:
 
     def _clean_expired(self) -> None:
         """Remove expired entries from the registry, with interval throttling."""
+        # Short-circuit: if TTL is disabled (<=0), skip all cleanup logic
+        if self._ttl_seconds <= 0:
+            return
+
         now = time.monotonic()
 
         # Apply cleanup interval throttling if configured

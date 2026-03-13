@@ -94,6 +94,10 @@ class MessageDeduplicator:
         sender_id: str = "",
     ) -> bool:
         async with self._lock:
+            # Bypass deduplication if TTL is 0 (disabled)
+            if self._message_ids.ttl_seconds == 0:
+                return False
+
             # 1) ID-based dedup
             if self._message_ids.contains(message_id):
                 logger.debug(
