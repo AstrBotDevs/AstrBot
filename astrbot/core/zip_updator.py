@@ -53,7 +53,7 @@ class RepoZipUpdator:
                 aiohttp.ClientSession(
                     trust_env=True,
                     connector=connector,
-                    headers=get_github_api_auth_header(),
+                    headers=get_github_api_auth_header(url),
                 ) as session,
                 session.get(url) as response,
             ):
