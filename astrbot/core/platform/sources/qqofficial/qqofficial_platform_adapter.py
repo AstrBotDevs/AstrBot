@@ -25,6 +25,7 @@ from astrbot.api.platform import (
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.number_utils import safe_positive_float
+from astrbot.core.utils.ttl_registry import TTLKeyRegistry
 
 from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
@@ -37,6 +38,32 @@ for handler in logging.root.handlers[:]:
 
 
 # QQ 机器人官方框架
+def _extract_sender_id(message) -> str:
+    """Extract sender ID from a QQ message object.
+
+    This is the central location for sender ID extraction logic to avoid
+    precedence drift between different code paths.
+
+    The precedence order is:
+    1. author.user_openid
+    2. author.member_openid
+    3. author.id
+
+    Args:
+        message: The message object with an author attribute.
+
+    Returns:
+        The sender ID as a string, or empty string if not found.
+    """
+    if hasattr(message, "author") and hasattr(message.author, "user_openid"):
+        return str(message.author.user_openid)
+    if hasattr(message, "author") and hasattr(message.author, "member_openid"):
+        return str(message.author.member_openid)
+    if hasattr(message, "author") and hasattr(message.author, "id"):
+        return str(message.author.id)
+    return ""
+
+
 class MessageDeduplicator:
     def __init__(
         self,
@@ -44,72 +71,21 @@ class MessageDeduplicator:
         content_key_ttl_seconds: float = 3.0,
         cleanup_interval_seconds: float = 1.0,
     ) -> None:
-        self._message_id_timestamps: dict[str, float] = {}
-        self._content_key_timestamps: dict[str, float] = {}
-        self._message_id_ttl_seconds = message_id_ttl_seconds
-        self._content_key_ttl_seconds = content_key_ttl_seconds
-        self._cleanup_interval_seconds = cleanup_interval_seconds
-        self._last_cleanup_at = 0.0
+        self._message_ids = TTLKeyRegistry(
+            ttl_seconds=message_id_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
+        self._content_keys = TTLKeyRegistry(
+            ttl_seconds=content_key_ttl_seconds,
+            cleanup_interval_seconds=cleanup_interval_seconds,
+        )
         self._lock = asyncio.Lock()
-
-    def _clean_expired(self, now: float) -> None:
-        if (
-            self._last_cleanup_at > 0
-            and now - self._last_cleanup_at < self._cleanup_interval_seconds
-        ):
-            return
-
-        expired_message_ids = [
-            key
-            for key, ts in self._message_id_timestamps.items()
-            if now - ts > self._message_id_ttl_seconds
-        ]
-        for key in expired_message_ids:
-            self._message_id_timestamps.pop(key, None)
-
-        expired_content_keys = [
-            key
-            for key, ts in self._content_key_timestamps.items()
-            if now - ts > self._content_key_ttl_seconds
-        ]
-        for key in expired_content_keys:
-            self._content_key_timestamps.pop(key, None)
-
-        self._last_cleanup_at = now
-
-    def _check_and_register_id(self, message_id: str, now: float) -> bool:
-        existing_ts = self._message_id_timestamps.get(message_id)
-        if existing_ts is not None:
-            if now - existing_ts <= self._message_id_ttl_seconds:
-                logger.debug(
-                    "[QQOfficial] Duplicate message detected (by ID): %s...",
-                    message_id[:50],
-                )
-                return True
-            self._message_id_timestamps.pop(message_id, None)
-
-        self._message_id_timestamps[message_id] = now
-        return False
 
     def _build_content_key(self, content: str, sender_id: str) -> str | None:
         if not (content and sender_id):
             return None
         content_hash = hashlib.sha1(content.encode("utf-8")).hexdigest()[:16]
         return f"{sender_id}:{content_hash}"
-
-    def _check_and_register_content_key(self, content_key: str, now: float) -> bool:
-        existing_ts = self._content_key_timestamps.get(content_key)
-        if existing_ts is not None:
-            if now - existing_ts <= self._content_key_ttl_seconds:
-                logger.debug(
-                    "[QQOfficial] Duplicate message detected (by content): %s",
-                    content_key,
-                )
-                return True
-            self._content_key_timestamps.pop(content_key, None)
-
-        self._content_key_timestamps[content_key] = now
-        return False
 
     async def is_duplicate(
         self,
@@ -118,21 +94,32 @@ class MessageDeduplicator:
         sender_id: str = "",
     ) -> bool:
         async with self._lock:
-            current_time = time.monotonic()
-            self._clean_expired(current_time)
-
-            if self._check_and_register_id(message_id, current_time):
+            # 1) ID-based dedup
+            if self._message_ids.contains(message_id):
+                logger.debug(
+                    "[QQOfficial] Duplicate message detected (by ID): %s...",
+                    message_id[:50],
+                )
                 return True
 
+            self._message_ids.add(message_id)
+
+            # 2) Content-based dedup
             content_key = self._build_content_key(content, sender_id)
-            if (
-                content_key is not None
-                and self._check_and_register_content_key(content_key, current_time)
-            ):
-                # Keep behavior unchanged: content duplicate should not register new message_id.
-                self._message_id_timestamps.pop(message_id, None)
+            if content_key is None:
+                logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
+                return False
+
+            if self._content_keys.contains(content_key):
+                logger.debug(
+                    "[QQOfficial] Duplicate message detected (by content): %s",
+                    content_key,
+                )
+                # Preserve existing behavior: do not keep message_id on content duplicates
+                self._message_ids.discard(message_id)
                 return True
 
+            self._content_keys.add(content_key)
             logger.debug("[QQOfficial] New message registered: %s...", message_id[:50])
             return False
 
@@ -144,19 +131,10 @@ class botClient(Client):
     def _get_sender_id(self, message) -> str:
         """Extract sender ID from different message types.
 
-        The precedence order is aligned with `_parse_from_qqofficial` to ensure
-        consistent deduplication and event fingerprinting:
-        1. author.user_openid
-        2. author.member_openid
-        3. author.id
+        Delegates to the centralized _extract_sender_id function to avoid
+        precedence drift.
         """
-        if hasattr(message, "author") and hasattr(message.author, "user_openid"):
-            return str(message.author.user_openid)
-        if hasattr(message, "author") and hasattr(message.author, "member_openid"):
-            return str(message.author.member_openid)
-        if hasattr(message, "author") and hasattr(message.author, "id"):
-            return str(message.author.id)
-        return ""
+        return _extract_sender_id(message)
 
     def _extract_dedup_key(self, message) -> tuple[str, str]:
         sender_id = self._get_sender_id(message)
@@ -602,12 +580,7 @@ class QQOfficialPlatformAdapter(Platform):
             QQOfficialPlatformAdapter._append_attachments(msg, message.attachments)
             abm.message = msg
             abm.message_str = plain_content
-            sender_user_id = cast(
-                str,
-                getattr(message.author, "user_openid", None)
-                or getattr(message.author, "member_openid", None)
-                or getattr(message.author, "id", ""),
-            )
+            sender_user_id = _extract_sender_id(message)
             abm.sender = MessageMember(
                 sender_user_id,
                 str(message.author.username),

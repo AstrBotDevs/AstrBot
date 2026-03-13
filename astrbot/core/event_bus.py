@@ -78,23 +78,45 @@ class EventDeduplicator:
             message_id,
         ])
 
-    def _keys_for_event(self, event: AstrMessageEvent) -> list[str]:
-        """Build all deduplication keys for an event."""
-        keys = [self._build_content_key(event)]
-        message_id_key = self._build_message_id_key(event)
-        if message_id_key is not None:
-            keys.append(message_id_key)
-        return keys
-
     def is_duplicate(self, event: AstrMessageEvent) -> bool:
         """Check if the event is a duplicate.
 
         Returns False immediately if TTL is 0 (deduplication disabled).
+        Short-circuits on message_id key to avoid expensive attachment signature computation.
         """
         # TTL of 0 means deduplication is disabled
         if self._registry.ttl_seconds == 0:
             return False
-        return self._registry.seen_many(self._keys_for_event(event))
+
+        # Short-circuit: check message_id first (cheap) before computing full content key (expensive)
+        message_id_key = self._build_message_id_key(event)
+        if message_id_key is not None:
+            if self._registry.contains(message_id_key):
+                logger.debug(
+                    "Skip duplicate event in event_bus (by message_id): umo=%s, sender=%s",
+                    event.unified_msg_origin,
+                    event.get_sender_id(),
+                )
+                return True
+            # Register message_id key since we'll process the event
+            self._registry.add(message_id_key)
+
+        # Only compute full content key if we get past message_id check
+        content_key = self._build_content_key(event)
+        if self._registry.contains(content_key):
+            logger.debug(
+                "Skip duplicate event in event_bus (by content): umo=%s, sender=%s",
+                event.unified_msg_origin,
+                event.get_sender_id(),
+            )
+            # If content duplicate, also remove message_id to preserve existing behavior
+            if message_id_key is not None:
+                self._registry.discard(message_id_key)
+            return True
+
+        # Register content key
+        self._registry.add(content_key)
+        return False
 
 
 class EventBus:
