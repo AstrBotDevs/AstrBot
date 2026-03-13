@@ -204,7 +204,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                                 "type": "string",
                                 "description": (
                                     "Component type. One of: "
-                                    "plain, image, record, file, mention_user"
+                                    "plain, image, record, video, file, mention_user. Record is voice message."
                                 ),
                             },
                             "text": {
@@ -320,6 +320,19 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         components.append(Comp.Record.fromURL(url=url))
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
+                elif msg_type == "video":
+                    path = msg.get("path")
+                    url = msg.get("url")
+                    if path:
+                        (
+                            local_path,
+                            file_from_sandbox,
+                        ) = await self._resolve_path_from_sandbox(context, path)
+                        components.append(Comp.Video.fromFileSystem(path=local_path))
+                    elif url:
+                        components.append(Comp.Video.fromURL(url=url))
+                    else:
+                        return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
                     path = msg.get("path")
                     url = msg.get("url")

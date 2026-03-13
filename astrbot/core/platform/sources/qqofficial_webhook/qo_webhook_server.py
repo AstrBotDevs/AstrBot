@@ -55,7 +55,7 @@ class QQOfficialWebhook:
             max_async=1,
             connect=bot_connect,
             dispatch=self.client.ws_dispatch,
-            loop=asyncio.get_event_loop(),
+            loop=asyncio.get_running_loop(),
             api=self.api,
         )
 
