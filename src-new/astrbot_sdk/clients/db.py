@@ -18,14 +18,11 @@
     - 数据永久存储，除非用户显式删除
     - 值类型支持任意 JSON 数据
     - 支持前缀查询键列表
-
-TODO:
-    - 缺少批量操作支持 (set_many, get_many)
-    - 缺少数据变更事件通知
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from ._proxy import CapabilityProxy
@@ -108,3 +105,67 @@ class DBClient:
         if not isinstance(keys, (list, tuple)):
             return []
         return [str(item) for item in keys]
+
+    async def get_many(self, keys: Sequence[str]) -> dict[str, Any | None]:
+        """批量获取多个键的值。
+
+        Args:
+            keys: 要读取的键列表
+
+        Returns:
+            一个 dict，key 为键名，value 为对应值（不存在则为 None）
+
+        示例:
+            values = await ctx.db.get_many(["user:1", "user:2"])
+            if values["user:1"] is None:
+                print("user:1 missing")
+        """
+        output = await self._proxy.call("db.get_many", {"keys": list(keys)})
+        items = output.get("items")
+        if not isinstance(items, (list, tuple)):
+            return {}
+        result: dict[str, Any | None] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            key = item.get("key")
+            if not isinstance(key, str):
+                continue
+            result[key] = item.get("value")
+        return result
+
+    async def set_many(
+        self, items: Mapping[str, Any] | Sequence[tuple[str, Any]]
+    ) -> None:
+        """批量写入多个键值对。
+
+        Args:
+            items: 键值对集合（dict 或二元组序列）
+
+        示例:
+            await ctx.db.set_many({"user:1": {"name": "a"}, "user:2": {"name": "b"}})
+        """
+        if isinstance(items, Mapping):
+            pairs = list(items.items())
+        else:
+            pairs = list(items)
+
+        payload_items: list[dict[str, Any]] = [
+            {"key": str(key), "value": value} for key, value in pairs
+        ]
+        await self._proxy.call("db.set_many", {"items": payload_items})
+
+    def watch(self, prefix: str | None = None) -> AsyncIterator[dict[str, Any]]:
+        """订阅 KV 变更事件（流式）。
+
+        Args:
+            prefix: 键前缀过滤；None 表示订阅所有键
+
+        Yields:
+            变更事件 dict：{"op": "set"|"delete", "key": str, "value": Any|None}
+
+        示例:
+            async for event in ctx.db.watch("user:"):
+                print(event["op"], event["key"])
+        """
+        return self._proxy.stream("db.watch", {"prefix": prefix})

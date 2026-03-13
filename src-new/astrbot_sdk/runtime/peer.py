@@ -507,9 +507,11 @@ class Peer:
                         "stream=true 必须返回 StreamExecution"
                     )
                 await self._send(EventMessage(id=message.id, phase="started"))
+                collect_chunks = execution.collect_chunks
                 chunks: list[dict[str, Any]] = []
                 async for chunk in execution.iterator:
-                    chunks.append(chunk)
+                    if collect_chunks:
+                        chunks.append(chunk)
                     await self._send(
                         EventMessage(id=message.id, phase="delta", data=chunk)
                     )

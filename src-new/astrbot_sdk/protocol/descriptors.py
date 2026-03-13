@@ -127,6 +127,37 @@ DB_LIST_OUTPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
 )
+DB_GET_MANY_INPUT_SCHEMA = _object_schema(
+    required=("keys",),
+    keys={"type": "array", "items": {"type": "string"}},
+)
+DB_GET_MANY_OUTPUT_SCHEMA = _object_schema(
+    required=("items",),
+    items={
+        "type": "array",
+        "items": _object_schema(
+            required=("key", "value"),
+            key={"type": "string"},
+            value=_nullable({}),
+        ),
+    },
+)
+DB_SET_MANY_INPUT_SCHEMA = _object_schema(
+    required=("items",),
+    items={
+        "type": "array",
+        "items": _object_schema(
+            required=("key", "value"),
+            key={"type": "string"},
+            value={},
+        ),
+    },
+)
+DB_SET_MANY_OUTPUT_SCHEMA = _object_schema()
+DB_WATCH_INPUT_SCHEMA = _object_schema(
+    prefix=_nullable({"type": "string"}),
+)
+DB_WATCH_OUTPUT_SCHEMA = _object_schema()
 SESSION_REF_SCHEMA = _object_schema(
     required=("conversation_id",),
     conversation_id={"type": "string"},
@@ -217,6 +248,18 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "db.list": {
         "input": DB_LIST_INPUT_SCHEMA,
         "output": DB_LIST_OUTPUT_SCHEMA,
+    },
+    "db.get_many": {
+        "input": DB_GET_MANY_INPUT_SCHEMA,
+        "output": DB_GET_MANY_OUTPUT_SCHEMA,
+    },
+    "db.set_many": {
+        "input": DB_SET_MANY_INPUT_SCHEMA,
+        "output": DB_SET_MANY_OUTPUT_SCHEMA,
+    },
+    "db.watch": {
+        "input": DB_WATCH_INPUT_SCHEMA,
+        "output": DB_WATCH_OUTPUT_SCHEMA,
     },
     "platform.send": {
         "input": PLATFORM_SEND_INPUT_SCHEMA,
@@ -491,10 +534,16 @@ __all__ = [
     "DB_DELETE_OUTPUT_SCHEMA",
     "DB_GET_INPUT_SCHEMA",
     "DB_GET_OUTPUT_SCHEMA",
+    "DB_GET_MANY_INPUT_SCHEMA",
+    "DB_GET_MANY_OUTPUT_SCHEMA",
     "DB_LIST_INPUT_SCHEMA",
     "DB_LIST_OUTPUT_SCHEMA",
     "DB_SET_INPUT_SCHEMA",
     "DB_SET_OUTPUT_SCHEMA",
+    "DB_SET_MANY_INPUT_SCHEMA",
+    "DB_SET_MANY_OUTPUT_SCHEMA",
+    "DB_WATCH_INPUT_SCHEMA",
+    "DB_WATCH_OUTPUT_SCHEMA",
     "EventTrigger",
     "HandlerDescriptor",
     "JSONSchema",

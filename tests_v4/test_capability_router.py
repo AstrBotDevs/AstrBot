@@ -164,6 +164,9 @@ class TestCapabilityRouterInit:
         assert "db.set" in capability_names
         assert "db.delete" in capability_names
         assert "db.list" in capability_names
+        assert "db.get_many" in capability_names
+        assert "db.set_many" in capability_names
+        assert "db.watch" in capability_names
 
         # Platform capabilities
         assert "platform.send" in capability_names
@@ -181,6 +184,14 @@ class TestCapabilityRouterInit:
         for name, schema in BUILTIN_CAPABILITY_SCHEMAS.items():
             assert descriptors[name].input_schema == schema["input"]
             assert descriptors[name].output_schema == schema["output"]
+
+    def test_db_watch_descriptor_supports_stream(self):
+        router = CapabilityRouter()
+        descriptors = {
+            descriptor.name: descriptor for descriptor in router.descriptors()
+        }
+
+        assert descriptors["db.watch"].supports_stream is True
 
 
 class TestCapabilityRouterRegister:
@@ -349,6 +360,85 @@ class TestCapabilityRouterExecute:
                 cancel_token=token,
                 request_id="req-1",
             )
+
+
+class TestCapabilityRouterDBWatch:
+    """Router-level tests for db.watch behavior."""
+
+    @pytest.mark.asyncio
+    async def test_db_watch_receives_set_and_delete_events(self):
+        router = CapabilityRouter()
+        token = CancelToken()
+
+        execution = await router.execute(
+            "db.watch",
+            {"prefix": None},
+            stream=True,
+            cancel_token=token,
+            request_id="watch-1",
+        )
+        assert isinstance(execution, StreamExecution)
+        assert execution.collect_chunks is False
+
+        await router.execute(
+            "db.set",
+            {"key": "a", "value": 1},
+            stream=False,
+            cancel_token=token,
+            request_id="set-1",
+        )
+        await router.execute(
+            "db.delete",
+            {"key": "a"},
+            stream=False,
+            cancel_token=token,
+            request_id="del-1",
+        )
+
+        event1 = await anext(execution.iterator)
+        event2 = await anext(execution.iterator)
+        assert event1 == {"op": "set", "key": "a", "value": 1}
+        assert event2 == {"op": "delete", "key": "a", "value": None}
+
+        close = getattr(execution.iterator, "aclose", None)
+        if close is not None:
+            await close()
+
+    @pytest.mark.asyncio
+    async def test_db_watch_prefix_filters_events(self):
+        router = CapabilityRouter()
+        token = CancelToken()
+
+        execution = await router.execute(
+            "db.watch",
+            {"prefix": "user:"},
+            stream=True,
+            cancel_token=token,
+            request_id="watch-2",
+        )
+        assert isinstance(execution, StreamExecution)
+
+        await router.execute(
+            "db.set",
+            {"key": "sys:1", "value": 1},
+            stream=False,
+            cancel_token=token,
+            request_id="set-2",
+        )
+        await router.execute(
+            "db.set",
+            {"key": "user:1", "value": {"ok": True}},
+            stream=False,
+            cancel_token=token,
+            request_id="set-3",
+        )
+
+        event = await anext(execution.iterator)
+        assert event == {"op": "set", "key": "user:1", "value": {"ok": True}}
+
+        close = getattr(execution.iterator, "aclose", None)
+        if close is not None:
+            await close()
 
     @pytest.mark.asyncio
     async def test_execute_missing_capability_raises(self):
