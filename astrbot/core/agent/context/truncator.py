@@ -12,6 +12,71 @@ class ContextTruncator:
             and len(message.tool_calls) > 0
         )
 
+    def _split_system_and_rest(
+        self, messages: list[Message]
+    ) -> tuple[list[Message], list[Message]]:
+        """Split messages into system messages and the rest.
+
+        Returns:
+            tuple: (system_messages, non_system_messages)
+        """
+        first_non_system = 0
+        for i, msg in enumerate(messages):
+            if msg.role != "system":
+                first_non_system = i
+                break
+
+        return messages[:first_non_system], messages[first_non_system:]
+
+    def _ensure_first_user_message(
+        self,
+        system_messages: list[Message],
+        non_system_messages: list[Message],
+        original_messages: list[Message],
+    ) -> list[Message]:
+        """Ensure the result always contains the first user message right after
+        system messages. This is required by many LLM APIs (e.g. Zhipu) that
+        mandate a ``user`` message immediately following the ``system`` message.
+
+        If the truncated ``non_system_messages`` already starts with a ``user``
+        message, the list is returned as-is (with ``fix_messages`` applied).
+        Otherwise the first ``user`` message from the *original* full message
+        list is located and prepended.
+
+        Args:
+            system_messages: The system messages extracted earlier.
+            non_system_messages: The truncated non-system messages.
+            original_messages: The full, untruncated message list (used to
+                locate the original first ``user`` message when it has been
+                removed by truncation).
+
+        Returns:
+            A well-formed message list: ``system + [first_user +] rest``.
+        """
+        # Fast path: already starts with a user message – nothing to fix.
+        if non_system_messages and non_system_messages[0].role == "user":
+            return self.fix_messages(system_messages + non_system_messages)
+
+        # Locate the first user message from the *original* list.
+        first_user_msg: Message | None = None
+        for msg in original_messages:
+            if msg.role == "user":
+                first_user_msg = msg
+                break
+
+        if first_user_msg is None:
+            # Degenerate case: no user message exists at all.
+            return self.fix_messages(system_messages + non_system_messages)
+
+        # Avoid duplicate: if the located message is already in the truncated
+        # list (identity check), don't prepend again.
+        if any(m is first_user_msg for m in non_system_messages):
+            return self.fix_messages(system_messages + non_system_messages)
+
+        # Prepend the first user message so the sequence is valid.
+        result = system_messages + [first_user_msg] + non_system_messages
+        return self.fix_messages(result)
+
     def fix_messages(self, messages: list[Message]) -> list[Message]:
         """修复消息列表，确保 tool call 和 tool response 的配对关系有效。
 
@@ -81,14 +146,7 @@ class ContextTruncator:
         if keep_most_recent_turns == -1:
             return messages
 
-        first_non_system = 0
-        for i, msg in enumerate(messages):
-            if msg.role != "system":
-                first_non_system = i
-                break
-
-        system_messages = messages[:first_non_system]
-        non_system_messages = messages[first_non_system:]
+        system_messages, non_system_messages = self._split_system_and_rest(messages)
 
         if len(non_system_messages) // 2 <= keep_most_recent_turns:
             return messages
@@ -107,9 +165,9 @@ class ContextTruncator:
         if index is not None and index > 0:
             truncated_contexts = truncated_contexts[index:]
 
-        result = system_messages + truncated_contexts
-
-        return self.fix_messages(result)
+        return self._ensure_first_user_message(
+            system_messages, truncated_contexts, messages
+        )
 
     def truncate_by_dropping_oldest_turns(
         self,
@@ -120,14 +178,7 @@ class ContextTruncator:
         if drop_turns <= 0:
             return messages
 
-        first_non_system = 0
-        for i, msg in enumerate(messages):
-            if msg.role != "system":
-                first_non_system = i
-                break
-
-        system_messages = messages[:first_non_system]
-        non_system_messages = messages[first_non_system:]
+        system_messages, non_system_messages = self._split_system_and_rest(messages)
 
         if len(non_system_messages) // 2 <= drop_turns:
             truncated_non_system = []
@@ -143,9 +194,9 @@ class ContextTruncator:
         elif truncated_non_system:
             truncated_non_system = []
 
-        result = system_messages + truncated_non_system
-
-        return self.fix_messages(result)
+        return self._ensure_first_user_message(
+            system_messages, truncated_non_system, messages
+        )
 
     def truncate_by_halving(
         self,
@@ -155,14 +206,7 @@ class ContextTruncator:
         if len(messages) <= 2:
             return messages
 
-        first_non_system = 0
-        for i, msg in enumerate(messages):
-            if msg.role != "system":
-                first_non_system = i
-                break
-
-        system_messages = messages[:first_non_system]
-        non_system_messages = messages[first_non_system:]
+        system_messages, non_system_messages = self._split_system_and_rest(messages)
 
         messages_to_delete = len(non_system_messages) // 2
         if messages_to_delete == 0:
@@ -177,6 +221,6 @@ class ContextTruncator:
         if index is not None:
             truncated_non_system = truncated_non_system[index:]
 
-        result = system_messages + truncated_non_system
-
-        return self.fix_messages(result)
+        return self._ensure_first_user_message(
+            system_messages, truncated_non_system, messages
+        )
