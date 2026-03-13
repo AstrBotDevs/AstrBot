@@ -109,6 +109,7 @@ CAPABILITY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$")
 class StreamExecution:
     iterator: AsyncIterator[dict[str, Any]]
     finalize: FinalizeHandler
+    collect_chunks: bool = True
 
 
 StreamHandler = Callable[
@@ -134,7 +135,17 @@ class CapabilityRouter:
         self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
         self.sent_messages: list[dict[str, Any]] = []
+        self._db_watch_subscriptions: dict[
+            str, tuple[str | None, asyncio.Queue[dict[str, Any]]]
+        ] = {}
         self._register_builtin_capabilities()
+
+    def _emit_db_change(self, *, op: str, key: str, value: Any | None) -> None:
+        event = {"op": op, "key": key, "value": value}
+        for prefix, queue in list(self._db_watch_subscriptions.values()):
+            if prefix is not None and not key.startswith(prefix):
+                continue
+            queue.put_nowait(event)
 
     def descriptors(self) -> list[CapabilityDescriptor]:
         return [
@@ -227,6 +238,7 @@ class CapabilityRouter:
         return StreamExecution(
             iterator=execution.iterator,
             finalize=validated_finalize,
+            collect_chunks=execution.collect_chunks,
         )
 
     def _register_builtin_capabilities(self) -> None:
@@ -329,13 +341,17 @@ class CapabilityRouter:
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
             key = str(payload.get("key", ""))
-            self.db_store[key] = payload.get("value")
+            value = payload.get("value")
+            self.db_store[key] = value
+            self._emit_db_change(op="set", key=key, value=value)
             return {}
 
         async def db_delete(
             _request_id: str, payload: dict[str, Any], _token
         ) -> dict[str, Any]:
-            self.db_store.pop(str(payload.get("key", "")), None)
+            key = str(payload.get("key", ""))
+            self.db_store.pop(key, None)
+            self._emit_db_change(op="delete", key=key, value=None)
             return {}
 
         async def db_list(
@@ -346,6 +362,63 @@ class CapabilityRouter:
             if isinstance(prefix, str):
                 keys = [item for item in keys if item.startswith(prefix)]
             return {"keys": keys}
+
+        async def db_get_many(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
+            keys_payload = payload.get("keys")
+            if not isinstance(keys_payload, (list, tuple)):
+                raise AstrBotError.invalid_input("db.get_many 的 keys 必须是数组")
+            keys = [str(item) for item in keys_payload]
+            items = [{"key": key, "value": self.db_store.get(key)} for key in keys]
+            return {"items": items}
+
+        async def db_set_many(
+            _request_id: str, payload: dict[str, Any], _token
+        ) -> dict[str, Any]:
+            items_payload = payload.get("items")
+            if not isinstance(items_payload, (list, tuple)):
+                raise AstrBotError.invalid_input("db.set_many 的 items 必须是数组")
+            for entry in items_payload:
+                if not isinstance(entry, dict):
+                    raise AstrBotError.invalid_input(
+                        "db.set_many 的 items 必须是 object 数组"
+                    )
+                key = str(entry.get("key", ""))
+                value = entry.get("value")
+                self.db_store[key] = value
+                self._emit_db_change(op="set", key=key, value=value)
+            return {}
+
+        async def db_watch(
+            request_id: str, payload: dict[str, Any], _token
+        ) -> StreamExecution:
+            prefix = payload.get("prefix")
+            prefix_value: str | None
+            if isinstance(prefix, str):
+                prefix_value = prefix
+            elif prefix is None:
+                prefix_value = None
+            else:
+                raise AstrBotError.invalid_input(
+                    "db.watch 的 prefix 必须是 string 或 null"
+                )
+
+            queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+            self._db_watch_subscriptions[request_id] = (prefix_value, queue)
+
+            async def iterator() -> AsyncIterator[dict[str, Any]]:
+                try:
+                    while True:
+                        yield await queue.get()
+                finally:
+                    self._db_watch_subscriptions.pop(request_id, None)
+
+            return StreamExecution(
+                iterator=iterator(),
+                finalize=lambda _chunks: {},
+                collect_chunks=False,
+            )
 
         async def platform_send(
             _request_id: str, payload: dict[str, Any], _token
@@ -459,6 +532,23 @@ class CapabilityRouter:
         self.register(
             builtin_descriptor("db.list", "列出 KV"),
             call_handler=db_list,
+        )
+        self.register(
+            builtin_descriptor("db.get_many", "批量读取 KV"),
+            call_handler=db_get_many,
+        )
+        self.register(
+            builtin_descriptor("db.set_many", "批量写入 KV"),
+            call_handler=db_set_many,
+        )
+        self.register(
+            builtin_descriptor(
+                "db.watch",
+                "订阅 KV 变更",
+                supports_stream=True,
+                cancelable=True,
+            ),
+            stream_handler=db_watch,
         )
         self.register(
             builtin_descriptor("platform.send", "发送消息"),
