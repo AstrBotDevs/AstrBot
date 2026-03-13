@@ -735,7 +735,9 @@ class PluginWorkerRuntime:
             runtime_context,
         )
 
-    async def _run_legacy_worker_startup_hooks(self, *, metadata: dict[str, Any]) -> None:
+    async def _run_legacy_worker_startup_hooks(
+        self, *, metadata: dict[str, Any]
+    ) -> None:
         await run_legacy_worker_startup_hooks(
             [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
             context=self._lifecycle_context,

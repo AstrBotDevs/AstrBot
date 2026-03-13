@@ -18,11 +18,11 @@
     5. 返回 PluginDiscoveryResult
 
 环境管理流程：
-    1. 检查 .venv 目录是否存在
-    2. 检查 Python 版本是否匹配
-    3. 检查指纹是否变化（requirements 内容）
-    4. 必要时重建虚拟环境
-    5. 使用 uv 安装依赖
+    1. 对插件集合做共享环境规划
+    2. 按 Python 版本和依赖兼容性构建环境分组
+    3. 为每个分组生成 lock/source/metadata 工件
+    4. 必要时重建或同步分组虚拟环境
+    5. 将单个插件映射到所属分组环境
 
 插件加载流程：
     1. 将插件目录添加到 sys.path
@@ -57,7 +57,7 @@
 
     新版 loader.py:
         - PluginSpec 描述插件规范
-        - PluginEnvironmentManager 管理虚拟环境
+        - PluginEnvironmentManager 管理分组共享环境
         - load_plugin() 加载并解析组件
         - LoadedHandler 封装处理器和描述符
         - 支持新旧 Star 组件兼容

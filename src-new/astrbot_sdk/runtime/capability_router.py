@@ -21,6 +21,9 @@
     db.set: 写入 KV 存储
     db.delete: 删除 KV 存储
     db.list: 列出 KV 键
+    db.get_many: 批量读取多个 KV 键
+    db.set_many: 批量写入多个 KV 键
+    db.watch: 订阅 KV 变更事件
     platform.send: 发送消息
     platform.send_image: 发送图片
     platform.send_chain: 发送消息链
