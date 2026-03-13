@@ -46,3 +46,43 @@ test('createTabRouteLocation falls back to the extension route name', () => {
     hash: '#installed',
   });
 });
+
+test('createTabRouteLocation prefers route name and preserves params', () => {
+  const params = { pluginId: 'demo-plugin' };
+  const location = createTabRouteLocation(
+    {
+      name: 'ExtensionDetails',
+      path: '/extension/demo-plugin',
+      params,
+      query: { tab: 'details' },
+    },
+    'market',
+  );
+
+  assert.deepEqual(location, {
+    name: 'ExtensionDetails',
+    params: { pluginId: 'demo-plugin' },
+    query: { tab: 'details' },
+    hash: '#market',
+  });
+  assert.notEqual(location.params, params);
+});
+
+test('createTabRouteLocation preserves params for path-based routes', () => {
+  const params = { pluginId: 'demo-plugin' };
+  const location = createTabRouteLocation(
+    {
+      path: '/extension/demo-plugin',
+      params,
+    },
+    'installed',
+  );
+
+  assert.deepEqual(location, {
+    path: '/extension/demo-plugin',
+    params: { pluginId: 'demo-plugin' },
+    query: {},
+    hash: '#installed',
+  });
+  assert.notEqual(location.params, params);
+});
