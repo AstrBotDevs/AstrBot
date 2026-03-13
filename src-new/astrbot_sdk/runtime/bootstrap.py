@@ -505,8 +505,10 @@ class SupervisorRuntime:
     async def start(self) -> None:
         discovery = discover_plugins(self.plugins_dir)
         self.skipped_plugins = dict(discovery.skipped_plugins)
+        plan_result = self.env_manager.plan(discovery.plugins)
+        self.skipped_plugins.update(plan_result.skipped_plugins)
         try:
-            for plugin in discovery.plugins:
+            for plugin in plan_result.plugins:
                 session = WorkerSession(
                     plugin=plugin,
                     repo_root=self.repo_root,
