@@ -469,7 +469,7 @@ class SatoriPlatformAdapter(Platform):
                 parsed_elements.extend(self.parse_satori_elements(item.children))
                 parsed_elements.append(Plain(text="\n"))
             elif isinstance(item, element.At):
-                if item.type:
+                if item.type in ("all", "here", "everyone"):
                     parsed_elements.append(AtAll())
                 else:
                     user_id = item.id or ""

@@ -216,12 +216,7 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                 temp_chain = MessageChain([Plain(text=content)])
                                 await self.send(temp_chain)
                                 content_parts = []
-                            try:
-                                img = await _components_to_element(component, E.image)
-                                img_chain = MessageChain([Plain(text=str(img))])
-                                await self.send(img_chain)
-                            except Exception as e:
-                                logger.error(f"图片转换失败: {e}")
+                            await self.send(MessageChain([component]))
                         else:
                             content_parts.append(str(component))
 
