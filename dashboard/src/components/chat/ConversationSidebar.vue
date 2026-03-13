@@ -416,26 +416,28 @@ function handleTransportModeChange(mode: string | null) {
     min-width: 132px;
 }
 
-:deep(.transport-mode-select .v-field) {
+.transport-mode-select :deep(.v-field) {
     font-size: 14px;
 }
 
-:deep(.transport-mode-select .v-field__input) {
+.transport-mode-select :deep(.v-field__input) {
     min-height: 30px;
     padding-top: 2px;
     padding-bottom: 2px;
 }
 
-:deep(.transport-mode-select .v-select__selection-text) {
+.transport-mode-select :deep(.v-select__selection-text) {
     font-size: 14px;
     font-weight: 400;
 }
+</style>
 
-:deep(.transport-mode-select-menu .v-list-item) {
+<style>
+.transport-mode-select-menu .v-list-item {
     min-height: 34px;
 }
 
-:deep(.transport-mode-select-menu .v-list-item-title) {
+.transport-mode-select-menu .v-list-item-title {
     font-size: 14px;
     font-weight: 400;
 }
