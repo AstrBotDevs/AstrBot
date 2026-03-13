@@ -1,3 +1,5 @@
+import { EXTENSION_ROUTE_NAME } from './routeConstants.mjs';
+
 const MainRoutes = {
   path: '/main',
   meta: {
@@ -17,7 +19,7 @@ const MainRoutes = {
       component: () => import('@/views/WelcomePage.vue')
     },
     {
-      name: 'Extensions',
+      name: EXTENSION_ROUTE_NAME,
       path: '/extension',
       component: () => import('@/views/ExtensionPage.vue')
     },
