@@ -130,7 +130,7 @@
                                 :items="transportOptions"
                                 item-title="label"
                                 item-value="value"
-                                :menu-props="{ contentClass: 'transport-mode-select-menu' }"
+                                :menu-props="transportSelectMenuProps"
                                 density="compact"
                                 variant="underlined"
                                 hide-details
@@ -218,6 +218,9 @@ const transportOptions = [
     { label: tm('transport.sse'), value: 'sse' as const },
     { label: tm('transport.websocket'), value: 'websocket' as const }
 ];
+const transportSelectMenuProps = {
+    contentClass: 'transport-mode-select-menu'
+} as const;
 
 // 从 localStorage 读取侧边栏折叠状态
 const savedCollapsedState = localStorage.getItem('sidebarCollapsed');
@@ -407,7 +410,6 @@ function handleTransportModeChange(mode: string | null) {
 
 .transport-mode-select-wrap {
     margin-inline-start: 12px;
-    min-width: 132px;
 }
 
 .transport-mode-select {
