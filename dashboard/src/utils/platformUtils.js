@@ -12,7 +12,7 @@ export function getPlatformIcon(name) {
     return new URL('@/assets/images/platform_logos/onebot.png', import.meta.url).href
   } else if (name === 'qq_official' || name === 'qq_official_webhook') {
     return new URL('@/assets/images/platform_logos/qq.png', import.meta.url).href
-  } else if (name === 'wecom' || name === 'wecom_ai_bot') {
+  } else if (name === 'wecom' || name === 'wecom_ai_bot' || name === 'wecom_group_bot') {
     return new URL('@/assets/images/platform_logos/wecom.png', import.meta.url).href
   } else if (name === 'weixin_official_account') {
     return new URL('@/assets/images/platform_logos/wechat.png', import.meta.url).href
