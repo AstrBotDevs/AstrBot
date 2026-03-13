@@ -17,6 +17,16 @@
       "known_unsupported": [
         "依赖 playwright 时会退回纯文本帮助输出"
       ]
+    },
+    {
+      "name": "self_learning",
+      "repo": "https://github.com/NickCharlie/astrbot_plugin_self_learning.git",
+      "command": "learning_status",
+      "event_text": "learning_status",
+      "expected_text": "自学习插件状态报告",
+      "known_unsupported": [
+        "矩阵当前只验证管理命令，未覆盖需要真实 provider/persona 系统的深层能力"
+      ]
     }
   ]
 }

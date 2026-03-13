@@ -5,7 +5,7 @@ from loguru import logger
 from astrbot_sdk._shared_preferences import sp
 from astrbot_sdk.api.basic import AstrBotConfig
 
-from . import config, message, platform, utils
+from . import agent, config, db, message, platform, provider, utils
 
 
 class _HtmlRendererCompat:
@@ -31,11 +31,14 @@ html_renderer = _HtmlRendererCompat()
 
 __all__ = [
     "AstrBotConfig",
+    "agent",
     "config",
+    "db",
     "html_renderer",
     "logger",
     "message",
     "platform",
+    "provider",
     "sp",
     "utils",
 ]
