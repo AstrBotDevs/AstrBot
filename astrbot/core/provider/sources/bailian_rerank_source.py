@@ -83,19 +83,30 @@ class BailianRerankProvider(RerankProvider):
         Returns:
             请求载荷字典
         """
+        normalized_model = self.model.strip().lower()
+        normalized_top_n = top_n if top_n is not None and top_n > 0 else None
+
+        # qwen3-rerank follows a model-specific payload:
+        # query/documents/top_n/instruct should be at the top level.
+        if normalized_model == "qwen3-rerank":
+            payload = {
+                "model": self.model,
+                "query": query,
+                "documents": documents,
+            }
+            if normalized_top_n is not None:
+                payload["top_n"] = normalized_top_n
+            if self.instruct:
+                payload["instruct"] = self.instruct
+            return payload
+
         base = {"model": self.model, "input": {"query": query, "documents": documents}}
 
         params = {
             k: v
             for k, v in [
-                ("top_n", top_n if top_n is not None and top_n > 0 else None),
+                ("top_n", normalized_top_n),
                 ("return_documents", True if self.return_documents else None),
-                (
-                    "instruct",
-                    self.instruct
-                    if self.instruct and self.model == "qwen3-rerank"
-                    else None,
-                ),
             ]
             if v is not None
         }
