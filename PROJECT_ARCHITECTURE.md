@@ -150,44 +150,46 @@ astrbot-sdk/
 ┌─────────────────────────────────────────────────────────────────┐
 │                   用户层 (Plugin Developer)                    │
 ├─────────────────────────────────────────────────────────────────┤
-│  新代码入口:  astrbot_sdk.{Star, Context, MessageEvent}     │
-│  旧代码入口:  astrbot_sdk.api.* / astrbot.api.*           │
-└────────────────────┬────────────────────────────────────────┘
+│  v4 入口:  astrbot_sdk.{Star, Context, MessageEvent}           │
+│  装饰器:   on_command, on_message, on_event, provide_capability│
+└────────────────────┬────────────────────────────────────────────┘
                    │
-┌──────────────────▼───────────────────────────────────────────┐
-│                 高层 API (High-Level API)                    │
+┌──────────────────▼─────────────────────────────────────────────┐
+│                 高层 API (High-Level API)                      │
 ├─────────────────────────────────────────────────────────────────┤
-│  原生客户端:  clients/{llm, memory, db, platform, ...}   │
-│  兼容 Facade:  _legacy_api.py (LegacyContext, ...)          │
-└──────────────────┬───────────────────────────────────────────┘
+│  能力客户端:                                                   │
+│    - LLMClient        (llm.chat, llm.chat_raw, llm.stream_chat)│
+│    - MemoryClient     (memory.save, memory.search, ...)        │
+│    - DBClient         (db.get, db.set, db.watch, ...)          │
+│    - PlatformClient   (platform.send, platform.send_image, ...)│
+│    - HTTPClient       (http.register_api, http.list_apis)      │
+│    - MetadataClient   (metadata.get_plugin, ...)               │
+└────────────────────┬────────────────────────────────────────────┘
                    │
-┌──────────────────▼───────────────────────────────────────────┐
-│              执行边界 (Execution Boundary)                  │
+┌──────────────────▼─────────────────────────────────────────────┐
+│              执行边界 (Execution Boundary)                     │
 ├─────────────────────────────────────────────────────────────────┤
-│  runtime 主干:                                             │
-│    - loader.py        (插件发现、加载)                       │
-│    - bootstrap.py     (Supervisor/Worker 启动)              │
-│    - handler_dispatcher.py  (Handler 执行分发)              │
-│    - capability_router.py  (Capability 路由)                 │
-│    - peer.py         (协议对等端)                            │
-│    - transport.py    (传输抽象)                              │
-│  compat 私有实现:                                          │
-│    - _legacy_runtime.py   (legacy 执行适配)                   │
-│    - _legacy_loader.py    (legacy 插件发现)                  │
-│    - _session_waiter.py  (session_waiter 兼容)             │
-└──────────────────┬───────────────────────────────────────────┘
+│  runtime 主干:                                                 │
+│    - loader.py        (插件发现、加载)                         │
+│    - bootstrap.py     (Supervisor/Worker 启动)                 │
+│    - handler_dispatcher.py  (Handler 执行分发)                 │
+│    - capability_router.py   (Capability 路由)                  │
+│    - peer.py          (协议对等端)                             │
+│    - transport.py     (传输抽象)                               │
+│    - supervisor.py    (Supervisor 运行时)                      │
+│    - worker.py        (Worker 运行时)                          │
+└────────────────────┬────────────────────────────────────────────┘
                    │
-┌──────────────────▼───────────────────────────────────────────┐
-│             协议与传输 (Protocol & Transport)                │
+┌──────────────────▼─────────────────────────────────────────────┐
+│             协议与传输 (Protocol & Transport)                  │
 ├─────────────────────────────────────────────────────────────────┤
-│  protocol/                                                   │
-│    - messages.py       (协议消息模型)                         │
-│    - descriptors.py    (Handler/Capability 描述符)           │
-│    - legacy_adapter.py (JSON-RPC ↔ v4 适配器)               │
-│  transport 实现:                                             │
-│    - StdioTransport        (标准输入输出)                       │
-│    - WebSocketServerTransport (WebSocket 服务端)                  │
-│    - WebSocketClientTransport (WebSocket 客户端)               │
+│  protocol/                                                     │
+│    - messages.py       (协议消息模型)                          │
+│    - descriptors.py    (Handler/Capability 描述符)             │
+│  transport 实现:                                               │
+│    - StdioTransport            (标准输入输出)                  │
+│    - WebSocketServerTransport  (WebSocket 服务端)              │
+│    - WebSocketClientTransport  (WebSocket 客户端)              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -196,8 +198,8 @@ astrbot-sdk/
 | 层次 | 职责 | 主要模块 |
 |------|------|---------|
 | 用户层 | 插件开发者 API | `Star`, `Context`, `MessageEvent`, 装饰器 |
-| 高层 API | 类型化的能力客户端 | `clients/`, `_legacy_api.py` |
-| 执行边界 | 插件加载、路由、分发 | `runtime/loader.py`, `runtime/bootstrap.py` |
+| 高层 API | 类型化的能力客户端 | `clients/{llm, memory, db, platform, http, metadata}` |
+| 执行边界 | 插件加载、路由、分发 | `runtime/loader.py`, `runtime/supervisor.py` |
 | 协议层 | 消息模型、描述符 | `protocol/` |
 | 传输层 | 底层通信抽象 | `runtime/transport.py` |
 
@@ -287,7 +289,7 @@ Worker (Plugin)                 Supervisor (Core)
 }
 ```
 
-### 内置 Capabilities (18个)
+### 内置 Capabilities (28个)
 
 | 命名空间 | 能力 | 说明 |
 |----------|------|------|
@@ -296,8 +298,12 @@ Worker (Plugin)                 Supervisor (Core)
 | `llm` | `stream_chat` | 流式对话 |
 | `memory` | `search` | 搜索记忆 |
 | `memory` | `save` | 保存记忆 |
+| `memory` | `save_with_ttl` | 保存带过期时间的记忆 |
 | `memory` | `get` | 读取单条记忆 |
+| `memory` | `get_many` | 批量获取记忆 |
 | `memory` | `delete` | 删除记忆 |
+| `memory` | `delete_many` | 批量删除记忆 |
+| `memory` | `stats` | 获取记忆统计信息 |
 | `db` | `get` | 读取 KV |
 | `db` | `set` | 写入 KV |
 | `db` | `delete` | 删除 KV |
@@ -309,6 +315,12 @@ Worker (Plugin)                 Supervisor (Core)
 | `platform` | `send_image` | 发送图片 |
 | `platform` | `send_chain` | 发送消息链 |
 | `platform` | `get_members` | 获取群成员 |
+| `http` | `register_api` | 注册 HTTP API 端点 |
+| `http` | `unregister_api` | 注销 HTTP API 端点 |
+| `http` | `list_apis` | 列出已注册的 API |
+| `metadata` | `get_plugin` | 获取单个插件元数据 |
+| `metadata` | `list_plugins` | 列出所有插件元数据 |
+| `metadata` | `get_plugin_config` | 获取当前插件配置 |
 
 ---
 
@@ -634,11 +646,11 @@ class LLMClient:
 
 | 客户端 | 主要方法 | 对应 Capability |
 |--------|---------|-----------------|
-| `MemoryClient` | `search()`, `save()`, `get()`, `delete()` | `memory.*` |
+| `MemoryClient` | `search()`, `save()`, `save_with_ttl()`, `get()`, `get_many()`, `delete()`, `delete_many()`, `stats()` | `memory.*` |
 | `DBClient` | `get()`, `set()`, `delete()`, `list()`, `get_many()`, `set_many()`, `watch()` | `db.*` |
 | `PlatformClient` | `send()`, `send_image()`, `send_chain()`, `get_members()` | `platform.*` |
-| `HTTPClient` | `register_webhook()` | - |
-| `MetadataClient` | `get_plugin_info()` | - |
+| `HTTPClient` | `register_api()`, `unregister_api()`, `list_apis()` | `http.*` |
+| `MetadataClient` | `get_plugin()`, `list_plugins()`, `get_current_plugin()`, `get_plugin_config()` | `metadata.*` |
 
 ---
 
@@ -695,98 +707,7 @@ class MyPlugin(Star):
 
 ---
 
-## 兼容层设计
-
-### 兼容架构
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Legacy Plugin                          │
-├─────────────────────────────────────────────────────────────┤
-│  import astrbot.api.star as star                         │
-│  import astrbot.api.event as event                       │
-│  from astrbot.api.star import Star, Context               │
-└────────────┬───────────────────────────────────────────────┘
-             │
-┌────────────▼──────────────────────────────────────────────┐
-│            astrbot_sdk.compat                             │
-│  - 顶层兼容入口，统一旧导入路径                          │
-└────────────┬───────────────────────────────────────────────┘
-             │
-┌────────────▼──────────────────────────────────────────────┐
-│         astrbot_sdk.api.* (Facade)                       │
-│  - 提供 astrbot.api.* 导入路径                           │
-│  - 调用 _legacy_api.py 中的实现                          │
-└────────────┬───────────────────────────────────────────────┘
-             │
-┌────────────▼──────────────────────────────────────────────┐
-│          astrbot_sdk._legacy_api.py                       │
-│  - LegacyContext, LegacyStar 等                          │
-│  - 兼容的 API 实现                                       │
-└────────────┬───────────────────────────────────────────────┘
-             │
-┌────────────▼──────────────────────────────────────────────┐
-│        astrbot_sdk._legacy_runtime.py                     │
-│  - LegacyRuntimeAdapter, LegacyWorkerRuntimeBridge          │
-│  - 处理 legacy hook 和 result                             │
-└────────────┬───────────────────────────────────────────────┘
-             │
-┌────────────▼──────────────────────────────────────────────┐
-│              runtime.HandlerDispatcher                      │
-│  - 调用 legacy_runtime.dispatch_result()                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 兼容模块职责
-
-| 模块 | 职责 |
-|------|------|
-| `compat.py` | 顶层兼容入口，统一旧导入路径 |
-| `api/*` | `astrbot.api.*` 导入路径 facade |
-| `_legacy_api.py` | LegacyContext, LegacyStar, 兼容 API 实现 |
-| `_legacy_runtime.py` | LegacyRuntimeAdapter, 处理 legacy hook/result |
-| `_legacy_loader.py` | Legacy 插件发现与 main.py 包装 |
-| `_legacy_llm.py` | Legacy LLM/tool 兼容 |
-| `_session_waiter.py` | session_waiter 兼容执行 |
-| `_shared_preferences.py` | 共享偏好兼容 |
-
-### LegacyContext
-
-```python
-class LegacyContext:
-    """旧版 Context 的兼容实现"""
-
-    def __init__(self, *, peer, plugin_id, logger, ...):
-        self.peer = peer
-        self.plugin_id = plugin_id
-
-    # 旧版方法
-    def call_context_function(self, function_name, **kwargs):
-        """调用上下文函数（兼容旧版）"""
-        # 通过 capability 调用实现
-
-    def send_message(self, target, message_chain):
-        """发送消息（兼容旧版）"""
-
-    # ... 其他旧版方法
-```
-
-### 旧包名兼容
-
-```python
-# src-new/astrbot/__init__.py
-# 提供 astrbot.api.* 和 astrbot.core.* 导入路径
-
-# 用户代码
-from astrbot.api.star import Star
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.event.filter import filter
-
-# 实际实现
-from astrbot_sdk.api.star import Star as _Star
-from astrbot_sdk.api.event import AstrMessageEvent as _AstrMessageEvent
-# ...
-```
+## 新旧架构对比
 
 ---
 
@@ -904,6 +825,7 @@ class MyOldPlugin(Star):
 - 显式声明 Capability 和输入/输出 Schema
 - 通过 CapabilityRouter 统一路由
 - 支持同步和流式两种调用模式
+- 冲突处理：保留命名空间冲突直接跳过，非保留命名空间冲突自动添加插件名前缀
 
 ### 3. 环境分组模式
 
@@ -923,17 +845,17 @@ class MyOldPlugin(Star):
 - 跨进程取消通过 CancelMessage
 - 早到取消避免竞态条件
 
-### 6. 兼容桥接模式
-
-- 多层兼容桥接：`compat.py` → `api/*` → `_legacy_api.py` → `_legacy_runtime.py`
-- 每层只负责一个兼容维度的转换
-- 新旧代码可以共存
-
-### 7. 插件隔离模式
+### 6. 插件隔离模式
 
 - 每个插件运行在独立 Worker 进程
 - 崩溃不影响其他插件
 - 支持 GroupWorkerRuntime 共享环境
+
+### 7. 热重载模式
+
+- `dev --watch` 支持文件变更检测
+- 按插件目录清理 `sys.modules` 缓存
+- 确保代码变更后正确重载
 
 ---
 
@@ -944,20 +866,40 @@ class MyOldPlugin(Star):
 | `src-new/astrbot_sdk/__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
 | `src-new/astrbot_sdk/star.py` | `Star` | v4 原生插件基类 |
 | `src-new/astrbot_sdk/context.py` | `Context` | 运行时上下文 |
-| `src-new/astrbot_sdk/decorators.py` | `on_command`, `on_message` | v4 装饰器 |
+| `src-new/astrbot_sdk/decorators.py` | `on_command`, `on_message`, `provide_capability` | v4 装饰器 |
+| `src-new/astrbot_sdk/errors.py` | `AstrBotError` | 统一错误模型 |
+| `src-new/astrbot_sdk/cli.py` | CLI 命令 | 命令行工具 |
+| `src-new/astrbot_sdk/testing.py` | `PluginHarness`, `MockContext` | 测试辅助 |
 | `src-new/astrbot_sdk/runtime/peer.py` | `Peer` | 协议对等端 |
-| `src-new/astrbot_sdk/runtime/bootstrap.py` | `SupervisorRuntime` | 启动引导 |
-| `src-new/astrbot_sdk/runtime/loader.py` | `load_plugin()` | 插件加载 |
+| `src-new/astrbot_sdk/runtime/supervisor.py` | `SupervisorRuntime` | Supervisor 运行时 |
+| `src-new/astrbot_sdk/runtime/worker.py` | `PluginWorkerRuntime` | Worker 运行时 |
+| `src-new/astrbot_sdk/runtime/loader.py` | `load_plugin()`, `_ResolvedComponent` | 插件加载 |
 | `src-new/astrbot_sdk/runtime/handler_dispatcher.py` | `HandlerDispatcher` | Handler 执行分发 |
 | `src-new/astrbot_sdk/runtime/capability_router.py` | `CapabilityRouter` | Capability 路由 |
+| `src-new/astrbot_sdk/runtime/environment_groups.py` | `EnvironmentGroup` | 环境分组 |
 | `src-new/astrbot_sdk/protocol/messages.py` | `InitializeMessage`, `InvokeMessage` | 协议消息 |
 | `src-new/astrbot_sdk/protocol/descriptors.py` | `HandlerDescriptor`, `CapabilityDescriptor` | 描述符 |
 | `src-new/astrbot_sdk/clients/_proxy.py` | `CapabilityProxy` | 能力代理 |
-| `src-new/astrbot_sdk/_legacy_runtime.py` | `LegacyRuntimeAdapter` | Legacy 执行适配 |
+| `src-new/astrbot_sdk/clients/llm.py` | `LLMClient` | LLM 客户端 |
+| `src-new/astrbot_sdk/clients/memory.py` | `MemoryClient` | 记忆客户端 |
+| `src-new/astrbot_sdk/clients/db.py` | `DBClient` | 数据库客户端 |
+| `src-new/astrbot_sdk/clients/platform.py` | `PlatformClient` | 平台客户端 |
+| `src-new/astrbot_sdk/clients/http.py` | `HTTPClient` | HTTP 客户端 |
+| `src-new/astrbot_sdk/clients/metadata.py` | `MetadataClient`, `PluginMetadata` | 元数据客户端 |
+| `examples/hello_plugin/` | - | 入门示例插件 |
 
 ---
 
 ## 更新日志
+
+### 2026-03-14 (v2)
+- 添加兼容层弃用通知
+- 更新目录结构，移除已删除的 `api/` 和 `astrbot/` 目录
+- 更新内置 Capabilities 列表至 28 个（新增 memory 扩展方法、http、metadata）
+- 更新客户端方法表，补充完整方法列表
+- 移除兼容层设计章节（已弃用）
+- 更新关键文件速查表
+- 添加热重载模式说明
 
 ### 2026-03-14
 - 添加环境分组详细说明
