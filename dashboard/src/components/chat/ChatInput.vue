@@ -95,7 +95,7 @@
                             {{ isRecording ? tm('voice.speaking') : tm('voice.startRecording') }}
                         </v-tooltip>
                     </v-btn>
-                    <v-btn icon v-if="isRunning" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
+                    <v-btn icon v-if="isRunning && !canSend" @click="$emit('stop')" variant="tonal" color="primary" class="send-btn">
                         <v-icon icon="mdi-stop" variant="text" plain></v-icon>
                         <v-tooltip activator="parent" location="top">
                             {{ tm('input.stopGenerating') }}
@@ -373,6 +373,11 @@ function getCurrentSelection() {
     return providerModelMenuRef.value?.getCurrentSelection();
 }
 
+function focusInput() {
+    if (!inputField.value) return;
+    inputField.value.focus();
+}
+
 onMounted(() => {
     if (inputField.value) {
         inputField.value.addEventListener('paste', handlePaste);
@@ -388,7 +393,8 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-    getCurrentSelection
+    getCurrentSelection,
+    focusInput
 });
 </script>
 
