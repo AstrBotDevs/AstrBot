@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot_sdk._invocation_context import caller_plugin_scope
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import (
@@ -1063,27 +1064,28 @@ class TestBuiltinHttpAndMetadataCapabilities:
         router = CapabilityRouter()
         token = CancelToken()
 
-        await router.execute(
-            "http.register_api",
-            {
-                "plugin_id": "demo_plugin",
-                "route": "/demo",
-                "methods": ["GET", "POST"],
-                "handler_capability": "demo.http_handler",
-                "description": "demo",
-            },
-            stream=False,
-            cancel_token=token,
-            request_id="req-http-1",
-        )
+        with caller_plugin_scope("demo_plugin"):
+            await router.execute(
+                "http.register_api",
+                {
+                    "route": "/demo",
+                    "methods": ["GET", "POST"],
+                    "handler_capability": "demo.http_handler",
+                    "description": "demo",
+                },
+                stream=False,
+                cancel_token=token,
+                request_id="req-http-1",
+            )
 
-        result = await router.execute(
-            "http.list_apis",
-            {"plugin_id": "demo_plugin"},
-            stream=False,
-            cancel_token=token,
-            request_id="req-http-2",
-        )
+        with caller_plugin_scope("demo_plugin"):
+            result = await router.execute(
+                "http.list_apis",
+                {},
+                stream=False,
+                cancel_token=token,
+                request_id="req-http-2",
+            )
 
         assert result["apis"] == [
             {
@@ -1111,20 +1113,21 @@ class TestBuiltinHttpAndMetadataCapabilities:
             config={"debug": True},
         )
 
-        plugin_result = await router.execute(
-            "metadata.get_plugin",
-            {"plugin_id": "demo_plugin", "name": "demo_plugin"},
-            stream=False,
-            cancel_token=token,
-            request_id="req-meta-1",
-        )
-        config_result = await router.execute(
-            "metadata.get_plugin_config",
-            {"plugin_id": "demo_plugin", "name": "demo_plugin"},
-            stream=False,
-            cancel_token=token,
-            request_id="req-meta-2",
-        )
+        with caller_plugin_scope("demo_plugin"):
+            plugin_result = await router.execute(
+                "metadata.get_plugin",
+                {"name": "demo_plugin"},
+                stream=False,
+                cancel_token=token,
+                request_id="req-meta-1",
+            )
+            config_result = await router.execute(
+                "metadata.get_plugin_config",
+                {"name": "demo_plugin"},
+                stream=False,
+                cancel_token=token,
+                request_id="req-meta-2",
+            )
 
         assert plugin_result["plugin"]["display_name"] == "Demo Plugin"
         assert config_result["config"] == {"debug": True}
@@ -1138,13 +1141,14 @@ class TestBuiltinHttpAndMetadataCapabilities:
             config={"secret": True},
         )
 
-        result = await router.execute(
-            "metadata.get_plugin_config",
-            {"plugin_id": "other_plugin", "name": "demo_plugin"},
-            stream=False,
-            cancel_token=token,
-            request_id="req-meta-3",
-        )
+        with caller_plugin_scope("other_plugin"):
+            result = await router.execute(
+                "metadata.get_plugin_config",
+                {"name": "demo_plugin"},
+                stream=False,
+                cancel_token=token,
+                request_id="req-meta-3",
+            )
 
         assert result == {"config": None}
 

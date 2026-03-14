@@ -244,19 +244,15 @@ HTTP_REGISTER_API_INPUT_SCHEMA = _object_schema(
     methods={"type": "array", "items": {"type": "string"}},
     handler_capability={"type": "string"},
     description={"type": "string"},
-    plugin_id=_nullable({"type": "string"}),
 )
 HTTP_REGISTER_API_OUTPUT_SCHEMA = _object_schema()
 HTTP_UNREGISTER_API_INPUT_SCHEMA = _object_schema(
     required=("route", "methods"),
     route={"type": "string"},
     methods={"type": "array", "items": {"type": "string"}},
-    plugin_id=_nullable({"type": "string"}),
 )
 HTTP_UNREGISTER_API_OUTPUT_SCHEMA = _object_schema()
-HTTP_LIST_APIS_INPUT_SCHEMA = _object_schema(
-    plugin_id=_nullable({"type": "string"}),
-)
+HTTP_LIST_APIS_INPUT_SCHEMA = _object_schema()
 HTTP_LIST_APIS_OUTPUT_SCHEMA = _object_schema(
     required=("apis",),
     apis={"type": "array", "items": {"type": "object"}},
@@ -264,15 +260,12 @@ HTTP_LIST_APIS_OUTPUT_SCHEMA = _object_schema(
 METADATA_GET_PLUGIN_INPUT_SCHEMA = _object_schema(
     required=("name",),
     name={"type": "string"},
-    plugin_id=_nullable({"type": "string"}),
 )
 METADATA_GET_PLUGIN_OUTPUT_SCHEMA = _object_schema(
     required=("plugin",),
     plugin=_nullable({"type": "object"}),
 )
-METADATA_LIST_PLUGINS_INPUT_SCHEMA = _object_schema(
-    plugin_id=_nullable({"type": "string"}),
-)
+METADATA_LIST_PLUGINS_INPUT_SCHEMA = _object_schema()
 METADATA_LIST_PLUGINS_OUTPUT_SCHEMA = _object_schema(
     required=("plugins",),
     plugins={"type": "array", "items": {"type": "object"}},
@@ -280,7 +273,6 @@ METADATA_LIST_PLUGINS_OUTPUT_SCHEMA = _object_schema(
 METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
     required=("name",),
     name={"type": "string"},
-    plugin_id=_nullable({"type": "string"}),
 )
 METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
     required=("config",),

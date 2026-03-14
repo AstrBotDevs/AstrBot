@@ -33,6 +33,7 @@ from typing import Any
 
 from loguru import logger
 
+from .._invocation_context import caller_plugin_scope
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
@@ -106,9 +107,10 @@ async def run_plugin_lifecycle(
         method = getattr(instance, method_name, None)
         if method is None:
             continue
-        result = method(context)
-        if inspect.isawaitable(result):
-            await result
+        with caller_plugin_scope(context.plugin_id):
+            result = method(context)
+            if inspect.isawaitable(result):
+                await result
 
 
 class GroupWorkerRuntime:

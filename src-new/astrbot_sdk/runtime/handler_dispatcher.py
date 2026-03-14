@@ -28,6 +28,7 @@ import typing
 from collections.abc import AsyncIterator
 from typing import Any, get_type_hints
 
+from .._invocation_context import caller_plugin_scope
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
 from ..events import MessageEvent
@@ -57,7 +58,8 @@ class HandlerDispatcher:
         # 提取 args 用于兼容 handler 签名
         args = message.input.get("args") or {}
 
-        task = asyncio.create_task(self._run_handler(loaded, event, ctx, args))
+        with caller_plugin_scope(plugin_id):
+            task = asyncio.create_task(self._run_handler(loaded, event, ctx, args))
         self._active[message.id] = (task, cancel_token)
         try:
             await task
@@ -284,15 +286,16 @@ class CapabilityDispatcher:
             cancel_token=cancel_token,
         )
 
-        task = asyncio.create_task(
-            self._run_capability(
-                loaded,
-                payload=dict(message.input),
-                ctx=ctx,
-                cancel_token=cancel_token,
-                stream=bool(message.stream),
+        with caller_plugin_scope(plugin_id):
+            task = asyncio.create_task(
+                self._run_capability(
+                    loaded,
+                    payload=dict(message.input),
+                    ctx=ctx,
+                    cancel_token=cancel_token,
+                    stream=bool(message.stream),
+                )
             )
-        )
         self._active[message.id] = (task, cancel_token)
         try:
             return await task

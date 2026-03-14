@@ -5,7 +5,10 @@
 功能说明：
     - 查询已加载插件信息
     - 获取插件列表
-    - 访问插件配置
+    - 访问当前插件配置
+
+安全边界：
+    插件身份由运行时透传到协议层；客户端只暴露业务参数，不接受外部指定调用者。
 """
 
 from __future__ import annotations
@@ -60,9 +63,6 @@ class MetadataClient:
         self._proxy = proxy
         self._plugin_id = plugin_id
 
-    def _payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return {"plugin_id": self._plugin_id, **payload}
-
     async def get_plugin(self, name: str) -> PluginMetadata | None:
         """获取指定插件的元数据。
 
@@ -79,7 +79,7 @@ class MetadataClient:
         """
         output = await self._proxy.call(
             "metadata.get_plugin",
-            self._payload({"name": name}),
+            {"name": name},
         )
         data = output.get("plugin")
         if data is None:
@@ -97,7 +97,7 @@ class MetadataClient:
             for p in plugins:
                 print(f"- {p.display_name} ({p.name})")
         """
-        output = await self._proxy.call("metadata.list_plugins", self._payload({}))
+        output = await self._proxy.call("metadata.list_plugins", {})
         items = output.get("plugins", [])
         return [
             PluginMetadata.from_dict(item) for item in items if isinstance(item, dict)
@@ -144,6 +144,6 @@ class MetadataClient:
             return None
         output = await self._proxy.call(
             "metadata.get_plugin_config",
-            self._payload({"name": target}),
+            {"name": target},
         )
         return output.get("config")

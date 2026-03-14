@@ -6,7 +6,7 @@
     from astrbot_sdk import Star, Context, MessageEvent
     from astrbot_sdk.decorators import on_command, on_message
 
-旧插件请使用 AstrBot 主程序运行，不再由 SDK 提供 compat 层。
+迁移期适配入口位于独立模块；此处只暴露 v4 原生主入口。
 """
 
 from .context import Context

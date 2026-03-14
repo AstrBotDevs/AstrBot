@@ -10,6 +10,7 @@
 设计说明：
     由于跨进程架构，handler 函数无法直接序列化传递。
     插件需要先声明处理 HTTP 请求的 capability，然后注册路由到 capability 的映射。
+    当前插件身份由运行时在协议层透传，客户端 payload 不暴露 `plugin_id`。
 
     调用流程:
         HTTP 请求 → 宿主 Web 服务器 → 查找 route 映射 → invoke capability → Worker 执行 handler → 返回响应
@@ -50,23 +51,13 @@ class HTTPClient:
         _proxy: CapabilityProxy 实例，用于远程能力调用
     """
 
-    def __init__(
-        self,
-        proxy: CapabilityProxy,
-        plugin_id: str | None = None,
-    ) -> None:
+    def __init__(self, proxy: CapabilityProxy) -> None:
         """初始化 HTTP 客户端。
 
         Args:
             proxy: CapabilityProxy 实例
         """
         self._proxy = proxy
-        self._plugin_id = plugin_id
-
-    def _payload_with_plugin(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if self._plugin_id is None:
-            return payload
-        return {"plugin_id": self._plugin_id, **payload}
 
     async def register_api(
         self,
@@ -96,14 +87,12 @@ class HTTPClient:
 
         await self._proxy.call(
             "http.register_api",
-            self._payload_with_plugin(
-                {
-                    "route": route,
-                    "methods": methods,
-                    "handler_capability": handler_capability,
-                    "description": description,
-                }
-            ),
+            {
+                "route": route,
+                "methods": methods,
+                "handler_capability": handler_capability,
+                "description": description,
+            },
         )
 
     async def unregister_api(
@@ -123,7 +112,7 @@ class HTTPClient:
 
         await self._proxy.call(
             "http.unregister_api",
-            self._payload_with_plugin({"route": route, "methods": methods}),
+            {"route": route, "methods": methods},
         )
 
     async def list_apis(self) -> list[dict[str, Any]]:
@@ -139,6 +128,6 @@ class HTTPClient:
         """
         output = await self._proxy.call(
             "http.list_apis",
-            self._payload_with_plugin({}),
+            {},
         )
         return output.get("apis", [])

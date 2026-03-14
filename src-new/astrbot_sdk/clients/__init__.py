@@ -4,8 +4,8 @@ These clients provide the narrow, typed surface exposed by `Context` for
 calling remote capabilities. They handle capability names, payload shaping,
 and result decoding, without exposing protocol or transport details.
 
-Compatibility features such as legacy conversation management, MessageChain
-bridging, and agent-loop semantics live in `_legacy_api.py` and `api/`.
+Migration shims and higher-level orchestration stay outside these native
+capability clients so `Context` keeps a narrow, stable surface.
 
 当前公开客户端：
     - LLMClient: 文本/结构化/流式 LLM 调用

@@ -37,7 +37,7 @@
     http.list_apis: 查询已注册的 HTTP 路由
     metadata.get_plugin: 获取单个插件元数据
     metadata.list_plugins: 列出所有插件元数据
-    metadata.get_plugin_config: 获取插件配置
+    metadata.get_plugin_config: 获取当前调用插件自己的配置
 
 与旧版对比：
     旧版:
@@ -105,6 +105,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .._invocation_context import current_caller_plugin_id
 from ..errors import AstrBotError
 from ..protocol.descriptors import (
     BUILTIN_CAPABILITY_SCHEMAS,
@@ -193,6 +194,15 @@ class CapabilityRouter:
             for entry in self.http_api_store
             if entry.get("plugin_id") != plugin_id
         ]
+
+    @staticmethod
+    def _require_caller_plugin_id(capability_name: str) -> str:
+        caller_plugin_id = current_caller_plugin_id()
+        if caller_plugin_id:
+            return caller_plugin_id
+        raise AstrBotError.invalid_input(
+            f"{capability_name} 只能在插件运行时上下文中调用"
+        )
 
     def _emit_db_change(self, *, op: str, key: str, value: Any | None) -> None:
         event = {"op": op, "key": key, "value": value}
@@ -760,15 +770,14 @@ class CapabilityRouter:
                 "http.register_api 需要 route 和 handler_capability"
             )
 
-        plugin_id = payload.get("plugin_id")
-        plugin_name = str(plugin_id).strip() if isinstance(plugin_id, str) else ""
+        plugin_name = self._require_caller_plugin_id("http.register_api")
         methods = sorted({method.upper() for method in methods_payload if method})
         entry = {
             "route": route,
             "methods": methods,
             "handler_capability": handler_capability,
             "description": str(payload.get("description", "")),
-            "plugin_id": plugin_name or None,
+            "plugin_id": plugin_name,
         }
         self.http_api_store = [
             item
@@ -794,15 +803,14 @@ class CapabilityRouter:
                 "http.unregister_api 的 methods 必须是 string 数组"
             )
 
-        plugin_id = payload.get("plugin_id")
-        plugin_name = str(plugin_id).strip() if isinstance(plugin_id, str) else None
+        plugin_name = self._require_caller_plugin_id("http.unregister_api")
         methods = {method.upper() for method in methods_payload if method}
         updated: list[dict[str, Any]] = []
         for entry in self.http_api_store:
             if entry.get("route") != route:
                 updated.append(entry)
                 continue
-            if plugin_name is not None and entry.get("plugin_id") != plugin_name:
+            if entry.get("plugin_id") != plugin_name:
                 updated.append(entry)
                 continue
             if not methods:
@@ -818,12 +826,11 @@ class CapabilityRouter:
     async def _http_list_apis(
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
-        plugin_id = payload.get("plugin_id")
-        plugin_name = str(plugin_id).strip() if isinstance(plugin_id, str) else None
+        plugin_name = self._require_caller_plugin_id("http.list_apis")
         apis = [
             dict(entry)
             for entry in self.http_api_store
-            if plugin_name is None or entry.get("plugin_id") == plugin_name
+            if entry.get("plugin_id") == plugin_name
         ]
         return {"apis": apis}
 
@@ -866,12 +873,8 @@ class CapabilityRouter:
         self, _request_id: str, payload: dict[str, Any], _token
     ) -> dict[str, Any]:
         name = str(payload.get("name", "")).strip()
-        caller_plugin_id = payload.get("plugin_id")
-        if (
-            isinstance(caller_plugin_id, str)
-            and caller_plugin_id
-            and name != caller_plugin_id
-        ):
+        caller_plugin_id = self._require_caller_plugin_id("metadata.get_plugin_config")
+        if name != caller_plugin_id:
             return {"config": None}
         plugin = self._plugins.get(name)
         if plugin is None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from astrbot_sdk._invocation_context import current_caller_plugin_id
 from astrbot_sdk.context import CancelToken, Context
 from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.protocol.descriptors import (
@@ -86,3 +87,42 @@ class TestHandlerDispatcherInvoke:
 
         with pytest.raises(TypeError, match="必填参数 'missing' 无法注入"):
             await dispatcher.invoke(Message(), CancelToken())
+
+    @pytest.mark.asyncio
+    async def test_invoke_binds_runtime_caller_plugin_id_for_raw_peer_calls(self):
+        seen: list[str | None] = []
+
+        class RecordingPeer:
+            remote_capability_map = {}
+            remote_peer = object()
+
+            async def invoke(self, capability, payload, *, stream=False):
+                seen.append(current_caller_plugin_id())
+                return {"ok": True}
+
+        peer = RecordingPeer()
+
+        async def handler(ctx: Context) -> None:
+            await ctx.peer.invoke("metadata.list_plugins", {}, stream=False)
+
+        loaded = LoadedHandler(
+            descriptor=HandlerDescriptor(
+                id="demo:plugin.handler",
+                trigger=MessageTrigger(),
+            ),
+            callable=handler,
+            owner=object(),
+            plugin_id="demo",
+        )
+        dispatcher = HandlerDispatcher(plugin_id="demo", peer=peer, handlers=[loaded])
+
+        class Message:
+            id = "req-2"
+            input = {
+                "handler_id": "demo:plugin.handler",
+                "event": {"text": "hello", "session_id": "s1"},
+            }
+
+        await dispatcher.invoke(Message(), CancelToken())
+
+        assert seen == ["demo"]

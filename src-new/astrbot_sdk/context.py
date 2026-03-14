@@ -53,13 +53,13 @@ class Context:
         cancel_token: CancelToken | None = None,
         logger: Any | None = None,
     ) -> None:
-        proxy = CapabilityProxy(peer)
+        proxy = CapabilityProxy(peer, caller_plugin_id=plugin_id)
         self.peer = peer
         self.llm = LLMClient(proxy)
         self.memory = MemoryClient(proxy)
         self.db = DBClient(proxy)
         self.platform = PlatformClient(proxy)
-        self.http = HTTPClient(proxy, plugin_id=plugin_id)
+        self.http = HTTPClient(proxy)
         self.metadata = MetadataClient(proxy, plugin_id)
         self.plugin_id = plugin_id
         self.logger = logger or base_logger.bind(plugin_id=plugin_id)

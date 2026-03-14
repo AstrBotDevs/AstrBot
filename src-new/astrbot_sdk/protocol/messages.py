@@ -192,6 +192,7 @@ class InvokeMessage(_MessageBase):
         capability: 目标能力名称，格式为 "namespace.action"
         input: 调用输入参数
         stream: 是否期望流式响应，若为 True 将收到 EventMessage 序列
+        caller_plugin_id: 运行时透传的调用方插件 ID，不属于业务 payload
     """
 
     type: Literal["invoke"] = "invoke"
@@ -199,6 +200,7 @@ class InvokeMessage(_MessageBase):
     capability: str
     input: dict[str, Any] = Field(default_factory=dict)
     stream: bool = False
+    caller_plugin_id: str | None = None
 
 
 class EventMessage(_MessageBase):
