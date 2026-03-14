@@ -76,6 +76,10 @@ class CronRoute(Route):
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
 
+            # compatible with python before 3.11
+            if run_at.endswith('Z'):
+                run_at = run_at.replace('Z', '+00:00')
+
             if not session:
                 return jsonify(Response().error("session is required").__dict__)
             if run_once and not run_at:
