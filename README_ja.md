@@ -78,7 +78,7 @@ AstrBot を素早く試したいユーザーで、コマンドラインに慣れ
 ```bash
 uv tool install astrbot
 astrbot init # 初回のみ実行して環境を初期化します
-astrbot
+astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) のインストールが必要です。
