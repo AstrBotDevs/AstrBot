@@ -137,7 +137,18 @@ class AstrMessageEvent(MessageEvent):
             session_id=self.session_id,
         )
         self.unified_msg_origin = str(self.session)
-        self.platform = self.platform_meta or self.platform
+
+    def to_payload(self) -> dict[str, Any]:
+        """Override to guarantee ``platform`` in the wire payload is always a string id.
+
+        ``MessageEvent.to_payload()`` serialises ``self.platform`` verbatim.
+        Since ``AstrMessageEvent`` may receive a ``PlatformMetadata`` object
+        via ``platform_meta``, we normalise it through ``get_platform_id()``
+        so the wire format stays a clean ``str | None``.
+        """
+        payload = super().to_payload()
+        payload["platform"] = self.get_platform_id() or None
+        return payload
 
     @classmethod
     def from_payload(
