@@ -344,6 +344,7 @@ class Peer:
             asyncio.get_running_loop().create_future()
         )
         self._pending_results[request_id] = future
+        # FIXME: 这里会输出乱七八糟的各种东西
         await self._send(
             InitializeMessage(
                 id=request_id,
@@ -354,6 +355,7 @@ class Peer:
                 metadata=handshake_metadata,
             )
         )
+        # FIXME: 👆会输出各种乱七八糟的东西
         result = await future
         if result.kind != "initialize_result":
             raise AstrBotError.protocol_error("initialize 必须收到 initialize_result")

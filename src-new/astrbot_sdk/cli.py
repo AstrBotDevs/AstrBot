@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import sys
 import typing
@@ -45,6 +46,9 @@ BUILD_EXCLUDED_DIRS = {
 BUILD_EXCLUDED_FILES = {
     ".astrbot-worker-state.json",
 }
+INIT_DEFAULT_AUTHOR = ""
+INIT_DEFAULT_PYTHON_VERSION = "3.12"
+INIT_DEFAULT_VERSION = "1.0.0"
 
 
 class _CliPluginValidationError(RuntimeError):
@@ -262,12 +266,6 @@ def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:
         return True
     return False
 
-
-def _slugify_plugin_name(value: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9]+", "_", value).strip("_").lower()
-    return slug or "my_plugin"
-
-
 def _class_name_for_plugin(value: str) -> str:
     parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
     if not parts:
@@ -280,18 +278,62 @@ def _sanitize_build_part(value: str) -> str:
     return sanitized or "artifact"
 
 
-def _render_init_plugin_yaml(*, plugin_name: str, display_name: str) -> str:
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+def _yaml_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _normalize_init_plugin_name(value: str) -> str:
+    normalized = re.sub(r"[\s-]+", "_", value.strip())
+    normalized = re.sub(r"[^a-zA-Z0-9_]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip("_").lower()
+    if not normalized:
+        normalized = "my_plugin"
+
+    prefix = "astrbot_plugin_"
+    if normalized == "astrbot_plugin":
+        return f"{prefix}my_plugin"
+    if normalized.startswith(prefix):
+        suffix = normalized.removeprefix(prefix).strip("_") or "my_plugin"
+        return f"{prefix}{suffix}"
+    return f"{prefix}{normalized}"
+
+
+def _prompt_required_init_name() -> str:
+    while True:
+        value = click.prompt("插件名字", default="", show_default=False).strip()
+        if value:
+            return value
+        click.echo("插件名字不能为空")
+
+
+def _collect_init_inputs(name: str | None) -> tuple[str, str, str]:
+    if name is not None:
+        return name, INIT_DEFAULT_AUTHOR, INIT_DEFAULT_VERSION
+
+    plugin_name = _prompt_required_init_name()
+    author = click.prompt("作者名字", default="", show_default=False).strip()
+    version = click.prompt("版本", default=INIT_DEFAULT_VERSION).strip()
+    return plugin_name, author, version or INIT_DEFAULT_VERSION
+
+
+def _render_init_plugin_yaml(
+    *,
+    plugin_name: str,
+    display_name: str,
+    author: str,
+    version: str,
+    python_version: str,
+) -> str:
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f"""\
         name: {plugin_name}
-        display_name: {display_name}
-        desc: 使用 AstrBot SDK 创建的插件
-        author: your-name
-        version: 0.1.0
+        display_name: {_yaml_string(display_name)}
+        desc: {_yaml_string("使用 AstrBot SDK 创建的插件")}
+        author: {_yaml_string(author)}
+        version: {_yaml_string(version)}
         runtime:
-          python: "{python_version}"
+          python: {_yaml_string(python_version)}
         components:
           - class: main:{class_name}
         """
@@ -394,19 +436,24 @@ def _iter_build_files(plugin_dir: Path, output_dir: Path) -> list[Path]:
     return files
 
 
-def _init_plugin(name: str) -> None:
-    target_dir = Path(name)
+def _init_plugin(name: str | None) -> None:
+    raw_name, author, version = _collect_init_inputs(name)
+    normalized_name = _normalize_init_plugin_name(raw_name)
+    target_dir = Path(normalized_name)
     if target_dir.exists():
         raise _CliPluginValidationError(f"目标目录已存在：{target_dir}")
 
-    plugin_name = _slugify_plugin_name(target_dir.name)
-    display_name = target_dir.name
+    plugin_name = normalized_name
+    display_name = raw_name
     target_dir.mkdir(parents=True, exist_ok=False)
     (target_dir / "tests").mkdir()
     (target_dir / "plugin.yaml").write_text(
         _render_init_plugin_yaml(
             plugin_name=plugin_name,
             display_name=display_name,
+            author=author,
+            version=version,
+            python_version=INIT_DEFAULT_PYTHON_VERSION,
         ),
         encoding="utf-8",
     )
@@ -419,7 +466,7 @@ def _init_plugin(name: str) -> None:
         _render_init_test_py(plugin_name=plugin_name),
         encoding="utf-8",
     )
-    click.echo(f"已创建插件骨架：{target_dir}")
+    click.echo(f"已创建插件骨架：{target_dir.resolve()}")
     click.echo("后续命令：")
     click.echo(f"  astrbot-sdk validate --plugin-dir {target_dir}")
     click.echo(
@@ -485,13 +532,15 @@ def run(plugins_dir: Path) -> None:
 
 
 @cli.command()
-@click.argument("name", type=str)
-def init(name: str) -> None:
-    """Create a new plugin skeleton in the target directory."""
+@click.argument("name", required=False, type=str)
+def init(name: str | None) -> None:
+    """Create a new plugin skeleton; omit name to enter interactive mode."""
     _run_sync_entrypoint(
         lambda: _init_plugin(name),
-        log_message=f"创建插件骨架：{name}",
-        context={"target": Path(name)},
+        log_message=(
+            f"创建插件骨架：{name}" if name is not None else "创建插件骨架：交互模式"
+        ),
+        context={"target": name or "<interactive>"},
     )
 
 
