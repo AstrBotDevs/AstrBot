@@ -177,7 +177,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
-    document.getElementById('content').innerHTML = marked.parse(`{{ text | safe }}`);
+    document.getElementById('content').innerHTML = marked.parse({{ text | tojson }});
   </script>
 
 </body>

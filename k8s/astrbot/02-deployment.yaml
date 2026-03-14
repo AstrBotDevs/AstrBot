@@ -17,10 +17,23 @@ spec:
       labels:
         app: astrbot-standalone
     spec:
+      securityContext:
+        # Keep these IDs in sync with the `astrbot` user declared in Dockerfile.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: astrbot
           image: soulter/astrbot:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: TZ
               value: "Asia/Shanghai"

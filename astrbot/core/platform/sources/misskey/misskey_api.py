@@ -15,6 +15,7 @@ except ImportError as e:
 
 from astrbot.api import logger
 
+from ..websocket_security import to_websocket_url
 from .misskey_utils import FileIDExtractor
 
 # Constants
@@ -56,10 +57,7 @@ class StreamingClient:
 
     async def connect(self) -> bool:
         try:
-            ws_url = self.instance_url.replace("https://", "wss://").replace(
-                "http://",
-                "ws://",
-            )
+            ws_url = to_websocket_url(self.instance_url, label="Misskey instance URL")
             ws_url += f"/streaming?i={self.access_token}"
 
             self.websocket = await websockets.connect(

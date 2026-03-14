@@ -129,7 +129,6 @@ class NetworkRenderStrategy(RenderStrategy):
         if not template_name:
             template_name = "base"
         tmpl_str = await self.get_template(name=template_name)
-        text = text.replace("`", "\\`")
         return await self.render_custom_template(
             tmpl_str,
             {"text": text, "version": f"v{VERSION}"},
