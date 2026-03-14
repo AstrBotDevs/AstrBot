@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 echo "[1/3] Running targeted dedup tests"
 uv run pytest -q tests/test_tool_loop_agent_runner.py -k \
-  "repeated_tool_output_is_deduplicated_in_context or repeated_tool_output_dedup_can_be_disabled"
+  "repeated_tool_output_is_deduplicated_in_context or repeated_tool_output_dedup_can_be_disabled or missing_required_tool_args"
 
 echo "[2/3] Verifying default config exposes dedup toggle"
 uv run python - <<'PY'

@@ -73,6 +73,26 @@ class MockProvider(Provider):
         yield response
 
 
+class MockMissingRequiredArgProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"max_results": 5}],
+            tools_call_ids=["call_missing_required"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockToolExecutor:
     """模拟工具执行器"""
 
@@ -191,9 +211,36 @@ def tool_set():
 
 
 @pytest.fixture
+def tool_set_required_query():
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer"},
+            },
+            "required": ["query"],
+        },
+        handler=AsyncMock(),
+    )
+    return ToolSet(tools=[tool])
+
+
+@pytest.fixture
 def provider_request(tool_set):
     """创建测试用的ProviderRequest"""
     return ProviderRequest(prompt="请帮我查询信息", func_tool=tool_set, contexts=[])
+
+
+@pytest.fixture
+def provider_request_required_query(tool_set_required_query):
+    return ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=tool_set_required_query,
+        contexts=[],
+    )
 
 
 @pytest.fixture
@@ -368,6 +415,36 @@ async def test_repeated_tool_output_dedup_can_be_disabled(
     assert not any(
         content.startswith("[tool-result-deduplicated]") for content in tool_contents
     )
+
+
+@pytest.mark.asyncio
+async def test_missing_required_tool_args_are_reported_without_handler_typeerror(
+    runner, provider_request_required_query, mock_tool_executor, mock_hooks
+):
+    provider = MockMissingRequiredArgProvider()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request_required_query,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert provider_request_required_query.tool_calls_result is not None
+    assert isinstance(provider_request_required_query.tool_calls_result, list)
+    contents = [
+        str(seg.content)
+        for tcr in provider_request_required_query.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert contents
+    assert any("Missing required tool arguments: query" in c for c in contents)
+    assert not any("Tool handler parameter mismatch" in c for c in contents)
 
 
 @pytest.mark.asyncio

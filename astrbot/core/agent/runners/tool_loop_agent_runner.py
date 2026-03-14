@@ -658,6 +658,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             preview=preview,
         )
 
+    @staticmethod
+    def _find_missing_required_tool_params(
+        *,
+        tool: T.Any,
+        provided_params: dict[str, T.Any],
+    ) -> list[str]:
+        params_schema = getattr(tool, "parameters", None)
+        if not isinstance(params_schema, dict):
+            return []
+        required = params_schema.get("required")
+        if not isinstance(required, list):
+            return []
+
+        missing: list[str] = []
+        for field_name in required:
+            if not isinstance(field_name, str):
+                continue
+            if field_name not in provided_params:
+                missing.append(field_name)
+                continue
+            value = provided_params.get(field_name)
+            if value is None:
+                missing.append(field_name)
+                continue
+            if isinstance(value, str) and not value.strip():
+                missing.append(field_name)
+        return missing
+
     @override
     async def step(self):
         """Process a single step of the agent.
@@ -1065,6 +1093,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
+
+                missing_required = self._find_missing_required_tool_params(
+                    tool=func_tool,
+                    provided_params=valid_params,
+                )
+                if missing_required:
+                    missing_text = ", ".join(missing_required)
+                    logger.warning(
+                        "工具 %s 缺少必填参数: %s。原始参数: %s",
+                        func_tool_name,
+                        missing_text,
+                        func_tool_args,
+                    )
+                    _append_tool_call_result(
+                        func_tool_id,
+                        (
+                            "error: Missing required tool arguments: "
+                            f"{missing_text}. "
+                            "Please call this tool again with all required arguments."
+                        ),
+                        tool_name=func_tool_name,
+                        tool_args=func_tool_args,
+                    )
+                    continue
 
                 try:
                     await self.agent_hooks.on_tool_start(
