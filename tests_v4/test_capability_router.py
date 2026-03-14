@@ -335,7 +335,7 @@ class TestCapabilityRouterExecute:
         token = CancelToken()
 
         # Missing required field
-        with pytest.raises(AstrBotError, match="缺少必填字段"):
+        with pytest.raises(AstrBotError) as raised:
             await router.execute(
                 "test.cap",
                 {},
@@ -343,6 +343,9 @@ class TestCapabilityRouterExecute:
                 cancel_token=token,
                 request_id="req-1",
             )
+        message = str(raised.value)
+        assert "capability 'test.cap' 的输入校验失败" in message
+        assert "缺少必填字段：name" in message
 
     @pytest.mark.asyncio
     async def test_execute_validates_output_schema(self):
@@ -363,7 +366,7 @@ class TestCapabilityRouterExecute:
 
         token = CancelToken()
 
-        with pytest.raises(AstrBotError, match="缺少必填字段"):
+        with pytest.raises(AstrBotError) as raised:
             await router.execute(
                 "test.cap",
                 {},
@@ -371,6 +374,9 @@ class TestCapabilityRouterExecute:
                 cancel_token=token,
                 request_id="req-1",
             )
+        message = str(raised.value)
+        assert "capability 'test.cap' 的输出校验失败" in message
+        assert "缺少必填字段：result" in message
 
 
 class TestCapabilityRouterDBWatch:

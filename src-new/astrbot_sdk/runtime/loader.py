@@ -131,6 +131,13 @@ class LoadedPlugin:
     instances: list[Any] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class _ResolvedComponent:
+    cls: type[Any]
+    class_path: str
+    index: int
+
+
 def _iter_handler_names(instance: Any) -> list[str]:
     handler_names = getattr(instance.__class__, "__handlers__", ())
     if handler_names:
@@ -143,6 +150,14 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
     known_names = set(handler_names)
     extra_names = sorted(name for name in dir(instance) if name not in known_names)
     return [*handler_names, *extra_names]
+
+
+def _plugin_context(plugin: PluginSpec) -> str:
+    return f"插件 '{plugin.name}'（{plugin.manifest_path}）"
+
+
+def _component_context(plugin: PluginSpec, *, class_path: str, index: int) -> str:
+    return f"{_plugin_context(plugin)} 的 components[{index}].class='{class_path}'"
 
 
 def _resolve_handler_candidate(instance: Any, name: str) -> tuple[Any, Any] | None:
@@ -309,25 +324,48 @@ def _is_new_star_component(cls: type[Any]) -> bool:
     return bool(getattr(cls, "__astrbot_is_new_star__", False))
 
 
-def _plugin_component_classes(plugin: PluginSpec) -> list[type[Any]]:
+def _plugin_component_classes(plugin: PluginSpec) -> list[_ResolvedComponent]:
     """解析插件组件类列表。"""
     components = plugin.manifest_data.get("components") or []
     if not isinstance(components, list):
         return []
 
-    classes: list[type[Any]] = []
-    for component in components:
+    classes: list[_ResolvedComponent] = []
+    for index, component in enumerate(components):
         if not isinstance(component, dict):
-            continue
+            raise ValueError(
+                f"{_plugin_context(plugin)} 的 components[{index}] 必须是 object。"
+            )
         class_path = component.get("class")
         if not isinstance(class_path, str) or ":" not in class_path:
-            continue
+            raise ValueError(
+                f"{_plugin_context(plugin)} 的 components[{index}].class "
+                "必须是 '<module>:<Class>'。"
+            )
         try:
             cls = import_string(class_path, plugin.plugin_dir)
-            if isinstance(cls, type):
-                classes.append(cls)
-        except Exception:
-            continue
+        except Exception as exc:
+            raise ValueError(
+                f"{_component_context(plugin, class_path=class_path, index=index)} "
+                f"加载失败：{exc}"
+            ) from exc
+        if not isinstance(cls, type):
+            raise ValueError(
+                f"{_component_context(plugin, class_path=class_path, index=index)} "
+                "解析结果不是类，请检查导出名称。"
+            )
+        classes.append(
+            _ResolvedComponent(
+                cls=cls,
+                class_path=class_path,
+                index=index,
+            )
+        )
+    if not classes:
+        raise ValueError(
+            f"{_plugin_context(plugin)} 未声明任何可加载组件。"
+            "请检查 plugin.yaml 中的 components 配置。"
+        )
     return classes
 
 
@@ -338,7 +376,7 @@ def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
     requirements_path = plugin_dir / "requirements.txt"
 
     if not manifest_path.exists():
-        raise ValueError(f"missing {PLUGIN_MANIFEST_FILE}")
+        raise ValueError(f"插件目录 '{plugin_dir}' 缺少 {PLUGIN_MANIFEST_FILE}。")
 
     manifest_data = _read_yaml(manifest_path)
     runtime = manifest_data.get("runtime") or {}
@@ -357,29 +395,33 @@ def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
 def validate_plugin_spec(plugin: PluginSpec) -> None:
     """校验单个插件规范，供 CLI 和发现流程复用。"""
     manifest_data = plugin.manifest_data
+    manifest_label = f"插件 '{plugin.name}'（{plugin.manifest_path}）"
 
     if not plugin.requirements_path.exists():
-        raise ValueError("missing requirements.txt")
+        raise ValueError(f"{manifest_label} 缺少 requirements.txt。")
 
     raw_name = manifest_data.get("name")
     if not isinstance(raw_name, str) or not raw_name:
-        raise ValueError("plugin name is required")
+        raise ValueError(f"{manifest_label} 缺少 name。")
 
     raw_runtime = manifest_data.get("runtime") or {}
     raw_python = raw_runtime.get("python")
     if not isinstance(raw_python, str) or not raw_python:
-        raise ValueError("runtime.python is required")
+        raise ValueError(f"{manifest_label} 缺少 runtime.python。")
 
     components = manifest_data.get("components")
     if not isinstance(components, list):
-        raise ValueError("components must be a list")
+        raise ValueError(f"{manifest_label} 的 components 必须是数组。")
 
     for index, component in enumerate(components):
         if not isinstance(component, dict):
-            raise ValueError(f"components[{index}] must be an object")
+            raise ValueError(f"{manifest_label} 的 components[{index}] 必须是 object。")
         class_path = component.get("class")
         if not isinstance(class_path, str) or ":" not in class_path:
-            raise ValueError(f"components[{index}].class must be '<module>:<Class>'")
+            raise ValueError(
+                f"{manifest_label} 的 components[{index}].class "
+                "必须是 '<module>:<Class>'。"
+            )
 
 
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
@@ -548,13 +590,21 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     handlers: list[LoadedHandler] = []
     capabilities: list[LoadedCapability] = []
 
-    for component_cls in _plugin_component_classes(plugin):
+    for resolved_component in _plugin_component_classes(plugin):
+        component_cls = resolved_component.cls
         if not _is_new_star_component(component_cls):
             raise ValueError(
-                f"组件 {component_cls.__name__} 不是 v4 Star 组件。"
-                "旧版插件请使用 AstrBot 主程序运行。"
+                f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
+                f"解析到的类 {component_cls.__module__}.{component_cls.__qualname__} "
+                "不是 v4 Star 组件。请继承 astrbot_sdk.Star。"
             )
-        instance = component_cls()
+        try:
+            instance = component_cls()
+        except Exception as exc:
+            raise ValueError(
+                f"{_component_context(plugin, class_path=resolved_component.class_path, index=resolved_component.index)} "
+                f"实例化失败：{exc}"
+            ) from exc
         instances.append(instance)
 
         for name in _iter_discoverable_names(instance):

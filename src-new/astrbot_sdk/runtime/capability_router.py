@@ -260,7 +260,12 @@ class CapabilityRouter:
         if registration is None:
             raise AstrBotError.capability_not_found(capability)
 
-        self._validate_schema(registration.descriptor.input_schema, payload)
+        self._validate_schema_with_context(
+            capability=capability,
+            phase="输入",
+            schema=registration.descriptor.input_schema,
+            payload=payload,
+        )
         if stream:
             if registration.stream_handler is None:
                 raise AstrBotError.invalid_input(f"{capability} 不支持 stream=true")
@@ -286,7 +291,12 @@ class CapabilityRouter:
         if registration.call_handler is None:
             raise AstrBotError.invalid_input(f"{capability} 只能以 stream=true 调用")
         output = await registration.call_handler(request_id, payload, cancel_token)
-        self._validate_schema(registration.descriptor.output_schema, output)
+        self._validate_schema_with_context(
+            capability=capability,
+            phase="输出",
+            schema=registration.descriptor.output_schema,
+            payload=output,
+        )
         return output
 
     def _wrap_stream_execution(
@@ -296,7 +306,12 @@ class CapabilityRouter:
     ) -> StreamExecution:
         def validated_finalize(chunks: list[dict[str, Any]]) -> dict[str, Any]:
             output = execution.finalize(chunks)
-            self._validate_schema(descriptor.output_schema, output)
+            self._validate_schema_with_context(
+                capability=descriptor.name,
+                phase="输出",
+                schema=descriptor.output_schema,
+                payload=output,
+            )
             return output
 
         return StreamExecution(
@@ -911,6 +926,26 @@ class CapabilityRouter:
             return
         self._validate_value(schema, payload, path="")
 
+    def _validate_schema_with_context(
+        self,
+        *,
+        capability: str,
+        phase: str,
+        schema: dict[str, Any] | None,
+        payload: Any,
+    ) -> None:
+        try:
+            self._validate_schema(schema, payload)
+        except AstrBotError as exc:
+            if exc.code != "invalid_input":
+                raise
+            raise AstrBotError.invalid_input(
+                f"capability '{capability}' 的{phase}校验失败：{exc.message}",
+                hint=(
+                    f"请检查 capability '{capability}' 的{phase.lower()}是否符合声明的 schema"
+                ),
+            ) from exc
+
     def _validate_value(
         self,
         schema: dict[str, Any],
@@ -929,20 +964,26 @@ class CapabilityRouter:
                 except AstrBotError:
                     continue
             raise AstrBotError.invalid_input(
-                f"{self._field_label(path)} 不符合允许的 schema 约束"
+                f"{self._field_label(path)} 不符合允许的 schema 约束，"
+                f"实际收到 {self._value_type_name(value)}"
             )
 
         enum = schema.get("enum")
         if isinstance(enum, list) and value not in enum:
-            raise AstrBotError.invalid_input(f"{self._field_label(path)} 必须是 {enum}")
+            raise AstrBotError.invalid_input(
+                f"{self._field_label(path)} 必须是 {enum}，实际收到 {value!r}"
+            )
 
         schema_type = schema.get("type")
         if schema_type == "object":
             if not isinstance(value, dict):
                 if not path:
-                    raise AstrBotError.invalid_input("输入必须是 object")
+                    raise AstrBotError.invalid_input(
+                        f"输入必须是 object，实际收到 {self._value_type_name(value)}"
+                    )
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 object"
+                    f"{self._field_label(path)} 必须是 object，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             properties = schema.get("properties", {})
             required_fields = schema.get("required", [])
@@ -973,7 +1014,8 @@ class CapabilityRouter:
         if schema_type == "array":
             if not isinstance(value, list):
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 array"
+                    f"{self._field_label(path)} 必须是 array，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             item_schema = schema.get("items")
             if isinstance(item_schema, dict):
@@ -988,35 +1030,40 @@ class CapabilityRouter:
         if schema_type == "string":
             if not isinstance(value, str):
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 string"
+                    f"{self._field_label(path)} 必须是 string，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             return
 
         if schema_type == "integer":
             if not isinstance(value, int) or isinstance(value, bool):
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 integer"
+                    f"{self._field_label(path)} 必须是 integer，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             return
 
         if schema_type == "number":
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 number"
+                    f"{self._field_label(path)} 必须是 number，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             return
 
         if schema_type == "boolean":
             if not isinstance(value, bool):
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 boolean"
+                    f"{self._field_label(path)} 必须是 boolean，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             return
 
         if schema_type == "null":
             if value is not None:
                 raise AstrBotError.invalid_input(
-                    f"{self._field_label(path)} 必须是 null"
+                    f"{self._field_label(path)} 必须是 null，"
+                    f"实际收到 {self._value_type_name(value)}"
                 )
             return
 
@@ -1061,3 +1108,21 @@ class CapabilityRouter:
             isinstance(candidate, dict) and candidate.get("type") == "null"
             for candidate in any_of
         )
+
+    @staticmethod
+    def _value_type_name(value: Any) -> str:
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, int):
+            return "integer"
+        if isinstance(value, float):
+            return "number"
+        if isinstance(value, str):
+            return "string"
+        if isinstance(value, list):
+            return "array"
+        if isinstance(value, dict):
+            return "object"
+        return type(value).__name__

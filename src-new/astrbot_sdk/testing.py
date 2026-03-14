@@ -41,6 +41,7 @@ from .runtime.loader import (
     load_plugin,
     load_plugin_config,
     load_plugin_spec,
+    validate_plugin_spec,
 )
 from .star import Star
 
@@ -563,6 +564,7 @@ class PluginHarness:
             return
         try:
             self.plugin = load_plugin_spec(self.config.plugin_dir)
+            validate_plugin_spec(self.plugin)
             self.loaded_plugin = load_plugin(self.plugin)
         except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
             raise _PluginLoadError(str(exc)) from exc

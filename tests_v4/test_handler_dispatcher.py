@@ -32,8 +32,12 @@ class TestHandlerDispatcherArgumentValidation:
         async def bad_handler(event: MessageEvent, missing: str) -> None:
             return None
 
-        with pytest.raises(TypeError, match="必填参数 'missing' 无法注入"):
+        with pytest.raises(TypeError) as raised:
             dispatcher._build_args(bad_handler, event, ctx, args={})
+        message = str(raised.value)
+        assert "插件 'demo' 的 handler" in message
+        assert "必填参数 'missing' 无法注入" in message
+        assert "MessageEvent / Context" in message
 
     def test_capability_dispatcher_raises_for_uninjectable_required_param(self):
         peer = _peer()
@@ -50,13 +54,17 @@ class TestHandlerDispatcherArgumentValidation:
         )
         ctx = Context(peer=peer, plugin_id="demo", cancel_token=CancelToken())
 
-        with pytest.raises(TypeError, match="必填参数 'missing' 无法注入"):
+        with pytest.raises(TypeError) as raised:
             dispatcher._build_args(
                 capability.callable,
                 payload={},
                 ctx=ctx,
                 cancel_token=CancelToken(),
             )
+        message = str(raised.value)
+        assert "插件 'demo' 的 capability" in message
+        assert "必填参数 'missing' 无法注入" in message
+        assert "Context / CancelToken / dict" in message
 
 
 class TestHandlerDispatcherInvoke:
@@ -85,8 +93,11 @@ class TestHandlerDispatcherInvoke:
                 "event": {"text": "hello", "session_id": "s1"},
             }
 
-        with pytest.raises(TypeError, match="必填参数 'missing' 无法注入"):
+        with pytest.raises(TypeError) as raised:
             await dispatcher.invoke(Message(), CancelToken())
+        message = str(raised.value)
+        assert "demo:plugin.bad_handler" in message
+        assert "必填参数 'missing' 无法注入" in message
 
     @pytest.mark.asyncio
     async def test_invoke_binds_runtime_caller_plugin_id_for_raw_peer_calls(self):

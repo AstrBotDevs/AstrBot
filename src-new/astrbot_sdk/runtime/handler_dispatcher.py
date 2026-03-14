@@ -106,7 +106,14 @@ class HandlerDispatcher:
     ) -> None:
         try:
             result = loaded.callable(
-                *self._build_args(loaded.callable, event, ctx, args)
+                *self._build_args(
+                    loaded.callable,
+                    event,
+                    ctx,
+                    args,
+                    plugin_id=self._resolve_plugin_id(loaded),
+                    handler_ref=loaded.descriptor.id,
+                )
             )
             if inspect.isasyncgen(result):
                 async for item in result:
@@ -133,6 +140,9 @@ class HandlerDispatcher:
         event: MessageEvent,
         ctx: Context,
         args: dict[str, Any] | None = None,
+        *,
+        plugin_id: str | None = None,
+        handler_ref: str | None = None,
     ) -> list[Any]:
         """构建 handler 参数列表。"""
         from loguru import logger
@@ -180,8 +190,13 @@ class HandlerDispatcher:
                     parameter.name,
                 )
                 raise TypeError(
-                    f"handler '{handler.__name__}' 的必填参数 "
-                    f"'{parameter.name}' 无法注入"
+                    self._format_handler_injection_error(
+                        handler=handler,
+                        parameter_name=parameter.name,
+                        plugin_id=plugin_id,
+                        handler_ref=handler_ref,
+                        args=args,
+                    )
                 )
             else:
                 injected_args.append(injected)
@@ -218,6 +233,36 @@ class HandlerDispatcher:
             return ctx
 
         return None
+
+    def _format_handler_injection_error(
+        self,
+        *,
+        handler,
+        parameter_name: str,
+        plugin_id: str | None,
+        handler_ref: str | None,
+        args: dict[str, Any],
+    ) -> str:
+        plugin_text = plugin_id or self._plugin_id
+        target = handler_ref or getattr(handler, "__name__", "<anonymous>")
+        arg_keys = sorted(str(key) for key in args.keys())
+        arg_keys_text = ", ".join(arg_keys) if arg_keys else "<none>"
+        return (
+            f"插件 '{plugin_text}' 的 handler '{target}' 参数注入失败："
+            f"必填参数 '{parameter_name}' 无法注入。"
+            f"签名: {getattr(handler, '__name__', '<anonymous>')}"
+            f"{self._callable_signature(handler)}。"
+            "当前支持按类型注入 MessageEvent / Context，"
+            "按参数名注入 event / ctx / context，"
+            f"以及 args 中现有键：{arg_keys_text}。"
+        )
+
+    @staticmethod
+    def _callable_signature(handler) -> str:
+        try:
+            return str(inspect.signature(handler))
+        except (TypeError, ValueError):
+            return "(...)"
 
     async def _send_result(
         self,
@@ -325,7 +370,14 @@ class CapabilityDispatcher:
         stream: bool,
     ) -> dict[str, Any] | StreamExecution:
         result = loaded.callable(
-            *self._build_args(loaded.callable, payload, ctx, cancel_token)
+            *self._build_args(
+                loaded.callable,
+                payload,
+                ctx,
+                cancel_token,
+                plugin_id=self._resolve_plugin_id(loaded),
+                capability_name=loaded.descriptor.name,
+            )
         )
         if stream:
             if inspect.isasyncgen(result):
@@ -355,6 +407,9 @@ class CapabilityDispatcher:
         payload: dict[str, Any],
         ctx: Context,
         cancel_token: CancelToken,
+        *,
+        plugin_id: str | None = None,
+        capability_name: str | None = None,
     ) -> list[Any]:
         signature = inspect.signature(handler)
         args: list[Any] = []
@@ -389,8 +444,13 @@ class CapabilityDispatcher:
                 if parameter.default is not parameter.empty:
                     continue
                 raise TypeError(
-                    f"capability '{handler.__name__}' 的必填参数 "
-                    f"'{parameter.name}' 无法注入"
+                    self._format_capability_injection_error(
+                        handler=handler,
+                        parameter_name=parameter.name,
+                        plugin_id=plugin_id,
+                        capability_name=capability_name,
+                        payload=payload,
+                    )
                 )
             args.append(injected)
 
@@ -422,6 +482,29 @@ class CapabilityDispatcher:
         if param_type is dict or origin is dict:
             return payload
         return None
+
+    def _format_capability_injection_error(
+        self,
+        *,
+        handler,
+        parameter_name: str,
+        plugin_id: str | None,
+        capability_name: str | None,
+        payload: dict[str, Any],
+    ) -> str:
+        plugin_text = plugin_id or self._plugin_id
+        target = capability_name or getattr(handler, "__name__", "<anonymous>")
+        payload_keys = sorted(str(key) for key in payload.keys())
+        payload_keys_text = ", ".join(payload_keys) if payload_keys else "<none>"
+        return (
+            f"插件 '{plugin_text}' 的 capability '{target}' 参数注入失败："
+            f"必填参数 '{parameter_name}' 无法注入。"
+            f"签名: {getattr(handler, '__name__', '<anonymous>')}"
+            f"{HandlerDispatcher._callable_signature(handler)}。"
+            "当前支持按类型注入 Context / CancelToken / dict，"
+            "按参数名注入 ctx / context / payload / input / data / cancel_token / token，"
+            f"以及 payload 中现有键：{payload_keys_text}。"
+        )
 
     async def _iterate_generator(
         self,

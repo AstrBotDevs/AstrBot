@@ -56,11 +56,16 @@ class AstrBotError(Exception):
         )
 
     @classmethod
-    def invalid_input(cls, message: str) -> "AstrBotError":
+    def invalid_input(
+        cls,
+        message: str,
+        *,
+        hint: str = "请检查调用参数",
+    ) -> "AstrBotError":
         return cls(
             code=ErrorCodes.INVALID_INPUT,
             message=message,
-            hint="请检查调用参数",
+            hint=hint,
             retryable=False,
         )
 
@@ -83,11 +88,16 @@ class AstrBotError(Exception):
         )
 
     @classmethod
-    def internal_error(cls, message: str) -> "AstrBotError":
+    def internal_error(
+        cls,
+        message: str,
+        *,
+        hint: str = "请联系插件作者",
+    ) -> "AstrBotError":
         return cls(
             code=ErrorCodes.INTERNAL_ERROR,
             message=message,
-            hint="请联系插件作者",
+            hint=hint,
             retryable=False,
         )
 

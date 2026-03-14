@@ -85,6 +85,50 @@ async def test_plugin_harness_supports_metadata_and_http_commands() -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_plugin_harness_reports_component_load_errors(tmp_path: Path) -> None:
+    from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness, _PluginLoadError
+
+    plugin_dir = tmp_path / "broken-plugin"
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+    (plugin_dir / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                "name: broken_demo",
+                "display_name: Broken Demo",
+                "author: test",
+                "version: 0.1.0",
+                "runtime:",
+                '  python: "3.13"',
+                "components:",
+                "  - class: main:MissingComponent",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "main.py").write_text(
+        "\n".join(
+            [
+                "from astrbot_sdk import Star",
+                "",
+                "class PresentComponent(Star):",
+                "    pass",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    harness = PluginHarness(LocalRuntimeConfig(plugin_dir=plugin_dir))
+    with pytest.raises(_PluginLoadError) as raised:
+        await harness.start()
+    message = str(raised.value)
+    assert "插件 'broken_demo'" in message
+    assert "components[0].class='main:MissingComponent'" in message
+    assert "加载失败" in message
+
+
 def _write_watch_plugin(plugin_dir: Path, *, reply_text: str) -> None:
     plugin_dir.mkdir(parents=True, exist_ok=True)
     (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
