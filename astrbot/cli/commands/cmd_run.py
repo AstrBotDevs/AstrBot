@@ -18,13 +18,17 @@ def _dashboard_enabled(astrbot_root: Path) -> bool:
     """
     config_path = astrbot_root / "data" / "cmd_config.json"
     try:
-        conf_str = config_path.read_text(encoding="utf-8-sig")
-        if conf_str.startswith("\ufeff"):
-            conf_str = conf_str[1:]
-        conf = json.loads(conf_str)
-        return conf.get("dashboard", {}).get("enable", True)
-    except Exception:
+        conf = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
         return True
+
+    if not isinstance(conf, dict):
+        return True
+    dashboard = conf.get("dashboard", {})
+    if not isinstance(dashboard, dict):
+        return True
+    enabled = dashboard.get("enable", True)
+    return enabled if isinstance(enabled, bool) else True
 
 
 async def _check_dashboard_if_enabled(astrbot_root: Path) -> None:

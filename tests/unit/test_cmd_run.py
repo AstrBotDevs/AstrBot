@@ -26,6 +26,15 @@ def test_dashboard_enabled_falls_back_to_true_on_invalid_json(tmp_path):
     assert cmd_run._dashboard_enabled(tmp_path) is True
 
 
+def test_dashboard_enabled_falls_back_to_true_when_config_missing(tmp_path):
+    assert cmd_run._dashboard_enabled(tmp_path) is True
+
+
+def test_dashboard_enabled_falls_back_to_true_when_root_is_not_object(tmp_path):
+    _write_cmd_config(tmp_path, "[]")
+    assert cmd_run._dashboard_enabled(tmp_path) is True
+
+
 @pytest.mark.asyncio
 async def test_check_dashboard_if_enabled_skips_when_disabled(monkeypatch, tmp_path):
     _write_cmd_config(tmp_path, '{"dashboard":{"enable":false}}')
