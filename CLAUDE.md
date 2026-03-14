@@ -63,6 +63,7 @@
 - 2026-03-14: If the repo is being simplified to a pure v4 SDK, remove or lazily isolate every `_legacy_*` import from public entrypoints before deleting the compat files. Leaving `testing.py` or `cli.py` with eager `_legacy_runtime` imports makes `import astrbot_sdk.testing` and `python -m astrbot_sdk --help` fail immediately, and install-only entrypoint tests can miss that regression.
 - 2026-03-14: `MemoryClient` 新增 `save_with_ttl()` / `get_many()` / `delete_many()` / `stats()` 方法，对应的 protocol schema 和 CapabilityRouter 处理器已同步添加。测试实现中 TTL 仅记录不实际过期，实际过期由后端实现。
 - 2026-03-14: `SupervisorRuntime._register_plugin_capability()` 改进冲突处理：保留命名空间冲突直接跳过，非保留命名空间冲突自动添加插件名前缀（如 `plugin_name.capability_name`）解决。
+- 2026-03-14: 本地 `dev --watch`/重复加载同一路径插件时，不能只依赖 `import_string()` 的跨插件根包冲突清理。即使缓存模块仍然属于当前插件目录，`sys.modules` 也会让 `load_plugin()` 继续复用旧代码；热重载前必须先按插件目录清掉已加载模块缓存。
 
 # 开发命令
 

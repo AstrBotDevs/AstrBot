@@ -8,6 +8,7 @@ import sys
 import typing
 import zipfile
 from collections.abc import Coroutine
+from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -38,6 +39,7 @@ BUILD_EXCLUDED_DIRS = {
 BUILD_EXCLUDED_FILES = {
     ".astrbot-worker-state.json",
 }
+WATCH_POLL_INTERVAL_SECONDS = 0.5
 
 
 class _CliPluginValidationError(RuntimeError):
@@ -50,6 +52,25 @@ class _CliPluginLoadError(RuntimeError):
 
 class _CliPluginExecutionError(RuntimeError):
     """CLI 侧的本地开发插件执行失败。"""
+
+
+@dataclass(slots=True)
+class _PluginTreeWatcher:
+    plugin_dir: Path
+    snapshot: dict[str, tuple[int, int]] = field(init=False, default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.snapshot = _snapshot_watch_files(self.plugin_dir)
+
+    def poll_changes(self) -> list[str]:
+        current = _snapshot_watch_files(self.plugin_dir)
+        changed = sorted(
+            path
+            for path in set(self.snapshot) | set(current)
+            if self.snapshot.get(path) != current.get(path)
+        )
+        self.snapshot = current
+        return changed
 
 
 def setup_logger(verbose: bool = False) -> None:
@@ -168,16 +189,248 @@ def _render_cli_error(
         click.echo(f"{key}: {value}", err=True)
 
 
+def _render_nonfatal_dev_error(
+    exc: Exception,
+    *,
+    context: dict[str, Any] | None = None,
+) -> None:
+    exit_code, error_code, hint = _classify_cli_exception(exc)
+    _render_cli_error(
+        error_code=error_code,
+        message=str(exc),
+        hint=hint,
+        context=context,
+    )
+    if exit_code == EXIT_UNEXPECTED:
+        logger.exception("watch 模式收到未分类异常")
+
+
+def _iter_watch_files(plugin_dir: Path) -> typing.Iterator[Path]:
+    root = plugin_dir.resolve()
+    for path in sorted(root.rglob("*")):
+        if path.is_dir():
+            continue
+        relative = path.relative_to(root)
+        if any(part in BUILD_EXCLUDED_DIRS for part in relative.parts[:-1]):
+            continue
+        if relative.name in BUILD_EXCLUDED_FILES:
+            continue
+        if path.suffix in {".pyc", ".pyo"}:
+            continue
+        yield path
+
+
+def _snapshot_watch_files(plugin_dir: Path) -> dict[str, tuple[int, int]]:
+    root = plugin_dir.resolve()
+    snapshot: dict[str, tuple[int, int]] = {}
+    for path in _iter_watch_files(root):
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        snapshot[path.relative_to(root).as_posix()] = (
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
+    return snapshot
+
+
+def _format_watch_changes(changes: list[str], *, limit: int = 5) -> str:
+    if not changes:
+        return "未知文件"
+    preview = changes[:limit]
+    text = ", ".join(preview)
+    if len(changes) > limit:
+        text += f" 等 {len(changes)} 个文件"
+    return text
+
+
+class _ReloadableLocalDevRunner:
+    def __init__(
+        self,
+        *,
+        plugin_dir: Path,
+        state: dict[str, Any],
+        plugin_load_error: type[Exception],
+        plugin_execution_error: type[Exception],
+        local_runtime_config,
+        plugin_harness,
+        stdout_platform_sink,
+    ) -> None:
+        self.plugin_dir = plugin_dir
+        self.state = state
+        self._plugin_load_error = plugin_load_error
+        self._plugin_execution_error = plugin_execution_error
+        self._local_runtime_config = local_runtime_config
+        self._plugin_harness = plugin_harness
+        self._stdout_platform_sink = stdout_platform_sink
+        self._harness = None
+        self._lock = asyncio.Lock()
+
+    async def close(self) -> None:
+        async with self._lock:
+            await self._stop_harness()
+
+    async def reload(self) -> bool:
+        async with self._lock:
+            await self._stop_harness()
+            harness = self._plugin_harness(
+                self._local_runtime_config(
+                    plugin_dir=self.plugin_dir,
+                    session_id=str(self.state["session_id"]),
+                    user_id=str(self.state["user_id"]),
+                    platform=str(self.state["platform"]),
+                    group_id=typing.cast(str | None, self.state["group_id"]),
+                    event_type=str(self.state["event_type"]),
+                ),
+                platform_sink=self._stdout_platform_sink(stream=sys.stdout),
+            )
+            try:
+                await harness.start()
+            except self._plugin_load_error as exc:
+                _render_nonfatal_dev_error(
+                    _CliPluginLoadError(str(exc)),
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            except self._plugin_execution_error as exc:
+                _render_nonfatal_dev_error(
+                    _CliPluginExecutionError(str(exc)),
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            self._harness = harness
+            return True
+
+    async def dispatch_text(self, text: str) -> bool:
+        async with self._lock:
+            if self._harness is None:
+                click.echo("当前插件未成功加载，等待下一次文件变更后重试。")
+                return False
+            try:
+                await self._harness.dispatch_text(
+                    text,
+                    session_id=str(self.state["session_id"]),
+                    user_id=str(self.state["user_id"]),
+                    platform=str(self.state["platform"]),
+                    group_id=typing.cast(str | None, self.state["group_id"]),
+                    event_type=str(self.state["event_type"]),
+                )
+            except (self._plugin_load_error, self._plugin_execution_error) as exc:
+                _render_nonfatal_dev_error(
+                    _CliPluginExecutionError(str(exc)),
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            except Exception as exc:
+                _render_nonfatal_dev_error(
+                    exc,
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            return True
+
+    async def _stop_harness(self) -> None:
+        if self._harness is None:
+            return
+        try:
+            await self._harness.stop()
+        finally:
+            self._harness = None
+
+
+async def _run_local_dev_watch(
+    *,
+    runner: _ReloadableLocalDevRunner,
+    event_text: str | None,
+    interactive: bool,
+    watch_poll_interval: float,
+    max_watch_reloads: int | None = None,
+) -> None:
+    watcher = _PluginTreeWatcher(runner.plugin_dir)
+    reload_count = 0
+
+    async def reload_and_maybe_rerun(*, announce: str | None) -> None:
+        if announce:
+            click.echo(announce)
+        if not await runner.reload():
+            return
+        if event_text is not None:
+            await runner.dispatch_text(event_text)
+
+    async def watch_loop(stop_event: asyncio.Event) -> None:
+        nonlocal reload_count
+        while not stop_event.is_set():
+            await asyncio.sleep(watch_poll_interval)
+            changes = watcher.poll_changes()
+            if not changes:
+                continue
+            await reload_and_maybe_rerun(
+                announce=(
+                    f"检测到文件变更，重新加载插件：{_format_watch_changes(changes)}"
+                )
+            )
+            reload_count += 1
+            if max_watch_reloads is not None and reload_count >= max_watch_reloads:
+                stop_event.set()
+                return
+
+    stop_event = asyncio.Event()
+    watch_task: asyncio.Task[None] | None = None
+    try:
+        await reload_and_maybe_rerun(
+            announce=(
+                "watch 模式已启动，监听插件目录变更。"
+                if event_text is not None
+                else "watch 模式已启动，监听插件目录变更并按需热重载。"
+            )
+        )
+        if max_watch_reloads == 0:
+            return
+        watch_task = asyncio.create_task(watch_loop(stop_event))
+        if interactive:
+            click.echo(
+                "本地交互模式已启动。可用命令：/session <id> /user <id> /platform <name> /group <id> /private /event <type> /exit"
+            )
+            while not stop_event.is_set():
+                line = await asyncio.to_thread(sys.stdin.readline)
+                if not line:
+                    break
+                text = line.strip()
+                if not text:
+                    continue
+                if _handle_dev_meta_command(text, runner.state):
+                    if text in {"/exit", "/quit"}:
+                        break
+                    continue
+                await runner.dispatch_text(text)
+            stop_event.set()
+            return
+        await stop_event.wait()
+    finally:
+        stop_event.set()
+        if watch_task is not None:
+            watch_task.cancel()
+            try:
+                await watch_task
+            except asyncio.CancelledError:
+                pass
+        await runner.close()
+
+
 async def _run_local_dev(
     *,
     plugin_dir: Path,
     event_text: str | None,
     interactive: bool,
+    watch: bool,
     session_id: str,
     user_id: str,
     platform: str,
     group_id: str | None,
     event_type: str,
+    watch_poll_interval: float = WATCH_POLL_INTERVAL_SECONDS,
+    max_watch_reloads: int | None = None,
 ) -> None:
     from .testing import (
         LocalRuntimeConfig,
@@ -186,6 +439,32 @@ async def _run_local_dev(
         _PluginExecutionError,
         _PluginLoadError,
     )
+
+    state = {
+        "session_id": session_id,
+        "user_id": user_id,
+        "platform": platform,
+        "group_id": group_id,
+        "event_type": event_type,
+    }
+    if watch:
+        runner = _ReloadableLocalDevRunner(
+            plugin_dir=plugin_dir,
+            state=state,
+            plugin_load_error=_PluginLoadError,
+            plugin_execution_error=_PluginExecutionError,
+            local_runtime_config=LocalRuntimeConfig,
+            plugin_harness=PluginHarness,
+            stdout_platform_sink=StdoutPlatformSink,
+        )
+        await _run_local_dev_watch(
+            runner=runner,
+            event_text=event_text,
+            interactive=interactive,
+            watch_poll_interval=watch_poll_interval,
+            max_watch_reloads=max_watch_reloads,
+        )
+        return
 
     sink = StdoutPlatformSink(stream=sys.stdout)
     harness = PluginHarness(
@@ -199,13 +478,6 @@ async def _run_local_dev(
         ),
         platform_sink=sink,
     )
-    state = {
-        "session_id": session_id,
-        "user_id": user_id,
-        "platform": platform,
-        "group_id": group_id,
-        "event_type": event_type,
-    }
     try:
         async with harness:
             if interactive:
@@ -565,6 +837,11 @@ def build(plugin_dir: Path, output_dir: Path | None) -> None:
 )
 @click.option("--event-text", type=str, help="Single message text to dispatch")
 @click.option("--interactive", is_flag=True, help="Read follow-up messages from stdin")
+@click.option(
+    "--watch",
+    is_flag=True,
+    help="Reload the local harness when plugin files change",
+)
 @click.option("--session-id", default="local-session", show_default=True)
 @click.option("--user-id", default="local-user", show_default=True)
 @click.option("--platform", "platform_name", default="test", show_default=True)
@@ -576,6 +853,7 @@ def dev(
     standalone_mode: bool,
     event_text: str | None,
     interactive: bool,
+    watch: bool,
     session_id: str,
     user_id: str,
     platform_name: str,
@@ -594,6 +872,7 @@ def dev(
             plugin_dir=plugin_dir,
             event_text=event_text,
             interactive=interactive,
+            watch=watch,
             session_id=session_id,
             user_id=user_id,
             platform=platform_name,

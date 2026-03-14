@@ -57,6 +57,7 @@ import inspect
 import json
 import os
 import re
+import shutil
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -540,6 +541,8 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     plugin_path = str(plugin.plugin_dir)
     if plugin_path not in sys.path:
         sys.path.insert(0, plugin_path)
+    _purge_plugin_bytecode(plugin.plugin_dir)
+    _purge_plugin_modules(plugin.plugin_dir)
 
     instances: list[Any] = []
     handlers: list[LoadedHandler] = []
@@ -623,6 +626,28 @@ def _module_belongs_to_plugin(module: Any, plugin_dir: Path) -> bool:
         isinstance(candidate, str) and _path_within_root(Path(candidate), plugin_dir)
         for candidate in package_paths
     )
+
+
+def _purge_plugin_modules(plugin_dir: Path) -> None:
+    plugin_root = plugin_dir.resolve()
+    for module_name, module in list(sys.modules.items()):
+        if module is None:
+            continue
+        if _module_belongs_to_plugin(module, plugin_root):
+            sys.modules.pop(module_name, None)
+
+
+def _purge_plugin_bytecode(plugin_dir: Path) -> None:
+    plugin_root = plugin_dir.resolve()
+    for path in plugin_root.rglob("*"):
+        try:
+            if path.is_dir() and path.name == "__pycache__":
+                shutil.rmtree(path, ignore_errors=True)
+                continue
+            if path.is_file() and path.suffix in {".pyc", ".pyo"}:
+                path.unlink(missing_ok=True)
+        except OSError:
+            continue
 
 
 def _purge_module_root(root_name: str) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import io
 import os
 import subprocess
 import sys
@@ -40,6 +42,19 @@ def test_cli_help_works_from_source_tree() -> None:
     assert "Usage" in process.stdout
 
 
+def test_dev_help_lists_watch_option() -> None:
+    process = subprocess.run(
+        [sys.executable, "-m", "astrbot_sdk", "dev", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_source_env(),
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert "--watch" in process.stdout
+
+
 @pytest.mark.asyncio
 async def test_plugin_harness_dispatches_sample_plugin() -> None:
     from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness
@@ -68,3 +83,78 @@ async def test_plugin_harness_supports_metadata_and_http_commands() -> None:
     assert any(
         "已注册 API，当前共 1 个" in (record.text or "") for record in api_records
     )
+
+
+def _write_watch_plugin(plugin_dir: Path, *, reply_text: str) -> None:
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "requirements.txt").write_text("", encoding="utf-8")
+    (plugin_dir / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                "name: watch_demo",
+                "display_name: Watch Demo",
+                "author: test",
+                "version: 0.1.0",
+                "runtime:",
+                '  python: "3.13"',
+                "components:",
+                "  - class: main:WatchDemo",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "main.py").write_text(
+        "\n".join(
+            [
+                "from astrbot_sdk import Context, MessageEvent, Star, on_command",
+                "",
+                "class WatchDemo(Star):",
+                '    @on_command("hello")',
+                "    async def hello(self, event: MessageEvent, ctx: Context) -> None:",
+                f'        await event.reply("{reply_text}")',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_local_dev_watch_reloads_on_file_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from astrbot_sdk.cli import _run_local_dev
+
+    plugin_dir = tmp_path / "watch-plugin"
+    _write_watch_plugin(plugin_dir, reply_text="v1")
+
+    stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    task = asyncio.create_task(
+        _run_local_dev(
+            plugin_dir=plugin_dir,
+            event_text="hello",
+            interactive=False,
+            watch=True,
+            session_id="local-session",
+            user_id="local-user",
+            platform="test",
+            group_id=None,
+            event_type="message",
+            watch_poll_interval=0.05,
+            max_watch_reloads=1,
+        )
+    )
+
+    await asyncio.sleep(0.2)
+    _write_watch_plugin(plugin_dir, reply_text="v2")
+
+    await asyncio.wait_for(task, timeout=3.0)
+
+    output = stdout.getvalue()
+    assert "watch 模式已启动" in output
+    assert "检测到文件变更" in output
+    assert "[text][local-session] v1" in output
+    assert "[text][local-session] v2" in output
