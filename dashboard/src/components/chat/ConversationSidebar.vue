@@ -98,16 +98,52 @@
                     </v-btn>
                 </template>
                 
-                <!-- 语言切换 -->
-                <v-list-item class="styled-menu-item">
-                    <template v-slot:prepend>
-                        <v-icon>mdi-translate</v-icon>
+                <!-- 语言切换（分组） -->
+                <v-menu
+                    :open-on-hover="!isMobile"
+                    :open-on-click="isMobile"
+                    :open-delay="!isMobile ? 60 : 0"
+                    :close-delay="!isMobile ? 120 : 0"
+                    :location="isMobile ? 'bottom' : 'end center'"
+                    offset="8"
+                    close-on-content-click
+                >
+                    <template v-slot:activator="{ props: languageMenuProps }">
+                        <v-list-item
+                            v-bind="languageMenuProps"
+                            class="styled-menu-item chat-settings-group-trigger"
+                            rounded="md"
+                        >
+                            <template v-slot:prepend>
+                                <v-icon>mdi-translate</v-icon>
+                            </template>
+                            <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
+                            <template v-slot:append>
+                                <span class="chat-settings-group-current">{{ currentLanguage?.flag }}</span>
+                                <v-icon size="18" class="chat-settings-group-arrow">mdi-chevron-right</v-icon>
+                            </template>
+                        </v-list-item>
                     </template>
-                    <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
-                    <template v-slot:append>
-                        <LanguageSwitcher variant="chatbox" />
-                    </template>
-                </v-list-item>
+
+                    <v-card class="styled-menu-card" style="min-width: 180px;" elevation="8" rounded="lg">
+                        <v-list density="compact" class="styled-menu-list pa-1">
+                            <v-list-item
+                                v-for="lang in languages"
+                                :key="lang.code"
+                                :value="lang.code"
+                                @click="changeLanguage(lang.code)"
+                                :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+                                class="styled-menu-item"
+                                rounded="md"
+                            >
+                                <template v-slot:prepend>
+                                    <span class="language-flag">{{ lang.flag }}</span>
+                                </template>
+                                <v-list-item-title>{{ lang.name }}</v-list-item-title>
+                            </v-list-item>
+                        </v-list>
+                    </v-card>
+                </v-menu>
                 
                 <!-- 主题切换 -->
                 <v-list-item class="styled-menu-item" @click="$emit('toggleTheme')">
@@ -117,26 +153,49 @@
                     <v-list-item-title>{{ isDark ? tm('modes.lightMode') : tm('modes.darkMode') }}</v-list-item-title>
                 </v-list-item>
 
-                <!-- 通信传输模式 -->
-                <v-list-item class="styled-menu-item">
-                    <template v-slot:prepend>
-                        <v-icon>mdi-lan-connect</v-icon>
+                <!-- 通信传输模式（分组） -->
+                <v-menu
+                    :open-on-hover="!isMobile"
+                    :open-on-click="isMobile"
+                    :open-delay="!isMobile ? 60 : 0"
+                    :close-delay="!isMobile ? 120 : 0"
+                    :location="isMobile ? 'bottom' : 'end center'"
+                    offset="8"
+                    close-on-content-click
+                >
+                    <template v-slot:activator="{ props: transportMenuProps }">
+                        <v-list-item
+                            v-bind="transportMenuProps"
+                            class="styled-menu-item chat-settings-group-trigger"
+                            rounded="md"
+                        >
+                            <template v-slot:prepend>
+                                <v-icon>mdi-lan-connect</v-icon>
+                            </template>
+                            <v-list-item-title>{{ tm('transport.title') }}</v-list-item-title>
+                            <template v-slot:append>
+                                <span class="chat-settings-group-current chat-settings-transport-current">{{ currentTransportLabel }}</span>
+                                <v-icon size="18" class="chat-settings-group-arrow">mdi-chevron-right</v-icon>
+                            </template>
+                        </v-list-item>
                     </template>
-                    <v-list-item-title>{{ tm('transport.title') }}</v-list-item-title>
-                    <template v-slot:append>
-                        <v-select
-                            :model-value="transportMode"
-                            :items="transportOptions"
-                            item-title="label"
-                            item-value="value"
-                            density="compact"
-                            variant="underlined"
-                            hide-details
-                            class="transport-mode-select"
-                            @update:model-value="handleTransportModeChange"
-                        />
-                    </template>
-                </v-list-item>
+
+                    <v-card class="styled-menu-card" style="min-width: 220px;" elevation="8" rounded="lg">
+                        <v-list density="compact" class="styled-menu-list pa-1">
+                            <v-list-item
+                                v-for="opt in transportOptions"
+                                :key="opt.value"
+                                :value="opt.value"
+                                @click="handleTransportModeChange(opt.value)"
+                                :class="{ 'styled-menu-item-active': transportMode === opt.value }"
+                                class="styled-menu-item"
+                                rounded="md"
+                            >
+                                <v-list-item-title>{{ opt.label }}</v-list-item-title>
+                            </v-list-item>
+                        </v-list>
+                    </v-card>
+                </v-menu>
 
                 <!-- 全屏/退出全屏 -->
                 <v-list-item class="styled-menu-item" @click="$emit('toggleFullscreen')">
@@ -162,15 +221,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import type { Session } from '@/composables/useSessions';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
-import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
 import StyledMenu from '@/components/shared/StyledMenu.vue';
 import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
 import ProjectList from '@/components/chat/ProjectList.vue';
 import type { Project } from '@/components/chat/ProjectList.vue';
+import { useLanguageSwitcher } from '@/i18n/composables';
+import type { Locale } from '@/i18n/types';
 
 interface Props {
     sessions: Session[];
@@ -215,6 +275,25 @@ const transportOptions = [
     { label: tm('transport.sse'), value: 'sse' as const },
     { label: tm('transport.websocket'), value: 'websocket' as const }
 ];
+
+// Language switcher
+const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
+const languages = computed(() =>
+    languageOptions.value.map(lang => ({
+        code: lang.value,
+        name: lang.label,
+        flag: lang.flag
+    }))
+);
+const currentLocale = computed(() => locale.value);
+const changeLanguage = async (langCode: string) => {
+    await switchLanguage(langCode as Locale);
+};
+
+const currentTransportLabel = computed(() => {
+    const found = transportOptions.find(opt => opt.value === props.transportMode);
+    return found?.label ?? '';
+});
 
 // 从 localStorage 读取侧边栏折叠状态
 const savedCollapsedState = localStorage.getItem('sidebarCollapsed');
@@ -402,7 +481,28 @@ function handleTransportModeChange(mode: string | null) {
     justify-content: center;
 }
 
-.transport-mode-select {
-    min-width: 120px;
+.chat-settings-group-trigger :deep(.v-list-item__append) {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chat-settings-group-current {
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.8;
+}
+
+.chat-settings-transport-current {
+    font-size: 12px;
+}
+
+.chat-settings-group-arrow {
+    opacity: 0.7;
+}
+
+.language-flag {
+    font-size: 16px;
+    margin-right: 8px;
 }
 </style>

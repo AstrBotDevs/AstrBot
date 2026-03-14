@@ -563,21 +563,51 @@ onMounted(async () => {
         <v-divider class="my-1" />
       </template>
 
-      <!-- 语言切换 -->
-      <v-list-item
-        v-for="lang in languages"
-        :key="lang.code"
-        :value="lang.code"
-        @click="changeLanguage(lang.code)"
-        :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- 语言切换分组 -->
+      <v-menu
+        :open-on-hover="!$vuetify.display.xs"
+        :open-on-click="$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <span class="language-flag">{{ lang.flag }}</span>
+        <template v-slot:activator="{ props: languageMenuProps }">
+          <v-list-item
+            v-bind="languageMenuProps"
+            class="styled-menu-item language-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-translate</v-icon>
+            </template>
+            <v-list-item-title>{{ t('core.common.language') }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="language-group-current">{{ currentLanguage?.flag }}</span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>{{ lang.name }}</v-list-item-title>
-      </v-list-item>
+
+        <v-card class="styled-menu-card" style="min-width: 180px;" elevation="8" rounded="lg">
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="lang in languages"
+              :key="lang.code"
+              :value="lang.code"
+              @click="changeLanguage(lang.code)"
+              :class="{ 'styled-menu-item-active': currentLocale === lang.code }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <span class="language-flag">{{ lang.flag }}</span>
+              </template>
+              <v-list-item-title>{{ lang.name }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
       <!-- 主题切换 -->
       <v-list-item
@@ -967,6 +997,25 @@ onMounted(async () => {
 .language-flag {
   font-size: 16px;
   margin-right: 8px;
+}
+
+.language-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.language-group-current {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.language-group-arrow {
+  opacity: 0.7;
+}
+
+.language-submenu-card {
+  min-width: 180px;
 }
 
 .mobile-mode-toggle-wrapper {
