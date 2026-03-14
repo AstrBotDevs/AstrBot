@@ -602,12 +602,15 @@ async function testSingleProvider(provider) {
       return
     }
 
+    const startTime = performance.now()
     const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`)
     if (res.data && res.data.status === 'ok') {
       const index = providerStatuses.value.findIndex(s => s.id === provider.id)
       if (index !== -1) {
         providerStatuses.value.splice(index, 1, res.data.data)
       }
+      const latency = Math.max(0, Math.round(performance.now() - startTime))
+      showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
     } else {
       throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
     }

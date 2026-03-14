@@ -132,6 +132,7 @@
     "deleteSuccess": "Model deleted successfully",
     "deleteError": "Failed to delete model",
     "testSuccess": "Model {id} test passed",
+    "testSuccessWithLatency": "Model {id} test passed, latency {latency} ms",
     "testError": "Model test failed",
     "searchPlaceholder": "Search models or ID",
     "manualAddButton": "Custom Model",

@@ -590,9 +590,11 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   async function testProvider(provider: any) {
     testingProviders.value.push(provider.id)
     try {
+      const startTime = performance.now()
       const response = await axios.get('/api/config/provider/check_one', { params: { id: provider.id } })
       if (response.data.status === 'ok' && response.data.data.error === null) {
-        showMessage(tm('models.testSuccess', { id: provider.id }))
+        const latency = Math.max(0, Math.round(performance.now() - startTime))
+        showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
       } else {
         throw new Error(response.data.data.error || tm('models.testError'))
       }
