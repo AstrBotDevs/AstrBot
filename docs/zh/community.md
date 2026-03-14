@@ -21,7 +21,7 @@
 
 ### Discord
 
-https://discord.gg/PxgzhmxJ
+https://discord.gg/hAVk6tgV36
 
 ### Astrbook
 
