@@ -42,6 +42,8 @@ class ProviderAnthropic(Provider):
         )
 
         self.base_url = provider_config.get("api_base", "https://api.anthropic.com")
+        if self.base_url.rstrip("/").endswith("/v1"):
+            self.base_url = self.base_url.rstrip("/")[:-3].rstrip("/")
         self.timeout = provider_config.get("timeout", 120)
         if isinstance(self.timeout, str):
             self.timeout = int(self.timeout)
