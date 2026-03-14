@@ -6,6 +6,7 @@ from aiocqhttp import CQHttp, Event
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
+    At,
     BaseMessageComponent,
     File,
     Image,
@@ -70,11 +71,19 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         """解析成 OneBot json 格式"""
         ret = []
         for segment in message_chain.chain:
-            if isinstance(segment, Plain):
+            if isinstance(segment, At):
+                # At 组件后插入一个空格，避免与后续文本粘连
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                ret.append(d)
+                ret.append({"type": "text", "data": {"text": " "}})
+            elif isinstance(segment, Plain):
                 if not segment.text.strip():
                     continue
-            d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
-            ret.append(d)
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                ret.append(d)
+            else:
+                d = await AiocqhttpMessageEvent._from_segment_to_dict(segment)
+                ret.append(d)
         return ret
 
     @classmethod
