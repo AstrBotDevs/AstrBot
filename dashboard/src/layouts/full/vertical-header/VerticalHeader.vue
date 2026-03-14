@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useCustomizerStore } from '@/stores/customizer';
 import axios from 'axios';
 import Logo from '@/components/shared/Logo.vue';
@@ -373,18 +373,18 @@ function toggleDarkMode() {
   theme.global.name.value = customizer.uiTheme;
 }
 
-function autoSyncTheme() {
+function autoSwitchTheme() {
   // 根据浏览器主题同步页面主题
   customizer.APPLY_SYSTEM_THEME();
   theme.global.name.value = customizer.uiTheme;
+}
 
-  // 添加监听器
-  if (typeof window !== 'undefined') {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-      const newTheme = e.matches ? 'PurpleThemeDark' : 'PurpleTheme';
-      customizer.SET_UI_THEME(newTheme);
-      theme.global.name.value = newTheme;
-    });
+// 页面监听器
+function autoSwitchThemeListener(e: MediaQueryListEvent) {
+  if (customizer.autoSwitchTheme) {
+    const newTheme = e.matches ? 'PurpleThemeDark' : 'PurpleTheme';
+    customizer.SET_UI_THEME(newTheme);
+    theme.global.name.value = newTheme;
   }
 }
 
@@ -473,7 +473,19 @@ onMounted(async () => {
     dashboardHasNewVersion.value = false;
   }
   if (customizer.autoSwitchTheme) {
-    autoSyncTheme();
+    autoSwitchTheme();
+
+    // 添加监听器
+    if (typeof window !== 'undefined') {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', autoSwitchThemeListener);
+    }
+  }
+});
+
+onBeforeUnmount(() => { 
+  // 移除监听器
+    if (typeof window !== 'undefined') {
+    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', autoSwitchThemeListener)
   }
 });
 
@@ -483,7 +495,7 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
+    <v-btn v-if="customizer.viewMode === 'bot' && !useCustomizerStore().isDarkTheme" style="margin-left: 16px;"
       class="hidden-md-and-down"  icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
@@ -495,7 +507,7 @@ onMounted(async () => {
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
+    <v-btn v-if="customizer.viewMode === 'bot' && !useCustomizerStore().isDarkTheme" class="hidden-lg-and-up ms-3"
       icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>

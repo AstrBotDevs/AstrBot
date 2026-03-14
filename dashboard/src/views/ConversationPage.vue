@@ -206,7 +206,7 @@
                         </div>
 
                         <!-- 消息列表组件 -->
-                        <MessageList v-else :messages="formattedMessages" :isDark="useCustomizerStore().isDarkTheme" />
+                        <MessageList v-else :messages="formattedMessages" :isDark="customizerStore.isDarkTheme" />
                     </div>
                 </v-card-text>
 

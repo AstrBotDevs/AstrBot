@@ -6,11 +6,11 @@
       </div>
       <div class="logo-text">
         <h2 
-          :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#5e35b1' : '#d7c5fa'}"
+          :style="{color: !useCustomizerStore().isDarkTheme ? '#5e35b1' : '#d7c5fa'}"
           v-html="formatTitle(title || t('core.header.logoTitle'))"
         ></h2>
         <!-- 父子组件传递css变量可能会出错，暂时使用十六进制颜色值 -->
-        <h4 :style="{color: useCustomizerStore().uiTheme === 'PurpleTheme' ? '#000000aa' : '#ffffffcc'}"
+        <h4 :style="{color: !useCustomizerStore().isDarkTheme ? '#000000aa' : '#ffffffcc'}"
             class="hint-text">{{ subtitle || t('core.header.accountDialog.title') }}</h4>
       </div>
     </div>
