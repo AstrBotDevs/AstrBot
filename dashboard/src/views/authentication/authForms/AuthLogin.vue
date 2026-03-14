@@ -52,7 +52,7 @@ async function validate(values: any, { setErrors }: any) {
     </div>
 
 
-    <v-btn color="secondary" :loading="isSubmitting || loading" block class="login-btn mt-8" variant="flat" size="large"
+    <v-btn color="primary" :loading="isSubmitting || loading" block class="login-btn mt-8" variant="flat" size="large"
       :disabled="valid" type="submit">
       <span class="login-btn-text">{{ t('login') }}</span>
     </v-btn>
