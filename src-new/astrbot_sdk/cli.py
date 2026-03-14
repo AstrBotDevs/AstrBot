@@ -599,6 +599,41 @@ def _render_init_main_py(*, plugin_name: str) -> str:
     )
 
 
+def _render_init_readme(*, plugin_name: str) -> str:
+    return dedent(
+        f"""\
+        # {plugin_name}
+
+        一个最小可运行的 AstrBot SDK v4 插件。
+
+        ## 目录结构
+
+        ```
+        .
+        ├── plugin.yaml
+        ├── requirements.txt
+        ├── main.py
+        └── tests
+            └── test_plugin.py
+        ```
+
+        ## 本地开发
+
+        ```bash
+        astrbot-sdk validate --plugin-dir .
+        astrbot-sdk dev --local --plugin-dir . --event-text hello
+        astrbot-sdk dev --local --watch --plugin-dir . --event-text hello
+        ```
+
+        ## 运行测试
+
+        ```bash
+        python -m pytest tests/test_plugin.py -v
+        ```
+        """
+    )
+
+
 def _render_init_test_py(*, plugin_name: str) -> str:
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
@@ -699,6 +734,10 @@ def _init_plugin(name: str) -> None:
     (target_dir / "requirements.txt").write_text("", encoding="utf-8")
     (target_dir / "main.py").write_text(
         _render_init_main_py(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    (target_dir / "README.md").write_text(
+        _render_init_readme(plugin_name=plugin_name),
         encoding="utf-8",
     )
     (target_dir / "tests" / "test_plugin.py").write_text(

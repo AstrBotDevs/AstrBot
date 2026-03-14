@@ -1,0 +1,9 @@
+name: hello_plugin
+display_name: Hello Plugin
+desc: 一个适合插件作者入门的最小示例插件
+author: your-name
+version: 0.1.0
+runtime:
+  python: "3.12"
+components:
+  - class: main:HelloPlugin

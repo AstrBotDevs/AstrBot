@@ -55,6 +55,20 @@ def test_dev_help_lists_watch_option() -> None:
     assert "--watch" in process.stdout
 
 
+def test_init_plugin_template_includes_readme(tmp_path: Path, monkeypatch) -> None:
+    from astrbot_sdk.cli import _init_plugin
+
+    target = tmp_path / "demo_plugin"
+    monkeypatch.chdir(tmp_path)
+
+    _init_plugin(target.name)
+
+    assert (target / "README.md").exists()
+    assert "astrbot-sdk dev --local --watch" in (
+        target / "README.md"
+    ).read_text(encoding="utf-8")
+
+
 @pytest.mark.asyncio
 async def test_plugin_harness_dispatches_sample_plugin() -> None:
     from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness
@@ -83,6 +97,21 @@ async def test_plugin_harness_supports_metadata_and_http_commands() -> None:
     assert any(
         "已注册 API，当前共 1 个" in (record.text or "") for record in api_records
     )
+
+
+@pytest.mark.asyncio
+async def test_example_hello_plugin_dispatches_commands() -> None:
+    from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness
+
+    plugin_dir = _repo_root() / "examples" / "hello_plugin"
+
+    async with PluginHarness(LocalRuntimeConfig(plugin_dir=plugin_dir)) as harness:
+        hello_records = await harness.dispatch_text("hello")
+        about_records = await harness.dispatch_text("about")
+
+    assert any(record.text == "Hello, World!" for record in hello_records)
+    # about 命令返回 display_name "Hello Plugin"，不是 name "hello_plugin"
+    assert any("Hello Plugin" in (record.text or "") for record in about_records)
 
 
 @pytest.mark.asyncio
