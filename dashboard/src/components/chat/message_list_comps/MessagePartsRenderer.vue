@@ -63,7 +63,7 @@
         <!-- Text (Markdown) -->
         <MarkdownRender
             v-else-if="renderPart.part.type === 'plain' && renderPart.part.text && renderPart.part.text.trim()"
-            custom-id="message-list" :custom-html-tags="['ref']" :content="renderPart.part.text" :typewriter="false"
+            custom-id="message-list" :custom-html-tags="['ref']" :content="normalizeMarkdownContent(renderPart.part.text)" :typewriter="false"
             class="markdown-content" :is-dark="isDark" :monacoOptions="{ theme: isDark ? 'vs-dark' : 'vs-light' }" />
 
         <!-- Image -->
@@ -149,6 +149,21 @@ const emitOpenImage = (url) => {
 
 const emitDownloadFile = (file) => {
     emit('download-file', file);
+};
+
+const FULL_HTML_DOCUMENT_RE = /^\s*(?:<!doctype\s+html[^>]*>\s*)?<html\b[\s\S]*<\/html>\s*$/i;
+
+const normalizeMarkdownContent = (text) => {
+    if (typeof text !== 'string') {
+        return text;
+    }
+
+    const trimmed = text.trim();
+    if (!trimmed || !FULL_HTML_DOCUMENT_RE.test(trimmed)) {
+        return text;
+    }
+
+    return `\`\`\`html\n${trimmed}\n\`\`\``;
 };
 
 const formatDuration = (seconds) => {
