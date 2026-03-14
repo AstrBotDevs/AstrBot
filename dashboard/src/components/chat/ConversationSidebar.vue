@@ -5,7 +5,7 @@
             'mobile-sidebar-open': isMobile && mobileMenuOpen,
             'mobile-sidebar': isMobile
         }"
-        :style="{ 'background-color': isDark ? sidebarCollapsed ? '#1e1e1e' : '#2d2d2d' : sidebarCollapsed ? '#ffffff' : '#f1f4f9' }">
+        :style="{ backgroundColor: sidebarCollapsed && !isMobile ? 'rgb(var(--v-theme-surface))' : 'rgb(var(--v-theme-mcpCardBg))' }">
 
         <div class="sidebar-collapse-btn-container" v-if="!isMobile">
             <v-btn icon class="sidebar-collapse-btn" @click="toggleSidebar" variant="text" color="deep-purple">
@@ -46,7 +46,7 @@
                     <v-list-item v-for="item in sessions" :key="item.session_id" :value="item.session_id"
                         rounded="lg" class="conversation-item" active-color="secondary">
                         <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title"
-                            :style="{ color: isDark ? '#ffffff' : '#000000' }">
+                            :style="{ color: 'rgb(var(--v-theme-primaryText))' }">
                             {{ item.display_name || tm('conversation.newConversation') }}
                         </v-list-item-title>
                         <!-- <v-list-item-subtitle v-if="!sidebarCollapsed || isMobile" class="timestamp">
@@ -310,7 +310,7 @@ function handleTransportModeChange(mode: string | null) {
 }
 
 .conversation-item:hover {
-    background-color: rgba(103, 58, 183, 0.05);
+    background-color: rgba(var(--v-theme-primary), 0.05);
 }
 
 .conversation-item:hover .conversation-actions {

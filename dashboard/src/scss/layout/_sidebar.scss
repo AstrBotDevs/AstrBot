@@ -28,27 +28,27 @@
     .v-list-group__items .v-list-item,
     .v-list-item {
       &:hover {
-        color: #b794f6 !important;
+        color: rgb(var(--v-theme-primary)) !important;
         
         .v-list-item-title {
-          color: #b794f6 !important;
+          color: rgb(var(--v-theme-primary)) !important;
         }
         
         .v-icon {
-          color: #b794f6 !important;
+          color: rgb(var(--v-theme-primary)) !important;
         }
       }
       
       // 选中状态的样式
       &.v-list-item--active {
-        color: #b794f6 !important;
+        color: rgb(var(--v-theme-primary)) !important;
         
         .v-list-item-title {
-          color: #b794f6 !important;
+          color: rgb(var(--v-theme-primary)) !important;
         }
         
         .v-icon {
-          color: #b794f6 !important;
+          color: rgb(var(--v-theme-primary)) !important;
         }
       }
     }
