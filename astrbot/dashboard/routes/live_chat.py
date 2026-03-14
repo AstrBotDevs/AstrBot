@@ -576,6 +576,19 @@ class LiveChatRoute(Route):
                     part = await self._create_attachment_from_file(filename, "video")
                     if part:
                         accumulated_parts.append(part)
+                elif msg_type == "elicitation":
+                    if accumulated_text:
+                        accumulated_parts.append(
+                            {"type": "plain", "text": accumulated_text}
+                        )
+                        accumulated_text = ""
+                    if isinstance(result_text, dict):
+                        accumulated_parts.append(
+                            {
+                                "type": "elicitation",
+                                "payload": result_text,
+                            }
+                        )
 
                 should_save = False
                 if msg_type == "end":

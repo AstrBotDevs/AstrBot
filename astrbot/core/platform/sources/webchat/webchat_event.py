@@ -66,6 +66,17 @@ class WebChatMessageEvent(AstrMessageEvent):
                     },
                 )
             elif isinstance(comp, Json):
+                if message.type == "elicitation" and isinstance(comp.data, dict):
+                    await web_chat_back_queue.put(
+                        {
+                            "type": "elicitation",
+                            "data": comp.data,
+                            "streaming": streaming,
+                            "chain_type": message.type,
+                            "message_id": message_id,
+                        },
+                    )
+                    continue
                 await web_chat_back_queue.put(
                     {
                         "type": "plain",

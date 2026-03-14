@@ -5,6 +5,7 @@ import sys
 import zipfile
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -273,6 +274,298 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
     assert data["status"] == "ok"
     # conflicts is a list
     assert isinstance(data["data"], list)
+
+
+@pytest.mark.asyncio
+async def test_mcp_servers_api_exposes_client_capabilities(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
+    monkeypatch.setattr(
+        tool_mgr,
+        "load_mcp_config",
+        lambda: {
+            "mcpServers": {
+                "demo": {
+                    "url": "https://example.com/mcp",
+                    "transport": "sse",
+                    "active": True,
+                    "client_capabilities": {
+                        "elicitation": {
+                            "enabled": True,
+                            "timeout_seconds": 180,
+                        },
+                        "sampling": {
+                            "enabled": True,
+                        }
+                    },
+                }
+            }
+        },
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/tools/mcp/servers",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"][0]["client_capabilities"]["elicitation"]["enabled"] is True
+    assert data["data"][0]["client_capabilities"]["elicitation"]["timeout_seconds"] == 180
+    assert data["data"][0]["client_capabilities"]["sampling"]["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_mcp_servers_api_includes_resource_bridge_tools(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
+    monkeypatch.setattr(
+        tool_mgr,
+        "load_mcp_config",
+        lambda: {
+            "mcpServers": {
+                "demo": {
+                    "command": "node",
+                    "args": ["stdio.js"],
+                    "active": True,
+                }
+            }
+        },
+    )
+    tool_mgr._mcp_server_runtime["demo"] = SimpleNamespace(
+        client=SimpleNamespace(
+            tools=[SimpleNamespace(name="demo_tool")],
+            resource_bridge_tool_names=["mcp_demo_list_resources"],
+            server_errlogs=[],
+        )
+    )
+
+    test_client = app.test_client()
+    try:
+        response = await test_client.get(
+            "/api/tools/mcp/servers",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"][0]["tools"] == [
+            "demo_tool",
+            "mcp_demo_list_resources",
+        ]
+    finally:
+        tool_mgr._mcp_server_runtime.pop("demo", None)
+
+
+@pytest.mark.asyncio
+async def test_mcp_servers_api_includes_prompt_bridge_tools(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
+    monkeypatch.setattr(
+        tool_mgr,
+        "load_mcp_config",
+        lambda: {
+            "mcpServers": {
+                "demo": {
+                    "command": "node",
+                    "args": ["stdio.js"],
+                    "active": True,
+                }
+            }
+        },
+    )
+    tool_mgr._mcp_server_runtime["demo"] = SimpleNamespace(
+        client=SimpleNamespace(
+            tools=[SimpleNamespace(name="demo_tool")],
+            resource_bridge_tool_names=[],
+            prompt_bridge_tool_names=["mcp_demo_list_prompts", "mcp_demo_get_prompt"],
+            server_errlogs=[],
+        )
+    )
+
+    test_client = app.test_client()
+    try:
+        response = await test_client.get(
+            "/api/tools/mcp/servers",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"][0]["tools"] == [
+            "demo_tool",
+            "mcp_demo_list_prompts",
+            "mcp_demo_get_prompt",
+        ]
+    finally:
+        tool_mgr._mcp_server_runtime.pop("demo", None)
+
+
+@pytest.mark.asyncio
+async def test_add_mcp_server_persists_client_capabilities(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "astrbot.core.provider.func_tool_manager.get_astrbot_data_path",
+        lambda: str(tmp_path),
+    )
+    tool_mgr = core_lifecycle_td.provider_manager.llm_tools
+    monkeypatch.setattr(
+        tool_mgr,
+        "test_mcp_server_connection",
+        AsyncMock(return_value=["demo_tool"]),
+    )
+    monkeypatch.setattr(
+        tool_mgr,
+        "enable_mcp_server",
+        AsyncMock(return_value=None),
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/tools/mcp/add",
+        json={
+            "name": "demo",
+            "url": "https://example.com/mcp",
+            "transport": "sse",
+            "active": True,
+            "client_capabilities": {
+                "elicitation": {
+                    "enabled": True,
+                    "timeout_seconds": 240,
+                },
+                "sampling": {
+                    "enabled": True,
+                }
+            },
+        },
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    persisted = tool_mgr.load_mcp_config()
+    assert (
+        persisted["mcpServers"]["demo"]["client_capabilities"]["elicitation"][
+            "enabled"
+        ]
+        is True
+    )
+    assert (
+        persisted["mcpServers"]["demo"]["client_capabilities"]["elicitation"][
+            "timeout_seconds"
+        ]
+        == 240
+    )
+    assert (
+        persisted["mcpServers"]["demo"]["client_capabilities"]["sampling"]["enabled"]
+        is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_chat_respond_elicitation_resolves_pending_reply_and_persists_message(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    captured: dict[str, str] = {}
+
+    def _fake_submit(umo: str, sender_id: str, reply_text: str, *, reply_outline=None):
+        captured["umo"] = umo
+        captured["sender_id"] = sender_id
+        captured["reply_text"] = reply_text
+        captured["reply_outline"] = reply_outline or ""
+        return True
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.submit_pending_mcp_elicitation_reply",
+        _fake_submit,
+    )
+
+    test_client = app.test_client()
+    new_session_response = await test_client.get(
+        "/api/chat/new_session",
+        headers=authenticated_header,
+    )
+    session_data = await new_session_response.get_json()
+    session_id = session_data["data"]["session_id"]
+
+    response = await test_client.post(
+        "/api/chat/respond_elicitation",
+        json={
+            "session_id": session_id,
+            "reply_text": '{"topic":"MCP 最小实现"}',
+            "display_text": "topic: MCP 最小实现",
+        },
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    expected_username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    assert captured["sender_id"] == expected_username
+    assert captured["reply_text"] == '{"topic":"MCP 最小实现"}'
+    assert captured["reply_outline"] == "topic: MCP 最小实现"
+    assert captured["umo"].endswith(f"webchat!{expected_username}!{session_id}")
+    assert data["data"]["saved_message"]["content"]["message"] == [
+        {"type": "plain", "text": "topic: MCP 最小实现"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chat_respond_elicitation_rejects_when_no_pending_request(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.submit_pending_mcp_elicitation_reply",
+        lambda *_args, **_kwargs: False,
+    )
+
+    test_client = app.test_client()
+    new_session_response = await test_client.get(
+        "/api/chat/new_session",
+        headers=authenticated_header,
+    )
+    session_data = await new_session_response.get_json()
+    session_id = session_data["data"]["session_id"]
+
+    response = await test_client.post(
+        "/api/chat/respond_elicitation",
+        json={
+            "session_id": session_id,
+            "reply_text": "cancel",
+            "display_text": "cancel",
+        },
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert "No pending MCP elicitation" in data["message"]
 
 
 @pytest.mark.asyncio

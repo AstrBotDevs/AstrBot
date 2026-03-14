@@ -34,14 +34,33 @@ export interface FileInfo {
     attachment_id?: string; // 用于按需下载
 }
 
+export interface ElicitationField {
+    name: string;
+    label: string;
+    description?: string;
+    required: boolean;
+    type: string;
+    enum?: string[];
+}
+
+export interface ElicitationPayload {
+    kind: 'form' | 'url';
+    server_name: string;
+    message: string;
+    prompt: string;
+    url?: string;
+    fields?: ElicitationField[];
+}
+
 // 消息部分的类型定义
 export interface MessagePart {
-    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply' | 'tool_call';
+    type: 'plain' | 'image' | 'record' | 'file' | 'video' | 'reply' | 'tool_call' | 'elicitation';
     text?: string;           // for plain
     attachment_id?: string;  // for image, record, file, video
     filename?: string;       // for file (filename from backend)
     message_id?: number;     // for reply (PlatformSessionHistoryMessage.id)
     tool_calls?: ToolCall[]; // for tool_call
+    payload?: ElicitationPayload; // for elicitation
     // embedded fields - 加载后填充
     embedded_url?: string;   // blob URL for image, record
     embedded_file?: FileInfo; // for file (保留 attachment_id 用于按需下载)
@@ -83,6 +102,35 @@ type StreamChunk = {
     ct?: string;
     [key: string]: any;
 };
+
+function normalizeElicitationPayload(payload: any): ElicitationPayload | null {
+    if (!payload || typeof payload !== 'object') {
+        return null;
+    }
+
+    const kind = payload.kind === 'url' ? 'url' : 'form';
+    const fields = Array.isArray(payload.fields)
+        ? payload.fields
+            .filter((field: any) => field && typeof field === 'object' && typeof field.name === 'string')
+            .map((field: any) => ({
+                name: String(field.name),
+                label: String(field.label || field.name),
+                description: String(field.description || ''),
+                required: Boolean(field.required),
+                type: String(field.type || 'string'),
+                enum: Array.isArray(field.enum) ? field.enum.map((value: any) => String(value)) : []
+            }))
+        : [];
+
+    return {
+        kind,
+        server_name: String(payload.server_name || ''),
+        message: String(payload.message || ''),
+        prompt: String(payload.prompt || ''),
+        url: typeof payload.url === 'string' ? payload.url : undefined,
+        fields
+    };
+}
 
 type WsStreamContext = {
     handleChunk: (payload: StreamChunk) => Promise<void>;
@@ -204,6 +252,24 @@ export function useMessages(
 
     async function handlePassiveWebSocketChunk(payload: StreamChunk) {
         if (!payload.type) {
+            return;
+        }
+
+        if (payload.type === 'elicitation') {
+            const normalizedPayload = normalizeElicitationPayload(payload.data);
+            if (!normalizedPayload) {
+                return;
+            }
+
+            messages.value.push({
+                content: {
+                    type: 'bot',
+                    message: [{
+                        type: 'elicitation',
+                        payload: normalizedPayload
+                    }]
+                }
+            });
             return;
         }
 
@@ -440,6 +506,24 @@ export function useMessages(
                 return;
             }
 
+            if (chunkJson.type === 'elicitation') {
+                const normalizedPayload = normalizeElicitationPayload(chunkJson.data);
+                if (!normalizedPayload) {
+                    return;
+                }
+
+                messages.value.push({
+                    content: {
+                        type: 'bot',
+                        message: [{
+                            type: 'elicitation',
+                            payload: normalizedPayload
+                        }]
+                    }
+                });
+                return;
+            }
+
             if (chunkJson.type === 'image') {
                 const img = String(chunkJson.data || '').replace('[IMAGE]', '');
                 const imageUrl = await getMediaFile(img);
@@ -671,6 +755,9 @@ export function useMessages(
                     };
                 }
                 // plain, reply, tool_call, video 保持原样
+                if (part.type === 'elicitation') {
+                    part.payload = normalizeElicitationPayload(part.payload) || undefined;
+                }
             }
         }
 
@@ -1003,6 +1090,49 @@ export function useMessages(
         }
     }
 
+    async function submitElicitationResponse(
+        sessionId: string,
+        replyText: string,
+        displayText: string
+    ) {
+        const normalizedSessionId = sessionId.trim();
+        const normalizedReplyText = replyText.trim();
+        const normalizedDisplayText = (displayText || replyText).trim();
+        if (!normalizedSessionId || !normalizedReplyText) {
+            throw new Error('Missing elicitation reply payload');
+        }
+
+        const response = await axios.post('/api/chat/respond_elicitation', {
+            session_id: normalizedSessionId,
+            reply_text: normalizedReplyText,
+            display_text: normalizedDisplayText
+        });
+        if (response.data?.status !== 'ok') {
+            throw new Error(response.data?.message || 'Failed to submit elicitation reply');
+        }
+
+        const savedMessage = response.data?.data?.saved_message;
+        if (savedMessage?.content) {
+            await parseMessageContent(savedMessage.content);
+            messages.value.push({
+                id: savedMessage.id,
+                created_at: savedMessage.created_at,
+                content: savedMessage.content
+            });
+            return savedMessage;
+        }
+
+        const fallbackMessage: MessageContent = {
+            type: 'user',
+            message: [{
+                type: 'plain',
+                text: normalizedDisplayText
+            }]
+        };
+        messages.value.push({ content: fallbackMessage });
+        return null;
+    }
+
     async function stopMessage() {
         const sessionId = currentRunningSessionId.value || currSessionId.value;
         if (!sessionId) {
@@ -1057,6 +1187,7 @@ export function useMessages(
         currentSessionProject,
         getSessionMessages,
         sendMessage,
+        submitElicitationResponse,
         stopMessage,
         toggleStreaming,
         setTransportMode,

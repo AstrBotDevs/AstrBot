@@ -6,6 +6,9 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import logger
+from astrbot.core.agent.mcp_elicitation_registry import (
+    try_capture_pending_mcp_elicitation,
+)
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
@@ -164,6 +167,12 @@ class InternalAgentSubStage(Stage):
                 return
 
             logger.debug("ready to request llm provider")
+            if try_capture_pending_mcp_elicitation(event):
+                logger.info(
+                    "Captured MCP elicitation reply for active agent run, umo=%s",
+                    event.unified_msg_origin,
+                )
+                return
             follow_up_capture = try_capture_follow_up(event)
             if follow_up_capture:
                 (

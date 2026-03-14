@@ -97,6 +97,21 @@
     "replyTo": "引用",
     "notFound": "无法定位消息"
   },
+  "elicitation": {
+    "title": "{server} 需要更多信息",
+    "submit": "提交",
+    "cancel": "取消",
+    "decline": "拒绝",
+    "done": "已完成",
+    "otherInput": "如果都不合适，可手动输入",
+    "arrayPlaceholder": "可使用逗号或换行分隔多个值",
+    "requiredField": "请填写 {field}",
+    "emptyReply": "请至少填写一个字段",
+    "submitted": "已提交，等待 AstrBot 继续处理",
+    "submitFailed": "提交 elicitation 回复失败",
+    "accepted": "已确认",
+    "booleanLabel": "打开以表示 true，关闭表示 false"
+  },
   "project": {
     "title": "项目",
     "create": "创建项目",
