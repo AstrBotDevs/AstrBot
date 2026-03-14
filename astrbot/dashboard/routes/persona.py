@@ -61,6 +61,11 @@ class PersonaRoute(Route):
                             "custom_error_message": persona.custom_error_message,
                             "folder_id": persona.folder_id,
                             "sort_order": persona.sort_order,
+                            "personality_config": persona.personality_config,
+                            "chat_config": persona.chat_config,
+                            "robot_config": persona.robot_config,
+                            "llm_model_config": persona.llm_model_config,
+                            "is_advanced": persona.is_advanced,
                             "created_at": persona.created_at.isoformat()
                             if persona.created_at
                             else None,
@@ -102,6 +107,11 @@ class PersonaRoute(Route):
                         "custom_error_message": persona.custom_error_message,
                         "folder_id": persona.folder_id,
                         "sort_order": persona.sort_order,
+                        "personality_config": persona.personality_config,
+                        "chat_config": persona.chat_config,
+                        "robot_config": persona.robot_config,
+                        "llm_model_config": persona.llm_model_config,
+                        "is_advanced": persona.is_advanced,
                         "created_at": persona.created_at.isoformat()
                         if persona.created_at
                         else None,
@@ -128,6 +138,12 @@ class PersonaRoute(Route):
             custom_error_message = data.get("custom_error_message")
             folder_id = data.get("folder_id")  # None 表示根目录
             sort_order = data.get("sort_order", 0)
+            # 高级人格配置
+            personality_config = data.get("personality_config")
+            chat_config = data.get("chat_config")
+            robot_config = data.get("robot_config")
+            llm_model_config = data.get("llm_model_config")
+            is_advanced = data.get("is_advanced", False)
 
             if not persona_id:
                 return Response().error("人格ID不能为空").__dict__
@@ -157,6 +173,11 @@ class PersonaRoute(Route):
                 custom_error_message=custom_error_message,
                 folder_id=folder_id,
                 sort_order=sort_order,
+                personality_config=personality_config,
+                chat_config=chat_config,
+                robot_config=robot_config,
+                llm_model_config=llm_model_config,
+                is_advanced=is_advanced,
             )
 
             return (
@@ -173,6 +194,11 @@ class PersonaRoute(Route):
                             "custom_error_message": persona.custom_error_message,
                             "folder_id": persona.folder_id,
                             "sort_order": persona.sort_order,
+                            "personality_config": persona.personality_config,
+                            "chat_config": persona.chat_config,
+                            "robot_config": persona.robot_config,
+                            "llm_model_config": persona.llm_model_config,
+                            "is_advanced": persona.is_advanced,
                             "created_at": persona.created_at.isoformat()
                             if persona.created_at
                             else None,
@@ -203,6 +229,17 @@ class PersonaRoute(Route):
             skills = data.get("skills")
             has_custom_error_message = "custom_error_message" in data
             custom_error_message = data.get("custom_error_message")
+            # 高级人格配置
+            has_personality_config = "personality_config" in data
+            personality_config = data.get("personality_config")
+            has_chat_config = "chat_config" in data
+            chat_config = data.get("chat_config")
+            has_robot_config = "robot_config" in data
+            robot_config = data.get("robot_config")
+            has_llm_model_config = "llm_model_config" in data
+            llm_model_config = data.get("llm_model_config")
+            has_is_advanced = "is_advanced" in data
+            is_advanced = data.get("is_advanced")
 
             if not persona_id:
                 return Response().error("缺少必要参数: persona_id").__dict__
@@ -234,6 +271,16 @@ class PersonaRoute(Route):
                 update_kwargs["skills"] = skills
             if has_custom_error_message:
                 update_kwargs["custom_error_message"] = custom_error_message
+            if has_personality_config:
+                update_kwargs["personality_config"] = personality_config
+            if has_chat_config:
+                update_kwargs["chat_config"] = chat_config
+            if has_robot_config:
+                update_kwargs["robot_config"] = robot_config
+            if has_llm_model_config:
+                update_kwargs["llm_model_config"] = llm_model_config
+            if has_is_advanced:
+                update_kwargs["is_advanced"] = is_advanced
 
             await self.persona_mgr.update_persona(**update_kwargs)
 

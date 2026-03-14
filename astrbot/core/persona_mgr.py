@@ -14,6 +14,10 @@ DEFAULT_PERSONALITY = Personality(
     tools=None,
     skills=None,
     custom_error_message=None,
+    personality_config=None,
+    chat_config=None,
+    robot_config=None,
+    is_advanced=False,
     _begin_dialogs_processed=[],
     _mood_imitation_dialogs_processed="",
 )
@@ -131,6 +135,11 @@ class PersonaManager:
         tools: list[str] | None | object = NOT_GIVEN,
         skills: list[str] | None | object = NOT_GIVEN,
         custom_error_message: str | None | object = NOT_GIVEN,
+        personality_config: dict | None | object = NOT_GIVEN,
+        chat_config: dict | None | object = NOT_GIVEN,
+        robot_config: dict | None | object = NOT_GIVEN,
+        llm_model_config: dict | None | object = NOT_GIVEN,
+        is_advanced: bool | object = NOT_GIVEN,
     ):
         """更新指定 persona 的信息。tools 参数为 None 时表示使用所有工具，空列表表示不使用任何工具"""
         existing_persona = await self.db.get_persona_by_id(persona_id)
@@ -143,6 +152,16 @@ class PersonaManager:
             update_kwargs["skills"] = skills
         if custom_error_message is not NOT_GIVEN:
             update_kwargs["custom_error_message"] = custom_error_message
+        if personality_config is not NOT_GIVEN:
+            update_kwargs["personality_config"] = personality_config
+        if chat_config is not NOT_GIVEN:
+            update_kwargs["chat_config"] = chat_config
+        if robot_config is not NOT_GIVEN:
+            update_kwargs["robot_config"] = robot_config
+        if llm_model_config is not NOT_GIVEN:
+            update_kwargs["llm_model_config"] = llm_model_config
+        if is_advanced is not NOT_GIVEN:
+            update_kwargs["is_advanced"] = is_advanced
 
         persona = await self.db.update_persona(
             persona_id,
@@ -311,6 +330,11 @@ class PersonaManager:
         custom_error_message: str | None = None,
         folder_id: str | None = None,
         sort_order: int = 0,
+        personality_config: dict | None = None,
+        chat_config: dict | None = None,
+        robot_config: dict | None = None,
+        llm_model_config: dict | None = None,
+        is_advanced: bool = False,
     ) -> Persona:
         """创建新的 persona。
 
@@ -322,6 +346,11 @@ class PersonaManager:
             skills: Skills 列表，None 表示使用所有 Skills，空列表表示不使用任何 Skills
             folder_id: 所属文件夹 ID，None 表示根目录
             sort_order: 排序顺序
+            personality_config: 高级人格配置 - 人格特质、表达风格、识别规则、心情标签等
+            chat_config: 高级人格配置 - 聊天频率、动态频率、消息长度等
+            robot_config: 高级人格配置 - 昵称、别名、平台等
+            llm_model_config: 高级人格配置 - 模型配置（功能模型、回复模型、思考模型）
+            is_advanced: 是否为高级人格
         """
         if await self.db.get_persona_by_id(persona_id):
             raise ValueError(f"Persona with ID {persona_id} already exists.")
@@ -334,6 +363,11 @@ class PersonaManager:
             custom_error_message=custom_error_message,
             folder_id=folder_id,
             sort_order=sort_order,
+            personality_config=personality_config,
+            chat_config=chat_config,
+            robot_config=robot_config,
+            llm_model_config=llm_model_config,
+            is_advanced=is_advanced,
         )
         self.personas.append(new_persona)
         self.get_v3_persona_data()
@@ -359,6 +393,10 @@ class PersonaManager:
                 "tools": persona.tools,
                 "skills": persona.skills,
                 "custom_error_message": persona.custom_error_message,
+                "personality_config": persona.personality_config,
+                "chat_config": persona.chat_config,
+                "robot_config": persona.robot_config,
+                "is_advanced": persona.is_advanced,
             }
             for persona in self.personas
         ]

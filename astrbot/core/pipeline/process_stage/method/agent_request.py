@@ -44,5 +44,16 @@ class AgentRequestSubStage(Stage):
             )
             return
 
-        async for resp in self.agent_sub_stage.process(event, self.prov_wake_prefix):
+        # 根据是否为高级人格选择子阶段
+        sub_stage = self.agent_sub_stage
+        if event.is_advanced_persona and self.mind_sub_stage:
+            logger.debug(
+                f"会话 {event.unified_msg_origin} 使用高级人格，使用 InternalMindSubStage"
+            )
+            sub_stage = self.mind_sub_stage
+
+        # 将事件和提供商唤醒前缀传递给代理子阶段处理
+        # 异步生成所有响应
+        async for resp in sub_stage.process(event, self.prov_wake_prefix):
+            # 生成每个响应
             yield resp

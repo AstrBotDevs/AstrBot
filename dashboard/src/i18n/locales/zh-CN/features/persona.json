@@ -4,6 +4,7 @@
   },
   "buttons": {
     "create": "创建人格",
+    "createAdvanced": "高级人格（测试版）",
     "createFirst": "创建第一个人格",
     "edit": "编辑",
     "delete": "删除",
@@ -142,5 +143,99 @@
     "description": "为 \"{name}\" 选择目标文件夹",
     "success": "移动成功",
     "error": "移动失败"
+  },
+  "advancedPersona": {
+    "back": "返回",
+    "createTitle": "创建高级人格",
+    "editTitle": "编辑高级人格",
+    "subtitle": "配置高级人格的详细设置",
+    "betaTag": "测试版",
+    "basicInfo": "基础信息",
+    "fillDefault": "填充麦麦默认配置",
+    "form": {
+      "personaId": "人格 ID",
+      "systemPrompt": "系统提示词",
+      "customErrorMessage": "自定义报错回复信息"
+    },
+    "tools": {
+      "title": "工具选择",
+      "all": "使用全部工具",
+      "select": "选择指定工具",
+      "search": "搜索工具"
+    },
+    "skills": {
+      "title": "Skills 选择",
+      "all": "使用全部 Skills",
+      "select": "选择指定 Skills",
+      "search": "搜索 Skills",
+      "noSkillsAvailable": "暂无可用的 Skills",
+      "noSkillsFound": "未找到匹配的 Skills",
+      "loading": "加载 Skills 中..."
+    },
+    "tabs": {
+      "personality": "人格设置",
+      "chat": "聊天设置",
+      "robot": "机器人账号",
+      "dialogs": "预设对话"
+    },
+    "personality": {
+      "traits": "人格特质",
+      "traitsHint": "描述人格的性格特点，如：温柔、内向、活泼等",
+      "expressionStyle": "表达风格",
+      "expressionStyleHint": "描述机器人的说话风格，如：简洁、幽默、正式等",
+      "recognitionRules": "识别规则",
+      "recognitionRulesHint": "定义图片识别和处理的规则",
+      "moodTags": "心情标签",
+      "moodTagsHint": "设置心情标签及其使用权重，总和应为100%",
+      "addMoodTag": "添加标签",
+      "tagName": "标签名",
+      "tagWeight": "权重",
+      "totalWeight": "总权重",
+      "weightWarning": "权重总和应为100%"
+    },
+    "chat": {
+      "chatFrequency": "聊天频率",
+      "chatFrequencyHint": "控制机器人主动聊天的频率",
+      "dynamicFrequency": "动态发言频率",
+      "dynamicFrequencyHint": "根据上下文动态调整发言频率",
+      "timeBasedMode": "根据时间选择",
+      "timeBasedModeHint": "根据当前时间选择不同的回复策略",
+      "messageLength": "消息条数长度",
+      "messageLengthHint": "控制生成消息的长度",
+      "frequencyOptions": {
+        "silent": "沉默",
+        "low": "低",
+        "normal": "正常",
+        "high": "高",
+        "veryHigh": "非常高"
+      },
+      "dynamicOptions": {
+        "auto": "自动",
+        "fixed": "固定",
+        "random": "随机"
+      },
+      "lengthOptions": {
+        "short": "短",
+        "normal": "正常",
+        "long": "长",
+        "adaptive": "自适应"
+      }
+    },
+    "robot": {
+      "nickname": "昵称",
+      "nicknameHint": "机器人的显示昵称",
+      "aliases": "别名",
+      "aliasesHint": "机器人的其他称呼，多个用回车分隔",
+      "addAlias": "添加别名",
+      "alias": "别名",
+      "platforms": "启用的平台",
+      "platformsHint": "选择机器人需要响应的平台"
+    },
+    "dialogs": {
+      "help": "添加预设对话来帮助机器人更好地理解角色设定",
+      "userMessage": "用户消息",
+      "assistantMessage": "AI 回答",
+      "addPair": "添加对话对"
+    }
   }
 }

@@ -14,6 +14,42 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
 
+
+async def _check_is_advanced_persona(
+    ctx: PipelineContext,
+    event: AstrMessageEvent,
+) -> bool:
+    """检查当前会话是否使用高级人格。
+
+    高级人格具有自主思考、主动发言等能力，群聊时不需要唤醒词。
+    """
+    try:
+        persona_manager = ctx.plugin_manager.context.persona_manager
+        provider_settings = ctx.astrbot_config.get("provider_settings", {})
+
+        # 解析当前会话使用的人格
+        (
+            _persona_id,
+            persona,
+            _force_applied,
+            _use_webchat_special,
+        ) = await persona_manager.resolve_selected_persona(
+            umo=event.session,
+            conversation_persona_id=None,
+            platform_name=event.get_platform_name(),
+            provider_settings=provider_settings,
+        )
+
+        if persona and persona.get("is_advanced", False):
+            logger.debug(
+                f"会话 {event.unified_msg_origin} 使用高级人格 {persona.get('name')}，跳过唤醒词检查"
+            )
+            return True
+    except Exception as e:
+        logger.debug(f"检查高级人格时出错: {e}")
+
+    return False
+
 UNIQUE_SESSION_ID_BUILDERS: dict[str, Callable[[AstrMessageEvent], str | None]] = {
     "aiocqhttp": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
     "slack": lambda e: f"{e.get_sender_id()}_{e.get_group_id()}",
@@ -98,10 +134,19 @@ class WakingCheckStage(Stage):
                 event.role = "admin"
                 break
 
+        # 检查是否是高级人格 - 高级人格在群聊时也不需要唤醒词
+        is_advanced_persona = await _check_is_advanced_persona(self.ctx, event)
+        if is_advanced_persona:
+            event.is_advanced_persona = True
+            event.is_wake = True
+            event.is_at_or_wake_command = True
+            logger.debug(
+                f"高级人格模式激活，会话 {event.unified_msg_origin} 无需唤醒词"
+            )
         # 检查 wake
         wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
         messages = event.get_messages()
-        is_wake = False
+        is_wake = is_advanced_persona  # 高级人格已唤醒
         for wake_prefix in wake_prefixes:
             if event.message_str.startswith(wake_prefix):
                 if (
