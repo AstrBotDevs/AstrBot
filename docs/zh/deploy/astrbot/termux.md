@@ -63,7 +63,7 @@ pkg install uv git proot-distro wget
 ### 使用 `proot-distro` 安装 `ubuntu环境`
 
 >[!TIP]
->中国大陆概率访问`GitHub`，故建议使用加速器或代理
+>在中国大陆访问 `GitHub` 可能不稳定，故建议使用加速器或代理
 >由于最新版本的ubuntu镜像缺少python3.12包，因此需要新增下载[旧版镜像](https://github.com/termux/proot-distro/releases/tag/v4.18.0),下面以ubuntu-noble-aarch64-pd-v4.18.0.tar.xz为例
 
 ```bash
