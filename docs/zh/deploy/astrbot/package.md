@@ -13,5 +13,5 @@
 ```bash
 uv tool install astrbot
 astrbot init # 只需要在第一次部署时执行，后续启动不需要执行
-astrbot
+astrbot run
 ```
