@@ -93,6 +93,66 @@ class MockMissingRequiredArgProvider(MockProvider):
         )
 
 
+class MockCamelCaseArgProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": 123, "maxResults": "5"}],
+            tools_call_ids=["call_camel_case"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MockAnyOfViolationProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"note": "only note"}],
+            tools_call_ids=["call_anyof_violation"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MockIncompatibleArgsProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"irrelevant_field": "x"}],
+            tools_call_ids=["call_incompatible_args"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockToolExecutor:
     """模拟工具执行器"""
 
@@ -464,6 +524,188 @@ async def test_missing_required_tool_args_are_reported_without_handler_typeerror
     assert contents
     assert any("Missing required tool arguments: query" in c for c in contents)
     assert not any("Tool handler parameter mismatch" in c for c in contents)
+
+
+@pytest.mark.asyncio
+async def test_camel_case_tool_args_are_mapped_to_snake_case_and_executed(
+    runner, mock_hooks
+):
+    provider = MockCamelCaseArgProvider()
+    captured: dict = {}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            captured.update(tool_args)
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer"},
+            },
+            "required": ["query", "max_results"],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert captured.get("query") == "123"
+    assert captured.get("max_results") == 5
+
+
+@pytest.mark.asyncio
+async def test_anyof_contract_violation_is_reported_without_executing_tool(
+    runner, mock_hooks
+):
+    provider = MockAnyOfViolationProvider()
+    executed = {"called": False}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            executed["called"] = True
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "note": {"type": "string"},
+                "cron_expression": {"type": "string"},
+                "run_at": {"type": "string"},
+            },
+            "required": ["note"],
+            "anyOf": [
+                {"required": ["cron_expression"]},
+                {"required": ["run_at"]},
+            ],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我创建未来任务",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert executed["called"] is False
+    assert request.tool_calls_result is not None
+    contents = [
+        str(seg.content)
+        for tcr in request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert any("Argument contract violation (anyOf)" in c for c in contents)
+
+
+@pytest.mark.asyncio
+async def test_incompatible_tool_args_are_rejected_early(
+    runner, mock_hooks
+):
+    provider = MockIncompatibleArgsProvider()
+    executed = {"called": False}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            executed["called"] = True
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert executed["called"] is False
+    assert request.tool_calls_result is not None
+    contents = [
+        str(seg.content)
+        for tcr in request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert any("No compatible arguments for this tool" in c for c in contents)
 
 
 @pytest.mark.asyncio

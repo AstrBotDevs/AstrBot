@@ -3,6 +3,7 @@ import copy
 import datetime as dt
 import hashlib
 import json
+import re
 import sys
 import time
 import traceback
@@ -266,6 +267,113 @@ def _canonicalize_tool_arg_value(
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
+    @staticmethod
+    def _normalize_tool_param_name_for_matching(name: str) -> str:
+        """Normalize common arg-name variants (camelCase/kebab-case) to snake_case."""
+        normalized = name.replace("-", "_")
+        normalized = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", normalized)
+        normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", normalized)
+        return normalized.lower()
+
+    @staticmethod
+    def _is_missing_like(value: T.Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return not value.strip()
+        return False
+
+    @staticmethod
+    def _schema_type_tokens(schema: dict[str, T.Any] | None) -> set[str]:
+        if not isinstance(schema, dict):
+            return set()
+        type_val = schema.get("type")
+        if isinstance(type_val, str):
+            return {type_val}
+        if isinstance(type_val, list):
+            return {str(t) for t in type_val if isinstance(t, str)}
+        return set()
+
+    @classmethod
+    def _coerce_tool_value_by_schema(
+        cls,
+        *,
+        value: T.Any,
+        schema: dict[str, T.Any] | None,
+    ) -> T.Any:
+        tokens = cls._schema_type_tokens(schema)
+        if not tokens:
+            return value
+
+        if "boolean" in tokens:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, int | float):
+                return bool(value)
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in {"true", "1", "yes", "y", "on"}:
+                    return True
+                if lowered in {"false", "0", "no", "n", "off", ""}:
+                    return False
+
+        if "integer" in tokens:
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float) and value.is_integer():
+                return int(value)
+            if isinstance(value, str):
+                stripped = value.strip()
+                if re.fullmatch(r"[+-]?\d+", stripped):
+                    try:
+                        return int(stripped)
+                    except ValueError:
+                        pass
+
+        if "number" in tokens:
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                stripped = value.strip()
+                if stripped:
+                    try:
+                        return float(stripped)
+                    except ValueError:
+                        pass
+
+        if "string" in tokens and not isinstance(value, str):
+            if isinstance(value, bool | int | float):
+                return str(value)
+
+        return value
+
+    @classmethod
+    def _coerce_tool_params_by_schema(
+        cls,
+        *,
+        params: dict[str, T.Any],
+        params_schema: dict[str, T.Any] | None,
+    ) -> tuple[dict[str, T.Any], dict[str, tuple[T.Any, T.Any]]]:
+        if not isinstance(params_schema, dict):
+            return params, {}
+        properties = params_schema.get("properties")
+        if not isinstance(properties, dict):
+            return params, {}
+
+        coerced_params = dict(params)
+        changed: dict[str, tuple[T.Any, T.Any]] = {}
+        for key, value in params.items():
+            schema = properties.get(key)
+            if not isinstance(schema, dict):
+                continue
+            coerced = cls._coerce_tool_value_by_schema(value=value, schema=schema)
+            if coerced is not value and coerced != value:
+                changed[key] = (value, coerced)
+                coerced_params[key] = coerced
+        return coerced_params, changed
+
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
         event = getattr(self.run_context.context, "event", None)
@@ -786,12 +894,68 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 missing.append(field_name)
                 continue
             value = provided_params.get(field_name)
-            if value is None:
-                missing.append(field_name)
-                continue
-            if isinstance(value, str) and not value.strip():
+            if ToolLoopAgentRunner._is_missing_like(value):
                 missing.append(field_name)
         return missing
+
+    @staticmethod
+    def _validate_anyof_oneof_contract(
+        *,
+        tool: T.Any,
+        provided_params: dict[str, T.Any],
+    ) -> str | None:
+        params_schema = getattr(tool, "parameters", None)
+        if not isinstance(params_schema, dict):
+            return None
+
+        def _extract_required_groups(key: str) -> list[list[str]]:
+            groups_raw = params_schema.get(key)
+            if not isinstance(groups_raw, list):
+                return []
+            groups: list[list[str]] = []
+            for item in groups_raw:
+                if not isinstance(item, dict):
+                    continue
+                req = item.get("required")
+                if not isinstance(req, list):
+                    continue
+                normalized = [f for f in req if isinstance(f, str) and f]
+                if normalized:
+                    groups.append(normalized)
+            return groups
+
+        def _is_group_satisfied(group: list[str]) -> bool:
+            for field in group:
+                if field not in provided_params:
+                    return False
+                if ToolLoopAgentRunner._is_missing_like(provided_params.get(field)):
+                    return False
+            return True
+
+        anyof_groups = _extract_required_groups("anyOf")
+        if anyof_groups and not any(_is_group_satisfied(g) for g in anyof_groups):
+            group_text = " or ".join(
+                "[" + ", ".join(group) + "]" for group in anyof_groups
+            )
+            return (
+                "error: Argument contract violation (anyOf). "
+                f"At least one argument group is required: {group_text}."
+            )
+
+        oneof_groups = _extract_required_groups("oneOf")
+        if oneof_groups:
+            satisfied = sum(1 for g in oneof_groups if _is_group_satisfied(g))
+            if satisfied != 1:
+                group_text = " | ".join(
+                    "[" + ", ".join(group) + "]" for group in oneof_groups
+                )
+                return (
+                    "error: Argument contract violation (oneOf). "
+                    "Exactly one argument group must be provided. "
+                    f"Available groups: {group_text}."
+                )
+
+        return None
 
     @override
     async def step(self):
@@ -1186,23 +1350,78 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     logger.debug(
                         f"工具 {func_tool_name} 期望的参数: {func_tool.parameters}",
                     )
+                    params_schema = (
+                        func_tool.parameters
+                        if isinstance(func_tool.parameters, dict)
+                        else None
+                    )
                     if func_tool.parameters and func_tool.parameters.get("properties"):
                         expected_params = set(func_tool.parameters["properties"].keys())
+                        alias_mapped_params: dict[str, str] = {}
+                        for raw_key, value in func_tool_args.items():
+                            if raw_key in expected_params:
+                                valid_params[raw_key] = value
+                                continue
+                            normalized_key = (
+                                self._normalize_tool_param_name_for_matching(raw_key)
+                            )
+                            if (
+                                normalized_key in expected_params
+                                and normalized_key not in valid_params
+                            ):
+                                valid_params[normalized_key] = value
+                                alias_mapped_params[raw_key] = normalized_key
 
-                        valid_params = {
-                            k: v
-                            for k, v in func_tool_args.items()
-                            if k in expected_params
-                        }
+                        if alias_mapped_params:
+                            logger.info(
+                                "工具 %s 参数名称已自动映射: %s",
+                                func_tool_name,
+                                alias_mapped_params,
+                            )
+
+                        valid_params, changed_types = self._coerce_tool_params_by_schema(
+                            params=valid_params,
+                            params_schema=params_schema,
+                        )
+                        if changed_types:
+                            logger.info(
+                                "工具 %s 参数类型已自动纠正: %s",
+                                func_tool_name,
+                                {
+                                    k: {"from": repr(v[0]), "to": repr(v[1])}
+                                    for k, v in changed_types.items()
+                                },
+                            )
 
                     # 记录被忽略的参数
                     ignored_params = set(func_tool_args.keys()) - set(
-                        valid_params.keys(),
+                        valid_params.keys()
                     )
+                    if func_tool.parameters and func_tool.parameters.get("properties"):
+                        ignored_params = {
+                            k
+                            for k in ignored_params
+                            if self._normalize_tool_param_name_for_matching(k)
+                            not in valid_params
+                        }
                     if ignored_params:
                         logger.warning(
                             f"工具 {func_tool_name} 忽略非期望参数: {ignored_params}",
                         )
+
+                    if func_tool_args and not valid_params:
+                        _append_tool_call_result(
+                            func_tool_id,
+                            (
+                                "error: No compatible arguments for this tool. "
+                                f"Provided arguments={sorted(func_tool_args.keys())}. "
+                                "This may indicate a wrong tool selection; "
+                                "please re-check tool name and argument schema."
+                            ),
+                            tool_name=func_tool_name,
+                            tool_args=func_tool_args,
+                        )
+                        continue
                 else:
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
@@ -1226,6 +1445,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             f"{missing_text}. "
                             "Please call this tool again with all required arguments."
                         ),
+                        tool_name=func_tool_name,
+                        tool_args=func_tool_args,
+                    )
+                    continue
+
+                contract_error = self._validate_anyof_oneof_contract(
+                    tool=func_tool,
+                    provided_params=valid_params,
+                )
+                if contract_error:
+                    logger.warning(
+                        "工具 %s 参数契约校验失败: %s",
+                        func_tool_name,
+                        contract_error,
+                    )
+                    _append_tool_call_result(
+                        func_tool_id,
+                        contract_error,
                         tool_name=func_tool_name,
                         tool_args=func_tool_args,
                     )
