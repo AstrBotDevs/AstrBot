@@ -1,5 +1,7 @@
 import asyncio
 import copy
+import hashlib
+import json
 import sys
 import time
 import traceback
@@ -80,6 +82,12 @@ class FollowUpTicket:
     resolved: asyncio.Event = field(default_factory=asyncio.Event)
 
 
+@dataclass(slots=True)
+class _ToolResultDedupState:
+    result_hash: str
+    repeat_count: int = 0
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -158,6 +166,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._aborted = False
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
+        self._tool_result_dedup: dict[str, _ToolResultDedupState] = {}
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -344,6 +353,68 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not notice:
             return content
         return f"{content}{notice}"
+
+    @staticmethod
+    def _compact_tool_result_preview(content: str, limit: int = 180) -> str:
+        normalized = " ".join(content.strip().split())
+        if len(normalized) <= limit:
+            return normalized
+        if limit <= 3:
+            return normalized[:limit]
+        return f"{normalized[: limit - 3]}..."
+
+    @staticmethod
+    def _normalize_tool_args_for_signature(tool_args: dict[str, T.Any]) -> str:
+        try:
+            return json.dumps(
+                tool_args,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+        except (TypeError, ValueError):
+            return repr(tool_args)
+
+    def _deduplicate_tool_result_content(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, T.Any],
+        content: str,
+    ) -> str:
+        if not content:
+            return content
+
+        signature = (
+            f"{tool_name}:{self._normalize_tool_args_for_signature(tool_args=tool_args)}"
+        )
+        content_hash = hashlib.sha256(
+            content.encode("utf-8", errors="replace")
+        ).hexdigest()
+
+        state = self._tool_result_dedup.get(signature)
+        if state is None or state.result_hash != content_hash:
+            self._tool_result_dedup[signature] = _ToolResultDedupState(
+                result_hash=content_hash,
+                repeat_count=0,
+            )
+            return content
+
+        state.repeat_count += 1
+        repeat_total = state.repeat_count + 1
+        preview = self._compact_tool_result_preview(content)
+        logger.info(
+            "Deduplicated repeated tool output: tool=%s repeats=%s",
+            tool_name,
+            repeat_total,
+        )
+        return (
+            "[tool-result-deduplicated] "
+            f"Tool `{tool_name}` returned unchanged output for {repeat_total} "
+            "consecutive calls with the same arguments. Full repeated output is "
+            f"omitted to reduce context growth. Latest preview: {preview}"
+        )
 
     @override
     async def step(self):
@@ -656,12 +727,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_result_blocks: list[ToolCallMessageSegment] = []
         logger.info(f"Agent 使用工具: {llm_response.tools_call_name}")
 
-        def _append_tool_call_result(tool_call_id: str, content: str) -> None:
+        def _append_tool_call_result(
+            tool_call_id: str,
+            content: str,
+            *,
+            tool_name: str | None = None,
+            tool_args: dict[str, T.Any] | None = None,
+        ) -> None:
+            output = content
+            if tool_name:
+                output = self._deduplicate_tool_result_content(
+                    tool_name=tool_name,
+                    tool_args=tool_args or {},
+                    content=content,
+                )
             tool_call_result_blocks.append(
                 ToolCallMessageSegment(
                     role="tool",
                     tool_call_id=tool_call_id,
-                    content=self._merge_follow_up_notice(content),
+                    content=self._merge_follow_up_notice(output),
                 ),
             )
 
@@ -707,6 +791,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     _append_tool_call_result(
                         func_tool_id,
                         f"error: Tool {func_tool_name} not found.",
+                        tool_name=func_tool_name,
+                        tool_args=func_tool_args,
                     )
                     continue
 
@@ -762,6 +848,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             _append_tool_call_result(
                                 func_tool_id,
                                 res.content[0].text,
+                                tool_name=func_tool_name,
+                                tool_args=valid_params,
                             )
                         elif isinstance(res.content[0], ImageContent):
                             # Cache the image instead of sending directly
@@ -779,6 +867,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                     f"with type='image' and path='{cached_img.file_path}'."
                                 ),
+                                tool_name=func_tool_name,
+                                tool_args=valid_params,
                             )
                             # Yield image info for LLM visibility (will be handled in step())
                             yield _HandleFunctionToolsResult.from_cached_image(
@@ -790,6 +880,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 _append_tool_call_result(
                                     func_tool_id,
                                     resource.text,
+                                    tool_name=func_tool_name,
+                                    tool_args=valid_params,
                                 )
                             elif (
                                 isinstance(resource, BlobResourceContents)
@@ -811,6 +903,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                         f"Review the image below. Use send_message_to_user to send it to the user if satisfied, "
                                         f"with type='image' and path='{cached_img.file_path}'."
                                     ),
+                                    tool_name=func_tool_name,
+                                    tool_args=valid_params,
                                 )
                                 # Yield image info for LLM visibility
                                 yield _HandleFunctionToolsResult.from_cached_image(
@@ -820,6 +914,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 _append_tool_call_result(
                                     func_tool_id,
                                     "The tool has returned a data type that is not supported.",
+                                    tool_name=func_tool_name,
+                                    tool_args=valid_params,
                                 )
 
                     elif resp is None:
@@ -834,6 +930,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         _append_tool_call_result(
                             func_tool_id,
                             "The tool has no return value, or has sent the result directly to the user.",
+                            tool_name=func_tool_name,
+                            tool_args=valid_params,
                         )
                     else:
                         # 不应该出现其他类型
@@ -843,6 +941,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         _append_tool_call_result(
                             func_tool_id,
                             "*The tool has returned an unsupported type. Please tell the user to check the definition and implementation of this tool.*",
+                            tool_name=func_tool_name,
+                            tool_args=valid_params,
                         )
 
                 try:
@@ -859,6 +959,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 _append_tool_call_result(
                     func_tool_id,
                     f"error: {e!s}",
+                    tool_name=func_tool_name,
+                    tool_args=func_tool_args,
                 )
 
         # yield the last tool call result

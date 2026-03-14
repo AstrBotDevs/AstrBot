@@ -296,6 +296,44 @@ async def test_normal_completion_without_max_step(
 
 
 @pytest.mark.asyncio
+async def test_repeated_tool_output_is_deduplicated_in_context(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """测试重复工具输出会被压缩，避免上下文持续膨胀。"""
+
+    # 前 3 次都调用相同工具，且工具返回相同文本
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 3
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    assert provider_request.tool_calls_result is not None
+    assert isinstance(provider_request.tool_calls_result, list)
+    assert provider_request.tool_calls_result
+
+    tool_contents = [
+        str(seg.content)
+        for tcr in provider_request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert tool_contents
+    assert "工具执行结果" in tool_contents[0]
+    assert any(
+        content.startswith("[tool-result-deduplicated]") for content in tool_contents[1:]
+    )
+
+
+@pytest.mark.asyncio
 async def test_max_step_with_streaming(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
