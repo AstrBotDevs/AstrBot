@@ -11,6 +11,7 @@
                     :currSessionId="currSessionId"
                     :selectedProjectId="selectedProjectId"
                     :transportMode="transportMode"
+                    :sendShortcut="sendShortcut"
                     :isDark="isDark"
                     :chatboxMode="chatboxMode"
                     :isMobile="isMobile"
@@ -29,6 +30,7 @@
                     @editProject="showEditProjectDialog"
                     @deleteProject="handleDeleteProject"
                     @updateTransportMode="setTransportMode"
+                    @updateSendShortcut="setSendShortcut"
                 />
 
                 <!-- 右侧聊天内容区域 -->
@@ -79,6 +81,7 @@
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
+                                :send-shortcut="sendShortcut"
                                 @send="handleSendMessage"
                                 @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
@@ -110,6 +113,7 @@
                                 :session-id="currSessionId || null"
                                 :current-session="getCurrentSession"
                                 :replyTo="replyTo"
+                                :send-shortcut="sendShortcut"
                                 @send="handleSendMessage"
                                 @stop="handleStopMessage"
                                 @toggleStreaming="toggleStreaming"
@@ -140,6 +144,7 @@
                             :session-id="currSessionId || null"
                             :current-session="getCurrentSession"
                             :replyTo="replyTo"
+                            :send-shortcut="sendShortcut"
                             @send="handleSendMessage"
                             @stop="handleStopMessage"
                             @toggleStreaming="toggleStreaming"
@@ -226,6 +231,8 @@ import { useToast } from '@/utils/toast';
 interface Props {
     chatboxMode?: boolean;
 }
+type SendShortcut = 'enter' | 'shift_enter';
+const SEND_SHORTCUT_STORAGE_KEY = 'chat_send_shortcut';
 
 const props = withDefaults(defineProps<Props>(), {
     chatboxMode: false
@@ -334,6 +341,12 @@ interface ReplyInfo {
 const replyTo = ref<ReplyInfo | null>(null);
 
 const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+const sendShortcut = ref<SendShortcut>('shift_enter');
+
+function setSendShortcut(mode: SendShortcut) {
+    sendShortcut.value = mode;
+    localStorage.setItem(SEND_SHORTCUT_STORAGE_KEY, mode);
+}
 
 // 检测是否为手机端
 function checkMobile() {
@@ -725,6 +738,10 @@ watch(sessions, (newSessions) => {
 });
 
 onMounted(() => {
+    const storedShortcut = localStorage.getItem(SEND_SHORTCUT_STORAGE_KEY);
+    if (storedShortcut === 'enter' || storedShortcut === 'shift_enter') {
+        sendShortcut.value = storedShortcut;
+    }
     checkMobile();
     window.addEventListener('resize', checkMobile);
     getSessions();

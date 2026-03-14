@@ -75,7 +75,12 @@
     "shortcuts": {
         "help": "Справка",
         "voiceRecord": "Запись голоса",
-        "pasteImage": "Вставить изображение"
+        "pasteImage": "Вставить изображение",
+        "sendKey": {
+            "title": "Клавиша отправки",
+            "enterToSend": "Enter для отправки",
+            "shiftEnterToSend": "Shift+Enter для отправки"
+        }
     },
     "streaming": {
         "enabled": "Потоковый ответ включен",
