@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from typing import IO
 
+from ..protocol.wire_codecs import make_protocol_codec
 from .loader import PluginEnvironmentManager
 from .supervisor import (
     SupervisorRuntime,
@@ -49,9 +50,10 @@ __all__ = [
 async def run_supervisor(
     *,
     plugins_dir: Path = Path("plugins"),
-    stdin: IO[str] | None = None,
-    stdout: IO[str] | None = None,
+    stdin: IO[str] | IO[bytes] | None = None,
+    stdout: IO[str] | IO[bytes] | None = None,
     env_manager: PluginEnvironmentManager | None = None,
+    worker_wire_codec: str = "json",
 ) -> None:
     transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
         stdin,
@@ -62,6 +64,7 @@ async def run_supervisor(
         transport=transport,
         plugins_dir=plugins_dir,
         env_manager=env_manager,
+        worker_wire_codec_name=worker_wire_codec,
     )
 
     try:
@@ -79,26 +82,39 @@ async def run_plugin_worker(
     *,
     plugin_dir: Path | None = None,
     group_metadata: Path | None = None,
-    stdin: IO[str] | None = None,
-    stdout: IO[str] | None = None,
+    stdin: IO[str] | IO[bytes] | None = None,
+    stdout: IO[str] | IO[bytes] | None = None,
+    wire_codec: str = "json",
 ) -> None:
     if plugin_dir is None and group_metadata is None:
         raise ValueError("plugin_dir or group_metadata is required")
     if plugin_dir is not None and group_metadata is not None:
         raise ValueError("plugin_dir and group_metadata are mutually exclusive")
 
+    codec = make_protocol_codec(wire_codec)
     transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
         stdin,
         stdout,
+        binary=codec.stdio_framing == "length_prefixed",
     )
-    transport = StdioTransport(stdin=transport_stdin, stdout=transport_stdout)
+    transport = StdioTransport(
+        stdin=transport_stdin,
+        stdout=transport_stdout,
+        framing=codec.stdio_framing,
+    )
     if group_metadata is not None:
         runtime = GroupWorkerRuntime(
             group_metadata_path=group_metadata,
             transport=transport,
+            codec=codec,
         )
     else:
-        runtime = PluginWorkerRuntime(plugin_dir=plugin_dir, transport=transport)
+        assert plugin_dir is not None
+        runtime = PluginWorkerRuntime(
+            plugin_dir=plugin_dir,
+            transport=transport,
+            codec=codec,
+        )
     try:
         await runtime.start()
         stop_event = asyncio.Event()
@@ -116,10 +132,18 @@ async def run_websocket_server(
     port: int = 8765,
     path: str = "/",
     plugin_dir: Path | None = None,
+    wire_codec: str = "json",
 ) -> None:
+    codec = make_protocol_codec(wire_codec)
     runtime = PluginWorkerRuntime(
         plugin_dir=plugin_dir or Path.cwd(),
-        transport=WebSocketServerTransport(host=host, port=port, path=path),
+        transport=WebSocketServerTransport(
+            host=host,
+            port=port,
+            path=path,
+            frame_type=codec.websocket_frame_type,
+        ),
+        codec=codec,
     )
     try:
         await runtime.start()

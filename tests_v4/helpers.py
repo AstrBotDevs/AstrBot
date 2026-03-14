@@ -4,8 +4,9 @@ import asyncio
 import shutil
 from types import SimpleNamespace
 from pathlib import Path
+from typing import cast
 
-from astrbot_sdk.runtime.transport import Transport
+from astrbot_sdk.runtime.transport import RawPayload, Transport
 
 
 class MemoryTransport(Transport):
@@ -36,7 +37,7 @@ class MemoryTransport(Transport):
         """
         self._closed.set()  # 设置关闭事件
 
-    async def send(self, payload: str) -> None:
+    async def send(self, payload: RawPayload) -> None:
         """发送消息给伙伴。
 
         Args:
@@ -48,7 +49,9 @@ class MemoryTransport(Transport):
         if self.partner is None:
             raise RuntimeError("MemoryTransport 未连接 partner")
         # 将消息转发给伙伴的_dispatch方法进行处理
-        await self.partner._dispatch(payload)
+        if isinstance(payload, str):
+            payload = payload.encode("utf-8")
+        await self.partner._dispatch(cast(bytes, payload))
 
 
 def make_transport_pair() -> tuple[MemoryTransport, MemoryTransport]:

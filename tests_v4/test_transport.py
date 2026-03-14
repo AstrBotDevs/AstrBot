@@ -5,7 +5,7 @@ Tests for runtime/transport.py - Transport implementations.
 from __future__ import annotations
 
 import asyncio
-from io import StringIO
+from io import BytesIO, StringIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,7 +32,7 @@ class TestTransportBase:
             async def stop(self):
                 pass
 
-            async def send(self, message: str):
+            async def send(self, payload):
                 pass
 
         transport = ConcreteTransport()
@@ -48,7 +48,7 @@ class TestTransportBase:
             async def stop(self):
                 pass
 
-            async def send(self, message: str):
+            async def send(self, payload):
                 pass
 
         transport = ConcreteTransport()
@@ -85,7 +85,7 @@ class TestTransportBase:
             async def stop(self):
                 pass
 
-            async def send(self, message: str):
+            async def send(self, payload):
                 pass
 
         transport = ConcreteTransport()
@@ -104,14 +104,14 @@ class TestTransportBase:
             async def stop(self):
                 pass
 
-            async def send(self, message: str):
+            async def send(self, payload):
                 pass
 
         transport = ConcreteTransport()
         handler = AsyncMock()
         transport.set_message_handler(handler)
-        await transport._dispatch("test payload")
-        handler.assert_called_once_with("test payload")
+        await transport._dispatch(b"test payload")
+        handler.assert_called_once_with(b"test payload")
 
     @pytest.mark.asyncio
     async def test_dispatch_without_handler(self):
@@ -124,12 +124,12 @@ class TestTransportBase:
             async def stop(self):
                 pass
 
-            async def send(self, message: str):
+            async def send(self, payload):
                 pass
 
         transport = ConcreteTransport()
         # Should not raise when no handler is set
-        await transport._dispatch("test payload")
+        await transport._dispatch(b"test payload")
 
 
 class TestStdioTransportInit:
@@ -186,14 +186,13 @@ class TestStdioTransportFileMode:
             await transport.start()
             task = transport._reader_task
             await transport.stop()
+            assert task is not None
             assert task.cancelled() or task.done()
 
     @pytest.mark.asyncio
     async def test_send_without_process(self):
         """send() without process should write to stdout."""
-        stdout = MagicMock()
-        stdout.write = MagicMock()
-        stdout.flush = MagicMock()
+        stdout = StringIO()
         transport = StdioTransport(stdout=stdout)
 
         with patch("sys.stdin"):
@@ -202,40 +201,35 @@ class TestStdioTransportFileMode:
         await transport.send("test message")
 
         # Should have written the message with newline
-        stdout.write.assert_called_once_with("test message\n")
-        stdout.flush.assert_called_once()
+        assert stdout.getvalue() == "test message\n"
 
         await transport.stop()
 
     @pytest.mark.asyncio
     async def test_send_adds_newline_if_missing(self):
         """send() should add newline if not present."""
-        stdout = MagicMock()
-        stdout.write = MagicMock()
-        stdout.flush = MagicMock()
+        stdout = StringIO()
         transport = StdioTransport(stdout=stdout)
 
         with patch("sys.stdin"):
             await transport.start()
 
         await transport.send("message")
-        stdout.write.assert_called_once_with("message\n")
+        assert stdout.getvalue() == "message\n"
 
         await transport.stop()
 
     @pytest.mark.asyncio
     async def test_send_preserves_existing_newline(self):
         """send() should not add extra newline."""
-        stdout = MagicMock()
-        stdout.write = MagicMock()
-        stdout.flush = MagicMock()
+        stdout = StringIO()
         transport = StdioTransport(stdout=stdout)
 
         with patch("sys.stdin"):
             await transport.start()
 
         await transport.send("message\n")
-        stdout.write.assert_called_once_with("message\n")
+        assert stdout.getvalue() == "message\n"
 
         await transport.stop()
 
@@ -268,6 +262,28 @@ class TestStdioTransportFileMode:
 
         with pytest.raises(RuntimeError, match="stdout"):
             await transport.send("test")
+
+    @pytest.mark.asyncio
+    async def test_length_prefixed_roundtrip(self):
+        """length-prefixed stdio should preserve binary payloads."""
+        stdin = BytesIO()
+        stdout = BytesIO()
+        transport = StdioTransport(
+            stdin=stdin,
+            stdout=stdout,
+            framing="length_prefixed",
+        )
+        received: list[bytes] = []
+
+        async def handle_message(payload: bytes):
+            received.append(payload)
+
+        transport.set_message_handler(handle_message)
+        await transport.send(b"\x81\xa4test\x01")
+        stdin.write(stdout.getvalue())
+        stdin.seek(0)
+        await transport._read_file_loop()
+        assert received == [b"\x81\xa4test\x01"]
 
 
 class TestStdioTransportProcessMode:
@@ -423,6 +439,7 @@ class TestWebSocketServerTransportLifecycle:
         transport._ws = MagicMock()
         transport._ws.closed = False
         transport._ws.send_str = AsyncMock()
+        transport._ws.send_bytes = AsyncMock()
         # close 也需要是异步的
         transport._ws.close = AsyncMock()
 
@@ -440,6 +457,24 @@ class TestWebSocketServerTransportLifecycle:
         # Set timeout to 0 for immediate failure
         with pytest.raises((RuntimeError, asyncio.TimeoutError)):
             await transport.send("test")
+
+        await transport.stop()
+
+    @pytest.mark.asyncio
+    async def test_send_binary_frame_when_configured(self):
+        transport = WebSocketServerTransport(port=0, heartbeat=0, frame_type="binary")
+        await transport.start()
+
+        transport._connected.set()
+        transport._ws = MagicMock()
+        transport._ws.closed = False
+        transport._ws.send_str = AsyncMock()
+        transport._ws.send_bytes = AsyncMock()
+        transport._ws.close = AsyncMock()
+
+        await transport.send(b"\x81\xa3hi")
+        transport._ws.send_bytes.assert_called_once_with(b"\x81\xa3hi")
+        transport._ws.send_str.assert_not_called()
 
         await transport.stop()
 
@@ -527,7 +562,7 @@ class TestTransportIntegration:
 
         received_messages = []
 
-        async def handle_message(payload: str):
+        async def handle_message(payload: bytes):
             received_messages.append(payload)
 
         server.set_message_handler(handle_message)
@@ -546,7 +581,7 @@ class TestTransportIntegration:
         # Wait for message to be received
         await asyncio.sleep(0.1)
 
-        assert "hello from client" in received_messages
+        assert b"hello from client" in received_messages
 
         await client.stop()
         await server.stop()
