@@ -189,7 +189,7 @@ exit
 可以使用命令如下：
 
 ```bash
-proot-distro login ubuntu
+proot-distro login ubuntu-old
 cd AstrBot && uv run main.py
 ```
 
