@@ -188,9 +188,9 @@ class CronJobManager:
         aps_job = self.scheduler.get_job(job_id)
         if aps_job and aps_job.next_run_time:
             next_run = aps_job.next_run_time
-            if next_run.tzinfo is not None:
-                next_run = next_run.astimezone(timezone.utc)
-            return next_run
+            if next_run.tzinfo is None:
+                return next_run.replace(tzinfo=timezone.utc)
+            return next_run.astimezone(timezone.utc)
         return None
 
     async def _run_job(self, job_id: str) -> None:
