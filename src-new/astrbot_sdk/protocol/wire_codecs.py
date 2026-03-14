@@ -18,7 +18,7 @@ class ProtocolCodec(ABC):
     websocket_frame_type: WebSocketFrameType
 
     @abstractmethod
-    def encode_message(self, message: ProtocolMessage) -> bytes:
+    def encode_message(self, message: ProtocolMessage) -> bytes | str:
         raise NotImplementedError
 
     @abstractmethod
@@ -31,8 +31,8 @@ class JsonProtocolCodec(ProtocolCodec):
     stdio_framing: StdioFraming = "line"
     websocket_frame_type: WebSocketFrameType = "text"
 
-    def encode_message(self, message: ProtocolMessage) -> bytes:
-        return message.model_dump_json(exclude_none=True).encode("utf-8")
+    def encode_message(self, message: ProtocolMessage) -> str:
+        return message.model_dump_json(exclude_none=True)
 
     def decode_message(self, payload: bytes | str) -> ProtocolMessage:
         if isinstance(payload, bytes):

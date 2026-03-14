@@ -34,7 +34,7 @@ class TestJsonProtocolCodec:
         encoded = codec.encode_message(message)
         decoded = codec.decode_message(encoded)
 
-        assert isinstance(encoded, bytes)
+        assert isinstance(encoded, str)
         assert decoded == message
 
 

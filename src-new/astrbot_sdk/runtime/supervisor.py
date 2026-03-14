@@ -395,14 +395,14 @@ class SupervisorRuntime:
         plugins_dir: Path,
         env_manager: PluginEnvironmentManager | None = None,
         codec: ProtocolCodec | None = None,
-        wire_codec_name: str = "json",
+        worker_wire_codec_name: str = "json",
     ) -> None:
         self.transport = transport
         self.plugins_dir = plugins_dir.resolve()
         self.repo_root = Path(__file__).resolve().parents[3]
         self.env_manager = env_manager or PluginEnvironmentManager(self.repo_root)
-        self.codec = codec or make_protocol_codec(wire_codec_name)
-        self.wire_codec_name = self.codec.name
+        self.codec = codec or make_protocol_codec("json")
+        self.worker_wire_codec_name = worker_wire_codec_name
         self.capability_router = CapabilityRouter()
         self.peer = Peer(
             transport=self.transport,
@@ -646,7 +646,7 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
-                            wire_codec_name=self.wire_codec_name,
+                            wire_codec_name=self.worker_wire_codec_name,
                             on_closed=lambda group_id=group.id: (
                                 self._handle_worker_closed(group_id)
                             ),
@@ -660,7 +660,7 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
-                            wire_codec_name=self.wire_codec_name,
+                            wire_codec_name=self.worker_wire_codec_name,
                             on_closed=lambda plugin_name=plugin.name: (
                                 self._handle_worker_closed(plugin_name)
                             ),

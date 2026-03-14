@@ -17,6 +17,7 @@ from astrbot_sdk.protocol.wire_codecs import MsgpackProtocolCodec
 from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
 from astrbot_sdk.runtime.peer import Peer
 from astrbot_sdk.runtime.transport import (
+    Transport,
     WebSocketClientTransport,
     WebSocketServerTransport,
 )
@@ -39,6 +40,21 @@ def make_linked_transport_pair() -> tuple[LinkedMemoryTransport, LinkedMemoryTra
     left.partner = right
     right.partner = left
     return left, right
+
+
+class RecordingTextTransport(Transport):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent_payloads: list[bytes | str] = []
+
+    async def start(self) -> None:
+        self._closed.clear()
+
+    async def stop(self) -> None:
+        self._closed.set()
+
+    async def send(self, payload):
+        self.sent_payloads.append(payload)
 
 
 class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
@@ -89,6 +105,20 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
         await plugin.stop()
         await core.stop()
+
+    async def test_default_json_codec_preserves_text_transport_payloads(self) -> None:
+        transport = RecordingTextTransport()
+        peer = Peer(
+            transport=transport,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+
+        await peer.start()
+        await peer.cancel("request-1")
+        await peer.stop()
+
+        self.assertEqual(len(transport.sent_payloads), 1)
+        self.assertIsInstance(transport.sent_payloads[0], str)
 
     async def test_initialize_carries_remote_provided_capabilities(self) -> None:
         provided = CapabilityDescriptor(
