@@ -99,6 +99,9 @@ class Plain(BaseMessageComponent):
     def toDict(self):
         return {"type": "text", "data": {"text": self.text}}
 
+    async def to_dict(self) -> dict:
+        return {"type": "text", "data": {"text": self.text}}
+
 
 class Face(BaseMessageComponent):
     type: ComponentType = ComponentType.Face
