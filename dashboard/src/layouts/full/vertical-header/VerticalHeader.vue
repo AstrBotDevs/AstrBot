@@ -465,23 +465,14 @@ onMounted(async () => {
   <v-app-bar elevation="0" height="50" class="top-header">
 
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" style="margin-left: 16px;"
-      class="hidden-md-and-down"  icon rounded="sm" variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'"
-      style="margin-left: 22px;"
+    <v-btn v-if="customizer.viewMode === 'bot'"
+      style="margin-left: 16px;"
       class="hidden-md-and-down" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
     <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
-    <v-btn v-if="customizer.viewMode === 'bot' && useCustomizerStore().uiTheme === 'PurpleTheme'" class="hidden-lg-and-up ms-3"
-      icon rounded="sm" variant="flat" @click.stop="customizer.SET_SIDEBAR_DRAWER">
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-    <v-btn v-else-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
+    <v-btn v-if="customizer.viewMode === 'bot'" class="hidden-lg-and-up ms-3" icon rounded="sm" variant="flat"
       @click.stop="customizer.SET_SIDEBAR_DRAWER">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
