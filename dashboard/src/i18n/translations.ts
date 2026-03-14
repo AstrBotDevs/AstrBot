@@ -106,11 +106,12 @@ export function isLocaleSupported(locale: string): locale is SupportedLocale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
 }
 
+const PATH_SEGMENT_ALIASES: Record<string, string> = {
+  'tool-use': 'tooluse'
+};
+
 function normalizePathSegment(segment: string): string {
-  if (segment === 'tool-use') {
-    return 'tooluse';
-  }
-  return segment;
+  return PATH_SEGMENT_ALIASES[segment] ?? segment;
 }
 
 function setNestedValue(target: Record<string, any>, pathSegments: string[], value: Record<string, any>): void {
@@ -168,6 +169,12 @@ export async function loadLocaleTranslations(locale: SupportedLocale): Promise<T
       modulePath.startsWith(`./locales/${locale}/`)
     );
 
+    if (entries.length === 0) {
+      throw new Error(`No translation modules found for locale: ${locale}`);
+    }
+
+    let loadedModuleCount = 0;
+
     await Promise.all(
       entries.map(async ([modulePath, loadModule]) => {
         const parsed = extractLocaleAndPath(modulePath);
@@ -178,8 +185,13 @@ export async function loadLocaleTranslations(locale: SupportedLocale): Promise<T
         const loadedModule = await loadModule();
         const moduleData = loadedModule.default || loadedModule;
         setNestedValue(localeData, parsed.pathSegments, moduleData);
+        loadedModuleCount += 1;
       })
     );
+
+    if (loadedModuleCount === 0 || Object.keys(localeData).length === 0) {
+      throw new Error(`Loaded empty translations for locale: ${locale}`);
+    }
 
     const typedLocaleData = localeData as TranslationData;
     localeCache.set(locale, typedLocaleData);

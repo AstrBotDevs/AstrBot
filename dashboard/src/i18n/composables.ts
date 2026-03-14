@@ -10,35 +10,35 @@ const translations = ref<Record<string, any>>({});
  * 初始化i18n系统
  */
 export async function initI18n(locale: Locale = 'zh-CN') {
-  currentLocale.value = locale;
-
-  // 加载翻译数据
-  await loadTranslations(locale);
+  // 加载翻译数据并获取实际生效语言（可能回退到zh-CN）
+  const effectiveLocale = await loadTranslations(locale);
+  currentLocale.value = effectiveLocale;
 }
 
 /**
- * 加载翻译数据（现在从静态导入获取）
+ * 加载翻译数据并返回实际生效语言
  */
-async function loadTranslations(locale: Locale): Promise<void> {
+async function loadTranslations(locale: Locale): Promise<Locale> {
   try {
     const data = await loadLocaleTranslations(locale);
-    if (data) {
-      translations.value = data;
-    } else {
-      console.warn(`Translations not found for locale: ${locale}`);
-      // 回退到中文
-      if (locale !== 'zh-CN') {
-        console.log('Falling back to zh-CN');
-        translations.value = await loadLocaleTranslations('zh-CN');
-      }
-    }
+    translations.value = data;
+    return locale;
   } catch (error) {
     console.error(`Failed to load translations for ${locale}:`, error);
+
     // 回退到中文
     if (locale !== 'zh-CN') {
-      console.log('Falling back to zh-CN');
-      translations.value = await loadLocaleTranslations('zh-CN');
+      try {
+        console.log('Falling back to zh-CN');
+        translations.value = await loadLocaleTranslations('zh-CN');
+        return 'zh-CN';
+      } catch (fallbackError) {
+        console.error('Failed to load fallback translations for zh-CN:', fallbackError);
+      }
     }
+
+    // 保持原有语言状态不变，避免状态与已加载翻译不一致
+    return currentLocale.value;
   }
 }
 
@@ -84,17 +84,22 @@ export function useI18n() {
   // 切换语言
   const setLocale = async (newLocale: Locale) => {
     if (newLocale !== currentLocale.value) {
-      currentLocale.value = newLocale;
-      await loadTranslations(newLocale);
+      const previousLocale = currentLocale.value;
+      const effectiveLocale = await loadTranslations(newLocale);
+      currentLocale.value = effectiveLocale;
+
+      if (effectiveLocale === previousLocale) {
+        return;
+      }
 
       // 保存到localStorage
-      localStorage.setItem('astrbot-locale', newLocale);
+      localStorage.setItem('astrbot-locale', effectiveLocale);
 
       // 触发自定义事件，通知相关页面重新加载配置数据
       // 这是因为插件适配器的 i18n 数据是通过后端 API 注入的，
       // 需要根据 Accept-Language 头重新获取
       window.dispatchEvent(new CustomEvent('astrbot-locale-changed', {
-        detail: { locale: newLocale }
+        detail: { locale: effectiveLocale }
       }));
     }
   };
