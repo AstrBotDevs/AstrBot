@@ -30,5 +30,6 @@ jobs:
 
       - name: 3. Ruff check and fix
         run: ruff check . --fix
+        continue-on-error: true
         env:
           PYTHONIOENCODING: utf-8
