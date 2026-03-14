@@ -81,9 +81,6 @@ importers:
       stream-markdown:
         specifier: ^0.0.13
         version: 0.0.13(shiki@3.22.0)
-      stream-monaco:
-        specifier: ^0.0.17
-        version: 0.0.17(monaco-editor@0.52.2)
       vee-validate:
         specifier: 4.11.3
         version: 4.11.3(vue@3.3.4)
@@ -3300,6 +3297,7 @@ snapshots:
       '@shikijs/core': 3.22.0
       '@shikijs/types': 3.22.0
       '@shikijs/vscode-textmate': 10.0.2
+    optional: true
 
   '@shikijs/themes@3.22.0':
     dependencies:
@@ -3992,7 +3990,8 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alien-signals@2.0.8: {}
+  alien-signals@2.0.8:
+    optional: true
 
   ansi-regex@5.0.1: {}
 
@@ -5443,6 +5442,7 @@ snapshots:
       alien-signals: 2.0.8
       monaco-editor: 0.52.2
       shiki: 3.22.0
+    optional: true
 
   stringify-entities@4.0.4:
     dependencies:

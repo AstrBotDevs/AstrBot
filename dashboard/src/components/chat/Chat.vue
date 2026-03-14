@@ -74,7 +74,7 @@
                                 :stagedImagesUrl="stagedImagesUrl"
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
-                                :disabled="isStreaming"
+                                :disabled="false"
                                 :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
@@ -106,7 +106,7 @@
                                 :stagedImagesUrl="stagedImagesUrl"
                                 :stagedAudioUrl="stagedAudioUrl"
                                 :stagedFiles="stagedNonImageFiles"
-                                :disabled="isStreaming"
+                                :disabled="false"
                                 :is-running="isStreaming || isConvRunning"
                                 :enableStreaming="enableStreaming"
                                 :isRecording="isRecording"
@@ -137,7 +137,7 @@
                             :stagedImagesUrl="stagedImagesUrl"
                             :stagedAudioUrl="stagedAudioUrl"
                             :stagedFiles="stagedNonImageFiles"
-                            :disabled="isStreaming"
+                            :disabled="false"
                             :is-running="isStreaming || isConvRunning"
                             :enableStreaming="enableStreaming"
                             :isRecording="isRecording"
@@ -348,6 +348,12 @@ function setSendShortcut(mode: SendShortcut) {
     localStorage.setItem(SEND_SHORTCUT_STORAGE_KEY, mode);
 }
 
+function focusChatInput() {
+    nextTick(() => {
+        chatInputRef.value?.focusInput?.();
+    });
+}
+
 // 检测是否为手机端
 function checkMobile() {
     isMobile.value = window.innerWidth <= 768;
@@ -505,6 +511,7 @@ async function handleSelectConversation(sessionIds: string[]) {
     nextTick(() => {
         messageList.value?.scrollToBottom();
     });
+    focusChatInput();
 }
 
 function handleNewChat() {
@@ -514,6 +521,7 @@ function handleNewChat() {
     // 退出项目视图
     selectedProjectId.value = null;
     projectSessions.value = [];
+    focusChatInput();
 }
 
 async function handleDeleteConversation(sessionId: string) {
@@ -671,6 +679,11 @@ async function handleSendMessage() {
     const selectedProviderId = selection?.providerId || '';
     const selectedModelName = selection?.modelName || '';
 
+    // 点击发送后立即将消息区滚到底部，确保用户看到最新消息
+    nextTick(() => {
+        messageList.value?.scrollToBottom();
+    });
+
     await sendMsg(
         promptToSend,
         filesToSend,
@@ -679,6 +692,11 @@ async function handleSendMessage() {
         selectedModelName,
         replyToSend
     );
+
+    // 发送流程结束后再兜底一次，处理异步渲染场景
+    nextTick(() => {
+        messageList.value?.scrollToBottom();
+    });
 
     // 如果在项目中创建了新会话，将其添加到项目
     if (isCreatingNewSession && currentProjectId && currSessionId.value) {
