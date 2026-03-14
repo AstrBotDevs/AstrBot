@@ -99,7 +99,7 @@ from typing import Any
 import yaml
 
 from .._legacy_loader import (
-    build_legacy_manifest,
+    PLUGIN_MANIFEST_FILE,
     load_legacy_main_component_classes,
     load_plugin_manifest_payload,
     looks_like_legacy_plugin,
@@ -109,7 +109,6 @@ from .._legacy_runtime import (
     LegacyRuntimeAdapter,
     build_capability_legacy_runtime,
     build_handler_legacy_runtime,
-    create_legacy_component_context,
     finalize_legacy_component_instance,
     is_new_star_component,
     plan_legacy_component_construction,
@@ -119,15 +118,12 @@ from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
 from .environment_groups import (
     EnvironmentGroup,
-    EnvironmentPlanResult,
     EnvironmentPlanner,
+    EnvironmentPlanResult,
     GroupEnvironmentManager,
 )
 
 STATE_FILE_NAME = ".astrbot-worker-state.json"
-PLUGIN_MANIFEST_FILE = "plugin.yaml"
-LEGACY_METADATA_FILE = "metadata.yaml"
-LEGACY_MAIN_FILE = "main.py"
 CONFIG_SCHEMA_FILE = "_conf_schema.json"
 LEGACY_MAIN_MANIFEST_KEY = "__legacy_main__"
 PLUGIN_METADATA_ATTR = "__astrbot_plugin_metadata__"
@@ -207,14 +203,6 @@ class LoadedPlugin:
     instances: list[Any] = field(default_factory=list)
 
 
-def _is_new_star_component(component_cls: Any) -> bool:
-    return is_new_star_component(component_cls)
-
-
-def _create_legacy_context(component_cls: Any, plugin_name: str) -> Any:
-    return create_legacy_component_context(component_cls, plugin_name)
-
-
 def _iter_handler_names(instance: Any) -> list[str]:
     handler_names = getattr(instance.__class__, "__handlers__", ())
     if handler_names:
@@ -275,19 +263,6 @@ def _read_requirements_text(path: Path) -> str:
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8")
-
-
-def _looks_like_legacy_plugin(plugin_dir: Path) -> bool:
-    return looks_like_legacy_plugin(plugin_dir)
-
-
-def _build_legacy_manifest(plugin_dir: Path) -> tuple[Path, dict[str, Any]]:
-    return build_legacy_manifest(
-        plugin_dir,
-        read_yaml=_read_yaml,
-        default_python_version=_default_python_version(),
-        manifest_flag_key=LEGACY_MAIN_MANIFEST_KEY,
-    )
 
 
 def _plugin_config_dir(plugin_dir: Path) -> Path:
@@ -479,7 +454,7 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
         if not entry.is_dir() or entry.name.startswith("."):
             continue
         manifest_path = entry / PLUGIN_MANIFEST_FILE
-        if not manifest_path.exists() and not _looks_like_legacy_plugin(entry):
+        if not manifest_path.exists() and not looks_like_legacy_plugin(entry):
             continue
         plugin: PluginSpec | None = None
         try:
@@ -629,7 +604,7 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     plugin_config = _load_plugin_config(plugin)
     for component_cls in _plugin_component_classes(plugin):
         legacy_context = None
-        if _is_new_star_component(component_cls):
+        if is_new_star_component(component_cls):
             instance = component_cls()
         else:
             construction = plan_legacy_component_construction(

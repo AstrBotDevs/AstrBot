@@ -86,6 +86,17 @@ from loguru import logger
 MessageHandler = Callable[[str], Awaitable[None]]
 
 
+def _frame_stdio_payload(payload: str) -> str:
+    body = payload
+    if body.endswith("\r\n"):
+        body = body[:-2]
+    elif body.endswith(("\n", "\r")):
+        body = body[:-1]
+    if "\n" in body or "\r" in body:
+        raise ValueError("STDIO payload 不允许包含原始换行符")
+    return f"{body}\n"
+
+
 class Transport(ABC):
     def __init__(self) -> None:
         self._handler: MessageHandler | None = None
@@ -175,7 +186,7 @@ class StdioTransport(Transport):
         self._closed.set()
 
     async def send(self, payload: str) -> None:
-        line = payload if payload.endswith("\n") else f"{payload}\n"
+        line = _frame_stdio_payload(payload)
         if self._process is not None:
             if self._process.stdin is None:
                 raise RuntimeError("STDIO subprocess stdin 不可用")

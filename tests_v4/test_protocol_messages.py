@@ -233,6 +233,12 @@ class TestInitializeOutput:
         output = InitializeOutput(peer=peer, metadata={"session": "abc"})
         assert output.metadata["session"] == "abc"
 
+    def test_with_protocol_version(self):
+        """InitializeOutput should accept negotiated protocol_version."""
+        peer = PeerInfo(name="core", role="core")
+        output = InitializeOutput(peer=peer, protocol_version="1.0")
+        assert output.protocol_version == "1.0"
+
 
 class TestResultMessage:
     """Tests for ResultMessage model."""

@@ -40,6 +40,7 @@
 - 2026-03-13: Real legacy plugins may still load through deep `astrbot.core.*` imports even when their public entrypoint only looks like `astrbot.api.*`. `astrbot_plugin_self_learning` hits `astrbot.core.utils.astrbot_path`, `astrbot.core.provider.*`, `astrbot.core.agent.message`, and `astrbot.core.db.po` during load; keep those deep-path shims minimal and whitelist-driven, but do not assume the `api` facade alone is enough.
 - 2026-03-13: `ARCHITECTURE.md` and `refactor.md` are no longer a full source of truth for the current runtime/compat surface. The shipped code also includes `runtime.environment_groups`, `_session_waiter`, the controlled `src-new/astrbot` alias facade, compat hook execution, and extra DB capabilities such as `db.get_many` / `db.set_many` / `db.watch`. Verify architectural claims against code and tests before declaring drift or completeness.
 - 2026-03-13: Duplicating private compat logic into a second `_legacy/` package added import-order risk and architectural noise. Keep one canonical set of top-level private compat modules (`_legacy_api.py`, `_legacy_runtime.py`, `_legacy_loader.py`, `_session_waiter.py`, `_shared_preferences.py`) while preserving public `astrbot_sdk.api`, `astrbot_sdk.compat`, and `src-new/astrbot` facades.
+- 2026-03-14: `inspect.getmembers(module, inspect.isclass)` sorts legacy `main.py` classes alphabetically by attribute name. Preserving old-plugin declaration order requires iterating `module.__dict__` directly; deleting a later explicit `.sort()` is insufficient.
 
 # 开发命令
 

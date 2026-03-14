@@ -13,10 +13,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
-
 from astrbot_sdk._legacy_api import LegacyContext
-from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
-from astrbot_sdk.api.event.filter import CustomFilter, custom_filter
+from astrbot_sdk._legacy_runtime import (
+    LegacyRuntimeAdapter,
+)
+from astrbot_sdk._legacy_runtime import (
+    create_legacy_component_context as _create_legacy_context,
+)
+from astrbot_sdk._legacy_runtime import (
+    is_new_star_component as _is_new_star_component,
+)
 from astrbot_sdk.protocol.descriptors import CommandTrigger, HandlerDescriptor
 from astrbot_sdk.runtime.environment_groups import (
     GROUP_STATE_FILE_NAME,
@@ -24,14 +30,12 @@ from astrbot_sdk.runtime.environment_groups import (
     GroupEnvironmentManager,
 )
 from astrbot_sdk.runtime.loader import (
+    STATE_FILE_NAME,
     LoadedHandler,
     LoadedPlugin,
     PluginDiscoveryResult,
     PluginEnvironmentManager,
     PluginSpec,
-    STATE_FILE_NAME,
-    _create_legacy_context,
-    _is_new_star_component,
     _iter_handler_names,
     _venv_python_path,
     discover_plugins,
@@ -39,6 +43,8 @@ from astrbot_sdk.runtime.loader import (
     load_plugin,
     load_plugin_spec,
 )
+
+from astrbot_sdk.api.event.filter import CustomFilter, custom_filter
 
 
 def write_test_plugin(
