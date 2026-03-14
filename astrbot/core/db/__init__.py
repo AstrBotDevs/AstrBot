@@ -648,6 +648,13 @@ class BaseDatabase(abc.ABC):
         ...
 
     @abc.abstractmethod
+    async def get_platform_sessions_by_ids(
+        self, session_ids: list[str]
+    ) -> list[PlatformSession]:
+        """Get platform sessions by IDs."""
+        ...
+
+    @abc.abstractmethod
     async def get_platform_sessions_by_creator(
         self,
         creator: str,

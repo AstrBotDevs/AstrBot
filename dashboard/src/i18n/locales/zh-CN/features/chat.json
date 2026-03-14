@@ -141,5 +141,15 @@
   "errors": {
     "sendMessageFailed": "发送消息失败，请重试",
     "createSessionFailed": "创建会话失败，请刷新页面重试"
+  },
+  "batch": {
+    "selected": "已选择 {count} 个",
+    "confirmDelete": "确定要删除 {count} 个对话吗？此操作无法撤销。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "delete": "删除",
+    "exit": "退出",
+    "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
+    "requestFailed": "删除对话失败，请重试。"
   }
 } 

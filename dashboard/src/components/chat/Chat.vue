@@ -20,6 +20,7 @@
                     @selectConversation="handleSelectConversation"
                     @editTitle="showEditTitleDialog"
                     @deleteConversation="handleDeleteConversation"
+                    @batchDeleteConversations="handleBatchDeleteConversations"
                     @closeMobileSidebar="closeMobileSidebar"
                     @toggleTheme="toggleTheme"
                     @toggleFullscreen="toggleFullscreen"
@@ -220,6 +221,7 @@ import { useMediaHandling } from '@/composables/useMediaHandling';
 import { useProjects } from '@/composables/useProjects';
 import type { Project } from '@/components/chat/ProjectList.vue';
 import { useRecording } from '@/composables/useRecording';
+import { useToast } from '@/utils/toast';
 
 interface Props {
     chatboxMode?: boolean;
@@ -233,6 +235,7 @@ const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
 const { tm } = useModuleI18n('features/chat');
+const { warning: toastWarning } = useToast();
 const theme = useTheme();
 const customizer = useCustomizerStore();
 
@@ -257,6 +260,7 @@ const {
     getSessions,
     newSession,
     deleteSession: deleteSessionFn,
+    batchDeleteSessions,
     showEditTitleDialog,
     saveTitle,
     updateSessionTitle,
@@ -507,6 +511,33 @@ async function handleDeleteConversation(sessionId: string) {
     if (selectedProjectId.value) {
         const sessions = await getProjectSessions(selectedProjectId.value);
         projectSessions.value = sessions;
+    }
+}
+
+async function handleBatchDeleteConversations(sessionIds: string[]) {
+    try {
+        const result = await batchDeleteSessions(sessionIds);
+
+        // 仅在当前会话成功删除时清除信息
+        if (result.currentSessionDeleted) {
+            messages.value = [];
+        }
+
+        // 失败处理
+        if (result.failed_count > 0) {
+            toastWarning(
+                tm('batch.partialFailure', { failed: result.failed_count, total: sessionIds.length })
+            );
+        }
+
+        // 如果在项目视图中，刷新项目会话列表
+        if (selectedProjectId.value) {
+            const sessions = await getProjectSessions(selectedProjectId.value);
+            projectSessions.value = sessions;
+        }
+    } catch (err) {
+        console.error('Batch delete sessions failed:', err);
+        toastWarning(tm('batch.requestFailed'));
     }
 }
 

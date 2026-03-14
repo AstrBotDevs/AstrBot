@@ -107,6 +107,109 @@ async def test_get_stat(app: Quart, authenticated_header: dict):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [[], "x"])
+async def test_batch_delete_sessions_rejects_non_object_payload(
+    app: Quart, authenticated_header: dict, payload
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json=payload,
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Invalid JSON body: expected object"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_masks_internal_error(
+    app: Quart, authenticated_header: dict, monkeypatch
+):
+    test_client = app.test_client()
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    async def _raise_error(*args, **kwargs):
+        raise RuntimeError("secret-internal-error")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.chat.ChatRoute._delete_session_internal",
+        _raise_error,
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 0
+    assert data["data"]["failed_count"] == 1
+    assert data["data"]["failed_items"][0]["session_id"] == session_id
+    assert data["data"]["failed_items"][0]["reason"] == "internal_error"
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_sessions_uses_batch_lookup(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    db = core_lifecycle_td.db
+
+    create_session_response = await test_client.get(
+        "/api/chat/new_session", headers=authenticated_header
+    )
+    assert create_session_response.status_code == 200
+    create_session_data = await create_session_response.get_json()
+    session_id = create_session_data["data"]["session_id"]
+
+    original_batch_lookup = db.get_platform_sessions_by_ids
+    called = {"batch_lookup_count": 0}
+
+    async def _wrapped_batch_lookup(session_ids: list[str]):
+        called["batch_lookup_count"] += 1
+        return await original_batch_lookup(session_ids)
+
+    # 不应单个查询
+    async def _should_not_call_single_lookup(session_id: str):
+        raise AssertionError(
+            f"single-session lookup should not be called: {session_id}"
+        )
+
+    monkeypatch.setattr(db, "get_platform_sessions_by_ids", _wrapped_batch_lookup)
+    monkeypatch.setattr(
+        db, "get_platform_session_by_id", _should_not_call_single_lookup
+    )
+
+    response = await test_client.post(
+        "/api/chat/batch_delete_sessions",
+        json={"session_ids": [session_id]},
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["deleted_count"] == 1
+    assert data["data"]["failed_count"] == 0
+    assert called["batch_lookup_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_plugins(
     app: Quart,
     authenticated_header: dict,
