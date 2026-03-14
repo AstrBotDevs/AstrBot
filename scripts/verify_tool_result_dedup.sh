@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "[1/3] Running targeted dedup tests"
+uv run pytest -q tests/test_tool_loop_agent_runner.py -k \
+  "repeated_tool_output_is_deduplicated_in_context or repeated_tool_output_dedup_can_be_disabled"
+
+echo "[2/3] Verifying default config exposes dedup toggle"
+uv run python - <<'PY'
+from astrbot.core.config.default import DEFAULT_CONFIG
+
+provider_settings = DEFAULT_CONFIG.get("provider_settings", {})
+assert "deduplicate_repeated_tool_results" in provider_settings
+assert provider_settings["deduplicate_repeated_tool_results"] is True
+print("DEFAULT_CONFIG.provider_settings.deduplicate_repeated_tool_results=True")
+PY
+
+echo "[3/3] Optional runtime config check (data/cmd_config.json)"
+if [[ -f "data/cmd_config.json" ]]; then
+  uv run python - <<'PY'
+import json
+from pathlib import Path
+
+cfg_path = Path("data/cmd_config.json")
+cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+value = cfg.get("provider_settings", {}).get("deduplicate_repeated_tool_results")
+print(f"{cfg_path}: provider_settings.deduplicate_repeated_tool_results={value!r}")
+PY
+else
+  echo "data/cmd_config.json not found, skip runtime check."
+fi
+
+echo "Verification completed."
