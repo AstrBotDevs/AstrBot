@@ -96,6 +96,7 @@ class _ToolResultDedupState:
 _DEDUP_PREVIEW_LIMIT = 180
 _DEDUP_PREVIEW_MIN_LIMIT = 3
 _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES = 1024
+_DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD = 8
 _DEDUP_MESSAGE_TEMPLATE = (
     "[tool-result-deduplicated] Tool `{tool_name}` returned unchanged output for "
     "{repeat_total} consecutive calls with the same arguments. Full repeated output "
@@ -295,6 +296,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         fallback_providers: list[Provider] | None = None,
         deduplicate_repeated_tool_results: bool = True,
         tool_result_dedup_max_entries: int | None = _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+        tool_error_repeat_guard_threshold: int | None = _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -353,6 +355,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_result_dedup_max_entries
             )
         )
+        self._tool_error_repeat_guard_threshold = (
+            self._normalize_tool_error_repeat_guard_threshold(
+                tool_error_repeat_guard_threshold
+            )
+        )
+        self._tool_error_repeat_counts: dict[str, int] = {}
+        self._tool_error_repeat_guard_triggered = False
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -579,6 +588,32 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return normalized
 
     @staticmethod
+    def _normalize_tool_error_repeat_guard_threshold(
+        threshold: int | None,
+    ) -> int | None:
+        if threshold is None:
+            return None
+        if isinstance(threshold, bool):
+            logger.warning(
+                "Invalid tool_error_repeat_guard_threshold=%s, fallback to %s.",
+                threshold,
+                _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+            )
+            return _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
+        try:
+            normalized = int(threshold)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid tool_error_repeat_guard_threshold=%s, fallback to %s.",
+                threshold,
+                _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD,
+            )
+            return _DEFAULT_TOOL_ERROR_REPEAT_GUARD_THRESHOLD
+        if normalized <= 0:
+            return None
+        return normalized
+
+    @staticmethod
     def _normalize_tool_args_for_signature(tool_args: dict[str, T.Any]) -> str:
         normalized_args = _canonicalize_tool_arg_value(tool_args)
         try:
@@ -602,6 +637,19 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 separators=(",", ":"),
             )
 
+    def _build_tool_signature(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, T.Any],
+    ) -> str:
+        return f"{tool_name}:{self._normalize_tool_args_for_signature(tool_args=tool_args)}"
+
+    @staticmethod
+    def _is_tool_error_content(content: str) -> bool:
+        normalized = content.strip().lower()
+        return normalized.startswith("error:")
+
     def _prune_tool_result_dedup_if_needed(self) -> None:
         """Bound dedup cache size for long-running sessions."""
         max_entries = self._tool_result_dedup_max_entries
@@ -615,6 +663,67 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 break
             self._tool_result_dedup.pop(oldest_key, None)
 
+    def _prune_tool_error_repeat_counts_if_needed(self) -> None:
+        max_entries = self._tool_result_dedup_max_entries
+        if max_entries is None:
+            max_entries = _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
+
+        while len(self._tool_error_repeat_counts) > max_entries:
+            try:
+                oldest_key = next(iter(self._tool_error_repeat_counts))
+            except StopIteration:
+                break
+            self._tool_error_repeat_counts.pop(oldest_key, None)
+
+    def _check_and_apply_tool_error_repeat_guard(
+        self,
+        *,
+        tool_name: str,
+        tool_args: dict[str, T.Any],
+        content: str,
+    ) -> None:
+        if self._tool_error_repeat_guard_triggered:
+            return
+        threshold = self._tool_error_repeat_guard_threshold
+        if threshold is None:
+            return
+
+        signature = self._build_tool_signature(tool_name=tool_name, tool_args=tool_args)
+        if not self._is_tool_error_content(content):
+            self._tool_error_repeat_counts.pop(signature, None)
+            return
+
+        repeat_count = self._tool_error_repeat_counts.get(signature, 0) + 1
+        self._tool_error_repeat_counts[signature] = repeat_count
+        self._prune_tool_error_repeat_counts_if_needed()
+        if repeat_count < threshold:
+            return
+
+        self._tool_error_repeat_guard_triggered = True
+        self._tool_error_repeat_counts.clear()
+        if self.req:
+            self.req.func_tool = None
+
+        preview = self._compact_tool_result_preview(content, limit=_DEDUP_PREVIEW_LIMIT)
+        logger.warning(
+            "Tool error repeat guard activated: tool=%s repeats=%s",
+            tool_name,
+            repeat_count,
+        )
+        self.run_context.messages.append(
+            Message(
+                role="user",
+                content=(
+                    "[SYSTEM NOTICE] Tool call error loop detected. "
+                    f"Tool `{tool_name}` with the same arguments has failed "
+                    f"{repeat_count} times consecutively. "
+                    "To prevent context bloat and wasted tool calls, all tools are now disabled for this run. "
+                    "Do not call tools again; provide the best possible answer to the user based on current information. "
+                    f"Latest error preview: {preview}"
+                ),
+            )
+        )
+
     def _deduplicate_tool_result_content(
         self,
         *,
@@ -625,9 +734,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not content:
             return content
 
-        signature = (
-            f"{tool_name}:{self._normalize_tool_args_for_signature(tool_args=tool_args)}"
-        )
+        signature = self._build_tool_signature(tool_name=tool_name, tool_args=tool_args)
         content_hash = hashlib.sha256(
             content.encode("utf-8", errors="replace")
         ).hexdigest()
@@ -1005,6 +1112,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             tool_args: dict[str, T.Any] | None = None,
         ) -> None:
             output = content
+            if tool_name:
+                self._check_and_apply_tool_error_repeat_guard(
+                    tool_name=tool_name,
+                    tool_args=tool_args or {},
+                    content=content,
+                )
             if self._deduplicate_repeated_tool_results and tool_name:
                 output = self._deduplicate_tool_result_content(
                     tool_name=tool_name,

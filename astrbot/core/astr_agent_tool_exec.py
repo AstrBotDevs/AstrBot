@@ -302,6 +302,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             "tool_result_dedup_max_entries",
             1024,
         )
+        tool_error_repeat_guard_threshold = prov_settings.get(
+            "tool_error_repeat_guard_threshold",
+            8,
+        )
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -314,6 +318,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             stream=stream,
             deduplicate_repeated_tool_results=deduplicate_repeated_tool_results,
             tool_result_dedup_max_entries=tool_result_dedup_max_entries,
+            tool_error_repeat_guard_threshold=tool_error_repeat_guard_threshold,
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]

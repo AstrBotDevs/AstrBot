@@ -110,6 +110,20 @@ class MockToolExecutor:
         return generator()
 
 
+class MockErrorToolExecutor:
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, TextContent
+
+            result = CallToolResult(
+                content=[TextContent(type="text", text="error: temporary upstream failure")]
+            )
+            yield result
+
+        return generator()
+
+
 class MockFailingProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -191,6 +205,11 @@ def mock_provider():
 @pytest.fixture
 def mock_tool_executor():
     return MockToolExecutor()
+
+
+@pytest.fixture
+def mock_error_tool_executor():
+    return MockErrorToolExecutor()
 
 
 @pytest.fixture
@@ -445,6 +464,67 @@ async def test_missing_required_tool_args_are_reported_without_handler_typeerror
     assert contents
     assert any("Missing required tool arguments: query" in c for c in contents)
     assert not any("Tool handler parameter mismatch" in c for c in contents)
+
+
+@pytest.mark.asyncio
+async def test_tool_error_repeat_guard_disables_tools_and_forces_direct_answer(
+    runner, mock_provider, provider_request, mock_error_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 100
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_error_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_error_repeat_guard_threshold=2,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    assert runner.done()
+    assert runner.req.func_tool is None
+    assert mock_provider.call_count <= 3
+    assert any(
+        m.role == "user"
+        and isinstance(m.content, str)
+        and "Tool call error loop detected" in m.content
+        for m in runner.run_context.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_error_repeat_guard_can_be_disabled(
+    runner, mock_provider, provider_request, mock_error_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 3
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_error_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_error_repeat_guard_threshold=0,
+    )
+
+    async for _ in runner.step_until_done(8):
+        pass
+
+    assert runner.done()
+    assert runner.req.func_tool is not None
+    assert not any(
+        m.role == "user"
+        and isinstance(m.content, str)
+        and "Tool call error loop detected" in m.content
+        for m in runner.run_context.messages
+    )
 
 
 @pytest.mark.asyncio

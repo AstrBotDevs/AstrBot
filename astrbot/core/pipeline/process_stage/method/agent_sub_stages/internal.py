@@ -84,6 +84,28 @@ class InternalAgentSubStage(Stage):
             and self.tool_result_dedup_max_entries <= 0
         ):
             self.tool_result_dedup_max_entries = None
+        raw_tool_error_guard = settings.get("tool_error_repeat_guard_threshold", 8)
+        if isinstance(raw_tool_error_guard, bool):
+            logger.warning(
+                "Invalid provider_settings.tool_error_repeat_guard_threshold=%s, fallback to 8.",
+                raw_tool_error_guard,
+            )
+            raw_tool_error_guard = 8
+        try:
+            self.tool_error_repeat_guard_threshold: int | None = (
+                None if raw_tool_error_guard is None else int(raw_tool_error_guard)
+            )
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid provider_settings.tool_error_repeat_guard_threshold=%s, fallback to 8.",
+                raw_tool_error_guard,
+            )
+            self.tool_error_repeat_guard_threshold = 8
+        if (
+            self.tool_error_repeat_guard_threshold is not None
+            and self.tool_error_repeat_guard_threshold <= 0
+        ):
+            self.tool_error_repeat_guard_threshold = None
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -166,6 +188,7 @@ class InternalAgentSubStage(Stage):
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
             deduplicate_repeated_tool_results=self.deduplicate_repeated_tool_results,
             tool_result_dedup_max_entries=self.tool_result_dedup_max_entries,
+            tool_error_repeat_guard_threshold=self.tool_error_repeat_guard_threshold,
         )
 
     async def process(

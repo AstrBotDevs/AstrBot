@@ -364,6 +364,14 @@ Maximum number of cached dedup signatures. Default is `1024`. Only applies when 
 
 This bounds how many `(tool_name + normalized_args)` signatures are retained in the dedup cache to prevent unbounded growth in long-running sessions. Set to `0` or a negative value to disable pruning.
 
+#### `provider_settings.tool_error_repeat_guard_threshold`
+
+Error-loop guard threshold for tool calls. Default is `8`. Only applies when `agent_runner_type="local"`.
+
+When the same tool call (same tool name + same arguments) keeps returning errors and reaches this threshold, tools are automatically disabled for the current agent run, and a system notice is injected to require the model to stop calling tools and answer directly based on available context.
+
+Set to `0` or a negative value to disable this guard.
+
 #### `provider_settings.tool_call_timeout`
 
 Added in `v4.3.5`

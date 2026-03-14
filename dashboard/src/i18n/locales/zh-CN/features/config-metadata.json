@@ -286,6 +286,10 @@
           "description": "重复工具结果缓存上限",
           "hint": "用于去重的工具签名缓存数量上限。设为 0 或负数表示不裁剪。"
         },
+        "tool_error_repeat_guard_threshold": {
+          "description": "工具错误循环保护阈值",
+          "hint": "同一工具在相同参数下连续报错达到阈值后，将自动停用工具并要求模型直接总结回复。设为 0 或负数表示禁用。"
+        },
         "sanitize_context_by_modalities": {
           "description": "按模型能力清理历史上下文",
           "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）"

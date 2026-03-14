@@ -284,6 +284,10 @@
           "description": "Tool Result Dedup Cache Limit",
           "hint": "Maximum number of cached tool signatures for deduplication. Set to 0 or negative to disable pruning."
         },
+        "tool_error_repeat_guard_threshold": {
+          "description": "Tool Error Loop Guard Threshold",
+          "hint": "When the same tool call with the same arguments fails repeatedly and reaches this threshold, tools are disabled for the run and the model is asked to answer directly. Set to 0 or negative to disable."
+        },
         "sanitize_context_by_modalities": {
           "description": "Sanitize History by Modalities",
           "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."

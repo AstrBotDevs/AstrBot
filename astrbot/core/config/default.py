@@ -121,6 +121,7 @@ DEFAULT_CONFIG = {
         "tool_schema_mode": "full",
         "deduplicate_repeated_tool_results": True,
         "tool_result_dedup_max_entries": 1024,
+        "tool_error_repeat_guard_threshold": 8,
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2553,6 +2554,9 @@ CONFIG_METADATA_2 = {
                     "tool_result_dedup_max_entries": {
                         "type": "int",
                     },
+                    "tool_error_repeat_guard_threshold": {
+                        "type": "int",
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3324,6 +3328,14 @@ CONFIG_METADATA_3 = {
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                             "provider_settings.deduplicate_repeated_tool_results": True,
+                        },
+                    },
+                    "provider_settings.tool_error_repeat_guard_threshold": {
+                        "description": "工具错误循环保护阈值",
+                        "type": "int",
+                        "hint": "同一工具在相同参数下连续错误达到该次数后，将自动停用工具并要求模型直接总结回复。设为 0 或负数表示禁用。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.wake_prefix": {
