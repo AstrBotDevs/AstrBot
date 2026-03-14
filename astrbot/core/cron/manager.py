@@ -27,7 +27,7 @@ class CronJobManager:
 
     def __init__(self, db: BaseDatabase) -> None:
         self.db = db
-        self.scheduler = AsyncIOScheduler()
+        self.scheduler = AsyncIOScheduler(timezone=timezone.utc)
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
         self._started = False
@@ -145,13 +145,13 @@ class CronJobManager:
             self.scheduler.start()
             self._started = True
         try:
-            tzinfo = None
+            tzinfo = timezone.utc
             if job.timezone:
                 try:
                     tzinfo = ZoneInfo(job.timezone)
                 except Exception:
                     logger.warning(
-                        "Invalid timezone %s for cron job %s, fallback to system.",
+                        "Invalid timezone %s for cron job %s, fallback to UTC.",
                         job.timezone,
                         job.job_id,
                     )
@@ -163,7 +163,7 @@ class CronJobManager:
                 if not run_at_str:
                     raise ValueError("run_once job missing run_at timestamp")
                 run_at = datetime.fromisoformat(run_at_str)
-                if run_at.tzinfo is None and tzinfo is not None:
+                if run_at.tzinfo is None:
                     run_at = run_at.replace(tzinfo=tzinfo)
                 trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
             else:
@@ -186,7 +186,12 @@ class CronJobManager:
 
     def _get_next_run_time(self, job_id: str):
         aps_job = self.scheduler.get_job(job_id)
-        return aps_job.next_run_time if aps_job else None
+        if aps_job and aps_job.next_run_time:
+            next_run = aps_job.next_run_time
+            if next_run.tzinfo is not None:
+                next_run = next_run.astimezone(timezone.utc)
+            return next_run
+        return None
 
     async def _run_job(self, job_id: str) -> None:
         job = await self.db.get_cron_job(job_id)
