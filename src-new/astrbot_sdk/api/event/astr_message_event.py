@@ -232,12 +232,31 @@ class AstrMessageEvent(MessageEvent):
     def get_platform_name(self) -> str:
         if self.platform_meta is not None:
             return self.platform_meta.name
-        return str(self.raw.get("platform_name") or self.raw.get("platform") or "")
+        # When no explicit PlatformMetadata is provided, try to derive the
+        # platform name from the raw payload if it is a dict; otherwise, fall
+        # back to an empty string.
+        if isinstance(self.raw, dict):
+            return str(
+                self.raw.get("platform_name") or self.raw.get("platform") or ""
+            )
+        return ""
 
     def get_platform_id(self) -> str:
+        # Priority:
+        # 1. Explicit PlatformMetadata.id
+        # 2. platform_id / platform from raw payload (if dict)
+        # 3. Fallback to the inherited MessageEvent.platform field
         if self.platform_meta is not None:
             return self.platform_meta.id
-        return str(self.raw.get("platform_id") or self.raw.get("platform") or "")
+        if isinstance(self.raw, dict):
+            platform_from_raw = (
+                self.raw.get("platform_id") or self.raw.get("platform")
+            )
+            if platform_from_raw:
+                return str(platform_from_raw)
+        if getattr(self, "platform", None) is not None:
+            return str(self.platform)
+        return ""
 
     def get_message_str(self) -> str:
         return self.text
