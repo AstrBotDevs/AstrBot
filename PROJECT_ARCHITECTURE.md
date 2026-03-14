@@ -5,6 +5,25 @@
 
 ---
 
+## ⚠️ 兼容层弃用通知
+
+**兼容层已标记为 deprecated，将在下个大版本移除。**
+
+- 旧插件请使用 **AstrBot 主程序** 运行（主程序有完整的 `StarManager` 支持）
+- 新插件请使用 `astrbot_sdk` 顶层入口
+- 导入兼容层会触发 `DeprecationWarning`
+
+**待移除的文件/目录**：
+- `src-new/astrbot_sdk/_legacy_*.py` - 所有 legacy 私有模块
+- `src-new/astrbot_sdk/api/` - 旧版 API 兼容层（已移除）
+- `src-new/astrbot_sdk/compat.py` - 顶层兼容入口
+- `src-new/astrbot_sdk/protocol/legacy_adapter.py` - JSON-RPC 适配器
+- `src-new/astrbot/` - 旧包名别名（已移除）
+- `test_plugin/old/` - 旧插件示例
+- `tests_v4/test_legacy*.py` - legacy 相关测试
+
+---
+
 ## 目录
 
 1. [项目概述](#项目概述)
@@ -14,9 +33,8 @@
 5. [运行时架构](#运行时架构)
 6. [客户端层设计](#客户端层设计)
 7. [新旧架构对比](#新旧架构对比)
-8. [兼容层设计](#兼容层设计)
-9. [插件开发指南](#插件开发指南)
-10. [关键设计模式](#关键设计模式)
+8. [插件开发指南](#插件开发指南)
+9. [关键设计模式](#关键设计模式)
 
 ---
 
@@ -57,6 +75,7 @@ astrbot-sdk/
 ├── src-new/                       # 新版 v4 实现 (当前活跃)
 │   └── astrbot_sdk/               # v4 SDK 主包
 │       ├── __init__.py             # 顶层公共 API
+│       ├── __main__.py            # CLI 入口点
 │       ├── star.py                 # v4 原生插件基类
 │       ├── context.py              # 运行时上下文
 │       ├── decorators.py           # v4 原生装饰器
@@ -64,6 +83,7 @@ astrbot-sdk/
 │       ├── errors.py               # 统一错误模型
 │       ├── cli.py                  # 命令行工具
 │       ├── testing.py              # 测试辅助模块
+│       ├── _invocation_context.py  # 调用上下文管理
 │       │
 │       ├── clients/                # 能力客户端层
 │       │   ├── __init__.py
@@ -73,56 +93,24 @@ astrbot-sdk/
 │       │   ├── db.py              # KV 存储客户端
 │       │   ├── platform.py        # 平台消息客户端
 │       │   ├── http.py            # HTTP 注册客户端
-│       │   └── metadata.py       # 插件元数据客户端
+│       │   └── metadata.py        # 插件元数据客户端
 │       │
 │       ├── protocol/               # 协议层
-│       │   ├── messages.py        # v4 协议消息模型
-│       │   ├── descriptors.py     # Handler/Capability 描述符
-│       │   └── legacy_adapter.py # JSON-RPC ↔ v4 适配器
-│       │
-│       ├── runtime/                # 运行时层
 │       │   ├── __init__.py
-│       │   ├── peer.py            # 协议对等端
-│       │   ├── transport.py       # 传输抽象与实现
-│       │   ├── handler_dispatcher.py  # Handler 执行分发
-│       │   ├── capability_router.py   # Capability 路由
-│       │   ├── loader.py          # 插件加载
-│       │   ├── bootstrap.py       # 启动引导
-│       │   └── environment_groups.py  # 环境分组管理
+│       │   ├── messages.py        # v4 协议消息模型
+│       │   └── descriptors.py     # Handler/Capability 描述符
 │       │
-│       ├── api/                    # 旧版 API 兼容 facade
-│       │   ├── basic/            # 基础配置与对话管理
-│       │   ├── components/       # 命令组件
-│       │   ├── event/           # 事件类型与过滤器
-│       │   ├── message/         # 消息链
-│       │   ├── message_components.py  # 消息组件别名
-│       │   ├── platform/        # 平台元数据
-│       │   ├── provider/        # Provider 实体
-│       │   └── star/            # Star 基类与上下文
-│       │
-│       ├── compat.py              # 顶层兼容入口
-│       ├── _legacy_api.py         # 旧版 API 兼容实现
-│       ├── _legacy_runtime.py     # Legacy 执行边界
-│       ├── _legacy_loader.py      # Legacy 插件发现
-│       ├── _legacy_llm.py        # Legacy LLM/tool 兼容
-│       ├── _session_waiter.py    # session_waiter 兼容
-│       └── _shared_preferences.py # 共享偏好兼容
-│
-├── src-new/astrbot/              # 旧包名兼容 facade
-│   ├── api/                    # astrbot.api.* 兼容
-│   │   ├── event/
-│   │   ├── star/
-│   │   ├── components/
-│   │   ├── platform/
-│   │   ├── provider/
-│   │   └── util/
-│   └── core/                    # astrbot.core.* 兼容
-│       ├── platform/
-│       ├── provider/
-│       ├── message/
-│       ├── utils/
-│       ├── agent/
-│       └── db/
+│       └── runtime/                # 运行时层
+│           ├── __init__.py
+│           ├── peer.py            # 协议对等端
+│           ├── transport.py       # 传输抽象与实现
+│           ├── handler_dispatcher.py  # Handler 执行分发
+│           ├── capability_router.py   # Capability 路由
+│           ├── loader.py          # 插件加载
+│           ├── bootstrap.py       # 启动引导
+│           ├── worker.py          # Worker 运行时
+│           ├── supervisor.py      # Supervisor 运行时
+│           └── environment_groups.py  # 环境分组管理
 │
 ├── tests_v4/                     # v4 测试套件
 │   ├── unit/                    # 单元测试
@@ -135,15 +123,22 @@ astrbot-sdk/
 │   │   └── commands/
 │   │       └── hello.py
 │   │
-│   └── old/                     # 旧版兼容插件示例
+│   └── old/                     # 旧版兼容插件示例 (deprecated)
 │       ├── plugin.yaml
 │       └── main.py
+│
+├── examples/                      # 示例插件
+│   └── hello_plugin/            # 入门示例
+│       ├── plugin.yaml
+│       ├── main.py
+│       └── README.md
 │
 ├── astrBot/                      # 参考 AstrBot 应用
 │
 ├── pyproject.toml               # 项目配置
 ├── ARCHITECTURE.md             # 架构文档
 ├── refactor.md                 # 重构历史
+├── PROJECT_ARCHITECTURE.md     # 本文档
 └── run_tests.py               # 测试入口
 ```
 

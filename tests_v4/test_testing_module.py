@@ -64,9 +64,9 @@ def test_init_plugin_template_includes_readme(tmp_path: Path, monkeypatch) -> No
     _init_plugin(target.name)
 
     assert (target / "README.md").exists()
-    assert "astrbot-sdk dev --local --watch" in (
-        target / "README.md"
-    ).read_text(encoding="utf-8")
+    assert "astrbot-sdk dev --local --watch" in (target / "README.md").read_text(
+        encoding="utf-8"
+    )
 
 
 @pytest.mark.asyncio
