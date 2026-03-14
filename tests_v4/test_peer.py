@@ -411,6 +411,49 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await plugin.stop()
         await core.stop()
 
+    async def test_websocket_transport_smoke_with_msgpack_codec(self) -> None:
+        codec = MsgpackProtocolCodec()
+        router = CapabilityRouter()
+        server_transport = WebSocketServerTransport(port=0)
+        core = Peer(
+            transport=server_transport,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+            codec=codec,
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=router.descriptors(),
+                    metadata={},
+                ),
+            )
+        )
+        core.set_invoke_handler(
+            lambda message, token: router.execute(
+                message.capability,
+                message.input,
+                stream=message.stream,
+                cancel_token=token,
+                request_id=message.id,
+            )
+        )
+
+        await core.start()
+        client_transport = WebSocketClientTransport(url=server_transport.url)
+        plugin = Peer(
+            transport=client_transport,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+            codec=codec,
+        )
+        await plugin.start()
+        await plugin.initialize([])
+        result = await plugin.invoke("llm.chat", {"prompt": "ws-msgpack"})
+        self.assertEqual(result["text"], "Echo: ws-msgpack")
+        await plugin.stop()
+        await core.stop()
+
     async def test_initialize_failure_closes_receiver_connection(self) -> None:
         core = Peer(
             transport=self.left,

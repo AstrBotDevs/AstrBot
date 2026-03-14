@@ -136,6 +136,10 @@ class Transport(ABC):
         """注册收到原始字符串消息后的回调。"""
         self._handler = handler
 
+    def configure_for_codec(self, codec) -> None:
+        """Allow transports to align framing or frame type with the selected codec."""
+        return None
+
     @abstractmethod
     async def start(self) -> None:
         raise NotImplementedError
@@ -193,9 +197,16 @@ class StdioTransport(Transport):
             self._reader_task = asyncio.create_task(self._read_process_loop())
             return
 
-        self._stdin = self._stdin or sys.stdin
-        self._stdout = self._stdout or sys.stdout
+        if self._framing == "length_prefixed":
+            self._stdin = self._stdin or sys.stdin.buffer
+            self._stdout = self._stdout or sys.stdout.buffer
+        else:
+            self._stdin = self._stdin or sys.stdin
+            self._stdout = self._stdout or sys.stdout
         self._reader_task = asyncio.create_task(self._read_file_loop())
+
+    def configure_for_codec(self, codec) -> None:
+        self._framing = codec.stdio_framing
 
     async def stop(self) -> None:
         if self._reader_task is not None:
@@ -389,6 +400,9 @@ class WebSocketServerTransport(Transport):
     def url(self) -> str:
         return f"ws://{self._host}:{self.port}{self._path}"
 
+    def configure_for_codec(self, codec) -> None:
+        self._frame_type = codec.websocket_frame_type
+
 
 class WebSocketClientTransport(Transport):
     def __init__(
@@ -453,3 +467,6 @@ class WebSocketClientTransport(Transport):
                     break
         finally:
             self._closed.set()
+
+    def configure_for_codec(self, codec) -> None:
+        self._frame_type = codec.websocket_frame_type

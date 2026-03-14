@@ -194,6 +194,9 @@ class Peer:
         self.transport = transport
         self.peer_info = peer_info
         self.codec = codec or JsonProtocolCodec()
+        configure_for_codec = getattr(self.transport, "configure_for_codec", None)
+        if callable(configure_for_codec):
+            configure_for_codec(self.codec)
         self.protocol_version = protocol_version
         self.supported_protocol_versions = _dedupe_protocol_versions(
             supported_protocol_versions,
