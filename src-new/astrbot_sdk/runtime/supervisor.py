@@ -41,13 +41,14 @@ import signal
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, cast
 
 from loguru import logger
 
 from ..errors import AstrBotError
 from ..protocol.descriptors import CapabilityDescriptor
 from ..protocol.messages import EventMessage, InitializeOutput, PeerInfo
+from ..protocol.wire_codecs import ProtocolCodec, make_protocol_codec
 from .capability_router import CapabilityRouter, StreamExecution
 from .environment_groups import EnvironmentGroup
 from .loader import (
@@ -79,13 +80,15 @@ def _install_signal_handlers(stop_event: asyncio.Event) -> None:
 
 
 def _prepare_stdio_transport(
-    stdin: IO[str] | None,
-    stdout: IO[str] | None,
-) -> tuple[IO[str], IO[str], IO[str] | None]:
+    stdin: IO[str] | IO[bytes] | None,
+    stdout: IO[str] | IO[bytes] | None,
+    *,
+    binary: bool = False,
+) -> tuple[IO[str] | IO[bytes], IO[str] | IO[bytes], IO[str] | None]:
     if stdin is not None and stdout is not None:
         return stdin, stdout, None
-    transport_stdin = stdin or sys.stdin
-    transport_stdout = stdout or sys.stdout
+    transport_stdin = stdin or (sys.stdin.buffer if binary else sys.stdin)
+    transport_stdout = stdout or (sys.stdout.buffer if binary else sys.stdout)
     original_stdout = sys.stdout
     sys.stdout = sys.stderr
     return transport_stdin, transport_stdout, original_stdout
@@ -128,17 +131,25 @@ class WorkerSession:
         env_manager: PluginEnvironmentManager,
         capability_router: CapabilityRouter,
         on_closed: Callable[[], None] | None = None,
+        codec: ProtocolCodec | None = None,
+        wire_codec_name: str = "json",
     ) -> None:
         if plugin is None and group is None:
             raise ValueError("WorkerSession requires either plugin or group")
+        if group is None and plugin is None:
+            raise ValueError("WorkerSession requires a plugin when group is absent")
         self.group = group
-        self.plugins = list(group.plugins) if group is not None else [plugin]
+        self.plugins = (
+            list(group.plugins) if group is not None else [cast(PluginSpec, plugin)]
+        )
         self.plugin = plugin or self.plugins[0]
         self.group_id = group.id if group is not None else self.plugin.name
         self.repo_root = repo_root.resolve()
         self.env_manager = env_manager
         self.capability_router = capability_router
         self.on_closed = on_closed
+        self.codec = codec or make_protocol_codec(wire_codec_name)
+        self.wire_codec_name = self.codec.name
         self.peer: Peer | None = None
         self.handlers = []
         self.provided_capabilities: list[CapabilityDescriptor] = []
@@ -164,10 +175,12 @@ class WorkerSession:
             command=command,
             cwd=cwd,
             env=env,
+            framing=self.codec.stdio_framing,
         )
         self.peer = Peer(
             transport=transport,
             peer_info=PeerInfo(name="astrbot-core", role="core", version="v4"),
+            codec=self.codec,
         )
         self.peer.set_initialize_handler(self._handle_initialize)
         self.peer.set_invoke_handler(self._handle_capability_invoke)
@@ -225,7 +238,7 @@ class WorkerSession:
         if self.group is not None:
             prepare_group = getattr(self.env_manager, "prepare_group_environment", None)
             if callable(prepare_group):
-                python_path = prepare_group(self.group)
+                python_path = cast(Path, prepare_group(self.group))
             else:
                 python_path = self.env_manager.prepare_environment(self.plugins[0])
             return (
@@ -235,13 +248,16 @@ class WorkerSession:
                     "-m",
                     "astrbot_sdk",
                     "worker",
+                    "--wire-codec",
+                    self.wire_codec_name,
                     "--group-metadata",
                     str(self.group.metadata_path),
                 ],
                 str(self.repo_root),
             )
 
-        python_path = self.env_manager.prepare_environment(self.plugin)
+        plugin = self.plugin
+        python_path = self.env_manager.prepare_environment(plugin)
         return (
             python_path,
             [
@@ -249,10 +265,12 @@ class WorkerSession:
                 "-m",
                 "astrbot_sdk",
                 "worker",
+                "--wire-codec",
+                self.wire_codec_name,
                 "--plugin-dir",
-                str(self.plugin.plugin_dir),
+                str(plugin.plugin_dir),
             ],
-            str(self.plugin.plugin_dir),
+            str(plugin.plugin_dir),
         )
 
     def start_close_watch(self) -> None:
@@ -376,15 +394,20 @@ class SupervisorRuntime:
         transport,
         plugins_dir: Path,
         env_manager: PluginEnvironmentManager | None = None,
+        codec: ProtocolCodec | None = None,
+        wire_codec_name: str = "json",
     ) -> None:
         self.transport = transport
         self.plugins_dir = plugins_dir.resolve()
         self.repo_root = Path(__file__).resolve().parents[3]
         self.env_manager = env_manager or PluginEnvironmentManager(self.repo_root)
+        self.codec = codec or make_protocol_codec(wire_codec_name)
+        self.wire_codec_name = self.codec.name
         self.capability_router = CapabilityRouter()
         self.peer = Peer(
             transport=self.transport,
             peer_info=PeerInfo(name="astrbot-supervisor", role="plugin", version="v4"),
+            codec=self.codec,
         )
         self.peer.set_invoke_handler(self._handle_upstream_invoke)
         self.peer.set_cancel_handler(self._handle_upstream_cancel)
@@ -623,6 +646,7 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
+                            wire_codec_name=self.wire_codec_name,
                             on_closed=lambda group_id=group.id: (
                                 self._handle_worker_closed(group_id)
                             ),
@@ -636,6 +660,7 @@ class SupervisorRuntime:
                             repo_root=self.repo_root,
                             env_manager=self.env_manager,
                             capability_router=self.capability_router,
+                            wire_codec_name=self.wire_codec_name,
                             on_closed=lambda plugin_name=plugin.name: (
                                 self._handle_worker_closed(plugin_name)
                             ),

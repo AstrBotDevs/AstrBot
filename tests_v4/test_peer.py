@@ -13,6 +13,7 @@ from astrbot_sdk.protocol.messages import (
     PeerInfo,
     ResultMessage,
 )
+from astrbot_sdk.protocol.wire_codecs import MsgpackProtocolCodec
 from astrbot_sdk.runtime.capability_router import CapabilityRouter, StreamExecution
 from astrbot_sdk.runtime.peer import Peer
 from astrbot_sdk.runtime.transport import (
@@ -128,6 +129,50 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
             [item.name for item in core.remote_provided_capabilities],
             ["demo.echo"],
         )
+        await plugin.stop()
+        await core.stop()
+
+    async def test_msgpack_codec_roundtrip(self) -> None:
+        codec = MsgpackProtocolCodec()
+        router = CapabilityRouter()
+        core = Peer(
+            transport=self.left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+            codec=codec,
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=router.descriptors(),
+                    metadata={},
+                ),
+            )
+        )
+        core.set_invoke_handler(
+            lambda message, token: router.execute(
+                message.capability,
+                message.input,
+                stream=message.stream,
+                cancel_token=token,
+                request_id=message.id,
+            )
+        )
+
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+            codec=codec,
+        )
+
+        await core.start()
+        await plugin.start()
+        await plugin.initialize([])
+
+        result = await plugin.invoke("llm.chat", {"prompt": "hello-msgpack"})
+        self.assertEqual(result["text"], "Echo: hello-msgpack")
+
         await plugin.stop()
         await core.stop()
 

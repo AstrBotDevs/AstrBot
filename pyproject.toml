@@ -16,6 +16,7 @@ dependencies = [
     "docstring-parser>=0.17.0",
     "google-genai>=1.50.0",
     "loguru>=0.7.3",
+    "msgpack>=1.1.1",
     "openai>=2.7.2",
     "pydantic>=2.12.3",
     "pyyaml>=6.0.3",

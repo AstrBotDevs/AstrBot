@@ -544,6 +544,7 @@ def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:
         return True
     return False
 
+
 def _class_name_for_plugin(value: str) -> str:
     parts = [part for part in re.split(r"[^a-zA-Z0-9]+", value) if part]
     if not parts:
@@ -866,12 +867,24 @@ def cli(ctx, verbose: bool) -> None:
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     help="Directory containing plugin folders",
 )
-def run(plugins_dir: Path) -> None:
+@click.option(
+    "--wire-codec",
+    default="json",
+    show_default=True,
+    type=click.Choice(["json", "msgpack"]),
+    help="Wire codec for supervisor/worker transport",
+)
+def run(plugins_dir: Path, wire_codec: str) -> None:
     """Start the plugin supervisor over stdio."""
+    entrypoint = (
+        run_supervisor(plugins_dir=plugins_dir)
+        if wire_codec == "json"
+        else run_supervisor(plugins_dir=plugins_dir, wire_codec=wire_codec)
+    )
     _run_async_entrypoint(
-        run_supervisor(plugins_dir=plugins_dir),
+        entrypoint,
         log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={"plugins_dir": plugins_dir},
+        context={"plugins_dir": plugins_dir, "wire_codec": wire_codec},
     )
 
 
@@ -1009,7 +1022,15 @@ def dev(
     required=False,
     type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
 )
-def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
+@click.option(
+    "--wire-codec",
+    default="json",
+    show_default=True,
+    type=click.Choice(["json", "msgpack"]),
+)
+def worker(
+    plugin_dir: Path | None, group_metadata: Path | None, wire_codec: str
+) -> None:
     """Internal command used by the supervisor to start a worker."""
     if plugin_dir is None and group_metadata is None:
         raise click.UsageError("Either --plugin-dir or --group-metadata is required")
@@ -1020,23 +1041,42 @@ def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
 
     target = str(group_metadata or plugin_dir)
     if group_metadata is not None:
-        entrypoint = run_plugin_worker(group_metadata=group_metadata)
+        entrypoint = (
+            run_plugin_worker(group_metadata=group_metadata)
+            if wire_codec == "json"
+            else run_plugin_worker(group_metadata=group_metadata, wire_codec=wire_codec)
+        )
     else:
-        entrypoint = run_plugin_worker(plugin_dir=plugin_dir)
+        entrypoint = (
+            run_plugin_worker(plugin_dir=plugin_dir)
+            if wire_codec == "json"
+            else run_plugin_worker(plugin_dir=plugin_dir, wire_codec=wire_codec)
+        )
     _run_async_entrypoint(
         entrypoint,
         log_message=f"启动插件工作进程：{target}",
         log_level="debug",
-        context={"plugin_dir": plugin_dir},
+        context={"plugin_dir": plugin_dir, "wire_codec": wire_codec},
     )
 
 
 @cli.command(hidden=True)
 @click.option("--port", default=8765, type=int, help="WebSocket server port")
-def websocket(port: int) -> None:
+@click.option(
+    "--wire-codec",
+    default="json",
+    show_default=True,
+    type=click.Choice(["json", "msgpack"]),
+)
+def websocket(port: int, wire_codec: str) -> None:
     """WebSocket runtime entrypoint kept for standalone bridge scenarios."""
+    entrypoint = (
+        run_websocket_server(port=port)
+        if wire_codec == "json"
+        else run_websocket_server(port=port, wire_codec=wire_codec)
+    )
     _run_async_entrypoint(
-        run_websocket_server(port=port),
+        entrypoint,
         log_message=f"启动 WebSocket 服务器，端口：{port}",
-        context={"port": port},
+        context={"port": port, "wire_codec": wire_codec},
     )
