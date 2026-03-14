@@ -342,6 +342,7 @@ class ChatRoute(Route):
 
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
+                        result = None
                         try:
                             result = await asyncio.wait_for(back_queue.get(), timeout=1)
                         except asyncio.TimeoutError:
@@ -349,8 +350,10 @@ class ChatRoute(Route):
                         except asyncio.CancelledError:
                             logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
                             client_disconnected = True
+                            continue
                         except Exception as e:
                             logger.error(f"WebChat stream error: {e}")
+                            continue
 
                         if not result:
                             continue

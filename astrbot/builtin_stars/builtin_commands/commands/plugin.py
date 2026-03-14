@@ -1,10 +1,14 @@
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core import DEMO_MODE, logger
+from astrbot.core.extensions import ExtensionKind, InstallRequest, InstallResultStatus
+from astrbot.core.extensions.runtime import (
+    get_extension_orchestrator,
+    is_extension_install_enabled,
+)
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
-from astrbot.core.star.star_manager import PluginManager
 
 
 class PluginCommands:
@@ -66,12 +70,45 @@ class PluginCommands:
                 MessageEventResult().message("/plugin get <插件仓库地址> 安装插件"),
             )
             return
+        if not is_extension_install_enabled(
+            self.context.get_config(umo=event.unified_msg_origin)
+        ):
+            event.set_result(
+                MessageEventResult().message(
+                    "当前未启用聊天扩展安装能力，请前往插件市场手动安装插件。"
+                )
+            )
+            return
         logger.info(f"准备从 {plugin_repo} 安装插件。")
         if self.context._star_manager:
-            star_mgr: PluginManager = self.context._star_manager
             try:
-                await star_mgr.install_plugin(plugin_repo)  # type: ignore
-                event.set_result(MessageEventResult().message("安装插件成功。"))
+                orchestrator = get_extension_orchestrator(
+                    self.context,
+                    umo=event.unified_msg_origin,
+                )
+                result = await orchestrator.install(
+                    InstallRequest(
+                        kind=ExtensionKind.PLUGIN,
+                        target=plugin_repo,
+                        provider="git",
+                        conversation_id=event.unified_msg_origin,
+                        requester_id=event.get_sender_id(),
+                        requester_role=event.role,
+                    )
+                )
+                if result.status == InstallResultStatus.PENDING:
+                    event.set_result(
+                        MessageEventResult().message(
+                            "安装请求已创建，等待确认。\n请直接在聊天中确认或拒绝。"
+                        )
+                    )
+                    return
+                if result.status == InstallResultStatus.SUCCESS:
+                    event.set_result(MessageEventResult().message("安装插件成功。"))
+                    return
+                event.set_result(
+                    MessageEventResult().message(f"安装插件失败: {result.message}")
+                )
             except Exception as e:
                 logger.error(f"安装插件失败: {e}")
                 event.set_result(MessageEventResult().message(f"安装插件失败: {e}"))

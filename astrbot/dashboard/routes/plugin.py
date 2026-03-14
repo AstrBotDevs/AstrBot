@@ -19,6 +19,10 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
 from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.star.plugin_search import (
+    filter_plugin_market_payload,
+    get_plugin_search_result_limit,
+)
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.star.star_manager import (
     PluginManager,
@@ -34,6 +38,8 @@ from .route import Response, Route, RouteContext
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
+DEFAULT_PLUGIN_PROVIDER = "git"
+SUPPORTED_PLUGIN_PROVIDERS = {"git"}
 
 
 @dataclass
@@ -157,6 +163,16 @@ class PluginRoute(Route):
     async def get_online_plugins(self):
         custom = request.args.get("custom_registry")
         force_refresh = request.args.get("force_refresh", "false").lower() == "true"
+        query = request.args.get("query", "").strip()
+        raw_limit = request.args.get("limit", "").strip()
+        limit: int | None = None
+        if raw_limit:
+            try:
+                limit = int(raw_limit)
+                if limit <= 0:
+                    return Response().error("limit must be a positive integer").__dict__
+            except ValueError:
+                return Response().error("limit must be a positive integer").__dict__
 
         # 构建注册表源信息
         source = self._build_registry_source(custom)
@@ -169,7 +185,15 @@ class PluginRoute(Route):
                 cached_data = self._load_plugin_cache(source.cache_file)
                 if cached_data:
                     logger.debug("缓存MD5匹配，使用缓存的插件市场数据")
-                    return Response().ok(cached_data).__dict__
+                    return (
+                        Response()
+                        .ok(
+                            self._filter_market_payload(
+                                cached_data, query=query, limit=limit
+                            )
+                        )
+                        .__dict__
+                    )
 
         # 尝试获取远程数据
         remote_data = None
@@ -209,7 +233,17 @@ class PluginRoute(Route):
                             remote_data,
                             current_md5,
                         )
-                        return Response().ok(remote_data).__dict__
+                        return (
+                            Response()
+                            .ok(
+                                self._filter_market_payload(
+                                    remote_data,
+                                    query=query,
+                                    limit=limit,
+                                )
+                            )
+                            .__dict__
+                        )
                     logger.error(f"请求 {url} 失败，状态码：{response.status}")
             except Exception as e:
                 logger.error(f"请求 {url} 失败，错误：{e}")
@@ -220,9 +254,30 @@ class PluginRoute(Route):
 
         if cached_data:
             logger.warning("远程插件市场数据获取失败，使用缓存数据")
-            return Response().ok(cached_data, "使用缓存数据，可能不是最新版本").__dict__
+            return (
+                Response()
+                .ok(
+                    self._filter_market_payload(cached_data, query=query, limit=limit),
+                    "使用缓存数据，可能不是最新版本",
+                )
+                .__dict__
+            )
 
         return Response().error("获取插件列表失败，且没有可用的缓存数据").__dict__
+
+    def _filter_market_payload(
+        self, data: dict | list, *, query: str, limit: int | None
+    ) -> dict | list:
+        if not query:
+            return data
+        return filter_plugin_market_payload(
+            data,
+            query,
+            limit=get_plugin_search_result_limit(
+                self.core_lifecycle.astrbot_config,
+                override=limit,
+            ),
+        )
 
     def _build_registry_source(self, custom_url: str | None) -> RegistrySource:
         """构建注册表源信息"""
@@ -501,6 +556,22 @@ class PluginRoute(Route):
 
         post_data = await request.get_json()
         repo_url = post_data["url"]
+        provider = (
+            str(
+                post_data.get("provider", DEFAULT_PLUGIN_PROVIDER)
+                or DEFAULT_PLUGIN_PROVIDER
+            )
+            .strip()
+            .lower()
+        )
+        if provider not in SUPPORTED_PLUGIN_PROVIDERS:
+            return (
+                Response()
+                .error(
+                    f"unsupported provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PLUGIN_PROVIDERS))}"
+                )
+                .__dict__
+            )
         ignore_version_check = bool(post_data.get("ignore_version_check", False))
 
         proxy: str = post_data.get("proxy", None)
@@ -509,23 +580,25 @@ class PluginRoute(Route):
 
         try:
             logger.info(f"正在安装插件 {repo_url}")
-            plugin_info = await self.plugin_manager.install_plugin(
-                repo_url,
-                proxy,
+            result = await self.plugin_manager.install_plugin(
+                repo_url=repo_url,
+                proxy=proxy or "",
                 ignore_version_check=ignore_version_check,
             )
-            # self.core_lifecycle.restart()
             logger.info(f"安装插件 {repo_url} 成功。")
-            return Response().ok(plugin_info, "安装成功。").__dict__
+            return Response().ok(result, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
-            return {
-                "status": "warning",
-                "message": str(e),
-                "data": {
-                    "warning_type": "astrbot_version_incompatible",
-                    "can_ignore": True,
-                },
-            }
+            return (
+                Response()
+                .warning(
+                    {
+                        "warning_type": "astrbot_version_incompatible",
+                        "can_ignore": True,
+                    },
+                    str(e),
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__
@@ -559,14 +632,17 @@ class PluginRoute(Route):
             logger.info(f"安装插件 {file.filename} 成功")
             return Response().ok(plugin_info, "安装成功。").__dict__
         except PluginVersionIncompatibleError as e:
-            return {
-                "status": "warning",
-                "message": str(e),
-                "data": {
-                    "warning_type": "astrbot_version_incompatible",
-                    "can_ignore": True,
-                },
-            }
+            return (
+                Response()
+                .warning(
+                    {
+                        "warning_type": "astrbot_version_incompatible",
+                        "can_ignore": True,
+                    },
+                    str(e),
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(str(e)).__dict__

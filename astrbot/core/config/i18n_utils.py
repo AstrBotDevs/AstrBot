@@ -87,6 +87,16 @@ class ConfigMetadataI18n:
                         f"{field_path}.template_schema",
                     )
 
+                if "templates" in field_data and isinstance(
+                    field_data["templates"], dict
+                ):
+                    field_result["templates"] = convert_items(
+                        group,
+                        section,
+                        field_data["templates"],
+                        f"{field_path}.templates",
+                    )
+
                 items_result[field_key] = field_result
 
             return items_result

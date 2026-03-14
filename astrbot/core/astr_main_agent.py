@@ -10,7 +10,7 @@ import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 
-from astrbot.core import logger
+from astrbot.core import logger, sp
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -51,6 +51,13 @@ from astrbot.core.astr_main_agent_resources import (
     retrieve_knowledge_base,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.extensions.llm_tools import (
+    EXTENSION_DENY_ALL_TOOL,
+    EXTENSION_DENY_TOOL,
+    EXTENSION_INSTALL_TOOL,
+    EXTENSION_SEARCH_TOOL,
+)
+from astrbot.core.extensions.runtime import is_extension_install_enabled
 from astrbot.core.message.components import File, Image, Reply
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -80,6 +87,8 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+
+EXTENSION_HUB_PLUGIN_MODULE_PATH = "astrbot.builtin_stars.builtin_extension_hub.main"
 
 
 @dataclass(slots=True)
@@ -925,6 +934,25 @@ def _proactive_cron_job_tools(req: ProviderRequest) -> None:
     req.func_tool.add_tool(LIST_CRON_JOBS_TOOL)
 
 
+def _apply_extension_hub_tools(req: ProviderRequest, cfg: dict) -> None:
+    inactivated_plugins = sp.get(
+        "inactivated_plugins",
+        [],
+        scope="global",
+        scope_id="global",
+    )
+    if EXTENSION_HUB_PLUGIN_MODULE_PATH in inactivated_plugins:
+        return
+    if not is_extension_install_enabled(cfg):
+        return
+    if req.func_tool is None:
+        req.func_tool = ToolSet()
+    req.func_tool.add_tool(EXTENSION_SEARCH_TOOL)
+    req.func_tool.add_tool(EXTENSION_INSTALL_TOOL)
+    req.func_tool.add_tool(EXTENSION_DENY_TOOL)
+    req.func_tool.add_tool(EXTENSION_DENY_ALL_TOOL)
+
+
 def _get_compress_provider(
     config: MainAgentBuildConfig, plugin_context: Context
 ) -> Provider | None:
@@ -1162,6 +1190,7 @@ async def build_main_agent(
 
     if config.add_cron_tools:
         _proactive_cron_job_tools(req)
+    _apply_extension_hub_tools(req, config.provider_settings)
 
     if event.platform_meta.support_proactive_message:
         if req.func_tool is None:

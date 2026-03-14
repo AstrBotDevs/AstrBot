@@ -835,6 +835,93 @@
         "description": "Available Plugins",
         "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
       }
+    },
+    "extension_install": {
+      "description": "Extension Install",
+      "provider_settings": {
+        "extension_install": {
+          "enable": {
+            "description": "Enable Chat Extension Install",
+            "hint": "When disabled, chat-side extension install capabilities are removed, including LLM extension tools and the related natural-language confirmation flow. Dashboard installs remain available."
+          },
+          "default_mode": {
+            "description": "Default Install Policy",
+            "hint": "In secure mode, only allowlisted plugins install directly and everything else requires confirmation. In open mode, only the blocklist applies and everything else installs directly.",
+            "labels": [
+              "Secure",
+              "Open"
+            ]
+          },
+          "search_result_limit": {
+            "description": "Default Search Result Limit",
+            "hint": "Controls the default number of chat-side extension search results."
+          },
+          "confirmation_token_ttl_seconds": {
+            "description": "Confirmation TTL (Seconds)",
+            "hint": "How long a pending chat-side install confirmation remains valid, in seconds."
+          },
+          "confirm_keyword": {
+            "description": "Confirm Keyword",
+            "hint": "When the user replies with this keyword, the pending install is approved."
+          },
+          "deny_keyword": {
+            "description": "Deny Keyword",
+            "hint": "When the user replies with this keyword, the pending install is rejected."
+          },
+          "allowed_roles": {
+            "description": "Allowed Roles",
+            "hint": "Roles allowed to initiate or confirm chat-side extension installs."
+          },
+          "pending_cleanup_interval_seconds": {
+            "description": "Pending Cleanup Interval (Seconds)",
+            "hint": "Background cleanup interval for expired pending install requests, in seconds."
+          },
+          "allowlist": {
+            "description": "Install Allowlist",
+            "hint": "Chat-side plugin installs matching these author rules are installed directly.",
+            "templates": {
+              "rule": {
+                "name": "Match Author",
+                "description": "Allowlist Rule",
+                "kind": {
+                  "description": "Extension Kind",
+                  "labels": [
+                    "Plugin",
+                    "Skill",
+                    "MCP"
+                  ]
+                },
+                "author": {
+                  "description": "Author",
+                  "hint": "Enter the plugin author name, for example NickMo."
+                }
+              }
+            }
+          },
+          "blocklist": {
+            "description": "Install Blocklist",
+            "hint": "Chat-side plugin installs matching these author rules are denied directly.",
+            "templates": {
+              "rule": {
+                "name": "Match Author",
+                "description": "Blocklist Rule",
+                "kind": {
+                  "description": "Extension Kind",
+                  "labels": [
+                    "Plugin",
+                    "Skill",
+                    "MCP"
+                  ]
+                },
+                "author": {
+                  "description": "Author",
+                  "hint": "Enter the plugin author name, for example NickMo."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "ext_group": {

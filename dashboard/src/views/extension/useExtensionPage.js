@@ -1266,6 +1266,14 @@ export const useExtensionPage = () => {
       return false;
     }
 
+    if (resData.status === "pending") {
+      const pendingMessage = `${resData.message}\n请在聊天中确认或拒绝。`;
+      onLoadingDialogResult(2, pendingMessage, -1);
+      toast(pendingMessage, "warning");
+      await refreshExtensionsAfterInstallFailure();
+      return false;
+    }
+
     if (toastStatus) {
       toast(resData.message, resData.status === "ok" ? "success" : "error");
     }
@@ -1293,6 +1301,7 @@ export const useExtensionPage = () => {
 
     return axios.post("/api/plugin/install", {
       url: extension_url.value,
+      provider: "git",
       proxy: getSelectedGitHubProxy(),
       ignore_version_check: ignoreVersionCheck,
     });
@@ -1310,10 +1319,12 @@ export const useExtensionPage = () => {
     await getExtensions();
     checkAlreadyInstalled();
 
-    viewReadme({
-      name: resData.data.name,
-      repo: resData.data.repo || null,
-    });
+    if (resData?.data?.name) {
+      viewReadme({
+        name: resData.data.name,
+        repo: resData.data.repo || null,
+      });
+    }
 
     await checkAndPromptConflicts();
   };

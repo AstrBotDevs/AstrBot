@@ -17,6 +17,7 @@ from astrbot.core.db.po import (
     CommandConflict,
     ConversationV2,
     CronJob,
+    PendingOperation,
     Persona,
     PersonaFolder,
     PlatformMessageHistory,
@@ -59,6 +60,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_folder_columns(conn)
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
+            await self._ensure_pending_operation_columns(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -101,6 +103,18 @@ class SQLiteDatabase(BaseDatabase):
         if "custom_error_message" not in columns:
             await conn.execute(
                 text("ALTER TABLE personas ADD COLUMN custom_error_message TEXT")
+            )
+
+    async def _ensure_pending_operation_columns(self, conn) -> None:
+        """Ensure pending_operations has forward-compatible columns."""
+        result = await conn.execute(text("PRAGMA table_info(pending_operations)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "conversation_id" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE pending_operations ADD COLUMN conversation_id VARCHAR(512) NOT NULL DEFAULT ''"
+                )
             )
 
     # ====
@@ -1276,6 +1290,183 @@ class SQLiteDatabase(BaseDatabase):
             )
 
         await self._run_in_tx(_op)
+
+    async def create_pending_operation(
+        self,
+        *,
+        operation_id: str,
+        token: str,
+        conversation_id: str,
+        requester_id: str,
+        requester_role: str,
+        kind: str,
+        provider: str,
+        target: str,
+        payload: dict,
+        status: str,
+        reason: str | None,
+        decision: str | None,
+        expires_at: datetime,
+    ) -> PendingOperation:
+        async def _op(session: AsyncSession) -> PendingOperation:
+            operation = PendingOperation(
+                operation_id=operation_id,
+                token=token,
+                conversation_id=conversation_id,
+                requester_id=requester_id,
+                requester_role=requester_role,
+                kind=kind,
+                provider=provider,
+                target=target,
+                payload=payload,
+                status=status,
+                reason=reason,
+                decision=decision,
+                expires_at=expires_at,
+            )
+            session.add(operation)
+            await session.flush()
+            await session.refresh(operation)
+            return operation
+
+        return await self._run_in_tx(_op)
+
+    async def get_pending_operation_by_operation_id(
+        self, operation_id: str
+    ) -> PendingOperation | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(PendingOperation).where(
+                    col(PendingOperation.operation_id) == operation_id,
+                ),
+            )
+            return result.scalar_one_or_none()
+
+    async def get_pending_operation_by_token(
+        self, token: str
+    ) -> PendingOperation | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(PendingOperation).where(col(PendingOperation.token) == token),
+            )
+            return result.scalar_one_or_none()
+
+    async def list_pending_operations(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+        conversation_id: str | None = None,
+    ) -> list[PendingOperation]:
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(PendingOperation)
+            if status:
+                query = query.where(col(PendingOperation.status) == status)
+            if status == "pending":
+                query = query.where(
+                    col(PendingOperation.expires_at) > datetime.now(timezone.utc)
+                )
+            if kind:
+                query = query.where(col(PendingOperation.kind) == kind)
+            if conversation_id is not None:
+                query = query.where(
+                    col(PendingOperation.conversation_id) == conversation_id
+                )
+            query = query.order_by(desc(PendingOperation.created_at))
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    async def get_active_pending_operation_by_conversation(
+        self, conversation_id: str
+    ) -> PendingOperation | None:
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(PendingOperation)
+                .where(
+                    col(PendingOperation.status) == "pending",
+                    col(PendingOperation.conversation_id) == conversation_id,
+                    col(PendingOperation.expires_at) > datetime.now(timezone.utc),
+                )
+                .order_by(desc(PendingOperation.created_at))
+            )
+            return result.scalars().first()
+
+    async def update_pending_operation(
+        self,
+        operation_id: str,
+        *,
+        status: str | None = None,
+        current_status: str | None = None,
+        decision: str | None = None,
+        reason: str | None = None,
+        error: str | None = None,
+        confirmed_by: str | None = None,
+        confirmed_at: datetime | None = None,
+        payload: dict | None = None,
+    ) -> PendingOperation | None:
+        async def _op(session: AsyncSession) -> PendingOperation | None:
+            update_values: dict[str, object] = {
+                "updated_at": datetime.now(timezone.utc),
+            }
+            if status is not None:
+                update_values["status"] = status
+            if decision is not None:
+                update_values["decision"] = decision
+            if reason is not None:
+                update_values["reason"] = reason
+            if error is not None:
+                update_values["error"] = error
+            if confirmed_by is not None:
+                update_values["confirmed_by"] = confirmed_by
+            if confirmed_at is not None:
+                update_values["confirmed_at"] = confirmed_at
+            if payload is not None:
+                update_values["payload"] = payload
+
+            conditions = [col(PendingOperation.operation_id) == operation_id]
+            if current_status is not None:
+                conditions.append(col(PendingOperation.status) == current_status)
+
+            result = await session.execute(
+                update(PendingOperation).where(*conditions).values(**update_values),
+            )
+            rowcount = result.rowcount or 0
+            if rowcount == 0:
+                return None
+
+            refreshed = await session.execute(
+                select(PendingOperation).where(
+                    col(PendingOperation.operation_id) == operation_id,
+                ),
+            )
+            return refreshed.scalar_one_or_none()
+
+        return await self._run_in_tx(_op)
+
+    async def expire_pending_operations(self, *, before: datetime | None = None) -> int:
+        expiry_time = before or datetime.now(timezone.utc)
+
+        async def _op(session: AsyncSession) -> int:
+            result = await session.execute(
+                update(PendingOperation)
+                .where(
+                    col(PendingOperation.status) == "pending",
+                    col(PendingOperation.expires_at) <= expiry_time,
+                )
+                .values(
+                    status="expired",
+                    reason="token expired",
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            )
+            rowcount = result.rowcount
+            return int(rowcount) if rowcount is not None else 0
+
+        return await self._run_in_tx(_op)
 
     # ====
     # Deprecated Methods

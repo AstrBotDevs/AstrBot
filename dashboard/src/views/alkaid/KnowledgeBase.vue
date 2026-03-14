@@ -715,6 +715,11 @@ export default {
                 .then(response => {
                     if (response.data.status === 'ok') {
                         this.checkPlugin();
+                    } else if (response.data.status === 'pending') {
+                        this.showSnackbar(
+                            `${response.data.message || this.tm('messages.installFailed')}\n请在聊天中确认或拒绝。`,
+                            'warning',
+                        );
                     } else {
                         this.showSnackbar(response.data.message || this.tm('messages.installFailed'), 'error');
                     }
