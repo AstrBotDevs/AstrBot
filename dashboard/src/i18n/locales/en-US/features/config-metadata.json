@@ -276,6 +276,14 @@
           "description": "Output Tool Call Results",
           "hint": "Only takes effect when \"Output Function Call Status\" is enabled, and shows at most 70 characters."
         },
+        "deduplicate_repeated_tool_results": {
+          "description": "Deduplicate Repeated Tool Results",
+          "hint": "When enabled, unchanged tool outputs with the same arguments are compacted to reduce context growth."
+        },
+        "tool_result_dedup_max_entries": {
+          "description": "Tool Result Dedup Cache Limit",
+          "hint": "Maximum number of cached tool signatures for deduplication. Set to 0 or negative to disable pruning."
+        },
         "sanitize_context_by_modalities": {
           "description": "Sanitize History by Modalities",
           "hint": "When enabled, sanitizes contexts before each LLM request by removing image blocks and tool-call structures that the current provider's modalities do not support (this changes what the model sees)."

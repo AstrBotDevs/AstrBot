@@ -120,6 +120,7 @@ DEFAULT_CONFIG = {
         "tool_call_timeout": 60,
         "tool_schema_mode": "full",
         "deduplicate_repeated_tool_results": True,
+        "tool_result_dedup_max_entries": 1024,
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2549,6 +2550,9 @@ CONFIG_METADATA_2 = {
                     "deduplicate_repeated_tool_results": {
                         "type": "bool",
                     },
+                    "tool_result_dedup_max_entries": {
+                        "type": "int",
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3311,6 +3315,15 @@ CONFIG_METADATA_3 = {
                         "hint": "开启后，工具在相同参数下连续返回完全相同结果时，会自动压缩重复内容，减少上下文膨胀。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.tool_result_dedup_max_entries": {
+                        "description": "重复工具结果缓存上限",
+                        "type": "int",
+                        "hint": "限制用于去重的工具签名缓存数量。设为 0 或负数表示不限制。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.deduplicate_repeated_tool_results": True,
                         },
                     },
                     "provider_settings.wake_prefix": {

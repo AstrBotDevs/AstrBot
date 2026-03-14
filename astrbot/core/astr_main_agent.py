@@ -140,6 +140,8 @@ class MainAgentBuildConfig:
     """Maximum number of images injected from quoted-message fallback extraction."""
     deduplicate_repeated_tool_results: bool = True
     """Whether to compact unchanged repeated tool outputs in context."""
+    tool_result_dedup_max_entries: int | None = 1024
+    """Maximum cached tool signatures for deduplication. None disables pruning."""
 
 
 @dataclass(slots=True)
@@ -1209,6 +1211,7 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         deduplicate_repeated_tool_results=config.deduplicate_repeated_tool_results,
+        tool_result_dedup_max_entries=config.tool_result_dedup_max_entries,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
         ),

@@ -60,6 +60,30 @@ class InternalAgentSubStage(Stage):
             "deduplicate_repeated_tool_results",
             True,
         )
+        raw_dedup_max_entries = settings.get("tool_result_dedup_max_entries", 1024)
+        if isinstance(raw_dedup_max_entries, bool):
+            logger.warning(
+                "Invalid provider_settings.tool_result_dedup_max_entries=%s, fallback to 1024.",
+                raw_dedup_max_entries,
+            )
+            raw_dedup_max_entries = 1024
+        try:
+            self.tool_result_dedup_max_entries: int | None = (
+                None
+                if raw_dedup_max_entries is None
+                else int(raw_dedup_max_entries)
+            )
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid provider_settings.tool_result_dedup_max_entries=%s, fallback to 1024.",
+                raw_dedup_max_entries,
+            )
+            self.tool_result_dedup_max_entries = 1024
+        if (
+            self.tool_result_dedup_max_entries is not None
+            and self.tool_result_dedup_max_entries <= 0
+        ):
+            self.tool_result_dedup_max_entries = None
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -141,6 +165,7 @@ class InternalAgentSubStage(Stage):
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
             deduplicate_repeated_tool_results=self.deduplicate_repeated_tool_results,
+            tool_result_dedup_max_entries=self.tool_result_dedup_max_entries,
         )
 
     async def process(

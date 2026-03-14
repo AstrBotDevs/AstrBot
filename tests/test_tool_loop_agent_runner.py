@@ -371,6 +371,96 @@ async def test_repeated_tool_output_dedup_can_be_disabled(
 
 
 @pytest.mark.asyncio
+async def test_tool_result_dedup_cache_is_pruned_when_exceeding_limit(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_result_dedup_max_entries=2,
+    )
+
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_a",
+        tool_args={"arg": 1},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_b",
+        tool_args={"arg": 2},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_c",
+        tool_args={"arg": 3},
+        content="same-result",
+    )
+
+    assert len(runner._tool_result_dedup) == 2
+    sig_a = "tool_a:" + runner._normalize_tool_args_for_signature({"arg": 1})
+    assert sig_a not in runner._tool_result_dedup
+
+
+@pytest.mark.asyncio
+async def test_tool_result_dedup_cache_allows_unbounded_when_limit_disabled(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_result_dedup_max_entries=None,
+    )
+
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_a",
+        tool_args={"arg": 1},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_b",
+        tool_args={"arg": 2},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_c",
+        tool_args={"arg": 3},
+        content="same-result",
+    )
+
+    assert len(runner._tool_result_dedup) == 3
+
+
+def test_tool_args_signature_normalization_is_stable_for_non_json_values(runner):
+    class NonJsonArg:
+        def __init__(self, payload: str):
+            self.payload = payload
+
+    sig_one = runner._normalize_tool_args_for_signature(
+        {
+            "obj": NonJsonArg("v1"),
+            "tags": {"b", "a"},
+        }
+    )
+    sig_two = runner._normalize_tool_args_for_signature(
+        {
+            "tags": {"a", "b"},
+            "obj": NonJsonArg("v1"),
+        }
+    )
+
+    assert sig_one == sig_two
+    assert "0x" not in sig_one
+
+
+@pytest.mark.asyncio
 async def test_max_step_with_streaming(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):

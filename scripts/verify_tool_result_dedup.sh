@@ -15,7 +15,10 @@ from astrbot.core.config.default import DEFAULT_CONFIG
 provider_settings = DEFAULT_CONFIG.get("provider_settings", {})
 assert "deduplicate_repeated_tool_results" in provider_settings
 assert provider_settings["deduplicate_repeated_tool_results"] is True
+assert "tool_result_dedup_max_entries" in provider_settings
+assert provider_settings["tool_result_dedup_max_entries"] == 1024
 print("DEFAULT_CONFIG.provider_settings.deduplicate_repeated_tool_results=True")
+print("DEFAULT_CONFIG.provider_settings.tool_result_dedup_max_entries=1024")
 PY
 
 echo "[3/3] Optional runtime config check (data/cmd_config.json)"
@@ -27,7 +30,9 @@ from pathlib import Path
 cfg_path = Path("data/cmd_config.json")
 cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
 value = cfg.get("provider_settings", {}).get("deduplicate_repeated_tool_results")
+max_entries = cfg.get("provider_settings", {}).get("tool_result_dedup_max_entries")
 print(f"{cfg_path}: provider_settings.deduplicate_repeated_tool_results={value!r}")
+print(f"{cfg_path}: provider_settings.tool_result_dedup_max_entries={max_entries!r}")
 PY
 else
   echo "data/cmd_config.json not found, skip runtime check."

@@ -1,12 +1,17 @@
 import asyncio
 import copy
+import datetime as dt
 import hashlib
 import json
 import sys
 import time
 import traceback
 import typing as T
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
+from decimal import Decimal
+from enum import Enum
+from pathlib import Path
+from uuid import UUID
 
 from mcp.types import (
     BlobResourceContents,
@@ -88,6 +93,177 @@ class _ToolResultDedupState:
     repeat_count: int = 0
 
 
+_DEDUP_PREVIEW_LIMIT = 180
+_DEDUP_PREVIEW_MIN_LIMIT = 3
+_DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES = 1024
+_DEDUP_MESSAGE_TEMPLATE = (
+    "[tool-result-deduplicated] Tool `{tool_name}` returned unchanged output for "
+    "{repeat_total} consecutive calls with the same arguments. Full repeated output "
+    "is omitted to reduce context growth. Latest preview: {preview}"
+)
+
+
+def _stable_type_name(value: T.Any) -> str:
+    cls = value.__class__
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _canonicalize_tool_arg_value(
+    value: T.Any,
+    *,
+    _seen: set[int] | None = None,
+) -> T.Any:
+    if _seen is None:
+        _seen = set()
+
+    if value is None or isinstance(value, bool | int | float | str):
+        return value
+
+    if isinstance(value, bytes | bytearray | memoryview):
+        return {
+            "__type__": _stable_type_name(value),
+            "hex": bytes(value).hex(),
+        }
+
+    if isinstance(value, dt.datetime | dt.date | dt.time):
+        return {
+            "__type__": _stable_type_name(value),
+            "iso": value.isoformat(),
+        }
+
+    if isinstance(value, Path):
+        return {
+            "__type__": _stable_type_name(value),
+            "path": str(value),
+        }
+
+    if isinstance(value, UUID | Decimal):
+        return {
+            "__type__": _stable_type_name(value),
+            "value": str(value),
+        }
+
+    if isinstance(value, Enum):
+        return {
+            "__type__": _stable_type_name(value),
+            "name": value.name,
+            "value": _canonicalize_tool_arg_value(value.value, _seen=_seen),
+        }
+
+    obj_id = id(value)
+    if obj_id in _seen:
+        return {
+            "__type__": _stable_type_name(value),
+            "__recursive__": True,
+        }
+    _seen.add(obj_id)
+    try:
+        if isinstance(value, dict):
+            normalized_items: list[tuple[str, T.Any]] = []
+            for key, item in value.items():
+                normalized_key = json.dumps(
+                    _canonicalize_tool_arg_value(key, _seen=_seen),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                normalized_items.append(
+                    (
+                        normalized_key,
+                        _canonicalize_tool_arg_value(item, _seen=_seen),
+                    )
+                )
+            normalized_items.sort(key=lambda kv: kv[0])
+            return {k: v for k, v in normalized_items}
+
+        if isinstance(value, list | tuple):
+            return [
+                _canonicalize_tool_arg_value(item, _seen=_seen)
+                for item in value
+            ]
+
+        if isinstance(value, set | frozenset):
+            normalized_items = [
+                _canonicalize_tool_arg_value(item, _seen=_seen)
+                for item in value
+            ]
+            normalized_items.sort(
+                key=lambda item: json.dumps(
+                    item,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+            return normalized_items
+
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump()
+            return {
+                "__type__": _stable_type_name(value),
+                "value": _canonicalize_tool_arg_value(dumped, _seen=_seen),
+            }
+
+        dict_dump = getattr(value, "dict", None)
+        if callable(dict_dump):
+            dumped = dict_dump()
+            return {
+                "__type__": _stable_type_name(value),
+                "value": _canonicalize_tool_arg_value(dumped, _seen=_seen),
+            }
+
+        if is_dataclass(value) and not isinstance(value, type):
+            attrs: dict[str, T.Any] = {}
+            for key in sorted(vars(value)):
+                if key.startswith("_"):
+                    continue
+                attrs[key] = _canonicalize_tool_arg_value(
+                    getattr(value, key),
+                    _seen=_seen,
+                )
+            return {
+                "__type__": _stable_type_name(value),
+                "attrs": attrs,
+            }
+
+        if hasattr(value, "__dict__"):
+            attrs: dict[str, T.Any] = {}
+            for key in sorted(vars(value)):
+                if key.startswith("_"):
+                    continue
+                attrs[key] = _canonicalize_tool_arg_value(
+                    getattr(value, key),
+                    _seen=_seen,
+                )
+            return {
+                "__type__": _stable_type_name(value),
+                "attrs": attrs,
+            }
+
+        slots = getattr(value, "__slots__", ())
+        if isinstance(slots, str):
+            slots = (slots,)
+        if slots:
+            attrs = {}
+            for slot_name in sorted(slots):
+                if not isinstance(slot_name, str):
+                    continue
+                if hasattr(value, slot_name):
+                    attrs[slot_name] = _canonicalize_tool_arg_value(
+                        getattr(value, slot_name),
+                        _seen=_seen,
+                    )
+            return {
+                "__type__": _stable_type_name(value),
+                "attrs": attrs,
+            }
+
+        return {"__type__": _stable_type_name(value)}
+    finally:
+        _seen.remove(obj_id)
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _get_persona_custom_error_message(self) -> str | None:
         """Read persona-level custom error message from event extras when available."""
@@ -118,6 +294,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
         deduplicate_repeated_tool_results: bool = True,
+        tool_result_dedup_max_entries: int | None = _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -167,8 +344,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._aborted = False
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
+        # This cache tracks repeated tool results. Bound it to keep long-running
+        # sessions from accumulating stale signatures indefinitely.
         self._tool_result_dedup: dict[str, _ToolResultDedupState] = {}
         self._deduplicate_repeated_tool_results = deduplicate_repeated_tool_results
+        self._tool_result_dedup_max_entries = (
+            self._normalize_tool_result_dedup_max_entries(
+                tool_result_dedup_max_entries
+            )
+        )
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -357,26 +541,79 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return f"{content}{notice}"
 
     @staticmethod
-    def _compact_tool_result_preview(content: str, limit: int = 180) -> str:
+    def _compact_tool_result_preview(
+        content: str,
+        limit: int = _DEDUP_PREVIEW_LIMIT,
+    ) -> str:
         normalized = " ".join(content.strip().split())
         if len(normalized) <= limit:
             return normalized
-        if limit <= 3:
+        if limit <= _DEDUP_PREVIEW_MIN_LIMIT:
             return normalized[:limit]
-        return f"{normalized[: limit - 3]}..."
+        return f"{normalized[: limit - _DEDUP_PREVIEW_MIN_LIMIT]}..."
+
+    @staticmethod
+    def _normalize_tool_result_dedup_max_entries(
+        max_entries: int | None,
+    ) -> int | None:
+        if max_entries is None:
+            return None
+        if isinstance(max_entries, bool):
+            logger.warning(
+                "Invalid tool_result_dedup_max_entries=%s, fallback to %s.",
+                max_entries,
+                _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+            )
+            return _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
+        try:
+            normalized = int(max_entries)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid tool_result_dedup_max_entries=%s, fallback to %s.",
+                max_entries,
+                _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES,
+            )
+            return _DEFAULT_TOOL_RESULT_DEDUP_MAX_ENTRIES
+        if normalized <= 0:
+            return None
+        return normalized
 
     @staticmethod
     def _normalize_tool_args_for_signature(tool_args: dict[str, T.Any]) -> str:
+        normalized_args = _canonicalize_tool_arg_value(tool_args)
         try:
             return json.dumps(
-                tool_args,
+                normalized_args,
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
-                default=str,
             )
         except (TypeError, ValueError):
-            return repr(tool_args)
+            logger.warning(
+                "Failed to normalize tool args for signature, fallback to type-only marker. args_type=%s",
+                _stable_type_name(tool_args),
+            )
+            return json.dumps(
+                {
+                    "__type__": _stable_type_name(tool_args),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+
+    def _prune_tool_result_dedup_if_needed(self) -> None:
+        """Bound dedup cache size for long-running sessions."""
+        max_entries = self._tool_result_dedup_max_entries
+        if max_entries is None:
+            return
+
+        while len(self._tool_result_dedup) > max_entries:
+            try:
+                oldest_key = next(iter(self._tool_result_dedup))
+            except StopIteration:
+                break
+            self._tool_result_dedup.pop(oldest_key, None)
 
     def _deduplicate_tool_result_content(
         self,
@@ -401,21 +638,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 result_hash=content_hash,
                 repeat_count=0,
             )
+            self._prune_tool_result_dedup_if_needed()
             return content
 
         state.repeat_count += 1
         repeat_total = state.repeat_count + 1
-        preview = self._compact_tool_result_preview(content)
+        preview = self._compact_tool_result_preview(
+            content,
+            limit=_DEDUP_PREVIEW_LIMIT,
+        )
         logger.info(
             "Deduplicated repeated tool output: tool=%s repeats=%s",
             tool_name,
             repeat_total,
         )
-        return (
-            "[tool-result-deduplicated] "
-            f"Tool `{tool_name}` returned unchanged output for {repeat_total} "
-            "consecutive calls with the same arguments. Full repeated output is "
-            f"omitted to reduce context growth. Latest preview: {preview}"
+        return _DEDUP_MESSAGE_TEMPLATE.format(
+            tool_name=tool_name,
+            repeat_total=repeat_total,
+            preview=preview,
         )
 
     @override
