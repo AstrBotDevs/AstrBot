@@ -19,6 +19,7 @@ from astrbot.core.config.default import (
 )
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.log import LogManager
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider import Provider
 from astrbot.core.provider.register import provider_registry
@@ -1028,6 +1029,7 @@ class ConfigRoute(Route):
 
             await self._save_astrbot_configs(config, conf_id)
             await self.core_lifecycle.reload_pipeline_scheduler(conf_id)
+            LogManager.configure_trace_logger(config)
 
             # Non-blocking Bay connectivity check
             warning = await _validate_neo_connectivity(config)

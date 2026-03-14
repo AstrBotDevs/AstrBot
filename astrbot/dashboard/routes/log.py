@@ -319,10 +319,31 @@ class LogRoute(Route):
                 return Response().error("数据库未初始化").__dict__
 
             before_ts = request.args.get("before_ts", type=float)
+            clear_all = before_ts is None
             if before_ts is None:
                 before_ts = time.time()  # delete all
 
             deleted = await self.db_helper.delete_traces_before(before_ts)
+
+            # When clearing all records, also truncate trace log files so that
+            # the reported disk usage reflects the actual state.
+            if clear_all:
+                data_path = get_astrbot_data_path()
+                trace_log_dir = os.path.join(data_path, "logs")
+                if os.path.exists(trace_log_dir):
+                    for fname in os.listdir(trace_log_dir):
+                        if "astrbot.trace.log" in fname:
+                            fpath = os.path.join(trace_log_dir, fname)
+                            try:
+                                # Truncate in-place so open file handles remain valid
+                                with open(fpath, "w"):
+                                    pass
+                            except OSError:
+                                try:
+                                    os.remove(fpath)
+                                except OSError:
+                                    pass
+
             return Response().ok(data={"deleted": deleted}).__dict__
         except Exception as e:
             logger.error(f"清除 Trace 失败: {e}")
