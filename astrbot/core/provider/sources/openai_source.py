@@ -629,7 +629,8 @@ class ProviderOpenAIOfficial(Provider):
             # 最后一次不等待
             if retry_cnt < max_retries - 1:
                 await asyncio.sleep(1)
-            available_api_keys.remove(chosen_key)
+            if chosen_key in available_api_keys:
+                available_api_keys.remove(chosen_key)
             if len(available_api_keys) > 0:
                 chosen_key = random.choice(available_api_keys)
                 return (
