@@ -97,7 +97,7 @@ class Plain(BaseMessageComponent):
         super().__init__(text=text, convert=convert, **_)
 
     def toDict(self):
-        return {"type": "text", "data": {"text": self.text.strip()}}
+        return {"type": "text", "data": {"text": self.text}}
 
     async def to_dict(self):
         return {"type": "text", "data": {"text": self.text}}
