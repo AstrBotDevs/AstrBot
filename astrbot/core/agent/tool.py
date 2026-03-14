@@ -63,6 +63,11 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
     """
+    source: str = "plugin"
+    """
+    Origin of this tool: 'plugin' (from star plugins), 'internal' (AstrBot built-in),
+    or 'mcp' (from MCP servers). Used by WebUI for display grouping.
+    """
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"
@@ -100,6 +105,15 @@ class ToolSet:
     def remove_tool(self, name: str) -> None:
         """Remove a tool by its name."""
         self.tools = [tool for tool in self.tools if tool.name != name]
+
+    def normalize(self) -> None:
+        """Sort tools by name for deterministic serialization.
+
+        This ensures the serialized tool schema sent to the LLM is
+        identical across requests regardless of registration/injection
+        order, enabling LLM provider prefix cache hits.
+        """
+        self.tools.sort(key=lambda t: t.name)
 
     def get_tool(self, name: str) -> FunctionTool | None:
         """Get a tool by its name."""

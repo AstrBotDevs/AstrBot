@@ -7,7 +7,7 @@
             {{ greetingText }} {{ greetingEmoji }}
           </h1>
           <p class="text-subtitle-1 text-medium-emphasis mb-0">
-            {{ tm('subtitle') }}
+            {{ tm("subtitle") }}
           </p>
         </v-col>
       </v-row>
@@ -16,50 +16,160 @@
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
             <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('onboard.title') }}
+              {{ tm("onboard.title") }}
             </div>
 
-            <v-timeline align="start" side="end" density="compact" class="welcome-timeline" truncate-line="both">
-              <v-timeline-item :dot-color="platformStepState === 'completed' ? 'success' : 'primary'"
-                :icon="platformStepState === 'completed' ? 'mdi-check' : 'mdi-numeric-1'" fill-dot size="small">
+            <v-timeline
+              align="start"
+              side="end"
+              density="compact"
+              class="welcome-timeline"
+              truncate-line="both"
+            >
+              <v-timeline-item
+                :dot-color="
+                  backendStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  backendStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-1'
+                "
+                fill-dot
+                size="small"
+              >
                 <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1">{{ tm('onboard.step1Title') }}</div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step1Desc') }}</p>
+                  <div class="text-h6 font-weight-bold mb-1">
+                    {{ tm("onboard.step0Title") || "配置后端地址" }}
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{
+                      tm("onboard.step0Desc") ||
+                      "配置 AstrBot 的后端 API 地址。"
+                    }}
+                  </p>
                   <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" :loading="loadingPlatformDialog"
-                      @click="openPlatformDialog">
-                      {{ tm('onboard.configure') }}
+                    <div style="max-width: 300px" class="flex-grow-1 mr-2">
+                      <v-text-field
+                        v-model="apiBaseUrl"
+                        label="Backend URL"
+                        placeholder="http://127.0.0.1:6185"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                      ></v-text-field>
+                    </div>
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      :loading="checkingBackend"
+                      @click="checkAndSaveBackend"
+                    >
+                      {{ t("core.common.save") }}
                     </v-btn>
-                    <div v-if="platformStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
+                    <div
+                      v-if="backendStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
                     </div>
                   </div>
                 </div>
               </v-timeline-item>
 
-              <v-timeline-item :dot-color="providerStepState === 'completed' ? 'success' : 'primary'"
-                :icon="providerStepState === 'completed' ? 'mdi-check' : 'mdi-numeric-2'" fill-dot size="small">
+              <v-timeline-item
+                :dot-color="
+                  platformStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  platformStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-2'
+                "
+                fill-dot
+                size="small"
+              >
                 <div class="pl-2">
-                  <div class="text-h6 font-weight-bold mb-1"
-                    :class="{ 'text-medium-emphasis': platformStepState !== 'completed' }">{{ tm('onboard.step2Title')
-                    }}
+                  <div
+                    class="text-h6 font-weight-bold mb-1"
+                    :class="{
+                      'text-medium-emphasis': backendStepState !== 'completed',
+                    }"
+                  >
+                    {{ tm("onboard.step1Title") }}
                   </div>
-                  <p class="text-body-2 text-medium-emphasis mb-3">{{ tm('onboard.step2Desc') }}</p>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step1Desc") }}
+                  </p>
                   <div class="d-flex align-center">
-                    <v-btn color="primary" variant="flat" rounded="pill" class="px-6" @click="openProviderDialog">
-                      {{ tm('onboard.configure') }}
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      :loading="loadingPlatformDialog"
+                      :disabled="backendStepState !== 'completed'"
+                      @click="openPlatformDialog"
+                    >
+                      {{ tm("onboard.configure") }}
                     </v-btn>
-                    <div v-if="providerStepState === 'completed'"
-                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3">
-                      {{ tm('onboard.completed') }}
+                    <div
+                      v-if="platformStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
+                    </div>
+                  </div>
+                </div>
+              </v-timeline-item>
+
+              <v-timeline-item
+                :dot-color="
+                  providerStepState === 'completed' ? 'success' : 'primary'
+                "
+                :icon="
+                  providerStepState === 'completed'
+                    ? 'mdi-check'
+                    : 'mdi-numeric-3'
+                "
+                fill-dot
+                size="small"
+              >
+                <div class="pl-2">
+                  <div
+                    class="text-h6 font-weight-bold mb-1"
+                    :class="{
+                      'text-medium-emphasis': platformStepState !== 'completed',
+                    }"
+                  >
+                    {{ tm("onboard.step2Title") }}
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step2Desc") }}
+                  </p>
+                  <div class="d-flex align-center">
+                    <v-btn
+                      color="primary"
+                      variant="flat"
+                      rounded="pill"
+                      class="px-6"
+                      @click="openProviderDialog"
+                    >
+                      {{ tm("onboard.configure") }}
+                    </v-btn>
+                    <div
+                      v-if="providerStepState === 'completed'"
+                      class="text-success d-flex align-center text-body-2 font-weight-medium ml-3"
+                    >
+                      {{ tm("onboard.completed") }}
                     </div>
                   </div>
                 </div>
               </v-timeline-item>
             </v-timeline>
           </v-card>
-
         </v-col>
       </v-row>
 
@@ -67,51 +177,68 @@
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
             <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('resources.title') }}
+              {{ tm("resources.title") }}
             </div>
             <v-row>
               <v-col cols="12" sm="4">
                 <!-- GitHub Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
-                  href="https://github.com/AstrBotDevs/AstrBot/" target="_blank">
+                <v-card
+                  variant="outlined"
+                  class="h-100 pa-4 d-flex flex-column"
+                  href="https://github.com/AstrBotDevs/AstrBot/"
+                  target="_blank"
+                >
                   <div class="d-flex align-center mb-3">
                     <v-icon size="32" class="mr-3">mdi-github</v-icon>
                     <span class="text-h6 font-weight-bold">GitHub</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.githubDesc') }}
+                    {{ tm("resources.githubDesc") }}
                   </p>
                 </v-card>
               </v-col>
 
               <v-col cols="12" sm="4">
                 <!-- Docs Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column" href="https://docs.astrbot.app"
-                  target="_blank">
+                <v-card
+                  variant="outlined"
+                  class="h-100 pa-4 d-flex flex-column"
+                  href="https://docs.astrbot.app"
+                  target="_blank"
+                >
                   <div class="d-flex align-center mb-3">
-                    <v-icon size="32" class="mr-3">mdi-book-open-variant</v-icon>
-                    <span class="text-h6 font-weight-bold">{{ tm('resources.docsTitle') }}</span>
+                    <v-icon size="32" class="mr-3"
+                      >mdi-book-open-variant</v-icon
+                    >
+                    <span class="text-h6 font-weight-bold">{{
+                      tm("resources.docsTitle")
+                    }}</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.docsDesc') }}
+                    {{ tm("resources.docsDesc") }}
                   </p>
                 </v-card>
               </v-col>
 
               <v-col cols="12" sm="4">
                 <!-- Afdian Card -->
-                <v-card variant="outlined" class="h-100 pa-4 d-flex flex-column"
-                  href="https://afdian.com/a/astrbot_team" target="_blank">
+                <v-card
+                  variant="outlined"
+                  class="h-100 pa-4 d-flex flex-column"
+                  href="https://afdian.com/a/astrbot_team"
+                  target="_blank"
+                >
                   <div class="d-flex align-center mb-3">
                     <v-icon size="32" class="mr-3">mdi-hand-heart</v-icon>
-                    <span class="text-h6 font-weight-bold">{{ tm('resources.afdianTitle') }}</span>
+                    <span class="text-h6 font-weight-bold">{{
+                      tm("resources.afdianTitle")
+                    }}</span>
                   </div>
                   <p class="text-body-2 text-medium-emphasis mb-0">
-                    {{ tm('resources.afdianDesc') }}
+                    {{ tm("resources.afdianDesc") }}
                   </p>
                 </v-card>
               </v-col>
-
             </v-row>
           </v-card>
         </v-col>
@@ -121,7 +248,7 @@
         <v-col cols="12">
           <v-card class="welcome-card pa-6" elevation="0" border>
             <div class="mb-4 text-h3 font-weight-bold">
-              {{ tm('announcement.title') }}
+              {{ tm("announcement.title") }}
             </div>
             <MarkdownRender
               :content="welcomeAnnouncement"
@@ -133,28 +260,34 @@
       </v-row>
     </v-container>
 
-    <AddNewPlatform v-model:show="showAddPlatformDialog" :metadata="platformMetadata" :config_data="platformConfigData"
-      @refresh-config="loadPlatformConfigBase" />
+    <AddNewPlatform
+      v-model:show="showAddPlatformDialog"
+      :metadata="platformMetadata"
+      :config_data="platformConfigData"
+      @refresh-config="loadPlatformConfigBase"
+    />
     <ProviderConfigDialog v-model="showProviderDialog" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue';
-import axios from 'axios';
-import AddNewPlatform from '@/components/platform/AddNewPlatform.vue';
-import ProviderConfigDialog from '@/components/chat/ProviderConfigDialog.vue';
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { useToast } from '@/utils/toast';
-import { MarkdownRender } from 'markstream-vue';
-import 'markstream-vue/index.css';
-import 'highlight.js/styles/github.css';
+import { computed, ref, watch, onMounted } from "vue";
+import axios from "axios";
+import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
+import ProviderConfigDialog from "@/components/chat/ProviderConfigDialog.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
+import { useApiStore } from "@/stores/api";
+import { MarkdownRender } from "markstream-vue";
+import "markstream-vue/index.css";
+import "highlight.js/styles/github.css";
 
-type StepState = 'pending' | 'completed' | 'skipped';
+type StepState = "pending" | "completed" | "skipped";
 
-const { tm } = useModuleI18n('features/welcome');
-const { locale } = useI18n();
+const { tm } = useModuleI18n("features/welcome");
+const { locale, t } = useI18n();
 const { success: showSuccess, error: showError } = useToast();
+const apiStore = useApiStore();
 
 const showAddPlatformDialog = ref(false);
 const showProviderDialog = ref(false);
@@ -165,49 +298,52 @@ const platformConfigData = ref<Record<string, any>>({});
 const platformCountBeforeOpen = ref(0);
 const providerCountBeforeOpen = ref(0);
 
-const platformStepState = ref<StepState>('pending');
-const providerStepState = ref<StepState>('pending');
+const backendStepState = ref<StepState>("pending");
+const checkingBackend = ref(false);
+const apiBaseUrl = ref(apiStore.apiBaseUrl || "http://127.0.0.1:6185");
+
+const platformStepState = ref<StepState>("pending");
+const providerStepState = ref<StepState>("pending");
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
-  if (typeof raw === 'string') {
+  if (typeof raw === "string") {
     return raw.trim();
   }
 
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return '';
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return "";
   }
 
   const localeMap = raw as Record<string, unknown>;
-  const normalized = currentLocale.replace('-', '_');
-  const preferredKeys =
-    normalized.startsWith('zh')
-      ? [normalized, 'zh_CN', 'zh-CN', 'zh', 'en_US', 'en-US', 'en']
-      : [normalized, 'en_US', 'en-US', 'en', 'zh_CN', 'zh-CN', 'zh'];
+  const normalized = currentLocale.replace("-", "_");
+  const preferredKeys = normalized.startsWith("zh")
+    ? [normalized, "zh_CN", "zh-CN", "zh", "en_US", "en-US", "en"]
+    : [normalized, "en_US", "en-US", "en", "zh_CN", "zh-CN", "zh"];
 
   for (const key of preferredKeys) {
     const value = localeMap[key];
-    if (typeof value === 'string' && value.trim().length > 0) {
+    if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
     }
   }
 
-  return '';
+  return "";
 }
 
 const welcomeAnnouncement = computed(() =>
-  resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value)
+  resolveWelcomeAnnouncement(welcomeAnnouncementRaw.value, locale.value),
 );
 const showAnnouncement = computed(() => welcomeAnnouncement.value.length > 0);
 
 const springFestivalDates: Record<number, string> = {
-  2025: '01-29',
-  2026: '02-17',
-  2027: '02-06',
-  2028: '01-26',
-  2029: '02-13',
-  2030: '02-03'
-}
+  2025: "01-29",
+  2026: "02-17",
+  2027: "02-06",
+  2028: "01-26",
+  2029: "02-13",
+  2030: "02-03",
+};
 
 function isSpringFestival() {
   const now = new Date();
@@ -216,7 +352,7 @@ function isSpringFestival() {
 
   if (!dateStr) return false;
 
-  const [month, day] = dateStr.split('-').map(Number);
+  const [month, day] = dateStr.split("-").map(Number);
   const festivalDate = new Date(year, month - 1, day);
 
   const start = new Date(festivalDate);
@@ -240,7 +376,7 @@ function isExactSpringFestivalDay() {
 
   if (!dateStr) return false;
 
-  const [month, day] = dateStr.split('-').map(Number);
+  const [month, day] = dateStr.split("-").map(Number);
   const festivalDate = new Date(year, month - 1, day);
 
   const nowTime = new Date(now).setHours(0, 0, 0, 0);
@@ -251,29 +387,62 @@ function isExactSpringFestivalDay() {
 
 const greetingEmoji = computed(() => {
   if (isExactSpringFestivalDay()) {
-    return '🧨';
+    return "🧨";
   }
   const hour = new Date().getHours();
   if (hour >= 0 && hour < 5) {
-    return '😴';
+    return "😴";
   }
-  return '😊';
+  return "😊";
 });
 
 const greetingText = computed(() => {
   if (isSpringFestival()) {
-    return tm('greeting.newYear');
+    return tm("greeting.newYear");
   }
   const hour = new Date().getHours();
-  if (hour < 12) return tm('greeting.morning');
-  if (hour < 18) return tm('greeting.afternoon');
-  return tm('greeting.evening');
+  if (hour < 12) return tm("greeting.morning");
+  if (hour < 18) return tm("greeting.afternoon");
+  return tm("greeting.evening");
 });
 
 async function loadPlatformConfigBase() {
-  const res = await axios.get('/api/config/get');
+  const res = await axios.get("/api/config/get");
   platformMetadata.value = res.data.data.metadata || {};
   platformConfigData.value = res.data.data.config || {};
+}
+
+async function checkAndSaveBackend() {
+  checkingBackend.value = true;
+  try {
+    // try to connect
+    const url = apiBaseUrl.value.replace(/\/+$/, "");
+    // temp set axios base url to check
+    const originalBase = axios.defaults.baseURL;
+    axios.defaults.baseURL = url;
+
+    await axios.get("/api/stat/version");
+
+    // if success, save
+    apiStore.setApiBaseUrl(url);
+    backendStepState.value = "completed";
+    showSuccess("Connected to AstrBot Backend successfully!");
+
+    // load subsequent data
+    await loadPlatformConfigBase();
+    if ((platformConfigData.value.platform || []).length > 0) {
+      platformStepState.value = "completed";
+    }
+  } catch (e) {
+    showError("Failed to connect to backend: " + e);
+    backendStepState.value = "pending";
+    // restore if failed (though user might want to try another)
+    // but here we just keep the axios instance dirty or reset?
+    // actually apiStore.init() logic should be used but simpler:
+    // we don't reset axios defaults here because the user might be trying to correct it.
+  } finally {
+    checkingBackend.value = false;
+  }
 }
 
 function getChatProvidersFromTemplatePayload(payload: any) {
@@ -284,28 +453,30 @@ function getChatProvidersFromTemplatePayload(payload: any) {
 
   return providers.filter((provider: any) => {
     if (provider.provider_type) {
-      return provider.provider_type === 'chat_completion';
+      return provider.provider_type === "chat_completion";
     }
     if (provider.provider_source_id) {
       const type = sourceMap.get(provider.provider_source_id);
-      if (type === 'chat_completion') return true;
+      if (type === "chat_completion") return true;
     }
-    return String(provider.type || '').includes('chat_completion');
+    return String(provider.type || "").includes("chat_completion");
   });
 }
 
 async function fetchChatProviders() {
-  const response = await axios.get('/api/config/provider/template');
-  if (response.data.status !== 'ok') {
-    throw new Error(response.data.message || tm('onboard.providerLoadFailed'));
+  const response = await axios.get("/api/config/provider/template");
+  if (response.data.status !== "ok") {
+    throw new Error(response.data.message || tm("onboard.providerLoadFailed"));
   }
   return getChatProvidersFromTemplatePayload(response.data.data);
 }
 
 function pickDefaultProviderId(providers: any[]) {
-  if (!providers.length) return '';
-  const enabledProvider = providers.find((provider) => provider.enable !== false);
-  return (enabledProvider || providers[0]).id || '';
+  if (!providers.length) return "";
+  const enabledProvider = providers.find(
+    (provider) => provider.enable !== false,
+  );
+  return (enabledProvider || providers[0]).id || "";
 }
 
 async function syncDefaultConfigProviderIfNeeded() {
@@ -315,31 +486,39 @@ async function syncDefaultConfigProviderIfNeeded() {
   const targetProviderId = pickDefaultProviderId(providers);
   if (!targetProviderId) return;
 
-  const configRes = await axios.get('/api/config/abconf', { params: { id: 'default' } });
+  const configRes = await axios.get("/api/config/abconf", {
+    params: { id: "default" },
+  });
   const configData = configRes.data?.data?.config || {};
   if (!configData.provider_settings) {
     configData.provider_settings = {};
   }
 
-  if (configData.provider_settings.default_provider_id === targetProviderId) return;
+  if (configData.provider_settings.default_provider_id === targetProviderId)
+    return;
 
   configData.provider_settings.default_provider_id = targetProviderId;
 
-  const updateRes = await axios.post('/api/config/astrbot/update', {
-    conf_id: 'default',
-    config: configData
+  const updateRes = await axios.post("/api/config/astrbot/update", {
+    conf_id: "default",
+    config: configData,
   });
-  if (updateRes.data.status !== 'ok') {
-    throw new Error(updateRes.data.message || tm('onboard.providerUpdateFailed'));
+  if (updateRes.data.status !== "ok") {
+    throw new Error(
+      updateRes.data.message || tm("onboard.providerUpdateFailed"),
+    );
   }
 
-  showSuccess(tm('onboard.providerDefaultUpdated', { id: targetProviderId }));
+  showSuccess(tm("onboard.providerDefaultUpdated", { id: targetProviderId }));
 }
 
 async function loadWelcomeAnnouncement() {
   try {
-    const res = await axios.get('https://cloud.astrbot.app/api/v1/announcement');
-    welcomeAnnouncementRaw.value = res?.data?.data?.notice?.welcome_page ?? null;
+    const res = await axios.get(
+      "https://cloud.astrbot.app/api/v1/announcement",
+    );
+    welcomeAnnouncementRaw.value =
+      res?.data?.data?.notice?.welcome_page ?? null;
   } catch (e) {
     welcomeAnnouncementRaw.value = null;
     console.error(e);
@@ -349,22 +528,33 @@ async function loadWelcomeAnnouncement() {
 onMounted(async () => {
   await loadWelcomeAnnouncement();
 
-  try {
-    await loadPlatformConfigBase();
-    if ((platformConfigData.value.platform || []).length > 0) {
-      platformStepState.value = 'completed';
-    }
-  } catch (e) {
-    console.error(e);
-  }
+  // Check if backend is already configured and working
+  if (apiStore.apiBaseUrl) {
+    try {
+      await axios.get("/api/stat/version");
+      backendStepState.value = "completed";
 
-  try {
-    const providers = await fetchChatProviders();
-    if (providers.length > 0) {
-      providerStepState.value = 'completed';
+      try {
+        await loadPlatformConfigBase();
+        if ((platformConfigData.value.platform || []).length > 0) {
+          platformStepState.value = "completed";
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      try {
+        const providers = await fetchChatProviders();
+        if (providers.length > 0) {
+          providerStepState.value = "completed";
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    } catch (e) {
+      // Backend configured but not reachable
+      backendStepState.value = "pending";
     }
-  } catch (e) {
-    console.error(e);
   }
 });
 
@@ -372,10 +562,16 @@ async function openPlatformDialog() {
   loadingPlatformDialog.value = true;
   try {
     await loadPlatformConfigBase();
-    platformCountBeforeOpen.value = (platformConfigData.value.platform || []).length;
+    platformCountBeforeOpen.value = (
+      platformConfigData.value.platform || []
+    ).length;
     showAddPlatformDialog.value = true;
   } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.platformLoadFailed'));
+    showError(
+      err?.response?.data?.message ||
+        err?.message ||
+        tm("onboard.platformLoadFailed"),
+    );
   } finally {
     loadingPlatformDialog.value = false;
   }
@@ -387,7 +583,11 @@ async function openProviderDialog() {
     providerCountBeforeOpen.value = providers.length;
     showProviderDialog.value = true;
   } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.providerLoadFailed'));
+    showError(
+      err?.response?.data?.message ||
+        err?.message ||
+        tm("onboard.providerLoadFailed"),
+    );
   }
 }
 
@@ -397,10 +597,14 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
     await loadPlatformConfigBase();
     const newCount = (platformConfigData.value.platform || []).length;
     if (newCount > platformCountBeforeOpen.value) {
-      platformStepState.value = 'completed';
+      platformStepState.value = "completed";
     }
   } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.platformLoadFailed'));
+    showError(
+      err?.response?.data?.message ||
+        err?.message ||
+        tm("onboard.platformLoadFailed"),
+    );
   }
 });
 
@@ -409,11 +613,15 @@ watch(showProviderDialog, async (visible, wasVisible) => {
   try {
     const providers = await fetchChatProviders();
     if (providers.length > providerCountBeforeOpen.value) {
-      providerStepState.value = 'completed';
+      providerStepState.value = "completed";
       await syncDefaultConfigProviderIfNeeded();
     }
   } catch (err: any) {
-    showError(err?.response?.data?.message || err?.message || tm('onboard.providerUpdateFailed'));
+    showError(
+      err?.response?.data?.message ||
+        err?.message ||
+        tm("onboard.providerUpdateFailed"),
+    );
   }
 });
 </script>

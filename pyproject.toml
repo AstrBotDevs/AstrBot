@@ -64,6 +64,7 @@ dependencies = [
   "shipyard-neo-sdk>=0.2.0",
   "python-socks>=2.8.0",
   "packaging>=24.2",
+  "quart-cors>=0.8.0",
 ]
 
 [dependency-groups]
@@ -93,7 +94,7 @@ select = [
   "Q",     # flake8-quotes
   "I",     # import-order
   "UP",    # pyupgrade
-  # "SIM", # flake8-simplify 
+  # "SIM", # flake8-simplify
 ]
 ignore = [
   "F403",
