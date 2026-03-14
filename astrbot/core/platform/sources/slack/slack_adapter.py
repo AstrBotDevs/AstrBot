@@ -24,6 +24,7 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
+from .session_codec import decode_slack_session_id, encode_thread_session_id
 from .slack_event import SlackMessageEvent
 
 
@@ -86,25 +87,36 @@ class SlackAdapter(Platform):
             message_chain=message_chain,
             web_client=self.web_client,
         )
+        safe_text = text or "消息"
 
         try:
+            channel_id_from_session, thread_ts_from_session = decode_slack_session_id(
+                session.session_id,
+            )
+            if thread_ts_from_session:
+                message_payload = {
+                    "channel": channel_id_from_session,
+                    "text": safe_text,
+                    "blocks": blocks if blocks else None,
+                    "thread_ts": thread_ts_from_session,
+                }
+                await self.web_client.chat_postMessage(**message_payload)
+                await super().send_by_session(session, message_chain)
+                return
+
             if session.message_type == MessageType.GROUP_MESSAGE:
-                # 发送到频道
-                channel_id = (
-                    session.session_id.split("_")[-1]
-                    if "_" in session.session_id
-                    else session.session_id
-                )
-                await self.web_client.chat_postMessage(
-                    channel=channel_id,
-                    text=text,
-                    blocks=blocks if blocks else None,
-                )
+                channel_id, _ = decode_slack_session_id(session.session_id)
+                message_payload = {
+                    "channel": channel_id,
+                    "text": safe_text,
+                    "blocks": blocks if blocks else None,
+                }
+                await self.web_client.chat_postMessage(**message_payload)
             else:
                 # 发送私信
                 await self.web_client.chat_postMessage(
                     channel=session.session_id,
-                    text=text,
+                    text=safe_text,
                     blocks=blocks if blocks else None,
                 )
         except Exception as e:
@@ -112,7 +124,22 @@ class SlackAdapter(Platform):
 
         await super().send_by_session(session, message_chain)
 
+    @staticmethod
+    def _normalize_event_payload(event: dict) -> dict:
+        # Socket Mode may deliver thread updates as message_replied envelopes.
+        # Unwrap nested "message" payload to preserve user/text/thread_ts fields.
+        if event.get("subtype") == "message_replied":
+            nested_message = event.get("message")
+            if isinstance(nested_message, dict):
+                merged = dict(event)
+                merged.update(nested_message)
+                if not merged.get("channel"):
+                    merged["channel"] = event.get("channel", "")
+                return merged
+        return event
+
     async def convert_message(self, event: dict) -> AstrBotMessage:
+        event = self._normalize_event_payload(event)
         logger.debug(f"[slack] RawMessage {event}")
 
         abm = AstrBotMessage()
@@ -146,7 +173,12 @@ class SlackAdapter(Platform):
             abm.group_id = channel_id
 
         # 设置会话ID
-        if abm.type == MessageType.GROUP_MESSAGE:
+        channel_id_for_session = str(channel_id or "")
+        thread_ts = str(event.get("thread_ts", "") or "")
+        if thread_ts and channel_id_for_session:
+            # Slack threads can appear in channels and DMs.
+            abm.session_id = encode_thread_session_id(channel_id_for_session, thread_ts)
+        elif abm.type == MessageType.GROUP_MESSAGE:
             abm.session_id = abm.group_id
         else:
             abm.session_id = user_id

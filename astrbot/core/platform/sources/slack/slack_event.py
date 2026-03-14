@@ -15,6 +15,8 @@ from astrbot.api.message_components import (
 )
 from astrbot.api.platform import Group, MessageMember
 
+from .session_codec import decode_slack_session_id
+
 
 class SlackMessageEvent(AstrMessageEvent):
     def __init__(
@@ -95,10 +97,12 @@ class SlackMessageEvent(AstrMessageEvent):
         """解析成 Slack 块格式"""
         blocks = []
         text_content = ""
+        fallback_parts = []
 
         for segment in message_chain.chain:
             if isinstance(segment, Plain):
                 text_content += segment.text
+                fallback_parts.append(segment.text)
             else:
                 # 如果有文本内容，先添加文本块
                 if text_content.strip():
@@ -117,6 +121,14 @@ class SlackMessageEvent(AstrMessageEvent):
                 )
                 if block:
                     blocks.append(block)
+                    if isinstance(segment, Image):
+                        fallback_parts.append("[图片]")
+                    elif isinstance(segment, File):
+                        fallback_parts.append(
+                            f"[文件:{segment.name or '文件'}]",
+                        )
+                    else:
+                        fallback_parts.append("[消息]")
 
         # 如果最后还有文本内容
         if text_content.strip():
@@ -124,29 +136,67 @@ class SlackMessageEvent(AstrMessageEvent):
                 {"type": "section", "text": {"type": "mrkdwn", "text": text_content}},
             )
 
-        return blocks, "" if blocks else text_content
+        fallback_text = "".join(fallback_parts).strip() or "消息"
+        return blocks, fallback_text if blocks else text_content
+
+    def _resolve_group_target(self) -> tuple[str, str | None]:
+        channel_id = self.get_group_id()
+        parsed_channel_id, parsed_thread_ts = decode_slack_session_id(self.session_id)
+        if not channel_id:
+            channel_id = parsed_channel_id
+
+        raw_message = getattr(self.message_obj, "raw_message", None)
+        raw_thread_ts = None
+        if isinstance(raw_message, dict):
+            raw_thread_ts = raw_message.get("thread_ts")
+        if raw_thread_ts is not None and raw_thread_ts != "":
+            return channel_id, str(raw_thread_ts)
+        return channel_id, parsed_thread_ts
+
+    def _resolve_friend_target(self) -> tuple[str, str | None]:
+        parsed_channel_id, parsed_thread_ts = decode_slack_session_id(self.session_id)
+        raw_message = getattr(self.message_obj, "raw_message", None)
+        raw_channel_id = ""
+        raw_thread_ts = None
+        if isinstance(raw_message, dict):
+            raw_channel = raw_message.get("channel")
+            if raw_channel is not None and raw_channel != "":
+                raw_channel_id = str(raw_channel)
+            raw_thread_ts = raw_message.get("thread_ts")
+
+        channel_id = raw_channel_id or parsed_channel_id or self.get_sender_id()
+        if raw_thread_ts is not None and raw_thread_ts != "":
+            return channel_id, str(raw_thread_ts)
+        return channel_id, parsed_thread_ts
 
     async def send(self, message: MessageChain) -> None:
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,
         )
+        safe_text = text or "消息"
 
         try:
             if self.get_group_id():
-                # 发送到频道
-                await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(),
-                    text=text,
-                    blocks=blocks or None,
-                )
+                channel_id, thread_ts = self._resolve_group_target()
+                message_payload = {
+                    "channel": channel_id,
+                    "text": safe_text,
+                    "blocks": blocks or None,
+                }
+                if thread_ts:
+                    message_payload["thread_ts"] = thread_ts
+                await self.web_client.chat_postMessage(**message_payload)
             else:
-                # 发送私信
-                await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(),
-                    text=text,
-                    blocks=blocks or None,
-                )
+                channel_id, thread_ts = self._resolve_friend_target()
+                message_payload = {
+                    "channel": channel_id,
+                    "text": safe_text,
+                    "blocks": blocks or None,
+                }
+                if thread_ts:
+                    message_payload["thread_ts"] = thread_ts
+                await self.web_client.chat_postMessage(**message_payload)
         except Exception:
             # 如果块发送失败，尝试只发送文本
             parts = []
@@ -157,18 +207,26 @@ class SlackMessageEvent(AstrMessageEvent):
                     parts.append(f" [文件: {segment.name}] ")
                 elif isinstance(segment, Image):
                     parts.append(" [图片] ")
-            fallback_text = "".join(parts)
+            fallback_text = "".join(parts) or "消息"
 
             if self.get_group_id():
-                await self.web_client.chat_postMessage(
-                    channel=self.get_group_id(),
-                    text=fallback_text,
-                )
+                channel_id, thread_ts = self._resolve_group_target()
+                fallback_payload = {
+                    "channel": channel_id,
+                    "text": fallback_text,
+                }
+                if thread_ts:
+                    fallback_payload["thread_ts"] = thread_ts
+                await self.web_client.chat_postMessage(**fallback_payload)
             else:
-                await self.web_client.chat_postMessage(
-                    channel=self.get_sender_id(),
-                    text=fallback_text,
-                )
+                channel_id, thread_ts = self._resolve_friend_target()
+                fallback_payload = {
+                    "channel": channel_id,
+                    "text": fallback_text,
+                }
+                if thread_ts:
+                    fallback_payload["thread_ts"] = thread_ts
+                await self.web_client.chat_postMessage(**fallback_payload)
 
         await super().send(message)
 
