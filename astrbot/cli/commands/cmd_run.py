@@ -13,13 +13,11 @@ from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
 def _dashboard_enabled(astrbot_root: Path) -> bool:
     """Return whether dashboard is enabled in cmd_config.json.
-
-    Any parse/read error falls back to True so startup behavior remains conservative.
-    """
-    config_path = astrbot_root / "data" / "cmd_config.json"
     try:
-        conf = json.loads(config_path.read_text(encoding="utf-8-sig"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        conf_str = config_path.read_text(encoding="utf-8-sig")
+        conf = json.loads(conf_str)
+        return conf.get("dashboard", {}).get("enable", True)
+    except (FileNotFoundError, json.JSONDecodeError):
         return True
 
     if not isinstance(conf, dict):
