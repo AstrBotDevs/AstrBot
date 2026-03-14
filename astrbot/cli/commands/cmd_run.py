@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 import traceback
@@ -10,12 +11,35 @@ from filelock import FileLock, Timeout
 from ..utils import check_astrbot_root, check_dashboard, get_astrbot_root
 
 
+def _dashboard_enabled(astrbot_root: Path) -> bool:
+    """Return whether dashboard is enabled in cmd_config.json.
+
+    Any parse/read error falls back to True so startup behavior remains conservative.
+    """
+    config_path = astrbot_root / "data" / "cmd_config.json"
+    try:
+        conf_str = config_path.read_text(encoding="utf-8-sig")
+        if conf_str.startswith("\ufeff"):
+            conf_str = conf_str[1:]
+        conf = json.loads(conf_str)
+        return conf.get("dashboard", {}).get("enable", True)
+    except Exception:
+        return True
+
+
+async def _check_dashboard_if_enabled(astrbot_root: Path) -> None:
+    if _dashboard_enabled(astrbot_root):
+        await check_dashboard(astrbot_root / "data")
+    else:
+        click.echo("Dashboard disabled in config, skipping dashboard asset check.")
+
+
 async def run_astrbot(astrbot_root: Path) -> None:
     """Run AstrBot"""
     from astrbot.core import LogBroker, LogManager, db_helper, logger
     from astrbot.core.initial_loader import InitialLoader
 
-    await check_dashboard(astrbot_root / "data")
+    await _check_dashboard_if_enabled(astrbot_root)
 
     log_broker = LogBroker()
     LogManager.set_queue_handler(logger, log_broker)
