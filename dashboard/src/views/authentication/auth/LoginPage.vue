@@ -45,9 +45,9 @@ onMounted(() => {
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
-              style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(180, 148, 246, 0.8) !important;"></v-divider>
+              style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
             <v-btn @click="toggleTheme" class="theme-toggle-btn" icon variant="text" size="small">
-              <v-icon size="18" :color="useCustomizerStore().uiTheme === 'PurpleTheme' ? '#5e35b1' : '#d7c5fa'">
+              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
                 mdi-white-balance-sunny
               </v-icon>
               <v-tooltip activator="parent" location="top">

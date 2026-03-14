@@ -1,12 +1,12 @@
 <template>
     <v-chip v-if="domain" class="ref-chip" size="x-small" variant="flat"
-        :style="{ backgroundColor: isDark ? '#303030' : '#f4f4f4', color: isDark ? '#999' : '#666' }" :href="url"
+        :style="chipStyle" :href="url"
         target="_blank" clickable>
         <v-icon start size="x-small" color>mdi-link-variant</v-icon>
         <span>{{ domain }}</span>
 
     </v-chip>
-    <span v-else class="ref-fallback" :style="{ color: isDark ? '#999' : '#666' }">{{ 'site' }}</span>
+    <span v-else class="ref-fallback" :style="fallbackStyle">{{ 'site' }}</span>
 </template>
 
 <script setup>
@@ -46,6 +46,15 @@ const domain = computed(() => {
         return ''
     }
 })
+
+const chipStyle = computed(() => ({
+    backgroundColor: isDark ? 'rgba(var(--v-theme-on-surface), 0.08)' : 'rgba(var(--v-theme-on-surface), 0.04)',
+    color: isDark ? 'rgba(var(--v-theme-on-surface), 0.62)' : 'rgba(var(--v-theme-on-surface), 0.72)'
+}))
+
+const fallbackStyle = computed(() => ({
+    color: isDark ? 'rgba(var(--v-theme-on-surface), 0.62)' : 'rgba(var(--v-theme-on-surface), 0.72)'
+}))
 </script>
 
 <style scoped>

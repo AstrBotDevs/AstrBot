@@ -12,7 +12,7 @@
       >
         <v-icon 
           size="18"
-          :color="props.variant === 'default' ? (useCustomizerStore().uiTheme === 'PurpleTheme' ? '#5e35b1' : '#d7c5fa') : undefined"
+          :color="props.variant === 'default' ? 'rgb(var(--v-theme-primary))' : undefined"
         >
           mdi-translate
         </v-icon>
@@ -42,7 +42,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n, useLanguageSwitcher } from '@/i18n/composables'
-import { useCustomizerStore } from '@/stores/customizer'
 import type { Locale } from '@/i18n/types'
 import StyledMenu from '@/components/shared/StyledMenu.vue'
 
@@ -90,7 +89,7 @@ const changeLanguage = async (langCode: string) => {
 
 .language-switcher--default:hover {
   transform: scale(1.05);
-  background: rgba(94, 53, 177, 0.08) !important;
+  background: rgba(var(--v-theme-primary), 0.08) !important;
 }
 
 /* Header变体样式 - 完全继承Vuetify和action-btn的默认样式 */
@@ -103,8 +102,4 @@ const changeLanguage = async (langCode: string) => {
   /* 继承action-btn样式，与工具栏主题按钮保持一致 */
 }
 
-/* 深色模式下的悬停效果（仅对default变体） */
-:deep(.v-theme--PurpleThemeDark) .language-switcher--default:hover {
-  background: rgba(114, 46, 209, 0.12) !important;
-}
 </style> 
