@@ -119,6 +119,7 @@ DEFAULT_CONFIG = {
         "max_agent_step": 30,
         "tool_call_timeout": 60,
         "tool_schema_mode": "full",
+        "deduplicate_repeated_tool_results": True,
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2545,6 +2546,9 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
+                    "deduplicate_repeated_tool_results": {
+                        "type": "bool",
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3297,6 +3301,14 @@ CONFIG_METADATA_3 = {
                         "options": ["skills_like", "full"],
                         "labels": ["Skills-like（两阶段）", "Full（完整参数）"],
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.deduplicate_repeated_tool_results": {
+                        "description": "压缩重复工具结果",
+                        "type": "bool",
+                        "hint": "开启后，工具在相同参数下连续返回完全相同结果时，会自动压缩重复内容，减少上下文膨胀。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

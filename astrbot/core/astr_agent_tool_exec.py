@@ -294,6 +294,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
+        deduplicate_repeated_tool_results = prov_settings.get(
+            "deduplicate_repeated_tool_results",
+            True,
+        )
         llm_resp = await ctx.tool_loop_agent(
             event=event,
             chat_provider_id=prov_id,
@@ -304,6 +308,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             contexts=contexts,
             max_steps=agent_max_step,
             stream=stream,
+            deduplicate_repeated_tool_results=deduplicate_repeated_tool_results,
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]

@@ -138,6 +138,8 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
+    deduplicate_repeated_tool_results: bool = True
+    """Whether to compact unchanged repeated tool outputs in context."""
 
 
 @dataclass(slots=True)
@@ -1206,6 +1208,7 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
+        deduplicate_repeated_tool_results=config.deduplicate_repeated_tool_results,
         fallback_providers=_get_fallback_chat_providers(
             provider, plugin_context, config.provider_settings
         ),

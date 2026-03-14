@@ -56,6 +56,10 @@ class InternalAgentSubStage(Stage):
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.deduplicate_repeated_tool_results: bool = settings.get(
+            "deduplicate_repeated_tool_results",
+            True,
+        )
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -136,6 +140,7 @@ class InternalAgentSubStage(Stage):
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
+            deduplicate_repeated_tool_results=self.deduplicate_repeated_tool_results,
         )
 
     async def process(

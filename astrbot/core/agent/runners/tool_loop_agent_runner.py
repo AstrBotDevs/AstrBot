@@ -117,6 +117,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        deduplicate_repeated_tool_results: bool = True,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -167,6 +168,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._tool_result_dedup: dict[str, _ToolResultDedupState] = {}
+        self._deduplicate_repeated_tool_results = deduplicate_repeated_tool_results
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -735,7 +737,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             tool_args: dict[str, T.Any] | None = None,
         ) -> None:
             output = content
-            if tool_name:
+            if self._deduplicate_repeated_tool_results and tool_name:
                 output = self._deduplicate_tool_result_content(
                     tool_name=tool_name,
                     tool_args=tool_args or {},
