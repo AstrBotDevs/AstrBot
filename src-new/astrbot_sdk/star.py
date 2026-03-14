@@ -1,7 +1,6 @@
 """v4 原生插件基类。
 
-旧版 ``StarMetadata`` 等兼容数据类型保留在 ``astrbot_sdk.api.star``，
-这里仅承载新版插件生命周期与 handler 收集逻辑。
+迁移期补充类型位于独立模块；这里仅承载 v4 插件生命周期与 handler 收集逻辑。
 """
 
 from __future__ import annotations

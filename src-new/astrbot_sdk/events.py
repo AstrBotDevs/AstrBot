@@ -1,8 +1,7 @@
 """v4 原生事件对象。
 
 顶层 ``MessageEvent`` 保持精简，只承载 v4 运行时真正需要的基础能力。
-旧版 ``AstrMessageEvent`` 的便捷方法与结果对象由
-``astrbot_sdk.api.event`` 兼容层承接，而不是继续塞回顶层事件类型。
+迁移期扩展事件能力放在独立模块中，而不是继续塞回顶层事件类型。
 """
 
 from __future__ import annotations

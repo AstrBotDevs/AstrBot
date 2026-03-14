@@ -62,7 +62,7 @@
     await transport.stop()
 
 `Transport` 只处理“字符串发出去 / 字符串收进来”这件事，不做协议解析，也不关心
-能力、handler 或 legacy 兼容。当前实现包括：
+能力、handler 或迁移适配策略。当前实现包括：
 
 - `StdioTransport`: 子进程或文件对象上的按行文本传输
 - `WebSocketServerTransport`: 单连接 WebSocket 服务端

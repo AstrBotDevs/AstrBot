@@ -561,7 +561,7 @@ def build(plugin_dir: Path, output_dir: Path | None) -> None:
     "--standalone",
     "standalone_mode",
     is_flag=True,
-    help="Alias of --local for compatibility",
+    help="Deprecated alias of --local",
 )
 @click.option("--event-text", type=str, help="Single message text to dispatch")
 @click.option("--interactive", is_flag=True, help="Read follow-up messages from stdin")
@@ -646,7 +646,7 @@ def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
 @cli.command(hidden=True)
 @click.option("--port", default=8765, type=int, help="WebSocket server port")
 def websocket(port: int) -> None:
-    """Legacy websocket runtime entrypoint."""
+    """WebSocket runtime entrypoint kept for standalone bridge scenarios."""
     _run_async_entrypoint(
         run_websocket_server(port=port),
         log_message=f"启动 WebSocket 服务器，端口：{port}",

@@ -1,7 +1,6 @@
 """v4 原生装饰器。
 
-旧版 ``astrbot_sdk.api.event.filter`` 的兼容与降级边界由 compat 模块处理，
-这里仅保留 v4 原生 trigger/permission 元数据建模。
+迁移期适配入口位于独立模块；这里仅保留 v4 原生 trigger/permission 元数据建模。
 """
 
 from __future__ import annotations
