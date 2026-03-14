@@ -24,7 +24,11 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
 from .client import SlackSocketClient, SlackWebhookClient
-from .session_codec import decode_slack_session_id, encode_thread_session_id
+from .session_codec import (
+    SLACK_SAFE_TEXT_FALLBACK,
+    encode_thread_session_id,
+    resolve_slack_message_target,
+)
 from .slack_event import SlackMessageEvent
 
 
@@ -87,38 +91,21 @@ class SlackAdapter(Platform):
             message_chain=message_chain,
             web_client=self.web_client,
         )
-        safe_text = text or "消息"
+        safe_text = text or SLACK_SAFE_TEXT_FALLBACK
 
         try:
-            channel_id_from_session, thread_ts_from_session = decode_slack_session_id(
-                session.session_id,
+            channel_id, thread_ts = resolve_slack_message_target(
+                session_id=session.session_id,
+                sender_id=session.session_id,
             )
-            if thread_ts_from_session:
-                message_payload = {
-                    "channel": channel_id_from_session,
-                    "text": safe_text,
-                    "blocks": blocks if blocks else None,
-                    "thread_ts": thread_ts_from_session,
-                }
-                await self.web_client.chat_postMessage(**message_payload)
-                await super().send_by_session(session, message_chain)
-                return
-
-            if session.message_type == MessageType.GROUP_MESSAGE:
-                channel_id, _ = decode_slack_session_id(session.session_id)
-                message_payload = {
-                    "channel": channel_id,
-                    "text": safe_text,
-                    "blocks": blocks if blocks else None,
-                }
-                await self.web_client.chat_postMessage(**message_payload)
-            else:
-                # 发送私信
-                await self.web_client.chat_postMessage(
-                    channel=session.session_id,
-                    text=safe_text,
-                    blocks=blocks if blocks else None,
-                )
+            message_payload = {
+                "channel": channel_id,
+                "text": safe_text,
+                "blocks": blocks if blocks else None,
+            }
+            if thread_ts:
+                message_payload["thread_ts"] = thread_ts
+            await self.web_client.chat_postMessage(**message_payload)
         except Exception as e:
             logger.error(f"Slack 发送消息失败: {e}")
 

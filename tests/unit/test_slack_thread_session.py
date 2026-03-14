@@ -9,6 +9,10 @@ from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
+from astrbot.core.platform.sources.slack.session_codec import (
+    decode_slack_session_id,
+    resolve_slack_message_target,
+)
 from astrbot.core.platform.sources.slack.slack_adapter import SlackAdapter
 from astrbot.core.platform.sources.slack.slack_event import SlackMessageEvent
 from astrbot.core.utils.metrics import Metric
@@ -259,3 +263,29 @@ async def test_parse_slack_blocks_includes_non_empty_fallback_text():
 
     assert blocks
     assert text == "hello"
+
+
+def test_decode_slack_session_id_thread_marker_does_not_fallback_to_legacy():
+    channel_id, thread_ts = decode_slack_session_id("C123__thread__")
+
+    assert channel_id == "C123"
+    assert thread_ts is None
+
+
+def test_decode_slack_session_id_supports_legacy_group_prefix():
+    channel_id, thread_ts = decode_slack_session_id("group_C123")
+
+    assert channel_id == "C123"
+    assert thread_ts is None
+
+
+def test_resolve_slack_message_target_prefers_raw_message_thread_ts():
+    channel_id, thread_ts = resolve_slack_message_target(
+        session_id="C123__thread__111.222",
+        raw_message={"channel": "C123", "thread_ts": "333.444"},
+        group_id="",
+        sender_id="U123",
+    )
+
+    assert channel_id == "C123"
+    assert thread_ts == "333.444"
