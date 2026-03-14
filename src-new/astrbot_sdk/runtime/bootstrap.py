@@ -53,7 +53,7 @@ async def run_supervisor(
     stdin: IO[str] | IO[bytes] | None = None,
     stdout: IO[str] | IO[bytes] | None = None,
     env_manager: PluginEnvironmentManager | None = None,
-    wire_codec: str = "json",
+    worker_wire_codec: str = "json",
 ) -> None:
     transport_stdin, transport_stdout, original_stdout = _prepare_stdio_transport(
         stdin,
@@ -64,7 +64,7 @@ async def run_supervisor(
         transport=transport,
         plugins_dir=plugins_dir,
         env_manager=env_manager,
-        worker_wire_codec_name=wire_codec,
+        worker_wire_codec_name=worker_wire_codec,
     )
 
     try:

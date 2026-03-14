@@ -868,23 +868,29 @@ def cli(ctx, verbose: bool) -> None:
     help="Directory containing plugin folders",
 )
 @click.option(
-    "--wire-codec",
+    "--worker-wire-codec",
     default="json",
     show_default=True,
     type=click.Choice(["json", "msgpack"]),
-    help="Wire codec for supervisor/worker transport",
+    help="Wire codec for supervisor-to-worker transport",
 )
-def run(plugins_dir: Path, wire_codec: str) -> None:
+def run(plugins_dir: Path, worker_wire_codec: str) -> None:
     """Start the plugin supervisor over stdio."""
     entrypoint = (
         run_supervisor(plugins_dir=plugins_dir)
-        if wire_codec == "json"
-        else run_supervisor(plugins_dir=plugins_dir, wire_codec=wire_codec)
+        if worker_wire_codec == "json"
+        else run_supervisor(
+            plugins_dir=plugins_dir,
+            worker_wire_codec=worker_wire_codec,
+        )
     )
     _run_async_entrypoint(
         entrypoint,
         log_message=f"启动插件主管进程，插件目录：{plugins_dir}",
-        context={"plugins_dir": plugins_dir, "wire_codec": wire_codec},
+        context={
+            "plugins_dir": plugins_dir,
+            "worker_wire_codec": worker_wire_codec,
+        },
     )
 
 
