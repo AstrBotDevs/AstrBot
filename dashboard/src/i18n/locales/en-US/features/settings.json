@@ -28,8 +28,7 @@
     "autoSync": {
       "title": "Auto-Switch Light/Dark Theme",
       "subtitle": "Can Switch to Dark Theme based on your system theme.",
-      "label": "Enable Auto-Switch",
-      "hint": "Once enabled, the theme will automatically switch according to your browser theme"
+      "label": "Enable Auto-Switch"
     }
   },
   "system": {

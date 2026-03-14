@@ -1,6 +1,7 @@
 <template>
 
-    <div style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
+    <div
+        style="background-color: var(--v-theme-surface, #fff); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px;">
 
         <v-list lines="two">
             <v-list-subheader>{{ tm('network.title') }}</v-list-subheader>
@@ -20,26 +21,12 @@
             <v-list-item :subtitle="tm('theme.subtitle')" :title="tm('theme.customize.title')">
                 <v-row class="mt-2" dense>
                     <v-col cols="4" sm="2">
-                        <v-text-field
-                            v-model="primaryColor"
-                            type="color"
-                            :label="tm('theme.customize.primary')"
-                            hide-details
-                            variant="outlined"
-                            density="compact"
-                            style="max-width: 220px;"
-                        />
+                        <v-text-field v-model="primaryColor" type="color" :label="tm('theme.customize.primary')"
+                            hide-details variant="outlined" density="compact" style="max-width: 220px;" />
                     </v-col>
                     <v-col cols="4" sm="2   ">
-                        <v-text-field
-                            v-model="secondaryColor"
-                            type="color"
-                            :label="tm('theme.customize.secondary')"
-                            hide-details
-                            variant="outlined"
-                            density="compact"
-                            style="max-width: 220px;"
-                        />
+                        <v-text-field v-model="secondaryColor" type="color" :label="tm('theme.customize.secondary')"
+                            hide-details variant="outlined" density="compact" style="max-width: 220px;" />
                     </v-col>
                     <v-col cols="12">
                         <v-btn size="small" variant="tonal" color="primary" @click="resetThemeColors">
@@ -53,9 +40,6 @@
             <v-list-item :subtitle="tm('theme.autoSync.subtitle')" :title="tm('theme.autoSync.title')">
                 <v-switch v-model="autoSyncTheme" :label="tm('theme.autoSync.label')" color="primary" hide-details
                     class="mt-2" />
-                <v-alert v-if="autoSyncTheme" type="info" variant="tonal" density="comfortable" class="mt-2">
-                    {{ tm('theme.autoSync.hint') }}
-                </v-alert>
             </v-list-item>
 
             <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
@@ -68,7 +52,8 @@
             </v-list-item>
 
             <v-list-item :subtitle="tm('system.restart.subtitle')" :title="tm('system.restart.title')">
-                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button') }}</v-btn>
+                <v-btn style="margin-top: 16px;" color="error" @click="restartAstrBot">{{ tm('system.restart.button')
+                    }}</v-btn>
             </v-list-item>
 
             <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
@@ -79,17 +64,9 @@
                         <span>{{ tm('apiKey.manageTitle') }}</span>
                         <v-tooltip location="top">
                             <template #activator="{ props }">
-                                <v-btn
-                                    v-bind="props"
-                                    icon
-                                    size="x-small"
-                                    variant="text"
-                                    class="ml-2"
-                                    :aria-label="tm('apiKey.docsLink')"
-                                    href="https://docs.astrbot.app/dev/openapi.html"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
+                                <v-btn v-bind="props" icon size="x-small" variant="text" class="ml-2"
+                                    :aria-label="tm('apiKey.docsLink')" href="https://docs.astrbot.app/dev/openapi.html"
+                                    target="_blank" rel="noopener noreferrer">
                                     <v-icon size="18">mdi-help-circle-outline</v-icon>
                                 </v-btn>
                             </template>
@@ -99,23 +76,12 @@
                 </template>
                 <v-row class="mt-2" dense>
                     <v-col cols="12" md="4">
-                        <v-text-field
-                            v-model="newApiKeyName"
-                            :label="tm('apiKey.name')"
-                            variant="outlined"
-                            density="compact"
-                            hide-details
-                        />
+                        <v-text-field v-model="newApiKeyName" :label="tm('apiKey.name')" variant="outlined"
+                            density="compact" hide-details />
                     </v-col>
                     <v-col cols="12" md="3">
-                        <v-select
-                            v-model="newApiKeyExpiresInDays"
-                            :items="apiKeyExpiryOptions"
-                            :label="tm('apiKey.expiresInDays')"
-                            variant="outlined"
-                            density="compact"
-                            hide-details
-                        />
+                        <v-select v-model="newApiKeyExpiresInDays" :items="apiKeyExpiryOptions"
+                            :label="tm('apiKey.expiresInDays')" variant="outlined" density="compact" hide-details />
                     </v-col>
                     <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
                         <v-alert type="warning" variant="tonal" density="comfortable">
@@ -132,13 +98,9 @@
                     <v-col cols="12">
                         <div class="text-caption text-medium-emphasis mb-1">{{ tm('apiKey.scopes') }}</div>
                         <v-chip-group v-model="newApiKeyScopes" multiple>
-                            <v-chip
-                                v-for="scope in availableScopes"
-                                :key="scope.value"
-                                :value="scope.value"
+                            <v-chip v-for="scope in availableScopes" :key="scope.value" :value="scope.value"
                                 :color="newApiKeyScopes.includes(scope.value) ? 'primary' : undefined"
-                                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'"
-                            >
+                                :variant="newApiKeyScopes.includes(scope.value) ? 'flat' : 'tonal'">
                                 {{ scope.label }}
                             </v-chip>
                         </v-chip-group>
@@ -175,33 +137,22 @@
                                     <td><code>{{ item.key_prefix }}</code></td>
                                     <td>{{ (item.scopes || []).join(', ') }}</td>
                                     <td>
-                                        <v-chip
-                                            size="small"
+                                        <v-chip size="small"
                                             :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
-                                            variant="tonal"
-                                        >
-                                            {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') : tm('apiKey.status.active') }}
+                                            variant="tonal">
+                                            {{ item.is_revoked || item.is_expired ? tm('apiKey.status.inactive') :
+                                            tm('apiKey.status.active') }}
                                         </v-chip>
                                     </td>
                                     <td>{{ formatDate(item.last_used_at) }}</td>
                                     <td>{{ formatDate(item.created_at) }}</td>
                                     <td>
-                                        <v-btn
-                                            v-if="!item.is_revoked"
-                                            size="x-small"
-                                            color="warning"
-                                            variant="tonal"
-                                            class="mr-2"
-                                            @click="revokeApiKey(item.key_id)"
-                                        >
+                                        <v-btn v-if="!item.is_revoked" size="x-small" color="warning" variant="tonal"
+                                            class="mr-2" @click="revokeApiKey(item.key_id)">
                                             {{ tm('apiKey.revoke') }}
                                         </v-btn>
-                                        <v-btn
-                                            size="x-small"
-                                            color="error"
-                                            variant="tonal"
-                                            @click="deleteApiKey(item.key_id)"
-                                        >
+                                        <v-btn size="x-small" color="error" variant="tonal"
+                                            @click="deleteApiKey(item.key_id)">
                                             {{ tm('apiKey.delete') }}
                                         </v-btn>
                                     </td>
@@ -218,9 +169,10 @@
             </v-list-item>
         </v-list>
 
-            <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
-                <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button') }}</v-btn>
-            </v-list-item>
+        <v-list-item :subtitle="tm('system.migration.subtitle')" :title="tm('system.migration.title')">
+            <v-btn style="margin-top: 16px;" color="primary" @click="startMigration">{{ tm('system.migration.button')
+                }}</v-btn>
+        </v-list-item>
 
     </div>
 
@@ -248,7 +200,7 @@ import { useToastStore } from '@/stores/toast';
 const { tm } = useModuleI18n('features/settings');
 const toastStore = useToastStore();
 const theme = useTheme();
-const customizerStore = useCustomizerStore();
+const customizer = useCustomizerStore();
 
 const getStoredColor = (key, fallback) => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
@@ -258,7 +210,7 @@ const getStoredColor = (key, fallback) => {
 const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
 const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
 const autoSyncTheme = computed({
-    get: () => customizer.autoSyncTheme,
+    get: () => customizer.autoSwitchTheme,
     set: (value) => {
         customizer.SET_AUTO_SYNC(value);
         if (value) {

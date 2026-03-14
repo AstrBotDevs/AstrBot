@@ -12,7 +12,7 @@ export const useCustomizerStore = defineStore({
     inputBg: config.inputBg,
     viewMode: (localStorage.getItem('viewMode') as 'bot' | 'chat') || 'bot', // 'bot' 或 'chat'
     chatSidebarOpen: false, // chat mode mobile sidebar state
-    autoSyncTheme: localStorage.getItem('auto-sync-theme') === 'true', // 自动同步主题
+    autoSwitchTheme: localStorage.getItem('autoSwitchTheme') === 'true', // 自动同步主题
   }),
 
   getters: {
@@ -33,8 +33,8 @@ export const useCustomizerStore = defineStore({
       localStorage.setItem("uiTheme", payload);
     },
     SET_AUTO_SYNC(payload: boolean) {
-      this.autoSyncTheme = payload;
-      localStorage.setItem('autoTheme', String(payload));
+      this.autoSwitchTheme = payload;
+      localStorage.setItem('autoSwitchTheme', String(payload));
     },
     // 新增：手动切换主题（同时关闭自动同步）
     TOGGLE_DARK_MODE() {

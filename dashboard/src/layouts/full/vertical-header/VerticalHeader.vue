@@ -472,7 +472,7 @@ onMounted(async () => {
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
   }
-  if (customizer.autoSyncTheme) {
+  if (customizer.autoSwitchTheme) {
     autoSyncTheme();
   }
 });

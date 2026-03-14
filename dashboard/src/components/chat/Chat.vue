@@ -330,7 +330,7 @@ interface ReplyInfo {
 const replyTo = ref<ReplyInfo | null>(null);
 
 // 直接从预设getter中获取
-const isDark = customizer.isDarkTheme;
+const isDark = computed(() => customizer.isDarkTheme);
 
 // 检测是否为手机端
 function checkMobile() {
