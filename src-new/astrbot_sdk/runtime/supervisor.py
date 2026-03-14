@@ -291,6 +291,7 @@ class WorkerSession:
         event_payload: dict[str, Any],
         *,
         request_id: str,
+        args: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if self.peer is None:
             raise RuntimeError("worker session is not running")
@@ -299,6 +300,7 @@ class WorkerSession:
             {
                 "handler_id": handler_id,
                 "event": event_payload,
+                "args": dict(args or {}),
             },
             request_id=request_id,
         )
@@ -772,6 +774,7 @@ class SupervisorRuntime:
                 handler_id,
                 payload.get("event", {}),
                 request_id=request_id,
+                args=payload.get("args", {}),
             )
         finally:
             self.active_requests.pop(request_id, None)

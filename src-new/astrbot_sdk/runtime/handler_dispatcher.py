@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
+import shlex
 import typing
 from collections.abc import AsyncIterator
 from typing import Any, get_type_hints
@@ -32,6 +34,7 @@ from .._invocation_context import caller_plugin_scope
 from ..context import CancelToken, Context
 from ..errors import AstrBotError
 from ..events import MessageEvent
+from ..protocol.descriptors import CommandTrigger, MessageTrigger
 from ..star import Star
 from .capability_router import StreamExecution
 from .loader import LoadedCapability, LoadedHandler
@@ -56,14 +59,16 @@ class HandlerDispatcher:
         event.bind_reply_handler(self._create_reply_handler(ctx, event))
 
         # 提取 args 用于兼容 handler 签名
-        args = message.input.get("args") or {}
+        raw_args = message.input.get("args") or {}
+        args = dict(raw_args) if isinstance(raw_args, dict) else {}
+        if not args:
+            args = self._derive_args(loaded, event)
 
         with caller_plugin_scope(plugin_id):
             task = asyncio.create_task(self._run_handler(loaded, event, ctx, args))
         self._active[message.id] = (task, cancel_token)
         try:
-            await task
-            return {}
+            return await task
         finally:
             self._active.pop(message.id, None)
 
@@ -103,7 +108,8 @@ class HandlerDispatcher:
         event: MessageEvent,
         ctx: Context,
         args: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
+        summary = {"sent_message": False, "stop": False, "call_llm": False}
         try:
             result = loaded.callable(
                 *self._build_args(
@@ -117,12 +123,19 @@ class HandlerDispatcher:
             )
             if inspect.isasyncgen(result):
                 async for item in result:
-                    await self._send_result(item, event, ctx)
-                return
+                    self._merge_handler_summary(
+                        summary,
+                        await self._handle_result_item(item, event, ctx),
+                    )
+                return summary
             if inspect.isawaitable(result):
                 result = await result
             if result is not None:
-                await self._send_result(result, event, ctx)
+                self._merge_handler_summary(
+                    summary,
+                    await self._handle_result_item(result, event, ctx),
+                )
+            return summary
         except Exception as exc:
             await self._handle_error(
                 loaded.owner,
@@ -133,6 +146,25 @@ class HandlerDispatcher:
                 plugin_id=self._resolve_plugin_id(loaded),
             )
             raise
+
+    def _derive_args(
+        self,
+        loaded: LoadedHandler,
+        event: MessageEvent,
+    ) -> dict[str, Any]:
+        trigger = loaded.descriptor.trigger
+        if isinstance(trigger, CommandTrigger):
+            for command_name in [trigger.command, *trigger.aliases]:
+                remainder = self._match_command_name(event.text, command_name)
+                if remainder is not None:
+                    return self._build_command_args(loaded.callable, remainder)
+            return {}
+        if isinstance(trigger, MessageTrigger) and trigger.regex:
+            match = re.search(trigger.regex, event.text)
+            if match is None:
+                return {}
+            return self._build_regex_args(loaded.callable, match)
+        return {}
 
     def _build_args(
         self,
@@ -264,6 +296,38 @@ class HandlerDispatcher:
         except (TypeError, ValueError):
             return "(...)"
 
+    async def _handle_result_item(
+        self,
+        item: Any,
+        event: MessageEvent,
+        ctx: Context | None = None,
+    ) -> dict[str, Any]:
+        sent_message = await self._send_result(item, event, ctx)
+        if isinstance(item, dict):
+            return {
+                "sent_message": sent_message,
+                "stop": bool(item.get("stop", False)),
+                "call_llm": bool(item.get("call_llm", False)),
+            }
+        return {
+            "sent_message": sent_message,
+            "stop": False,
+            "call_llm": False,
+        }
+
+    @staticmethod
+    def _merge_handler_summary(
+        target: dict[str, Any],
+        source: dict[str, Any],
+    ) -> None:
+        target["sent_message"] = bool(target.get("sent_message")) or bool(
+            source.get("sent_message")
+        )
+        target["stop"] = bool(target.get("stop")) or bool(source.get("stop"))
+        target["call_llm"] = bool(target.get("call_llm")) or bool(
+            source.get("call_llm")
+        )
+
     async def _send_result(
         self,
         item: Any,
@@ -283,6 +347,104 @@ class HandlerDispatcher:
             await event.reply(text)
             return True
         return False
+
+    @staticmethod
+    def _match_command_name(text: str, command_name: str) -> str | None:
+        normalized = text.strip()
+        if normalized == command_name:
+            return ""
+        if normalized.startswith(f"{command_name} "):
+            return normalized[len(command_name) :].strip()
+        return None
+
+    @classmethod
+    def _build_command_args(cls, handler, remainder: str) -> dict[str, Any]:
+        names = cls._legacy_arg_parameter_names(handler)
+        if not names or not remainder:
+            return {}
+        if len(names) == 1:
+            return {names[0]: remainder}
+        parts = cls._split_command_remainder(remainder)
+        return {
+            name: parts[index] for index, name in enumerate(names) if index < len(parts)
+        }
+
+    @classmethod
+    def _build_regex_args(cls, handler, match: re.Match[str]) -> dict[str, Any]:
+        named = {
+            key: value for key, value in match.groupdict().items() if value is not None
+        }
+        names = [
+            name
+            for name in cls._legacy_arg_parameter_names(handler)
+            if name not in named
+        ]
+        positional = [value for value in match.groups() if value is not None]
+        for index, value in enumerate(positional):
+            if index >= len(names):
+                break
+            named[names[index]] = value
+        return named
+
+    @staticmethod
+    def _split_command_remainder(remainder: str) -> list[str]:
+        try:
+            return shlex.split(remainder)
+        except ValueError:
+            return remainder.split()
+
+    @classmethod
+    def _legacy_arg_parameter_names(cls, handler) -> list[str]:
+        try:
+            signature = inspect.signature(handler)
+        except (TypeError, ValueError):
+            return []
+        try:
+            type_hints = get_type_hints(handler)
+        except Exception:
+            type_hints = {}
+        names: list[str] = []
+        for parameter in signature.parameters.values():
+            if parameter.kind not in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
+                continue
+            if cls._is_injected_parameter(
+                parameter.name, type_hints.get(parameter.name)
+            ):
+                continue
+            names.append(parameter.name)
+        return names
+
+    @classmethod
+    def _is_injected_parameter(cls, name: str, annotation: Any) -> bool:
+        if name in {"event", "ctx", "context"}:
+            return True
+        normalized = cls._unwrap_optional(annotation)
+        if normalized is None:
+            return False
+        if normalized is Context or normalized is MessageEvent:
+            return True
+        if isinstance(normalized, type) and issubclass(
+            normalized,
+            (Context, MessageEvent),
+        ):
+            return True
+        return False
+
+    @staticmethod
+    def _unwrap_optional(annotation: Any) -> Any:
+        if annotation is None:
+            return None
+        origin = typing.get_origin(annotation)
+        if origin is typing.Union:
+            options = [
+                item for item in typing.get_args(annotation) if item is not type(None)
+            ]
+            if len(options) == 1:
+                return options[0]
+        return annotation
 
     async def _handle_error(
         self,
