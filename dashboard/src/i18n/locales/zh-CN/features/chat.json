@@ -71,10 +71,16 @@
   "modes": {
     "darkMode": "切换到夜间模式",
     "lightMode": "切换到日间模式"
-  },  "shortcuts": {
+  },
+  "shortcuts": {
     "help": "获取帮助",
     "voiceRecord": "录制语音",
-    "pasteImage": "粘贴图片"
+    "pasteImage": "粘贴图片",
+    "sendKey": {
+      "title": "发送快捷键",
+      "enterToSend": "Enter 发送",
+      "shiftEnterToSend": "Shift+Enter 发送"
+    }
   },
   "streaming": {
     "enabled": "流式响应已开启",

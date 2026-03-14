@@ -71,10 +71,16 @@
   "modes": {
     "darkMode": "Switch to Dark Mode",
     "lightMode": "Switch to Light Mode"
-  },  "shortcuts": {
+  },
+  "shortcuts": {
     "help": "Get Help",
     "voiceRecord": "Record Voice",
-    "pasteImage": "Paste Image"
+    "pasteImage": "Paste Image",
+    "sendKey": {
+      "title": "Send Shortcut",
+      "enterToSend": "Enter to send",
+      "shiftEnterToSend": "Shift+Enter to send"
+    }
   },
   "streaming": {
     "enabled": "Streaming enabled",

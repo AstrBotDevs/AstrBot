@@ -231,6 +231,50 @@
                     </v-card>
                 </v-menu>
 
+                <!-- 发送快捷键（分组） -->
+                <v-menu
+                    :open-on-hover="!isMobile"
+                    :open-on-click="isMobile"
+                    :open-delay="!isMobile ? 60 : 0"
+                    :close-delay="!isMobile ? 120 : 0"
+                    :location="isMobile ? 'bottom' : 'end center'"
+                    offset="8"
+                    close-on-content-click
+                >
+                    <template v-slot:activator="{ props: sendShortcutMenuProps }">
+                        <v-list-item
+                            v-bind="sendShortcutMenuProps"
+                            class="styled-menu-item chat-settings-group-trigger"
+                            rounded="md"
+                        >
+                            <template v-slot:prepend>
+                                <v-icon>mdi-keyboard-outline</v-icon>
+                            </template>
+                            <v-list-item-title>{{ tm('shortcuts.sendKey.title') }}</v-list-item-title>
+                            <template v-slot:append>
+                                <span class="chat-settings-group-current chat-settings-transport-current">{{ currentSendShortcutLabel }}</span>
+                                <v-icon size="18" class="chat-settings-group-arrow">mdi-chevron-right</v-icon>
+                            </template>
+                        </v-list-item>
+                    </template>
+
+                    <v-card class="styled-menu-card" style="min-width: 220px;" elevation="8" rounded="lg">
+                        <v-list density="compact" class="styled-menu-list pa-1">
+                            <v-list-item
+                                v-for="opt in sendShortcutOptions"
+                                :key="opt.value"
+                                :value="opt.value"
+                                @click="handleSendShortcutChange(opt.value)"
+                                :class="{ 'styled-menu-item-active': props.sendShortcut === opt.value }"
+                                class="styled-menu-item"
+                                rounded="md"
+                            >
+                                <v-list-item-title>{{ opt.label }}</v-list-item-title>
+                            </v-list-item>
+                        </v-list>
+                    </v-card>
+                </v-menu>
+
                 <!-- 全屏/退出全屏 -->
                 <v-list-item class="styled-menu-item" @click="$emit('toggleFullscreen')">
                     <template v-slot:prepend>
@@ -277,6 +321,7 @@ interface Props {
     isMobile: boolean;
     mobileMenuOpen: boolean;
     projects?: Project[];
+    sendShortcut: 'enter' | 'shift_enter';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -297,6 +342,7 @@ const emit = defineEmits<{
     editProject: [project: Project];
     deleteProject: [projectId: string];
     updateTransportMode: [mode: 'sse' | 'websocket'];
+    updateSendShortcut: [mode: 'enter' | 'shift_enter'];
 }>();
 
 const { t } = useI18n();
@@ -357,6 +403,10 @@ const transportOptions = [
     { label: tm('transport.sse'), value: 'sse' as const },
     { label: tm('transport.websocket'), value: 'websocket' as const }
 ];
+const sendShortcutOptions = [
+    { label: tm('shortcuts.sendKey.enterToSend'), value: 'enter' as const },
+    { label: tm('shortcuts.sendKey.shiftEnterToSend'), value: 'shift_enter' as const }
+];
 
 // Language switcher
 const { languageOptions, currentLanguage, switchLanguage, locale } = useLanguageSwitcher();
@@ -374,6 +424,10 @@ const changeLanguage = async (langCode: string) => {
 
 const currentTransportLabel = computed(() => {
     const found = transportOptions.find(opt => opt.value === props.transportMode);
+    return found?.label ?? '';
+});
+const currentSendShortcutLabel = computed(() => {
+    const found = sendShortcutOptions.find(opt => opt.value === props.sendShortcut);
     return found?.label ?? '';
 });
 
@@ -401,6 +455,12 @@ async function handleDeleteConversation(session: Session) {
 function handleTransportModeChange(mode: string | null) {
     if (mode === 'sse' || mode === 'websocket') {
         emit('updateTransportMode', mode);
+    }
+}
+
+function handleSendShortcutChange(mode: string | null) {
+    if (mode === 'enter' || mode === 'shift_enter') {
+        emit('updateSendShortcut', mode);
     }
 }
 </script>
