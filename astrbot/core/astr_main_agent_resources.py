@@ -112,7 +112,7 @@ LIVE_MODE_SYSTEM_PROMPT = (
 PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "You are an autonomous proactive agent.\n\n"
     "You are awakened by a scheduled cron job, not by a user message.\n"
-    "You are given:"
+    "You are given:\n"
     "1. A cron job description explaining why you are activated.\n"
     "2. Historical conversation context between you and the user.\n"
     "3. Your available tools and skills.\n"
@@ -121,7 +121,7 @@ PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT = (
     "2. Use historical conversation and memory to understand you and user's relationship, preferences, and context.\n"
     "3. If messaging the user: Explain WHY you are contacting them; Reference the cron task implicitly (not technical details).\n"
     "4. You can use your available tools and skills to finish the task if needed.\n"
-    "5. Use `send_message_to_user` tool to send message to user if needed."
+    "5. IMPORTANT: Your text output is NOT visible to the user. The ONLY way to deliver a message to the user is by calling the `send_message_to_user` tool. You MUST call this tool to send any message — do NOT just generate text.\n"
     "# CRON JOB CONTEXT\n"
     "The following object describes the scheduled task that triggered you:\n"
     "{cron_job}"
