@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,14 +33,6 @@ from typing import Any
 
 from loguru import logger
 
-from .._legacy_runtime import (
-    LegacyWorkerRuntimeBridge,
-    bind_legacy_runtime_contexts,
-    build_legacy_worker_runtime_bridge,
-    run_legacy_worker_shutdown_hooks,
-    run_legacy_worker_startup_hooks,
-    run_plugin_lifecycle,
-)
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
@@ -103,6 +96,21 @@ def _load_group_plugin_specs(group_metadata_path: Path) -> tuple[str, list[Plugi
     return group_id, plugins
 
 
+async def run_plugin_lifecycle(
+    instances: list[Any],
+    method_name: str,
+    context: RuntimeContext,
+) -> None:
+    """运行插件生命周期方法。"""
+    for instance in instances:
+        method = getattr(instance, method_name, None)
+        if method is None:
+            continue
+        result = method(context)
+        if inspect.isawaitable(result):
+            await result
+
+
 class GroupWorkerRuntime:
     def __init__(self, *, group_metadata_path: Path, transport) -> None:
         self.group_metadata_path = group_metadata_path.resolve()
@@ -134,10 +142,6 @@ class GroupWorkerRuntime:
                 continue
 
             lifecycle_context = RuntimeContext(peer=self.peer, plugin_id=plugin.name)
-            bind_legacy_runtime_contexts(
-                [*loaded_plugin.handlers, *loaded_plugin.capabilities],
-                lifecycle_context,
-            )
             self._plugin_states.append(
                 GroupPluginRuntimeState(
                     plugin=plugin,
@@ -208,12 +212,6 @@ class GroupWorkerRuntime:
                 ],
                 metadata=self._initialize_metadata(),
             )
-
-            for state in self._active_plugin_states:
-                await self._run_legacy_worker_startup_hooks(
-                    state,
-                    metadata=dict(state.plugin.manifest_data),
-                )
         except Exception:
             for state in reversed(started_states):
                 try:
@@ -232,10 +230,6 @@ class GroupWorkerRuntime:
         try:
             for state in reversed(self._active_plugin_states):
                 try:
-                    await self._run_legacy_worker_shutdown_hooks(
-                        state,
-                        metadata=dict(state.plugin.manifest_data),
-                    )
                     await self._run_lifecycle(state, "on_stop")
                 except Exception as exc:
                     if first_error is None:
@@ -286,36 +280,6 @@ class GroupWorkerRuntime:
             state.loaded_plugin.instances, method_name, state.lifecycle_context
         )
 
-    async def _run_legacy_worker_startup_hooks(
-        self,
-        state: GroupPluginRuntimeState,
-        *,
-        metadata: dict[str, Any],
-    ) -> None:
-        await run_legacy_worker_startup_hooks(
-            [
-                *state.loaded_plugin.handlers,
-                *state.loaded_plugin.capabilities,
-            ],
-            context=state.lifecycle_context,
-            metadata=metadata,
-        )
-
-    async def _run_legacy_worker_shutdown_hooks(
-        self,
-        state: GroupPluginRuntimeState,
-        *,
-        metadata: dict[str, Any],
-    ) -> None:
-        await run_legacy_worker_shutdown_hooks(
-            [
-                *state.loaded_plugin.handlers,
-                *state.loaded_plugin.capabilities,
-            ],
-            context=state.lifecycle_context,
-            metadata=metadata,
-        )
-
 
 class PluginWorkerRuntime:
     def __init__(self, *, plugin_dir: Path, transport) -> None:
@@ -339,15 +303,6 @@ class PluginWorkerRuntime:
         self._lifecycle_context = RuntimeContext(
             peer=self.peer, plugin_id=self.plugin.name
         )
-        self._legacy_worker_runtime: LegacyWorkerRuntimeBridge = (
-            build_legacy_worker_runtime_bridge(
-                lambda: [
-                    *self.loaded_plugin.handlers,
-                    *self.loaded_plugin.capabilities,
-                ]
-            )
-        )
-        self._bind_legacy_runtime_contexts(self._lifecycle_context)
         self.peer.set_invoke_handler(self._handle_invoke)
         self.peer.set_cancel_handler(self._handle_cancel)
 
@@ -373,9 +328,6 @@ class PluginWorkerRuntime:
                     },
                 },
             )
-            await self._run_legacy_worker_startup_hooks(
-                metadata=dict(self.plugin.manifest_data),
-            )
         except Exception:
             if lifecycle_started:
                 try:
@@ -390,9 +342,6 @@ class PluginWorkerRuntime:
 
     async def stop(self) -> None:
         try:
-            await self._run_legacy_worker_shutdown_hooks(
-                metadata=dict(self.plugin.manifest_data),
-            )
             await self._run_lifecycle("on_stop")
         finally:
             await self.peer.stop()
@@ -412,25 +361,4 @@ class PluginWorkerRuntime:
     async def _run_lifecycle(self, method_name: str) -> None:
         await run_plugin_lifecycle(
             self.loaded_plugin.instances, method_name, self._lifecycle_context
-        )
-
-    def _bind_legacy_runtime_contexts(self, runtime_context: RuntimeContext) -> None:
-        self._legacy_worker_runtime.bind_runtime_contexts(runtime_context)
-
-    async def _run_legacy_worker_startup_hooks(
-        self, *, metadata: dict[str, Any]
-    ) -> None:
-        await self._legacy_worker_runtime.run_startup_hooks(
-            context=self._lifecycle_context,
-            metadata=metadata,
-        )
-
-    async def _run_legacy_worker_shutdown_hooks(
-        self,
-        *,
-        metadata: dict[str, Any],
-    ) -> None:
-        await self._legacy_worker_runtime.run_shutdown_hooks(
-            context=self._lifecycle_context,
-            metadata=metadata,
         )

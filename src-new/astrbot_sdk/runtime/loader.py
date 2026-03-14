@@ -1,7 +1,7 @@
 """插件加载模块。
 
 定义插件发现、环境管理和加载的核心逻辑。
-支持新旧两种 Star 组件的兼容加载。
+仅支持 v4 新版 Star 组件。
 
 核心概念：
     PluginSpec: 插件规范，描述插件的基本信息
@@ -28,40 +28,9 @@
     1. 将插件目录添加到 sys.path
     2. 遍历 components 列表
     3. 动态导入组件类
-    4. 判断是否为新版 Star
-    5. 创建实例（新版直接实例化，旧版传入 legacy_context）
-    6. 扫描处理器方法
-    7. 构建 HandlerDescriptor
-
-新旧 Star 组件兼容：
-    新版 Star:
-        - 继承自 Star 基类
-        - __astrbot_is_new_star__ 返回 True
-        - 无参构造函数
-        - 通过 @handler 装饰器注册处理器
-
-    旧版 Star:
-        - 不继承或 __astrbot_is_new_star__ 返回 False
-        - 需要 legacy_context 参数
-        - 通过 @xxx_handler 装饰器注册处理器
-        - 使用 extras_configs 传递配置
-
-与旧版对比：
-    旧版 StarManager:
-        - 通过 plugin.yaml 发现插件
-        - 动态导入组件类并实例化
-        - 注册到 star_handlers_registry
-        - 使用 functools.partial 绑定实例
-        - 无环境管理
-        - 无指纹缓存
-
-    新版 loader.py:
-        - PluginSpec 描述插件规范
-        - PluginEnvironmentManager 管理分组共享环境
-        - load_plugin() 加载并解析组件
-        - LoadedHandler 封装处理器和描述符
-        - 支持新旧 Star 组件兼容
-        - 支持环境指纹缓存
+    4. 直接实例化（无参构造函数）
+    5. 扫描处理器方法
+    6. 构建 HandlerDescriptor
 
 plugin.yaml 格式：
     name: my_plugin
@@ -78,8 +47,6 @@ plugin.yaml 格式：
 - 从 `plugin.yaml` 解析出可运行的 `PluginSpec`
 - 用 `uv` 为插件准备独立环境
 - 把组件实例和 handler 元数据整理成 `LoadedPlugin`
-
-legacy 兼容也集中放在这里，尤其是“同一插件共享一个 `LegacyContext`”这一旧语义。
 """
 
 from __future__ import annotations
@@ -98,22 +65,6 @@ from typing import Any
 
 import yaml
 
-from .._legacy_loader import (
-    PLUGIN_MANIFEST_FILE,
-    load_legacy_main_component_classes,
-    load_plugin_manifest_payload,
-    looks_like_legacy_plugin,
-    resolve_plugin_component_classes,
-)
-from .._legacy_runtime import (
-    LegacyRuntimeAdapter,
-    build_capability_legacy_runtime,
-    build_handler_legacy_runtime,
-    finalize_legacy_component_instance,
-    is_new_star_component,
-    plan_legacy_component_construction,
-)
-from ..api.basic.astrbot_config import AstrBotConfig
 from ..decorators import get_capability_meta, get_handler_meta
 from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
 from .environment_groups import (
@@ -123,9 +74,9 @@ from .environment_groups import (
     GroupEnvironmentManager,
 )
 
+PLUGIN_MANIFEST_FILE = "plugin.yaml"
 STATE_FILE_NAME = ".astrbot-worker-state.json"
 CONFIG_SCHEMA_FILE = "_conf_schema.json"
-LEGACY_MAIN_MANIFEST_KEY = "__legacy_main__"
 PLUGIN_METADATA_ATTR = "__astrbot_plugin_metadata__"
 
 
@@ -161,21 +112,6 @@ class LoadedHandler:
     callable: Any
     owner: Any
     plugin_id: str = ""
-    legacy_context: Any | None = None
-    compat_filters: list[Any] = field(default_factory=list)
-    legacy_runtime: LegacyRuntimeAdapter | None = field(
-        init=False, default=None, repr=False
-    )
-
-    def __post_init__(self) -> None:
-        if self.legacy_context is None:
-            return
-        self.legacy_runtime = build_handler_legacy_runtime(
-            self.legacy_context,
-            self.callable,
-            compat_filters=self.compat_filters or None,
-        )
-        self.compat_filters = list(self.legacy_runtime.filters)
 
 
 @dataclass(slots=True)
@@ -184,15 +120,6 @@ class LoadedCapability:
     callable: Any
     owner: Any
     plugin_id: str = ""
-    legacy_context: Any | None = None
-    legacy_runtime: LegacyRuntimeAdapter | None = field(
-        init=False, default=None, repr=False
-    )
-
-    def __post_init__(self) -> None:
-        if self.legacy_context is None:
-            return
-        self.legacy_runtime = build_capability_legacy_runtime(self.legacy_context)
 
 
 @dataclass(slots=True)
@@ -339,10 +266,11 @@ def _normalize_config_value(field_schema: dict[str, Any], value: Any) -> Any:
     return copy.deepcopy(value) if value is not None else default_value
 
 
-def _load_plugin_config(plugin: PluginSpec) -> AstrBotConfig | None:
+def _load_plugin_config(plugin: PluginSpec) -> dict[str, Any]:
+    """加载插件配置，返回普通字典。"""
     schema_path = plugin.plugin_dir / CONFIG_SCHEMA_FILE
     if not schema_path.exists():
-        return None
+        return {}
 
     try:
         schema_payload = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -365,40 +293,56 @@ def _load_plugin_config(plugin: PluginSpec) -> AstrBotConfig | None:
         for key, field_schema in schema.items()
         if isinstance(field_schema, dict)
     }
-    config = AstrBotConfig(normalized, save_path=config_path)
+
     if not config_path.exists() or normalized != existing:
-        config.save_config()
-    return config
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(
+            json.dumps(normalized, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    return normalized
 
 
-def _legacy_component_classes(plugin: PluginSpec) -> list[type[Any]]:
-    return load_legacy_main_component_classes(
-        plugin_name=plugin.name,
-        plugin_dir=plugin.plugin_dir,
-    )
+def _is_new_star_component(cls: type[Any]) -> bool:
+    """检查组件类是否为 v4 新版 Star。"""
+    return bool(getattr(cls, "__astrbot_is_new_star__", False))
 
 
 def _plugin_component_classes(plugin: PluginSpec) -> list[type[Any]]:
-    return resolve_plugin_component_classes(
-        plugin_name=plugin.name,
-        plugin_dir=plugin.plugin_dir,
-        manifest_data=plugin.manifest_data,
-        manifest_flag_key=LEGACY_MAIN_MANIFEST_KEY,
-        import_string=import_string,
-    )
+    """解析插件组件类列表。"""
+    components = plugin.manifest_data.get("components") or []
+    if not isinstance(components, list):
+        return []
+
+    classes: list[type[Any]] = []
+    for component in components:
+        if not isinstance(component, dict):
+            continue
+        class_path = component.get("class")
+        if not isinstance(class_path, str) or ":" not in class_path:
+            continue
+        try:
+            cls = import_string(class_path, plugin.plugin_dir)
+            if isinstance(cls, type):
+                classes.append(cls)
+        except Exception:
+            continue
+    return classes
 
 
 def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
+    """从插件目录加载插件规范。"""
     plugin_dir = plugin_dir.resolve()
+    manifest_path = plugin_dir / PLUGIN_MANIFEST_FILE
     requirements_path = plugin_dir / "requirements.txt"
-    manifest_path, manifest_data = load_plugin_manifest_payload(
-        plugin_dir,
-        read_yaml=_read_yaml,
-        default_python_version=_default_python_version(),
-        manifest_flag_key=LEGACY_MAIN_MANIFEST_KEY,
-    )
+
+    if not manifest_path.exists():
+        raise ValueError(f"missing {PLUGIN_MANIFEST_FILE}")
+
+    manifest_data = _read_yaml(manifest_path)
     runtime = manifest_data.get("runtime") or {}
     python_version = runtime.get("python") or _default_python_version()
+
     return PluginSpec(
         name=str(manifest_data.get("name") or plugin_dir.name),
         plugin_dir=plugin_dir,
@@ -412,26 +356,22 @@ def load_plugin_spec(plugin_dir: Path) -> PluginSpec:
 def validate_plugin_spec(plugin: PluginSpec) -> None:
     """校验单个插件规范，供 CLI 和发现流程复用。"""
     manifest_data = plugin.manifest_data
-    is_legacy_main = bool(manifest_data.get(LEGACY_MAIN_MANIFEST_KEY))
 
-    if not is_legacy_main and not plugin.requirements_path.exists():
+    if not plugin.requirements_path.exists():
         raise ValueError("missing requirements.txt")
 
     raw_name = manifest_data.get("name")
-    if not is_legacy_main and (not isinstance(raw_name, str) or not raw_name):
+    if not isinstance(raw_name, str) or not raw_name:
         raise ValueError("plugin name is required")
 
     raw_runtime = manifest_data.get("runtime") or {}
     raw_python = raw_runtime.get("python")
-    if not is_legacy_main and (not isinstance(raw_python, str) or not raw_python):
+    if not isinstance(raw_python, str) or not raw_python:
         raise ValueError("runtime.python is required")
 
     components = manifest_data.get("components")
     if not isinstance(components, list):
         raise ValueError("components must be a list")
-
-    if is_legacy_main:
-        return
 
     for index, component in enumerate(components):
         if not isinstance(component, dict):
@@ -442,6 +382,7 @@ def validate_plugin_spec(plugin: PluginSpec) -> None:
 
 
 def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
+    """扫描目录发现所有插件。"""
     plugins_root = plugins_dir.resolve()
     skipped_plugins: dict[str, str] = {}
     plugins: list[PluginSpec] = []
@@ -454,8 +395,9 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
         if not entry.is_dir() or entry.name.startswith("."):
             continue
         manifest_path = entry / PLUGIN_MANIFEST_FILE
-        if not manifest_path.exists() and not looks_like_legacy_plugin(entry):
+        if not manifest_path.exists():
             continue
+
         plugin: PluginSpec | None = None
         try:
             plugin = load_plugin_spec(entry)
@@ -464,14 +406,11 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
             skip_key = entry.name
             if plugin is not None:
                 raw_name = plugin.manifest_data.get("name")
-                if (
-                    isinstance(raw_name, str)
-                    and raw_name
-                    and str(exc) != "missing requirements.txt"
-                ):
+                if isinstance(raw_name, str) and raw_name:
                     skip_key = raw_name
             skipped_plugins[skip_key] = f"failed to parse plugin manifest: {exc}"
             continue
+
         plugin_name = plugin.name
         if not isinstance(plugin_name, str) or not plugin_name:
             skipped_plugins[entry.name] = "plugin name is required"
@@ -481,6 +420,7 @@ def discover_plugins(plugins_dir: Path) -> PluginDiscoveryResult:
             continue
         seen_names.add(plugin_name)
         plugins.append(plugin)
+
     return PluginDiscoveryResult(plugins=plugins, skipped_plugins=skipped_plugins)
 
 
@@ -521,7 +461,7 @@ class PluginEnvironmentManager:
         """返回该插件所属分组环境的解释器路径。
 
         如果调用方还没有先对整批插件做规划，这里会自动创建一个至少包含当
-        前插件的最小规划，以保证旧的“单插件直接调用”模式仍然可用。
+        前插件的最小规划，以保证旧的"单插件直接调用"模式仍然可用。
         """
         if (
             self._plan_result is None
@@ -593,6 +533,10 @@ class PluginEnvironmentManager:
 
 
 def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
+    """加载插件，返回处理器和能力列表。
+
+    仅支持 v4 新版 Star 组件（无参构造函数）。
+    """
     plugin_path = str(plugin.plugin_dir)
     if plugin_path not in sys.path:
         sys.path.insert(0, plugin_path)
@@ -600,32 +544,16 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
     instances: list[Any] = []
     handlers: list[LoadedHandler] = []
     capabilities: list[LoadedCapability] = []
-    shared_legacy_context = None
-    plugin_config = _load_plugin_config(plugin)
+
     for component_cls in _plugin_component_classes(plugin):
-        legacy_context = None
-        if is_new_star_component(component_cls):
-            instance = component_cls()
-        else:
-            construction = plan_legacy_component_construction(
-                component_cls,
-                plugin_name=plugin.name,
-                shared_legacy_context=shared_legacy_context,
-                plugin_config=plugin_config,
-                default_config_factory=lambda: AstrBotConfig(
-                    {},
-                    save_path=_plugin_config_path(plugin.plugin_dir, plugin.name),
-                ),
+        if not _is_new_star_component(component_cls):
+            raise ValueError(
+                f"组件 {component_cls.__name__} 不是 v4 Star 组件。"
+                "旧版插件请使用 AstrBot 主程序运行。"
             )
-            shared_legacy_context = construction.shared_legacy_context
-            legacy_context = construction.legacy_context
-            instance = component_cls(*construction.constructor_args)
-            finalize_legacy_component_instance(
-                instance,
-                legacy_context=legacy_context,
-                component_config=construction.component_config,
-            )
+        instance = component_cls()
         instances.append(instance)
+
         for name in _iter_discoverable_names(instance):
             resolved = _resolve_handler_candidate(instance, name)
             if resolved is None:
@@ -639,10 +567,10 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                         callable=bound,
                         owner=instance,
                         plugin_id=plugin.name,
-                        legacy_context=legacy_context,
                     )
                 )
                 continue
+
             bound, meta = resolved
             handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
             handlers.append(
@@ -658,9 +586,9 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                     callable=bound,
                     owner=instance,
                     plugin_id=plugin.name,
-                    legacy_context=legacy_context,
                 )
             )
+
     return LoadedPlugin(
         plugin=plugin,
         handlers=handlers,
@@ -731,6 +659,7 @@ def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:
 
 
 def import_string(path: str, plugin_dir: Path | None = None) -> Any:
+    """通过字符串路径导入对象。"""
     module_name, attr = path.split(":", 1)
     _prepare_plugin_import(module_name, plugin_dir)
     module = import_module(module_name)

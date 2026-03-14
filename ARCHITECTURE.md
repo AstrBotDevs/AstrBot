@@ -203,7 +203,42 @@ src-new/
 - `SessionRef` 是结构化发送目标 schema，不是 capability。
 - `internal.*` 与 `handler.*` 命名空间保留给框架内部使用，不属于公开内建 capability 列表。
 
-## 7. 兼容层现状
+## 7. 兼容层现状（已弃用）
+
+> **⚠️ 重要：兼容层已弃用，将在下个大版本移除**
+>
+> - 旧插件请使用 **AstrBot 主程序** 运行（主程序有完整的 `StarManager` 支持）
+> - 新插件请迁移到 `astrbot_sdk` 顶层入口
+> - 导入兼容层会触发 `DeprecationWarning`
+
+### 7.0 迁移指南
+
+**旧插件开发者有两个选择：**
+
+1. **继续使用旧 API**：由 AstrBot 主程序运行，无需修改代码
+2. **迁移到 v4 SDK**：
+
+```python
+# 旧版（由主程序运行）
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.star import Context, Star
+
+class MyPlugin(Star):
+    def __init__(self, context: Context):
+        self.context = context
+
+    @filter.command("hello")
+    async def hello(self, event: AstrMessageEvent):
+        yield event.plain_result("Hello!")
+
+# 新版（v4 SDK）
+from astrbot_sdk import Star, on_command, MessageEvent
+
+class MyPlugin(Star):
+    @on_command("hello")
+    async def hello(self, event: MessageEvent):
+        return event.reply("Hello!")
+```
 
 ### 7.1 等价或接近等价的兼容面
 
@@ -253,29 +288,33 @@ src-new/
 
 ## 8. 对插件作者的导入建议
 
-### 推荐的新代码
+### 推荐的新代码（v4）
 
 ```python
 from astrbot_sdk import Star, Context, MessageEvent
 from astrbot_sdk.decorators import on_command, on_message, provide_capability
 ```
 
-### 仍受支持的旧代码
+### ~~仍受支持的旧代码~~（已弃用）
+
+> ⚠️ 以下导入路径已弃用，将在下个大版本移除。旧插件请使用 AstrBot 主程序运行。
 
 ```python
+# 已弃用 - 请迁移到 v4 或使用主程序
 from astrbot_sdk.api.event import AstrMessageEvent
 from astrbot_sdk.api.star.context import Context
 from astrbot_sdk.api.event.filter import filter
 ```
 
-### 旧包名 facade
+### ~~旧包名 facade~~（已弃用）
+
+> ⚠️ 以下导入路径已弃用，将在下个大版本移除。
 
 ```python
+# 已弃用 - 请迁移到 v4 或使用主程序
 from astrbot.api.star import Star
 from astrbot.core.utils.session_waiter import session_waiter
 ```
-
-只有在需要兼容现有旧插件时才应继续使用这些路径；新插件应直接使用 v4 顶层入口。
 
 ## 9. 本地开发与测试
 
@@ -318,9 +357,8 @@ from astrbot.core.utils.session_waiter import session_waiter
   - compat 支持级别变化时，同时更新本文档、`CLAUDE.md` / `AGENTS.md` 备注以及相关契约测试。
   - `refactor.md` 不再承载现状；出现冲突时，一律以本文档和代码/测试为准。
 
-## 11. 当前建议的后续演进方向
+## 11. 后续演进方向
 
-1. 继续把 runtime 对 compat 的认知收口到 `_legacy_runtime.py` 与 `_legacy_loader.py`。
-2. 继续拆薄 `_legacy_api.py`，让 `LegacyContext` 更偏向 facade 和 orchestration。
-3. 保持 `src-new/astrbot` 为受控 facade，不要把旧应用整棵树重新复制进来。
-4. 用契约测试保护 capability 注册表、compat hook 执行和 facade 导入矩阵，避免文档再次漂移。
+1. **当前版本**：兼容层已标记为 deprecated，触发 `DeprecationWarning`
+2. **下个大版本**：完全移除兼容层，SDK 只支持 v4 新插件
+3. 旧插件将由 AstrBot 主程序独立支持，不依赖 SDK 兼容层

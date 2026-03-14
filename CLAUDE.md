@@ -1,5 +1,24 @@
 # CLAUDE Notes
 
+## ⚠️ 兼容层弃用通知 (2026-03-14)
+
+**兼容层已标记为 deprecated，将在下个大版本移除。**
+
+- 旧插件请使用 **AstrBot 主程序** 运行（主程序有完整的 `StarManager` 支持）
+- 新插件请使用 `astrbot_sdk` 顶层入口
+- 导入兼容层会触发 `DeprecationWarning`
+
+**待移除的文件/目录**：
+- `src-new/astrbot_sdk/_legacy_*.py` - 所有 legacy 私有模块
+- `src-new/astrbot_sdk/api/` - 旧版 API 兼容层
+- `src-new/astrbot_sdk/compat.py` - 顶层兼容入口
+- `src-new/astrbot_sdk/protocol/legacy_adapter.py` - JSON-RPC 适配器
+- `src-new/astrbot/` - 旧包名别名
+- `test_plugin/old/` - 旧插件示例
+- `tests_v4/test_legacy*.py` - legacy 相关测试
+
+---
+
 - 2026-03-12: Legacy `handshake` payloads only contain `event_type` / `handler_full_name` metadata and do not preserve v4 command/message trigger details such as command names, aliases, keywords, or regex. Any legacy-to-v4 handshake translation must approximate handlers as coarse event subscriptions and keep the raw handshake payload in metadata for lossless fallback.
 - 2026-03-12: Legacy `src/astrbot_sdk/api/event/filter.py` exported a much larger decorator surface than `src-new/astrbot_sdk/api/event/filter.py`. Current compat coverage is enough for `command` / `regex` / `permission` and the exercised migration tests, but it is not a full drop-in replacement for every historical filter helper.
 - 2026-03-13: Transport-pair startup tests for `SupervisorRuntime` must start a real peer on the opposite transport and provide an `initialize` response. Wiring only the supervisor side drops or captures the outgoing initialize message without replying, and `Peer.initialize()` then waits forever.
