@@ -21,7 +21,7 @@
                     @editTitle="showEditTitleDialog"
                     @deleteConversation="handleDeleteConversation"
                     @closeMobileSidebar="closeMobileSidebar"
-                    @toggleTheme="toggleTheme"
+                    @toggleTheme="toggleDarkMode"
                     @toggleFullscreen="toggleFullscreen"
                     @selectProject="handleSelectProject"
                     @createProject="showCreateProjectDialog"
@@ -329,7 +329,8 @@ interface ReplyInfo {
 }
 const replyTo = ref<ReplyInfo | null>(null);
 
-const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+// 直接从预设getter中获取
+const isDark = customizer.isDarkTheme;
 
 // 检测是否为手机端
 function checkMobile() {
@@ -357,10 +358,10 @@ watch(() => customizer.chatSidebarOpen, (val) => {
     }
 });
 
-function toggleTheme() {
-    const newTheme = customizer.uiTheme === 'PurpleTheme' ? 'PurpleThemeDark' : 'PurpleTheme';
-    customizer.SET_UI_THEME(newTheme);
-    theme.global.name.value = newTheme;
+// 修改：将逻辑集成进store/customizer
+function toggleDarkMode() {
+  customizer.TOGGLE_DARK_MODE();
+  theme.global.name.value = customizer.uiTheme;
 }
 
 function toggleFullscreen() {

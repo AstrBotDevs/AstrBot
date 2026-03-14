@@ -11,10 +11,13 @@ export const useCustomizerStore = defineStore({
     uiTheme: config.uiTheme,
     inputBg: config.inputBg,
     viewMode: (localStorage.getItem('viewMode') as 'bot' | 'chat') || 'bot', // 'bot' 或 'chat'
-    chatSidebarOpen: false // chat mode mobile sidebar state
+    chatSidebarOpen: false, // chat mode mobile sidebar state
+    autoSyncTheme: localStorage.getItem('auto-sync-theme') === 'true', // 自动同步主题
   }),
 
-  getters: {},
+  getters: {
+    isDarkTheme: (state) => state.uiTheme === 'PurpleThemeDark',
+  },
   actions: {
     SET_SIDEBAR_DRAWER() {
       this.Sidebar_drawer = !this.Sidebar_drawer;
@@ -28,6 +31,26 @@ export const useCustomizerStore = defineStore({
     SET_UI_THEME(payload: string) {
       this.uiTheme = payload;
       localStorage.setItem("uiTheme", payload);
+    },
+    SET_AUTO_SYNC(payload: boolean) {
+      this.autoSyncTheme = payload;
+      localStorage.setItem('autoTheme', String(payload));
+    },
+    // 新增：手动切换主题（同时关闭自动同步）
+    TOGGLE_DARK_MODE() {
+      // 手动切换时禁用自动同步
+      this.SET_AUTO_SYNC(false);
+      
+      const newTheme = this.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
+      this.SET_UI_THEME(newTheme);
+    },
+    // 新增：应用系统主题（用于自动同步）
+    APPLY_SYSTEM_THEME() {
+      if (typeof window === 'undefined') return;
+      
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const themeToApply = isDark ? 'PurpleThemeDark' : 'PurpleTheme';
+      this.SET_UI_THEME(themeToApply);
     },
     SET_VIEW_MODE(payload: 'bot' | 'chat') {
       this.viewMode = payload;

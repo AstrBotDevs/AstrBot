@@ -200,7 +200,8 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n('features/chat');
-const isDark = computed(() => useCustomizerStore().uiTheme === 'PurpleThemeDark');
+// 直接从预设getter中获取
+const isDark = useCustomizerStore().isDarkTheme;
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);

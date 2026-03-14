@@ -50,6 +50,14 @@
                 </v-row>
             </v-list-item>
 
+            <v-list-item :subtitle="tm('theme.autoSync.subtitle')" :title="tm('theme.autoSync.title')">
+                <v-switch v-model="autoSyncTheme" :label="tm('theme.autoSync.label')" color="primary" hide-details
+                    class="mt-2" />
+                <v-alert v-if="autoSyncTheme" type="info" variant="tonal" density="comfortable" class="mt-2">
+                    {{ tm('theme.autoSync.hint') }}
+                </v-alert>
+            </v-list-item>
+
             <v-list-subheader>{{ tm('system.title') }}</v-list-subheader>
 
             <v-list-item :subtitle="tm('system.backup.subtitle')" :title="tm('system.backup.title')">
@@ -232,6 +240,7 @@ import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { useModuleI18n } from '@/i18n/composables';
+import { useCustomizerStore } from '@/stores/customizer';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
 import { useToastStore } from '@/stores/toast';
@@ -239,6 +248,7 @@ import { useToastStore } from '@/stores/toast';
 const { tm } = useModuleI18n('features/settings');
 const toastStore = useToastStore();
 const theme = useTheme();
+const customizerStore = useCustomizerStore();
 
 const getStoredColor = (key, fallback) => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
@@ -247,6 +257,21 @@ const getStoredColor = (key, fallback) => {
 
 const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
 const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
+const autoSyncTheme = computed({
+    get: () => customizer.autoSyncTheme,
+    set: (value) => {
+        customizer.SET_AUTO_SYNC(value);
+        if (value) {
+            // 启用时立即应用系统主题
+            customizer.APPLY_SYSTEM_THEME();
+
+            // 更新Vuetify主题
+            if (theme?.global?.name?.value) {
+                theme.global.name.value = customizer.uiTheme;
+            }
+        }
+    }
+});
 
 const resolveThemes = () => {
     if (theme?.themes?.value) return theme.themes.value;

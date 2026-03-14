@@ -16,10 +16,10 @@ const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
 
 // 主题切换函数
-function toggleTheme() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+// 修改：将逻辑集成进store/customizer
+function toggleDarkMode() {
+  customizer.TOGGLE_DARK_MODE();
+  theme.global.name.value = customizer.uiTheme;
 }
 
 onMounted(() => {
@@ -46,7 +46,7 @@ onMounted(() => {
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
               style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(180, 148, 246, 0.8) !important;"></v-divider>
-            <v-btn @click="toggleTheme" class="theme-toggle-btn" icon variant="text" size="small">
+            <v-btn @click="toggleDarkMode" class="theme-toggle-btn" icon variant="text" size="small">
               <v-icon size="18" :color="useCustomizerStore().uiTheme === 'PurpleTheme' ? '#5e35b1' : '#d7c5fa'">
                 mdi-white-balance-sunny
               </v-icon>

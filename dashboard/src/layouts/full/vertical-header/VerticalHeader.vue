@@ -367,10 +367,25 @@ function updateDashboard() {
     });
 }
 
+// 修改：将逻辑集成进store/customizer
 function toggleDarkMode() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+  customizer.TOGGLE_DARK_MODE();
+  theme.global.name.value = customizer.uiTheme;
+}
+
+function autoSyncTheme() {
+  // 根据浏览器主题同步页面主题
+  customizer.APPLY_SYSTEM_THEME();
+  theme.global.name.value = customizer.uiTheme;
+
+  // 添加监听器
+  if (typeof window !== 'undefined') {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      const newTheme = e.matches ? 'PurpleThemeDark' : 'PurpleTheme';
+      customizer.SET_UI_THEME(newTheme);
+      theme.global.name.value = newTheme;
+    });
+  }
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -456,6 +471,9 @@ onMounted(async () => {
   isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
+  }
+  if (customizer.autoSyncTheme) {
+    autoSyncTheme();
   }
 });
 
@@ -596,11 +614,11 @@ onMounted(async () => {
       >
         <template v-slot:prepend>
           <v-icon>
-            {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
+            {{ useCustomizerStore().isDarkTheme ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}
           </v-icon>
         </template>
         <v-list-item-title>
-          {{ useCustomizerStore().uiTheme === 'PurpleThemeDark' ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
+          {{ useCustomizerStore().isDarkTheme ? t('core.header.buttons.theme.light') : t('core.header.buttons.theme.dark') }}
         </v-list-item-title>
       </v-list-item>
 

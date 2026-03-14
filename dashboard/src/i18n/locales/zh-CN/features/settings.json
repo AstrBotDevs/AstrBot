@@ -24,6 +24,12 @@
       "primary": "主色",
       "secondary": "辅助色",
       "reset": "恢复默认"
+    },
+    "autoSync": {
+      "title": "自动切换深色主题",
+      "subtitle": "根据系统时间自动切换深色主题",
+      "label": "启用自动切换",
+      "hint": "启用后，系统将根据您的浏览器主题自动切换"
     }
   },
   "system": {
