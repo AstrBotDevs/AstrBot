@@ -66,15 +66,17 @@
                         rounded="lg" class="conversation-item" active-color="secondary"
                         @click="batchMode ? toggleBatchItem(item.session_id) : undefined">
 
-                        <template v-if="batchMode && (!sidebarCollapsed || isMobile)" v-slot:prepend>
-                            <v-checkbox-btn
-                                :model-value="batchSelected.includes(item.session_id)"
-                                @update:model-value="toggleBatchItem(item.session_id)"
-                                @click.stop
-                                density="compact"
-                                hide-details
-                                class="batch-checkbox"
-                            />
+                        <template v-slot:prepend>
+                            <div class="batch-checkbox-slot" :class="{ 'batch-checkbox-slot--active': batchMode }">
+                                <v-checkbox-btn
+                                    :model-value="batchSelected.includes(item.session_id)"
+                                    @update:model-value="toggleBatchItem(item.session_id)"
+                                    @click.stop
+                                    density="compact"
+                                    hide-details
+                                    class="batch-checkbox"
+                                />
+                            </div>
                         </template>
 
                         <v-list-item-title v-if="!sidebarCollapsed || isMobile" class="conversation-title"
@@ -513,5 +515,22 @@ function handleTransportModeChange(mode: string | null) {
 
 .batch-checkbox {
     flex: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.batch-checkbox-slot {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transform: translateX(-8px);
+    transition: width 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.batch-checkbox-slot--active {
+    width: 28px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
 }
 </style>
