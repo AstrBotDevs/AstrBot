@@ -155,13 +155,21 @@ class HelloPlugin(Star):
 
         # Batch operations
         values = await ctx.db.get_many(["demo:key1", "demo:key2"])
-        await ctx.db.set_many({
-            "demo:batch1": {"batch": True},
-            "demo:batch2": {"batch": True},
-        })
+        await ctx.db.set_many(
+            {
+                "demo:batch1": {"batch": True},
+                "demo:batch2": {"batch": True},
+            }
+        )
 
         # Cleanup
-        for key in ["demo:key1", "demo:key2", "demo:key3", "demo:batch1", "demo:batch2"]:
+        for key in [
+            "demo:key1",
+            "demo:key2",
+            "demo:key3",
+            "demo:batch1",
+            "demo:batch2",
+        ]:
             await ctx.db.delete(key)
 
         return event.plain_result(
@@ -177,9 +185,7 @@ class HelloPlugin(Star):
             count = 0
             async for change in ctx.db.watch("demo:"):
                 count += 1
-                await event.reply(
-                    f"变更: {change['op']} {change['key']}"
-                )
+                await event.reply(f"变更: {change['op']} {change['key']}")
                 if count >= 3:
                     break
 
@@ -310,10 +316,7 @@ class HelloPlugin(Star):
     async def on_group_join(self, event: MessageEvent, ctx: Context) -> None:
         """Handle group join events."""
         ctx.logger.info("用户加入群组: {}", event.user_id)
-        await ctx.platform.send(
-            event.session_id,
-            f"欢迎 {event.user_id} 加入群组!"
-        )
+        await ctx.platform.send(event.session_id, f"欢迎 {event.user_id} 加入群组!")
 
     @on_event("group_leave")
     async def on_group_leave(self, event: MessageEvent, ctx: Context) -> None:

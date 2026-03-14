@@ -1,8 +1,6 @@
 """v4 原生运行时上下文。
 
 `Context` 负责组合 v4 原生 capability 客户端。
-旧版 `conversation_manager`、`send_message()` 等兼容入口不在这里实现，
-而由 `_legacy_api.py` 承接。
 """
 
 from __future__ import annotations
@@ -61,7 +59,7 @@ class Context:
         self.memory = MemoryClient(proxy)
         self.db = DBClient(proxy)
         self.platform = PlatformClient(proxy)
-        self.http = HTTPClient(proxy)
+        self.http = HTTPClient(proxy, plugin_id=plugin_id)
         self.metadata = MetadataClient(proxy, plugin_id)
         self.plugin_id = plugin_id
         self.logger = logger or base_logger.bind(plugin_id=plugin_id)

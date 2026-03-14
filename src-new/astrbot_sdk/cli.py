@@ -18,13 +18,6 @@ from loguru import logger
 from .errors import AstrBotError
 from .runtime.bootstrap import run_plugin_worker, run_supervisor, run_websocket_server
 from .runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec
-from .testing import (
-    LocalRuntimeConfig,
-    PluginHarness,
-    StdoutPlatformSink,
-    _PluginExecutionError,
-    _PluginLoadError,
-)
 
 EXIT_OK = 0
 EXIT_UNEXPECTED = 1
@@ -49,6 +42,14 @@ BUILD_EXCLUDED_FILES = {
 
 class _CliPluginValidationError(RuntimeError):
     """CLI 侧的插件结构或打包校验失败。"""
+
+
+class _CliPluginLoadError(RuntimeError):
+    """CLI 侧的本地开发插件加载失败。"""
+
+
+class _CliPluginExecutionError(RuntimeError):
+    """CLI 侧的本地开发插件执行失败。"""
 
 
 def setup_logger(verbose: bool = False) -> None:
@@ -121,7 +122,7 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
         exc,
         (
             _CliPluginValidationError,
-            _PluginLoadError,
+            _CliPluginLoadError,
             FileNotFoundError,
             ImportError,
             ModuleNotFoundError,
@@ -138,7 +139,7 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
             "dispatch_error",
             "请检查 handler 或 capability 是否已正确注册",
         )
-    if isinstance(exc, _PluginExecutionError):
+    if isinstance(exc, _CliPluginExecutionError):
         return (
             EXIT_PLUGIN_EXECUTION,
             "plugin_execution_error",
@@ -178,6 +179,14 @@ async def _run_local_dev(
     group_id: str | None,
     event_type: str,
 ) -> None:
+    from .testing import (
+        LocalRuntimeConfig,
+        PluginHarness,
+        StdoutPlatformSink,
+        _PluginExecutionError,
+        _PluginLoadError,
+    )
+
     sink = StdoutPlatformSink(stream=sys.stdout)
     harness = PluginHarness(
         LocalRuntimeConfig(
@@ -197,40 +206,45 @@ async def _run_local_dev(
         "group_id": group_id,
         "event_type": event_type,
     }
-    async with harness:
-        if interactive:
-            click.echo(
-                "本地交互模式已启动。可用命令：/session <id> /user <id> /platform <name> /group <id> /private /event <type> /exit"
-            )
-            while True:
-                line = await asyncio.to_thread(sys.stdin.readline)
-                if not line:
-                    break
-                text = line.strip()
-                if not text:
-                    continue
-                if _handle_dev_meta_command(text, state):
-                    if text in {"/exit", "/quit"}:
-                        break
-                    continue
-                await harness.dispatch_text(
-                    text,
-                    session_id=str(state["session_id"]),
-                    user_id=str(state["user_id"]),
-                    platform=str(state["platform"]),
-                    group_id=typing.cast(str | None, state["group_id"]),
-                    event_type=str(state["event_type"]),
+    try:
+        async with harness:
+            if interactive:
+                click.echo(
+                    "本地交互模式已启动。可用命令：/session <id> /user <id> /platform <name> /group <id> /private /event <type> /exit"
                 )
-            return
-        assert event_text is not None
-        await harness.dispatch_text(
-            event_text,
-            session_id=session_id,
-            user_id=user_id,
-            platform=platform,
-            group_id=group_id,
-            event_type=event_type,
-        )
+                while True:
+                    line = await asyncio.to_thread(sys.stdin.readline)
+                    if not line:
+                        break
+                    text = line.strip()
+                    if not text:
+                        continue
+                    if _handle_dev_meta_command(text, state):
+                        if text in {"/exit", "/quit"}:
+                            break
+                        continue
+                    await harness.dispatch_text(
+                        text,
+                        session_id=str(state["session_id"]),
+                        user_id=str(state["user_id"]),
+                        platform=str(state["platform"]),
+                        group_id=typing.cast(str | None, state["group_id"]),
+                        event_type=str(state["event_type"]),
+                    )
+                return
+            assert event_text is not None
+            await harness.dispatch_text(
+                event_text,
+                session_id=session_id,
+                user_id=user_id,
+                platform=platform,
+                group_id=group_id,
+                event_type=event_type,
+            )
+    except _PluginLoadError as exc:
+        raise _CliPluginLoadError(str(exc)) from exc
+    except _PluginExecutionError as exc:
+        raise _CliPluginExecutionError(str(exc)) from exc
 
 
 def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:

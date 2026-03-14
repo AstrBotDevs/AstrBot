@@ -71,3 +71,4 @@ old文件夹是兼容旧插件的测试，旧插件全部放进old文件夹
 - 2026-03-14: `test_plugin/old/` 和 `test_plugin/new/` 里可能带着已生成的 `__pycache__` / `*.pyc`。测试夹具复制示例插件时必须显式忽略这些缓存文件，否则临时插件目录、断言结果和 `git status` 都可能被污染。
 - 2026-03-14: grouped worker / grouped env 路径不要再复制单 worker 的 compat 生命周期和 legacy runtime 绑定逻辑。优先复用 `_legacy_runtime.py` 里的 `bind_legacy_runtime_contexts()`、`run_legacy_worker_startup_hooks()`、`run_legacy_worker_shutdown_hooks()` 以及 `resolve_plugin_lifecycle_hook()`，否则很容易出现“普通 worker 测试通过，但真正的 grouped subprocess 路径在运行时 NameError/行为漂移”的回归。
 - 2026-03-14: `inspect.getmembers(module, inspect.isclass)` 会按属性名排序，所以 legacy `main.py` 组件发现若要保留声明顺序，必须遍历 `module.__dict__`；只删除后面的 `.sort()` 仍然不够。
+- 2026-03-14: 如果仓库正在收敛为纯 v4 SDK，删除 compat 文件前必须先移除或延迟隔离所有公开入口里的 `_legacy_*` import。`testing.py` 或 `cli.py` 里残留对 `_legacy_runtime` 的 eager import，会让 `import astrbot_sdk.testing` 和 `python -m astrbot_sdk --help` 在运行前直接失败，而仅检查 site-packages 安装态的 CLI smoke test 很容易漏掉这类回归。

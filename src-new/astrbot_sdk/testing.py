@@ -2,7 +2,7 @@
 
 `astrbot_sdk.testing` 是面向插件作者的稳定开发入口：
 
-- `PluginHarness` 负责复用现有 loader / dispatcher / compat 执行链
+- `PluginHarness` 负责复用现有 loader / dispatcher 执行链
 - `MockCapabilityRouter` 提供进程内 mock core 能力
 - `MockPeer` 让 `Context` 客户端继续走真实的 capability 调用路径
 - `StdoutPlatformSink` / `RecordedSend` 提供可观测的发送记录
@@ -22,11 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TextIO, get_type_hints
 
-from ._legacy_runtime import (
-    bind_legacy_runtime_contexts,
-    run_legacy_worker_shutdown_hooks,
-    run_legacy_worker_startup_hooks,
-)
 from .context import CancelToken, Context as RuntimeContext
 from .errors import AstrBotError
 from .events import MessageEvent
@@ -44,6 +39,7 @@ from .runtime.loader import (
     LoadedPlugin,
     PluginSpec,
     load_plugin,
+    load_plugin_config,
     load_plugin_spec,
 )
 from .star import Star
@@ -408,6 +404,22 @@ class MockPeer:
         return f"local_{self._counter:04d}"
 
 
+def _plugin_metadata_from_spec(
+    plugin: PluginSpec,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    manifest = plugin.manifest_data
+    return {
+        "name": plugin.name,
+        "display_name": str(manifest.get("display_name") or plugin.name),
+        "description": str(manifest.get("desc") or manifest.get("description") or ""),
+        "author": str(manifest.get("author") or ""),
+        "version": str(manifest.get("version") or "0.0.0"),
+        "enabled": enabled,
+    }
+
+
 class MockContext(RuntimeContext):
     """直接用于 handler 单元测试的轻量运行时上下文。"""
 
@@ -427,6 +439,17 @@ class MockContext(RuntimeContext):
             plugin_id=plugin_id,
             cancel_token=cancel_token,
             logger=logger,
+        )
+        self.router.upsert_plugin(
+            metadata={
+                "name": plugin_id,
+                "display_name": plugin_id,
+                "description": "",
+                "author": "",
+                "version": "0.0.0",
+                "enabled": True,
+            },
+            config={},
         )
         self.llm = MockLLMClient(self.llm, self.router)
         self.platform = MockPlatformClient(self.platform, self.platform_sink)
@@ -497,10 +520,10 @@ class LocalRuntimeConfig:
 class PluginHarness:
     """本地插件消息泵。
 
-    这里复用真实的 loader / dispatcher / compat 执行链，只负责：
+    这里复用真实的 loader / dispatcher 执行链，只负责：
     - 在同一个事件循环里装配单插件运行时
     - 维持本地 mock core 与发送记录
-    - 把后续消息持续送入同一个 dispatcher/session_waiter 图
+    - 把后续消息持续送入同一个 dispatcher
     """
 
     def __init__(
@@ -557,17 +580,12 @@ class PluginHarness:
             peer=self.peer,
             plugin_id=self.plugin.name,
         )
-        bind_legacy_runtime_contexts(
-            [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
-            self.lifecycle_context,
+        self.router.upsert_plugin(
+            metadata=_plugin_metadata_from_spec(self.plugin, enabled=True),
+            config=load_plugin_config(self.plugin),
         )
         try:
             await self._run_lifecycle("on_start")
-            await run_legacy_worker_startup_hooks(
-                [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
-                context=self.lifecycle_context,
-                metadata=dict(self.plugin.manifest_data),
-            )
         except AstrBotError:
             raise
         except Exception as exc:  # pragma: no cover - 由 CLI/集成测试覆盖
@@ -582,13 +600,11 @@ class PluginHarness:
         ):
             return
         try:
-            await run_legacy_worker_shutdown_hooks(
-                [*self.loaded_plugin.handlers, *self.loaded_plugin.capabilities],
-                context=self.lifecycle_context,
-                metadata=dict(self.plugin.manifest_data),
-            )
             await self._run_lifecycle("on_stop")
         finally:
+            if self.plugin is not None:
+                self.router.set_plugin_enabled(self.plugin.name, False)
+                self.router.remove_http_apis_for_plugin(self.plugin.name)
             self._started = False
 
     async def dispatch_text(
@@ -880,7 +896,9 @@ class PluginHarness:
             event_payload,
             context=self.lifecycle_context,
         )
-        session_waiters = self.dispatcher._session_waiters
+        session_waiters = getattr(self.dispatcher, "_session_waiters", None)
+        if session_waiters is None:
+            return False
         if hasattr(session_waiters, "has_waiter"):
             return session_waiters.has_waiter(probe_event)
         if isinstance(session_waiters, dict):

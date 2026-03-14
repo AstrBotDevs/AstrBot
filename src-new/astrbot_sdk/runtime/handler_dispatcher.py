@@ -172,11 +172,15 @@ class HandlerDispatcher:
             if injected is None:
                 if parameter.default is not parameter.empty:
                     continue
-                logger.warning(
-                    f"Handler '{handler.__name__}': 参数 '{parameter.name}' "
-                    f"无法注入，将传入 None"
+                logger.error(
+                    "Handler '{}' 的必填参数 '{}' 无法注入",
+                    handler.__name__,
+                    parameter.name,
                 )
-                injected_args.append(None)
+                raise TypeError(
+                    f"handler '{handler.__name__}' 的必填参数 "
+                    f"'{parameter.name}' 无法注入"
+                )
             else:
                 injected_args.append(injected)
 
@@ -381,8 +385,10 @@ class CapabilityDispatcher:
             if injected is None:
                 if parameter.default is not parameter.empty:
                     continue
-                args.append(None)
-                continue
+                raise TypeError(
+                    f"capability '{handler.__name__}' 的必填参数 "
+                    f"'{parameter.name}' 无法注入"
+                )
             args.append(injected)
 
         return args

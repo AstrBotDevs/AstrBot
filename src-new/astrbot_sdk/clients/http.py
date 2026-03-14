@@ -50,13 +50,23 @@ class HTTPClient:
         _proxy: CapabilityProxy 实例，用于远程能力调用
     """
 
-    def __init__(self, proxy: CapabilityProxy) -> None:
+    def __init__(
+        self,
+        proxy: CapabilityProxy,
+        plugin_id: str | None = None,
+    ) -> None:
         """初始化 HTTP 客户端。
 
         Args:
             proxy: CapabilityProxy 实例
         """
         self._proxy = proxy
+        self._plugin_id = plugin_id
+
+    def _payload_with_plugin(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._plugin_id is None:
+            return payload
+        return {"plugin_id": self._plugin_id, **payload}
 
     async def register_api(
         self,
@@ -86,12 +96,14 @@ class HTTPClient:
 
         await self._proxy.call(
             "http.register_api",
-            {
-                "route": route,
-                "methods": methods,
-                "handler_capability": handler_capability,
-                "description": description,
-            },
+            self._payload_with_plugin(
+                {
+                    "route": route,
+                    "methods": methods,
+                    "handler_capability": handler_capability,
+                    "description": description,
+                }
+            ),
         )
 
     async def unregister_api(
@@ -111,7 +123,7 @@ class HTTPClient:
 
         await self._proxy.call(
             "http.unregister_api",
-            {"route": route, "methods": methods},
+            self._payload_with_plugin({"route": route, "methods": methods}),
         )
 
     async def list_apis(self) -> list[dict[str, Any]]:
@@ -125,5 +137,8 @@ class HTTPClient:
             for api in apis:
                 print(f"{api['route']}: {api['methods']}")
         """
-        output = await self._proxy.call("http.list_apis", {})
+        output = await self._proxy.call(
+            "http.list_apis",
+            self._payload_with_plugin({}),
+        )
         return output.get("apis", [])

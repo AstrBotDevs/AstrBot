@@ -266,7 +266,7 @@ def _normalize_config_value(field_schema: dict[str, Any], value: Any) -> Any:
     return copy.deepcopy(value) if value is not None else default_value
 
 
-def _load_plugin_config(plugin: PluginSpec) -> dict[str, Any]:
+def load_plugin_config(plugin: PluginSpec) -> dict[str, Any]:
     """加载插件配置，返回普通字典。"""
     schema_path = plugin.plugin_dir / CONFIG_SCHEMA_FILE
     if not schema_path.exists():

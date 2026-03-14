@@ -8,8 +8,12 @@
     新版: 新增 MemoryClient，提供语义搜索能力
         - search(): 语义搜索记忆项
         - save(): 保存记忆项
+        - save_with_ttl(): 保存带过期时间的记忆项
         - get(): 精确获取单个记忆项
+        - get_many(): 批量获取多个记忆项
         - delete(): 删除记忆项
+        - delete_many(): 批量删除多个记忆项
+        - stats(): 获取记忆统计信息
 
 设计说明：
     MemoryClient 与 DBClient 的区别：
@@ -20,11 +24,6 @@
     - 存储用户偏好和设置
     - 记录对话摘要
     - 缓存 AI 推理结果
-
-TODO:
-    - 缺少记忆项过期时间 (TTL) 支持
-    - 缺少批量操作支持
-    - 缺少记忆统计和容量查询
 """
 
 from __future__ import annotations
@@ -137,3 +136,105 @@ class MemoryClient:
             await ctx.memory.delete("old_note")
         """
         await self._proxy.call("memory.delete", {"key": key})
+
+    async def save_with_ttl(
+        self,
+        key: str,
+        value: dict[str, Any],
+        ttl_seconds: int,
+    ) -> None:
+        """保存带过期时间的记忆项。
+
+        与 save() 不同，此方法允许设置记忆项的存活时间（TTL），
+        过期后记忆项将自动删除。
+
+        Args:
+            key: 记忆项的唯一标识键
+            value: 要存储的数据字典
+            ttl_seconds: 存活时间（秒），必须大于 0
+
+        Raises:
+            TypeError: 如果 value 不是 dict 类型
+            ValueError: 如果 ttl_seconds 小于 1
+
+        示例:
+            # 保存临时会话状态，1小时后过期
+            await ctx.memory.save_with_ttl(
+                "session_temp",
+                {"state": "waiting"},
+                ttl_seconds=3600,
+            )
+        """
+        if not isinstance(value, dict):
+            raise TypeError("memory.save_with_ttl 的 value 必须是 dict")
+        if ttl_seconds < 1:
+            raise ValueError("ttl_seconds 必须大于 0")
+        await self._proxy.call(
+            "memory.save_with_ttl",
+            {"key": key, "value": value, "ttl_seconds": ttl_seconds},
+        )
+
+    async def get_many(
+        self,
+        keys: list[str],
+    ) -> list[dict[str, Any]]:
+        """批量获取多个记忆项。
+
+        一次性获取多个键对应的记忆内容，比多次调用 get() 更高效。
+
+        Args:
+            keys: 记忆项键名列表
+
+        Returns:
+            记忆项列表，每项包含 key 和 value 字段，
+            不存在的键返回 value 为 None
+
+        示例:
+            items = await ctx.memory.get_many(["pref1", "pref2", "pref3"])
+            for item in items:
+                if item["value"]:
+                    print(f"{item['key']}: {item['value']}")
+        """
+        output = await self._proxy.call("memory.get_many", {"keys": keys})
+        items = output.get("items")
+        if not isinstance(items, (list, tuple)):
+            return []
+        return [dict(item) for item in items]
+
+    async def delete_many(self, keys: list[str]) -> int:
+        """批量删除多个记忆项。
+
+        一次性删除多个键对应的记忆项，返回实际删除的数量。
+
+        Args:
+            keys: 要删除的记忆项键名列表
+
+        Returns:
+            实际删除的记忆项数量
+
+        示例:
+            deleted = await ctx.memory.delete_many(["old1", "old2", "old3"])
+            print(f"删除了 {deleted} 条记忆")
+        """
+        output = await self._proxy.call("memory.delete_many", {"keys": keys})
+        return int(output.get("deleted_count", 0))
+
+    async def stats(self) -> dict[str, Any]:
+        """获取记忆系统统计信息。
+
+        返回记忆系统的当前状态，包括总条目数等统计信息。
+
+        Returns:
+            统计信息字典，包含：
+            - total_items: 总记忆条目数
+            - total_bytes: 总占用字节数（可选）
+
+        示例:
+            stats = await ctx.memory.stats()
+            print(f"记忆库共有 {stats['total_items']} 条记录")
+        """
+        output = await self._proxy.call("memory.stats", {})
+        return {
+            "total_items": output.get("total_items", 0),
+            "total_bytes": output.get("total_bytes"),
+        }

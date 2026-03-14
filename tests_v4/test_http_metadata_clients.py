@@ -201,7 +201,7 @@ class TestMetadataClient:
 
         mock_proxy.call.assert_called_once_with(
             "metadata.get_plugin_config",
-            {"name": "current_plugin"},
+            {"plugin_id": "current_plugin", "name": "current_plugin"},
         )
         assert result == {"key": "value"}
 
@@ -235,6 +235,34 @@ class TestMetadataClient:
 
         assert result is not None
         assert result.name == "current_plugin"
+
+    @pytest.mark.asyncio
+    async def test_get_plugin_includes_caller_plugin_id(
+        self, metadata_client, mock_proxy
+    ):
+        """Metadata requests should carry current plugin identity for routing/auth."""
+        mock_proxy.call.return_value = {"plugin": None}
+
+        await metadata_client.get_plugin("other_plugin")
+
+        mock_proxy.call.assert_called_once_with(
+            "metadata.get_plugin",
+            {"plugin_id": "current_plugin", "name": "other_plugin"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_plugins_includes_caller_plugin_id(
+        self, metadata_client, mock_proxy
+    ):
+        """list_plugins should include current plugin identity."""
+        mock_proxy.call.return_value = {"plugins": []}
+
+        await metadata_client.list_plugins()
+
+        mock_proxy.call.assert_called_once_with(
+            "metadata.list_plugins",
+            {"plugin_id": "current_plugin"},
+        )
 
 
 class TestPluginMetadata:

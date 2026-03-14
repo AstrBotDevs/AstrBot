@@ -60,6 +60,9 @@ class MetadataClient:
         self._proxy = proxy
         self._plugin_id = plugin_id
 
+    def _payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {"plugin_id": self._plugin_id, **payload}
+
     async def get_plugin(self, name: str) -> PluginMetadata | None:
         """获取指定插件的元数据。
 
@@ -74,7 +77,10 @@ class MetadataClient:
             if meta:
                 print(f"{meta.display_name} v{meta.version}")
         """
-        output = await self._proxy.call("metadata.get_plugin", {"name": name})
+        output = await self._proxy.call(
+            "metadata.get_plugin",
+            self._payload({"name": name}),
+        )
         data = output.get("plugin")
         if data is None:
             return None
@@ -91,7 +97,7 @@ class MetadataClient:
             for p in plugins:
                 print(f"- {p.display_name} ({p.name})")
         """
-        output = await self._proxy.call("metadata.list_plugins", {})
+        output = await self._proxy.call("metadata.list_plugins", self._payload({}))
         items = output.get("plugins", [])
         return [
             PluginMetadata.from_dict(item) for item in items if isinstance(item, dict)
@@ -138,6 +144,6 @@ class MetadataClient:
             return None
         output = await self._proxy.call(
             "metadata.get_plugin_config",
-            {"name": target},
+            self._payload({"name": target}),
         )
         return output.get("config")

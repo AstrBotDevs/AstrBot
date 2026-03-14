@@ -54,6 +54,7 @@ from .loader import (
     PluginEnvironmentManager,
     PluginSpec,
     discover_plugins,
+    load_plugin_config,
 )
 from .peer import Peer
 from .transport import StdioTransport
@@ -398,6 +399,24 @@ class SupervisorRuntime:
         self.skipped_plugins: dict[str, str] = {}
         self._register_internal_capabilities()
 
+    def _sync_plugin_registry(self, plugins: list[PluginSpec]) -> None:
+        loaded_plugin_set = set(self.loaded_plugins)
+        for plugin in plugins:
+            manifest = plugin.manifest_data
+            self.capability_router.upsert_plugin(
+                metadata={
+                    "name": plugin.name,
+                    "display_name": str(manifest.get("display_name") or plugin.name),
+                    "description": str(
+                        manifest.get("desc") or manifest.get("description") or ""
+                    ),
+                    "author": str(manifest.get("author") or ""),
+                    "version": str(manifest.get("version") or "0.0.0"),
+                    "enabled": plugin.name in loaded_plugin_set,
+                },
+                config=load_plugin_config(plugin),
+            )
+
     def _register_internal_capabilities(self) -> None:
         self.capability_router.register(
             CapabilityDescriptor(
@@ -450,17 +469,71 @@ class SupervisorRuntime:
         session: WorkerSession,
         plugin_name: str,
     ) -> None:
+        """注册插件 capability，处理命名冲突。
+
+        当 capability 名称冲突时：
+        - 如果是保留命名空间（handler/system/internal），跳过并警告
+        - 否则，使用插件名作为前缀重新命名，例如：
+          - 插件 'my_plugin' 注册 'demo.echo' 冲突
+          - 自动重命名为 'my_plugin.demo.echo'
+        """
         capability_name = descriptor.name
-        if self.capability_router.contains(capability_name):
-            logger.warning(
-                "Capability 名称冲突：'{}' 已存在，跳过插件 '{}' 的注册。",
-                capability_name,
-                plugin_name,
-                # TODO: 更好的解决方案？
+
+        if not self.capability_router.contains(capability_name):
+            # 无冲突，直接注册
+            self._do_register_capability(
+                descriptor, session, capability_name, plugin_name
             )
             return
+
+        # 检查是否在保留命名空间内
+        if capability_name.startswith(("handler.", "system.", "internal.")):
+            logger.warning(
+                "Capability '{}' 在保留命名空间内，跳过插件 '{}' 的注册。"
+                "保留命名空间不允许插件覆盖。",
+                capability_name,
+                plugin_name,
+            )
+            return
+
+        # 尝试添加插件前缀解决冲突
+        prefixed_name = f"{plugin_name}.{capability_name}"
+        if self.capability_router.contains(prefixed_name):
+            logger.warning(
+                "Capability '{}' 和 '{}.{}' 均已存在，"
+                "跳过插件 '{}' 的注册。请考虑使用更唯一的命名。",
+                capability_name,
+                plugin_name,
+                capability_name,
+                plugin_name,
+            )
+            return
+
+        # 使用前缀名称注册
+        prefixed_descriptor = descriptor.model_copy(deep=True)
+        prefixed_descriptor.name = prefixed_name
+        logger.info(
+            "Capability '{}' 与已注册能力冲突，自动重命名为 '{}' (插件: {})。",
+            capability_name,
+            prefixed_name,
+            plugin_name,
+        )
+        self._do_register_capability(
+            prefixed_descriptor, session, prefixed_name, plugin_name
+        )
+        # 记录原始名称到前缀名称的映射，便于调试
+        self._capability_sources[f"_original:{prefixed_name}"] = capability_name
+
+    def _do_register_capability(
+        self,
+        descriptor: CapabilityDescriptor,
+        session: WorkerSession,
+        capability_name: str,
+        plugin_name: str,
+    ) -> None:
+        """实际执行 capability 注册。"""
         self.capability_router.register(
-            descriptor.model_copy(deep=True),
+            descriptor,
             call_handler=self._make_plugin_capability_caller(session, capability_name),
             stream_handler=(
                 self._make_plugin_capability_streamer(session, capability_name)
@@ -538,6 +611,7 @@ class SupervisorRuntime:
         self.skipped_plugins = dict(discovery.skipped_plugins)
         plan_result = self.env_manager.plan(discovery.plugins)
         self.skipped_plugins.update(plan_result.skipped_plugins)
+        self._sync_plugin_registry(discovery.plugins)
         try:
             planned_sessions: list[WorkerSession] = []
             if plan_result.groups:
@@ -595,6 +669,8 @@ class SupervisorRuntime:
                         plugin_name = session.group_id
                     self._register_plugin_capability(descriptor, session, plugin_name)
                 session.start_close_watch()
+
+            self._sync_plugin_registry(discovery.plugins)
 
             aggregated_handlers = list(self.handler_to_worker.keys())
             logger.info(
@@ -655,6 +731,8 @@ class SupervisorRuntime:
             if plugin_name in self.loaded_plugins:
                 self.loaded_plugins.remove(plugin_name)
             self.plugin_to_worker_session.pop(plugin_name, None)
+            self.capability_router.set_plugin_enabled(plugin_name, False)
+            self.capability_router.remove_http_apis_for_plugin(plugin_name)
         stale_requests = [
             request_id
             for request_id, active_session in self.active_requests.items()

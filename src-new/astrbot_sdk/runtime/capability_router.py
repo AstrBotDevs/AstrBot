@@ -15,8 +15,12 @@
     llm.stream_chat: 流式 LLM 聊天
     memory.search: 搜索记忆
     memory.save: 保存记忆
+    memory.save_with_ttl: 保存带过期时间的记忆
     memory.get: 读取单条记忆
+    memory.get_many: 批量获取多条记忆
     memory.delete: 删除记忆
+    memory.delete_many: 批量删除多条记忆
+    memory.stats: 获取记忆统计信息
     db.get: 读取 KV 存储
     db.set: 写入 KV 存储
     db.delete: 删除 KV 存储
@@ -28,6 +32,12 @@
     platform.send_image: 发送图片
     platform.send_chain: 发送消息链
     platform.get_members: 获取群成员
+    http.register_api: 注册 HTTP 路由到插件 capability
+    http.unregister_api: 注销 HTTP 路由
+    http.list_apis: 查询已注册的 HTTP 路由
+    metadata.get_plugin: 获取单个插件元数据
+    metadata.list_plugins: 列出所有插件元数据
+    metadata.get_plugin_config: 获取插件配置
 
 与旧版对比：
     旧版:
@@ -132,16 +142,57 @@ class _CapabilityRegistration:
     exposed: bool = True
 
 
+@dataclass(slots=True)
+class _RegisteredPlugin:
+    metadata: dict[str, Any]
+    config: dict[str, Any]
+
+
 class CapabilityRouter:
     def __init__(self) -> None:
         self._registrations: dict[str, _CapabilityRegistration] = {}
         self.db_store: dict[str, Any] = {}
         self.memory_store: dict[str, dict[str, Any]] = {}
         self.sent_messages: list[dict[str, Any]] = []
+        self.http_api_store: list[dict[str, Any]] = []
+        self._plugins: dict[str, _RegisteredPlugin] = {}
         self._db_watch_subscriptions: dict[
             str, tuple[str | None, asyncio.Queue[dict[str, Any]]]
         ] = {}
         self._register_builtin_capabilities()
+
+    def upsert_plugin(
+        self,
+        *,
+        metadata: dict[str, Any],
+        config: dict[str, Any] | None = None,
+    ) -> None:
+        name = str(metadata.get("name", "")).strip()
+        if not name:
+            raise ValueError("plugin metadata must include a non-empty name")
+        normalized_metadata = dict(metadata)
+        normalized_metadata.setdefault("display_name", name)
+        normalized_metadata.setdefault("description", "")
+        normalized_metadata.setdefault("author", "")
+        normalized_metadata.setdefault("version", "0.0.0")
+        normalized_metadata.setdefault("enabled", True)
+        self._plugins[name] = _RegisteredPlugin(
+            metadata=normalized_metadata,
+            config=dict(config or {}),
+        )
+
+    def set_plugin_enabled(self, name: str, enabled: bool) -> None:
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return
+        plugin.metadata["enabled"] = enabled
+
+    def remove_http_apis_for_plugin(self, plugin_id: str) -> None:
+        self.http_api_store = [
+            entry
+            for entry in self.http_api_store
+            if entry.get("plugin_id") != plugin_id
+        ]
 
     def _emit_db_change(self, *, op: str, key: str, value: Any | None) -> None:
         event = {"op": op, "key": key, "value": value}
@@ -249,11 +300,13 @@ class CapabilityRouter:
     # ------------------------------------------------------------------
 
     def _register_builtin_capabilities(self) -> None:
-        """注册全部 18 条内建 capability。"""
+        """注册全部内建 capability。"""
         self._register_llm_capabilities()
         self._register_memory_capabilities()
         self._register_db_capabilities()
         self._register_platform_capabilities()
+        self._register_http_capabilities()
+        self._register_metadata_capabilities()
 
     def _builtin_descriptor(
         self,
@@ -379,6 +432,70 @@ class CapabilityRouter:
         self.memory_store.pop(str(payload.get("key", "")), None)
         return {}
 
+    async def _memory_save_with_ttl(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        """保存带 TTL 的记忆项（测试实现，TTL 仅记录但不实际过期）。"""
+        key = str(payload.get("key", ""))
+        value = payload.get("value")
+        ttl_seconds = payload.get("ttl_seconds", 0)
+        if not isinstance(value, dict):
+            raise AstrBotError.invalid_input(
+                "memory.save_with_ttl 的 value 必须是 object"
+            )
+        # 在测试实现中，我们只存储值，TTL 由实际后端实现
+        self.memory_store[key] = {"value": value, "ttl_seconds": ttl_seconds}
+        return {}
+
+    async def _memory_get_many(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        """批量获取多个记忆项。"""
+        keys_payload = payload.get("keys")
+        if not isinstance(keys_payload, (list, tuple)):
+            raise AstrBotError.invalid_input("memory.get_many 的 keys 必须是数组")
+        keys = [str(item) for item in keys_payload]
+        items = []
+        for key in keys:
+            stored = self.memory_store.get(key)
+            # 如果存储的是带 TTL 的结构，提取实际值
+            if (
+                isinstance(stored, dict)
+                and "value" in stored
+                and "ttl_seconds" in stored
+            ):
+                value = stored["value"]
+            else:
+                value = stored
+            items.append({"key": key, "value": value})
+        return {"items": items}
+
+    async def _memory_delete_many(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        """批量删除多个记忆项。"""
+        keys_payload = payload.get("keys")
+        if not isinstance(keys_payload, (list, tuple)):
+            raise AstrBotError.invalid_input("memory.delete_many 的 keys 必须是数组")
+        keys = [str(item) for item in keys_payload]
+        deleted_count = 0
+        for key in keys:
+            if key in self.memory_store:
+                del self.memory_store[key]
+                deleted_count += 1
+        return {"deleted_count": deleted_count}
+
+    async def _memory_stats(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        """获取记忆统计信息。"""
+        total_items = len(self.memory_store)
+        # 简单估算字节大小
+        total_bytes = sum(
+            len(str(key)) + len(str(value)) for key, value in self.memory_store.items()
+        )
+        return {"total_items": total_items, "total_bytes": total_bytes}
+
     def _register_memory_capabilities(self) -> None:
         self.register(
             self._builtin_descriptor("memory.search", "搜索记忆"),
@@ -395,6 +512,22 @@ class CapabilityRouter:
         self.register(
             self._builtin_descriptor("memory.delete", "删除记忆"),
             call_handler=self._memory_delete,
+        )
+        self.register(
+            self._builtin_descriptor("memory.save_with_ttl", "保存带过期时间的记忆"),
+            call_handler=self._memory_save_with_ttl,
+        )
+        self.register(
+            self._builtin_descriptor("memory.get_many", "批量获取记忆"),
+            call_handler=self._memory_get_many,
+        )
+        self.register(
+            self._builtin_descriptor("memory.delete_many", "批量删除记忆"),
+            call_handler=self._memory_delete_many,
+        )
+        self.register(
+            self._builtin_descriptor("memory.stats", "获取记忆统计信息"),
+            call_handler=self._memory_stats,
         )
 
     # ------------------------------------------------------------------
@@ -606,36 +739,322 @@ class CapabilityRouter:
         )
 
     # ------------------------------------------------------------------
+    # HTTP handlers
+    # ------------------------------------------------------------------
+
+    async def _http_register_api(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        methods_payload = payload.get("methods")
+        if not isinstance(methods_payload, list) or not all(
+            isinstance(item, str) for item in methods_payload
+        ):
+            raise AstrBotError.invalid_input(
+                "http.register_api 的 methods 必须是 string 数组"
+            )
+
+        route = str(payload.get("route", "")).strip()
+        handler_capability = str(payload.get("handler_capability", "")).strip()
+        if not route or not handler_capability:
+            raise AstrBotError.invalid_input(
+                "http.register_api 需要 route 和 handler_capability"
+            )
+
+        plugin_id = payload.get("plugin_id")
+        plugin_name = str(plugin_id).strip() if isinstance(plugin_id, str) else ""
+        methods = sorted({method.upper() for method in methods_payload if method})
+        entry = {
+            "route": route,
+            "methods": methods,
+            "handler_capability": handler_capability,
+            "description": str(payload.get("description", "")),
+            "plugin_id": plugin_name or None,
+        }
+        self.http_api_store = [
+            item
+            for item in self.http_api_store
+            if not (
+                item.get("route") == route
+                and item.get("plugin_id") == entry["plugin_id"]
+                and item.get("methods") == methods
+            )
+        ]
+        self.http_api_store.append(entry)
+        return {}
+
+    async def _http_unregister_api(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        route = str(payload.get("route", "")).strip()
+        methods_payload = payload.get("methods")
+        if not isinstance(methods_payload, list) or not all(
+            isinstance(item, str) for item in methods_payload
+        ):
+            raise AstrBotError.invalid_input(
+                "http.unregister_api 的 methods 必须是 string 数组"
+            )
+
+        plugin_id = payload.get("plugin_id")
+        plugin_name = str(plugin_id).strip() if isinstance(plugin_id, str) else None
+        methods = {method.upper() for method in methods_payload if method}
+        updated: list[dict[str, Any]] = []
+        for entry in self.http_api_store:
+            if entry.get("route") != route:
+                updated.append(entry)
+                continue
+            if plugin_name is not None and entry.get("plugin_id") != plugin_name:
+                updated.append(entry)
+                continue
+            if not methods:
+                continue
+            remaining_methods = [
+                method for method in entry.get("methods", []) if method not in methods
+            ]
+            if remaining_methods:
+                updated.append({**entry, "methods": remaining_methods})
+        self.http_api_store = updated
+        return {}
+
+    async def _http_list_apis(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugin_id = payload.get("plugin_id")
+        plugin_name = str(plugin_id).strip() if isinstance(plugin_id, str) else None
+        apis = [
+            dict(entry)
+            for entry in self.http_api_store
+            if plugin_name is None or entry.get("plugin_id") == plugin_name
+        ]
+        return {"apis": apis}
+
+    def _register_http_capabilities(self) -> None:
+        self.register(
+            self._builtin_descriptor("http.register_api", "注册 HTTP 路由"),
+            call_handler=self._http_register_api,
+        )
+        self.register(
+            self._builtin_descriptor("http.unregister_api", "注销 HTTP 路由"),
+            call_handler=self._http_unregister_api,
+        )
+        self.register(
+            self._builtin_descriptor("http.list_apis", "列出 HTTP 路由"),
+            call_handler=self._http_list_apis,
+        )
+
+    # ------------------------------------------------------------------
+    # Metadata handlers
+    # ------------------------------------------------------------------
+
+    async def _metadata_get_plugin(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        name = str(payload.get("name", "")).strip()
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return {"plugin": None}
+        return {"plugin": dict(plugin.metadata)}
+
+    async def _metadata_list_plugins(
+        self, _request_id: str, _payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        plugins = [
+            dict(self._plugins[name].metadata) for name in sorted(self._plugins.keys())
+        ]
+        return {"plugins": plugins}
+
+    async def _metadata_get_plugin_config(
+        self, _request_id: str, payload: dict[str, Any], _token
+    ) -> dict[str, Any]:
+        name = str(payload.get("name", "")).strip()
+        caller_plugin_id = payload.get("plugin_id")
+        if (
+            isinstance(caller_plugin_id, str)
+            and caller_plugin_id
+            and name != caller_plugin_id
+        ):
+            return {"config": None}
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return {"config": None}
+        return {"config": dict(plugin.config)}
+
+    def _register_metadata_capabilities(self) -> None:
+        self.register(
+            self._builtin_descriptor("metadata.get_plugin", "获取单个插件元数据"),
+            call_handler=self._metadata_get_plugin,
+        )
+        self.register(
+            self._builtin_descriptor("metadata.list_plugins", "列出插件元数据"),
+            call_handler=self._metadata_list_plugins,
+        )
+        self.register(
+            self._builtin_descriptor(
+                "metadata.get_plugin_config",
+                "获取插件配置",
+            ),
+            call_handler=self._metadata_get_plugin_config,
+        )
+
+    # ------------------------------------------------------------------
     # Schema validation
     # ------------------------------------------------------------------
 
     def _validate_schema(
         self,
         schema: dict[str, Any] | None,
-        payload: dict[str, Any],
+        payload: Any,
     ) -> None:
-        def schema_allows_null(field_schema: Any) -> bool:
-            if not isinstance(field_schema, dict):
-                return False
-            if field_schema.get("type") == "null":
-                return True
-            any_of = field_schema.get("anyOf")
-            if not isinstance(any_of, list):
-                return False
-            return any(
-                isinstance(candidate, dict) and candidate.get("type") == "null"
-                for candidate in any_of
+        if not isinstance(schema, dict) or not schema:
+            return
+        self._validate_value(schema, payload, path="")
+
+    def _validate_value(
+        self,
+        schema: dict[str, Any],
+        value: Any,
+        *,
+        path: str,
+    ) -> None:
+        any_of = schema.get("anyOf")
+        if isinstance(any_of, list):
+            for candidate in any_of:
+                if not isinstance(candidate, dict):
+                    continue
+                try:
+                    self._validate_value(candidate, value, path=path)
+                    return
+                except AstrBotError:
+                    continue
+            raise AstrBotError.invalid_input(
+                f"{self._field_label(path)} 不符合允许的 schema 约束"
             )
 
-        if schema is None:
+        enum = schema.get("enum")
+        if isinstance(enum, list) and value not in enum:
+            raise AstrBotError.invalid_input(f"{self._field_label(path)} 必须是 {enum}")
+
+        schema_type = schema.get("type")
+        if schema_type == "object":
+            if not isinstance(value, dict):
+                if not path:
+                    raise AstrBotError.invalid_input("输入必须是 object")
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 object"
+                )
+            properties = schema.get("properties", {})
+            required_fields = schema.get("required", [])
+            for field_name in required_fields:
+                field_path = self._join_path(path, str(field_name))
+                if field_name not in value:
+                    raise AstrBotError.invalid_input(f"缺少必填字段：{field_path}")
+                field_schema = self._property_schema(properties, field_name)
+                if value[field_name] is None and not self._schema_allows_null(
+                    field_schema
+                ):
+                    raise AstrBotError.invalid_input(f"缺少必填字段：{field_path}")
+                self._validate_value(
+                    field_schema,
+                    value[field_name],
+                    path=field_path,
+                )
+            for field_name, field_value in value.items():
+                field_schema = properties.get(field_name)
+                if isinstance(field_schema, dict):
+                    self._validate_value(
+                        field_schema,
+                        field_value,
+                        path=self._join_path(path, str(field_name)),
+                    )
             return
-        if schema.get("type") == "object" and not isinstance(payload, dict):
-            raise AstrBotError.invalid_input("输入必须是 object")
-        properties = schema.get("properties", {})
-        for field_name in schema.get("required", []):
-            if field_name not in payload:
-                raise AstrBotError.invalid_input(f"缺少必填字段：{field_name}")
-            if payload[field_name] is None and not schema_allows_null(
-                properties.get(field_name)
-            ):
-                raise AstrBotError.invalid_input(f"缺少必填字段：{field_name}")
+
+        if schema_type == "array":
+            if not isinstance(value, list):
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 array"
+                )
+            item_schema = schema.get("items")
+            if isinstance(item_schema, dict):
+                for index, item in enumerate(value):
+                    self._validate_value(
+                        item_schema,
+                        item,
+                        path=self._index_path(path, index),
+                    )
+            return
+
+        if schema_type == "string":
+            if not isinstance(value, str):
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 string"
+                )
+            return
+
+        if schema_type == "integer":
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 integer"
+                )
+            return
+
+        if schema_type == "number":
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 number"
+                )
+            return
+
+        if schema_type == "boolean":
+            if not isinstance(value, bool):
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 boolean"
+                )
+            return
+
+        if schema_type == "null":
+            if value is not None:
+                raise AstrBotError.invalid_input(
+                    f"{self._field_label(path)} 必须是 null"
+                )
+            return
+
+    @staticmethod
+    def _field_label(path: str) -> str:
+        if not path:
+            return "输入"
+        return f"字段 {path}"
+
+    @staticmethod
+    def _join_path(path: str, field_name: str) -> str:
+        if not path:
+            return field_name
+        return f"{path}.{field_name}"
+
+    @staticmethod
+    def _index_path(path: str, index: int) -> str:
+        return f"{path}[{index}]" if path else f"[{index}]"
+
+    @staticmethod
+    def _property_schema(
+        properties: Any,
+        field_name: str,
+    ) -> dict[str, Any]:
+        if not isinstance(properties, dict):
+            return {}
+        field_schema = properties.get(field_name)
+        if isinstance(field_schema, dict):
+            return field_schema
+        return {}
+
+    @staticmethod
+    def _schema_allows_null(field_schema: Any) -> bool:
+        if not isinstance(field_schema, dict):
+            return False
+        if field_schema.get("type") == "null":
+            return True
+        any_of = field_schema.get("anyOf")
+        if not isinstance(any_of, list):
+            return False
+        return any(
+            isinstance(candidate, dict) and candidate.get("type") == "null"
+            for candidate in any_of
+        )
