@@ -1,0 +1,146 @@
+﻿{
+    "page": {
+        "description": "Управление настройками и поведением персонажей"
+    },
+    "buttons": {
+        "create": "Создать персонажа",
+        "createFirst": "Создать первого персонажа",
+        "edit": "Изменить",
+        "delete": "Удалить",
+        "cancel": "Отмена",
+        "save": "Сохранить",
+        "move": "Переместить",
+        "addDialogPair": "Добавить пример диалога"
+    },
+    "labels": {
+        "presetDialogs": "Примеры диалогов ({count})",
+        "createdAt": "Создан",
+        "updatedAt": "Обновлен"
+    },
+    "form": {
+        "personaId": "ID персонажа",
+        "systemPrompt": "Системный промпт",
+        "customErrorMessage": "Свое сообщение об ошибке (опционально)",
+        "customErrorMessageHelp": "Это сообщение будет отправлено пользователю при сбое запроса к LLM. Если оставить пустым, будет использовано системное сообщение по умолчанию.",
+        "presetDialogs": "Примеры диалогов",
+        "presetDialogsHelp": "Добавьте примеры взаимодействия, чтобы помочь AI лучше понять свою роль и стиль общения.",
+        "userMessage": "Сообщение пользователя",
+        "assistantMessage": "Ответ AI",
+        "tools": "Инструменты / MCP серверы",
+        "toolsHelp": "Выберите инструменты, доступные этому персонажу. Инструменты позволяют AI взаимодействовать с внешним миром: искать в интернете, выполнять расчеты и т.д.",
+        "toolsSelection": "Выбор инструментов",
+        "selectAllTools": "Выбрать все",
+        "clearAllTools": "Очистить всё",
+        "allSelected": "Выбрано всё",
+        "mcpServersQuickSelect": "Быстрый выбор MCP серверов",
+        "searchTools": "Поиск инструментов",
+        "selectedTools": "Выбранные инструменты",
+        "noToolsAvailable": "Нет доступных инструментов",
+        "noToolsFound": "Инструменты не найдены",
+        "loadingTools": "Загрузка инструментов...",
+        "allToolsAvailable": "Использовать все доступные инструменты",
+        "noToolsSelected": "Инструменты не выбраны",
+        "skills": "Навыки (Skills)",
+        "skillsHelp": "Выберите навыки, доступные этому персонажу. Навыки предоставляют AI готовые сценарии и правила работы.",
+        "skillsAllAvailable": "По умолчанию использовать все навыки",
+        "skillsSelectSpecific": "Выбрать определенные навыки",
+        "searchSkills": "Поиск навыков",
+        "selectedSkills": "Выбранные навыки",
+        "noSkillsAvailable": "Нет доступных навыков",
+        "noSkillsFound": "Навыки не найдены",
+        "loadingSkills": "Загрузка навыков...",
+        "allSkillsAvailable": "Использовать все доступные навыки",
+        "noSkillsSelected": "Навыки не выбраны",
+        "skillsRuntimeNoneWarning": "Среда выполнения Computer Use не задана. Навыки могут не работать, так как нет активного окружения.",
+        "createInFolder": "Будет создан в папке «{folder}»",
+        "rootFolder": "Все персонажи"
+    },
+    "dialog": {
+        "create": {
+            "title": "Создание персонажа"
+        },
+        "edit": {
+            "title": "Редактирование персонажа"
+        }
+    },
+    "empty": {
+        "title": "Персонажи не настроены",
+        "description": "Самое время создать одного!",
+        "folderEmpty": "Папка пуста",
+        "folderEmptyDescription": "Создайте нового персонажа или папку, чтобы начать"
+    },
+    "validation": {
+        "required": "Это поле обязательно для заполнения",
+        "minLength": "Минимум {min} символов",
+        "alphanumeric": "Разрешены только латинские буквы, цифры, подчёркивания и дефисы",
+        "dialogRequired": "{type} не может быть пустым",
+        "personaIdExists": "Персонаж с таким ID уже существует"
+    },
+    "messages": {
+        "loadError": "Не удалось загрузить список персонажей",
+        "saveSuccess": "Сохранено",
+        "saveError": "Ошибка сохранения",
+        "deleteConfirm": "Вы уверены, что хотите удалить персонажа «{id}»? Это действие необратимо.",
+        "deleteSuccess": "Удалено",
+        "deleteError": "Ошибка удаления"
+    },
+    "persona": {
+        "personasTitle": "Персонаж",
+        "toolsCount": "инстр.",
+        "skillsCount": "навыков",
+        "contextMenu": {
+            "moveTo": "Переместить в..."
+        },
+        "messages": {
+            "moveSuccess": "Персонаж перемещен",
+            "moveError": "Не удалось переместить персонажа"
+        }
+    },
+    "folder": {
+        "sidebarTitle": "Папки",
+        "rootFolder": "Корень",
+        "foldersTitle": "Папки",
+        "noFolders": "Папок нет",
+        "createButton": "Новая папка",
+        "searchPlaceholder": "Поиск папок...",
+        "form": {
+            "name": "Имя папки",
+            "description": "Описание (опционально)"
+        },
+        "validation": {
+            "nameRequired": "Имя папки не может быть пустым"
+        },
+        "contextMenu": {
+            "open": "Открыть",
+            "rename": "Переименовать",
+            "moveTo": "Переместить в...",
+            "delete": "Удалить"
+        },
+        "createDialog": {
+            "title": "Создать папку",
+            "createButton": "Создать"
+        },
+        "renameDialog": {
+            "title": "Переименовать папку"
+        },
+        "deleteDialog": {
+            "title": "Удаление папки",
+            "message": "Вы уверены, что хотите удалить папку «{name}»?",
+            "warning": "Все персонажи из этой папки будут перемещены в корневой каталог."
+        },
+        "messages": {
+            "createSuccess": "Папка создана",
+            "createError": "Ошибка создания папки",
+            "renameSuccess": "Папка переименована",
+            "renameError": "Ошибка переименования папки",
+            "deleteSuccess": "Папка удалена",
+            "deleteError": "Ошибка удаления папки"
+        }
+    },
+    "moveDialog": {
+        "title": "Перемещение",
+        "description": "Выберите папку для «{name}»",
+        "success": "Объект перемещен",
+        "error": "Ошибка перемещения"
+    }
+}
