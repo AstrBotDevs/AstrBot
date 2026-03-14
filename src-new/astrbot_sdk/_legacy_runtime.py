@@ -463,3 +463,38 @@ def resolve_plugin_lifecycle_hook(
             if callable(hook):
                 return hook
     return None
+
+
+async def run_plugin_lifecycle(
+    instances: list[Any],
+    method_name: str,
+    context: Any,
+) -> None:
+    """执行插件实例列表的生命周期钩子。
+
+    对每个实例查找对应的生命周期方法，按签名决定是否注入 context，然后调用。
+    """
+    for instance in instances:
+        hook = resolve_plugin_lifecycle_hook(instance, method_name)
+        if hook is None:
+            continue
+        args: list[Any] = []
+        try:
+            signature = inspect.signature(hook)
+        except (TypeError, ValueError):
+            signature = None
+        if signature is not None:
+            positional_params = [
+                parameter
+                for parameter in signature.parameters.values()
+                if parameter.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+            if positional_params:
+                args.append(context)
+        result = hook(*args)
+        if inspect.isawaitable(result):
+            await result

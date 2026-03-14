@@ -110,11 +110,13 @@ class InitializeOutput(_MessageBase):
 
     Attributes:
         peer: 接收方（核心）节点信息
+        protocol_version: 协商后的协议版本；未协商时可为空
         capabilities: 核心提供的能力描述符列表
         metadata: 扩展元数据
     """
 
     peer: PeerInfo
+    protocol_version: str | None = None
     capabilities: list[CapabilityDescriptor] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

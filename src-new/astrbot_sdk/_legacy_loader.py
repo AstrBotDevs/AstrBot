@@ -84,6 +84,19 @@ def _prepare_legacy_package(package_name: str, plugin_dir: Path) -> None:
     importlib.invalidate_caches()
 
 
+def _iter_main_module_component_classes(module: types.ModuleType) -> list[type[Any]]:
+    component_classes: list[type[Any]] = []
+    for candidate in module.__dict__.values():
+        if not inspect.isclass(candidate):
+            continue
+        if candidate.__module__ != module.__name__:
+            continue
+        if not issubclass(candidate, Star) or candidate is Star:
+            continue
+        component_classes.append(candidate)
+    return component_classes
+
+
 def load_legacy_main_component_classes(
     *,
     plugin_name: str,
@@ -99,15 +112,7 @@ def load_legacy_main_component_classes(
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
-    component_classes: list[type[Any]] = []
-    for _, candidate in inspect.getmembers(module, inspect.isclass):
-        if candidate.__module__ != module.__name__:
-            continue
-        if not issubclass(candidate, Star) or candidate is Star:
-            continue
-        component_classes.append(candidate)
-    component_classes.sort(key=lambda cls: cls.__name__)
-    return component_classes
+    return _iter_main_module_component_classes(module)
 
 
 def resolve_plugin_component_classes(

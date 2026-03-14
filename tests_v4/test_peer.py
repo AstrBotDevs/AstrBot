@@ -345,6 +345,7 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
             transport=self.right,
             peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
             protocol_version="2.0",
+            supported_protocol_versions=["1.0", "2.0"],
         )
 
         await core.start()
@@ -358,6 +359,46 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(plugin.wait_closed(), timeout=1.0)
         self.assertTrue(core._closed)
         self.assertTrue(plugin._closed)
+
+    async def test_initialize_negotiates_lower_minor_protocol_version(self) -> None:
+        core = Peer(
+            transport=self.left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+            protocol_version="1.0",
+            supported_protocol_versions=["1.0"],
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=[],
+                    metadata={},
+                ),
+            )
+        )
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+            protocol_version="1.1",
+            supported_protocol_versions=["1.0", "1.1"],
+        )
+
+        await core.start()
+        await plugin.start()
+
+        output = await plugin.initialize([])
+
+        self.assertEqual(output.protocol_version, "1.0")
+        self.assertEqual(plugin.negotiated_protocol_version, "1.0")
+        self.assertEqual(core.negotiated_protocol_version, "1.0")
+        self.assertEqual(
+            core.remote_metadata["supported_protocol_versions"], ["1.1", "1.0"]
+        )
+        self.assertEqual(plugin.remote_metadata["negotiated_protocol_version"], "1.0")
+
+        await plugin.stop()
+        await core.stop()
 
     async def test_wait_until_remote_initialized_raises_if_connection_closes_first(
         self,

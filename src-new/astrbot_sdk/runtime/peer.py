@@ -85,7 +85,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
 from ..context import CancelToken
@@ -109,6 +109,61 @@ InvokeHandler = Callable[
 ]
 CancelHandler = Callable[[str], Awaitable[None]]
 
+SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY = "supported_protocol_versions"
+NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY = "negotiated_protocol_version"
+
+
+def _dedupe_protocol_versions(
+    versions: Sequence[str] | None, *, preferred_version: str
+) -> list[str]:
+    ordered_versions: list[str] = [preferred_version]
+    if versions is not None:
+        ordered_versions.extend(versions)
+    deduped: list[str] = []
+    for version in ordered_versions:
+        if not isinstance(version, str) or not version:
+            continue
+        if version not in deduped:
+            deduped.append(version)
+    return deduped
+
+
+def _parse_protocol_version(version: str) -> tuple[int, int] | None:
+    major, dot, minor = version.partition(".")
+    if not dot or not major.isdigit() or not minor.isdigit():
+        return None
+    return int(major), int(minor)
+
+
+def _select_negotiated_protocol_version(
+    requested_version: str,
+    remote_metadata: dict[str, Any],
+    local_supported_versions: Sequence[str],
+) -> str | None:
+    if requested_version in local_supported_versions:
+        return requested_version
+    requested_key = _parse_protocol_version(requested_version)
+    if requested_key is None:
+        return None
+    remote_supported = remote_metadata.get(SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY)
+    if not isinstance(remote_supported, (list, tuple)):
+        return None
+    local_supported_set = set(local_supported_versions)
+    compatible_versions: list[tuple[tuple[int, int], str]] = []
+    for version in remote_supported:
+        if not isinstance(version, str) or version not in local_supported_set:
+            continue
+        parsed_version = _parse_protocol_version(version)
+        if parsed_version is None:
+            continue
+        if parsed_version[0] != requested_key[0] or parsed_version > requested_key:
+            continue
+        compatible_versions.append((parsed_version, version))
+    if not compatible_versions:
+        return None
+    compatible_versions.sort(reverse=True)
+    return compatible_versions[0][1]
+
 
 class Peer:
     """表示协议连接中的一个对等端。
@@ -124,17 +179,24 @@ class Peer:
         transport,
         peer_info: PeerInfo,
         protocol_version: str = "1.0",
+        supported_protocol_versions: Sequence[str] | None = None,
     ) -> None:
         """创建一个协议对等端实例。
 
         Args:
             transport: 底层传输实现，负责发送字符串消息并回调入站消息。
             peer_info: 当前端点对外声明的身份信息。
-            protocol_version: 当前端点支持的协议版本，用于初始化握手校验。
+            protocol_version: 当前端点首选的协议版本，用于初始化握手。
+            supported_protocol_versions: 当前端点可接受的协议版本列表。
         """
         self.transport = transport
         self.peer_info = peer_info
         self.protocol_version = protocol_version
+        self.supported_protocol_versions = _dedupe_protocol_versions(
+            supported_protocol_versions,
+            preferred_version=protocol_version,
+        )
+        self.negotiated_protocol_version: str | None = None
         self.remote_peer: PeerInfo | None = None
         self.remote_handlers = []
         self.remote_provided_capabilities = []
@@ -175,6 +237,7 @@ class Peer:
         self._closed.clear()
         self._unusable = False
         self._stopping = False
+        self.negotiated_protocol_version = None
         self._remote_initialized.clear()
         self.transport.set_message_handler(self._handle_raw_message)
         await self.transport.start()
@@ -273,6 +336,10 @@ class Peer:
         """
         self._ensure_usable()
         request_id = self._next_id()
+        handshake_metadata = dict(metadata or {})
+        handshake_metadata[SUPPORTED_PROTOCOL_VERSIONS_METADATA_KEY] = list(
+            self.supported_protocol_versions
+        )
         future: asyncio.Future[ResultMessage] = (
             asyncio.get_running_loop().create_future()
         )
@@ -284,7 +351,7 @@ class Peer:
                 peer=self.peer_info,
                 handlers=list(handlers),
                 provided_capabilities=list(provided_capabilities or []),
-                metadata=metadata or {},
+                metadata=handshake_metadata,
             )
         )
         result = await future
@@ -297,10 +364,25 @@ class Peer:
                 result.error.model_dump() if result.error else {}
             )
         output = InitializeOutput.model_validate(result.output)
+        negotiated_protocol_version = (
+            output.protocol_version
+            or output.metadata.get(NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY)
+            or self.protocol_version
+        )
+        if (
+            not isinstance(negotiated_protocol_version, str)
+            or negotiated_protocol_version not in self.supported_protocol_versions
+        ):
+            self._unusable = True
+            await self.stop()
+            raise AstrBotError.protocol_version_mismatch(
+                f"对端返回了当前端点不支持的协商协议版本：{negotiated_protocol_version}"
+            )
         self.remote_peer = output.peer
         self.remote_capabilities = output.capabilities
         self.remote_capability_map = {item.name: item for item in output.capabilities}
         self.remote_metadata = output.metadata
+        self.negotiated_protocol_version = negotiated_protocol_version
         self._remote_initialized.set()
         return output
 
@@ -458,7 +540,7 @@ class Peer:
         self.remote_provided_capability_map = {
             item.name: item for item in message.provided_capabilities
         }
-        self.remote_metadata = message.metadata
+        self.remote_metadata = dict(message.metadata)
         if self._initialize_handler is None:
             await self._reject_initialize(
                 message,
@@ -466,16 +548,37 @@ class Peer:
             )
             return
 
-        if message.protocol_version != self.protocol_version:
+        negotiated_protocol_version = _select_negotiated_protocol_version(
+            message.protocol_version,
+            self.remote_metadata,
+            self.supported_protocol_versions,
+        )
+        if negotiated_protocol_version is None:
+            supported_versions = ", ".join(self.supported_protocol_versions)
             await self._reject_initialize(
                 message,
                 AstrBotError.protocol_version_mismatch(
-                    f"服务端支持协议版本 {self.protocol_version}，客户端请求版本 {message.protocol_version}"
+                    "服务端支持协议版本 "
+                    f"{supported_versions}，客户端请求版本 {message.protocol_version}"
                 ),
             )
             return
 
+        self.negotiated_protocol_version = negotiated_protocol_version
+        self.remote_metadata[NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY] = (
+            negotiated_protocol_version
+        )
         output = await self._initialize_handler(message)
+        response_metadata = dict(output.metadata)
+        response_metadata[NEGOTIATED_PROTOCOL_VERSION_METADATA_KEY] = (
+            negotiated_protocol_version
+        )
+        output = output.model_copy(
+            update={
+                "protocol_version": negotiated_protocol_version,
+                "metadata": response_metadata,
+            }
+        )
         await self._send(
             ResultMessage(
                 id=message.id,

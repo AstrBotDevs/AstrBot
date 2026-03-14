@@ -240,6 +240,27 @@ class TestStdioTransportFileMode:
         await transport.stop()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "payload",
+        ["first\nsecond", "first\rsecond", "first\r\nsecond"],
+    )
+    async def test_send_rejects_embedded_newlines(self, payload):
+        """send() should reject payloads containing raw embedded newlines."""
+        stdout = MagicMock()
+        stdout.write = MagicMock()
+        stdout.flush = MagicMock()
+        transport = StdioTransport(stdout=stdout)
+
+        with patch("sys.stdin"):
+            await transport.start()
+
+        with pytest.raises(ValueError, match="原始换行符"):
+            await transport.send(payload)
+        stdout.write.assert_not_called()
+
+        await transport.stop()
+
+    @pytest.mark.asyncio
     async def test_send_raises_without_stdout(self):
         """send() should raise if stdout is None."""
         transport = StdioTransport(stdout=None)

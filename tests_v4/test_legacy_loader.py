@@ -88,6 +88,38 @@ def test_load_legacy_main_component_classes_supports_relative_imports():
         assert classes[0].helper_value == "legacy-ok"
 
 
+def test_load_legacy_main_component_classes_preserves_definition_order():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        plugin_dir = Path(temp_dir) / "legacy_plugin"
+        plugin_dir.mkdir()
+        (plugin_dir / "main.py").write_text(
+            textwrap.dedent(
+                """\
+                from astrbot_sdk.api.star import Star
+
+
+                class ZebraComponent(Star):
+                    pass
+
+
+                class AlphaComponent(Star):
+                    pass
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        classes = load_legacy_main_component_classes(
+            plugin_name="legacy-plugin",
+            plugin_dir=plugin_dir,
+        )
+
+        assert [cls.__name__ for cls in classes] == [
+            "ZebraComponent",
+            "AlphaComponent",
+        ]
+
+
 def test_load_plugin_manifest_payload_prefers_plugin_yaml_when_present():
     with tempfile.TemporaryDirectory() as temp_dir:
         plugin_dir = Path(temp_dir) / "plugin"
