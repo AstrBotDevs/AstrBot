@@ -73,6 +73,7 @@ omit = [
     "*/tests/*",
     "*/__pycache__/*",
     "*/_legacy_api.py",
+    "*/plugins/*"
 ]
 
 [tool.coverage.report]

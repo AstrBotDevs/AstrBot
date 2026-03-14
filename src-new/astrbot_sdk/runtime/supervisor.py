@@ -537,6 +537,7 @@ class SupervisorRuntime:
         discovery = discover_plugins(self.plugins_dir)
         self.skipped_plugins = dict(discovery.skipped_plugins)
         plan_result = self.env_manager.plan(discovery.plugins)
+        logger.info(f"发现 {len(discovery.plugins)} 个插件，{len(plan_result.groups)} 个环境组")
         self.skipped_plugins.update(plan_result.skipped_plugins)
         try:
             planned_sessions: list[WorkerSession] = []
@@ -598,7 +599,7 @@ class SupervisorRuntime:
 
             aggregated_handlers = list(self.handler_to_worker.keys())
             logger.info(
-                "Loaded plugins: {}", ", ".join(sorted(self.loaded_plugins)) or "none"
+                "Loaded plugins: \n{}", "\n ".join(sorted(self.loaded_plugins)) or "none"
             )
 
             await self.peer.start()

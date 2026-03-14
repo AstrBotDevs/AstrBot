@@ -304,7 +304,7 @@ class TestCliModule:
         with runner.isolated_filesystem():
             result = runner.invoke(cli, ["init", "demo-plugin"])
 
-            plugin_dir = Path("demo-plugin")
+            plugin_dir = Path("astrbot_plugin_demo_plugin")
             manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
             main_file = (plugin_dir / "main.py").read_text(encoding="utf-8")
             test_file = (plugin_dir / "tests" / "test_plugin.py").read_text(
@@ -313,13 +313,88 @@ class TestCliModule:
 
         assert result.exit_code == 0
         assert "已创建插件骨架" in result.output
-        assert "name: demo_plugin" in manifest
-        assert (
-            f'python: "{sys.version_info.major}.{sys.version_info.minor}"' in manifest
-        )
-        assert "class DemoPlugin(Star):" in main_file
+        assert "name: astrbot_plugin_demo_plugin" in manifest
+        assert 'display_name: "demo-plugin"' in manifest
+        assert 'author: ""' in manifest
+        assert 'version: "1.0.0"' in manifest
+        assert 'python: "3.12"' in manifest
+        assert "class AstrbotPluginDemoPlugin(Star):" in main_file
         assert "MockContext" in test_file
         assert "MockMessageEvent" in test_file
+
+    def test_init_command_normalizes_spaces_to_underscores(self):
+        """init should normalize spaces in the generated directory and manifest name."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            result = runner.invoke(cli, ["init", "demo plugin"])
+
+            plugin_dir = Path("astrbot_plugin_demo_plugin")
+            manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            assert plugin_dir.is_dir()
+
+        assert result.exit_code == 0
+        assert "name: astrbot_plugin_demo_plugin" in manifest
+        assert 'display_name: "demo plugin"' in manifest
+
+    def test_init_command_converts_legacy_prefix_to_underscore_prefix(self):
+        """init should translate the legacy astrbot-plugin prefix to astrbot_plugin."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            result = runner.invoke(cli, ["init", "astrbot-plugin-demo"])
+
+            plugin_dir = Path("astrbot_plugin_demo")
+            manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            assert plugin_dir.is_dir()
+
+        assert result.exit_code == 0
+        assert "name: astrbot_plugin_demo" in manifest
+
+    def test_init_command_enters_interactive_mode_without_name(self):
+        """init without a name should prompt for plugin metadata interactively."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                ["init"],
+                input="hello world\nalice\n2.3.4\n",
+            )
+
+            plugin_dir = Path("astrbot_plugin_hello_world")
+            manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            assert plugin_dir.is_dir()
+
+        assert result.exit_code == 0
+        assert "插件名字" in result.output
+        assert "作者名字" in result.output
+        assert "版本" in result.output
+        assert "name: astrbot_plugin_hello_world" in manifest
+        assert 'display_name: "hello world"' in manifest
+        assert 'author: "alice"' in manifest
+        assert 'version: "2.3.4"' in manifest
+        assert 'python: "3.12"' in manifest
+
+    def test_init_command_reprompts_for_empty_interactive_name(self):
+        """init interactive mode should reject an empty plugin name and keep prompting."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                ["init"],
+                input="\nhello world\n\n\n",
+            )
+
+            plugin_dir = Path("astrbot_plugin_hello_world")
+            manifest = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            assert plugin_dir.is_dir()
+
+        assert result.exit_code == 0
+        assert "插件名字不能为空" in result.output
+        assert 'author: ""' in manifest
+        assert 'version: "1.0.0"' in manifest
 
     def test_validate_command_checks_real_plugin_fixture(self):
         """validate should reuse loader-based discovery against a real v4 fixture."""
@@ -379,11 +454,11 @@ class TestCliModule:
                 [
                     "build",
                     "--plugin-dir",
-                    "buildable-plugin",
+                    "astrbot_plugin_buildable_plugin",
                 ],
             )
 
-            artifact_dir = Path("buildable-plugin") / "dist"
+            artifact_dir = Path("astrbot_plugin_buildable_plugin") / "dist"
             artifacts = sorted(artifact_dir.glob("*.zip"))
             assert len(artifacts) == 1
             with zipfile.ZipFile(artifacts[0]) as archive:
