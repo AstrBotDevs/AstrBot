@@ -30,19 +30,19 @@ my_plugin/
 ### 2. 校验插件
 
 ```bash
-astrbot-sdk validate --plugin-dir .
+astrbot-sdk validate
 ```
 
 ### 3. 本地运行一次
 
 ```bash
-astrbot-sdk dev --local --plugin-dir . --event-text hello
+astrbot-sdk dev --local --event-text hello
 ```
 
 ### 4. 开启热重载
 
 ```bash
-astrbot-sdk dev --local --watch --plugin-dir . --event-text hello
+astrbot-sdk dev --local --watch --event-text hello
 ```
 
 保存 `main.py` 后，本地 harness 会自动重载并重新派发这条消息。
@@ -79,6 +79,8 @@ components:
 
 - `MessageEvent.text`: 当前消息文本
 - `MessageEvent.reply(text)`: 回复文本
+- `MessageEvent.reply_image(image_url)`: 回复图片
+- `MessageEvent.reply_chain(chain)`: 回复消息链
 - `Context.plugin_id`: 当前插件 ID
 - `Context.logger`: 已绑定插件 ID 的日志器
 
@@ -104,22 +106,27 @@ components:
 
 - `ctx.metadata.get_current_plugin()`
 - `ctx.metadata.get_plugin_config()`
-- `ctx.http.register_api(...)`
+- `ctx.http.register_api(handler=self.http_handler)`
 - `ctx.http.unregister_api(...)`
 - `ctx.http.list_apis()`
+
+### 自定义 capability
+
+- `@provide_capability(..., input_model=MyInput, output_model=MyOutput)`
+- `ctx.http.register_api(handler=self.http_handler)` 可以直接复用上面的 capability 方法引用
 
 ## 本地调试
 
 ### 单次派发
 
 ```bash
-astrbot-sdk dev --local --plugin-dir . --event-text hello
+astrbot-sdk dev --local --event-text hello
 ```
 
 ### 交互模式
 
 ```bash
-astrbot-sdk dev --local --plugin-dir . --interactive
+astrbot-sdk dev --local --interactive
 ```
 
 交互模式支持：
@@ -135,7 +142,7 @@ astrbot-sdk dev --local --plugin-dir . --interactive
 ### 热重载
 
 ```bash
-astrbot-sdk dev --local --watch --plugin-dir . --interactive
+astrbot-sdk dev --local --watch --interactive
 ```
 
 适合边改边测。代码变更后会自动重建插件运行时。
@@ -167,6 +174,21 @@ async def test_hello_handler():
 
 ```bash
 python -m pytest tests/test_plugin.py -v
+```
+
+如果你想走真实 dispatch 链，而不是直接调用 handler：
+
+```python
+from pathlib import Path
+
+from astrbot_sdk.testing import PluginHarness
+
+
+async def test_dispatch():
+    plugin_dir = Path(__file__).resolve().parents[1]
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+        records = await harness.dispatch_text("hello")
+    assert any(record.text == "Hello, World!" for record in records)
 ```
 
 ## 示例插件

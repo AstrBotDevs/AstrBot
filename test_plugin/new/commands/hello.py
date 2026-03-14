@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import asyncio
 
+from pydantic import BaseModel, Field
+
 from astrbot_sdk import (
     Context,
     MessageEvent,
@@ -42,6 +44,33 @@ from astrbot_sdk import (
     require_admin,
 )
 from astrbot_sdk.context import CancelToken
+
+
+class EchoCapabilityInput(BaseModel):
+    text: str
+
+
+class EchoCapabilityOutput(BaseModel):
+    echo: str
+    plugin_id: str
+
+
+class StreamCapabilityInput(BaseModel):
+    text: str
+
+
+class StreamCapabilityOutput(BaseModel):
+    items: list[dict[str, object]]
+
+
+class HttpHandlerInput(BaseModel):
+    method: str = "GET"
+    body: dict[str, object] = Field(default_factory=dict)
+
+
+class HttpHandlerOutput(BaseModel):
+    status: int
+    body: dict[str, object]
 
 
 class HelloPlugin(Star):
@@ -210,12 +239,11 @@ class HelloPlugin(Star):
         # Send text
         await ctx.platform.send(target, f"成员数: {len(members)}")
 
-        # Send image
-        await ctx.platform.send_image(target, "https://example.com/demo.png")
+        # Send image back to the current conversation
+        await event.reply_image("https://example.com/demo.png")
 
-        # Send message chain
-        await ctx.platform.send_chain(
-            target,
+        # Send message chain back to the current conversation
+        await event.reply_chain(
             [
                 {"type": "Plain", "text": "消息链 "},
                 {"type": "Image", "file": "https://example.com/demo.png"},
@@ -225,8 +253,7 @@ class HelloPlugin(Star):
     @on_command("announce", description="发送富消息链")
     async def announce(self, event: MessageEvent, ctx: Context) -> None:
         """Send rich message chain."""
-        await ctx.platform.send_chain(
-            event.target or event.session_id,
+        await event.reply_chain(
             [
                 {"type": "Plain", "text": "公告: "},
                 {"type": "Plain", "text": event.text or "无内容"},
@@ -242,7 +269,7 @@ class HelloPlugin(Star):
         """Register a custom HTTP API endpoint."""
         await ctx.http.register_api(
             route="/demo/api",
-            handler_capability="demo.http_handler",
+            handler=self.http_handler_capability,
             methods=["GET", "POST"],
             description="Demo HTTP API",
         )
@@ -345,19 +372,8 @@ class HelloPlugin(Star):
     @provide_capability(
         "demo.echo",
         description="回显输入文本",
-        input_schema={
-            "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "echo": {"type": "string"},
-                "plugin_id": {"type": "string"},
-            },
-            "required": ["echo", "plugin_id"],
-        },
+        input_model=EchoCapabilityInput,
+        output_model=EchoCapabilityOutput,
     )
     async def echo_capability(
         self,
@@ -377,21 +393,8 @@ class HelloPlugin(Star):
     @provide_capability(
         "demo.stream",
         description="流式回显输入文本",
-        input_schema={
-            "type": "object",
-            "properties": {"text": {"type": "string"}},
-            "required": ["text"],
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                }
-            },
-            "required": ["items"],
-        },
+        input_model=StreamCapabilityInput,
+        output_model=StreamCapabilityOutput,
         supports_stream=True,
         cancelable=True,
     )
@@ -412,20 +415,8 @@ class HelloPlugin(Star):
     @provide_capability(
         "demo.http_handler",
         description="处理 /demo/api HTTP 请求",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "method": {"type": "string"},
-                "body": {"type": "object"},
-            },
-        },
-        output_schema={
-            "type": "object",
-            "properties": {
-                "status": {"type": "integer"},
-                "body": {"type": "object"},
-            },
-        },
+        input_model=HttpHandlerInput,
+        output_model=HttpHandlerOutput,
     )
     async def http_handler_capability(
         self,

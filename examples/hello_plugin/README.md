@@ -18,6 +18,7 @@ hello_plugin/
 - 如何定义一个 `Star` 插件
 - 如何注册命令 handler
 - 如何使用 `MessageEvent.reply()`
+- 如何用 `PluginHarness.from_plugin_dir()` 走真实 dispatch 链
 - 如何从 `Context` 里读取当前插件元数据
 - 如何用 `MockContext` / `MockMessageEvent` 写插件测试
 
@@ -26,9 +27,10 @@ hello_plugin/
 在仓库根目录执行：
 
 ```bash
-astrbot-sdk validate --plugin-dir examples/hello_plugin
-astrbot-sdk dev --local --plugin-dir examples/hello_plugin --event-text hello
-astrbot-sdk dev --local --watch --plugin-dir examples/hello_plugin --event-text hello
+cd examples/hello_plugin
+astrbot-sdk validate
+astrbot-sdk dev --local --event-text hello
+astrbot-sdk dev --local --watch --event-text hello
 ```
 
 ## 测试
@@ -41,3 +43,5 @@ python -m pytest examples/hello_plugin/tests/test_plugin.py -v
 
 - `hello`: 最小命令，收到 `hello` 时回复 `Hello, World!`
 - `about`: 读取 `ctx.metadata.get_current_plugin()`，演示 capability 客户端的基础用法
+- `tests/test_plugin.py`: 展示 direct handler test
+- `tests/test_dispatch.py`: 展示 `PluginHarness.from_plugin_dir()` dispatch test

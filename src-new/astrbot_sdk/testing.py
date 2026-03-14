@@ -20,7 +20,7 @@ import shlex
 import typing
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TextIO, get_type_hints
+from typing import Any, Mapping, TextIO, get_type_hints
 
 from .context import CancelToken, Context as RuntimeContext
 from .errors import AstrBotError
@@ -421,6 +421,31 @@ def _plugin_metadata_from_spec(
     }
 
 
+def _normalize_plugin_metadata(
+    plugin_id: str,
+    plugin_metadata: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if plugin_metadata is None:
+        plugin_metadata = {}
+    declared_name = plugin_metadata.get("name")
+    if declared_name is not None and str(declared_name) != plugin_id:
+        raise ValueError(
+            "MockContext.plugin_metadata['name'] 必须与 plugin_id 一致，"
+            f"当前收到 {declared_name!r} != {plugin_id!r}"
+        )
+    description = plugin_metadata.get("description")
+    if description is None:
+        description = plugin_metadata.get("desc", "")
+    return {
+        "name": plugin_id,
+        "display_name": str(plugin_metadata.get("display_name") or plugin_id),
+        "description": str(description or ""),
+        "author": str(plugin_metadata.get("author") or ""),
+        "version": str(plugin_metadata.get("version") or "0.0.0"),
+        "enabled": bool(plugin_metadata.get("enabled", True)),
+    }
+
+
 class MockContext(RuntimeContext):
     """直接用于 handler 单元测试的轻量运行时上下文。"""
 
@@ -431,6 +456,7 @@ class MockContext(RuntimeContext):
         logger: Any | None = None,
         cancel_token: CancelToken | None = None,
         platform_sink: StdoutPlatformSink | None = None,
+        plugin_metadata: Mapping[str, Any] | None = None,
     ) -> None:
         self.platform_sink = platform_sink or StdoutPlatformSink()
         self.router = MockCapabilityRouter(platform_sink=self.platform_sink)
@@ -442,14 +468,7 @@ class MockContext(RuntimeContext):
             logger=logger,
         )
         self.router.upsert_plugin(
-            metadata={
-                "name": plugin_id,
-                "display_name": plugin_id,
-                "description": "",
-                "author": "",
-                "version": "0.0.0",
-                "enabled": True,
-            },
+            metadata=_normalize_plugin_metadata(plugin_id, plugin_metadata),
             config={},
         )
         self.llm = MockLLMClient(self.llm, self.router)
@@ -544,6 +563,30 @@ class PluginHarness:
         self.lifecycle_context: RuntimeContext | None = None
         self._request_counter = 0
         self._started = False
+
+    @classmethod
+    def from_plugin_dir(
+        cls,
+        plugin_dir: str | Path,
+        *,
+        session_id: str = "local-session",
+        user_id: str = "local-user",
+        platform: str = "test",
+        group_id: str | None = None,
+        event_type: str = "message",
+        platform_sink: StdoutPlatformSink | None = None,
+    ) -> "PluginHarness":
+        return cls(
+            LocalRuntimeConfig(
+                plugin_dir=Path(plugin_dir),
+                session_id=session_id,
+                user_id=user_id,
+                platform=platform,
+                group_id=group_id,
+                event_type=event_type,
+            ),
+            platform_sink=platform_sink,
+        )
 
     async def __aenter__(self) -> "PluginHarness":
         await self.start()

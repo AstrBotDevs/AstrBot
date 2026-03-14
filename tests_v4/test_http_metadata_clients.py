@@ -9,6 +9,8 @@ import pytest
 from astrbot_sdk.clients.http import HTTPClient
 from astrbot_sdk.clients.metadata import MetadataClient, PluginMetadata
 from astrbot_sdk.clients._proxy import CapabilityProxy
+from astrbot_sdk.decorators import provide_capability
+from astrbot_sdk.errors import AstrBotError
 
 
 class TestHTTPClient:
@@ -58,6 +60,74 @@ class TestHTTPClient:
 
         call_args = mock_proxy.call.call_args
         assert call_args[0][1]["methods"] == ["GET"]
+
+    @pytest.mark.asyncio
+    async def test_register_api_accepts_capability_handler_reference(
+        self, http_client, mock_proxy
+    ):
+        class DemoPlugin:
+            @provide_capability(
+                "demo.http_handler",
+                description="handle http requests",
+            )
+            async def http_handler(self, payload):
+                return payload
+
+        plugin = DemoPlugin()
+        await http_client.register_api(
+            route="/test-api",
+            handler=plugin.http_handler,
+            methods=["POST"],
+        )
+
+        mock_proxy.call.assert_called_once_with(
+            "http.register_api",
+            {
+                "route": "/test-api",
+                "methods": ["POST"],
+                "handler_capability": "demo.http_handler",
+                "description": "",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_register_api_rejects_conflicting_handler_inputs(
+        self, http_client, mock_proxy
+    ):
+        class DemoPlugin:
+            @provide_capability(
+                "demo.http_handler",
+                description="handle http requests",
+            )
+            async def http_handler(self, payload):
+                return payload
+
+        plugin = DemoPlugin()
+        with pytest.raises(AstrBotError, match="不能同时提供"):
+            await http_client.register_api(
+                route="/test-api",
+                handler_capability="demo.http_handler",
+                handler=plugin.http_handler,
+            )
+        mock_proxy.call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_register_api_rejects_non_capability_handler(
+        self, http_client, mock_proxy
+    ):
+        class DemoPlugin:
+            async def plain_method(self, payload):
+                return payload
+
+        plugin = DemoPlugin()
+        with pytest.raises(
+            AstrBotError, match="需要传入使用 @provide_capability 声明的方法"
+        ):
+            await http_client.register_api(
+                route="/test-api",
+                handler=plugin.plain_method,
+            )
+        mock_proxy.call.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_unregister_api_calls_proxy(self, http_client, mock_proxy):

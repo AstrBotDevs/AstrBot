@@ -64,9 +64,46 @@ def test_init_plugin_template_includes_readme(tmp_path: Path, monkeypatch) -> No
     _init_plugin(target.name)
 
     assert (target / "README.md").exists()
-    assert "astrbot-sdk dev --local --watch" in (target / "README.md").read_text(
-        encoding="utf-8"
+    readme = (target / "README.md").read_text(encoding="utf-8")
+    test_file = (target / "tests" / "test_plugin.py").read_text(encoding="utf-8")
+
+    assert "astrbot-sdk dev --local --watch --event-text hello" in readme
+    assert "PluginHarness.from_plugin_dir" in test_file
+    assert "test_hello_dispatch" in test_file
+
+
+def test_mock_context_accepts_plugin_metadata() -> None:
+    from astrbot_sdk.testing import MockContext
+
+    ctx = MockContext(
+        plugin_id="demo_plugin",
+        plugin_metadata={
+            "display_name": "Demo Plugin",
+            "author": "tester",
+            "version": "1.2.3",
+        },
     )
+
+    plugin = ctx.router._plugins["demo_plugin"].metadata
+    assert plugin["display_name"] == "Demo Plugin"
+    assert plugin["author"] == "tester"
+    assert plugin["version"] == "1.2.3"
+
+
+def test_plugin_harness_from_plugin_dir_builds_expected_config() -> None:
+    from astrbot_sdk.testing import PluginHarness
+
+    plugin_dir = _repo_root() / "examples" / "hello_plugin"
+
+    harness = PluginHarness.from_plugin_dir(
+        plugin_dir,
+        session_id="custom-session",
+        platform="qq",
+    )
+
+    assert harness.config.plugin_dir == plugin_dir
+    assert harness.config.session_id == "custom-session"
+    assert harness.config.platform == "qq"
 
 
 @pytest.mark.asyncio
@@ -101,17 +138,62 @@ async def test_plugin_harness_supports_metadata_and_http_commands() -> None:
 
 @pytest.mark.asyncio
 async def test_example_hello_plugin_dispatches_commands() -> None:
-    from astrbot_sdk.testing import LocalRuntimeConfig, PluginHarness
+    from astrbot_sdk.testing import PluginHarness
 
     plugin_dir = _repo_root() / "examples" / "hello_plugin"
 
-    async with PluginHarness(LocalRuntimeConfig(plugin_dir=plugin_dir)) as harness:
+    async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
         hello_records = await harness.dispatch_text("hello")
         about_records = await harness.dispatch_text("about")
 
     assert any(record.text == "Hello, World!" for record in hello_records)
     # about 命令返回 display_name "Hello Plugin"，不是 name "hello_plugin"
     assert any("Hello Plugin" in (record.text or "") for record in about_records)
+
+
+def test_dev_infers_plugin_dir_from_current_directory() -> None:
+    plugin_dir = _repo_root() / "examples" / "hello_plugin"
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "astrbot_sdk",
+            "dev",
+            "--local",
+            "--event-text",
+            "hello",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_source_env(),
+        cwd=plugin_dir,
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert "[text][local-session] Hello, World!" in process.stdout
+
+
+def test_dev_requires_plugin_dir_or_plugin_yaml_in_cwd(tmp_path: Path) -> None:
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "astrbot_sdk",
+            "dev",
+            "--local",
+            "--event-text",
+            "hello",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_source_env(),
+        cwd=tmp_path,
+    )
+
+    assert process.returncode != 0
+    assert "当前目录未找到 plugin.yaml" in process.stderr
 
 
 @pytest.mark.asyncio

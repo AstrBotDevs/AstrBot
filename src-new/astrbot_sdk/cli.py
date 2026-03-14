@@ -253,7 +253,6 @@ class _ReloadableLocalDevRunner:
         state: dict[str, Any],
         plugin_load_error: type[Exception],
         plugin_execution_error: type[Exception],
-        local_runtime_config,
         plugin_harness,
         stdout_platform_sink,
     ) -> None:
@@ -261,7 +260,6 @@ class _ReloadableLocalDevRunner:
         self.state = state
         self._plugin_load_error = plugin_load_error
         self._plugin_execution_error = plugin_execution_error
-        self._local_runtime_config = local_runtime_config
         self._plugin_harness = plugin_harness
         self._stdout_platform_sink = stdout_platform_sink
         self._harness = None
@@ -274,15 +272,13 @@ class _ReloadableLocalDevRunner:
     async def reload(self) -> bool:
         async with self._lock:
             await self._stop_harness()
-            harness = self._plugin_harness(
-                self._local_runtime_config(
-                    plugin_dir=self.plugin_dir,
-                    session_id=str(self.state["session_id"]),
-                    user_id=str(self.state["user_id"]),
-                    platform=str(self.state["platform"]),
-                    group_id=typing.cast(str | None, self.state["group_id"]),
-                    event_type=str(self.state["event_type"]),
-                ),
+            harness = self._plugin_harness.from_plugin_dir(
+                self.plugin_dir,
+                session_id=str(self.state["session_id"]),
+                user_id=str(self.state["user_id"]),
+                platform=str(self.state["platform"]),
+                group_id=typing.cast(str | None, self.state["group_id"]),
+                event_type=str(self.state["event_type"]),
                 platform_sink=self._stdout_platform_sink(stream=sys.stdout),
             )
             try:
@@ -433,7 +429,6 @@ async def _run_local_dev(
     max_watch_reloads: int | None = None,
 ) -> None:
     from .testing import (
-        LocalRuntimeConfig,
         PluginHarness,
         StdoutPlatformSink,
         _PluginExecutionError,
@@ -453,7 +448,6 @@ async def _run_local_dev(
             state=state,
             plugin_load_error=_PluginLoadError,
             plugin_execution_error=_PluginExecutionError,
-            local_runtime_config=LocalRuntimeConfig,
             plugin_harness=PluginHarness,
             stdout_platform_sink=StdoutPlatformSink,
         )
@@ -467,15 +461,13 @@ async def _run_local_dev(
         return
 
     sink = StdoutPlatformSink(stream=sys.stdout)
-    harness = PluginHarness(
-        LocalRuntimeConfig(
-            plugin_dir=plugin_dir,
-            session_id=session_id,
-            user_id=user_id,
-            platform=platform,
-            group_id=group_id,
-            event_type=event_type,
-        ),
+    harness = PluginHarness.from_plugin_dir(
+        plugin_dir,
+        session_id=session_id,
+        user_id=user_id,
+        platform=platform,
+        group_id=group_id,
+        event_type=event_type,
         platform_sink=sink,
     )
     try:
@@ -620,9 +612,9 @@ def _render_init_readme(*, plugin_name: str) -> str:
         ## 本地开发
 
         ```bash
-        astrbot-sdk validate --plugin-dir .
-        astrbot-sdk dev --local --plugin-dir . --event-text hello
-        astrbot-sdk dev --local --watch --plugin-dir . --event-text hello
+        astrbot-sdk validate
+        astrbot-sdk dev --local --event-text hello
+        astrbot-sdk dev --local --watch --event-text hello
         ```
 
         ## 运行测试
@@ -638,22 +630,37 @@ def _render_init_test_py(*, plugin_name: str) -> str:
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f'''\
+        from pathlib import Path
+
         import pytest
 
-        from astrbot_sdk.testing import MockContext, MockMessageEvent
+        from astrbot_sdk.testing import MockContext, MockMessageEvent, PluginHarness
         from main import {class_name}
 
 
         @pytest.mark.asyncio
         async def test_hello_handler():
             plugin = {class_name}()
-            ctx = MockContext(plugin_id="{plugin_name}")
+            ctx = MockContext(
+                plugin_id="{plugin_name}",
+                plugin_metadata={{"display_name": "{class_name}"}},
+            )
             event = MockMessageEvent(text="/hello", context=ctx)
 
             await plugin.hello(event, ctx)
 
             assert event.replies == ["Hello, World!"]
             ctx.platform.assert_sent("Hello, World!")
+
+
+        @pytest.mark.asyncio
+        async def test_hello_dispatch():
+            plugin_dir = Path(__file__).resolve().parents[1]
+
+            async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+                records = await harness.dispatch_text("hello")
+
+            assert any(record.text == "Hello, World!" for record in records)
         '''
     )
 
@@ -663,6 +670,18 @@ def _ensure_plugin_dir_exists(plugin_dir: Path) -> Path:
     if not resolved.exists() or not resolved.is_dir():
         raise _CliPluginValidationError(f"插件目录不存在：{plugin_dir}")
     return resolved
+
+
+def _resolve_dev_plugin_dir(plugin_dir: Path | None) -> Path:
+    if plugin_dir is not None:
+        return plugin_dir
+    current_dir = Path.cwd()
+    if (current_dir / "plugin.yaml").exists():
+        return Path(".")
+    raise click.BadParameter(
+        "未提供 --plugin-dir，且当前目录未找到 plugin.yaml",
+        param_hint="--plugin-dir",
+    )
 
 
 def _load_validated_plugin(plugin_dir: Path) -> tuple[Any, Any]:
@@ -863,9 +882,10 @@ def build(plugin_dir: Path, output_dir: Path | None) -> None:
 @cli.command()
 @click.option(
     "--plugin-dir",
-    required=True,
+    required=False,
+    default=None,
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    help="Plugin directory to run locally",
+    help="Plugin directory to run locally, defaults to current directory when plugin.yaml exists",
 )
 @click.option("--local", "local_mode", is_flag=True, help="Run against local mock core")
 @click.option(
@@ -887,7 +907,7 @@ def build(plugin_dir: Path, output_dir: Path | None) -> None:
 @click.option("--group-id", default=None)
 @click.option("--event-type", default="message", show_default=True)
 def dev(
-    plugin_dir: Path,
+    plugin_dir: Path | None,
     local_mode: bool,
     standalone_mode: bool,
     event_text: str | None,
@@ -906,9 +926,10 @@ def dev(
         raise click.BadParameter("--interactive 与 --event-text 不能同时使用")
     if not interactive and not event_text:
         raise click.BadParameter("请提供 --event-text，或改用 --interactive")
+    resolved_plugin_dir = _resolve_dev_plugin_dir(plugin_dir)
     _run_async_entrypoint(
         _run_local_dev(
-            plugin_dir=plugin_dir,
+            plugin_dir=resolved_plugin_dir,
             event_text=event_text,
             interactive=interactive,
             watch=watch,
@@ -918,9 +939,9 @@ def dev(
             group_id=group_id,
             event_type=event_type,
         ),
-        log_message=f"启动本地开发模式：{plugin_dir}",
+        log_message=f"启动本地开发模式：{resolved_plugin_dir}",
         context={
-            "plugin_dir": plugin_dir,
+            "plugin_dir": resolved_plugin_dir,
             "session_id": session_id,
             "platform": platform_name,
             "event_type": event_type,

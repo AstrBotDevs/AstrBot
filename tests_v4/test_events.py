@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from astrbot_sdk.events import MessageEvent, PlainTextResult
+from astrbot_sdk.testing import MockContext
 
 
 class TestMessageEvent:
@@ -83,6 +84,55 @@ class TestMessageEvent:
 
         with pytest.raises(RuntimeError, match="未绑定 reply handler"):
             await event.reply("response")
+
+    @pytest.mark.asyncio
+    async def test_reply_image_uses_bound_runtime_context(self):
+        ctx = MockContext(plugin_id="demo")
+        event = MessageEvent(
+            text="hello", session_id="s1", platform="test", context=ctx
+        )
+
+        await event.reply_image("https://example.com/demo.png")
+
+        assert ctx.sent_messages[0].kind == "image"
+        assert ctx.sent_messages[0].image_url == "https://example.com/demo.png"
+
+    @pytest.mark.asyncio
+    async def test_reply_chain_uses_structured_target(self):
+        ctx = MockContext(plugin_id="demo")
+        event = MessageEvent.from_payload(
+            {
+                "text": "hello",
+                "target": {
+                    "conversation_id": "session-1",
+                    "platform": "test-platform",
+                },
+            },
+            context=ctx,
+        )
+
+        await event.reply_chain([{"type": "Plain", "text": "hi"}])
+
+        assert ctx.sent_messages[0].kind == "chain"
+        assert ctx.sent_messages[0].session_id == "session-1"
+        assert ctx.sent_messages[0].target == {
+            "conversation_id": "session-1",
+            "platform": "test-platform",
+            "raw": {
+                "text": "hello",
+                "target": {
+                    "conversation_id": "session-1",
+                    "platform": "test-platform",
+                },
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_reply_image_without_runtime_context_raises(self):
+        event = MessageEvent(text="hello", session_id="s1")
+
+        with pytest.raises(RuntimeError, match="未绑定运行时上下文"):
+            await event.reply_image("https://example.com/demo.png")
 
     def test_to_payload(self):
         """to_payload() should serialize event to dict."""

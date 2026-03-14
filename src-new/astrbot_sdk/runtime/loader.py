@@ -712,8 +712,8 @@ def _prepare_plugin_import(module_name: str, plugin_dir: Path | None) -> None:
 
     plugin_root = plugin_dir.resolve()
     plugin_path = str(plugin_root)
-    if plugin_path not in sys.path:
-        sys.path.insert(0, plugin_path)
+    sys.path[:] = [entry for entry in sys.path if entry != plugin_path]
+    sys.path.insert(0, plugin_path)
 
     root_name = module_name.split(".", 1)[0]
     if not _plugin_defines_module_root(plugin_root, root_name):
