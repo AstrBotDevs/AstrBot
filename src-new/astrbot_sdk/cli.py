@@ -9,6 +9,7 @@ import sys
 import typing
 import zipfile
 from collections.abc import Coroutine
+from dataclasses import dataclass, field
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -19,13 +20,6 @@ from loguru import logger
 from .errors import AstrBotError
 from .runtime.bootstrap import run_plugin_worker, run_supervisor, run_websocket_server
 from .runtime.loader import load_plugin, load_plugin_spec, validate_plugin_spec
-from .testing import (
-    LocalRuntimeConfig,
-    PluginHarness,
-    StdoutPlatformSink,
-    _PluginExecutionError,
-    _PluginLoadError,
-)
 
 EXIT_OK = 0
 EXIT_UNEXPECTED = 1
@@ -46,6 +40,7 @@ BUILD_EXCLUDED_DIRS = {
 BUILD_EXCLUDED_FILES = {
     ".astrbot-worker-state.json",
 }
+WATCH_POLL_INTERVAL_SECONDS = 0.5
 INIT_DEFAULT_AUTHOR = ""
 INIT_DEFAULT_PYTHON_VERSION = "3.12"
 INIT_DEFAULT_VERSION = "1.0.0"
@@ -53,6 +48,33 @@ INIT_DEFAULT_VERSION = "1.0.0"
 
 class _CliPluginValidationError(RuntimeError):
     """CLI 侧的插件结构或打包校验失败。"""
+
+
+class _CliPluginLoadError(RuntimeError):
+    """CLI 侧的本地开发插件加载失败。"""
+
+
+class _CliPluginExecutionError(RuntimeError):
+    """CLI 侧的本地开发插件执行失败。"""
+
+
+@dataclass(slots=True)
+class _PluginTreeWatcher:
+    plugin_dir: Path
+    snapshot: dict[str, tuple[int, int]] = field(init=False, default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.snapshot = _snapshot_watch_files(self.plugin_dir)
+
+    def poll_changes(self) -> list[str]:
+        current = _snapshot_watch_files(self.plugin_dir)
+        changed = sorted(
+            path
+            for path in set(self.snapshot) | set(current)
+            if self.snapshot.get(path) != current.get(path)
+        )
+        self.snapshot = current
+        return changed
 
 
 def setup_logger(verbose: bool = False) -> None:
@@ -125,7 +147,7 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
         exc,
         (
             _CliPluginValidationError,
-            _PluginLoadError,
+            _CliPluginLoadError,
             FileNotFoundError,
             ImportError,
             ModuleNotFoundError,
@@ -142,7 +164,7 @@ def _classify_cli_exception(exc: Exception) -> tuple[int, str, str]:
             "dispatch_error",
             "请检查 handler 或 capability 是否已正确注册",
         )
-    if isinstance(exc, _PluginExecutionError):
+    if isinstance(exc, _CliPluginExecutionError):
         return (
             EXIT_PLUGIN_EXECUTION,
             "plugin_execution_error",
@@ -171,29 +193,252 @@ def _render_cli_error(
         click.echo(f"{key}: {value}", err=True)
 
 
+def _render_nonfatal_dev_error(
+    exc: Exception,
+    *,
+    context: dict[str, Any] | None = None,
+) -> None:
+    exit_code, error_code, hint = _classify_cli_exception(exc)
+    _render_cli_error(
+        error_code=error_code,
+        message=str(exc),
+        hint=hint,
+        context=context,
+    )
+    if exit_code == EXIT_UNEXPECTED:
+        logger.exception("watch 模式收到未分类异常")
+
+
+def _iter_watch_files(plugin_dir: Path) -> typing.Iterator[Path]:
+    root = plugin_dir.resolve()
+    for path in sorted(root.rglob("*")):
+        if path.is_dir():
+            continue
+        relative = path.relative_to(root)
+        if any(part in BUILD_EXCLUDED_DIRS for part in relative.parts[:-1]):
+            continue
+        if relative.name in BUILD_EXCLUDED_FILES:
+            continue
+        if path.suffix in {".pyc", ".pyo"}:
+            continue
+        yield path
+
+
+def _snapshot_watch_files(plugin_dir: Path) -> dict[str, tuple[int, int]]:
+    root = plugin_dir.resolve()
+    snapshot: dict[str, tuple[int, int]] = {}
+    for path in _iter_watch_files(root):
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        snapshot[path.relative_to(root).as_posix()] = (
+            stat.st_mtime_ns,
+            stat.st_size,
+        )
+    return snapshot
+
+
+def _format_watch_changes(changes: list[str], *, limit: int = 5) -> str:
+    if not changes:
+        return "未知文件"
+    preview = changes[:limit]
+    text = ", ".join(preview)
+    if len(changes) > limit:
+        text += f" 等 {len(changes)} 个文件"
+    return text
+
+
+class _ReloadableLocalDevRunner:
+    def __init__(
+        self,
+        *,
+        plugin_dir: Path,
+        state: dict[str, Any],
+        plugin_load_error: type[Exception],
+        plugin_execution_error: type[Exception],
+        plugin_harness,
+        stdout_platform_sink,
+    ) -> None:
+        self.plugin_dir = plugin_dir
+        self.state = state
+        self._plugin_load_error = plugin_load_error
+        self._plugin_execution_error = plugin_execution_error
+        self._plugin_harness = plugin_harness
+        self._stdout_platform_sink = stdout_platform_sink
+        self._harness = None
+        self._lock = asyncio.Lock()
+
+    async def close(self) -> None:
+        async with self._lock:
+            await self._stop_harness()
+
+    async def reload(self) -> bool:
+        async with self._lock:
+            await self._stop_harness()
+            harness = self._plugin_harness.from_plugin_dir(
+                self.plugin_dir,
+                session_id=str(self.state["session_id"]),
+                user_id=str(self.state["user_id"]),
+                platform=str(self.state["platform"]),
+                group_id=typing.cast(str | None, self.state["group_id"]),
+                event_type=str(self.state["event_type"]),
+                platform_sink=self._stdout_platform_sink(stream=sys.stdout),
+            )
+            try:
+                await harness.start()
+            except self._plugin_load_error as exc:
+                _render_nonfatal_dev_error(
+                    _CliPluginLoadError(str(exc)),
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            except self._plugin_execution_error as exc:
+                _render_nonfatal_dev_error(
+                    _CliPluginExecutionError(str(exc)),
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            self._harness = harness
+            return True
+
+    async def dispatch_text(self, text: str) -> bool:
+        async with self._lock:
+            if self._harness is None:
+                click.echo("当前插件未成功加载，等待下一次文件变更后重试。")
+                return False
+            try:
+                await self._harness.dispatch_text(
+                    text,
+                    session_id=str(self.state["session_id"]),
+                    user_id=str(self.state["user_id"]),
+                    platform=str(self.state["platform"]),
+                    group_id=typing.cast(str | None, self.state["group_id"]),
+                    event_type=str(self.state["event_type"]),
+                )
+            except (self._plugin_load_error, self._plugin_execution_error) as exc:
+                _render_nonfatal_dev_error(
+                    _CliPluginExecutionError(str(exc)),
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            except Exception as exc:
+                _render_nonfatal_dev_error(
+                    exc,
+                    context={"plugin_dir": self.plugin_dir},
+                )
+                return False
+            return True
+
+    async def _stop_harness(self) -> None:
+        if self._harness is None:
+            return
+        try:
+            await self._harness.stop()
+        finally:
+            self._harness = None
+
+
+async def _run_local_dev_watch(
+    *,
+    runner: _ReloadableLocalDevRunner,
+    event_text: str | None,
+    interactive: bool,
+    watch_poll_interval: float,
+    max_watch_reloads: int | None = None,
+) -> None:
+    watcher = _PluginTreeWatcher(runner.plugin_dir)
+    reload_count = 0
+
+    async def reload_and_maybe_rerun(*, announce: str | None) -> None:
+        if announce:
+            click.echo(announce)
+        if not await runner.reload():
+            return
+        if event_text is not None:
+            await runner.dispatch_text(event_text)
+
+    async def watch_loop(stop_event: asyncio.Event) -> None:
+        nonlocal reload_count
+        while not stop_event.is_set():
+            await asyncio.sleep(watch_poll_interval)
+            changes = watcher.poll_changes()
+            if not changes:
+                continue
+            await reload_and_maybe_rerun(
+                announce=(
+                    f"检测到文件变更，重新加载插件：{_format_watch_changes(changes)}"
+                )
+            )
+            reload_count += 1
+            if max_watch_reloads is not None and reload_count >= max_watch_reloads:
+                stop_event.set()
+                return
+
+    stop_event = asyncio.Event()
+    watch_task: asyncio.Task[None] | None = None
+    try:
+        await reload_and_maybe_rerun(
+            announce=(
+                "watch 模式已启动，监听插件目录变更。"
+                if event_text is not None
+                else "watch 模式已启动，监听插件目录变更并按需热重载。"
+            )
+        )
+        if max_watch_reloads == 0:
+            return
+        watch_task = asyncio.create_task(watch_loop(stop_event))
+        if interactive:
+            click.echo(
+                "本地交互模式已启动。可用命令：/session <id> /user <id> /platform <name> /group <id> /private /event <type> /exit"
+            )
+            while not stop_event.is_set():
+                line = await asyncio.to_thread(sys.stdin.readline)
+                if not line:
+                    break
+                text = line.strip()
+                if not text:
+                    continue
+                if _handle_dev_meta_command(text, runner.state):
+                    if text in {"/exit", "/quit"}:
+                        break
+                    continue
+                await runner.dispatch_text(text)
+            stop_event.set()
+            return
+        await stop_event.wait()
+    finally:
+        stop_event.set()
+        if watch_task is not None:
+            watch_task.cancel()
+            try:
+                await watch_task
+            except asyncio.CancelledError:
+                pass
+        await runner.close()
+
+
 async def _run_local_dev(
     *,
     plugin_dir: Path,
     event_text: str | None,
     interactive: bool,
+    watch: bool,
     session_id: str,
     user_id: str,
     platform: str,
     group_id: str | None,
     event_type: str,
+    watch_poll_interval: float = WATCH_POLL_INTERVAL_SECONDS,
+    max_watch_reloads: int | None = None,
 ) -> None:
-    sink = StdoutPlatformSink(stream=sys.stdout)
-    harness = PluginHarness(
-        LocalRuntimeConfig(
-            plugin_dir=plugin_dir,
-            session_id=session_id,
-            user_id=user_id,
-            platform=platform,
-            group_id=group_id,
-            event_type=event_type,
-        ),
-        platform_sink=sink,
+    from .testing import (
+        PluginHarness,
+        StdoutPlatformSink,
+        _PluginExecutionError,
+        _PluginLoadError,
     )
+
     state = {
         "session_id": session_id,
         "user_id": user_id,
@@ -201,40 +446,73 @@ async def _run_local_dev(
         "group_id": group_id,
         "event_type": event_type,
     }
-    async with harness:
-        if interactive:
-            click.echo(
-                "本地交互模式已启动。可用命令：/session <id> /user <id> /platform <name> /group <id> /private /event <type> /exit"
-            )
-            while True:
-                line = await asyncio.to_thread(sys.stdin.readline)
-                if not line:
-                    break
-                text = line.strip()
-                if not text:
-                    continue
-                if _handle_dev_meta_command(text, state):
-                    if text in {"/exit", "/quit"}:
-                        break
-                    continue
-                await harness.dispatch_text(
-                    text,
-                    session_id=str(state["session_id"]),
-                    user_id=str(state["user_id"]),
-                    platform=str(state["platform"]),
-                    group_id=typing.cast(str | None, state["group_id"]),
-                    event_type=str(state["event_type"]),
-                )
-            return
-        assert event_text is not None
-        await harness.dispatch_text(
-            event_text,
-            session_id=session_id,
-            user_id=user_id,
-            platform=platform,
-            group_id=group_id,
-            event_type=event_type,
+    if watch:
+        runner = _ReloadableLocalDevRunner(
+            plugin_dir=plugin_dir,
+            state=state,
+            plugin_load_error=_PluginLoadError,
+            plugin_execution_error=_PluginExecutionError,
+            plugin_harness=PluginHarness,
+            stdout_platform_sink=StdoutPlatformSink,
         )
+        await _run_local_dev_watch(
+            runner=runner,
+            event_text=event_text,
+            interactive=interactive,
+            watch_poll_interval=watch_poll_interval,
+            max_watch_reloads=max_watch_reloads,
+        )
+        return
+
+    sink = StdoutPlatformSink(stream=sys.stdout)
+    harness = PluginHarness.from_plugin_dir(
+        plugin_dir,
+        session_id=session_id,
+        user_id=user_id,
+        platform=platform,
+        group_id=group_id,
+        event_type=event_type,
+        platform_sink=sink,
+    )
+    try:
+        async with harness:
+            if interactive:
+                click.echo(
+                    "本地交互模式已启动。可用命令：/session <id> /user <id> /platform <name> /group <id> /private /event <type> /exit"
+                )
+                while True:
+                    line = await asyncio.to_thread(sys.stdin.readline)
+                    if not line:
+                        break
+                    text = line.strip()
+                    if not text:
+                        continue
+                    if _handle_dev_meta_command(text, state):
+                        if text in {"/exit", "/quit"}:
+                            break
+                        continue
+                    await harness.dispatch_text(
+                        text,
+                        session_id=str(state["session_id"]),
+                        user_id=str(state["user_id"]),
+                        platform=str(state["platform"]),
+                        group_id=typing.cast(str | None, state["group_id"]),
+                        event_type=str(state["event_type"]),
+                    )
+                return
+            assert event_text is not None
+            await harness.dispatch_text(
+                event_text,
+                session_id=session_id,
+                user_id=user_id,
+                platform=platform,
+                group_id=group_id,
+                event_type=event_type,
+            )
+    except _PluginLoadError as exc:
+        raise _CliPluginLoadError(str(exc)) from exc
+    except _PluginExecutionError as exc:
+        raise _CliPluginExecutionError(str(exc)) from exc
 
 
 def _handle_dev_meta_command(command: str, state: dict[str, Any]) -> bool:
@@ -355,26 +633,76 @@ def _render_init_main_py(*, plugin_name: str) -> str:
     )
 
 
+def _render_init_readme(*, plugin_name: str) -> str:
+    return dedent(
+        f"""\
+        # {plugin_name}
+
+        一个最小可运行的 AstrBot SDK v4 插件。
+
+        ## 目录结构
+
+        ```
+        .
+        ├── plugin.yaml
+        ├── requirements.txt
+        ├── main.py
+        └── tests
+            └── test_plugin.py
+        ```
+
+        ## 本地开发
+
+        ```bash
+        astrbot-sdk validate
+        astrbot-sdk dev --local --event-text hello
+        astrbot-sdk dev --local --watch --event-text hello
+        ```
+
+        ## 运行测试
+
+        ```bash
+        python -m pytest tests/test_plugin.py -v
+        ```
+        """
+    )
+
+
 def _render_init_test_py(*, plugin_name: str) -> str:
     class_name = _class_name_for_plugin(plugin_name)
     return dedent(
         f'''\
+        from pathlib import Path
+
         import pytest
 
-        from astrbot_sdk.testing import MockContext, MockMessageEvent
+        from astrbot_sdk.testing import MockContext, MockMessageEvent, PluginHarness
         from main import {class_name}
 
 
         @pytest.mark.asyncio
         async def test_hello_handler():
             plugin = {class_name}()
-            ctx = MockContext(plugin_id="{plugin_name}")
+            ctx = MockContext(
+                plugin_id="{plugin_name}",
+                plugin_metadata={{"display_name": "{class_name}"}},
+            )
             event = MockMessageEvent(text="/hello", context=ctx)
 
             await plugin.hello(event, ctx)
 
             assert event.replies == ["Hello, World!"]
             ctx.platform.assert_sent("Hello, World!")
+
+
+        @pytest.mark.asyncio
+        async def test_hello_dispatch():
+            plugin_dir = Path(__file__).resolve().parents[1]
+
+            async with PluginHarness.from_plugin_dir(plugin_dir) as harness:
+                records = await harness.dispatch_text("hello")
+
+            assert any(record.text == "Hello, World!" for record in records)
         '''
     )
 
@@ -384,6 +712,18 @@ def _ensure_plugin_dir_exists(plugin_dir: Path) -> Path:
     if not resolved.exists() or not resolved.is_dir():
         raise _CliPluginValidationError(f"插件目录不存在：{plugin_dir}")
     return resolved
+
+
+def _resolve_dev_plugin_dir(plugin_dir: Path | None) -> Path:
+    if plugin_dir is not None:
+        return plugin_dir
+    current_dir = Path.cwd()
+    if (current_dir / "plugin.yaml").exists():
+        return Path(".")
+    raise click.BadParameter(
+        "未提供 --plugin-dir，且当前目录未找到 plugin.yaml",
+        param_hint="--plugin-dir",
+    )
 
 
 def _load_validated_plugin(plugin_dir: Path) -> tuple[Any, Any]:
@@ -460,6 +800,10 @@ def _init_plugin(name: str | None) -> None:
     (target_dir / "requirements.txt").write_text("", encoding="utf-8")
     (target_dir / "main.py").write_text(
         _render_init_main_py(plugin_name=plugin_name),
+        encoding="utf-8",
+    )
+    (target_dir / "README.md").write_text(
+        _render_init_readme(plugin_name=plugin_name),
         encoding="utf-8",
     )
     (target_dir / "tests" / "test_plugin.py").write_text(
@@ -587,30 +931,37 @@ def build(plugin_dir: Path, output_dir: Path | None) -> None:
 @cli.command()
 @click.option(
     "--plugin-dir",
-    required=True,
+    required=False,
+    default=None,
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
-    help="Plugin directory to run locally",
+    help="Plugin directory to run locally, defaults to current directory when plugin.yaml exists",
 )
 @click.option("--local", "local_mode", is_flag=True, help="Run against local mock core")
 @click.option(
     "--standalone",
     "standalone_mode",
     is_flag=True,
-    help="Alias of --local for compatibility",
+    help="Deprecated alias of --local",
 )
 @click.option("--event-text", type=str, help="Single message text to dispatch")
 @click.option("--interactive", is_flag=True, help="Read follow-up messages from stdin")
+@click.option(
+    "--watch",
+    is_flag=True,
+    help="Reload the local harness when plugin files change",
+)
 @click.option("--session-id", default="local-session", show_default=True)
 @click.option("--user-id", default="local-user", show_default=True)
 @click.option("--platform", "platform_name", default="test", show_default=True)
 @click.option("--group-id", default=None)
 @click.option("--event-type", default="message", show_default=True)
 def dev(
-    plugin_dir: Path,
+    plugin_dir: Path | None,
     local_mode: bool,
     standalone_mode: bool,
     event_text: str | None,
     interactive: bool,
+    watch: bool,
     session_id: str,
     user_id: str,
     platform_name: str,
@@ -624,20 +975,22 @@ def dev(
         raise click.BadParameter("--interactive 与 --event-text 不能同时使用")
     if not interactive and not event_text:
         raise click.BadParameter("请提供 --event-text，或改用 --interactive")
+    resolved_plugin_dir = _resolve_dev_plugin_dir(plugin_dir)
     _run_async_entrypoint(
         _run_local_dev(
-            plugin_dir=plugin_dir,
+            plugin_dir=resolved_plugin_dir,
             event_text=event_text,
             interactive=interactive,
+            watch=watch,
             session_id=session_id,
             user_id=user_id,
             platform=platform_name,
             group_id=group_id,
             event_type=event_type,
         ),
-        log_message=f"启动本地开发模式：{plugin_dir}",
+        log_message=f"启动本地开发模式：{resolved_plugin_dir}",
         context={
-            "plugin_dir": plugin_dir,
+            "plugin_dir": resolved_plugin_dir,
             "session_id": session_id,
             "platform": platform_name,
             "event_type": event_type,
@@ -681,7 +1034,7 @@ def worker(plugin_dir: Path | None, group_metadata: Path | None) -> None:
 @cli.command(hidden=True)
 @click.option("--port", default=8765, type=int, help="WebSocket server port")
 def websocket(port: int) -> None:
-    """Legacy websocket runtime entrypoint."""
+    """WebSocket runtime entrypoint kept for standalone bridge scenarios."""
     _run_async_entrypoint(
         run_websocket_server(port=port),
         log_message=f"启动 WebSocket 服务器，端口：{port}",

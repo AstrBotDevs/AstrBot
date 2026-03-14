@@ -10,6 +10,7 @@
 设计说明：
     由于跨进程架构，handler 函数无法直接序列化传递。
     插件需要先声明处理 HTTP 请求的 capability，然后注册路由到 capability 的映射。
+    当前插件身份由运行时在协议层透传，客户端 payload 不暴露 `plugin_id`。
 
     调用流程:
         HTTP 请求 → 宿主 Web 服务器 → 查找 route 映射 → invoke capability → Worker 执行 handler → 返回响应
@@ -39,6 +40,34 @@ from __future__ import annotations
 from typing import Any
 
 from ._proxy import CapabilityProxy
+from ..decorators import get_capability_meta
+from ..errors import AstrBotError
+
+
+def _resolve_handler_capability(
+    handler_capability: str | None,
+    handler: Any | None,
+) -> str:
+    if handler_capability and handler is not None:
+        raise AstrBotError.invalid_input(
+            "register_api 不能同时提供 handler_capability 和 handler",
+            hint="请二选一：传 capability 名称字符串，或传 @provide_capability 标记的方法",
+        )
+    if handler_capability:
+        return handler_capability
+    if handler is None:
+        raise AstrBotError.invalid_input(
+            "register_api 需要提供 handler_capability 或 handler",
+            hint="示例：handler_capability='demo.http_handler' 或 handler=self.http_handler_capability",
+        )
+    target = getattr(handler, "__func__", handler)
+    meta = get_capability_meta(target)
+    if meta is None:
+        raise AstrBotError.invalid_input(
+            "register_api(handler=...) 需要传入使用 @provide_capability 声明的方法",
+            hint="请先用 @provide_capability(name='demo.http_handler', ...) 标记该方法",
+        )
+    return meta.descriptor.name
 
 
 class HTTPClient:
@@ -61,7 +90,9 @@ class HTTPClient:
     async def register_api(
         self,
         route: str,
-        handler_capability: str,
+        handler_capability: str | None = None,
+        *,
+        handler: Any | None = None,
         methods: list[str] | None = None,
         description: str = "",
     ) -> None:
@@ -70,6 +101,7 @@ class HTTPClient:
         Args:
             route: API 路由路径（如 "/my-api"）
             handler_capability: 处理此路由的 capability 名称
+            handler: 使用 @provide_capability 标记的方法引用
             methods: HTTP 方法列表，默认 ["GET"]
             description: API 描述
 
@@ -83,13 +115,14 @@ class HTTPClient:
         """
         if methods is None:
             methods = ["GET"]
+        resolved_handler = _resolve_handler_capability(handler_capability, handler)
 
         await self._proxy.call(
             "http.register_api",
             {
                 "route": route,
                 "methods": methods,
-                "handler_capability": handler_capability,
+                "handler_capability": resolved_handler,
                 "description": description,
             },
         )
@@ -125,5 +158,8 @@ class HTTPClient:
             for api in apis:
                 print(f"{api['route']}: {api['methods']}")
         """
-        output = await self._proxy.call("http.list_apis", {})
+        output = await self._proxy.call(
+            "http.list_apis",
+            {},
+        )
         return output.get("apis", [])

@@ -5,7 +5,10 @@
 功能说明：
     - 查询已加载插件信息
     - 获取插件列表
-    - 访问插件配置
+    - 访问当前插件配置
+
+安全边界：
+    插件身份由运行时透传到协议层；客户端只暴露业务参数，不接受外部指定调用者。
 """
 
 from __future__ import annotations
@@ -74,7 +77,10 @@ class MetadataClient:
             if meta:
                 print(f"{meta.display_name} v{meta.version}")
         """
-        output = await self._proxy.call("metadata.get_plugin", {"name": name})
+        output = await self._proxy.call(
+            "metadata.get_plugin",
+            {"name": name},
+        )
         data = output.get("plugin")
         if data is None:
             return None

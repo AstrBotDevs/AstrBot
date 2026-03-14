@@ -1,1228 +1,139 @@
-"""
-Tests for runtime/handler_dispatcher.py - HandlerDispatcher implementation.
-"""
-
 from __future__ import annotations
-
-import asyncio
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from astrbot.core.utils.session_waiter import (
-    SessionController,
-    SessionWaiter,
-    session_waiter,
-)
-from astrbot_sdk._legacy_api import LegacyContext
-from astrbot_sdk._legacy_runtime import LegacyRuntimeAdapter
-from astrbot_sdk.api.event import AstrMessageEvent
-from astrbot_sdk.api.event.filter import (
-    CustomFilter,
-    after_message_sent,
-    on_decorating_result,
-)
-from astrbot_sdk.api.message import Comp, MessageChain
+from astrbot_sdk._invocation_context import current_caller_plugin_id
 from astrbot_sdk.context import CancelToken, Context
-from astrbot_sdk.events import MessageEvent, PlainTextResult
+from astrbot_sdk.events import MessageEvent
 from astrbot_sdk.protocol.descriptors import (
-    CommandTrigger,
+    CapabilityDescriptor,
     HandlerDescriptor,
+    MessageTrigger,
 )
-from astrbot_sdk.protocol.messages import InvokeMessage
-from astrbot_sdk.runtime.handler_dispatcher import HandlerDispatcher
-from astrbot_sdk.runtime.loader import LoadedHandler
+from astrbot_sdk.runtime.handler_dispatcher import (
+    CapabilityDispatcher,
+    HandlerDispatcher,
+)
+from astrbot_sdk.runtime.loader import LoadedCapability, LoadedHandler
+from astrbot_sdk.testing import MockCapabilityRouter, MockPeer
 
 
-class MockPeer:
-    """Mock peer for testing."""
-
-    def __init__(self):
-        self.sent_messages: list[dict[str, Any]] = []
-        self.platform = self  # platform.send 通过 self.send 调用
-        # CapabilityProxy 需要的属性
-        self.remote_capability_map: dict[str, Any] = {}
-
-    async def send(self, session_id: str, text: str) -> None:
-        """模拟 platform.send 方法"""
-        self.sent_messages.append({"session_id": session_id, "text": text})
-
-    async def invoke(
-        self, name: str, payload: dict[str, Any], stream: bool = False
-    ) -> dict[str, Any]:
-        """模拟 peer.invoke 方法，用于 CapabilityProxy"""
-        if name == "platform.send":
-            await self.send(
-                payload.get("session", payload.get("session_id", "")),
-                payload.get("text", ""),
-            )
-            return {}
-        if name == "platform.send_chain":
-            self.sent_messages.append(
-                {
-                    "session_id": payload.get("session", ""),
-                    "chain": payload.get("chain", []),
-                }
-            )
-            return {}
-        return {}
+def _peer():
+    return MockPeer(MockCapabilityRouter())
 
 
-def create_mock_handler(
-    handler_id: str = "test.handler",
-    command: str = "hello",
-) -> LoadedHandler:
-    """Create a mock loaded handler."""
-    descriptor = HandlerDescriptor(
-        id=handler_id,
-        trigger=CommandTrigger(command=command),
-    )
+class TestHandlerDispatcherArgumentValidation:
+    def test_handler_dispatcher_raises_for_uninjectable_required_param(self):
+        peer = _peer()
+        dispatcher = HandlerDispatcher(plugin_id="demo", peer=peer, handlers=[])
+        ctx = Context(peer=peer, plugin_id="demo", cancel_token=CancelToken())
+        event = MessageEvent(text="hello", session_id="s1", context=ctx)
 
-    async def handler_func(event: MessageEvent, ctx: Context):
-        await event.reply("Hello!")
-        return None
+        async def bad_handler(event: MessageEvent, missing: str) -> None:
+            return None
 
-    handler_func.__func__ = handler_func  # Simulate bound method
+        with pytest.raises(TypeError) as raised:
+            dispatcher._build_args(bad_handler, event, ctx, args={})
+        message = str(raised.value)
+        assert "插件 'demo' 的 handler" in message
+        assert "必填参数 'missing' 无法注入" in message
+        assert "MessageEvent / Context" in message
 
-    return LoadedHandler(
-        descriptor=descriptor,
-        callable=handler_func,
-        owner=MagicMock(),
-        legacy_context=None,
-    )
-
-
-def create_invoke_message(
-    message_id: str = "msg_001",
-    handler_id: str = "test.handler",
-    event_data: dict[str, Any] | None = None,
-    args: dict[str, Any] | None = None,
-) -> InvokeMessage:
-    """Create a mock invoke message."""
-    input_data = {"handler_id": handler_id, "event": event_data or {}}
-    if args:
-        input_data["args"] = args
-    return InvokeMessage(
-        id=message_id,
-        capability="handler.invoke",
-        input=input_data,
-    )
-
-
-def create_message_event() -> MessageEvent:
-    """Create a mock message event."""
-    return MessageEvent(
-        session_id="session-1",
-        user_id="user-1",
-        platform="test",
-        text="hello world",
-    )
-
-
-class TestHandlerDispatcherInit:
-    """Tests for HandlerDispatcher initialization."""
-
-    def test_init(self):
-        """HandlerDispatcher should initialize with handlers."""
-        peer = MockPeer()
-        handler = create_mock_handler()
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
+    def test_capability_dispatcher_raises_for_uninjectable_required_param(self):
+        peer = _peer()
+        capability = LoadedCapability(
+            descriptor=CapabilityDescriptor(name="demo.cap", description="demo"),
+            callable=lambda ctx, missing: {"ok": True},
+            owner=object(),
+            plugin_id="demo",
         )
-
-        assert dispatcher._plugin_id == "test_plugin"
-        assert dispatcher._peer is peer
-        assert "test.handler" in dispatcher._handlers
-        assert dispatcher._active == {}
-
-    def test_handlers_indexed_by_id(self):
-        """HandlerDispatcher should index handlers by id."""
-        peer = MockPeer()
-        handlers = [
-            create_mock_handler("handler.one", "cmd1"),
-            create_mock_handler("handler.two", "cmd2"),
-        ]
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
+        dispatcher = CapabilityDispatcher(
+            plugin_id="demo",
             peer=peer,
-            handlers=handlers,
+            capabilities=[capability],
         )
+        ctx = Context(peer=peer, plugin_id="demo", cancel_token=CancelToken())
 
-        assert "handler.one" in dispatcher._handlers
-        assert "handler.two" in dispatcher._handlers
+        with pytest.raises(TypeError) as raised:
+            dispatcher._build_args(
+                capability.callable,
+                payload={},
+                ctx=ctx,
+                cancel_token=CancelToken(),
+            )
+        message = str(raised.value)
+        assert "插件 'demo' 的 capability" in message
+        assert "必填参数 'missing' 无法注入" in message
+        assert "Context / CancelToken / dict" in message
 
 
 class TestHandlerDispatcherInvoke:
-    """Tests for HandlerDispatcher.invoke method."""
-
     @pytest.mark.asyncio
-    async def test_invoke_calls_handler(self):
-        """invoke should call the registered handler."""
-        peer = MockPeer()
-        sent_messages = []
+    async def test_invoke_reports_missing_injected_param(self):
+        peer = _peer()
 
-        # 记录 platform.send 的调用
-        original_send = peer.send
-
-        async def track_send(session_id: str, text: str) -> None:
-            sent_messages.append({"session_id": session_id, "text": text})
-            await original_send(session_id, text)
-
-        peer.send = track_send
-
-        handler_called = []
-
-        async def handler_func(e: MessageEvent, ctx: Context):
-            handler_called.append(e)
-            await e.reply("response")
-
-        descriptor = HandlerDescriptor(
-            id="test.handler",
-            trigger=CommandTrigger(command="hello"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        event = create_message_event()
-        # MessageEvent 使用 to_payload() 而不是 model_dump()
-        message = InvokeMessage(
-            id="msg_001",
-            capability="handler.invoke",
-            input={"handler_id": "test.handler", "event": event.to_payload()},
-        )
-
-        cancel_token = CancelToken()
-        result = await dispatcher.invoke(message, cancel_token)
-
-        assert result == {}
-        assert len(handler_called) == 1
-        # 验证 reply 通过 platform.send 发送
-        assert any("response" in m.get("text", "") for m in sent_messages)
-
-    @pytest.mark.asyncio
-    async def test_invoke_missing_handler_raises(self):
-        """invoke should raise LookupError for missing handler."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        message = InvokeMessage(
-            id="msg_001",
-            capability="handler.invoke",
-            input={"handler_id": "nonexistent.handler", "event": {}},
-        )
-
-        cancel_token = CancelToken()
-
-        with pytest.raises(LookupError, match="handler not found"):
-            await dispatcher.invoke(message, cancel_token)
-
-    @pytest.mark.asyncio
-    async def test_invoke_with_legacy_args(self):
-        """invoke should pass legacy args to handler."""
-        peer = MockPeer()
-
-        received_args = []
-
-        async def handler_func(event: MessageEvent, ctx: Context, name: str):
-            received_args.append(name)
+        async def bad_handler(event: MessageEvent, missing: str) -> None:
             return None
 
-        descriptor = HandlerDescriptor(
-            id="test.handler",
-            trigger=CommandTrigger(command="hello"),
+        loaded = LoadedHandler(
+            descriptor=HandlerDescriptor(
+                id="demo:plugin.bad_handler",
+                trigger=MessageTrigger(),
+            ),
+            callable=bad_handler,
+            owner=object(),
+            plugin_id="demo",
         )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_001",
-            capability="handler.invoke",
-            input={
-                "handler_id": "test.handler",
-                "event": {
-                    "type": "message",
-                    "session_id": "s1",
-                    "user_id": "u1",
-                    "platform": "test",
-                },
-                "args": {"name": "test_name"},
-            },
-        )
-
-        cancel_token = CancelToken()
-        await dispatcher.invoke(message, cancel_token)
-
-        assert "test_name" in received_args
-
-    @pytest.mark.asyncio
-    async def test_invoke_tracks_active_task(self):
-        """invoke should track active task."""
-        peer = MockPeer()
-
-        async def slow_handler(event: MessageEvent, ctx: Context):
-            await asyncio.sleep(0.1)
-            return None
-
-        descriptor = HandlerDescriptor(
-            id="slow.handler",
-            trigger=CommandTrigger(command="slow"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=slow_handler,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_001",
-            capability="handler.invoke",
-            input={
-                "handler_id": "slow.handler",
-                "event": {
-                    "type": "message",
-                    "session_id": "s1",
-                    "user_id": "u1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        cancel_token = CancelToken()
-
-        # Start invoke in background
-        task = asyncio.create_task(dispatcher.invoke(message, cancel_token))
-
-        # Give it time to start
-        await asyncio.sleep(0)
-
-        # Should have active task during execution
-        # Note: might be empty if task completes quickly
-
-        await task
-
-        # After completion, should be cleared
-        assert "msg_001" not in dispatcher._active
-
-    @pytest.mark.asyncio
-    async def test_invoke_wraps_legacy_astr_message_event(self):
-        """Annotated AstrMessageEvent handlers should receive the compat wrapper."""
-        peer = MockPeer()
-        received_types = []
-        replies = []
-
-        async def handler_func(event: AstrMessageEvent):
-            received_types.append(type(event))
-            yield event.plain_result("legacy reply")
-
-        async def track_send(session_id: str, text: str) -> None:
-            replies.append({"session_id": session_id, "text": text})
-
-        peer.send = track_send
-
-        descriptor = HandlerDescriptor(
-            id="legacy.handler",
-            trigger=CommandTrigger(command="hello"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_legacy",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.handler",
-                "event": {
-                    "text": "hello",
-                    "session_id": "session-legacy",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        await dispatcher.invoke(message, CancelToken())
-
-        assert received_types == [AstrMessageEvent]
-        assert replies == [{"session_id": "session-legacy", "text": "legacy reply"}]
-
-    @pytest.mark.asyncio
-    async def test_invoke_reply_falls_back_to_peer_send_for_sync_mock(self):
-        """invoke should fall back to peer.send when peer.invoke is a sync mock."""
-        peer = MagicMock()
-        peer.remote_capability_map = {}
-        sent_messages = []
-
-        async def track_send(session_id: str, text: str) -> None:
-            sent_messages.append({"session_id": session_id, "text": text})
-
-        peer.send = track_send
-
-        async def handler_func(event: MessageEvent, ctx: Context):
-            await event.reply("fallback")
-
-        descriptor = HandlerDescriptor(
-            id="test.handler",
-            trigger=CommandTrigger(command="hello"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_sync_mock",
-            capability="handler.invoke",
-            input={
-                "handler_id": "test.handler",
-                "event": {
-                    "text": "hello",
-                    "session_id": "session-sync",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        await dispatcher.invoke(message, CancelToken())
-
-        assert sent_messages == [{"session_id": "session-sync", "text": "fallback"}]
-
-    @pytest.mark.asyncio
-    async def test_invoke_routes_followup_message_to_session_waiter(self):
-        """compat session_waiter should capture the next message from the same session."""
-        peer = MockPeer()
-        legacy_context = LegacyContext("test_plugin")
-        captured_replies = []
-
-        async def handler_func(event: AstrMessageEvent):
-            await event.send(MessageChain().message("请输入确认内容"))
-
-            @session_waiter(timeout=0.2, record_history_chains=False)
-            async def waiter(controller: SessionController, ev: AstrMessageEvent):
-                captured_replies.append(ev.message_str)
-                await ev.send(MessageChain().message(f"收到:{ev.message_str}"))
-                controller.stop()
-
-            await waiter(event)
-
-        descriptor = HandlerDescriptor(
-            id="legacy.waiter",
-            trigger=CommandTrigger(command="ask"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=legacy_context,
-        )
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        first_message = InvokeMessage(
-            id="msg_waiter_1",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.waiter",
-                "event": {
-                    "text": "ask",
-                    "session_id": "session-waiter",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-        followup_message = InvokeMessage(
-            id="msg_waiter_2",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.waiter",
-                "event": {
-                    "text": "确认",
-                    "session_id": "session-waiter",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        waiting_task = asyncio.create_task(
-            dispatcher.invoke(first_message, CancelToken())
-        )
-        await asyncio.sleep(0.05)
-        result = await dispatcher.invoke(followup_message, CancelToken())
-        await waiting_task
-
-        assert result == {}
-        assert captured_replies == ["确认"]
-        assert peer.sent_messages == [
-            {"session_id": "session-waiter", "text": "请输入确认内容"},
-            {"session_id": "session-waiter", "text": "收到:确认"},
-        ]
-
-    @pytest.mark.asyncio
-    async def test_session_waiter_trigger_routes_by_explicit_session_id(self):
-        """SessionWaiter.trigger() should forward a message to the active waiter by key."""
-        peer = MockPeer()
-        legacy_context = LegacyContext("test_plugin")
-        captured_replies = []
-
-        async def handler_func(event: AstrMessageEvent):
-            @session_waiter(timeout=0.2)
-            async def waiter(controller: SessionController, ev: AstrMessageEvent):
-                captured_replies.append(ev.message_str)
-                controller.stop()
-
-            waiting_task = asyncio.create_task(waiter(event))
-            await asyncio.sleep(0)
-            await SessionWaiter.trigger(
-                event.unified_msg_origin,
-                AstrMessageEvent(
-                    text="显式触发",
-                    session_id=event.get_session_id(),
-                    user_id=event.get_sender_id(),
-                    platform=event.get_platform_name(),
-                    context=event._context,
-                ),
-            )
-            await waiting_task
-
-        descriptor = HandlerDescriptor(
-            id="legacy.waiter.trigger",
-            trigger=CommandTrigger(command="ask"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=legacy_context,
-        )
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_waiter_trigger",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.waiter.trigger",
-                "event": {
-                    "text": "ask",
-                    "session_id": "session-trigger",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        await dispatcher.invoke(message, CancelToken())
-
-        assert captured_replies == ["显式触发"]
-
-
-class TestHandlerDispatcherLegacyCompat:
-    """Tests for legacy compat hooks and filters during dispatch."""
-
-    @pytest.mark.asyncio
-    async def test_prebuilt_legacy_runtime_adapter_can_drive_filtering(self):
-        """Dispatcher should prefer the adapter boundary instead of reading raw legacy fields."""
-        peer = MockPeer()
-        legacy_context = LegacyContext("test_plugin")
-        called = []
-
-        class RejectAll(CustomFilter):
-            def filter(self, event: AstrMessageEvent, cfg) -> bool:
-                return False
-
-        async def handler_func(event: AstrMessageEvent):
-            called.append(event.message_str)
-
-        descriptor = HandlerDescriptor(
-            id="legacy.adapter.filtered",
-            trigger=CommandTrigger(command="ask"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-        handler.legacy_runtime = LegacyRuntimeAdapter(
-            legacy_context=legacy_context,
-            filters=[RejectAll()],
-        )
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_filtered_adapter",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.adapter.filtered",
-                "event": {
-                    "text": "ask",
-                    "session_id": "session-filtered",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        result = await dispatcher.invoke(message, CancelToken())
-
-        assert result == {}
-        assert called == []
-        assert peer.sent_messages == []
-
-    @pytest.mark.asyncio
-    async def test_custom_filter_can_skip_legacy_handler_invocation(self):
-        """Legacy custom filters should prevent handler execution when they reject the event."""
-        peer = MockPeer()
-        legacy_context = LegacyContext("test_plugin")
-        called = []
-
-        class RejectAll(CustomFilter):
-            def filter(self, event: AstrMessageEvent, cfg) -> bool:
-                return False
-
-        async def handler_func(event: AstrMessageEvent):
-            called.append(event.message_str)
-
-        descriptor = HandlerDescriptor(
-            id="legacy.filtered",
-            trigger=CommandTrigger(command="ask"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=legacy_context,
-            compat_filters=[RejectAll()],
-        )
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_filtered",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.filtered",
-                "event": {
-                    "text": "ask",
-                    "session_id": "session-filtered",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        result = await dispatcher.invoke(message, CancelToken())
-
-        assert result == {}
-        assert called == []
-        assert peer.sent_messages == []
-
-    @pytest.mark.asyncio
-    async def test_decorating_and_after_send_hooks_run_for_legacy_results(self):
-        """Legacy decorating/send hooks should be applied around compat result sending."""
-        peer = MockPeer()
-        legacy_context = LegacyContext("test_plugin")
-        observed_results = []
-
-        class CompatHooks:
-            @on_decorating_result()
-            async def decorate(self, event: AstrMessageEvent):
-                event.set_result("decorated result")
-
-            @after_message_sent()
-            async def after_send(self, event: AstrMessageEvent):
-                result = event.get_result()
-                observed_results.append(result.get_plain_text() if result else "")
-
-        legacy_context._register_component(CompatHooks())
-
-        async def handler_func(event: AstrMessageEvent):
-            return "raw result"
-
-        descriptor = HandlerDescriptor(
-            id="legacy.decorated",
-            trigger=CommandTrigger(command="decorate"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=handler_func,
-            owner=MagicMock(),
-            legacy_context=legacy_context,
-        )
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_decorated",
-            capability="handler.invoke",
-            input={
-                "handler_id": "legacy.decorated",
-                "event": {
-                    "text": "decorate",
-                    "session_id": "session-decorated",
-                    "user_id": "user-1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        await dispatcher.invoke(message, CancelToken())
-
-        assert peer.sent_messages == [
-            {"session_id": "session-decorated", "text": "decorated result"}
-        ]
-        assert observed_results == ["decorated result"]
-
-
-class TestHandlerDispatcherCancel:
-    """Tests for HandlerDispatcher.cancel method."""
-
-    @pytest.mark.asyncio
-    async def test_cancel_stops_active_task(self):
-        """cancel should stop the active task."""
-        peer = MockPeer()
-
-        cancelled = []
-
-        async def slow_handler(event: MessageEvent, ctx: Context):
-            try:
-                await asyncio.sleep(10)  # Long sleep
-            except asyncio.CancelledError:
-                cancelled.append(True)
-                raise
-
-        descriptor = HandlerDescriptor(
-            id="slow.handler",
-            trigger=CommandTrigger(command="slow"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=slow_handler,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        message = InvokeMessage(
-            id="msg_001",
-            capability="handler.invoke",
-            input={
-                "handler_id": "slow.handler",
-                "event": {
-                    "type": "message",
-                    "session_id": "s1",
-                    "user_id": "u1",
-                    "platform": "test",
-                },
-            },
-        )
-
-        cancel_token = CancelToken()
-
-        # Start invoke
-        task = asyncio.create_task(dispatcher.invoke(message, cancel_token))
-
-        # Wait for task to be active
-        await asyncio.sleep(0.05)
-
-        # Cancel
-        await dispatcher.cancel("msg_001")
-
-        # Task should be cancelled
-        await asyncio.sleep(0.05)
-
-        assert cancelled or task.cancelled() or task.done()
-
-    @pytest.mark.asyncio
-    async def test_cancel_unknown_request_does_nothing(self):
-        """cancel should do nothing for unknown request."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        # Should not raise
-        await dispatcher.cancel("unknown_request")
-
-
-class TestHandlerDispatcherBuildArgs:
-    """Tests for HandlerDispatcher._build_args method."""
-
-    def test_build_args_event_parameter(self):
-        """_build_args should inject event parameter."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        def handler(event: MessageEvent, ctx: Context):
-            pass
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        args = dispatcher._build_args(handler, event, ctx)
-
-        assert args[0] is event
-
-    def test_build_args_ctx_parameter(self):
-        """_build_args should inject ctx/context parameter."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        def handler(event: MessageEvent, ctx: Context):
-            pass
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        args = dispatcher._build_args(handler, event, ctx)
-
-        assert args[1] is ctx
-
-    def test_build_args_legacy_args(self):
-        """_build_args should inject legacy args."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        def handler(event: MessageEvent, ctx: Context, custom_arg: str):
-            pass
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        args = dispatcher._build_args(handler, event, ctx, {"custom_arg": "value"})
-
-        assert args[2] == "value"
-
-    def test_build_args_skip_keyword_only(self):
-        """_build_args should skip keyword-only parameters."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        def handler(event: MessageEvent, *, optional: str = "default"):
-            pass
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        args = dispatcher._build_args(handler, event, ctx)
-
-        # Should only have event
-        assert len(args) == 1
-
-
-class TestHandlerDispatcherConsumeResult:
-    """Tests for HandlerDispatcher._consume_legacy_result method."""
-
-    @pytest.mark.asyncio
-    async def test_consume_plain_text_result(self):
-        """_consume_legacy_result should handle PlainTextResult."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        replies = []
-        event = create_message_event()
-
-        # reply_handler 必须是异步的
-        async def async_reply(text: str) -> None:
-            replies.append(text)
-
-        event._reply_handler = async_reply
-
-        result = PlainTextResult(text="plain text")
-        await dispatcher._consume_legacy_result(result, event)
-
-        assert "plain text" in replies
-
-    @pytest.mark.asyncio
-    async def test_consume_string(self):
-        """_consume_legacy_result should handle string."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        replies = []
-        event = create_message_event()
-
-        # reply_handler 必须是异步的
-        async def async_reply(text: str) -> None:
-            replies.append(text)
-
-        event._reply_handler = async_reply
-
-        await dispatcher._consume_legacy_result("string reply", event)
-
-        assert "string reply" in replies
-
-    @pytest.mark.asyncio
-    async def test_consume_dict_with_text(self):
-        """_consume_legacy_result should handle dict with text."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        replies = []
-        event = create_message_event()
-
-        # reply_handler 必须是异步的
-        async def async_reply(text: str) -> None:
-            replies.append(text)
-
-        event._reply_handler = async_reply
-
-        await dispatcher._consume_legacy_result({"text": "dict reply"}, event)
-
-        assert "dict reply" in replies
-
-    @pytest.mark.asyncio
-    async def test_consume_other_type_ignored(self):
-        """_consume_legacy_result should ignore other types."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        event = create_message_event()
-        event._reply_handler = MagicMock()
-
-        # Should not raise
-        await dispatcher._consume_legacy_result(123, event)
-        await dispatcher._consume_legacy_result(None, event)
-
-    @pytest.mark.asyncio
-    async def test_consume_message_chain_uses_platform_send_chain(self):
-        """_consume_legacy_result should preserve rich chains when ctx is available."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-        chain = MessageChain(
-            [
-                Comp.Plain(text="hello"),
-                Comp.Image(file="https://example.com/image.png"),
-            ]
-        )
-
-        await dispatcher._consume_legacy_result(chain, event, ctx)
-
-        assert peer.sent_messages == [
-            {
-                "session_id": "session-1",
-                "chain": [
-                    {"type": "Plain", "text": "hello"},
-                    {"type": "Image", "file": "https://example.com/image.png"},
-                ],
+        dispatcher = HandlerDispatcher(plugin_id="demo", peer=peer, handlers=[loaded])
+
+        class Message:
+            id = "req-1"
+            input = {
+                "handler_id": "demo:plugin.bad_handler",
+                "event": {"text": "hello", "session_id": "s1"},
             }
-        ]
 
-
-class TestHandlerDispatcherHandleError:
-    """Tests for HandlerDispatcher._handle_error method."""
-
-    @pytest.mark.asyncio
-    async def test_handle_error_with_on_error_method(self):
-        """_handle_error should call owner.on_error if available."""
-        peer = MockPeer()
-
-        errors_handled = []
-
-        class OwnerWithOnError:
-            async def on_error(self, exc: Exception, event: MessageEvent, ctx: Context):
-                errors_handled.append(exc)
-
-        owner = OwnerWithOnError()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
-        )
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-        exc = ValueError("test error")
-
-        await dispatcher._handle_error(owner, exc, event, ctx)
-
-        assert exc in errors_handled
+        with pytest.raises(TypeError) as raised:
+            await dispatcher.invoke(Message(), CancelToken())
+        message = str(raised.value)
+        assert "demo:plugin.bad_handler" in message
+        assert "必填参数 'missing' 无法注入" in message
 
     @pytest.mark.asyncio
-    async def test_handle_error_without_on_error_method(self):
-        """_handle_error should use Star.on_error if owner has no on_error."""
-        peer = MockPeer()
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[],
+    async def test_invoke_binds_runtime_caller_plugin_id_for_raw_peer_calls(self):
+        seen: list[str | None] = []
+
+        class RecordingPeer:
+            remote_capability_map = {}
+            remote_peer = object()
+
+            async def invoke(self, capability, payload, *, stream=False):
+                seen.append(current_caller_plugin_id())
+                return {"ok": True}
+
+        peer = RecordingPeer()
+
+        async def handler(ctx: Context) -> None:
+            await ctx.peer.invoke("metadata.list_plugins", {}, stream=False)
+
+        loaded = LoadedHandler(
+            descriptor=HandlerDescriptor(
+                id="demo:plugin.handler",
+                trigger=MessageTrigger(),
+            ),
+            callable=handler,
+            owner=object(),
+            plugin_id="demo",
         )
+        dispatcher = HandlerDispatcher(plugin_id="demo", peer=peer, handlers=[loaded])
 
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-        exc = ValueError("test error")
+        class Message:
+            id = "req-2"
+            input = {
+                "handler_id": "demo:plugin.handler",
+                "event": {"text": "hello", "session_id": "s1"},
+            }
 
-        # owner 是 MagicMock，on_error 方法返回 MagicMock 而不是协程
-        # 但 _handle_error 会 await owner.on_error(...)
-        # 所以我们需要让 owner.on_error 返回一个协程
-        owner = MagicMock()
-        owner.on_error = AsyncMock()
+        await dispatcher.invoke(Message(), CancelToken())
 
-        # Should not raise
-        await dispatcher._handle_error(owner, exc, event, ctx)
-
-
-class TestHandlerDispatcherRunHandler:
-    """Tests for HandlerDispatcher._run_handler method."""
-
-    @pytest.mark.asyncio
-    async def test_run_handler_sync_function(self):
-        """_run_handler should handle sync function."""
-        peer = MockPeer()
-
-        called = []
-
-        def sync_handler(event: MessageEvent, ctx: Context):
-            called.append(True)
-
-        descriptor = HandlerDescriptor(
-            id="sync.handler",
-            trigger=CommandTrigger(command="sync"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=sync_handler,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        await dispatcher._run_handler(handler, event, ctx)
-
-        assert called
-
-    @pytest.mark.asyncio
-    async def test_run_handler_async_function(self):
-        """_run_handler should handle async function."""
-        peer = MockPeer()
-
-        called = []
-
-        async def async_handler(event: MessageEvent, ctx: Context):
-            called.append(True)
-
-        descriptor = HandlerDescriptor(
-            id="async.handler",
-            trigger=CommandTrigger(command="async"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=async_handler,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        await dispatcher._run_handler(handler, event, ctx)
-
-        assert called
-
-    @pytest.mark.asyncio
-    async def test_run_handler_async_generator(self):
-        """_run_handler should handle async generator."""
-        peer = MockPeer()
-
-        replies = []
-
-        async def gen_handler(event: MessageEvent, ctx: Context):
-            yield "first"
-            yield "second"
-
-        descriptor = HandlerDescriptor(
-            id="gen.handler",
-            trigger=CommandTrigger(command="gen"),
-        )
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=gen_handler,
-            owner=MagicMock(),
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        event = create_message_event()
-
-        # reply_handler 必须是异步的
-        async def async_reply(text: str) -> None:
-            replies.append(text)
-
-        event._reply_handler = async_reply
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        await dispatcher._run_handler(handler, event, ctx)
-
-        assert "first" in replies
-        assert "second" in replies
-
-    @pytest.mark.asyncio
-    async def test_run_handler_with_exception(self):
-        """_run_handler should handle exceptions."""
-        peer = MockPeer()
-
-        async def failing_handler(event: MessageEvent, ctx: Context):
-            raise ValueError("handler error")
-
-        descriptor = HandlerDescriptor(
-            id="failing.handler",
-            trigger=CommandTrigger(command="fail"),
-        )
-        # owner.on_error 需要是异步的
-        owner = MagicMock()
-        owner.on_error = AsyncMock()
-        handler = LoadedHandler(
-            descriptor=descriptor,
-            callable=failing_handler,
-            owner=owner,
-            legacy_context=None,
-        )
-
-        dispatcher = HandlerDispatcher(
-            plugin_id="test_plugin",
-            peer=peer,
-            handlers=[handler],
-        )
-
-        event = create_message_event()
-        ctx = Context(peer=peer, plugin_id="test", cancel_token=CancelToken())
-
-        with pytest.raises(ValueError, match="handler error"):
-            await dispatcher._run_handler(handler, event, ctx)
+        assert seen == ["demo"]

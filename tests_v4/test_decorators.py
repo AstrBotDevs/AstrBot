@@ -5,6 +5,7 @@ Tests for decorators.py - Handler decorator infrastructure.
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel
 
 from astrbot_sdk.decorators import (
     get_capability_meta,
@@ -294,6 +295,62 @@ class TestProvideCapabilityDecorator:
                 )
                 async def reserved(payload):
                     return payload
+
+    def test_supports_input_output_models(self):
+        """@provide_capability should accept pydantic models and derive schemas."""
+
+        class EchoInput(BaseModel):
+            text: str
+
+        class EchoOutput(BaseModel):
+            echoed: str
+
+        @provide_capability(
+            "demo.typed",
+            description="typed capability",
+            input_model=EchoInput,
+            output_model=EchoOutput,
+        )
+        async def typed(payload):
+            return payload
+
+        meta = get_capability_meta(typed)
+        assert meta is not None
+        assert meta.descriptor.input_schema["properties"]["text"]["type"] == "string"
+        assert meta.descriptor.output_schema["properties"]["echoed"]["type"] == "string"
+
+    def test_rejects_schema_and_model_conflicts(self):
+        """@provide_capability should reject mixed schema/model declarations."""
+
+        class EchoInput(BaseModel):
+            text: str
+
+        with pytest.raises(
+            ValueError, match="input_schema 和 input_model 不能同时提供"
+        ):
+
+            @provide_capability(
+                "demo.conflict",
+                description="conflict capability",
+                input_schema={"type": "object"},
+                input_model=EchoInput,
+            )
+            async def conflict(payload):
+                return payload
+
+    def test_rejects_non_pydantic_models(self):
+        """@provide_capability should require BaseModel subclasses."""
+        with pytest.raises(
+            TypeError, match="input_model 必须是 pydantic BaseModel 子类"
+        ):
+
+            @provide_capability(
+                "demo.invalid_model",
+                description="invalid model",
+                input_model=dict,
+            )
+            async def invalid(payload):
+                return payload
 
     def test_can_combine_with_other_decorators(self):
         """@require_admin can be combined with other decorators."""

@@ -6,15 +6,9 @@
 - 统一封装 invoke 和 invoke_stream 调用
 
 设计说明：
-    CapabilityProxy 是新版架构的核心组件，实现了从旧版 Context 直接方法调用
-    到新版 RPC 能力调用的转换。每个专用客户端 (LLMClient, DBClient 等)
-    都通过 CapabilityProxy 与远程通信。
-
-    旧版设计:
-        Context.llm_generate() → 直接调用内部方法
-
-    新版设计:
-        LLMClient.chat() → CapabilityProxy.call() → Peer.invoke() → RPC 通信
+    CapabilityProxy 是新版架构的核心组件。每个专用客户端 (LLMClient, DBClient 等)
+    都通过 CapabilityProxy 与远程通信，并在发起调用时绑定当前插件身份，
+    让运行时把调用者信息放进协议层而不是业务 payload。
 
 使用示例:
     proxy = CapabilityProxy(peer)
@@ -32,6 +26,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, Protocol
 
+from .._invocation_context import caller_plugin_scope
 from ..errors import AstrBotError
 
 
@@ -67,13 +62,18 @@ class CapabilityProxy:
         _peer: 底层 Peer 实例，负责实际的 RPC 通信
     """
 
-    def __init__(self, peer: _CapabilityPeerLike) -> None:
+    def __init__(
+        self,
+        peer: _CapabilityPeerLike,
+        caller_plugin_id: str | None = None,
+    ) -> None:
         """初始化能力代理。
 
         Args:
             peer: Peer 实例，提供 remote_capability_map 和 invoke/invoke_stream 方法
         """
         self._peer = peer
+        self._caller_plugin_id = caller_plugin_id
 
     def _get_descriptor(self, name: str):
         """获取能力描述符。
@@ -132,7 +132,8 @@ class CapabilityProxy:
             print(result["text"])
         """
         self._ensure_available(name, stream=False)
-        return await self._peer.invoke(name, payload, stream=False)
+        with caller_plugin_scope(self._caller_plugin_id):
+            return await self._peer.invoke(name, payload, stream=False)
 
     async def stream(
         self,
@@ -156,7 +157,8 @@ class CapabilityProxy:
                 print(delta["text"], end="")
         """
         self._ensure_available(name, stream=True)
-        event_stream = await self._peer.invoke_stream(name, payload)
+        with caller_plugin_scope(self._caller_plugin_id):
+            event_stream = await self._peer.invoke_stream(name, payload)
         async for event in event_stream:
             if event.phase == "delta":
                 yield event.data

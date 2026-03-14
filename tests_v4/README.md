@@ -1,25 +1,36 @@
-# AstrBot SDK Test Framework
+# AstrBot SDK Tests
 
 ## Overview
 
-This test suite uses **pytest** with `pytest-asyncio` for testing the AstrBot SDK v4 implementation.
+当前测试集使用 `pytest` + `pytest-asyncio`，覆盖 v4 原生协议、运行时、客户端和本地开发入口。
 
 ## Test Structure
 
 ```
 tests_v4/
-├── conftest.py              # Shared fixtures and path bootstrap
-├── test_api_contract.py     # API contract tests
-├── test_api_decorators.py   # Decorator and Star class tests
-├── test_context.py          # Context and CancelToken tests
-├── test_entrypoints.py      # CLI entrypoint tests (requires installation)
-├── test_events.py           # MessageEvent and PlainTextResult tests
-├── test_legacy_adapter.py   # Legacy API compatibility tests
-├── test_peer.py             # Peer communication tests
-├── test_protocol.py         # Protocol message tests
-├── test_runtime.py          # Supervisor/Worker runtime tests
-├── test_script_migrations.py # Migration script tests
-└── test_supervisor_migration.py # Supervisor migration tests
+├── conftest.py                  # 共享 fixtures 和路径引导
+├── helpers.py                   # 内存传输等测试辅助
+├── test_api_decorators.py       # 装饰器元数据与 API 入口
+├── test_capability_proxy.py     # CapabilityProxy 调用与校验
+├── test_capability_router.py    # 内建 capability 与 schema 验证
+├── test_clients_module.py       # clients 包导出
+├── test_conftest_fixtures.py    # conftest fixtures 行为
+├── test_context.py              # Context 与 CancelToken
+├── test_db_client.py            # DBClient
+├── test_decorators.py           # 顶层 decorators 模块
+├── test_entrypoints.py          # 已安装环境下的 CLI 入口
+├── test_events.py               # MessageEvent
+├── test_handler_dispatcher.py   # handler/capability 参数注入与分发
+├── test_http_metadata_clients.py # HTTPClient 与 MetadataClient
+├── test_llm_client.py           # LLMClient
+├── test_memory_client.py        # MemoryClient
+├── test_peer.py                 # Peer 握手、调用、取消、连接失败
+├── test_platform_client.py      # PlatformClient
+├── test_protocol.py             # 协议级冒烟测试
+├── test_protocol_descriptors.py # 描述符与 schema 模型
+├── test_protocol_messages.py    # 协议消息模型
+├── test_testing_module.py       # 本地 harness / testing 入口
+└── test_transport.py            # stdio / websocket transport
 ```
 
 ## Running Tests
@@ -153,18 +164,9 @@ Or use the optional dependency group:
 pip install -e ".[test]"
 ```
 
-## Test Categories
+## Coverage Focus
 
-### Unit Tests (Fast)
-
-- `test_context.py` - CancelToken and Context tests
-- `test_events.py` - MessageEvent and PlainTextResult tests
-- `test_api_decorators.py` - Decorator tests
-- `test_protocol.py` - Protocol message tests
-
-### Integration Tests (Slower)
-
-- `test_peer.py` - Peer communication with real transports
-- `test_runtime.py` - Supervisor/Worker process tests
-- `test_legacy_adapter.py` - Legacy API compatibility
-- `test_script_migrations.py` - Migration script tests
+- 协议层：`test_protocol_messages.py`、`test_protocol_descriptors.py`、`test_peer.py`
+- 运行时调度：`test_capability_router.py`、`test_handler_dispatcher.py`
+- 客户端 facade：`test_llm_client.py`、`test_db_client.py`、`test_memory_client.py`、`test_platform_client.py`、`test_http_metadata_clients.py`
+- 本地开发入口：`test_testing_module.py`、`test_entrypoints.py`

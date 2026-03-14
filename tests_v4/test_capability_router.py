@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot_sdk._invocation_context import caller_plugin_scope
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import (
@@ -174,6 +175,16 @@ class TestCapabilityRouterInit:
         assert "platform.send_chain" in capability_names
         assert "platform.get_members" in capability_names
 
+        # HTTP capabilities
+        assert "http.register_api" in capability_names
+        assert "http.unregister_api" in capability_names
+        assert "http.list_apis" in capability_names
+
+        # Metadata capabilities
+        assert "metadata.get_plugin" in capability_names
+        assert "metadata.list_plugins" in capability_names
+        assert "metadata.get_plugin_config" in capability_names
+
     def test_builtin_descriptors_use_protocol_schema_registry(self):
         """CapabilityRouter should source built-in schemas from protocol constants."""
         router = CapabilityRouter()
@@ -324,7 +335,7 @@ class TestCapabilityRouterExecute:
         token = CancelToken()
 
         # Missing required field
-        with pytest.raises(AstrBotError, match="缺少必填字段"):
+        with pytest.raises(AstrBotError) as raised:
             await router.execute(
                 "test.cap",
                 {},
@@ -332,6 +343,9 @@ class TestCapabilityRouterExecute:
                 cancel_token=token,
                 request_id="req-1",
             )
+        message = str(raised.value)
+        assert "capability 'test.cap' 的输入校验失败" in message
+        assert "缺少必填字段：name" in message
 
     @pytest.mark.asyncio
     async def test_execute_validates_output_schema(self):
@@ -352,7 +366,7 @@ class TestCapabilityRouterExecute:
 
         token = CancelToken()
 
-        with pytest.raises(AstrBotError, match="缺少必填字段"):
+        with pytest.raises(AstrBotError) as raised:
             await router.execute(
                 "test.cap",
                 {},
@@ -360,6 +374,9 @@ class TestCapabilityRouterExecute:
                 cancel_token=token,
                 request_id="req-1",
             )
+        message = str(raised.value)
+        assert "capability 'test.cap' 的输出校验失败" in message
+        assert "缺少必填字段：result" in message
 
 
 class TestCapabilityRouterDBWatch:
@@ -1045,6 +1062,103 @@ class TestBuiltinPlatformCapabilities:
         assert result["members"][0]["user_id"] == "session-1:member-1"
 
 
+class TestBuiltinHttpAndMetadataCapabilities:
+    """Tests for built-in HTTP and metadata capabilities."""
+
+    @pytest.mark.asyncio
+    async def test_http_register_and_list_apis(self):
+        router = CapabilityRouter()
+        token = CancelToken()
+
+        with caller_plugin_scope("demo_plugin"):
+            await router.execute(
+                "http.register_api",
+                {
+                    "route": "/demo",
+                    "methods": ["GET", "POST"],
+                    "handler_capability": "demo.http_handler",
+                    "description": "demo",
+                },
+                stream=False,
+                cancel_token=token,
+                request_id="req-http-1",
+            )
+
+        with caller_plugin_scope("demo_plugin"):
+            result = await router.execute(
+                "http.list_apis",
+                {},
+                stream=False,
+                cancel_token=token,
+                request_id="req-http-2",
+            )
+
+        assert result["apis"] == [
+            {
+                "route": "/demo",
+                "methods": ["GET", "POST"],
+                "handler_capability": "demo.http_handler",
+                "description": "demo",
+                "plugin_id": "demo_plugin",
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_metadata_get_plugin_and_config(self):
+        router = CapabilityRouter()
+        token = CancelToken()
+        router.upsert_plugin(
+            metadata={
+                "name": "demo_plugin",
+                "display_name": "Demo Plugin",
+                "description": "demo",
+                "author": "tester",
+                "version": "0.1.0",
+                "enabled": True,
+            },
+            config={"debug": True},
+        )
+
+        with caller_plugin_scope("demo_plugin"):
+            plugin_result = await router.execute(
+                "metadata.get_plugin",
+                {"name": "demo_plugin"},
+                stream=False,
+                cancel_token=token,
+                request_id="req-meta-1",
+            )
+            config_result = await router.execute(
+                "metadata.get_plugin_config",
+                {"name": "demo_plugin"},
+                stream=False,
+                cancel_token=token,
+                request_id="req-meta-2",
+            )
+
+        assert plugin_result["plugin"]["display_name"] == "Demo Plugin"
+        assert config_result["config"] == {"debug": True}
+
+    @pytest.mark.asyncio
+    async def test_metadata_get_plugin_config_rejects_other_plugin(self):
+        router = CapabilityRouter()
+        token = CancelToken()
+        router.upsert_plugin(
+            metadata={"name": "demo_plugin"},
+            config={"secret": True},
+        )
+
+        with caller_plugin_scope("other_plugin"):
+            result = await router.execute(
+                "metadata.get_plugin_config",
+                {"name": "demo_plugin"},
+                stream=False,
+                cancel_token=token,
+                request_id="req-meta-3",
+            )
+
+        assert result == {"config": None}
+
+
 class TestValidateSchema:
     """Tests for _validate_schema method."""
 
@@ -1084,4 +1198,39 @@ class TestValidateSchema:
             router._validate_schema(
                 {"type": "object", "required": ["name"]},
                 {"name": None},
+            )
+
+    @pytest.mark.asyncio
+    async def test_type_mismatch_raises(self):
+        """_validate_schema should reject mismatched scalar types."""
+        router = CapabilityRouter()
+
+        with pytest.raises(AstrBotError, match="字段 count 必须是 integer"):
+            router._validate_schema(
+                {
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                    "required": ["count"],
+                },
+                {"count": "bad"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_array_item_type_mismatch_raises(self):
+        """_validate_schema should validate nested array items."""
+        router = CapabilityRouter()
+
+        with pytest.raises(AstrBotError, match=r"字段 keys\[1\] 必须是 string"):
+            router._validate_schema(
+                {
+                    "type": "object",
+                    "properties": {
+                        "keys": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        }
+                    },
+                    "required": ["keys"],
+                },
+                {"keys": ["ok", 1]},
             )

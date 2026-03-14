@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from astrbot_sdk._invocation_context import caller_plugin_scope
 from astrbot_sdk.context import CancelToken
 from astrbot_sdk.errors import AstrBotError
 from astrbot_sdk.protocol.descriptors import CapabilityDescriptor
@@ -154,6 +155,46 @@ class PeerRuntimeTest(unittest.IsolatedAsyncioTestCase):
         await plugin.start()
         await plugin.initialize([])
         await plugin.wait_until_remote_initialized(timeout=0.1)
+
+        await plugin.stop()
+        await core.stop()
+
+    async def test_invoke_transports_runtime_caller_plugin_id(self) -> None:
+        captured: list[str | None] = []
+
+        async def invoke_handler(message, _token):
+            captured.append(message.caller_plugin_id)
+            return {"ok": True}
+
+        core = Peer(
+            transport=self.left,
+            peer_info=PeerInfo(name="core", role="core", version="v4"),
+        )
+        core.set_initialize_handler(
+            lambda _message: asyncio.sleep(
+                0,
+                result=InitializeOutput(
+                    peer=PeerInfo(name="core", role="core", version="v4"),
+                    capabilities=[],
+                    metadata={},
+                ),
+            )
+        )
+        core.set_invoke_handler(invoke_handler)
+        plugin = Peer(
+            transport=self.right,
+            peer_info=PeerInfo(name="plugin", role="plugin", version="v4"),
+        )
+
+        await core.start()
+        await plugin.start()
+        await plugin.initialize([])
+
+        with caller_plugin_scope("demo_plugin"):
+            result = await plugin.invoke("llm.chat", {"prompt": "hello"})
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(captured, ["demo_plugin"])
 
         await plugin.stop()
         await core.stop()

@@ -7,7 +7,7 @@
     - `chat_raw()` 返回完整结构化响应
     - `stream_chat()` 返回文本增量
     - Agent 循环、动态工具注册等更高层 orchestration 不放在客户端内，
-      由上层运行时或 `_legacy_api.py` 的兼容入口承接
+      由上层运行时或独立迁移入口承接
 """
 
 from __future__ import annotations

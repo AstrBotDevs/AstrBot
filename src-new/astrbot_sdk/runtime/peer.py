@@ -88,6 +88,7 @@ import inspect
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
+from .._invocation_context import caller_plugin_scope, current_caller_plugin_id
 from ..context import CancelToken
 from ..errors import AstrBotError, ErrorCodes
 from ..protocol.messages import (
@@ -418,6 +419,7 @@ class Peer:
                 capability=capability,
                 input=payload,
                 stream=False,
+                caller_plugin_id=current_caller_plugin_id(),
             )
         )
         result = await future
@@ -456,6 +458,7 @@ class Peer:
                 capability=capability,
                 input=payload,
                 stream=True,
+                caller_plugin_id=current_caller_plugin_id(),
             )
         )
 
@@ -603,7 +606,8 @@ class Peer:
             token.raise_if_cancelled()
             if self._invoke_handler is None:
                 raise AstrBotError.capability_not_found(message.capability)
-            execution = await self._invoke_handler(message, token)
+            with caller_plugin_scope(message.caller_plugin_id):
+                execution = await self._invoke_handler(message, token)
             if inspect.isawaitable(execution):
                 execution = await execution
             if message.stream:

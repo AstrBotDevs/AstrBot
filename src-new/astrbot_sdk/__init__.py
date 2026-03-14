@@ -2,11 +2,11 @@
 
 这里仅重新导出 v4 推荐直接导入的稳定入口。
 
-- ``astrbot_sdk``: v4 原生稳定 API
-- ``astrbot_sdk.compat``: 旧版顶层导入路径兼容入口
-- ``astrbot_sdk.api``: 历史 ``api.*`` 导入路径兼容面
+新插件应直接使用此模块的导出：
+    from astrbot_sdk import Star, Context, MessageEvent
+    from astrbot_sdk.decorators import on_command, on_message
 
-这样可以把原生 API 与迁移入口明确分开，避免旧路径继续反向污染顶层包。
+迁移期适配入口位于独立模块；此处只暴露 v4 原生主入口。
 """
 
 from .context import Context

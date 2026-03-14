@@ -4,9 +4,8 @@
 
 设计边界：
     - `PlatformClient` 只负责直接的平台 capability
-    - 旧版 `send_message(session, MessageChain)` 兼容由 `_legacy_api.py` 承接
-    - 富消息链通过 `platform.send_chain` 发送，链构建能力位于 `api.message`
-      compat 子模块，而不是此客户端
+    - 迁移期消息桥接由独立迁移入口承接，不放进原生客户端
+    - 富消息链通过 `platform.send_chain` 发送，链构建能力位于专门的消息模块
 """
 
 from __future__ import annotations

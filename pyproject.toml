@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astrbot-sdk"
 version = "0.1.0"
-description = "AstrBot SDK with v4 runtime and legacy compatibility surfaces"
+description = "AstrBot SDK with v4 runtime, worker protocol, and plugin tooling"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

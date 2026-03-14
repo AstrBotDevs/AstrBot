@@ -101,6 +101,41 @@ MEMORY_DELETE_INPUT_SCHEMA = _object_schema(
     key={"type": "string"},
 )
 MEMORY_DELETE_OUTPUT_SCHEMA = _object_schema()
+MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA = _object_schema(
+    required=("key", "value", "ttl_seconds"),
+    key={"type": "string"},
+    value={"type": "object"},
+    ttl_seconds={"type": "integer", "minimum": 1},
+)
+MEMORY_SAVE_WITH_TTL_OUTPUT_SCHEMA = _object_schema()
+MEMORY_GET_MANY_INPUT_SCHEMA = _object_schema(
+    required=("keys",),
+    keys={"type": "array", "items": {"type": "string"}},
+)
+MEMORY_GET_MANY_OUTPUT_SCHEMA = _object_schema(
+    required=("items",),
+    items={
+        "type": "array",
+        "items": _object_schema(
+            required=("key", "value"),
+            key={"type": "string"},
+            value=_nullable({"type": "object"}),
+        ),
+    },
+)
+MEMORY_DELETE_MANY_INPUT_SCHEMA = _object_schema(
+    required=("keys",),
+    keys={"type": "array", "items": {"type": "string"}},
+)
+MEMORY_DELETE_MANY_OUTPUT_SCHEMA = _object_schema(
+    required=("deleted_count",),
+    deleted_count={"type": "integer"},
+)
+MEMORY_STATS_INPUT_SCHEMA = _object_schema()
+MEMORY_STATS_OUTPUT_SCHEMA = _object_schema(
+    total_items={"type": "integer"},
+    total_bytes=_nullable({"type": "integer"}),
+)
 DB_GET_INPUT_SCHEMA = _object_schema(
     required=("key",),
     key={"type": "string"},
@@ -203,6 +238,46 @@ PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA = _object_schema(
     required=("members",),
     members={"type": "array", "items": {"type": "object"}},
 )
+HTTP_REGISTER_API_INPUT_SCHEMA = _object_schema(
+    required=("route", "methods", "handler_capability"),
+    route={"type": "string"},
+    methods={"type": "array", "items": {"type": "string"}},
+    handler_capability={"type": "string"},
+    description={"type": "string"},
+)
+HTTP_REGISTER_API_OUTPUT_SCHEMA = _object_schema()
+HTTP_UNREGISTER_API_INPUT_SCHEMA = _object_schema(
+    required=("route", "methods"),
+    route={"type": "string"},
+    methods={"type": "array", "items": {"type": "string"}},
+)
+HTTP_UNREGISTER_API_OUTPUT_SCHEMA = _object_schema()
+HTTP_LIST_APIS_INPUT_SCHEMA = _object_schema()
+HTTP_LIST_APIS_OUTPUT_SCHEMA = _object_schema(
+    required=("apis",),
+    apis={"type": "array", "items": {"type": "object"}},
+)
+METADATA_GET_PLUGIN_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+METADATA_GET_PLUGIN_OUTPUT_SCHEMA = _object_schema(
+    required=("plugin",),
+    plugin=_nullable({"type": "object"}),
+)
+METADATA_LIST_PLUGINS_INPUT_SCHEMA = _object_schema()
+METADATA_LIST_PLUGINS_OUTPUT_SCHEMA = _object_schema(
+    required=("plugins",),
+    plugins={"type": "array", "items": {"type": "object"}},
+)
+METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA = _object_schema(
+    required=("name",),
+    name={"type": "string"},
+)
+METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
+    required=("config",),
+    config=_nullable({"type": "object"}),
+)
 
 BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "llm.chat": {
@@ -232,6 +307,22 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "memory.delete": {
         "input": MEMORY_DELETE_INPUT_SCHEMA,
         "output": MEMORY_DELETE_OUTPUT_SCHEMA,
+    },
+    "memory.save_with_ttl": {
+        "input": MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA,
+        "output": MEMORY_SAVE_WITH_TTL_OUTPUT_SCHEMA,
+    },
+    "memory.get_many": {
+        "input": MEMORY_GET_MANY_INPUT_SCHEMA,
+        "output": MEMORY_GET_MANY_OUTPUT_SCHEMA,
+    },
+    "memory.delete_many": {
+        "input": MEMORY_DELETE_MANY_INPUT_SCHEMA,
+        "output": MEMORY_DELETE_MANY_OUTPUT_SCHEMA,
+    },
+    "memory.stats": {
+        "input": MEMORY_STATS_INPUT_SCHEMA,
+        "output": MEMORY_STATS_OUTPUT_SCHEMA,
     },
     "db.get": {
         "input": DB_GET_INPUT_SCHEMA,
@@ -276,6 +367,30 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "platform.get_members": {
         "input": PLATFORM_GET_MEMBERS_INPUT_SCHEMA,
         "output": PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA,
+    },
+    "http.register_api": {
+        "input": HTTP_REGISTER_API_INPUT_SCHEMA,
+        "output": HTTP_REGISTER_API_OUTPUT_SCHEMA,
+    },
+    "http.unregister_api": {
+        "input": HTTP_UNREGISTER_API_INPUT_SCHEMA,
+        "output": HTTP_UNREGISTER_API_OUTPUT_SCHEMA,
+    },
+    "http.list_apis": {
+        "input": HTTP_LIST_APIS_INPUT_SCHEMA,
+        "output": HTTP_LIST_APIS_OUTPUT_SCHEMA,
+    },
+    "metadata.get_plugin": {
+        "input": METADATA_GET_PLUGIN_INPUT_SCHEMA,
+        "output": METADATA_GET_PLUGIN_OUTPUT_SCHEMA,
+    },
+    "metadata.list_plugins": {
+        "input": METADATA_LIST_PLUGINS_INPUT_SCHEMA,
+        "output": METADATA_LIST_PLUGINS_OUTPUT_SCHEMA,
+    },
+    "metadata.get_plugin_config": {
+        "input": METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA,
+        "output": METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA,
     },
 }
 
@@ -546,6 +661,12 @@ __all__ = [
     "DB_WATCH_OUTPUT_SCHEMA",
     "EventTrigger",
     "HandlerDescriptor",
+    "HTTP_LIST_APIS_INPUT_SCHEMA",
+    "HTTP_LIST_APIS_OUTPUT_SCHEMA",
+    "HTTP_REGISTER_API_INPUT_SCHEMA",
+    "HTTP_REGISTER_API_OUTPUT_SCHEMA",
+    "HTTP_UNREGISTER_API_INPUT_SCHEMA",
+    "HTTP_UNREGISTER_API_OUTPUT_SCHEMA",
     "JSONSchema",
     "LLM_CHAT_INPUT_SCHEMA",
     "LLM_CHAT_OUTPUT_SCHEMA",
@@ -555,12 +676,26 @@ __all__ = [
     "LLM_STREAM_CHAT_OUTPUT_SCHEMA",
     "MEMORY_DELETE_INPUT_SCHEMA",
     "MEMORY_DELETE_OUTPUT_SCHEMA",
+    "MEMORY_DELETE_MANY_INPUT_SCHEMA",
+    "MEMORY_DELETE_MANY_OUTPUT_SCHEMA",
     "MEMORY_GET_INPUT_SCHEMA",
     "MEMORY_GET_OUTPUT_SCHEMA",
+    "MEMORY_GET_MANY_INPUT_SCHEMA",
+    "MEMORY_GET_MANY_OUTPUT_SCHEMA",
     "MEMORY_SAVE_INPUT_SCHEMA",
     "MEMORY_SAVE_OUTPUT_SCHEMA",
+    "MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA",
+    "MEMORY_SAVE_WITH_TTL_OUTPUT_SCHEMA",
     "MEMORY_SEARCH_INPUT_SCHEMA",
     "MEMORY_SEARCH_OUTPUT_SCHEMA",
+    "MEMORY_STATS_INPUT_SCHEMA",
+    "MEMORY_STATS_OUTPUT_SCHEMA",
+    "METADATA_GET_PLUGIN_CONFIG_INPUT_SCHEMA",
+    "METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA",
+    "METADATA_GET_PLUGIN_INPUT_SCHEMA",
+    "METADATA_GET_PLUGIN_OUTPUT_SCHEMA",
+    "METADATA_LIST_PLUGINS_INPUT_SCHEMA",
+    "METADATA_LIST_PLUGINS_OUTPUT_SCHEMA",
     "MessageTrigger",
     "PLATFORM_GET_MEMBERS_INPUT_SCHEMA",
     "PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA",
