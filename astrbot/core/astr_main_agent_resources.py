@@ -382,6 +382,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             MessageChain(chain=components),
         )
 
+        if str(target_session) == context.context.event.unified_msg_origin:
+            context.context.event._has_send_oper = True
+            context.context.event.set_extra(
+                "_send_message_to_user_current_session",
+                True,
+            )
+
         # if file_from_sandbox:
         #     try:
         #         os.remove(local_path)
