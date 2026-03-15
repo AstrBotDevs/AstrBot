@@ -5,6 +5,7 @@ from quart import jsonify, request
 
 from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.utils import datetime_utils
 
 from .route import Response, Route, RouteContext
 
@@ -27,7 +28,7 @@ class CronRoute(Route):
         data = job.model_dump() if hasattr(job, "model_dump") else job.__dict__
         for k in ["created_at", "updated_at", "last_run_at", "next_run_time"]:
             if isinstance(data.get(k), datetime):
-                data[k] = data[k].isoformat()
+                data[k] = datetime_utils.to_utc_isoformat(data[k])
         # expose note explicitly for UI (prefer payload.note then description)
         payload = data.get("payload") or {}
         data["note"] = payload.get("note") or data.get("description") or ""
@@ -74,6 +75,10 @@ class CronRoute(Route):
             enabled = bool(payload.get("enabled", True))
             run_once = bool(payload.get("run_once", False))
             run_at = payload.get("run_at")
+
+            # compatible with python before 3.11
+            if run_at.endswith('Z'):
+                run_at = run_at.replace('Z', '+00:00')
 
             if not session:
                 return jsonify(Response().error("session is required").__dict__)

@@ -265,6 +265,9 @@ async function createJob() {
   creating.value = true
   try {
     const payload: any = { ...newJob.value }
+    if (payload.run_at) {
+      payload.run_at = new Date(payload.run_at).toISOString()
+    }
     const res = await axios.post('/api/cron/jobs', payload)
     if (res.data.status === 'ok') {
       toast(tm('messages.createSuccess'))
