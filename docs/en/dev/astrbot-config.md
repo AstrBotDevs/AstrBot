@@ -352,6 +352,26 @@ Whether platforms that don't support streaming responses should fall back to seg
 
 Limit on the maximum number of Agent steps. Default is `30`. Each tool call by the model counts as one step.
 
+#### `provider_settings.deduplicate_repeated_tool_results`
+
+Whether to compact repeated tool results. Default is `true`. Only applies when `agent_runner_type="local"`.
+
+When enabled, if the same tool repeatedly returns exactly the same output with the same arguments, the first output is kept in full and later repeated outputs are replaced with a compact summary to reduce context growth.
+
+#### `provider_settings.tool_result_dedup_max_entries`
+
+Maximum number of cached dedup signatures. Default is `1024`. Only applies when `agent_runner_type="local"` and `deduplicate_repeated_tool_results=true`.
+
+This bounds how many `(tool_name + normalized_args)` signatures are retained in the dedup cache to prevent unbounded growth in long-running sessions. Set to `0` or a negative value to disable pruning.
+
+#### `provider_settings.tool_error_repeat_guard_threshold`
+
+Error-loop guard threshold for tool calls. Default is `8`. Only applies when `agent_runner_type="local"`.
+
+When the same tool call (same tool name + same arguments) keeps returning errors and reaches this threshold, tools are automatically disabled for the current agent run, and a system notice is injected to require the model to stop calling tools and answer directly based on available context.
+
+Set to `0` or a negative value to disable this guard.
+
 #### `provider_settings.tool_call_timeout`
 
 Added in `v4.3.5`

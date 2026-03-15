@@ -352,6 +352,26 @@ Tavily 搜索引擎的 API Key 列表。使用 `tavily` 作为网页搜索提供
 
 Agent 最大步骤数限制。默认为 `30`。模型的每次工具调用算作一步。
 
+#### `provider_settings.deduplicate_repeated_tool_results`
+
+是否压缩重复工具结果。默认为 `true`。仅在 `agent_runner_type="local"` 时生效。
+
+开启后，当同一个工具在相同参数下连续返回完全相同的结果时，系统会保留首次完整输出，并将后续重复输出替换为摘要消息，减少上下文膨胀。
+
+#### `provider_settings.tool_result_dedup_max_entries`
+
+去重缓存签名上限。默认为 `1024`。仅在 `agent_runner_type="local"` 且 `deduplicate_repeated_tool_results=true` 时生效。
+
+用于限制去重缓存中可保留的“工具名 + 参数签名”数量，避免长会话下缓存无限增长。设为 `0` 或负数表示不限制（不裁剪）。
+
+#### `provider_settings.tool_error_repeat_guard_threshold`
+
+工具错误循环保护阈值。默认为 `8`。仅在 `agent_runner_type="local"` 时生效。
+
+当同一工具在相同参数下连续返回错误达到该阈值时，系统会自动停用本轮 Agent 的工具能力，并注入系统提示要求模型停止调用工具、直接基于现有信息回复用户。可用于避免“错误轮询”持续消耗 step 与上下文。
+
+设为 `0` 或负数可禁用该保护。
+
 #### `provider_settings.tool_call_timeout`
 
 Added in `v4.3.5`

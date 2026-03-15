@@ -56,6 +56,56 @@ class InternalAgentSubStage(Stage):
         self.max_step: int = settings.get("max_agent_step", 30)
         self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
         self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        self.deduplicate_repeated_tool_results: bool = settings.get(
+            "deduplicate_repeated_tool_results",
+            True,
+        )
+        raw_dedup_max_entries = settings.get("tool_result_dedup_max_entries", 1024)
+        if isinstance(raw_dedup_max_entries, bool):
+            logger.warning(
+                "Invalid provider_settings.tool_result_dedup_max_entries=%s, fallback to 1024.",
+                raw_dedup_max_entries,
+            )
+            raw_dedup_max_entries = 1024
+        try:
+            self.tool_result_dedup_max_entries: int | None = (
+                None
+                if raw_dedup_max_entries is None
+                else int(raw_dedup_max_entries)
+            )
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid provider_settings.tool_result_dedup_max_entries=%s, fallback to 1024.",
+                raw_dedup_max_entries,
+            )
+            self.tool_result_dedup_max_entries = 1024
+        if (
+            self.tool_result_dedup_max_entries is not None
+            and self.tool_result_dedup_max_entries <= 0
+        ):
+            self.tool_result_dedup_max_entries = None
+        raw_tool_error_guard = settings.get("tool_error_repeat_guard_threshold", 8)
+        if isinstance(raw_tool_error_guard, bool):
+            logger.warning(
+                "Invalid provider_settings.tool_error_repeat_guard_threshold=%s, fallback to 8.",
+                raw_tool_error_guard,
+            )
+            raw_tool_error_guard = 8
+        try:
+            self.tool_error_repeat_guard_threshold: int | None = (
+                None if raw_tool_error_guard is None else int(raw_tool_error_guard)
+            )
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid provider_settings.tool_error_repeat_guard_threshold=%s, fallback to 8.",
+                raw_tool_error_guard,
+            )
+            self.tool_error_repeat_guard_threshold = 8
+        if (
+            self.tool_error_repeat_guard_threshold is not None
+            and self.tool_error_repeat_guard_threshold <= 0
+        ):
+            self.tool_error_repeat_guard_threshold = None
         if self.tool_schema_mode not in ("skills_like", "full"):
             logger.warning(
                 "Unsupported tool_schema_mode: %s, fallback to skills_like",
@@ -136,6 +186,9 @@ class InternalAgentSubStage(Stage):
             subagent_orchestrator=conf.get("subagent_orchestrator", {}),
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
+            deduplicate_repeated_tool_results=self.deduplicate_repeated_tool_results,
+            tool_result_dedup_max_entries=self.tool_result_dedup_max_entries,
+            tool_error_repeat_guard_threshold=self.tool_error_repeat_guard_threshold,
         )
 
     async def process(

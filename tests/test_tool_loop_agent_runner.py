@@ -73,6 +73,86 @@ class MockProvider(Provider):
         yield response
 
 
+class MockMissingRequiredArgProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"max_results": 5}],
+            tools_call_ids=["call_missing_required"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MockCamelCaseArgProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"query": 123, "maxResults": "5"}],
+            tools_call_ids=["call_camel_case"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MockAnyOfViolationProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"note": "only note"}],
+            tools_call_ids=["call_anyof_violation"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class MockIncompatibleArgsProvider(MockProvider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="这是我的最终回答",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="我需要使用工具来帮助您",
+            tools_call_name=["test_tool"],
+            tools_call_args=[{"irrelevant_field": "x"}],
+            tools_call_ids=["call_incompatible_args"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
 class MockToolExecutor:
     """模拟工具执行器"""
 
@@ -84,6 +164,20 @@ class MockToolExecutor:
 
             result = CallToolResult(
                 content=[TextContent(type="text", text="工具执行结果")]
+            )
+            yield result
+
+        return generator()
+
+
+class MockErrorToolExecutor:
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, TextContent
+
+            result = CallToolResult(
+                content=[TextContent(type="text", text="error: temporary upstream failure")]
             )
             yield result
 
@@ -174,6 +268,11 @@ def mock_tool_executor():
 
 
 @pytest.fixture
+def mock_error_tool_executor():
+    return MockErrorToolExecutor()
+
+
+@pytest.fixture
 def mock_hooks():
     return MockHooks()
 
@@ -191,9 +290,36 @@ def tool_set():
 
 
 @pytest.fixture
+def tool_set_required_query():
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer"},
+            },
+            "required": ["query"],
+        },
+        handler=AsyncMock(),
+    )
+    return ToolSet(tools=[tool])
+
+
+@pytest.fixture
 def provider_request(tool_set):
     """创建测试用的ProviderRequest"""
     return ProviderRequest(prompt="请帮我查询信息", func_tool=tool_set, contexts=[])
+
+
+@pytest.fixture
+def provider_request_required_query(tool_set_required_query):
+    return ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=tool_set_required_query,
+        contexts=[],
+    )
 
 
 @pytest.fixture
@@ -293,6 +419,444 @@ async def test_normal_completion_without_max_step(
 
     # 验证工具仍然可用（没有被禁用）
     assert runner.req.func_tool is not None, "正常完成时工具不应该被禁用"
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_output_is_deduplicated_in_context(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """测试重复工具输出会被压缩，避免上下文持续膨胀。"""
+
+    # 前 3 次都调用相同工具，且工具返回相同文本
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 3
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    assert provider_request.tool_calls_result is not None
+    assert isinstance(provider_request.tool_calls_result, list)
+    assert provider_request.tool_calls_result
+
+    tool_contents = [
+        str(seg.content)
+        for tcr in provider_request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert tool_contents
+    assert "工具执行结果" in tool_contents[0]
+    assert any(
+        content.startswith("[tool-result-deduplicated]") for content in tool_contents[1:]
+    )
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_output_dedup_can_be_disabled(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    """测试关闭去重配置后，重复工具输出保持原样。"""
+
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 3
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        deduplicate_repeated_tool_results=False,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    assert provider_request.tool_calls_result is not None
+    assert isinstance(provider_request.tool_calls_result, list)
+
+    tool_contents = [
+        str(seg.content)
+        for tcr in provider_request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert tool_contents
+    assert sum(1 for content in tool_contents if content == "工具执行结果") >= 2
+    assert not any(
+        content.startswith("[tool-result-deduplicated]") for content in tool_contents
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_required_tool_args_are_reported_without_handler_typeerror(
+    runner, provider_request_required_query, mock_tool_executor, mock_hooks
+):
+    provider = MockMissingRequiredArgProvider()
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request_required_query,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert provider_request_required_query.tool_calls_result is not None
+    assert isinstance(provider_request_required_query.tool_calls_result, list)
+    contents = [
+        str(seg.content)
+        for tcr in provider_request_required_query.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert contents
+    assert any("Missing required tool arguments: query" in c for c in contents)
+    assert not any("Tool handler parameter mismatch" in c for c in contents)
+
+
+@pytest.mark.asyncio
+async def test_camel_case_tool_args_are_mapped_to_snake_case_and_executed(
+    runner, mock_hooks
+):
+    provider = MockCamelCaseArgProvider()
+    captured: dict = {}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            captured.update(tool_args)
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer"},
+            },
+            "required": ["query", "max_results"],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert captured.get("query") == "123"
+    assert captured.get("max_results") == 5
+
+
+@pytest.mark.asyncio
+async def test_anyof_contract_violation_is_reported_without_executing_tool(
+    runner, mock_hooks
+):
+    provider = MockAnyOfViolationProvider()
+    executed = {"called": False}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            executed["called"] = True
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {
+                "note": {"type": "string"},
+                "cron_expression": {"type": "string"},
+                "run_at": {"type": "string"},
+            },
+            "required": ["note"],
+            "anyOf": [
+                {"required": ["cron_expression"]},
+                {"required": ["run_at"]},
+            ],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我创建未来任务",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert executed["called"] is False
+    assert request.tool_calls_result is not None
+    contents = [
+        str(seg.content)
+        for tcr in request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert any("Argument contract violation (anyOf)" in c for c in contents)
+
+
+@pytest.mark.asyncio
+async def test_incompatible_tool_args_are_rejected_early(
+    runner, mock_hooks
+):
+    provider = MockIncompatibleArgsProvider()
+    executed = {"called": False}
+
+    class CaptureToolExecutor:
+        @classmethod
+        def execute(cls, tool, run_context, **tool_args):
+            executed["called"] = True
+
+            async def generator():
+                from mcp.types import CallToolResult, TextContent
+
+                yield CallToolResult(
+                    content=[TextContent(type="text", text="工具执行结果")]
+                )
+
+            return generator()
+
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="请帮我查询信息",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=CaptureToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert executed["called"] is False
+    assert request.tool_calls_result is not None
+    contents = [
+        str(seg.content)
+        for tcr in request.tool_calls_result
+        for seg in tcr.tool_calls_result
+    ]
+    assert any("No compatible arguments for this tool" in c for c in contents)
+
+
+@pytest.mark.asyncio
+async def test_tool_error_repeat_guard_disables_tools_and_forces_direct_answer(
+    runner, mock_provider, provider_request, mock_error_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 100
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_error_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_error_repeat_guard_threshold=2,
+    )
+
+    async for _ in runner.step_until_done(6):
+        pass
+
+    assert runner.done()
+    assert runner.req.func_tool is None
+    assert mock_provider.call_count <= 3
+    assert any(
+        m.role == "user"
+        and isinstance(m.content, str)
+        and "Tool call error loop detected" in m.content
+        for m in runner.run_context.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_error_repeat_guard_can_be_disabled(
+    runner, mock_provider, provider_request, mock_error_tool_executor, mock_hooks
+):
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 3
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_error_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_error_repeat_guard_threshold=0,
+    )
+
+    async for _ in runner.step_until_done(8):
+        pass
+
+    assert runner.done()
+    assert runner.req.func_tool is not None
+    assert not any(
+        m.role == "user"
+        and isinstance(m.content, str)
+        and "Tool call error loop detected" in m.content
+        for m in runner.run_context.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_result_dedup_cache_is_pruned_when_exceeding_limit(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_result_dedup_max_entries=2,
+    )
+
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_a",
+        tool_args={"arg": 1},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_b",
+        tool_args={"arg": 2},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_c",
+        tool_args={"arg": 3},
+        content="same-result",
+    )
+
+    assert len(runner._tool_result_dedup) == 2
+    sig_a = "tool_a:" + runner._normalize_tool_args_for_signature({"arg": 1})
+    assert sig_a not in runner._tool_result_dedup
+
+
+@pytest.mark.asyncio
+async def test_tool_result_dedup_cache_allows_unbounded_when_limit_disabled(
+    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+):
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        tool_result_dedup_max_entries=None,
+    )
+
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_a",
+        tool_args={"arg": 1},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_b",
+        tool_args={"arg": 2},
+        content="same-result",
+    )
+    runner._deduplicate_tool_result_content(
+        tool_name="tool_c",
+        tool_args={"arg": 3},
+        content="same-result",
+    )
+
+    assert len(runner._tool_result_dedup) == 3
+
+
+def test_tool_args_signature_normalization_is_stable_for_non_json_values(runner):
+    class NonJsonArg:
+        def __init__(self, payload: str):
+            self.payload = payload
+
+    sig_one = runner._normalize_tool_args_for_signature(
+        {
+            "obj": NonJsonArg("v1"),
+            "tags": {"b", "a"},
+        }
+    )
+    sig_two = runner._normalize_tool_args_for_signature(
+        {
+            "tags": {"a", "b"},
+            "obj": NonJsonArg("v1"),
+        }
+    )
+
+    assert sig_one == sig_two
+    assert "0x" not in sig_one
 
 
 @pytest.mark.asyncio
