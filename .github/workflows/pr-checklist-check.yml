@@ -1,5 +1,3 @@
-# This workflow checks whether the PR author checked the "I did NOT read" item
-# in the PR checklist. If so, it posts a reminder comment and closes the PR.
 name: PR Checklist Check
 
 on:
@@ -9,6 +7,7 @@ on:
 jobs:
   check-checklist:
     runs-on: ubuntu-latest
+
     permissions:
       pull-requests: write
       issues: write
@@ -21,54 +20,70 @@ jobs:
           script: |
             const body = context.payload.pull_request.body || '';
 
-            // 精确匹配完整的 checklist 项：- [x] 或 - [X] 后跟完整句子，忽略大小写和多余空格
-            const regex = /-+\s*\[\s*[xX]\s*\]\s*⚠️\s*我\*\*没有\*\*认真阅读以上内容，直接提交。/im;
+            // 宽松匹配 checklist
+            const regex = /-\s*\[\s*x\s*\]\s*.*我\s*\*?\*?没有\s*\*?\*?认真阅读/im;
+
             const isBad = regex.test(body);
 
-            return isBad;
-          result-encoding: string
-
+            core.setOutput("bad", isBad);
+      
       - name: Comment and close PR if checklist violated
-        if: steps.check.outputs.result == 'true'
+        if: steps.check.outputs.bad == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.pull_request.number;
-            const author = context.payload.pull_request.user.login;
+            const pr = context.payload.pull_request;
+            const prNumber = pr.number;
+            const author = pr.user.login;
 
-            await github.rest.issues.createComment({
+            // 防止重复评论
+            const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: prNumber,
-              body: |
-                👋 @${author}
-
-                您的 PR 未通过检查清单校验 —— 检测到您勾选了「我**没有**认真阅读以上内容，直接提交」。
-
-                请按照以下规则重新提交 PR：
-
-                1. 请仔细阅读 PR 模板中的所有说明。
-                2. 本次开发请**基于 \`dev\` 分支**进行，并将 PR 目标分支设置为**开发分支（\`dev\`）**（除非极其紧急的情况才允许合并到主分支）。
-                3. 完成上述检查后，请重新发起 PR。
-
-                本 PR 已自动关闭，请按规范重新拉起。感谢您的贡献！🙏
-
-                ---
-
-                Your PR failed the checklist validation — the item "I **did not** read the above carefully before submitting" was checked.
-
-                Please follow these rules and reopen a new PR:
-
-                1. Read all the instructions in the PR template carefully.
-                2. Make sure your development is **based on the \`dev\` branch**, and set the PR target branch to the **development branch (\`dev\`)** (only merge to main if extremely urgent).
-                3. Once you have reviewed everything, please open a new PR.
-
-                This PR has been automatically closed. Please reopen a correct one. Thank you for your contribution! 🙏
+              issue_number: prNumber
             });
+
+            const already = comments.data.some(c =>
+              c.body.includes("PR 未通过检查清单校验")
+            );
+
+            if (!already) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `
+👋 @${author}
+
+您的 PR 未通过检查清单校验 —— 检测到您勾选了「我**没有**认真阅读以上内容，直接提交」。
+
+请按照以下规则重新提交 PR：
+
+1. 请仔细阅读 PR 模板中的所有说明。
+2. 本次开发请 **基于 \`dev\` 分支** 进行，并将 PR 目标分支设置为 **开发分支（\`dev\`）**。
+3. 完成检查后重新提交 PR。
+
+本 PR 已自动关闭，请按规范重新拉起。感谢贡献！ 🙏
+
+---
+
+Your PR failed the checklist validation — the item  
+"I **did not** read the instructions carefully before submitting" was checked.
+
+Please:
+
+1. Read the PR template carefully
+2. Base your work on the **\`dev\` branch**
+3. Open a new PR after fixing the checklist
+
+This PR has been automatically closed. Thank you! 🙏
+`
+              });
+            }
 
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber,
-              state: 'closed'
+              state: "closed"
             });
