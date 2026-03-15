@@ -505,8 +505,8 @@ watch(
 </script>
 
 <template>
-  <v-app-bar elevation="0" :priority="0" height="70" class="px-0">
-    <v-container class="fill-height d-flex align-center">
+  <v-app-bar elevation="0" :priority="0" height="70" class="px-0" app>
+    <div class="fill-height d-flex align-center w-100 px-4">
       <!-- 桌面端标题栏拖拽区域 -->
       <div
         v-if="isDesktopReleaseMode"
@@ -522,6 +522,29 @@ watch(
       ></div>
 
       <div class="d-flex align-center">
+        <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
+        <v-btn
+          v-if="customizer.viewMode === 'bot'"
+          class="hidden-md-and-down mr-3"
+          icon
+          rounded="sm"
+          variant="flat"
+          @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+        >
+          <v-icon>mdi-menu</v-icon>
+        </v-btn>
+        <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
+        <v-btn
+          v-if="customizer.viewMode === 'bot'"
+          class="hidden-lg-and-up mr-3"
+          icon
+          rounded="sm"
+          variant="flat"
+          @click.stop="customizer.SET_SIDEBAR_DRAWER"
+        >
+          <v-icon>mdi-menu</v-icon>
+        </v-btn>
+
         <Logo />
       </div>
 
@@ -731,7 +754,7 @@ watch(
           }}</v-list-item-title>
         </v-list-item>
       </StyledMenu>
-    </v-container>
+    </div>
   </v-app-bar>
 
   <!-- 更新对话框 -->
