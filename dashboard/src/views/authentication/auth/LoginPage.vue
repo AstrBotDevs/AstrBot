@@ -47,12 +47,8 @@ function isCustomPreset(name: string) {
 
 // 主题切换函数
 function toggleTheme() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+  customizer.TOGGLE_DARK_MODE();
+  theme.global.name.value = customizer.uiTheme;
 }
 
 onMounted(() => {
