@@ -1,28 +1,27 @@
 import { fileURLToPath, URL } from 'url';
 import { defineConfig } from 'vite';
-import { execFileSync } from 'child_process';
 import vue from '@vitejs/plugin-vue';
 import vuetify from 'vite-plugin-vuetify';
 import webfontDl from 'vite-plugin-webfont-dl';
+// @ts-ignore — .mjs not in TS project scope; Vite resolves this at runtime
+import { runMdiSubset } from './scripts/subset-mdi-font.mjs';
 
-// Vite plugin: run MDI icon font subsetting before each build
+// Vite plugin: run MDI icon font subsetting (build only)
 function mdiSubset() {
   return {
     name: 'vite-plugin-mdi-subset',
-    buildStart() {
+    async buildStart() {
       console.log('\n🔧 Running MDI icon font subsetting...');
-      execFileSync('node', ['scripts/subset-mdi-font.mjs'], {
-        cwd: fileURLToPath(new URL('.', import.meta.url)),
-        stdio: 'inherit',
-      });
+      await runMdiSubset();
     },
   };
 }
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
-    mdiSubset(),
+    // Only run MDI subsetting during production builds, skip in dev server
+    ...(command === 'build' ? [mdiSubset()] : []),
     vue({
       template: {
         compilerOptions: {
@@ -65,4 +64,4 @@ export default defineConfig({
       }
     }
   }
-});
+}));
