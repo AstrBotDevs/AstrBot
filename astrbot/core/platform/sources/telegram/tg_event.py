@@ -26,12 +26,12 @@ from astrbot.core.utils.metrics import Metric
 
 
 def _is_gif(path: str) -> bool:
-    if str(path).lower().endswith('.gif'):
+    if path.lower().endswith('.gif'):
         return True
     try:
         with open(path, 'rb') as f:
             return f.read(6) in (b'GIF87a', b'GIF89a')
-    except Exception:
+    except OSError:
         return False
 
 
