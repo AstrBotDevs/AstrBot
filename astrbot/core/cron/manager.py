@@ -233,12 +233,12 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        session_str = payload.get("session")
-        if not session_str:
+        target_sessions = self._resolve_target_sessions(payload)
+        if not target_sessions:
             raise ValueError("ActiveAgentCronJob missing session.")
         note = payload.get("note") or job.description or job.name
 
-        extras = {
+        base_extras = {
             "cron_job": {
                 "id": job.job_id,
                 "name": job.name,
@@ -254,11 +254,45 @@ class CronJobManager:
             "cron_payload": payload,
         }
 
-        await self._woke_main_agent(
-            message=note,
-            session_str=session_str,
-            extras=extras,
-        )
+        for index, session_str in enumerate(target_sessions):
+            extras = {
+                **base_extras,
+                "cron_job": {
+                    **base_extras["cron_job"],
+                    "target_session": session_str,
+                    "target_index": index,
+                    "target_count": len(target_sessions),
+                },
+            }
+
+            await self._woke_main_agent(
+                message=note,
+                session_str=session_str,
+                extras=extras,
+            )
+
+    @staticmethod
+    def _resolve_target_sessions(payload: dict[str, Any]) -> list[str]:
+        target_sessions = payload.get("target_sessions")
+        sessions: list[str] = []
+
+        if isinstance(target_sessions, list):
+            for item in target_sessions:
+                session = str(item).strip()
+                if session and session not in sessions:
+                    sessions.append(session)
+        elif isinstance(target_sessions, str):
+            session = target_sessions.strip()
+            if session:
+                sessions.append(session)
+
+        primary_session = payload.get("session")
+        if primary_session:
+            session = str(primary_session).strip()
+            if session and session not in sessions:
+                sessions.insert(0, session)
+
+        return sessions
 
     async def _woke_main_agent(
         self,
