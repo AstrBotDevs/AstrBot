@@ -57,6 +57,7 @@ from astrbot.core.persona_error_reply import (
     set_persona_custom_error_message_on_event,
 )
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.provider import Provider
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
@@ -1168,7 +1169,11 @@ async def build_main_agent(
     if config.add_cron_tools:
         _proactive_cron_job_tools(req)
 
-    if event.platform_meta.support_proactive_message:
+    # Only register send_message_to_user tool for proactive agent scenarios
+    # (e.g., cron job triggered), not for normal conversations
+    if event.platform_meta.support_proactive_message and isinstance(
+        event, CronMessageEvent
+    ):
         if req.func_tool is None:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
