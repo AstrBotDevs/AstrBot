@@ -502,6 +502,14 @@ watch(
     }
   },
 );
+
+// Merry Christmas! 🎄
+const isChristmas = computed(() => {
+  const today = new Date();
+  const month = today.getMonth() + 1; // getMonth() 返回 0-11
+  const day = today.getDate();
+  return month === 12 && day === 25;
+});
 </script>
 
 <template>
@@ -544,8 +552,33 @@ watch(
         >
           <v-icon>mdi-menu</v-icon>
         </v-btn>
+      </div>
 
-        <Logo />
+      <div
+        class="logo-container"
+        :class="{
+          'mobile-logo': $vuetify.display.xs,
+          'chat-mode-logo': customizer.viewMode === 'chat',
+        }"
+        @click="handleLogoClick"
+      >
+        <span class="logo-text Outfit"
+          >Astr<span class="logo-text bot-text-wrapper"
+            >Bot
+            <img
+              v-if="isChristmas"
+              src="@/assets/images/xmas-hat.png"
+              alt="Christmas hat"
+              class="xmas-hat"
+            /> </span
+        ></span>
+        <span
+          class="logo-text logo-text-light Outfit"
+          style="color: grey"
+          v-if="customizer.viewMode === 'chat'"
+          >ChatUI</span
+        >
+        <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
       </div>
 
       <v-spacer />
