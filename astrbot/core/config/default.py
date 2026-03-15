@@ -1107,6 +1107,7 @@ CONFIG_METADATA_2 = {
                         },
                         "gm_thinking_config": {"budget": 0, "level": "HIGH"},
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "Anthropic": {
                         "id": "anthropic",
@@ -1118,6 +1119,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.anthropic.com/v1",
                         "timeout": 120,
                         "proxy": "",
+                        "custom_headers": {},
                         "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
                     },
                     "Moonshot": {
@@ -1350,6 +1352,7 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "Coze": {
                         "id": "coze",
@@ -1362,6 +1365,7 @@ CONFIG_METADATA_2 = {
                         "coze_api_base": "https://api.coze.cn",
                         "timeout": 60,
                         "proxy": "",
+                        "custom_headers": {},
                         # "auto_save_history": True,
                     },
                     "阿里云百炼应用": {
@@ -1381,6 +1385,7 @@ CONFIG_METADATA_2 = {
                         "variables": {},
                         "timeout": 60,
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "DeerFlow": {
                         "id": "deerflow",
@@ -1424,6 +1429,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "",
                         "model": "whisper-1",
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "Whisper(Local)": {
                         "provider": "openai",
@@ -1432,6 +1438,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "id": "whisper_selfhost",
                         "model": "tiny",
+                        "custom_headers": {},
                     },
                     "SenseVoice(Local)": {
                         "type": "sensevoice_stt_selfhost",
@@ -1441,6 +1448,7 @@ CONFIG_METADATA_2 = {
                         "id": "sensevoice",
                         "stt_model": "iic/SenseVoiceSmall",
                         "is_emotion": False,
+                        "custom_headers": {},
                     },
                     "OpenAI TTS(API)": {
                         "id": "openai_tts",
@@ -1454,6 +1462,7 @@ CONFIG_METADATA_2 = {
                         "openai-tts-voice": "alloy",
                         "timeout": "20",
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "Genie TTS": {
                         "id": "genie_tts",
@@ -1467,6 +1476,7 @@ CONFIG_METADATA_2 = {
                         "genie_refer_audio_path": "",
                         "genie_refer_text": "",
                         "timeout": 20,
+                        "custom_headers": {},
                     },
                     "Edge TTS": {
                         "id": "edge_tts",
@@ -1479,6 +1489,7 @@ CONFIG_METADATA_2 = {
                         "volume": "+0%",
                         "pitch": "+0Hz",
                         "timeout": 20,
+                        "custom_headers": {},
                     },
                     "GSV TTS(Local)": {
                         "id": "gsv_tts",
@@ -1490,6 +1501,7 @@ CONFIG_METADATA_2 = {
                         "gpt_weights_path": "",
                         "sovits_weights_path": "",
                         "timeout": 60,
+                        "custom_headers": {},
                         "gsv_default_parms": {
                             "gsv_ref_audio_path": "",
                             "gsv_prompt_text": "",
@@ -1522,6 +1534,7 @@ CONFIG_METADATA_2 = {
                         "emotion": "default",
                         "enable": False,
                         "timeout": 20,
+                        "custom_headers": {},
                     },
                     "FishAudio TTS(API)": {
                         "id": "fishaudio_tts",
@@ -1535,6 +1548,7 @@ CONFIG_METADATA_2 = {
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "阿里云百炼 TTS(API)": {
                         "hint": "API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。模型和音色的选择文档请参考: 阿里云百炼语音合成音色名称。具体可参考 https://help.aliyun.com/zh/model-studio/speech-synthesis-and-speech-recognition",
@@ -1547,6 +1561,7 @@ CONFIG_METADATA_2 = {
                         "model": "cosyvoice-v1",
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
+                        "custom_headers": {},
                     },
                     "Azure TTS": {
                         "id": "azure_tts",
@@ -1562,6 +1577,7 @@ CONFIG_METADATA_2 = {
                         "azure_tts_subscription_key": "",
                         "azure_tts_region": "eastus",
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "MiniMax TTS(API)": {
                         "id": "minimax_tts",
@@ -1585,6 +1601,7 @@ CONFIG_METADATA_2 = {
                         "minimax-voice-english-normalization": False,
                         "timeout": 20,
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "火山引擎_TTS(API)": {
                         "id": "volcengine_tts",
@@ -1600,6 +1617,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://openspeech.bytedance.com/api/v1/tts",
                         "timeout": 20,
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "Gemini TTS": {
                         "id": "gemini_tts",
@@ -1614,6 +1632,7 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
@@ -1628,6 +1647,7 @@ CONFIG_METADATA_2 = {
                         "embedding_dimensions": 1024,
                         "timeout": 20,
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "Gemini Embedding": {
                         "id": "gemini_embedding",
@@ -1642,6 +1662,7 @@ CONFIG_METADATA_2 = {
                         "embedding_dimensions": 768,
                         "timeout": 20,
                         "proxy": "",
+                        "custom_headers": {},
                     },
                     "vLLM Rerank": {
                         "id": "vllm_rerank",
@@ -1653,6 +1674,7 @@ CONFIG_METADATA_2 = {
                         "rerank_api_base": "http://127.0.0.1:8000",
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
+                        "custom_headers": {},
                     },
                     "Xinference Rerank": {
                         "id": "xinference_rerank",
@@ -1665,6 +1687,7 @@ CONFIG_METADATA_2 = {
                         "rerank_model": "BAAI/bge-reranker-base",
                         "timeout": 20,
                         "launch_model_if_not_running": False,
+                        "custom_headers": {},
                     },
                     "阿里云百炼重排序": {
                         "id": "bailian_rerank",
@@ -1678,6 +1701,7 @@ CONFIG_METADATA_2 = {
                         "timeout": 30,
                         "return_documents": False,
                         "instruct": "",
+                        "custom_headers": {},
                     },
                     "Xinference STT": {
                         "id": "xinference_stt",
@@ -1690,6 +1714,7 @@ CONFIG_METADATA_2 = {
                         "model": "whisper-large-v3",
                         "timeout": 180,
                         "launch_model_if_not_running": False,
+                        "custom_headers": {},
                     },
                 },
                 "items": {
@@ -1756,6 +1781,29 @@ CONFIG_METADATA_2 = {
                         "type": "dict",
                         "items": {},
                         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。",
+                        "template_schema": {
+                            "User-Agent": {
+                                "name": "User-Agent",
+                                "description": "User-Agent 请求头",
+                                "hint": "用于覆盖默认客户端标识。",
+                                "type": "string",
+                                "default": "",
+                            },
+                            "Accept": {
+                                "name": "Accept",
+                                "description": "Accept 请求头",
+                                "hint": "声明可接受的响应类型。默认留空以使用 SDK/服务端默认值，仅在需要时显式覆盖（例如指定 application/json）。",
+                                "type": "string",
+                                "default": "",
+                            },
+                            "Accept-Language": {
+                                "name": "Accept-Language",
+                                "description": "Accept-Language 请求头",
+                                "hint": "声明偏好语言，例如 zh-CN,zh;q=0.9,en;q=0.8。",
+                                "type": "string",
+                                "default": "",
+                            },
+                        },
                     },
                     "custom_extra_body": {
                         "description": "自定义请求体参数",
