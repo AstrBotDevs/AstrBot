@@ -484,8 +484,12 @@ class ProviderManager:
                 merged_config = {**provider_source, **pc}
                 # 保持 id 为 provider 的 id，而不是 source 的 id
                 merged_config["id"] = pc["id"]
-                merged_config["type"] = provider_source.get("type", merged_config.get("type"))
-                merged_config["provider"] = provider_source.get("provider", merged_config.get("provider"))
+                merged_config["type"] = provider_source.get(
+                    "type", merged_config.get("type")
+                )
+                merged_config["provider"] = provider_source.get(
+                    "provider", merged_config.get("provider")
+                )
                 merged_config["provider_type"] = provider_source.get(
                     "provider_type", merged_config.get("provider_type")
                 )
@@ -494,7 +498,9 @@ class ProviderManager:
                     and merged_config.get("type") == "openai_oauth_chat_completion"
                     and merged_config.get("auth_mode") == "openai_oauth"
                 ):
-                    access_token = (merged_config.get("oauth_access_token") or "").strip()
+                    access_token = (
+                        merged_config.get("oauth_access_token") or ""
+                    ).strip()
                     if access_token:
                         merged_config["key"] = [access_token]
                 pc = merged_config
@@ -515,7 +521,7 @@ class ProviderManager:
                     if env_val is None:
                         provider_id = provider_config.get("id")
                         logger.warning(
-                            f"Provider {provider_id} 配置项 key[{idx}] 使用环境变量 {env_key} 但未设置。",
+                            f"Provider {provider_id} 配置项 key[{idx}] 使用的环境变量未设置。",
                         )
                         resolved_keys.append("")
                     else:

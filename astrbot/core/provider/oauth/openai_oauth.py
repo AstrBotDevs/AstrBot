@@ -20,9 +20,11 @@ OPENAI_OAUTH_ACCOUNT_CLAIM_PATH = "https://api.openai.com/auth"
 def create_pkce_flow() -> dict[str, str]:
     state = secrets.token_hex(16)
     verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode()).digest()
-    ).decode().rstrip("=")
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .decode()
+        .rstrip("=")
+    )
     return {
         "state": state,
         "verifier": verifier,
@@ -57,7 +59,9 @@ def parse_authorization_input(raw: str) -> tuple[str, str]:
         parsed = urlparse(value)
         if parsed.query:
             query = parse_qs(parsed.query)
-            return query.get("code", [""])[0].strip(), query.get("state", [""])[0].strip()
+            return query.get("code", [""])[0].strip(), query.get("state", [""])[
+                0
+            ].strip()
         query = parse_qs(value)
         return query.get("code", [""])[0].strip(), query.get("state", [""])[0].strip()
     if "#" in value:
@@ -83,7 +87,9 @@ def parse_oauth_credential_json(raw: str) -> dict[str, Any] | None:
     expires_at = _normalize_expires_at(
         data.get("expired") or data.get("expires_at") or data.get("expires"),
     )
-    account_id = str(data.get("account_id") or "").strip() or extract_account_id_from_jwt(access_token)
+    account_id = str(
+        data.get("account_id") or ""
+    ).strip() or extract_account_id_from_jwt(access_token)
     email = str(data.get("email") or "").strip() or extract_email_from_jwt(access_token)
     return {
         "access_token": access_token,
@@ -122,8 +128,12 @@ async def refresh_access_token(
     return await _request_token(payload, proxy_url)
 
 
-async def _request_token(payload: dict[str, str], proxy_url: str = "") -> dict[str, Any]:
-    async with httpx.AsyncClient(proxy=proxy_url or None, timeout=OPENAI_OAUTH_TIMEOUT) as client:
+async def _request_token(
+    payload: dict[str, str], proxy_url: str = ""
+) -> dict[str, Any]:
+    async with httpx.AsyncClient(
+        proxy=proxy_url or None, timeout=OPENAI_OAUTH_TIMEOUT
+    ) as client:
         response = await client.post(
             OPENAI_OAUTH_TOKEN_URL,
             data=payload,
@@ -134,7 +144,9 @@ async def _request_token(payload: dict[str, str], proxy_url: str = "") -> dict[s
         )
     data = response.json()
     if response.status_code < 200 or response.status_code >= 300:
-        raise ValueError(f"oauth token request failed: status={response.status_code}, body={data}")
+        raise ValueError(
+            f"oauth token request failed: status={response.status_code}, body={data}"
+        )
     access_token = (data.get("access_token") or "").strip()
     refresh_token = (data.get("refresh_token") or "").strip()
     expires_in = int(data.get("expires_in") or 0)

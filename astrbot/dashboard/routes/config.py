@@ -461,14 +461,20 @@ class ConfigRoute(Route):
                 reload_errors.append(f"{provider.get('id')}: {e}")
         return reload_errors
 
-    async def _persist_provider_source_patch(self, source_id: str, updates: dict) -> dict:
-        provider_sources, target_idx, provider_source = self._find_provider_source(source_id)
+    async def _persist_provider_source_patch(
+        self, source_id: str, updates: dict
+    ) -> dict:
+        provider_sources, target_idx, provider_source = self._find_provider_source(
+            source_id
+        )
         provider_sources[target_idx] = {**provider_source, **updates}
         self.config["provider_sources"] = provider_sources
         save_config(self.config, self.config, is_core=True)
         reload_errors = await self._reload_provider_source_providers(source_id)
         if reload_errors:
-            raise ValueError("更新成功，但部分提供商重载失败: " + ", ".join(reload_errors))
+            raise ValueError(
+                "更新成功，但部分提供商重载失败: " + ", ".join(reload_errors)
+            )
         return provider_sources[target_idx]
 
     async def start_provider_source_openai_oauth(self):
@@ -498,12 +504,16 @@ class ConfigRoute(Route):
         self._cleanup_expired_provider_source_oauth_flows()
         flow = self._create_provider_source_oauth_flow()
         self._provider_source_oauth_flows[source_id] = flow
-        return Response().ok(
-            data={
-                "authorize_url": flow["authorize_url"],
-                "state": flow["state"],
-            }
-        ).__dict__
+        return (
+            Response()
+            .ok(
+                data={
+                    "authorize_url": flow["authorize_url"],
+                    "state": flow["state"],
+                }
+            )
+            .__dict__
+        )
 
     async def complete_provider_source_openai_oauth(self):
         post_data = await request.json or {}
@@ -515,7 +525,11 @@ class ConfigRoute(Route):
         try:
             _, _, provider_source = self._find_provider_source(source_id)
             if not self._is_openai_oauth_supported_source(provider_source):
-                return Response().error("当前 provider source 不支持 OpenAI OAuth").__dict__
+                return (
+                    Response()
+                    .error("当前 provider source 不支持 OpenAI OAuth")
+                    .__dict__
+                )
             token = parse_oauth_credential_json(auth_input)
             if token is None:
                 if not flow:
@@ -545,14 +559,18 @@ class ConfigRoute(Route):
                 },
             )
             self._provider_source_oauth_flows.pop(source_id, None)
-            return Response().ok(
-                data={
-                    "source": updated_source,
-                    "email": updated_source.get("oauth_account_email", ""),
-                    "expires_at": updated_source.get("oauth_expires_at", ""),
-                },
-                message="账号态 OAuth 绑定成功",
-            ).__dict__
+            return (
+                Response()
+                .ok(
+                    data={
+                        "source": updated_source,
+                        "email": updated_source.get("oauth_account_email", ""),
+                        "expires_at": updated_source.get("oauth_expires_at", ""),
+                    },
+                    message="账号态 OAuth 绑定成功",
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"账号态 OAuth 绑定失败: {e}").__dict__
@@ -564,9 +582,15 @@ class ConfigRoute(Route):
             return Response().error("缺少 source_id").__dict__
         try:
             _, _, provider_source = self._find_provider_source(source_id)
-            refresh_token_value = (provider_source.get("oauth_refresh_token") or "").strip()
+            refresh_token_value = (
+                provider_source.get("oauth_refresh_token") or ""
+            ).strip()
             if not refresh_token_value:
-                return Response().error("当前 provider source 没有可用的 refresh token").__dict__
+                return (
+                    Response()
+                    .error("当前 provider source 没有可用的 refresh token")
+                    .__dict__
+                )
             token = await refresh_access_token(
                 refresh_token_value,
                 provider_source.get("proxy", ""),
@@ -585,14 +609,18 @@ class ConfigRoute(Route):
                     or provider_source.get("oauth_account_id", ""),
                 },
             )
-            return Response().ok(
-                data={
-                    "source": updated_source,
-                    "email": updated_source.get("oauth_account_email", ""),
-                    "expires_at": updated_source.get("oauth_expires_at", ""),
-                },
-                message="账号态 OAuth 刷新成功",
-            ).__dict__
+            return (
+                Response()
+                .ok(
+                    data={
+                        "source": updated_source,
+                        "email": updated_source.get("oauth_account_email", ""),
+                        "expires_at": updated_source.get("oauth_expires_at", ""),
+                    },
+                    message="账号态 OAuth 刷新成功",
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"账号态 OAuth 刷新失败: {e}").__dict__
@@ -616,10 +644,14 @@ class ConfigRoute(Route):
                 },
             )
             self._provider_source_oauth_flows.pop(source_id, None)
-            return Response().ok(
-                data={"source": updated_source},
-                message="账号态 OAuth 已断开",
-            ).__dict__
+            return (
+                Response()
+                .ok(
+                    data={"source": updated_source},
+                    message="账号态 OAuth 已断开",
+                )
+                .__dict__
+            )
         except Exception as e:
             logger.error(traceback.format_exc())
             return Response().error(f"断开账号态 OAuth 失败: {e}").__dict__
