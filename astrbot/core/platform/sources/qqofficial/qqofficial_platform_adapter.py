@@ -424,7 +424,7 @@ class QQOfficialPlatformAdapter(Platform):
                     emoji_text = ext_data.get("text", "")
                     if emoji_text:
                         return f"[表情:{emoji_text}]"
-                except Exception:
+                except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
                     pass
             # Fallback if parsing fails
             return "[表情]"
