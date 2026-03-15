@@ -14,8 +14,6 @@ Welcome to submit Issues or Pull Requests:
 
 - [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot)
 
-- [AstrBotDevs/AstrBot-Docs](https://github.com/AstrBotDevs/AstrBot-docs)
-
 ### Tencent QQ Groups
 
 > - All groups are available to join. If you find that the group size is below the limit, please feel free to join.

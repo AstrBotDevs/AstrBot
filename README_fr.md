@@ -78,7 +78,7 @@ Pour les utilisateurs qui veulent découvrir AstrBot rapidement, qui sont famili
 ```bash
 uv tool install astrbot
 astrbot init # Exécutez cette commande uniquement la première fois pour initialiser l'environnement
-astrbot
+astrbot run
 ```
 
 > [uv](https://docs.astral.sh/uv/) doit être installé.
@@ -222,6 +222,7 @@ pre-commit install
 - Groupe 5 : 822130018
 - Groupe 6 : 753075035
 - Groupe développeurs : 975206796
+- Groupe développeurs (officiel) : 1039761811
 
 ### Serveur Discord
 

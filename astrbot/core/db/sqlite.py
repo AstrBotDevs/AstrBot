@@ -1417,6 +1417,21 @@ class SQLiteDatabase(BaseDatabase):
             result = await session.execute(query)
             return result.scalar_one_or_none()
 
+    async def get_platform_sessions_by_ids(
+        self, session_ids: list[str]
+    ) -> list[PlatformSession]:
+        """Get platform sessions by IDs."""
+        if not session_ids:
+            return []
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(PlatformSession).where(
+                col(PlatformSession.session_id).in_(session_ids)
+            )
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
     async def get_platform_sessions_by_creator(
         self,
         creator: str,
