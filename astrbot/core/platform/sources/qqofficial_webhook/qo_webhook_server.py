@@ -39,6 +39,8 @@ class QQOfficialWebhook:
         self.client = botpy_client
         self.event_queue = event_queue
         self.shutdown_event = asyncio.Event()
+        # Cache for extra fields extracted from raw webhook payloads, keyed by message id
+        self._extra_data_cache: dict[str, dict] = {}
 
     async def initialize(self) -> None:
         logger.info("正在登录到 QQ 官方机器人...")
@@ -80,6 +82,10 @@ class QQOfficialWebhook:
         }
         return response
 
+    def pop_extra_data(self, message_id: str) -> dict:
+        """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
+        return self._extra_data_cache.pop(message_id, {})
+
     async def callback(self):
         """内部服务器的回调入口"""
         return await self.handle_callback(quart.request)
@@ -103,15 +109,29 @@ class QQOfficialWebhook:
         if opcode == 13:
             # validation
             signed = await self.webhook_validation(cast(dict, data))
-            print(signed)
+            logger.debug(f"webhook validation response: {signed}")
             return signed
 
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
+            # Extract extra fields from raw payload before botpy parses and discards them
+            if data:
+                msg_id = data.get("id")
+                if msg_id:
+                    author = data.get("author") or {}
+                    extra: dict = {}
+                    if union_openid := author.get("union_openid"):
+                        extra["union_openid"] = union_openid
+                    if message_scene := data.get("message_scene"):
+                        extra["message_scene"] = message_scene
+                    if extra:
+                        self._extra_data_cache[msg_id] = extra
             try:
                 func = self._connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
+                if data:
+                    self._extra_data_cache.pop(data.get("id", ""), None)
             else:
                 func(msg)
 
