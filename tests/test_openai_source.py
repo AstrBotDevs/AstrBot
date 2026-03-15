@@ -199,6 +199,37 @@ def test_extract_error_text_candidates_truncates_long_response_text():
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_accepts_reasoning_only_response(monkeypatch):
+    provider = _make_provider()
+    try:
+        completion = SimpleNamespace(
+            id="chatcmpl-test",
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=None, tool_calls=[]),
+                )
+            ],
+            usage=None,
+        )
+        monkeypatch.setattr(
+            provider,
+            "_extract_reasoning_content",
+            lambda _completion: "我先思考一下这个问题",
+        )
+
+        llm_response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert llm_response.role == "assistant"
+        assert llm_response.completion_text is None
+        assert llm_response.reasoning_content == "我先思考一下这个问题"
+        assert llm_response.raw_completion is completion
+        assert llm_response.id == "chatcmpl-test"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_handle_api_error_content_moderated_without_images_raises():
     provider = _make_provider(
         {"image_moderation_error_patterns": ["file:content-moderated"]}

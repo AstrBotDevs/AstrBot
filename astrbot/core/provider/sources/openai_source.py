@@ -534,7 +534,11 @@ class ProviderOpenAIOfficial(Provider):
             raise Exception(
                 "API 返回的 completion 由于内容安全过滤被拒绝(非 AstrBot)。",
             )
-        if llm_response.completion_text is None and not llm_response.tools_call_args:
+        if (
+            llm_response.completion_text is None
+            and not llm_response.tools_call_args
+            and not llm_response.reasoning_content
+        ):
             logger.error(f"API 返回的 completion 无法解析：{completion}。")
             raise Exception(f"API 返回的 completion 无法解析：{completion}。")
 
