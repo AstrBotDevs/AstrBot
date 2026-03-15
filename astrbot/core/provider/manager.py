@@ -371,6 +371,10 @@ class ProviderManager:
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
                 )
+            case "minimax_chat_completion":
+                from .sources.minimax_source import (
+                    ProviderMiniMax as ProviderMiniMax,
+                )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
