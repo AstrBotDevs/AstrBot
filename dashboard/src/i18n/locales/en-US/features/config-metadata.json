@@ -1038,6 +1038,10 @@
         "description": "Rerank Model API Base URL",
         "hint": "AstrBot appends /v1/rerank to the request URL."
       },
+      "rerank_api_url": {
+        "description": "Generic Rerank Full Request URL",
+        "hint": "Only applies to the generic rerank adapter. Enter the full request URL (for example, https://api.example.com/v1/rerank)."
+      },
       "rerank_api_key": {
         "description": "API Key",
         "hint": "Leave empty if no API key is required."

@@ -1040,6 +1040,10 @@
         "description": "重排序模型 API Base URL",
         "hint": "AstrBot 会在请求时在末尾加上 /v1/rerank。"
       },
+      "rerank_api_url": {
+        "description": "通用 Rerank 完整请求 URL",
+        "hint": "仅对通用 Rerank 适配器生效。请填写完整请求 URL（例如 https://api.example.com/v1/rerank）。"
+      },
       "rerank_api_key": {
         "description": "API Key",
         "hint": "如果不需要 API Key, 请留空。"
