@@ -31,7 +31,7 @@ class PluginMetadata:
     enabled: bool = True
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PluginMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> PluginMetadata:
         """从字典创建元数据实例。"""
         return cls(
             name=data.get("name", ""),

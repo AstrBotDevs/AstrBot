@@ -234,7 +234,12 @@ class MemoryClient:
             print(f"记忆库共有 {stats['total_items']} 条记录")
         """
         output = await self._proxy.call("memory.stats", {})
-        return {
+        stats = {
             "total_items": output.get("total_items", 0),
             "total_bytes": output.get("total_bytes"),
         }
+        if "plugin_id" in output:
+            stats["plugin_id"] = output.get("plugin_id")
+        if "ttl_entries" in output:
+            stats["ttl_entries"] = output.get("ttl_entries")
+        return stats

@@ -37,7 +37,6 @@ from .._invocation_context import caller_plugin_scope
 from ..context import Context as RuntimeContext
 from ..errors import AstrBotError
 from ..protocol.messages import PeerInfo
-from ..protocol.wire_codecs import ProtocolCodec, make_protocol_codec
 from .handler_dispatcher import CapabilityDispatcher, HandlerDispatcher
 from .loader import (
     LoadedPlugin,
@@ -115,22 +114,13 @@ async def run_plugin_lifecycle(
 
 
 class GroupWorkerRuntime:
-    def __init__(
-        self,
-        *,
-        group_metadata_path: Path,
-        transport,
-        codec: ProtocolCodec | None = None,
-        wire_codec_name: str = "json",
-    ) -> None:
+    def __init__(self, *, group_metadata_path: Path, transport) -> None:
         self.group_metadata_path = group_metadata_path.resolve()
         self.group_id, self.plugins = _load_group_plugin_specs(self.group_metadata_path)
         self.transport = transport
-        self.codec = codec or make_protocol_codec(wire_codec_name)
         self.peer = Peer(
             transport=self.transport,
             peer_info=PeerInfo(name=self.group_id, role="plugin", version="v4"),
-            codec=self.codec,
         )
         self.skipped_plugins: dict[str, str] = {}
         self._plugin_states: list[GroupPluginRuntimeState] = []
@@ -294,22 +284,13 @@ class GroupWorkerRuntime:
 
 
 class PluginWorkerRuntime:
-    def __init__(
-        self,
-        *,
-        plugin_dir: Path,
-        transport,
-        codec: ProtocolCodec | None = None,
-        wire_codec_name: str = "json",
-    ) -> None:
+    def __init__(self, *, plugin_dir: Path, transport) -> None:
         self.plugin = load_plugin_spec(plugin_dir)
         self.transport = transport
-        self.codec = codec or make_protocol_codec(wire_codec_name)
         self.loaded_plugin = load_plugin(self.plugin)
         self.peer = Peer(
             transport=self.transport,
             peer_info=PeerInfo(name=self.plugin.name, role="plugin", version="v4"),
-            codec=self.codec,
         )
         self.dispatcher = HandlerDispatcher(
             plugin_id=self.plugin.name,

@@ -1,8 +1,6 @@
 # AstrBot SDK 项目完整架构分析文档
 
 > 作者：whatevertogo
-> 更新时间：2026-03-14
-
 
 ## 目录
 
@@ -49,77 +47,59 @@ AstrBot SDK 是一个基于 Python 3.12+ 的机器人插件开发框架，采用
 ## 目录结构
 
 ```
-astrbot-sdk/
-├── src/                           # 旧版实现 (已停止更新)
-│   └── astrbot_sdk/               # 旧版 SDK
-├── src-new/                       # 新版 v4 实现 (当前活跃)
-│   └── astrbot_sdk/               # v4 SDK 主包
-│       ├── __init__.py             # 顶层公共 API
-│       ├── __main__.py            # CLI 入口点
-│       ├── star.py                 # v4 原生插件基类
-│       ├── context.py              # 运行时上下文
-│       ├── decorators.py           # v4 原生装饰器
-│       ├── events.py               # v4 原生事件对象
-│       ├── errors.py               # 统一错误模型
-│       ├── cli.py                  # 命令行工具
-│       ├── testing.py              # 测试辅助模块
-│       ├── _invocation_context.py  # 调用上下文管理
-│       │
-│       ├── clients/                # 能力客户端层
-│       │   ├── __init__.py
-│       │   ├── _proxy.py          # CapabilityProxy 能力代理
-│       │   ├── llm.py             # LLM 客户端
-│       │   ├── memory.py          # 记忆存储客户端
-│       │   ├── db.py              # KV 存储客户端
-│       │   ├── platform.py        # 平台消息客户端
-│       │   ├── http.py            # HTTP 注册客户端
-│       │   └── metadata.py        # 插件元数据客户端
-│       │
-│       ├── protocol/               # 协议层
-│       │   ├── __init__.py
-│       │   ├── messages.py        # v4 协议消息模型
-│       │   └── descriptors.py     # Handler/Capability 描述符
-│       │
-│       └── runtime/                # 运行时层
-│           ├── __init__.py
-│           ├── peer.py            # 协议对等端
-│           ├── transport.py       # 传输抽象与实现
-│           ├── handler_dispatcher.py  # Handler 执行分发
-│           ├── capability_router.py   # Capability 路由
-│           ├── loader.py          # 插件加载
-│           ├── bootstrap.py       # 启动引导
-│           ├── worker.py          # Worker 运行时
-│           ├── supervisor.py      # Supervisor 运行时
-│           └── environment_groups.py  # 环境分组管理
+astrbot_sdk/                          # v4 SDK 主包
+├── __init__.py                       # 顶层公共 API 导出
+├── __main__.py                       # CLI 入口点 (python -m astrbot_sdk)
+├── star.py                           # v4 原生插件基类
+├── context.py                        # 运行时上下文 (Context, CancelToken)
+├── decorators.py                     # v4 原生装饰器 (on_command, on_message, etc.)
+├── events.py                         # v4 原生事件对象 (MessageEvent)
+├── errors.py                         # 统一错误模型 (AstrBotError)
+├── cli.py                            # 命令行工具 (init/validate/build/dev/run)
+├── testing.py                        # 测试辅助模块 (PluginHarness)
+├── _invocation_context.py            # 调用上下文管理 (caller_plugin_scope)
+├── _testing_support.py               # 测试支持工具
 │
-├── tests_v4/                     # v4 测试套件
-│   ├── unit/                    # 单元测试
-│   ├── integration/             # 集成测试
-│   └── external_plugin_matrix.json  # 外部插件兼容矩阵
+├── commands.py                       # 命令分组工具 (CommandGroup)
+├── filters.py                        # 事件过滤器 (PlatformFilter, CustomFilter)
+├── message_components.py             # 消息组件 (Plain, Image, At, etc.)
+├── message_result.py                 # 消息结果对象 (MessageChain)
+├── message_session.py                # 会话标识符 (MessageSession)
+├── schedule.py                       # 定时任务上下文 (ScheduleContext)
+├── session_waiter.py                 # 会话等待器 (SessionController)
+├── types.py                          # 参数类型助手 (GreedyStr)
 │
-├── test_plugin/                   # 测试插件样本
-│   ├── new/                     # v4 原生插件示例
-│   │   ├── plugin.yaml
-│   │   └── commands/
-│   │       └── hello.py
-│   │
-│   └── old/                     # 旧版兼容插件示例 (deprecated)
-│       ├── plugin.yaml
-│       └── main.py
+├── clients/                          # 能力客户端层
+│   ├── __init__.py                   # 客户端公共导出
+│   ├── _proxy.py                    # CapabilityProxy 能力代理
+│   ├── llm.py                       # LLM 客户端 (chat, chat_raw, stream_chat)
+│   ├── memory.py                    # 记忆存储客户端 (search, save, get)
+│   ├── db.py                        # KV 存储客户端 (get, set, watch)
+│   ├── platform.py                  # 平台消息客户端 (send, send_image)
+│   ├── http.py                      # HTTP 注册客户端 (register_api)
+│   └── metadata.py                  # 插件元数据客户端 (get_plugin)
 │
-├── examples/                      # 示例插件
-│   └── hello_plugin/            # 入门示例
-│       ├── plugin.yaml
-│       ├── main.py
-│       └── README.md
+├── protocol/                         # 协议层
+│   ├── __init__.py                   # 协议公共导出
+│   ├── messages.py                  # v4 协议消息模型
+│   ├── descriptors.py               # Handler/Capability 描述符
+│   └── _builtin_schemas.py          # 内置能力 JSON Schema
 │
-├── astrBot/                      # 参考 AstrBot 应用
-│
-├── pyproject.toml               # 项目配置
-├── ARCHITECTURE.md             # 架构文档
-├── refactor.md                 # 重构历史
-├── PROJECT_ARCHITECTURE.md     # 本文档
-└── run_tests.py               # 测试入口
+└── runtime/                          # 运行时层
+    ├── __init__.py                   # 运行时公共导出 (延迟加载)
+    ├── peer.py                      # 协议对等端 (Peer)
+    ├── transport.py                 # 传输抽象 (Stdio, WebSocket)
+    ├── handler_dispatcher.py        # Handler 执行分发
+    ├── capability_dispatcher.py     # Capability 调用分发
+    ├── capability_router.py         # Capability 路由
+    ├── _capability_router_builtins.py  # 内置能力处理器
+    ├── _loader_support.py           # 加载器反射工具
+    ├── _streaming.py                # 流式执行原语 (StreamExecution)
+    ├── loader.py                    # 插件加载器
+    ├── bootstrap.py                 # 启动引导
+    ├── worker.py                    # Worker 运行时
+    ├── supervisor.py                # Supervisor 运行时
+    └── environment_groups.py        # 环境分组管理
 ```
 
 ---
@@ -131,41 +111,51 @@ astrbot-sdk/
 │                   用户层 (Plugin Developer)                    │
 ├─────────────────────────────────────────────────────────────────┤
 │  v4 入口:  astrbot_sdk.{Star, Context, MessageEvent}           │
-│  装饰器:   on_command, on_message, on_event, provide_capability│
+│  装饰器:   on_command, on_message, on_event, on_schedule       │
+│           provide_capability, require_admin                     │
+│  过滤器:   PlatformFilter, MessageTypeFilter, CustomFilter      │
+│  命令组:   CommandGroup, command_group                          │
+│  会话:     MessageSession, session_waiter                       │
 └────────────────────┬────────────────────────────────────────────┘
                    │
 ┌──────────────────▼─────────────────────────────────────────────┐
 │                 高层 API (High-Level API)                      │
 ├─────────────────────────────────────────────────────────────────┤
-│  能力客户端:                                                   │
+│  能力客户端 (通过 CapabilityProxy 调用):                       │
 │    - LLMClient        (llm.chat, llm.chat_raw, llm.stream_chat)│
-│    - MemoryClient     (memory.save, memory.search, ...)        │
-│    - DBClient         (db.get, db.set, db.watch, ...)          │
+│    - MemoryClient     (memory.search, memory.save, memory.stats)│
+│    - DBClient         (db.get, db.set, db.watch, db.list)      │
 │    - PlatformClient   (platform.send, platform.send_image, ...)│
 │    - HTTPClient       (http.register_api, http.list_apis)      │
-│    - MetadataClient   (metadata.get_plugin, ...)               │
+│    - MetadataClient   (metadata.get_plugin, metadata.list_plugins)│
 └────────────────────┬────────────────────────────────────────────┘
                    │
 ┌──────────────────▼─────────────────────────────────────────────┐
 │              执行边界 (Execution Boundary)                     │
 ├─────────────────────────────────────────────────────────────────┤
 │  runtime 主干:                                                 │
-│    - loader.py        (插件发现、加载)                         │
-│    - bootstrap.py     (Supervisor/Worker 启动)                 │
-│    - handler_dispatcher.py  (Handler 执行分发)                 │
-│    - capability_router.py   (Capability 路由)                  │
-│    - peer.py          (协议对等端)                             │
-│    - transport.py     (传输抽象)                               │
-│    - supervisor.py    (Supervisor 运行时)                      │
-│    - worker.py        (Worker 运行时)                          │
+│    - loader.py              (插件发现、加载、环境管理)         │
+│    - bootstrap.py           (Supervisor/Worker 启动)           │
+│    - handler_dispatcher.py  (Handler 执行分发、参数注入)       │
+│    - capability_dispatcher.py (Capability 调用分发)            │
+│    - capability_router.py   (Capability 路由、Schema 验证)     │
+│    - _capability_router_builtins.py (内置能力实现)             │
+│    - _loader_support.py     (反射工具、签名验证)               │
+│    - _streaming.py          (流式执行原语)                     │
+│    - peer.py                (协议对等端)                       │
+│    - transport.py           (传输抽象)                         │
+│    - supervisor.py          (Supervisor 运行时)                │
+│    - worker.py              (Worker 运行时)                    │
+│    - environment_groups.py  (环境分组规划)                     │
 └────────────────────┬────────────────────────────────────────────┘
                    │
 ┌──────────────────▼─────────────────────────────────────────────┐
 │             协议与传输 (Protocol & Transport)                  │
 ├─────────────────────────────────────────────────────────────────┤
 │  protocol/                                                     │
-│    - messages.py       (协议消息模型)                          │
-│    - descriptors.py    (Handler/Capability 描述符)             │
+│    - messages.py          (协议消息模型)                       │
+│    - descriptors.py       (Handler/Capability 描述符)          │
+│    - _builtin_schemas.py  (内置能力 JSON Schema)               │
 │  transport 实现:                                               │
 │    - StdioTransport            (标准输入输出)                  │
 │    - WebSocketServerTransport  (WebSocket 服务端)              │
@@ -177,11 +167,18 @@ astrbot-sdk/
 
 | 层次 | 职责 | 主要模块 |
 |------|------|---------|
-| 用户层 | 插件开发者 API | `Star`, `Context`, `MessageEvent`, 装饰器 |
+| 用户层 | 插件开发者 API | `Star`, `Context`, `MessageEvent`, 装饰器, 过滤器, 命令组 |
 | 高层 API | 类型化的能力客户端 | `clients/{llm, memory, db, platform, http, metadata}` |
-| 执行边界 | 插件加载、路由、分发 | `runtime/loader.py`, `runtime/supervisor.py` |
-| 协议层 | 消息模型、描述符 | `protocol/` |
+| 执行边界 | 插件加载、路由、分发、参数注入 | `runtime/loader.py`, `runtime/*_dispatcher.py` |
+| 协议层 | 消息模型、描述符、JSON Schema | `protocol/` |
 | 传输层 | 底层通信抽象 | `runtime/transport.py` |
+
+### 核心设计原则
+
+1. **延迟加载**：`runtime/__init__.py` 使用 `__getattr__` 避免导入时加载 websocket/aiohttp 等重型依赖
+2. **插件身份透传**：通过 `caller_plugin_scope()` 上下文管理器将 plugin_id 注入协议层
+3. **声明式优先**：所有配置都是数据结构（描述符），便于序列化和跨进程传递
+4. **类型安全**：使用 Pydantic 模型和类型注解提供验证和 IDE 支持
 
 ---
 
@@ -194,10 +191,18 @@ v4 协议定义了 5 种消息类型：
 | 消息类型 | 用途 | 关键字段 |
 |---------|------|---------|
 | `InitializeMessage` | 握手初始化 | `protocol_version`, `peer`, `handlers`, `provided_capabilities` |
-| `InvokeMessage` | 调用能力 | `capability`, `input`, `stream` |
-| `ResultMessage` | 返回结果 | `success`, `output`, `error` |
+| `InvokeMessage` | 调用能力 | `capability`, `input`, `stream`, `caller_plugin_id` |
+| `ResultMessage` | 返回结果 | `success`, `output`, `error`, `kind` |
 | `EventMessage` | 流式事件 | `phase` (started/delta/completed/failed), `data` |
 | `CancelMessage` | 取消调用 | `reason` |
+
+### 错误模型
+
+`ErrorPayload` 使用字符串 code（而非整数），包含：
+- `code`: 错误码（如 "capability_not_found"）
+- `message`: 开发者信息
+- `hint`: 用户友好提示
+- `retryable`: 是否可重试
 
 ### 握手流程
 
@@ -205,6 +210,7 @@ v4 协议定义了 5 种消息类型：
 Worker (Plugin)                 Supervisor (Core)
      |                               |
      |  InitializeMessage             |
+     |  (handlers, capabilities)      |
      |----------------------------->|
      |                               | 创建 CapabilityRouter
      |                               | 注册 handler.invoke
@@ -236,13 +242,33 @@ Worker (Plugin)                 Supervisor (Core)
         "aliases": ["hi"],
         "description": "打招呼命令"
     },
+    "kind": "handler",           # handler | hook | tool | session
+    "contract": "message_event", # message_event | schedule
     "priority": 0,
-    "permissions": {
-        "require_admin": False,
-        "level": 0
-    }
+    "permissions": {"require_admin": False, "level": 0},
+    "filters": [],               # 高级过滤器列表
+    "param_specs": [],           # 参数规范
+    "command_route": {...}       # 命令路由元信息
 }
 ```
+
+#### Trigger 类型
+
+| 类型 | 关键字段 | 说明 |
+|------|---------|------|
+| `CommandTrigger` | command, aliases, platforms | 命令触发 |
+| `MessageTrigger` | regex, keywords, platforms | 消息触发（正则/关键词） |
+| `EventTrigger` | event_type | 事件触发 |
+| `ScheduleTrigger` | cron, interval_seconds | 定时触发（二选一） |
+
+#### FilterSpec 类型
+
+| 类型 | 说明 |
+|------|------|
+| `PlatformFilterSpec` | 按平台名称过滤 |
+| `MessageTypeFilterSpec` | 按消息类型过滤 |
+| `LocalFilterRefSpec` | 引用本地自定义过滤器 |
+| `CompositeFilterSpec` | 组合过滤器（AND/OR） |
 
 #### CapabilityDescriptor
 
@@ -252,16 +278,12 @@ Worker (Plugin)                 Supervisor (Core)
     "description": "发送对话请求，返回文本",
     "input_schema": {
         "type": "object",
-        "properties": {
-            "prompt": {"type": "string"}
-        },
+        "properties": {"prompt": {"type": "string"}},
         "required": ["prompt"]
     },
     "output_schema": {
         "type": "object",
-        "properties": {
-            "text": {"type": "string"}
-        },
+        "properties": {"text": {"type": "string"}},
         "required": ["text"]
     },
     "supports_stream": False,
@@ -269,38 +291,89 @@ Worker (Plugin)                 Supervisor (Core)
 }
 ```
 
-### 内置 Capabilities (28个)
+### 命名空间治理
 
-| 命名空间 | 能力 | 说明 |
-|----------|------|------|
-| `llm` | `chat` | 同步对话，返回文本 |
-| `llm` | `chat_raw` | 同步对话，返回完整响应 |
-| `llm` | `stream_chat` | 流式对话 |
-| `memory` | `search` | 搜索记忆 |
-| `memory` | `save` | 保存记忆 |
-| `memory` | `save_with_ttl` | 保存带过期时间的记忆 |
-| `memory` | `get` | 读取单条记忆 |
-| `memory` | `get_many` | 批量获取记忆 |
-| `memory` | `delete` | 删除记忆 |
-| `memory` | `delete_many` | 批量删除记忆 |
-| `memory` | `stats` | 获取记忆统计信息 |
-| `db` | `get` | 读取 KV |
-| `db` | `set` | 写入 KV |
-| `db` | `delete` | 删除 KV |
-| `db` | `list` | 列出 KV 键 |
-| `db` | `get_many` | 批量读取 KV |
-| `db` | `set_many` | 批量写入 KV |
-| `db` | `watch` | 订阅 KV 变更 |
-| `platform` | `send` | 发送消息 |
-| `platform` | `send_image` | 发送图片 |
-| `platform` | `send_chain` | 发送消息链 |
-| `platform` | `get_members` | 获取群成员 |
-| `http` | `register_api` | 注册 HTTP API 端点 |
-| `http` | `unregister_api` | 注销 HTTP API 端点 |
-| `http` | `list_apis` | 列出已注册的 API |
-| `metadata` | `get_plugin` | 获取单个插件元数据 |
-| `metadata` | `list_plugins` | 列出所有插件元数据 |
-| `metadata` | `get_plugin_config` | 获取当前插件配置 |
+**保留前缀**：
+- `handler.` - 内部 handler.invoke
+- `system.` - 系统内置能力
+- `internal.` - 内部使用
+
+**内置能力命名空间**：`llm`, `memory`, `db`, `platform`, `http`, `metadata`
+
+### 内置 Capabilities (38个)
+
+#### LLM 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `llm.chat` | 同步对话，返回文本 |
+| `llm.chat_raw` | 同步对话，返回完整响应（含 usage、tool_calls） |
+| `llm.stream_chat` | 流式对话 |
+
+#### Memory 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `memory.search` | 语义搜索记忆 |
+| `memory.save` | 保存记忆 |
+| `memory.save_with_ttl` | 保存带过期时间的记忆 |
+| `memory.get` | 读取单条记忆 |
+| `memory.get_many` | 批量获取记忆 |
+| `memory.delete` | 删除记忆 |
+| `memory.delete_many` | 批量删除记忆 |
+| `memory.stats` | 获取记忆统计信息 |
+
+#### DB 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `db.get` | 读取 KV |
+| `db.set` | 写入 KV |
+| `db.delete` | 删除 KV |
+| `db.list` | 列出 KV 键（支持前缀过滤） |
+| `db.get_many` | 批量读取 KV |
+| `db.set_many` | 批量写入 KV |
+| `db.watch` | 订阅 KV 变更（流式） |
+
+#### Platform 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `platform.send` | 发送文本消息 |
+| `platform.send_image` | 发送图片 |
+| `platform.send_chain` | 发送消息链 |
+| `platform.get_members` | 获取群成员 |
+
+#### HTTP 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `http.register_api` | 注册 HTTP API 端点 |
+| `http.unregister_api` | 注销 HTTP API 端点 |
+| `http.list_apis` | 列出已注册的 API |
+
+#### Metadata 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `metadata.get_plugin` | 获取单个插件元数据 |
+| `metadata.list_plugins` | 列出所有插件元数据 |
+| `metadata.get_plugin_config` | 获取当前插件配置 |
+
+#### System 命名空间
+
+| 能力 | 说明 |
+|------|------|
+| `system.get_data_dir` | 获取插件数据目录 |
+| `system.text_to_image` | 文本转图片 |
+| `system.html_render` | 渲染 HTML 模板 |
+| `system.session_waiter.register` | 注册会话等待器 |
+| `system.session_waiter.unregister` | 注销会话等待器 |
+| `system.event.react` | 发送表情回应 |
+| `system.event.send_typing` | 发送输入中状态 |
+| `system.event.send_streaming` | 开始流式消息会话 |
+| `system.event.send_streaming_chunk` | 推送流式消息分片 |
+| `system.event.send_streaming_close` | 关闭流式消息会话 |
 
 ---
 
@@ -749,39 +822,6 @@ class MyPlugin(Star):
         return {"result": x * 2}
 ```
 
-### 旧版兼容插件
-
-#### plugin.yaml
-
-```yaml
-name: my_old_plugin
-version: 1.0.0
-components:
-  - class: main:MyOldPlugin
-```
-
-#### main.py
-
-```python
-from astrbot.api.star import Star
-from astrbot.api.event import AstrMessageEvent
-
-class MyOldPlugin(Star):
-    # 旧版装饰器仍然支持
-    @command_handler("old_hello")
-    def old_hello_handler(self, event: AstrMessageEvent):
-        # 旧版 API 调用
-        reply = self.call_context_function("llm_generate", prompt="你好")
-        event.reply(reply)
-
-    # 生命周期钩子
-    async def on_start(self):
-        self.put_kv_data("started", True)
-
-    async def on_stop(self):
-        self.put_kv_data("started", False)
-```
-
 ### 生命周期钩子
 
 | 钩子 | 说明 |
@@ -843,56 +883,47 @@ class MyOldPlugin(Star):
 
 | 文件 | 核心类/函数 | 说明 |
 |------|------------|------|
-| `src-new/astrbot_sdk/__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
-| `src-new/astrbot_sdk/star.py` | `Star` | v4 原生插件基类 |
-| `src-new/astrbot_sdk/context.py` | `Context` | 运行时上下文 |
-| `src-new/astrbot_sdk/decorators.py` | `on_command`, `on_message`, `provide_capability` | v4 装饰器 |
-| `src-new/astrbot_sdk/errors.py` | `AstrBotError` | 统一错误模型 |
-| `src-new/astrbot_sdk/cli.py` | CLI 命令 | 命令行工具 |
-| `src-new/astrbot_sdk/testing.py` | `PluginHarness`, `MockContext` | 测试辅助 |
-| `src-new/astrbot_sdk/runtime/peer.py` | `Peer` | 协议对等端 |
-| `src-new/astrbot_sdk/runtime/supervisor.py` | `SupervisorRuntime` | Supervisor 运行时 |
-| `src-new/astrbot_sdk/runtime/worker.py` | `PluginWorkerRuntime` | Worker 运行时 |
-| `src-new/astrbot_sdk/runtime/loader.py` | `load_plugin()`, `_ResolvedComponent` | 插件加载 |
-| `src-new/astrbot_sdk/runtime/handler_dispatcher.py` | `HandlerDispatcher` | Handler 执行分发 |
-| `src-new/astrbot_sdk/runtime/capability_router.py` | `CapabilityRouter` | Capability 路由 |
-| `src-new/astrbot_sdk/runtime/environment_groups.py` | `EnvironmentGroup` | 环境分组 |
-| `src-new/astrbot_sdk/protocol/messages.py` | `InitializeMessage`, `InvokeMessage` | 协议消息 |
-| `src-new/astrbot_sdk/protocol/descriptors.py` | `HandlerDescriptor`, `CapabilityDescriptor` | 描述符 |
-| `src-new/astrbot_sdk/clients/_proxy.py` | `CapabilityProxy` | 能力代理 |
-| `src-new/astrbot_sdk/clients/llm.py` | `LLMClient` | LLM 客户端 |
-| `src-new/astrbot_sdk/clients/memory.py` | `MemoryClient` | 记忆客户端 |
-| `src-new/astrbot_sdk/clients/db.py` | `DBClient` | 数据库客户端 |
-| `src-new/astrbot_sdk/clients/platform.py` | `PlatformClient` | 平台客户端 |
-| `src-new/astrbot_sdk/clients/http.py` | `HTTPClient` | HTTP 客户端 |
-| `src-new/astrbot_sdk/clients/metadata.py` | `MetadataClient`, `PluginMetadata` | 元数据客户端 |
-| `examples/hello_plugin/` | - | 入门示例插件 |
+| `astrbot_sdk/__init__.py` | `Star`, `Context`, `MessageEvent` | 顶层入口 |
+| `astrbot_sdk/star.py` | `Star` | v4 原生插件基类 |
+| `astrbot_sdk/context.py` | `Context` | 运行时上下文 |
+| `astrbot_sdk/decorators.py` | `on_command`, `on_message`, `provide_capability` | v4 装饰器 |
+| `astrbot_sdk/errors.py` | `AstrBotError` | 统一错误模型 |
+| `astrbot_sdk/cli.py` | CLI 命令 | 命令行工具（init/validate/build/dev/run/worker/websocket） |
+| `astrbot_sdk/testing.py` | `PluginHarness`, `MockContext` | 测试辅助 |
+| `astrbot_sdk/commands.py` | `CommandGroup`, `command_group` | 命令分组工具 |
+| `astrbot_sdk/filters.py` | `PlatformFilter`, `CustomFilter`, `all_of`, `any_of` | 事件过滤器 |
+| `astrbot_sdk/message_result.py` | `MessageChain`, `MessageEventResult` | 消息结果对象 |
+| `astrbot_sdk/message_session.py` | `MessageSession` | 会话标识符 |
+| `astrbot_sdk/schedule.py` | `ScheduleContext` | 定时任务上下文 |
+| `astrbot_sdk/session_waiter.py` | `SessionController`, `SessionWaiterManager` | 会话等待器 |
+| `astrbot_sdk/types.py` | `GreedyStr` | 参数类型助手 |
+| `astrbot_sdk/runtime/__init__.py` | 延迟导出 | 运行时公共 API（延迟加载） |
+| `astrbot_sdk/runtime/peer.py` | `Peer` | 协议对等端 |
+| `astrbot_sdk/runtime/supervisor.py` | `SupervisorRuntime` | Supervisor 运行时 |
+| `astrbot_sdk/runtime/worker.py` | `PluginWorkerRuntime` | Worker 运行时 |
+| `astrbot_sdk/runtime/loader.py` | `load_plugin()`, `_ResolvedComponent` | 插件加载 |
+| `astrbot_sdk/runtime/_loader_support.py` | `build_param_specs`, `is_injected_parameter` | 加载器反射工具 |
+| `astrbot_sdk/runtime/_streaming.py` | `StreamExecution` | 流式执行原语 |
+| `astrbot_sdk/runtime/handler_dispatcher.py` | `HandlerDispatcher` | Handler 执行分发 |
+| `astrbot_sdk/runtime/capability_dispatcher.py` | `CapabilityDispatcher` | Capability 调用分发 |
+| `astrbot_sdk/runtime/capability_router.py` | `CapabilityRouter` | Capability 路由 |
+| `astrbot_sdk/runtime/_capability_router_builtins.py` | `BuiltinCapabilityRouterMixin` | 内置能力处理器 |
+| `astrbot_sdk/runtime/environment_groups.py` | `EnvironmentGroup` | 环境分组 |
+| `astrbot_sdk/protocol/messages.py` | `InitializeMessage`, `InvokeMessage` | 协议消息 |
+| `astrbot_sdk/protocol/descriptors.py` | `HandlerDescriptor`, `CapabilityDescriptor` | 描述符 |
+| `astrbot_sdk/protocol/_builtin_schemas.py` | `BUILTIN_CAPABILITY_SCHEMAS` | 内置能力 JSON Schema |
+| `astrbot_sdk/clients/_proxy.py` | `CapabilityProxy` | 能力代理 |
+| `astrbot_sdk/clients/llm.py` | `LLMClient` | LLM 客户端 |
+| `astrbot_sdk/clients/memory.py` | `MemoryClient` | 记忆客户端 |
+| `astrbot_sdk/clients/db.py` | `DBClient` | 数据库客户端 |
+| `astrbot_sdk/clients/platform.py` | `PlatformClient` | 平台客户端 |
+| `astrbot_sdk/clients/http.py` | `HTTPClient` | HTTP 客户端 |
+| `astrbot_sdk/clients/metadata.py` | `MetadataClient`, `PluginMetadata` | 元数据客户端 |
+| `astrbot_sdk/message_components.py` | `Plain`, `Image`, `At`, `Reply` | 消息组件 |
+| `astrbot_sdk/events.py` | `MessageEvent` | 事件对象 |
+| `astrbot_sdk/_testing_support.py` | 测试工具 | 测试支持 |
 
 ---
 
-## 更新日志
-
-### 2026-03-14 (v2)
-- 添加兼容层弃用通知
-- 更新目录结构，移除已删除的 `api/` 和 `astrbot/` 目录
-- 更新内置 Capabilities 列表至 28 个（新增 memory 扩展方法、http、metadata）
-- 更新客户端方法表，补充完整方法列表
-- 移除兼容层设计章节（已弃用）
-- 更新关键文件速查表
-- 添加热重载模式说明
-
-### 2026-03-14
-- 添加环境分组详细说明
-- 完善 CapabilityRouter 内置能力列表
-- 添加客户端层架构图
-- 补充新旧代码对比示例
-
-### 2026-03-13
-- 初始版本
-- 完成整体架构分析
-- 新旧对比整理
-
----
-
-> 本文档基于 AstrBot SDK 当前版本 (`refact1/refactsome`) 整理
+> 本文档描述 AstrBot SDK v4 的设计与实现思想
 > 如有疑问请查阅源代码或提交 Issue

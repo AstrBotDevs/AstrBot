@@ -59,6 +59,7 @@ import os
 import re
 import shutil
 import sys
+import typing
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
@@ -67,7 +68,14 @@ from typing import Any
 import yaml
 
 from ..decorators import get_capability_meta, get_handler_meta
-from ..protocol.descriptors import CapabilityDescriptor, HandlerDescriptor
+from ..protocol.descriptors import (
+    CapabilityDescriptor,
+    HandlerDescriptor,
+    ParamSpec,
+    ScheduleTrigger,
+)
+from ..schedule import ScheduleContext
+from ..types import GreedyStr
 from .environment_groups import (
     EnvironmentGroup,
     EnvironmentPlanner,
@@ -113,6 +121,7 @@ class LoadedHandler:
     callable: Any
     owner: Any
     plugin_id: str = ""
+    local_filters: list[Any] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -150,6 +159,107 @@ def _iter_discoverable_names(instance: Any) -> list[str]:
     known_names = set(handler_names)
     extra_names = sorted(name for name in dir(instance) if name not in known_names)
     return [*handler_names, *extra_names]
+
+
+def _unwrap_optional(annotation: Any) -> tuple[Any, bool]:
+    origin = typing.get_origin(annotation)
+    if origin is typing.Union:
+        args = [item for item in typing.get_args(annotation) if item is not type(None)]
+        if len(args) == 1:
+            return args[0], True
+    return annotation, False
+
+
+def _is_injected_parameter(annotation: Any, parameter_name: str) -> bool:
+    if parameter_name in {"event", "ctx", "context", "sched", "schedule"}:
+        return True
+    normalized, _is_optional = _unwrap_optional(annotation)
+    if normalized is None:
+        return False
+    if normalized in {ScheduleContext}:
+        return True
+    if isinstance(normalized, type):
+        from ..context import Context
+        from ..events import MessageEvent
+
+        return issubclass(normalized, (Context, MessageEvent, ScheduleContext))
+    return False
+
+
+def _param_type_name(annotation: Any) -> tuple[str, str | None, bool]:
+    normalized, is_optional = _unwrap_optional(annotation)
+    if normalized is GreedyStr:
+        return "greedy_str", None, False
+    if normalized in {int, float, bool, str}:
+        if is_optional:
+            return "optional", normalized.__name__, False
+        return normalized.__name__, None, True
+    if is_optional:
+        return "optional", "str", False
+    return "str", None, True
+
+
+def _build_param_specs(handler: Any) -> list[ParamSpec]:
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return []
+    try:
+        type_hints = typing.get_type_hints(handler)
+    except Exception:
+        type_hints = {}
+
+    specs: list[ParamSpec] = []
+    for parameter in signature.parameters.values():
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            continue
+        annotation = type_hints.get(parameter.name)
+        if _is_injected_parameter(annotation, parameter.name):
+            continue
+        param_type, inner_type, required = _param_type_name(annotation)
+        if parameter.default is not inspect.Parameter.empty:
+            required = False
+        specs.append(
+            ParamSpec(
+                name=parameter.name,
+                type=param_type,
+                required=required,
+                inner_type=inner_type,
+            )
+        )
+
+    greedy_indexes = [
+        index for index, spec in enumerate(specs) if spec.type == "greedy_str"
+    ]
+    if greedy_indexes and greedy_indexes[-1] != len(specs) - 1:
+        greedy_spec = specs[greedy_indexes[-1]]
+        raise ValueError(f"参数 '{greedy_spec.name}' (GreedyStr) 必须是最后一个参数。")
+    return specs
+
+
+def _validate_schedule_signature(handler: Any) -> None:
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return
+    allowed_names = {"ctx", "context", "sched", "schedule"}
+    invalid = [
+        parameter.name
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        and parameter.name not in allowed_names
+    ]
+    if invalid:
+        raise ValueError(
+            "Schedule handler 只允许注入 ctx/context 和 sched/schedule 参数。"
+        )
 
 
 def _plugin_context(plugin: PluginSpec) -> str:
@@ -626,6 +736,9 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
 
             bound, meta = resolved
             handler_id = f"{plugin.name}:{instance.__class__.__module__}.{instance.__class__.__name__}.{name}"
+            if isinstance(meta.trigger, ScheduleTrigger):
+                _validate_schedule_signature(bound)
+            param_specs = _build_param_specs(bound)
             handlers.append(
                 LoadedHandler(
                     descriptor=HandlerDescriptor(
@@ -635,10 +748,20 @@ def load_plugin(plugin: PluginSpec) -> LoadedPlugin:
                         contract=meta.contract,
                         priority=meta.priority,
                         permissions=meta.permissions.model_copy(deep=True),
+                        filters=[item.model_copy(deep=True) for item in meta.filters],
+                        param_specs=[
+                            item.model_copy(deep=True) for item in param_specs
+                        ],
+                        command_route=(
+                            meta.command_route.model_copy(deep=True)
+                            if meta.command_route is not None
+                            else None
+                        ),
                     ),
                     callable=bound,
                     owner=instance,
                     plugin_id=plugin.name,
+                    local_filters=list(meta.local_filters),
                 )
             )
 

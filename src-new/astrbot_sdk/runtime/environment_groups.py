@@ -37,6 +37,10 @@ GROUP_STATE_FILE_NAME = ".group-venv-state.json"
 
 _EXACT_PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s;]+)$")
 _NORMALIZE_PATTERN = re.compile(r"[-_.]+")
+_PYVENV_VERSION_PATTERN = re.compile(
+    r"^(?:version|version_info)\s*=\s*(\d+\.\d+)(?:\.\d+)?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _venv_python_path(venv_path: Path) -> Path:
@@ -47,6 +51,19 @@ def _venv_python_path(venv_path: Path) -> Path:
 
 def _normalize_package_name(name: str) -> str:
     return _NORMALIZE_PATTERN.sub("-", name).lower()
+
+
+def _read_pyvenv_major_minor(pyvenv_cfg: Path) -> str | None:
+    if not pyvenv_cfg.exists():
+        return None
+    try:
+        content = pyvenv_cfg.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = _PYVENV_VERSION_PATTERN.search(content)
+    if match is None:
+        return None
+    return match.group(1)
 
 
 def _requirement_lines(plugin: PluginSpec) -> list[str]:
@@ -612,15 +629,7 @@ class GroupEnvironmentManager:
 
     @staticmethod
     def _matches_python_version(venv_path: Path, version: str) -> bool:
-        pyvenv_cfg = venv_path / "pyvenv.cfg"
-        if not pyvenv_cfg.exists():
-            return False
-        try:
-            content = pyvenv_cfg.read_text(encoding="utf-8")
-        except OSError:
-            return False
-        match = re.search(r"version\s*=\s*(\d+\.\d+)\.\d+", content, re.IGNORECASE)
-        return match is not None and match.group(1) == version
+        return _read_pyvenv_major_minor(venv_path / "pyvenv.cfg") == version
 
     @staticmethod
     def _load_state(state_path: Path) -> dict[str, object]:

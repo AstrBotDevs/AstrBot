@@ -152,7 +152,7 @@ class ResultMessage(_MessageBase):
     error: ErrorPayload | None = None
 
     @model_validator(mode="after")
-    def validate_result_state(self) -> "ResultMessage":
+    def validate_result_state(self) -> ResultMessage:
         """约束 success / output / error 的组合状态。"""
         if self.success:
             if self.error is not None:
@@ -238,7 +238,7 @@ class EventMessage(_MessageBase):
     error: ErrorPayload | None = None
 
     @model_validator(mode="after")
-    def validate_phase_constraints(self) -> "EventMessage":
+    def validate_phase_constraints(self) -> EventMessage:
         """验证各 phase 的字段约束。
 
         - started: 所有字段必须为空

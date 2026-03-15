@@ -1,21 +1,19 @@
-"""v4 协议描述符模型。
+"""Builtin protocol schema constants.
 
-`protocol` 是 v4 新引入的协议层抽象，不对应旧树(圣诞树)中的一个同名目录。这里
-定义的是跨进程握手和调度时使用的声明式元数据，而不是运行时的具体处理器/
-能力实现。
+本模块定义了 AstrBot SDK v4 协议中所有内置能力的 JSON Schema。
+这些 Schema 用于：
+1. 验证能力调用的输入参数是否符合预期格式
+2. 生成能力描述文档，供插件开发者参考
+3. 确保跨进程/跨语言调用时的类型安全
+
+所有 Schema 遵循 JSON Schema 规范，支持基本类型检查、必填字段、数组元素约束等。
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
-
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from typing import Any
 
 JSONSchema = dict[str, Any]
-RESERVED_CAPABILITY_NAMESPACES = ("handler", "system", "internal")
-RESERVED_CAPABILITY_PREFIXES = tuple(
-    f"{namespace}." for namespace in RESERVED_CAPABILITY_NAMESPACES
-)
 
 
 def _object_schema(
@@ -52,10 +50,7 @@ LLM_CHAT_INPUT_SCHEMA = _object_schema(
     prompt={"type": "string"},
     **_OPTIONAL_CHAT_PROPERTIES,
 )
-LLM_CHAT_OUTPUT_SCHEMA = _object_schema(
-    required=("text",),
-    text={"type": "string"},
-)
+LLM_CHAT_OUTPUT_SCHEMA = _object_schema(required=("text",), text={"type": "string"})
 LLM_CHAT_RAW_INPUT_SCHEMA = _object_schema(
     required=("prompt",),
     prompt={"type": "string"},
@@ -77,12 +72,10 @@ LLM_STREAM_CHAT_INPUT_SCHEMA = _object_schema(
     **_OPTIONAL_CHAT_PROPERTIES,
 )
 LLM_STREAM_CHAT_OUTPUT_SCHEMA = _object_schema(
-    required=("text",),
-    text={"type": "string"},
+    required=("text",), text={"type": "string"}
 )
 MEMORY_SEARCH_INPUT_SCHEMA = _object_schema(
-    required=("query",),
-    query={"type": "string"},
+    required=("query",), query={"type": "string"}
 )
 MEMORY_SEARCH_OUTPUT_SCHEMA = _object_schema(
     required=("items",),
@@ -94,10 +87,7 @@ MEMORY_SAVE_INPUT_SCHEMA = _object_schema(
     value={"type": "object"},
 )
 MEMORY_SAVE_OUTPUT_SCHEMA = _object_schema()
-MEMORY_GET_INPUT_SCHEMA = _object_schema(
-    required=("key",),
-    key={"type": "string"},
-)
+MEMORY_GET_INPUT_SCHEMA = _object_schema(required=("key",), key={"type": "string"})
 MEMORY_GET_OUTPUT_SCHEMA = _object_schema(
     required=("value",),
     value=_nullable({"type": "object"}),
@@ -179,10 +169,7 @@ SYSTEM_SESSION_WAITER_UNREGISTER_INPUT_SCHEMA = _object_schema(
     session_key={"type": "string"},
 )
 SYSTEM_SESSION_WAITER_UNREGISTER_OUTPUT_SCHEMA = _object_schema()
-DB_GET_INPUT_SCHEMA = _object_schema(
-    required=("key",),
-    key={"type": "string"},
-)
+DB_GET_INPUT_SCHEMA = _object_schema(required=("key",), key={"type": "string"})
 DB_GET_OUTPUT_SCHEMA = _object_schema(
     required=("value",),
     value=_nullable({}),
@@ -193,14 +180,9 @@ DB_SET_INPUT_SCHEMA = _object_schema(
     value={},
 )
 DB_SET_OUTPUT_SCHEMA = _object_schema()
-DB_DELETE_INPUT_SCHEMA = _object_schema(
-    required=("key",),
-    key={"type": "string"},
-)
+DB_DELETE_INPUT_SCHEMA = _object_schema(required=("key",), key={"type": "string"})
 DB_DELETE_OUTPUT_SCHEMA = _object_schema()
-DB_LIST_INPUT_SCHEMA = _object_schema(
-    prefix=_nullable({"type": "string"}),
-)
+DB_LIST_INPUT_SCHEMA = _object_schema(prefix=_nullable({"type": "string"}))
 DB_LIST_OUTPUT_SCHEMA = _object_schema(
     required=("keys",),
     keys={"type": "array", "items": {"type": "string"}},
@@ -232,9 +214,7 @@ DB_SET_MANY_INPUT_SCHEMA = _object_schema(
     },
 )
 DB_SET_MANY_OUTPUT_SCHEMA = _object_schema()
-DB_WATCH_INPUT_SCHEMA = _object_schema(
-    prefix=_nullable({"type": "string"}),
-)
+DB_WATCH_INPUT_SCHEMA = _object_schema(prefix=_nullable({"type": "string"}))
 DB_WATCH_OUTPUT_SCHEMA = _object_schema()
 SESSION_REF_SCHEMA = _object_schema(
     required=("conversation_id",),
@@ -362,10 +342,7 @@ METADATA_GET_PLUGIN_CONFIG_OUTPUT_SCHEMA = _object_schema(
 )
 
 BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
-    "llm.chat": {
-        "input": LLM_CHAT_INPUT_SCHEMA,
-        "output": LLM_CHAT_OUTPUT_SCHEMA,
-    },
+    "llm.chat": {"input": LLM_CHAT_INPUT_SCHEMA, "output": LLM_CHAT_OUTPUT_SCHEMA},
     "llm.chat_raw": {
         "input": LLM_CHAT_RAW_INPUT_SCHEMA,
         "output": LLM_CHAT_RAW_OUTPUT_SCHEMA,
@@ -406,22 +383,10 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": MEMORY_STATS_INPUT_SCHEMA,
         "output": MEMORY_STATS_OUTPUT_SCHEMA,
     },
-    "db.get": {
-        "input": DB_GET_INPUT_SCHEMA,
-        "output": DB_GET_OUTPUT_SCHEMA,
-    },
-    "db.set": {
-        "input": DB_SET_INPUT_SCHEMA,
-        "output": DB_SET_OUTPUT_SCHEMA,
-    },
-    "db.delete": {
-        "input": DB_DELETE_INPUT_SCHEMA,
-        "output": DB_DELETE_OUTPUT_SCHEMA,
-    },
-    "db.list": {
-        "input": DB_LIST_INPUT_SCHEMA,
-        "output": DB_LIST_OUTPUT_SCHEMA,
-    },
+    "db.get": {"input": DB_GET_INPUT_SCHEMA, "output": DB_GET_OUTPUT_SCHEMA},
+    "db.set": {"input": DB_SET_INPUT_SCHEMA, "output": DB_SET_OUTPUT_SCHEMA},
+    "db.delete": {"input": DB_DELETE_INPUT_SCHEMA, "output": DB_DELETE_OUTPUT_SCHEMA},
+    "db.list": {"input": DB_LIST_INPUT_SCHEMA, "output": DB_LIST_OUTPUT_SCHEMA},
     "db.get_many": {
         "input": DB_GET_MANY_INPUT_SCHEMA,
         "output": DB_GET_MANY_OUTPUT_SCHEMA,
@@ -430,10 +395,7 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
         "input": DB_SET_MANY_INPUT_SCHEMA,
         "output": DB_SET_MANY_OUTPUT_SCHEMA,
     },
-    "db.watch": {
-        "input": DB_WATCH_INPUT_SCHEMA,
-        "output": DB_WATCH_OUTPUT_SCHEMA,
-    },
+    "db.watch": {"input": DB_WATCH_INPUT_SCHEMA, "output": DB_WATCH_OUTPUT_SCHEMA},
     "platform.send": {
         "input": PLATFORM_SEND_INPUT_SCHEMA,
         "output": PLATFORM_SEND_OUTPUT_SCHEMA,
@@ -517,324 +479,22 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
 }
 
 
-class _DescriptorBase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class Permissions(_DescriptorBase):
-    """权限配置，控制处理器的访问权限。
-
-    与旧版对比：
-        旧版: 通过 extras_configs 字典配置
-            {"require_admin": true, "level": 1}
-        新版: 使用 Permissions 模型，类型安全
-
-    Attributes:
-        require_admin: 是否需要管理员权限
-        level: 权限等级，数值越高权限越大
-    """
-
-    require_admin: bool = False
-    level: int = 0
-
-
-class SessionRef(_DescriptorBase):
-    """结构化会话目标。
-
-    v4 运行时内部仍然保留 legacy `session` 字符串作为最低兼容层，
-    但对外模型允许同时携带平台与原始寻址信息，避免平台发送接口长期
-    只依赖一个不透明字符串。
-    """
-
-    conversation_id: str = Field(
-        validation_alias=AliasChoices("conversation_id", "session"),
-    )
-    platform: str | None = None
-    raw: dict[str, Any] | None = None
-
-    @property
-    def session(self) -> str:
-        return self.conversation_id
-
-    def to_payload(self) -> dict[str, Any]:
-        return self.model_dump(exclude_none=True)
-
-
-class CommandTrigger(_DescriptorBase):
-    """命令触发器，响应特定命令。
-
-    与旧版对比：
-        旧版: 使用 @command_handler("help") 装饰器注册
-        新版: 使用 CommandTrigger 声明式定义，支持别名
-
-    Attributes:
-        type: 触发器类型，固定为 "command"
-        command: 命令名称（不含前缀，如 "help"）
-        aliases: 命令别名列表
-        description: 命令描述，用于帮助文档
-        platforms: 允许的平台列表，为空表示所有平台
-        message_types: 限定的消息类型列表，为空表示不限
-    """
-
-    type: Literal["command"] = "command"
-    command: str
-    aliases: list[str] = Field(default_factory=list)
-    description: str | None = None
-    platforms: list[str] = Field(default_factory=list)
-    message_types: list[str] = Field(default_factory=list)
-
-
-class MessageTrigger(_DescriptorBase):
-    """消息触发器，描述消息类处理器的订阅条件。
-
-    与旧版对比：
-        旧版: 使用 @regex_handler(r"pattern") 或 @message_handler 装饰器
-        新版: 使用 MessageTrigger 声明式定义，支持正则、关键词和平台过滤
-
-    Attributes:
-        type: 触发器类型，固定为 "message"
-        regex: 正则表达式模式，匹配消息文本
-        keywords: 关键词列表，消息包含任一关键词即触发
-        platforms: 目标平台列表，为空表示所有平台
-        message_types: 限定的消息类型列表，为空表示不限
-
-    Note:
-        `regex` 和 `keywords` 可以同时为空，此时表示“任意消息均可触发”，
-        仅由平台过滤或上层运行时进一步筛选。
-    """
-
-    type: Literal["message"] = "message"
-    regex: str | None = None
-    keywords: list[str] = Field(default_factory=list)
-    platforms: list[str] = Field(default_factory=list)
-    message_types: list[str] = Field(default_factory=list)
-
-
-class EventTrigger(_DescriptorBase):
-    """事件触发器，响应特定类型的事件。
-
-    与旧版对比：
-        旧版: 使用整数 event_type，如 3 表示消息事件
-        新版: 使用字符串 event_type，如 "message" 或 "3"，更灵活
-
-    Attributes:
-        type: 触发器类型，固定为 "event"
-        event_type: 事件类型，字符串形式（如 "message"、"notice"）
-    """
-
-    type: Literal["event"] = "event"
-    event_type: str
-
-
-class ScheduleTrigger(_DescriptorBase):
-    """定时触发器，按 cron 表达式或固定间隔执行。
-
-    与旧版对比：
-        旧版: 使用 @scheduled("0 * * * *") 装饰器
-        新版: 使用 ScheduleTrigger 声明式定义
-
-    Attributes:
-        type: 触发器类型，固定为 "schedule"
-        cron: cron 表达式（如 "0 9 * * *" 表示每天 9 点）
-        interval_seconds: 执行间隔（秒）
-
-    Note:
-        cron 和 interval_seconds 必须且只能有一个非空。
-    """
-
-    type: Literal["schedule"] = "schedule"
-    cron: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("cron", "schedule"),
-    )
-    interval_seconds: int | None = None
-
-    @property
-    def schedule(self) -> str | None:
-        return self.cron
-
-    @model_validator(mode="after")
-    def validate_schedule(self) -> ScheduleTrigger:
-        has_cron = self.cron is not None
-        has_interval = self.interval_seconds is not None
-        if has_cron == has_interval:
-            raise ValueError("cron 和 interval_seconds 必须且只能有一个非 null")
-        return self
-
-
-class PlatformFilterSpec(_DescriptorBase):
-    kind: Literal["platform"] = "platform"
-    platforms: list[str] = Field(default_factory=list)
-
-
-class MessageTypeFilterSpec(_DescriptorBase):
-    kind: Literal["message_type"] = "message_type"
-    message_types: list[str] = Field(default_factory=list)
-
-
-class LocalFilterRefSpec(_DescriptorBase):
-    kind: Literal["local"] = "local"
-    filter_id: str
-    args: dict[str, Any] = Field(default_factory=dict)
-
-
-class CompositeFilterSpec(_DescriptorBase):
-    kind: Literal["and", "or"]
-    children: list[FilterSpec] = Field(default_factory=list)
-
-
-FilterSpec = Annotated[
-    PlatformFilterSpec
-    | MessageTypeFilterSpec
-    | LocalFilterRefSpec
-    | CompositeFilterSpec,
-    Field(discriminator="kind"),
-]
-
-
-class ParamSpec(_DescriptorBase):
-    name: str
-    type: Literal["str", "int", "float", "bool", "optional", "greedy_str"]
-    required: bool = True
-    inner_type: Literal["str", "int", "float", "bool"] | None = None
-
-
-class CommandRouteSpec(_DescriptorBase):
-    group_path: list[str] = Field(default_factory=list)
-    display_command: str
-    group_help: str | None = None
-
-
-CompositeFilterSpec.model_rebuild()
-
-
-Trigger = Annotated[
-    CommandTrigger | MessageTrigger | EventTrigger | ScheduleTrigger,
-    Field(discriminator="type"),
-]
-"""触发器联合类型，使用 type 字段作为判别器自动解析具体类型。"""
-
-
-class HandlerDescriptor(_DescriptorBase):
-    """处理器描述符，描述一个事件处理函数的元信息。
-
-    与旧版对比：
-        旧版 handshake 响应中的处理器信息:
-            {
-                "event_type": 3,
-                "handler_full_name": "plugin.handler",
-                "handler_name": "handler",
-                "handler_module_path": "plugin",
-                "desc": "描述",
-                "extras_configs": {"priority": 0, "require_admin": false}
-            }
-
-        新版 HandlerDescriptor:
-            {
-                "id": "plugin.handler",
-                "trigger": {"type": "event", "event_type": "message"},
-                "priority": 0,
-                "permissions": {"require_admin": false, "level": 0}
-            }
-
-    Attributes:
-        id: 处理器唯一标识，通常是 "模块.函数名" 格式
-        trigger: 触发器配置，决定何时执行该处理器
-        kind: 处理器类别，默认普通 handler
-        contract: 运行时契约名，描述入参/执行语义
-        priority: 优先级，数值越大越先执行
-        permissions: 权限配置，控制谁可以触发该处理器
-    """
-
-    id: str
-    trigger: Trigger
-    kind: Literal["handler", "hook", "tool", "session"] = "handler"
-    contract: str | None = None
-    priority: int = 0
-    permissions: Permissions = Field(default_factory=Permissions)
-    filters: list[FilterSpec] = Field(default_factory=list)
-    param_specs: list[ParamSpec] = Field(default_factory=list)
-    command_route: CommandRouteSpec | None = None
-
-    @model_validator(mode="after")
-    def validate_contract_defaults(self) -> HandlerDescriptor:
-        if self.contract is None:
-            if isinstance(self.trigger, ScheduleTrigger):
-                self.contract = "schedule"
-            else:
-                self.contract = "message_event"
-        return self
-
-
-class CapabilityDescriptor(_DescriptorBase):
-    """能力描述符，描述一个可调用的远程能力。
-
-    与旧版对比：
-        旧版: 无独立的能力描述，通过 method 名称隐式定义
-        新版: 使用 CapabilityDescriptor 显式声明能力，支持 JSON Schema 验证
-
-    能力命名规范：
-        - 使用 "namespace.action" 格式，如 "llm.chat"、"db.set"
-        - 内置能力以 "internal." 开头，如 "internal.legacy.call_context_function"
-
-    Attributes:
-        name: 能力名称，格式为 "namespace.action"
-        description: 能力描述，用于文档和调试
-        input_schema: 输入参数的 JSON Schema，用于验证
-        output_schema: 输出结果的 JSON Schema，用于验证
-        supports_stream: 是否支持流式响应
-        cancelable: 是否支持取消
-    """
-
-    name: str
-    description: str
-    input_schema: JSONSchema | None = None
-    output_schema: JSONSchema | None = None
-    supports_stream: bool = False
-    cancelable: bool = False
-
-    @model_validator(mode="after")
-    def validate_builtin_schema_governance(self) -> CapabilityDescriptor:
-        builtin_schema = BUILTIN_CAPABILITY_SCHEMAS.get(self.name)
-        if builtin_schema is None:
-            return self
-        if self.input_schema is None or self.output_schema is None:
-            raise ValueError(
-                f"内建 capability {self.name} 必须同时提供 input_schema 和 output_schema"
-            )
-        if (
-            self.input_schema != builtin_schema["input"]
-            or self.output_schema != builtin_schema["output"]
-        ):
-            raise ValueError(
-                f"内建 capability {self.name} 的 schema 必须与协议注册表保持一致"
-            )
-        return self
-
-
 __all__ = [
     "BUILTIN_CAPABILITY_SCHEMAS",
-    "CapabilityDescriptor",
-    "CommandRouteSpec",
-    "CommandTrigger",
-    "CompositeFilterSpec",
     "DB_DELETE_INPUT_SCHEMA",
     "DB_DELETE_OUTPUT_SCHEMA",
     "DB_GET_INPUT_SCHEMA",
-    "DB_GET_OUTPUT_SCHEMA",
     "DB_GET_MANY_INPUT_SCHEMA",
     "DB_GET_MANY_OUTPUT_SCHEMA",
+    "DB_GET_OUTPUT_SCHEMA",
     "DB_LIST_INPUT_SCHEMA",
     "DB_LIST_OUTPUT_SCHEMA",
     "DB_SET_INPUT_SCHEMA",
-    "DB_SET_OUTPUT_SCHEMA",
     "DB_SET_MANY_INPUT_SCHEMA",
     "DB_SET_MANY_OUTPUT_SCHEMA",
+    "DB_SET_OUTPUT_SCHEMA",
     "DB_WATCH_INPUT_SCHEMA",
     "DB_WATCH_OUTPUT_SCHEMA",
-    "EventTrigger",
-    "FilterSpec",
-    "HandlerDescriptor",
     "HTTP_LIST_APIS_INPUT_SCHEMA",
     "HTTP_LIST_APIS_OUTPUT_SCHEMA",
     "HTTP_REGISTER_API_INPUT_SCHEMA",
@@ -849,13 +509,13 @@ __all__ = [
     "LLM_STREAM_CHAT_INPUT_SCHEMA",
     "LLM_STREAM_CHAT_OUTPUT_SCHEMA",
     "MEMORY_DELETE_INPUT_SCHEMA",
-    "MEMORY_DELETE_OUTPUT_SCHEMA",
     "MEMORY_DELETE_MANY_INPUT_SCHEMA",
     "MEMORY_DELETE_MANY_OUTPUT_SCHEMA",
+    "MEMORY_DELETE_OUTPUT_SCHEMA",
     "MEMORY_GET_INPUT_SCHEMA",
-    "MEMORY_GET_OUTPUT_SCHEMA",
     "MEMORY_GET_MANY_INPUT_SCHEMA",
     "MEMORY_GET_MANY_OUTPUT_SCHEMA",
+    "MEMORY_GET_OUTPUT_SCHEMA",
     "MEMORY_SAVE_INPUT_SCHEMA",
     "MEMORY_SAVE_OUTPUT_SCHEMA",
     "MEMORY_SAVE_WITH_TTL_INPUT_SCHEMA",
@@ -870,9 +530,6 @@ __all__ = [
     "METADATA_GET_PLUGIN_OUTPUT_SCHEMA",
     "METADATA_LIST_PLUGINS_INPUT_SCHEMA",
     "METADATA_LIST_PLUGINS_OUTPUT_SCHEMA",
-    "MessageTrigger",
-    "MessageTypeFilterSpec",
-    "ParamSpec",
     "PLATFORM_GET_MEMBERS_INPUT_SCHEMA",
     "PLATFORM_GET_MEMBERS_OUTPUT_SCHEMA",
     "PLATFORM_SEND_CHAIN_INPUT_SCHEMA",
@@ -881,12 +538,7 @@ __all__ = [
     "PLATFORM_SEND_IMAGE_OUTPUT_SCHEMA",
     "PLATFORM_SEND_INPUT_SCHEMA",
     "PLATFORM_SEND_OUTPUT_SCHEMA",
-    "Permissions",
-    "RESERVED_CAPABILITY_NAMESPACES",
-    "RESERVED_CAPABILITY_PREFIXES",
-    "ScheduleTrigger",
     "SESSION_REF_SCHEMA",
-    "SessionRef",
     "SYSTEM_EVENT_REACT_INPUT_SCHEMA",
     "SYSTEM_EVENT_REACT_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_STREAMING_CHUNK_INPUT_SCHEMA",
@@ -897,7 +549,4 @@ __all__ = [
     "SYSTEM_EVENT_SEND_STREAMING_OUTPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_TYPING_INPUT_SCHEMA",
     "SYSTEM_EVENT_SEND_TYPING_OUTPUT_SCHEMA",
-    "Trigger",
-    "LocalFilterRefSpec",
-    "PlatformFilterSpec",
 ]

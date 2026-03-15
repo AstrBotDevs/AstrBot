@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from loguru import logger as base_logger
@@ -115,6 +116,7 @@ class Context:
             logger: 日志器，None 时使用默认 logger 并绑定 plugin_id
         """
         proxy = CapabilityProxy(peer, caller_plugin_id=plugin_id)
+        self._proxy = proxy
         self.peer = peer
         self.llm = LLMClient(proxy)
         self.memory = MemoryClient(proxy)
@@ -125,3 +127,41 @@ class Context:
         self.plugin_id = plugin_id
         self.logger = logger or base_logger.bind(plugin_id=plugin_id)
         self.cancel_token = cancel_token or CancelToken()
+
+    async def get_data_dir(self) -> Path:
+        """Return the plugin-scoped data directory path."""
+        output = await self._proxy.call("system.get_data_dir", {})
+        return Path(str(output.get("path", "")))
+
+    async def text_to_image(
+        self,
+        text: str,
+        *,
+        return_url: bool = True,
+    ) -> str:
+        """Render plain text into an image using the host renderer."""
+        output = await self._proxy.call(
+            "system.text_to_image",
+            {"text": text, "return_url": return_url},
+        )
+        return str(output.get("result", ""))
+
+    async def html_render(
+        self,
+        tmpl: str,
+        data: dict[str, Any],
+        *,
+        return_url: bool = True,
+        options: dict[str, Any] | None = None,
+    ) -> str:
+        """Render an HTML template using the host renderer."""
+        output = await self._proxy.call(
+            "system.html_render",
+            {
+                "tmpl": tmpl,
+                "data": dict(data),
+                "return_url": return_url,
+                "options": options,
+            },
+        )
+        return str(output.get("result", ""))

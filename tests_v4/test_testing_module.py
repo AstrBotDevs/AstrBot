@@ -58,10 +58,10 @@ def test_dev_help_lists_watch_option() -> None:
 def test_init_plugin_template_includes_readme(tmp_path: Path, monkeypatch) -> None:
     from astrbot_sdk.cli import _init_plugin
 
-    target = tmp_path / "demo_plugin"
+    target = tmp_path / "astrbot_plugin_demo_plugin"
     monkeypatch.chdir(tmp_path)
 
-    _init_plugin(target.name)
+    _init_plugin("demo_plugin")
 
     assert (target / "README.md").exists()
     readme = (target / "README.md").read_text(encoding="utf-8")
