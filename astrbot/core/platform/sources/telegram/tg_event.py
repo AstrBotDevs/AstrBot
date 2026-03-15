@@ -423,23 +423,21 @@ class TelegramPlatformEvent(AstrMessageEvent):
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
                 if _is_gif(image_path):
-                    await self._send_media_with_action(
-                        self.client,
-                        ChatAction.UPLOAD_VIDEO,
-                        self.client.send_animation,
-                        user_name=user_name,
-                        animation=image_path,
-                        **cast(Any, payload),
-                    )
+                    action = ChatAction.UPLOAD_VIDEO
+                    send_coro = self.client.send_animation
+                    media_kwarg = {"animation": image_path}
                 else:
-                    await self._send_media_with_action(
-                        self.client,
-                        ChatAction.UPLOAD_PHOTO,
-                        self.client.send_photo,
-                        user_name=user_name,
-                        photo=image_path,
-                        **cast(Any, payload),
-                    )
+                    action = ChatAction.UPLOAD_PHOTO
+                    send_coro = self.client.send_photo
+                    media_kwarg = {"photo": image_path}
+                await self._send_media_with_action(
+                    self.client,
+                    action,
+                    send_coro,
+                    user_name=user_name,
+                    **media_kwarg,
+                    **cast(Any, payload),
+                )
             elif isinstance(i, File):
                 path = await i.get_file()
                 name = i.name or os.path.basename(path)
