@@ -311,7 +311,7 @@ class ProviderOpenAIOfficial(Provider):
                 state.handle_chunk(chunk)
             except Exception as e:
                 logger.warning("Saving chunk state error: " + str(e))
-            if len(chunk.choices) == 0:
+            if chunk.choices is None or len(chunk.choices) == 0:
                 continue
             delta = chunk.choices[0].delta
             # logger.debug(f"chunk delta: {delta}")
@@ -345,7 +345,7 @@ class ProviderOpenAIOfficial(Provider):
     ) -> str:
         """Extract reasoning content from OpenAI ChatCompletion if available."""
         reasoning_text = ""
-        if len(completion.choices) == 0:
+        if completion.choices is None or len(completion.choices) == 0:
             return reasoning_text
         if isinstance(completion, ChatCompletion):
             choice = completion.choices[0]
@@ -468,7 +468,7 @@ class ProviderOpenAIOfficial(Provider):
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
-        if len(completion.choices) == 0:
+        if completion.choices is None or len(completion.choices) == 0:
             raise Exception("API 返回的 completion 为空。")
         choice = completion.choices[0]
 
